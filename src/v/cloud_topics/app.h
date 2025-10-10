@@ -38,6 +38,10 @@ class cloud_topics_manager;
 class level_zero_gc;
 class housekeeper_manager;
 
+namespace l1 {
+class topic_purger_manager;
+} // namespace l1
+
 class app : public ssx::sharded_service_container {
 public:
     explicit app(ss::sstring logger_name = "cloud_topics::app");
@@ -82,6 +86,7 @@ private:
     ss::sharded<reconciler::reconciler> reconciler;
     ss::sharded<l1::domain_supervisor> domain_supervisor;
     ss::sharded<l1::frontend> l1_metastore_fe;
+    ss::sharded<l1::topic_purger_manager> topic_purge_manager;
     ss::sharded<cloud_topics_manager> manager;
     ss::sharded<level_zero_gc> l0_gc;
     ss::sharded<housekeeper_manager> housekeeper_manager;

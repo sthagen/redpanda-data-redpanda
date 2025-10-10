@@ -189,6 +189,17 @@ public:
     virtual ss::future<std::expected<void, errc>>
     set_start_offset(const model::topic_id_partition&, kafka::offset) = 0;
 
+    struct topic_removal_response {
+        // Topic IDs that were not removed from the metastore and still have
+        // state to be removed in a subsequent attempt.
+        chunked_hash_set<model::topic_id> not_removed;
+    };
+    // Removes the given topics from the metastore, returning any that need to
+    // be retried. If an error is returned, callers should assume that all
+    // topics need to be retried.
+    virtual ss::future<std::expected<topic_removal_response, errc>>
+    remove_topics(const chunked_vector<model::topic_id>&) = 0;
+
     // Finds the first object of a given partition with data greater than or
     // equal to the given offset. If no such offset exists, returns
     // `out_of_range`.

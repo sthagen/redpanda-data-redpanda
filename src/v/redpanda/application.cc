@@ -1537,6 +1537,7 @@ void application::wire_up_runtime_services(
       &_connection_cache,
       controller.get(),
       &group_router,
+      &snc_quota_mgr,
       &controller->get_health_monitor(),
       &controller->get_security_frontend(),
       smp_service_groups.cluster_link_smp_sg(),

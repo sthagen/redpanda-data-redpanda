@@ -1335,6 +1335,7 @@ TEST_F(ManualFixture, TestSpilloverWithTruncationRetainsStartOffset) {
 
     auto partition = app.partition_manager.local().get(ntp);
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
 
     SCOPED_TRACE("Seeding partition data");
 

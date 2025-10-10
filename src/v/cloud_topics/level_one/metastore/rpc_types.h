@@ -285,6 +285,28 @@ struct set_start_offset_request
     kafka::offset start_offset;
 };
 
+struct remove_topics_reply
+  : serde::envelope<
+      remove_topics_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, not_removed); }
+
+    errc ec;
+    chunked_vector<model::topic_id> not_removed;
+};
+struct remove_topics_request
+  : serde::envelope<
+      remove_topics_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = remove_topics_reply;
+    auto serde_fields() { return std::tie(metastore_partition, topics); }
+
+    model::partition_id metastore_partition;
+    chunked_vector<model::topic_id> topics;
+};
+
 } //  namespace cloud_topics::l1::rpc
 
 template<>

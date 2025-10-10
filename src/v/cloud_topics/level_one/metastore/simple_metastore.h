@@ -70,6 +70,9 @@ public:
     ss::future<std::expected<void, errc>>
     set_start_offset(const model::topic_id_partition&, kafka::offset) override;
 
+    ss::future<std::expected<topic_removal_response, errc>>
+    remove_topics(const chunked_vector<model::topic_id>&) override;
+
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, kafka::offset) override;
 

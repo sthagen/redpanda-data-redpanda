@@ -707,4 +707,49 @@ remove_objects_update::apply(state& state) {
     return std::monostate{};
 }
 
+std::expected<remove_topics_update, stm_update_error>
+remove_topics_update::build(
+  const state& state, chunked_vector<model::topic_id> topics) {
+    remove_topics_update update{
+      .topics = std::move(topics),
+    };
+    auto allowed = update.can_apply(state);
+    if (!allowed.has_value()) {
+        return std::unexpected(allowed.error());
+    }
+    return update;
+}
+
+std::expected<std::monostate, stm_update_error>
+remove_topics_update::can_apply(const state&) {
+    return std::monostate{};
+}
+
+std::expected<std::monostate, stm_update_error>
+remove_topics_update::apply(state& state) {
+    auto allowed = can_apply(state);
+    if (!allowed.has_value()) {
+        return std::unexpected(allowed.error());
+    }
+    for (const auto tid : topics) {
+        auto t_it = state.topic_to_state.find(tid);
+        if (t_it == state.topic_to_state.end()) {
+            continue;
+        }
+        const auto& t_state = t_it->second;
+        for (const auto& [pid, p_state] : t_state.pid_to_state) {
+            for (const auto& e : p_state.extents) {
+                auto o_it = state.objects.find(e.oid);
+                if (o_it == state.objects.end()) {
+                    continue;
+                }
+                auto& [oid, obj_entry] = *o_it;
+                obj_entry.removed_data_size += e.len;
+            }
+        }
+        state.topic_to_state.erase(t_it);
+    }
+    return std::monostate{};
+}
+
 } // namespace cloud_topics::l1

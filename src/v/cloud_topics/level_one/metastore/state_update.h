@@ -25,6 +25,7 @@ enum class update_key : uint8_t {
     replace_objects = 1,
     set_start_offset = 2,
     remove_objects = 3,
+    remove_topics = 4,
 };
 
 using stm_update_error = named_type<ss::sstring, struct update_error_tag>;
@@ -208,6 +209,26 @@ struct remove_objects_update
     chunked_vector<object_id> objects;
 };
 
+struct remove_topics_update
+  : public serde::envelope<
+      remove_topics_update,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    friend bool
+    operator==(const remove_topics_update&, const remove_topics_update&)
+      = default;
+    auto serde_fields() { return std::tie(topics); }
+    static constexpr auto key{update_key::remove_topics};
+
+    static std::expected<remove_topics_update, stm_update_error>
+    build(const state&, chunked_vector<model::topic_id>);
+
+    std::expected<std::monostate, stm_update_error> can_apply(const state&);
+    std::expected<std::monostate, stm_update_error> apply(state&);
+
+    chunked_vector<model::topic_id> topics;
+};
+
 } // namespace cloud_topics::l1
 
 template<>
@@ -225,6 +246,8 @@ struct fmt::formatter<cloud_topics::l1::update_key> final
             return formatter<string_view>::format("set_start_offset", ctx);
         case cloud_topics::l1::update_key::remove_objects:
             return formatter<string_view>::format("remove_objects", ctx);
+        case cloud_topics::l1::update_key::remove_topics:
+            return formatter<string_view>::format("remove_topics", ctx);
         }
     }
 };

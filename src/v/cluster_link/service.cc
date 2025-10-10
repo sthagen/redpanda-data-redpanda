@@ -26,6 +26,7 @@
 #include "cluster_link/source_topic_syncer.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/server/group_router.h"
+#include "kafka/server/snc_quota_manager.h"
 
 #include <seastar/coroutine/switch_to.hh>
 
@@ -181,9 +182,11 @@ private:
 class default_link_factory : public link_factory {
 public:
     explicit default_link_factory(
-      ss::sharded<cluster::partition_manager>* partition_manager)
+      ss::sharded<cluster::partition_manager>* partition_manager,
+      ss::sharded<kafka::snc_quota_manager>* snc_quota_mgr)
       : link_factory()
-      , _partition_manager(partition_manager) {}
+      , _partition_manager(partition_manager)
+      , _snc_quota_mgr(snc_quota_mgr) {}
 
     static constexpr auto link_reconciler_period = 5min;
     std::unique_ptr<link> create_link(
@@ -192,6 +195,7 @@ public:
       manager* manager,
       model::metadata config,
       std::unique_ptr<kafka::client::cluster> cluster_connection) override {
+        auto client_id = config.connection.client_id;
         return std::make_unique<link>(
           self,
           link_id,
@@ -199,14 +203,19 @@ public:
           link_reconciler_period,
           std::move(config),
           std::move(cluster_connection),
-          std::make_unique<data_src_factory>(
-            make_remote_consumer(*cluster_connection, config.connection)),
+          std::make_unique<data_src_factory>(make_remote_consumer(
+            std::move(client_id),
+            *cluster_connection,
+            _snc_quota_mgr->local(),
+            config.connection)),
           std::make_unique<data_sink_factory>(*_partition_manager));
     }
 
 private:
     std::unique_ptr<replication::mux_remote_consumer> make_remote_consumer(
+      ss::sstring client_id,
       kafka::client::cluster& cluster,
+      kafka::snc_quota_manager& snc_quota_mgr,
       const model::connection_config& conn_cfg) {
         // todo0: make more these configurable at connection level
         // todo1: make these dynamic
@@ -225,11 +234,14 @@ private:
           cluster, cfg);
 
         return std::make_unique<replication::mux_remote_consumer>(
+          std::move(client_id),
           std::move(direct_consumer),
+          snc_quota_mgr,
           partition_max_buffered_bytes,
           fetch_max_wait);
     }
     ss::sharded<cluster::partition_manager>* _partition_manager;
+    ss::sharded<kafka::snc_quota_manager>* _snc_quota_mgr;
 };
 
 class kafka_consumer_groups_router : public consumer_groups_router {
@@ -311,6 +323,7 @@ service::service(
   ss::sharded<::rpc::connection_cache>* connections,
   cluster::controller* controller,
   ss::sharded<kafka::group_router>* group_router,
+  ss::sharded<kafka::snc_quota_manager>* snc_quota_mgr,
   ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
   ss::sharded<cluster::security_frontend>* security_fe,
   ss::smp_service_group smp_group,
@@ -325,6 +338,7 @@ service::service(
   , _connections(connections)
   , _controller(controller)
   , _group_router(group_router)
+  , _snc_quota_mgr(snc_quota_mgr)
   , _hm_frontend(hm_frontend)
   , _security_fe(security_fe)
   , _smp_group(smp_group)
@@ -344,7 +358,8 @@ ss::future<> service::start() {
       topic_creator::make_default(_controller),
       security_service::make_default(_security_fe),
       std::make_unique<link_registry_adapter>(&_plf->local(), this),
-      std::make_unique<default_link_factory>(_partition_manager),
+      std::make_unique<default_link_factory>(
+        _partition_manager, _snc_quota_mgr),
       std::make_unique<cluster_factory>(),
       std::make_unique<kafka_consumer_groups_router>(_group_router),
       std::make_unique<health_monitor_based_partition_metadata_provider>(

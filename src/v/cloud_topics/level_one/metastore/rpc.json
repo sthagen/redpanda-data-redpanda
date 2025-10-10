@@ -54,6 +54,11 @@
             "name": "set_start_offset",
             "input_type": "set_start_offset_request",
             "output_type": "set_start_offset_reply"
+        },
+        {
+            "name": "remove_topics",
+            "input_type": "remove_topics_request",
+            "output_type": "remove_topics_reply"
         }
     ]
 }

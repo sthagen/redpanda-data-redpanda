@@ -43,6 +43,7 @@ public:
       ss::sharded<::rpc::connection_cache>* connections,
       cluster::controller* controller,
       ss::sharded<kafka::group_router>* group_router,
+      ss::sharded<kafka::snc_quota_manager>* snc_quota_mgr,
       ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
       ss::sharded<cluster::security_frontend>* security_fe,
       ss::smp_service_group smp_group,
@@ -159,6 +160,7 @@ private:
     ss::sharded<::rpc::connection_cache>* _connections;
     cluster::controller* _controller;
     ss::sharded<kafka::group_router>* _group_router;
+    ss::sharded<kafka::snc_quota_manager>* _snc_quota_mgr;
     ss::sharded<cluster::health_monitor_frontend>* _hm_frontend;
     ss::sharded<cluster::security_frontend>* _security_fe;
     ss::smp_service_group _smp_group;

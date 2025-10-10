@@ -107,11 +107,10 @@ public:
             co_return model::make_empty_record_batch_reader();
         }
 
-        // It's possible for LSO to be 0, which in this case the previous
-        // is model::offset::min(), this is the same as the kafka fetch
         cloud_topic_log_reader_config cfg(
-          /*start_offset=*/std::min(
-            effective_start.value(), last_reconciled_offset()),
+          /*start_offset=*/std::max(
+            effective_start.value(),
+            kafka::next_offset(last_reconciled_offset())),
           /*max_offset=*/kafka::prev_offset(maybe_lso.value()),
           /*min_bytes=*/1,
           /*max_bytes=*/input_cfg.max_bytes,

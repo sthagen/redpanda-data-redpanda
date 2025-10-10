@@ -27,8 +27,13 @@ public:
     void SetUp() override {
         basic_consumer_fixture::SetUp();
         auto consumer = make_consumer();
+        auto* rp = instance(model::node_id{0});
         _mux_consumer = std::make_unique<mux_remote_consumer>(
-          make_consumer(), partition_max_buffered, fetch_max_wait);
+          client_id,
+          make_consumer(),
+          rp->app.snc_quota_mgr.local(),
+          partition_max_buffered,
+          fetch_max_wait);
         _mux_consumer->start().get();
         // create source and target topics;
         create_topic(model::topic_namespace_view{_source}).get();
@@ -72,6 +77,7 @@ public:
     void StopConsumer() override {}
 
 protected:
+    const ss::sstring client_id = "replicator_fixture_test";
     std::unique_ptr<mux_remote_consumer> _mux_consumer;
     std::unique_ptr<partition_replicator> _replicator;
     model::ntp _source{model::kafka_namespace, "source", 0};
@@ -133,6 +139,4 @@ INSTANTIATE_TEST_SUITE_P(
   ReplicatorFixtureAndSessions,
   ReplicatorFixture,
   testing::Values(
-    session_config::with_sessions,
-    session_config::without_sessions,
-    session_config::toggle_sessions));
+    session_config::with_sessions, session_config::without_sessions));

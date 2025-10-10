@@ -240,6 +240,33 @@ simple_metastore::set_start_offset(
     co_return std::expected<void, metastore::errc>{};
 }
 
+ss::future<std::expected<metastore::topic_removal_response, metastore::errc>>
+simple_metastore::remove_topics(const chunked_vector<model::topic_id>& topics) {
+    auto update_res = remove_topics_update::build(state_, topics.copy());
+    if (!update_res.has_value()) {
+        vlog(cd_log.debug, "Topics removal failed: {}", update_res.error());
+        co_return std::unexpected(metastore::errc::invalid_request);
+    }
+    auto apply_res = update_res->apply(state_);
+    vassert(
+      apply_res.has_value(),
+      "Apply must succeed if can_apply() is true: {}",
+      apply_res.error());
+    topic_removal_response resp;
+    for (const auto& t : topics) {
+        if (state_.topic_to_state.contains(t)) {
+            vlog(cd_log.error, "Topics removal didn't remove topic {}", t);
+            resp.not_removed.insert(t);
+        }
+    }
+    vassert(
+      resp.not_removed.empty(),
+      "Topic removal in the simple_metastore is expected to always remove all "
+      "requested topics, {} not removed",
+      resp.not_removed.size());
+    co_return resp;
+}
+
 ss::future<std::expected<metastore::object_response, metastore::errc>>
 simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, kafka::offset o) {

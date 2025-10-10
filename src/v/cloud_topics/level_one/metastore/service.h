@@ -35,6 +35,9 @@ public:
     ss::future<set_start_offset_reply> set_start_offset(
       set_start_offset_request, ::rpc::streaming_context&) override;
 
+    ss::future<remove_topics_reply>
+    remove_topics(remove_topics_request, ::rpc::streaming_context&) override;
+
     ss::future<get_first_offset_ge_reply> get_first_offset_ge(
       get_first_offset_ge_request, ::rpc::streaming_context&) override;
 

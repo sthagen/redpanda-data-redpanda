@@ -13,6 +13,7 @@
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/logger.h"
+#include "model/batch_builder.h"
 #include "ssx/future-util.h"
 #include "ssx/sleep_abortable.h"
 
@@ -457,6 +458,67 @@ domain_manager::set_start_offset(rpc::set_start_offset_request req) {
     }
 
     co_return rpc::set_start_offset_reply{.ec = rpc::errc::ok};
+}
+
+ss::future<rpc::remove_topics_reply>
+domain_manager::remove_topics(rpc::remove_topics_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::remove_topics_reply{
+          .ec = rpc::errc::not_leader, .not_removed = {}};
+    }
+
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::remove_topics_reply{
+          .ec = convert_stm_errc(sync_res.error()), .not_removed = {}};
+    }
+    chunked_vector<model::topic_id> topics_to_remove;
+    for (const auto& t : req.topics) {
+        if (stm_->state().topic_to_state.contains(t)) {
+            topics_to_remove.emplace_back(t);
+        }
+    }
+    // NOTE: even if topics_to_remove is empty, replicate it so we're
+    // guaranteed to have been a caught up leader when we build not_removed
+    // below. It's possible the sync() call above finished but our state was
+    // still stale, e.g. because of a cross-shard movement.
+    auto update_res = remove_topics_update::build(
+      stm_->state(), std::move(topics_to_remove));
+    if (!update_res.has_value()) {
+        vlog(
+          cd_log.debug,
+          "Rejecting request to remove topics: {}",
+          update_res.error());
+        co_return rpc::remove_topics_reply{
+          .ec = rpc::errc::concurrent_requests,
+          .not_removed = {},
+        };
+    }
+    model::batch_builder builder;
+    builder.set_batch_type(model::record_batch_type::l1_stm);
+    builder.add_record(
+      {.key = serde::to_iobuf(remove_topics_update::key),
+       .value = serde::to_iobuf(std::move(update_res.value()))});
+    auto batch = co_await builder.build();
+    auto repl_res = co_await stm_->replicate_and_wait(
+      sync_res.value(), std::move(batch), as_);
+    if (!repl_res.has_value()) {
+        co_return rpc::remove_topics_reply{
+          .ec = convert_stm_errc(repl_res.error()),
+          .not_removed = {},
+        };
+    }
+    chunked_vector<model::topic_id> not_removed;
+    for (const auto& t : req.topics) {
+        if (stm_->state().topic_to_state.contains(t)) {
+            not_removed.emplace_back(t);
+        }
+    }
+    co_return rpc::remove_topics_reply{
+      .ec = rpc::errc::ok,
+      .not_removed = std::move(not_removed),
+    };
 }
 
 ss::future<> domain_manager::gc_loop() {

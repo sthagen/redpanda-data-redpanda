@@ -217,6 +217,7 @@ redpanda_test_cc_library(
         "//src/v/redpanda/tests:fixture",
         "//src/v/storage",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
         "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",

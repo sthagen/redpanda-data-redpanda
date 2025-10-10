@@ -19,6 +19,7 @@
 #include "storage/offset_to_filepos.h"
 #include "storage/segment_reader.h"
 #include "storage/types.h"
+#include "test_utils/scoped_config.h"
 
 #include <gtest/gtest.h>
 
@@ -87,6 +88,7 @@ public:
     async_data_uploader_fixture()
       : redpanda_thread_fixture(
           redpanda_thread_fixture::init_cloud_storage_tag{}) {
+        cfg.get("cloud_storage_disable_upload_loop_for_tests").set_value(true);
         wait_for_controller_leadership().get();
     }
 
@@ -510,6 +512,7 @@ public:
     }
 
     model::timestamp _produce_timestamp{0};
+    scoped_config cfg;
 };
 
 } // namespace archival

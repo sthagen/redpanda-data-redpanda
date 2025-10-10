@@ -14,12 +14,14 @@ from rptest.tests.redpanda_test import RedpandaTest
 from rptest.clients.rpk_remote import RpkRemoteTool
 
 import dataclasses
+import re
 
 # only works with --max-parallel 1
 
 
-# TODO: generalize, only works on 4 core AWS for now.
 class NetTunerTest(RedpandaTest):
+    TARGET_RFS_TABLE_SIZE = 32768
+
     def __init__(self, ctx: TestContext):
         super().__init__(test_context=ctx)
 
@@ -30,6 +32,21 @@ class NetTunerTest(RedpandaTest):
         self.rpk = RpkRemoteTool(self.redpanda, self.node)
         self.rpk.mode_set("production")
 
+        interfaces = (
+            self.redpanda.nodes[0]
+            .account.ssh_output("ls /sys/class/net")
+            .decode("utf-8")
+            .strip()
+            .split("\n")
+        )
+        assert len(interfaces) == 2, f"Unexpected amount of interfaces: {interfaces}"
+        for interface in interfaces:
+            if interface != "lo":
+                self.interface_name = interface
+                break
+
+        self.logger.info(f"Found interface {self.interface_name}")
+
     def start_rp(self):
         # Need to explicitly pass listener config otherwise RP will complain about 0.0.0.0 listeners
         self.redpanda.start_node_with_rpk(
@@ -38,19 +55,6 @@ class NetTunerTest(RedpandaTest):
             clean_node=False,
         )
 
-    @staticmethod
-    def parse_matching_interrupt_num_from_interrupt_file(
-        interrupt_file: str, matcher: str
-    ) -> list[int]:
-        ret: list[int] = []
-        for line in interrupt_file.split("\n"):
-            if matcher in line:
-                ret.append(int(line.split(":")[0]))
-
-        return ret
-
-    TARGET_RFS_TABLE_SIZE = 32768
-
     @dataclasses.dataclass
     class ExpectedInterruptSetup:
         interrupts_masks: list[str]
@@ -58,6 +62,31 @@ class NetTunerTest(RedpandaTest):
         rps_cpu_mask: str
         rps_cpu_flow_count: int
         rfs_table_size: int
+        rx_tx_queue_count: int
+
+    def get_interrupt_match(self) -> str:
+        return self.interface_name
+
+    @staticmethod
+    def parse_matching_interrupt_num_from_interrupt_file(
+        interrupt_file: str, matcher: str
+    ) -> list[int]:
+        ret: list[int] = []
+        pattern = re.compile(matcher)
+        for line in interrupt_file.split("\n"):
+            if pattern.search(line):
+                ret.append(int(line.split(":")[0]))
+
+        return ret
+
+    def _test_irq_balance(self):
+        # test irqbalance
+        irqbalance_output = self.node.account.ssh_output(
+            "systemctl status irqbalance"
+        ).decode("utf-8")
+        assert "--banirq" in irqbalance_output, (
+            f"irqbalance is not configured correctly, got {irqbalance_output}"
+        )
 
     def _test_interrupt_config(
         self,
@@ -65,20 +94,14 @@ class NetTunerTest(RedpandaTest):
         rpk: RpkRemoteTool,
         expected_interrupt_setup: ExpectedInterruptSetup,
     ):
-        # test irqbalance
-        irqbalance_output = node.account.ssh_output(
-            "systemctl status irqbalance"
-        ).decode("utf-8")
-        assert "--banirq" in irqbalance_output, (
-            f"irqbalance is not configured correctly, got {irqbalance_output}"
-        )
+        self._test_irq_balance()
 
         # test interrupts
         interrupts_file = node.account.ssh_output("cat /proc/interrupts").decode(
             "utf-8"
         )
         interrupt_ids = self.parse_matching_interrupt_num_from_interrupt_file(
-            interrupts_file, "ens5"
+            interrupts_file, self.get_interrupt_match()
         )
 
         assert len(interrupt_ids) == len(expected_interrupt_setup.interrupts_masks), (
@@ -97,11 +120,23 @@ class NetTunerTest(RedpandaTest):
                 f"IRQ {interrupt_id} smp_affinity is not set correctly, got {cpu_affinity} expected {target_mask}"
             )
 
+        rx_tx_queue_count = int(
+            node.account.ssh_output(
+                f"ls /sys/class/net/{self.interface_name}/queues/ | grep rx- | wc -l"
+            )
+            .decode("utf-8")
+            .strip()
+        )
+
+        assert rx_tx_queue_count == expected_interrupt_setup.rx_tx_queue_count, (
+            f"Got unexpected amount of queues, got {rx_tx_queue_count} expected {expected_interrupt_setup.rx_tx_queue_count}"
+        )
+
         # test RPS
-        for i in range(len(interrupt_ids)):
+        for i in range(rx_tx_queue_count):
             rps_cpu = (
                 node.account.ssh_output(
-                    f"cat /sys/class/net/ens5/queues/rx-{i}/rps_cpus"
+                    f"cat /sys/class/net/{self.interface_name}/queues/rx-{i}/rps_cpus"
                 )
                 .decode("utf-8")
                 .strip()
@@ -122,10 +157,10 @@ class NetTunerTest(RedpandaTest):
             f"rps_sock_flow_entries is not set correctly, got {total_rps_sock_flow_entries} expected {targetRFSTableSize}"
         )
 
-        for i in range(len(interrupt_ids)):
+        for i in range(rx_tx_queue_count):
             per_queue_rps_flow_count = int(
                 node.account.ssh_output(
-                    f"cat /sys/class/net/ens5/queues/rx-{i}/rps_flow_cnt"
+                    f"cat /sys/class/net/{self.interface_name}/queues/rx-{i}/rps_flow_cnt"
                 )
                 .decode("utf-8")
                 .strip()
@@ -153,79 +188,148 @@ class NetTunerTest(RedpandaTest):
         check_output = rpk.check().split()
 
         for line in check_output:
-            if line.startswith("NIC ens5"):
+            if line.startswith(f"NIC {self.interface_name}"):
                 assert line.endswith("true"), f"NIC check failed: {line}"
 
-    @cluster(num_nodes=1)
-    def test_tune_net_mq(self):
+    def _test_tune_net_mq(self, expected_interrupt_setup: ExpectedInterruptSetup):
         self.rpk.tune("net")
 
         self.start_rp()
 
+        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+
+    def _test_tune_net_dedicated_core(
+        self,
+        expected_interrupt_setup: ExpectedInterruptSetup,
+        dedicated_cores: int,
+        rps_rfs: bool = True,
+    ):
+        self.rpk.config_set(
+            "rpk.cores_per_dedicated_interrupt_core", str(dedicated_cores)
+        )
+        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
+        if not rps_rfs:
+            self.rpk.config_set("rpk.allow_rps_rfs_tuner", "false")
+
+        self.rpk.tune("net")
+
+        self.start_rp()
+
+        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+
+
+# Targets 4 core machines
+class AwsNetTunerTest(NetTunerTest):
+    @cluster(num_nodes=1)
+    def test_tune_net_mq(self):
         expected_interrupt_setup = self.ExpectedInterruptSetup(
             interrupts_masks=["1", "4", "2", "8"],
             redpanda_cores={0, 1, 2, 3},
             rps_cpu_mask="0",
             rps_cpu_flow_count=0,
             rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=4,
         )
 
-        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+        self._test_tune_net_mq(expected_interrupt_setup)
 
     @cluster(num_nodes=1)
     def test_tune_net_dedicated_1_core(self):
-        self.rpk.config_set("rpk.cores_per_dedicated_interrupt_core", "4")
-        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
-
-        self.rpk.tune("net")
-
-        self.start_rp()
-
         expected_interrupt_setup = self.ExpectedInterruptSetup(
             interrupts_masks=["8"],
             redpanda_cores={0, 1, 2},
             rps_cpu_mask="7",
             rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 1),
             rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=1,
         )
 
-        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+        self._test_tune_net_dedicated_core(expected_interrupt_setup, 4)
 
     @cluster(num_nodes=1)
     def test_tune_net_dedicated_1_core_no_rps_rfs(self):
-        self.rpk.config_set("rpk.cores_per_dedicated_interrupt_core", "4")
-        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
-        self.rpk.config_set("rpk.allow_rps_rfs_tuner", "false")
-
-        self.rpk.tune("net")
-
-        self.start_rp()
-
         expected_interrupt_setup = self.ExpectedInterruptSetup(
             interrupts_masks=["8"],
             redpanda_cores={0, 1, 2},
             rps_cpu_mask="0",
             rps_cpu_flow_count=0,
             rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=1,
         )
 
-        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+        self._test_tune_net_dedicated_core(expected_interrupt_setup, 4, False)
 
     @cluster(num_nodes=1)
     def test_tune_net_dedicated_2_cores(self):
-        self.rpk.config_set("rpk.cores_per_dedicated_interrupt_core", "2")
-        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
-
-        self.rpk.tune("net")
-
-        self.start_rp()
-
         expected_interrupt_setup = self.ExpectedInterruptSetup(
             interrupts_masks=["4", "8"],
             redpanda_cores={0, 1},
             rps_cpu_mask="3",
             rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 2),
             rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=2,
         )
 
-        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+        self._test_tune_net_dedicated_core(expected_interrupt_setup, 2)
+
+
+# Targets 4 core virtio (this is what our current ansible targets) machines
+class GcpNetTunerTest(NetTunerTest):
+    def get_interrupt_match(self) -> str:
+        return "virtio1-(input|output)"
+
+    def _test_irq_balance(self):
+        # no irq-balance on GCP ubu images
+        pass
+
+    @cluster(num_nodes=1)
+    def test_tune_net_mq(self):
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["1", "1", "4", "4", "2", "2", "8", "8"],
+            redpanda_cores={0, 1, 2, 3},
+            rps_cpu_mask="0",
+            rps_cpu_flow_count=0,
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=4,
+        )
+
+        self._test_tune_net_mq(expected_interrupt_setup)
+
+    @cluster(num_nodes=1)
+    def test_tune_net_dedicated_1_core(self):
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["8", "8", "8", "8", "8", "8", "8", "8"],
+            redpanda_cores={0, 1, 2},
+            rps_cpu_mask="7",
+            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 1),
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=1,
+        )
+
+        self._test_tune_net_dedicated_core(expected_interrupt_setup, 4)
+
+    @cluster(num_nodes=1)
+    def test_tune_net_dedicated_1_core_no_rps_rfs(self):
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["8", "8", "8", "8", "8", "8", "8", "8"],
+            redpanda_cores={0, 1, 2},
+            rps_cpu_mask="0",
+            rps_cpu_flow_count=0,
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=1,
+        )
+
+        self._test_tune_net_dedicated_core(expected_interrupt_setup, 4, False)
+
+    @cluster(num_nodes=1)
+    def test_tune_net_dedicated_2_cores(self):
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["4", "4", "8", "8", "4", "4", "8", "8"],
+            redpanda_cores={0, 1},
+            rps_cpu_mask="3",
+            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 2),
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=2,
+        )
+
+        self._test_tune_net_dedicated_core(expected_interrupt_setup, 2)

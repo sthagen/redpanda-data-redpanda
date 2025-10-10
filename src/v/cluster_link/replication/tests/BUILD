@@ -65,6 +65,7 @@ redpanda_cc_gtest(
         "//src/v/kafka/client/direct_consumer/tests:direct_consumer_fixture",
         "//src/v/model",
         "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:scoped_config",
         "@fmt",
         "@googletest//:gtest",
         "@seastar",

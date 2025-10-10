@@ -58,6 +58,9 @@ public:
     ss::future<rpc::set_start_offset_reply>
       set_start_offset(rpc::set_start_offset_request);
 
+    ss::future<rpc::remove_topics_reply>
+      remove_topics(rpc::remove_topics_request);
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
     ss::future<> gc_loop();

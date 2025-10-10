@@ -387,6 +387,51 @@ replicated_metastore::set_start_offset(
     co_return std::expected<void, metastore::errc>{};
 }
 
+ss::future<std::expected<metastore::topic_removal_response, metastore::errc>>
+replicated_metastore::remove_topics(
+  const chunked_vector<model::topic_id>& topics) {
+    auto num_metastore_partitions = fe_.num_metastore_partitions();
+    if (!num_metastore_partitions.has_value()) {
+        vlog(cd_log.warn, "Unable to get num metastore partitions");
+        co_return std::unexpected(errc::transport_error);
+    }
+    static constexpr auto max_rpc_concurrency = 10;
+    chunked_hash_set<model::topic_id> not_removed;
+    auto fut = co_await ss::coroutine::as_future(
+      ss::max_concurrent_for_each(
+        std::views::iota(0, *num_metastore_partitions),
+        max_rpc_concurrency,
+        [this, &topics, &not_removed](int pid) {
+            return fe_
+              .remove_topics(
+                rpc::remove_topics_request{
+                  .metastore_partition = model::partition_id{pid},
+                  .topics = topics.copy(),
+                })
+              .then(
+                [&not_removed, &topics](const rpc::remove_topics_reply& repl) {
+                    if (topics.size() == not_removed.size()) {
+                        // Minor optimization: exit early if the set needing
+                        // retry is the complete set of topics to remove.
+                        return;
+                    }
+                    if (repl.ec != rpc::errc::ok) {
+                        not_removed.insert(topics.begin(), topics.end());
+                    }
+                    not_removed.insert(
+                      repl.not_removed.begin(), repl.not_removed.end());
+                });
+        }));
+    if (fut.failed()) {
+        auto ex = fut.get_exception();
+        vlog(cd_log.warn, "Error while sending topic removal requests: {}", ex);
+        co_return std::unexpected(metastore::errc::transport_error);
+    }
+    co_return topic_removal_response{
+      .not_removed = std::move(not_removed),
+    };
+}
+
 ss::future<std::expected<metastore::object_response, metastore::errc>>
 replicated_metastore::get_first_ge(
   const model::topic_id_partition& tidp, kafka::offset offset) {

@@ -81,6 +81,7 @@ redpanda_cc_library(
         ":cluster_services_interface",
         ":data_plane_impl",
         "//src/v/cloud_topics/housekeeper:manager",
+        "//src/v/cloud_topics/level_one/metastore:topic_purger",
         "//src/v/cloud_topics/level_zero/gc:level_zero_gc",
         "//src/v/cloud_topics/manager",
     ],

@@ -39,6 +39,12 @@ ss::future<set_start_offset_reply> service::set_start_offset(
       std::move(request), frontend::local_only::yes);
 }
 
+ss::future<remove_topics_reply> service::remove_topics(
+  remove_topics_request request, ::rpc::streaming_context&) {
+    return _frontend->local().remove_topics(
+      std::move(request), frontend::local_only::yes);
+}
+
 ss::future<get_first_offset_ge_reply> service::get_first_offset_ge(
   get_first_offset_ge_request request, ::rpc::streaming_context&) {
     return _frontend->local().get_first_offset_ge(

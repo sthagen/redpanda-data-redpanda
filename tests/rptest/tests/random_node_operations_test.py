@@ -461,7 +461,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "Skipping test with iceberg and unsupported cloud storage type"
                 )
 
-        with_cloud_topics = True
+        with_cloud_topics = False
         if mixed_versions:
             with_cloud_topics = False
             self.logger.info("Disabling cloud topics in mixed version test")

@@ -224,3 +224,29 @@ redpanda_cc_library(
         "//src/v/serde:map",
     ],
 )
+
+redpanda_cc_library(
+    name = "topic_purger",
+    srcs = [
+        "topic_purger.cc",
+    ],
+    hdrs = [
+        "topic_purger.h",
+    ],
+    implementation_deps = [
+        ":metastore",
+        "//src/v/base",
+        "//src/v/cloud_topics:logger",
+        "//src/v/cluster",
+        "//src/v/model",
+        "//src/v/model:batch_builder",
+        "//src/v/ssx:sleep_abortable",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/ssx:work_queue",
+        "//src/v/utils:named_type",
+        "@seastar",
+    ],
+)

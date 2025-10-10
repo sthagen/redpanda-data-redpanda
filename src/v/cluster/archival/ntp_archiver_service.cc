@@ -771,8 +771,7 @@ ss::future<> ntp_archiver::sync_manifest_until_abort() {
         co_return;
     }
     if (!_probe) {
-        _probe.emplace(
-          _conf->ntp_metrics_disabled, _ntp, _parent.archival_meta_stm());
+        initialize_probe();
     }
 
     while (!_as.abort_requested()) {

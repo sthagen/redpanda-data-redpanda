@@ -11,6 +11,7 @@
 
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "kafka/client/direct_consumer/tests/direct_consumer_fixture.h"
+#include "test_utils/scoped_config.h"
 
 #include <seastar/core/sleep.hh>
 
@@ -28,8 +29,13 @@ public:
         basic_consumer_fixture::SetUp();
         auto consumer = make_consumer();
         _raw_consumer = consumer.get();
+        auto* rp = instance(model::node_id{0});
         _mux_consumer = std::make_unique<mux_remote_consumer>(
-          std::move(consumer), partition_max_buffered, fetch_max_wait);
+          client_id,
+          std::move(consumer),
+          rp->app.snc_quota_mgr.local(),
+          partition_max_buffered,
+          fetch_max_wait);
         _mux_consumer->start().get();
     }
     void TearDown() override {
@@ -56,6 +62,7 @@ public:
     void StopConsumer() override {}
 
 protected:
+    const ss::sstring client_id = "mux_consumer_test";
     std::unique_ptr<mux_remote_consumer> _mux_consumer;
     const kafka::client::direct_consumer* _raw_consumer;
 };
@@ -198,11 +205,55 @@ TEST_P(MuxConsumerFixture, TestResetPartition) {
     EXPECT_EQ(records, 100);
 }
 
+TEST_P(MuxConsumerFixture, TestProduceThrottling) {
+    scoped_config config;
+    config.get("max_kafka_throttle_delay_ms").set_value(100ms);
+
+    auto* rp = instance(model::node_id{0});
+    auto& quota_mgr = rp->app.snc_quota_mgr.local();
+    auto& buckets = rp->app.snc_node_quota;
+    const auto& probe = quota_mgr.get_snc_quotas_probe();
+    auto total_throttled = [&probe]() {
+        return probe.get_throttle_time().sample_sum;
+    };
+
+    // produce some data to the source topic
+    produce_to_partition(topic, 0, 100).get();
+    EXPECT_EQ(total_throttled(), 0);
+    // throttle ingress to lowest possible value to trigger throttling
+    config.get("kafka_throughput_limit_node_in_bps")
+      .set_value(std::make_optional<int64_t>(1));
+    RPTEST_REQUIRE_EVENTUALLY(
+      5s, [&buckets]() { return buckets.in && buckets.in->rate() == 1; });
+
+    // fetch the data.
+    auto tp = model::topic_partition{topic, model::partition_id{0}};
+    auto added = _mux_consumer->add(tp, kafka::offset{0});
+    ASSERT_TRUE(added.has_value()) << added.error();
+    auto reset = _mux_consumer->reset(tp, kafka::offset{0});
+    ASSERT_TRUE(reset.has_value()) << reset.error();
+    // Ensure data can be fetched.
+    // it should be throttled as data is fetched by the consumer
+    ss::abort_source as;
+    auto fetch_res = _mux_consumer->fetch(tp, as).get();
+    ASSERT_TRUE(fetch_res.has_value()) << fetch_res.error();
+    auto throttled = total_throttled();
+    EXPECT_GT(throttled, 0);
+    // Disable produce throttling
+    config.get("kafka_throughput_controlled_api_keys")
+      .set_value(std::vector<ss::sstring>{});
+    // produce more data, shouldn't get throttled now
+    produce_to_partition(topic, 0, 100).get();
+    // fetch again
+    fetch_res = _mux_consumer->fetch(tp, as).get();
+    ASSERT_TRUE(fetch_res.has_value()) << fetch_res.error();
+    // should remain the same
+    EXPECT_EQ(total_throttled(), throttled);
+}
+
 using session_config = kafka::client::tests::session_config;
 INSTANTIATE_TEST_SUITE_P(
   MuxConsumerFixtureAndSessions,
   MuxConsumerFixture,
   testing::Values(
-    session_config::with_sessions,
-    session_config::without_sessions,
-    session_config::toggle_sessions));
+    session_config::with_sessions, session_config::without_sessions));

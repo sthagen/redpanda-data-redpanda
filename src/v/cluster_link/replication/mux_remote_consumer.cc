@@ -11,9 +11,33 @@
 #include "cluster_link/replication/mux_remote_consumer.h"
 
 #include "cluster_link/logger.h"
+#include "config/configuration.h"
 #include "ssx/future-util.h"
 
 namespace cluster_link::replication {
+
+mux_remote_consumer::mux_remote_consumer(
+  ss::sstring client_id,
+  std::unique_ptr<kafka::client::direct_consumer> consumer,
+  kafka::snc_quota_manager& snc_quota_mgr,
+  size_t partition_max_buffered,
+  std::chrono::milliseconds fetch_max_wait)
+  : _client_id(std::move(client_id))
+  , _consumer(std::move(consumer))
+  , _snc_quota_mgr(snc_quota_mgr)
+  , _partition_max_buffered(partition_max_buffered)
+  , _fetch_max_wait(fetch_max_wait)
+  , _kafka_tput_controlled_api_keys(
+      config::shard_local_cfg().kafka_throughput_controlled_api_keys.bind())
+  , _produce_throttling_enabled(should_throttle_produce()) {
+    _kafka_tput_controlled_api_keys.watch(
+      [this]() { _produce_throttling_enabled = should_throttle_produce(); });
+}
+
+bool mux_remote_consumer::should_throttle_produce() {
+    const auto& keys = _kafka_tput_controlled_api_keys();
+    return std::ranges::find(keys, kafka::produce_api::name) != keys.end();
+}
 
 ss::future<> mux_remote_consumer::start() {
     co_await _consumer->start();
@@ -175,6 +199,27 @@ bool mux_remote_consumer::can_ignore_partition_data(
 
 ss::future<> mux_remote_consumer::process_fetched_data(
   chunked_vector<kafka::client::fetched_topic_data> fetches) {
+    if (_produce_throttling_enabled) {
+        size_t total_fetch_bytes = std::accumulate(
+          fetches.begin(), fetches.end(), 0, [](size_t sum, const auto& t) {
+              return sum + t.total_bytes;
+          });
+        _snc_quota_mgr.get_or_create_quota_context(_snc_quota_ctx, _client_id);
+        _snc_quota_mgr.record_request_receive(
+          *_snc_quota_ctx, total_fetch_bytes);
+        auto delays = _snc_quota_mgr.get_shard_delays(*_snc_quota_ctx);
+        if (delays.request > ss::lowres_clock::duration::zero()) {
+            vlog(
+              cllog.debug,
+              "Throttling fetch processing for {}",
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                delays.request));
+            co_await ss::sleep_abortable(delays.request, _as);
+        }
+        _snc_quota_mgr.record_request_intake(
+          *_snc_quota_ctx, total_fetch_bytes);
+    }
+
     chunked_vector<model::topic_partition> to_unassign;
     for (auto& tp_fetch : fetches) {
         const auto& topic = tp_fetch.topic;

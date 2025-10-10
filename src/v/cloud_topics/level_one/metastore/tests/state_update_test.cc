@@ -1365,3 +1365,143 @@ TEST(StateUpdateTest, TestRemoveMissingObjects) {
     // The operation should have succeeded.
     EXPECT_EQ(0, s.objects.size());
 }
+
+TEST(StateUpdateTest, TestRemoveTopicsBasic) {
+    state s;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 200, 1100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
+                 .build();
+    ASSERT_TRUE(add.apply(s).has_value());
+    EXPECT_EQ(2, s.topic_to_state.size());
+    EXPECT_EQ(1, s.objects.size());
+
+    auto& obj = s.objects.at(oid1);
+    EXPECT_EQ(198, obj.total_data_size);
+    EXPECT_EQ(0, obj.removed_data_size);
+
+    // Remove just one topic.
+    auto tp_a = model::topic_id_partition::from(tidp_a);
+    auto remove_topics_res = remove_topics_update::build(s, {tp_a.topic_id});
+    ASSERT_TRUE(remove_topics_res.has_value());
+    ASSERT_TRUE(remove_topics_res->apply(s).has_value());
+
+    // Just the other topic should remain in the state.
+    EXPECT_EQ(1, s.topic_to_state.size());
+    EXPECT_FALSE(s.topic_to_state.contains(tp_a.topic_id));
+    auto tp_b = model::topic_id_partition::from(tidp_b);
+    EXPECT_TRUE(s.topic_to_state.contains(tp_b.topic_id));
+
+    // Validate object accounting.
+    EXPECT_EQ(1, s.objects.size());
+    EXPECT_EQ(198, obj.total_data_size);
+    EXPECT_EQ(99, obj.removed_data_size);
+
+    // We should be unable to remove object until the other topic is removed.
+    auto remove_obj_res = remove_objects_update::build(s, {oid1});
+    EXPECT_FALSE(remove_obj_res.has_value());
+    EXPECT_THAT(
+      remove_obj_res.error()(), testing::ContainsRegex("is still referenced"));
+    EXPECT_EQ(1, s.objects.size());
+
+    // Now remove the other topic and try again.
+    remove_topics_res = remove_topics_update::build(s, {tp_b.topic_id});
+    ASSERT_TRUE(remove_topics_res.has_value());
+    ASSERT_TRUE(remove_topics_res->apply(s).has_value());
+
+    remove_obj_res = remove_objects_update::build(s, {oid1});
+    EXPECT_TRUE(remove_obj_res.has_value());
+    ASSERT_TRUE(remove_obj_res->apply(s).has_value());
+    EXPECT_EQ(0, s.objects.size());
+}
+
+TEST(StateUpdateTest, TestRemoveMultipleTopics) {
+    state s;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 200, 1100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .add(new_obj_builder(oid2, 200, 1100)
+                        .add(tidp_b, 11_o, 20_o, 1999_t, 0, 99)
+                        .add(tidp_c, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid4, 100, 1100)
+                        .add(tidp_c, 11_o, 20_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
+                 .add_term_start(tidp_c, 0_tm, 0_o)
+                 .build();
+    ASSERT_TRUE(add.apply(s).has_value());
+    EXPECT_EQ(3, s.topic_to_state.size());
+    EXPECT_EQ(4, s.objects.size());
+
+    // Remove all the topics in a single update.
+    auto tp_a = model::topic_id_partition::from(tidp_a);
+    auto tp_b = model::topic_id_partition::from(tidp_b);
+    auto tp_c = model::topic_id_partition::from(tidp_c);
+    auto remove_topics_res = remove_topics_update::build(
+      s, {tp_a.topic_id, tp_b.topic_id, tp_c.topic_id});
+    ASSERT_TRUE(remove_topics_res.has_value());
+    ASSERT_TRUE(remove_topics_res->apply(s).has_value());
+    EXPECT_EQ(0, s.topic_to_state.size());
+
+    // Sanity check, the objects should still be there -- only the topics are
+    // removed.
+    EXPECT_EQ(4, s.objects.size());
+
+    // All the objects should be removable now.
+    auto remove_obj_res = remove_objects_update::build(
+      s, {oid1, oid2, oid3, oid4});
+    ASSERT_TRUE(remove_obj_res.has_value());
+    ASSERT_TRUE(remove_obj_res->apply(s).has_value());
+    EXPECT_EQ(0, s.objects.size());
+}
+
+TEST(StateUpdateTest, TestRemoveMissingTopic) {
+    state s;
+    // Add just one topic.
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    ASSERT_TRUE(add.apply(s).has_value());
+    EXPECT_EQ(1, s.topic_to_state.size());
+    EXPECT_EQ(1, s.objects.size());
+
+    // Remove topics that don't exist (and one that does).
+    auto tp_a = model::topic_id_partition::from(tidp_a);
+    auto tp_b = model::topic_id_partition::from(tidp_b);
+    auto tp_c = model::topic_id_partition::from(tidp_c);
+    auto remove_topics_res = remove_topics_update::build(
+      s, {tp_a.topic_id, tp_b.topic_id, tp_c.topic_id});
+    ASSERT_TRUE(remove_topics_res.has_value());
+    ASSERT_TRUE(remove_topics_res->apply(s).has_value());
+
+    // Should succeed gracefully despite having other topics.
+    EXPECT_EQ(0, s.topic_to_state.size());
+    EXPECT_EQ(1, s.objects.size());
+
+    // Object accounting should only reflect the removed topic A.
+    auto& obj = s.objects.at(oid1);
+    EXPECT_EQ(99, obj.total_data_size);
+    EXPECT_EQ(99, obj.removed_data_size);
+
+    // Do the same with only non-existent topics. This is a no-op.
+    remove_topics_res = remove_topics_update::build(
+      s, {tp_b.topic_id, tp_c.topic_id});
+    ASSERT_TRUE(remove_topics_res.has_value());
+    ASSERT_TRUE(remove_topics_res->apply(s).has_value());
+    EXPECT_EQ(0, s.topic_to_state.size());
+    EXPECT_EQ(1, s.objects.size());
+}

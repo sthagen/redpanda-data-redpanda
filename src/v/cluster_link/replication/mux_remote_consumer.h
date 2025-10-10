@@ -13,6 +13,7 @@
 #include "cluster_link/replication/partition_data_queue.h"
 #include "container/chunked_hash_map.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
+#include "kafka/server/snc_quota_manager.h"
 
 #include <expected>
 #include <memory>
@@ -44,12 +45,11 @@ public:
     using result = std::expected<void, errc>;
 
     explicit mux_remote_consumer(
+      ss::sstring client_id,
       std::unique_ptr<kafka::client::direct_consumer> consumer,
+      kafka::snc_quota_manager& snc_quota_mgr,
       size_t partition_max_buffered,
-      std::chrono::milliseconds fetch_max_wait)
-      : _consumer(std::move(consumer))
-      , _partition_max_buffered(partition_max_buffered)
-      , _fetch_max_wait(fetch_max_wait) {}
+      std::chrono::milliseconds fetch_max_wait);
 
     ss::future<> start();
     ss::future<> stop() noexcept;
@@ -75,6 +75,7 @@ public:
     fetch(const ::model::topic_partition&, ss::abort_source&);
 
 private:
+    bool should_throttle_produce();
     bool can_ignore_partition_data(const ::model::topic_partition&);
     ss::future<> assign_pending_partitions();
     ss::future<> fetch_loop();
@@ -85,7 +86,10 @@ private:
       ::model::topic_partition,
       std::unique_ptr<partition_data_queue>>
       _partitions;
+    ss::sstring _client_id;
     std::unique_ptr<kafka::client::direct_consumer> _consumer;
+    std::unique_ptr<kafka::snc_quota_context> _snc_quota_ctx;
+    kafka::snc_quota_manager& _snc_quota_mgr;
     /// Maps topics to their pending partition assignments that are waiting to
     /// be processed. Each topic is associated with a set of partition IDs that
     /// need to be assigned to this consumer but have not yet been fully
@@ -94,7 +98,10 @@ private:
       _pending_assignment;
     size_t _partition_max_buffered;
     std::chrono::milliseconds _fetch_max_wait;
+    config::binding<std::vector<ss::sstring>> _kafka_tput_controlled_api_keys;
+    bool _produce_throttling_enabled;
     ss::gate _gate;
+    ss::abort_source _as;
     ss::condition_variable _cv;
     friend class ::MuxConsumerFixture;
 };

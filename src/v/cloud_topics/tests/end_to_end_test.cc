@@ -19,6 +19,7 @@
 #include "model/timestamp.h"
 #include "redpanda/tests/fixture.h"
 #include "ssx/sformat.h"
+#include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
 #include <gtest/gtest.h>
@@ -87,8 +88,6 @@ TEST_F(e2e_fixture, test_create_cloud_topic) {
 }
 
 TEST_F(e2e_fixture, test_l0_path) {
-    auto partition = app.partition_manager.local().get(ntp);
-
     auto* producer = make_producer();
     size_t total_records = 100;
     size_t records_per_batch = 5;
@@ -205,6 +204,31 @@ TEST_F(e2e_fixture, timequery) {
                         .get();
         EXPECT_EQ(offset, testcase.expected_offset)
           << "for timequery at relative timestamp: "
+          << testcase.relative_timestamp;
+    }
+    auto partition = app.partition_manager.local().get(ntp);
+    auto state = partition->get_cloud_topics_state();
+    ASSERT_NE(state, nullptr);
+    auto topic_id = partition->get_topic_config()->get().tp_id;
+    ASSERT_NE(topic_id, std::nullopt);
+    RPTEST_REQUIRE_EVENTUALLY(30s, [this, state, topic_id]() {
+        // Expect eventually we don't get a missing ntp error.
+        return state->local()
+          .get_l1_metastore()
+          ->get_offsets({*topic_id, ntp.tp.partition})
+          .then([](auto result) { return result.has_value(); });
+    });
+    // Retry now that the data is in L1
+    for (const auto& testcase : timequery_tests) {
+        auto offset = consumer
+                        ->timequery(
+                          ntp.tp,
+                          model::timestamp{
+                            now()
+                            + (testcase.relative_timestamp * hour_in_milli)})
+                        .get();
+        EXPECT_EQ(offset, testcase.expected_offset)
+          << "for L1 timequery at relative timestamp: "
           << testcase.relative_timestamp;
     }
 }

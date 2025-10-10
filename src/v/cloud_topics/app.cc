@@ -14,6 +14,7 @@
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/data_plane_impl.h"
 #include "cloud_topics/housekeeper/manager.h"
+#include "cloud_topics/level_one/metastore/topic_purger.h"
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
 #include "cloud_topics/manager/manager.h"
 #include "cloud_topics/reconciler/reconciler.h"
@@ -90,6 +91,12 @@ ss::future<> app::construct(
         [&metadata_cache] { return &metadata_cache->local(); }));
 
     co_await construct_service(
+      topic_purge_manager,
+      ss::sharded_parameter([this] { return &replicated_metastore.local(); }),
+      &controller->get_topics_state(),
+      &controller->get_topics_frontend());
+
+    co_await construct_service(
       reconciler,
       ss::sharded_parameter([this] { return &l1_io.local(); }),
       ss::sharded_parameter([this] { return &replicated_metastore.local(); }));
@@ -144,6 +151,19 @@ ss::future<> app::wire_up_notifications() {
             } else {
                 gc.pause();
             }
+        });
+    });
+    co_await topic_purge_manager.invoke_on_all([this](auto& purge_mgr) {
+        manager.local().on_l1_domain_leader([&purge_mgr](
+                                              const model::ntp& ntp,
+                                              const auto&,
+                                              const auto& partition) noexcept {
+            if (ntp.tp.partition != model::partition_id{0}) {
+                return;
+            }
+            auto needs_loop = l1::topic_purger_manager::needs_loop{
+              bool(partition)};
+            purge_mgr.enqueue_loop_reset(needs_loop);
         });
     });
     co_await housekeeper_manager.invoke_on_all([this](auto& hm) {

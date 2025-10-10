@@ -41,6 +41,10 @@ public:
           fmt::format("deadbeef-aaaa-0000-0000-000000000000/{}", i));
     }
 
+    model::topic_id_partition make_topic_p0(int t) {
+        return model::topic_id_partition::from(
+          fmt::format("deadbeef-aaaa-0000-0000-{:012x}/0", t));
+    };
     // Create an object builder with objects for the given number of
     // partitions, one per partition.
     void create_initial_objects(
@@ -82,6 +86,36 @@ public:
                 .term = model::term_id{0}, .first_offset = o{0}});
         }
         auto add_res = meta.add_objects(*objs, terms).get();
+        ASSERT_TRUE_CORO(add_res.has_value());
+    }
+
+    ss::future<> add_objects_for_topics(
+      replicated_metastore& meta, int topics_count, int last_offset) {
+        auto obj_builder = meta.object_builder().get().value();
+        metastore::term_offset_map_t terms;
+        for (int i = 0; i < topics_count; ++i) {
+            auto tp = make_topic_p0(i);
+            auto oid = obj_builder->get_or_create_object_for(tp).value();
+            auto add_res = obj_builder->add(
+              oid,
+              metastore::object_metadata::ntp_metadata{
+                .tidp = tp,
+                .base_offset = o{0},
+                .last_offset = o{last_offset},
+                .max_timestamp = ts{10000},
+                .pos = 0,
+                .size = 500,
+              });
+            ASSERT_TRUE_CORO(add_res.has_value()) << add_res.error();
+            auto fin_res = obj_builder->finish(oid, 500, 1000);
+            ASSERT_TRUE_CORO(fin_res.has_value()) << fin_res.error();
+
+            terms[tp].emplace_back(
+              metastore::term_offset{
+                .term = model::term_id{0}, .first_offset = o{0}});
+        }
+
+        auto add_res = co_await meta.add_objects(*obj_builder, terms);
         ASSERT_TRUE_CORO(add_res.has_value());
     }
 };
@@ -671,4 +705,114 @@ TEST_F(ReplicatedMetastoreTest, TestSetStartOffset) {
     auto term_res = meta.get_term_for_offset(tp, o{100}).get();
     ASSERT_TRUE(term_res.has_value());
     ASSERT_EQ(term_res.value(), model::term_id{0});
+}
+
+TEST_F(ReplicatedMetastoreTest, TestBasicRemoveTopics) {
+    auto& app = get_ct_app(model::node_id{0});
+    replicated_metastore meta(app.get_sharded_l1_metastore_fe()->local());
+
+    static constexpr auto topics_count = 10000;
+    add_objects_for_topics(meta, topics_count, 99).get();
+
+    // Sanity check that all topics exist.
+    for (int i = 0; i < topics_count; ++i) {
+        auto tp = make_topic_p0(i);
+        auto offsets = meta.get_offsets(tp).get();
+        ASSERT_TRUE(offsets.has_value());
+        ASSERT_EQ(offsets->next_offset, o{100});
+    }
+
+    // Collect all topic IDs to remove.
+    chunked_vector<model::topic_id> topic_ids_to_remove;
+    for (int i = 0; i < topics_count; ++i) {
+        auto tp = make_topic_p0(i);
+        topic_ids_to_remove.push_back(tp.topic_id);
+    }
+
+    // Remove all topics.
+    auto remove_res = meta.remove_topics(topic_ids_to_remove).get();
+    ASSERT_TRUE(remove_res.has_value());
+    EXPECT_TRUE(remove_res->not_removed.empty())
+      << remove_res->not_removed.size() << " topics remain";
+
+    // Verify all topics are gone.
+    for (int i = 0; i < topics_count; ++i) {
+        auto tp = make_topic_p0(i);
+        auto offsets = meta.get_offsets(tp).get();
+        ASSERT_FALSE(offsets.has_value());
+        ASSERT_EQ(offsets.error(), metastore::errc::missing_ntp);
+    }
+    for (int i = 0; i < 3; ++i) {
+        auto l1_stm = get_l1_stm(model::partition_id{i});
+        ASSERT_TRUE(l1_stm != nullptr);
+        auto& l1_state = l1_stm->state();
+        EXPECT_TRUE(l1_state.topic_to_state.empty());
+    }
+}
+
+TEST_F(ReplicatedMetastoreTest, TestRemoveTopicsWithShuffleLoop) {
+    auto& app = get_ct_app(model::node_id{0});
+    replicated_metastore meta(app.get_sharded_l1_metastore_fe()->local());
+
+    static constexpr auto topics_count = 1000;
+    add_objects_for_topics(meta, topics_count, 99).get();
+
+    chunked_vector<model::topic_id> topics_to_remove;
+    for (int i = 0; i < topics_count; ++i) {
+        auto tp = make_topic_p0(i);
+        topics_to_remove.push_back(tp.topic_id);
+    }
+    // Pick a metastore partition to shuffle leadership on.
+    auto meta_ntp = model::ntp{
+      model::kafka_internal_namespace,
+      model::l1_metastore_topic,
+      model::partition_id{0},
+    };
+    // Start shuffle loop in the background.
+    ss::gate gate;
+    auto shuffle_loop = ssx::spawn_with_gate_then(gate, [this, meta_ntp] {
+        return shuffle_leadership(meta_ntp).then(
+          [] { return ss::sleep(300ms); });
+    });
+
+    // Retry until removal succeeds.
+    auto deadline = ss::lowres_clock::now() + 30s;
+    bool timed_out = false;
+    bool succeeded = false;
+    while (!succeeded) {
+        if (ss::lowres_clock::now() > deadline) {
+            timed_out = true;
+            break;
+        }
+        auto remove_res = meta.remove_topics(topics_to_remove).get();
+        if (
+          !remove_res.has_value() || !remove_res.value().not_removed.empty()) {
+            ss::sleep(100ms).get();
+            continue;
+        }
+        succeeded = true;
+    }
+
+    gate.close().get();
+    shuffle_loop.get();
+
+    ASSERT_FALSE(timed_out) << "Timed out waiting for remove_topics to succeed";
+    ASSERT_TRUE(succeeded);
+
+    // Verify all topics are gone.
+    for (int i = 0; i < topics_count; ++i) {
+        auto tp = make_topic_p0(i);
+        auto offsets = meta.get_offsets(tp).get();
+        ASSERT_FALSE(offsets.has_value());
+        ASSERT_EQ(offsets.error(), metastore::errc::missing_ntp);
+    }
+
+    // Verify metastore state is clean across all partitions.
+    for (int i = 0; i < 3; ++i) {
+        auto l1_stm = get_l1_stm(model::partition_id{i});
+        ASSERT_TRUE(l1_stm != nullptr);
+        auto& l1_state = l1_stm->state();
+        EXPECT_TRUE(l1_state.topic_to_state.empty())
+          << "Partition " << i << " still has topics";
+    }
 }
