@@ -66,6 +66,8 @@ std::string errc_category::message(int c) const {
         return "SCRAM configuration invalid";
     case errc::link_has_active_shadow_topics:
         return "Link has active shadow topics";
+    case errc::license_required:
+        return "A valid license is required to create a shadow link";
     }
     return "cluster::cluster_link::unknown";
 }
@@ -162,5 +164,8 @@ auto fmt::formatter<cluster::cluster_link::errc>::format(
         return fmt::format_to(
           ctx.out(),
           "cluster::cluster_link::errc::link_has_active_shadow_topics");
+    case cluster::cluster_link::errc::license_required:
+        return fmt::format_to(
+          ctx.out(), "cluster::cluster_link::errc::license_required");
     }
 }

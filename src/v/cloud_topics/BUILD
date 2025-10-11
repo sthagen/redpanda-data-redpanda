@@ -6,8 +6,6 @@ package(default_visibility = [
     "//src/v/cloud_topics/core/tests:__pkg__",
     "//src/v/cloud_topics/frontend:__pkg__",
     "//src/v/cloud_topics/level_zero:__subpackages__",
-    "//src/v/cloud_topics/level_zero/throttler:__pkg__",
-    "//src/v/cloud_topics/level_zero/throttler/tests:__pkg__",
     "//src/v/cloud_topics/tests:__pkg__",
     "//src/v/kafka/data:__pkg__",
 ])
@@ -135,7 +133,6 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
         "//src/v/cloud_topics/level_zero/reader:fetch_handler",
-        "//src/v/cloud_topics/level_zero/throttler",
         "//src/v/model",
         "//src/v/ssx:sharded_service_container",
         "//src/v/storage",

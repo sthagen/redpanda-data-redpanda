@@ -227,6 +227,13 @@ func TestTLSSettingsUnmarshalYAML(t *testing.T) {
 		wantErr  bool
 	}{
 		{
+			name:     "just enabled TLS",
+			yamlData: "enabled: true",
+			want: &TLSPEMSettings{
+				Enabled: true,
+			},
+		},
+		{
 			name: "file-based TLS settings",
 			yamlData: `
 ca_path: "/path/to/ca.crt"
@@ -261,8 +268,9 @@ ca: "ca-content"
 			wantErr: true,
 		},
 		{
-			name: "error - neither ca_path nor ca",
+			name: "error - neither ca_path nor ca (enabled is false)",
 			yamlData: `
+enabled: false
 key_path: "/path/to/key.pem"
 `,
 			wantErr: true,
@@ -537,6 +545,13 @@ func TestTLSSettingsUnmarshalJSON(t *testing.T) {
 		wantErr  bool
 	}{
 		{
+			name:     "just enabled TLS",
+			jsonData: `{"enabled": true}`,
+			want: &TLSPEMSettings{
+				Enabled: true,
+			},
+		},
+		{
 			name: "file-based TLS settings",
 			jsonData: `{
 				"enabled": true,
@@ -575,8 +590,9 @@ func TestTLSSettingsUnmarshalJSON(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "error - neither ca_path nor ca",
+			name: "error - neither ca_path nor ca and enabled is false",
 			jsonData: `{
+				"enabled": false,
 				"key_path": "/path/to/key.pem"
 			}`,
 			wantErr: true,

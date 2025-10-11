@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +45,7 @@ func (t *checkedTunable) CheckIfSupported() (supported bool, reason string) {
 }
 
 func (t *checkedTunable) Tune() TuneResult {
-	zap.L().Sugar().Debugf("Checking '%s'", t.checker.GetDesc())
+	zap.L().Sugar().Debugf(out.WithLogBanner("Checking '%s'", t.checker.GetDesc()))
 	result := t.checker.Check()
 	if result.Err != nil {
 		return NewTuneError(result.Err)

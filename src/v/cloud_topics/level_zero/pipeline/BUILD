@@ -7,8 +7,6 @@ package(default_visibility = [
     "//src/v/cloud_topics/level_zero/batcher/tests:__pkg__",
     "//src/v/cloud_topics/level_zero/reader:__pkg__",
     "//src/v/cloud_topics/level_zero/reader/tests:__pkg__",
-    "//src/v/cloud_topics/level_zero/throttler:__pkg__",
-    "//src/v/cloud_topics/level_zero/throttler/tests:__pkg__",
     "//src/v/cloud_topics/level_zero/write_request_scheduler:__pkg__",
     "//src/v/cloud_topics/level_zero/write_request_scheduler/tests:__pkg__",
 ])

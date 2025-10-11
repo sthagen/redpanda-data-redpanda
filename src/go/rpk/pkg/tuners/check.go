@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/redpanda"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
@@ -44,7 +45,7 @@ func Check(
 	for _, id := range ids {
 		checkers := checkersMap[CheckerID(id)]
 		for _, c := range checkers {
-			zap.L().Sugar().Debugf("Starting checker %q", c.GetDesc())
+			zap.L().Sugar().Debugf(out.WithLogBanner("Starting checker %q", c.GetDesc()))
 			result := c.Check()
 			if result.Err != nil {
 				if c.GetSeverity() == Fatal {

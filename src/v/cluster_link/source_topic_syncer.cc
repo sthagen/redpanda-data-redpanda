@@ -15,6 +15,7 @@
 #include "cluster_link/model/filter_utils.h"
 #include "cluster_link/model/types.h"
 #include "kafka/server/handlers/topics/types.h"
+#include "model/namespace.h"
 
 #include <fmt/ranges.h>
 
@@ -37,9 +38,8 @@ const absl::flat_hash_map<ss::sstring, ss::sstring>
   topic_configuration_overrides{
     {{ss::sstring(kafka::topic_property_remote_allow_gaps), "true"}}};
 
-const absl::flat_hash_set<::model::topic> topic_denylist{
-  ::model::kafka_consumer_offsets_topic,
-};
+const chunked_vector<ss::sstring> topic_prefix_denylist{
+  ss::sstring("__redpanda"), ss::sstring("_redpanda")};
 
 bool has_required_permissions(
   kafka::topic_authorized_operations permissions_to_check,
@@ -164,6 +164,35 @@ validate_topic_cache_entry(
       replication_factor,
       it->second.authorized_operations,
       topic_id);
+}
+
+std::optional<ss::sstring> is_valid_topic(
+  ::model::topic_view topic,
+  const chunked_vector<model::resource_name_filter_pattern>& patterns) {
+    if (!::model::is_shadow_link_enabled({::model::kafka_namespace, topic})) {
+        return ssx::sformat(
+          "Topic {} is not a valid topic for Shadow Linking", topic);
+    }
+    for (const auto& prefix : topic_prefix_denylist) {
+        if (topic().starts_with(prefix)) {
+            // Need to check the list of include filters and see if it matches
+            // any specifically included topics
+            for (const auto& p : patterns) {
+                if (
+                  p.filter == model::filter_type::include
+                  && p.pattern_type == model::filter_pattern_type::literal
+                  && p.pattern == topic) {
+                    // Even though the topic is prefixed with either "_redpanda"
+                    // or "__redpanda", if it's specifically included, then we
+                    // will permit shadowing of this topic
+                    return std::nullopt;
+                }
+            }
+            return ssx::sformat(
+              "Topic {} starts with a denied prefix: {}", topic, prefix);
+        }
+    }
+    return std::nullopt;
 }
 } // namespace
 
@@ -552,14 +581,6 @@ source_topic_syncer::find_candidate_topics_for_update(
     candidate_topics.reserve(mirror_topics->size());
 
     for (auto& [topic, mirror_metadata] : *mirror_topics) {
-        if (topic_denylist.contains(topic)) {
-            vlog(
-              logger().trace,
-              "Skipping mirroring of {} topic, it is in the denylist",
-              topic);
-            continue;
-        }
-
         vlog(logger().trace, "Checking metadata cache for topic {}", topic);
         auto metadata_value = validate_topic_cache_entry(
           logger(), cluster.get_topics(), topic);
@@ -612,11 +633,9 @@ source_topic_syncer::find_candidate_topics_for_creation(
 
     for (const auto& topic : topics) {
         vlog(logger().trace, "Checking topic: {}", topic);
-        if (topic_denylist.contains(topic)) {
-            vlog(
-              logger().trace,
-              "Skipping mirroring of {} topic, it is in the denylist",
-              topic);
+        auto deny_msg = is_valid_topic(topic, _config.topic_name_filters);
+        if (deny_msg.has_value()) {
+            vlog(logger().trace, "{}", *deny_msg);
             continue;
         }
 

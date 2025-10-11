@@ -124,6 +124,11 @@ ss::future<> reconciler::reconciliation_loop() {
           lg.debug,
           "Reconciliation loop tick with {} attached partitions",
           _sources.size());
+        if (config::shard_local_cfg()
+              .cloud_topics_disable_reconciliation_loop()) {
+            vlog(lg.debug, "Reconciliation loop disabled, skipping iteration");
+            continue;
+        }
 
         // clang-format off
         /*

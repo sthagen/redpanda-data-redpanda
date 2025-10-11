@@ -6,7 +6,7 @@ on:
     branches: [dev]
     paths:
       - 'tests/**/*.py'
-      - 'tests/type-checking/**'
+      - 'tools/type-checking/**'
       - 'tests/pyrightconfig.json'
       - 'tests/setup.py'
       - '.github/workflows/type-check-python.yaml'
@@ -15,7 +15,7 @@ on:
   pull_request:
     paths:
       - 'tests/**/*.py'
-      - 'tests/type-checking/**'
+      - 'tools/type-checking/**'
       - 'tests/pyrightconfig.json'
       - 'tests/setup.py'
       - '.github/workflows/type-check-python.yaml'
@@ -30,8 +30,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: tests
-          file: tests/type-checking/Dockerfile
+          context: "."
+          file: tools/type-checking/Dockerfile
           tags: redpanda-data/python-type-check
           cache-from: type=gha
           cache-to: type=gha,mode=max

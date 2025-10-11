@@ -22,7 +22,7 @@ FROM with-python AS build
 RUN apt-get update && \
     apt-get install --no-install-recommends -y python3-pip python3-dev git gcc && \
     rm -rf /var/lib/apt/lists/*
-COPY setup.py /tmp/rptest-setup/
+COPY tests/setup.py /tmp/rptest-setup/
 
 # install rptest and run pyright --version to prompt it to download its embedded nodejs
 RUN python3 -m pip install --no-cache-dir -e /tmp/rptest-setup
@@ -31,7 +31,7 @@ RUN python3 -m pip install --no-cache-dir -e /tmp/rptest-setup
 FROM with-python AS final
 
 ###### install pyright
-COPY type-checking/requirements.txt /tmp/pyright.txt
+COPY tools/type-checking/requirements.txt /tmp/pyright.txt
 RUN python3 -m pip install --no-cache-dir -r /tmp/pyright.txt
 
 # Copy-in *only* the parts of the python packages needed for type checking,
@@ -53,7 +53,7 @@ RUN --mount=from=build,source=/usr/local/lib/,target=/build-lib \
         /build-lib/python3.1*/dist-packages/ /usr/local/lib/python3.1*/dist-packages/
 
 
-COPY type-checking/type-check.* /type-checking/
+COPY tools/type-checking/type-check* /type-checking/
 
 ENTRYPOINT [ "/type-checking/type-check.py" ]
 

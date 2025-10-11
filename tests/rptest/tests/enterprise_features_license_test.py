@@ -45,6 +45,7 @@ class Feature(IntEnum):
     leadership_pinning = 10
     gssapi_override = 11
     oidc_override = 12
+    shadow_linking = 13
 
 
 def to_enterprise_feature(feature):
@@ -72,6 +73,7 @@ FEATURE_DEPENDENT_CONFIG = {
     Feature.leadership_pinning: "default_leaders_preference",
     Feature.gssapi_override: "sasl_mechanisms_overrides",
     Feature.oidc_override: "sasl_mechanisms_overrides",
+    Feature.shadow_linking: "enable_shadow_linking",
 }
 
 SKIP_FEATURES = [
@@ -245,6 +247,8 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
                 replicas=1,
                 config={"redpanda.leaders.preference": "racks:rack1"},
             )
+        elif feature == Feature.shadow_linking:
+            self.redpanda.set_cluster_config({"enable_shadow_linking": "true"})
         else:
             assert False, f"Unexpected feature={feature}"
 

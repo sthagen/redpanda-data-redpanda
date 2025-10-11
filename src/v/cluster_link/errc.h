@@ -40,6 +40,7 @@ enum class errc : int {
     link_has_active_shadow_topics,
     topic_does_not_exist,
     topic_metadata_stale,
+    license_required,
 };
 
 std::error_code make_error_code(errc) noexcept;

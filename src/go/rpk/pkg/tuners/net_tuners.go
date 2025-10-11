@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
@@ -111,6 +112,7 @@ func (f *netTunersFactory) NewRxTxQueueCountTuner(interfaces []string, mode irq.
 			return f.checkersFactory.NewNicRxTxQueueCountChecker(nic, mode, cpuMask)
 		},
 		func(nic network.Nic) TuneResult {
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning '%s' queue counts", nic.Name()))
 			if !f.t.GetAllowRxTxQueueTuner() {
 				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as it's disabled by configuration")
 				return NewTuneResult(false)
@@ -125,7 +127,6 @@ func (f *netTunersFactory) NewRxTxQueueCountTuner(interfaces []string, mode irq.
 				return NewTuneResult(false)
 			}
 
-			zap.L().Sugar().Debugf("Tuning '%s' queue counts", nic.Name())
 			_, targetChannels, err := network.GetCurrentAndTargetChannels(nic, mode, cpuMask, f.cpuMasks, f.t, f.ethtool)
 			if err != nil {
 				return NewTuneError(err)
@@ -151,7 +152,7 @@ func (f *netTunersFactory) NewNICsBalanceServiceTuner(
 	interfaces []string,
 ) Tunable {
 	return NewCheckedTunable(
-		f.checkersFactory.NewNicIRQAffinityStaticChecker(interfaces),
+		f.checkersFactory.NewNicIRQBalanceChecker(interfaces),
 		func() TuneResult {
 			var IRQs []int
 			for _, ifaceName := range interfaces {
@@ -185,7 +186,7 @@ func (f *netTunersFactory) NewNICsIRQsAffinityTuner(
 			return f.checkersFactory.NewNicIRQAffinityChecker(nic, mode, cpuMask)
 		},
 		func(nic network.Nic) TuneResult {
-			zap.L().Sugar().Debugf("Tuning '%s' IRQs affinity", nic.Name())
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning '%s' IRQs affinity", nic.Name()))
 			dist, err := network.GetHwInterfaceIRQsDistribution(nic, mode, cpuMask, f.cpuMasks, f.t)
 			if err != nil {
 				return NewTuneError(err)
@@ -211,7 +212,7 @@ func (f *netTunersFactory) NewNICsRpsTuner(
 			return f.checkersFactory.NewNicRpsSetChecker(nic, mode, cpuMask)
 		},
 		func(nic network.Nic) TuneResult {
-			zap.L().Sugar().Debugf("Tuning '%s' RPS", nic.Name())
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning '%s' RPS", nic.Name()))
 			rpsCPUs, err := nic.GetRpsCPUFiles()
 			if err != nil {
 				return NewTuneError(err)
@@ -244,7 +245,7 @@ func (f *netTunersFactory) NewNICsRfsTuner(interfaces []string, mode irq.Mode, c
 			return f.checkersFactory.NewNicRfsChecker(nic, mode, cpuMask)
 		},
 		func(nic network.Nic) TuneResult {
-			zap.L().Sugar().Debugf("Tuning '%s' RFS", nic.Name())
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning '%s' RFS", nic.Name()))
 			limits, err := nic.GetRpsLimitFiles()
 			if err != nil {
 				return NewTuneError(err)
@@ -277,7 +278,7 @@ func (f *netTunersFactory) NewNICsNTupleTuner(interfaces []string) Tunable {
 			return f.checkersFactory.NewNicNTupleChecker(nic)
 		},
 		func(nic network.Nic) TuneResult {
-			zap.L().Sugar().Debugf("Tuning '%s' NTuple", nic.Name())
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning '%s' NTuple", nic.Name()))
 			ntupleFeature := map[string]bool{"ntuple": true}
 			err := f.executor.Execute(
 				commands.NewEthtoolChangeCmd(f.ethtool, nic.Name(), ntupleFeature))
@@ -299,7 +300,7 @@ func (f *netTunersFactory) NewNICsXpsTuner(interfaces []string) Tunable {
 			return f.checkersFactory.NewNicXpsChecker(nic)
 		},
 		func(nic network.Nic) TuneResult {
-			zap.L().Sugar().Debugf("Tuning '%s' XPS", nic.Name())
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning '%s' XPS", nic.Name()))
 			xpsCPUFiles, err := nic.GetXpsCPUFiles()
 			if err != nil {
 				return NewTuneError(err)
@@ -326,7 +327,7 @@ func (f *netTunersFactory) NewRfsTableSizeTuner() Tunable {
 	return NewCheckedTunable(
 		f.checkersFactory.NewRfsTableSizeChecker(),
 		func() TuneResult {
-			zap.L().Sugar().Debug("Tuning RFS table size")
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning RFS table size"))
 			err := f.executor.Execute(
 				commands.NewSysctlSetCmd(
 					network.RfsTableSizeProperty, fmt.Sprint(network.RfsTableSize)))
@@ -346,7 +347,7 @@ func (f *netTunersFactory) NewListenBacklogTuner() Tunable {
 	return NewCheckedTunable(
 		f.checkersFactory.NewListenBacklogChecker(),
 		func() TuneResult {
-			zap.L().Sugar().Debug("Tuning connections listen backlog size")
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning connections listen backlog size"))
 			err := f.writeIntToFile(network.ListenBacklogFile, network.ListenBacklogSize)
 			if err != nil {
 				return NewTuneError(err)
@@ -364,7 +365,7 @@ func (f *netTunersFactory) NewSynBacklogTuner() Tunable {
 	return NewCheckedTunable(
 		f.checkersFactory.NewSynBacklogChecker(),
 		func() TuneResult {
-			zap.L().Sugar().Debug("Tuning SYN backlog size")
+			zap.L().Sugar().Debugf(out.WithLogBanner("Tuning SYN backlog size"))
 			err := f.writeIntToFile(network.SynBacklogFile, network.SynBacklogSize)
 			if err != nil {
 				return NewTuneError(err)

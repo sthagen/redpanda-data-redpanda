@@ -87,30 +87,6 @@ private:
     metrics::public_metric_groups _public_metrics;
 };
 
-/// \brief Throttler probe
-/// \details This class is used to collect metrics for the level_zero throttler
-///          (src/v/cloud_topics/level_zero/throttler/throttler.{h,cc}).
-class throttler_probe {
-public:
-    explicit throttler_probe(bool disable);
-    void register_throttle_event() { ++_throttle_events_count; }
-    auto track_throttled_bytes(uint64_t bytes) {
-        _requests_throttled_gauge += 1;
-        _bytes_throttled_gauge += bytes;
-        return ss::defer([this, bytes] {
-            _requests_throttled_gauge -= 1;
-            _bytes_throttled_gauge -= bytes;
-        });
-    }
-
-private:
-    void setup_internal_metrics(bool disable);
-    uint64_t _throttle_events_count{0};
-    uint64_t _bytes_throttled_gauge{0};
-    uint64_t _requests_throttled_gauge{0};
-    metrics::internal_metric_groups _metrics;
-};
-
 class write_request_scheduler_probe {
 public:
     explicit write_request_scheduler_probe(bool disable);

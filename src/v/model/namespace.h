@@ -111,4 +111,13 @@ inline bool is_consumer_offsets_topic(const ntp& ntp) {
     return topic_namespace_view{ntp} == kafka_consumer_offsets_nt;
 }
 
+inline bool is_shadow_link_enabled(topic_namespace_view tp_ns) {
+    return is_user_topic(tp_ns)
+           || tp_ns.tp == schema_registry_internal_tp.topic;
+}
+
+inline bool is_shadow_link_enabled(const ntp& ntp) {
+    return is_shadow_link_enabled(topic_namespace_view{ntp});
+}
+
 } // namespace model

@@ -21,6 +21,8 @@
 #include "kafka/server/fwd.h"
 #include "model/fundamental.h"
 #include "rpc/fwd.h"
+#include "ssx/work_queue.h"
+#include "utils/mutex.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
@@ -34,6 +36,7 @@ class service : public ss::peering_sharded_service<service> {
 public:
     service(
       ::model::node_id self,
+      config::binding<bool> enable_shadow_linking,
       ss::sharded<::cluster::cluster_link::frontend>* plf,
       std::unique_ptr<cluster::partition_change_notifier> notifications,
       ss::sharded<cluster::partition_manager>* partition_manager,
@@ -96,7 +99,7 @@ public:
      */
     ss::future<cl_result<model::metadata>> update_mirror_topic_status(
       model::name_t link_name,
-      const ::model::topic&,
+      ::model::topic topic,
       model::mirror_topic_status);
 
     /**
@@ -114,7 +117,7 @@ public:
      * @return nothing on success or an error
      */
     ss::future<cl_result<void>>
-    delete_cluster_link(const model::name_t& name, bool force_delete_link);
+    delete_cluster_link(model::name_t name, bool force_delete_link);
 
     /**
      * @brief Reports the status of a shard-local topic in the given link
@@ -139,6 +142,30 @@ public:
 private:
     void register_notifications();
     void unregister_notifications();
+    errc check_manager_state();
+    void handle_enable_shadow_link_change();
+    ss::future<> do_handle_enable_shadow_link_change();
+    ss::future<> maybe_start_manager();
+    ss::future<> maybe_stop_manager();
+
+    template<typename Func, typename Ret = std::invoke_result_t<Func, manager*>>
+    requires std::invocable<Func, manager*>
+    auto with_manager(Func&& func) -> Ret {
+        using return_type = Ret;
+
+        if (auto ec = check_manager_state(); ec != errc::success) {
+            if constexpr (ss::is_future<return_type>::value) {
+                // Asynchronous case - return a future
+                using inner_type = typename return_type::value_type;
+                return ss::make_ready_future<inner_type>(err_info{ec});
+
+            } else {
+                // Synchronous case - return directly
+                return err_info{ec};
+            }
+        }
+        return func(_manager.get());
+    }
 
 private:
     /**
@@ -151,6 +178,7 @@ private:
     ss::gate _gate;
     // Need explicit namespace due to having a `cluster_link::model` namespace
     ::model::node_id _self;
+    config::binding<bool> _enable_shadow_linking;
     ss::sharded<::cluster::cluster_link::frontend>* _plf;
     std::unique_ptr<cluster::partition_change_notifier> _notifications;
     ss::sharded<cluster::partition_manager>* _partition_manager;
@@ -168,5 +196,9 @@ private:
     std::unique_ptr<manager> _manager;
     std::vector<ss::deferred_action<ss::noncopyable_function<void()>>>
       _notification_cleanups;
+    ssx::work_queue _queue;
+
+    ss::abort_source _as;
+    mutex _shadow_link_config_mutex{"shadow_link/config"};
 };
 } // namespace cluster_link

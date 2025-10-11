@@ -143,37 +143,6 @@ void pipeline_probe::setup_public_metrics(bool disable, ss::sstring name) {
       });
 }
 
-throttler_probe::throttler_probe(bool disable) {
-    setup_internal_metrics(disable);
-}
-
-void throttler_probe::setup_internal_metrics(bool disable) {
-    if (disable) {
-        return;
-    }
-    namespace sm = ss::metrics;
-    std::vector<sm::label_instance> labels;
-
-    // Set up private metrics
-    _metrics.add_group(
-      prometheus_sanitize::metrics_name("cloud_topics_throttler"),
-      {sm::make_counter(
-         "throttle_events",
-         [this] { return _throttle_events_count; },
-         sm::description("Number of times throttling was applied."),
-         labels),
-       sm::make_gauge(
-         "bytes_throttled",
-         [this] { return _bytes_throttled_gauge; },
-         sm::description("Current number of bytes being throttled."),
-         labels),
-       sm::make_gauge(
-         "requests_throttled",
-         [this] { return _requests_throttled_gauge; },
-         sm::description("Current number of requests being throttled."),
-         labels)});
-}
-
 write_request_scheduler_probe::write_request_scheduler_probe(bool disable) {
     setup_internal_metrics(disable);
 }

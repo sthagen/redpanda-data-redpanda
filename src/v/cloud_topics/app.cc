@@ -216,6 +216,10 @@ ss::sharded<l1::domain_supervisor>* app::get_sharded_l1_domain_supervisor() {
     return &domain_supervisor;
 }
 
+ss::sharded<reconciler::reconciler>* app::get_reconciler() {
+    return &reconciler;
+}
+
 ss::sharded<state_accessors>* app::get_state() { return &state; }
 
 } // namespace cloud_topics

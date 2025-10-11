@@ -119,6 +119,7 @@ redpanda_cc_library(
         ":logger",
         "//src/v/cluster_link/model",
         "//src/v/kafka/server:topic_config_utils",
+        "//src/v/model",
         "@fmt",
     ],
     visibility = ["//src/v/cluster_link:__subpackages__"],
@@ -194,6 +195,7 @@ redpanda_cc_library(
         ":security_migrator",
         ":source_topic_syncer",
         "//src/v/cluster_link/model",
+        "//src/v/ssx:future_util",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -210,6 +212,8 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/raft",
         "//src/v/rpc",
+        "//src/v/ssx:work_queue",
+        "//src/v/utils:mutex",
         "@seastar",
     ],
 )

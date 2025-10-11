@@ -79,10 +79,10 @@ ctp_stm_api::replicated_apply(
 
 ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
 ctp_stm_api::advance_reconciled_offset(
-  kafka::offset last_reconciled_offset,
+  kafka::offset lro,
   model::timeout_clock::time_point deadline,
   ss::abort_source& as) {
-    if (last_reconciled_offset <= get_last_reconciled_offset()) {
+    if (lro <= get_last_reconciled_offset()) {
         co_return std::monostate{};
     }
     vlog(cd_log.debug, "Replicating ctp_stm_cmd::advance_reconciled_offset");
@@ -90,9 +90,10 @@ ctp_stm_api::advance_reconciled_offset(
     storage::record_batch_builder builder(
       model::record_batch_type::ctp_stm_command, model::offset(0));
 
+    auto lrlo = _stm->_raft->log()->to_log_offset(kafka::offset_cast(lro));
     builder.add_raw_kv(
       serde::to_iobuf(advance_reconciled_offset_cmd::key),
-      serde::to_iobuf(advance_reconciled_offset_cmd(last_reconciled_offset)));
+      serde::to_iobuf(advance_reconciled_offset_cmd(lro, lrlo)));
 
     auto batch = std::move(builder).build();
     auto apply_result = co_await replicated_apply(

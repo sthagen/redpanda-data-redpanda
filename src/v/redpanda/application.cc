@@ -1523,6 +1523,9 @@ void application::wire_up_runtime_services(
     construct_service(
       _cluster_link_service,
       node_id,
+      ss::sharded_parameter([]() {
+          return config::shard_local_cfg().enable_shadow_linking.bind();
+      }),
       &controller->get_cluster_link_frontend(),
       ss::sharded_parameter([this] {
           return cluster::partition_change_notifier_impl::make_default(

@@ -149,6 +149,8 @@ private:
     cluster::cluster_link::errc
     validate_mutation(const cluster_link_cmd&) const;
 
+    bool is_sanctioned();
+
 public:
     /// Class used to validate the incoming mutation request
     /// Made public for testing purposes
@@ -182,7 +184,7 @@ private:
     table* _table;
     ss::abort_source* _as;
     cluster::controller_stm* _controller;
-    [[maybe_unused]] features::feature_table* _features;
+    features::feature_table* _features;
 
     mutex _mu{"panda-link::frontend::mu"};
 };

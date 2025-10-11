@@ -67,6 +67,8 @@ errc map_cluster_errc(::cluster::cluster_link::errc ec) {
         return errc::topic_not_being_mirrored;
     case cluster::cluster_link::errc::link_has_active_shadow_topics:
         return errc::link_has_active_shadow_topics;
+    case cluster::cluster_link::errc::license_required:
+        return errc::license_required;
     }
     __builtin_unreachable();
 }

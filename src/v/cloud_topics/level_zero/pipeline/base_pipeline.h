@@ -114,6 +114,9 @@ public:
               // improved by transferring exception to the subscriber.
               flt.cancel();
           });
+        if (!sub) {
+            co_return event{.type = event_type::shutting_down};
+        }
         co_return co_await subscribe(flt);
     }
     ss::future<event> subscribe(event_filter<Clock>& flt) noexcept {
@@ -128,8 +131,11 @@ public:
         }
         if (found) {
             // Trigger event immediately without waiting for the future
-            co_return static_cast<Derived*>(this)->trigger_event(
+            auto event = static_cast<Derived*>(this)->trigger_event(
               flt.get_stage());
+            if (flt.trigger(event)) {
+                co_return event;
+            }
         }
         _filters.push_back(flt);
         auto ev = co_await ss::coroutine::as_future(flt.get_future());

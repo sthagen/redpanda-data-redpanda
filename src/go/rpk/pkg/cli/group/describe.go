@@ -92,13 +92,9 @@ Describe any one-character group:
 			}
 
 			groupDescriptions := buildDescribed(lags, partitionCount)
-			formatOutput, isText, err := formatDescribedJSON(groupDescriptions, f)
-			if err != nil {
-				out.Die("Error formatting group descriptions: %v", err)
-			}
-			if !isText {
-				fmt.Print(formatOutput)
-				return
+			if isText, _, s, err := f.Format(groupDescriptions); !isText {
+				out.MaybeDie(err, "unable to format described group: %v", err)
+				out.Exit(s)
 			}
 			if lagPerTopic {
 				printLagPerTopic(lags, partitionCount)
@@ -186,10 +182,11 @@ func buildDescribed(lags kadm.DescribedGroupLags, partitionCount int) []groupDes
 			// Apache Kafka does use a different algorithm, https://github.com/apache/kafka/blob/4.0.0/core/src/main/scala/kafka/coordinator/group/GroupMetadataManager.scala#L192
 			hash := xxhash.Sum64String(group.Group)
 			partitionID = jump.Hash(hash, int32(partitionCount))
-			groupDescription.CoordinatorPartition = fmt.Sprintf("__consumer_offsets/%d\n", partitionID)
+			groupDescription.CoordinatorPartition = fmt.Sprintf("__consumer_offsets/%d", partitionID)
 		}
 
-		var partitionsInfo []partitionInfo
+		// Initialize partition info so that it is not null in the JSON output.
+		partitionsInfo := []partitionInfo{}
 		for _, l := range group.Lag.Sorted() {
 			pi := partitionInfo{
 				Topic:          l.Topic,
@@ -215,7 +212,7 @@ func buildDescribed(lags kadm.DescribedGroupLags, partitionCount int) []groupDes
 			partitionsInfo = append(partitionsInfo, pi)
 		}
 		groupDescription.Partitions = partitionsInfo
-		var membersInfo []memberInfo
+		membersInfo := []memberInfo{}
 		for _, m := range group.Members {
 			mi := memberInfo{
 				MemberID: m.MemberID,
@@ -232,23 +229,6 @@ func buildDescribed(lags kadm.DescribedGroupLags, partitionCount int) []groupDes
 		groupDescriptions = append(groupDescriptions, groupDescription)
 	}
 	return groupDescriptions
-}
-
-// formatDescribedJSON is used to verify the type of format that
-// should be outputted. If it is suppose to be text, then return true
-// so that main run function can continue with printing in text.
-// if it returns false, then print in requested format (json or yaml)
-// and then return after.
-func formatDescribedJSON(groupDescriptions []groupDescription, f config.OutFormatter) (string, bool, error) {
-	isText, _, s, err := f.Format(groupDescriptions)
-	if err != nil {
-		return "", false, fmt.Errorf("unable to print in the required format %q: %v", f.Kind, err)
-	}
-	// handle text printing else where
-	if isText {
-		return "", true, nil
-	}
-	return s, false, nil
 }
 
 // Below here lies printing the output of everything we have done.

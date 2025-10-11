@@ -272,6 +272,9 @@ feature_manager::report_enterprise_features() const {
     report.set(
       features::license_required_feature::leadership_pinning,
       leadership_pinning_enabled());
+    report.set(
+      features::license_required_feature::shadow_linking,
+      cfg.enable_shadow_linking());
     return report;
 }
 

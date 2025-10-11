@@ -15,6 +15,7 @@
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/tests/random_batch.h"
+#include "test_utils/async.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
@@ -111,7 +112,6 @@ TEST_CORO(EventFilterTest, filter_triggered_once) {
         req.set_value(chunked_vector<extent_meta>());
     }
     std::ignore = co_await std::move(write);
-    co_return;
 }
 
 TEST_CORO(EventFilterTest, filter_has_memory) {
@@ -178,10 +178,57 @@ TEST_CORO(EventFilterTest, filter_timedout) {
     l0::event_filter<ss::lowres_clock> flt(
       l0::event_type::new_write_request,
       stage.id(),
-      ss::lowres_clock::now() + 1ms);
+      ss::lowres_clock::now() + 1ms,
+      {});
     auto sub = pipeline.subscribe(flt);
     co_await ss::sleep(10ms);
     auto res = co_await std::move(sub);
     ASSERT_TRUE_CORO(res.type == l0::event_type::err_timedout);
     co_return;
+}
+
+TEST_CORO(EventFilterTest, filter_min_write_bytes) {
+    auto batch1 = model::test::make_random_batch({
+      .offset = model::offset{0},
+      .allow_compression = false,
+      .count = 100,
+      .records = 10,
+    });
+    auto batch2 = model::test::make_random_batch({
+      .offset = model::offset{0},
+      .allow_compression = false,
+      .count = 100,
+      .records = 10,
+    });
+    l0::write_pipeline<ss::lowres_clock> pipeline;
+    auto stage = pipeline.register_write_pipeline_stage();
+    // The subscription mechanism can be aborted by timeout
+    l0::event_filter<ss::lowres_clock> flt(
+      l0::event_type::new_write_request,
+      stage.id(),
+      ss::lowres_clock::now() + 10000s,
+      {.min_pending_write_bytes = get_serialized_size(batch1)
+                                  + get_serialized_size(batch2)});
+    auto sub = pipeline.subscribe(flt);
+    EXPECT_FALSE(sub.available());
+    auto write1 = pipeline.write_and_debounce(
+      model::controller_ntp,
+      chunked_vector<model::record_batch>::single(batch1.copy()),
+      ss::lowres_clock::now() + 1s);
+    co_await tests::drain_task_queue();
+    EXPECT_FALSE(sub.available());
+    auto write2 = pipeline.write_and_debounce(
+      model::controller_ntp,
+      chunked_vector<model::record_batch>::single(batch2.copy()),
+      ss::lowres_clock::now() + 1s);
+    co_await tests::drain_task_queue();
+    auto res = co_await std::move(sub);
+    ASSERT_TRUE_CORO(res.type == l0::event_type::new_write_request);
+    auto pending = stage.pull_write_requests(
+      std::numeric_limits<size_t>::max());
+    for (auto& req : pending.requests) {
+        req.set_value(chunked_vector<extent_meta>());
+    }
+    std::ignore = co_await std::move(write1);
+    std::ignore = co_await std::move(write2);
 }

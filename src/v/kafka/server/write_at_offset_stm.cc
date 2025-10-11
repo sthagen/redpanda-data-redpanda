@@ -381,8 +381,7 @@ write_at_offset_stm_factory::write_at_offset_stm_factory(
 
 bool write_at_offset_stm_factory::is_applicable_for(
   const storage::ntp_config& cfg) const {
-    return model::is_user_topic(cfg.ntp())
-           || cfg.ntp().tp.topic == model::schema_registry_internal_tp.topic;
+    return model::is_shadow_link_enabled(cfg.ntp());
 }
 
 void write_at_offset_stm_factory::create(

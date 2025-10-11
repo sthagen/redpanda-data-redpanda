@@ -50,6 +50,9 @@ struct event {
 template<class Clock = ss::lowres_clock>
 class event_filter {
 public:
+    struct predicate {
+        size_t min_pending_write_bytes = 0;
+    };
     event_filter() = delete;
     ~event_filter() = default;
     event_filter(const event_filter&) = delete;
@@ -58,7 +61,7 @@ public:
     event_filter& operator=(event_filter&&) noexcept = default;
 
     /// Filter without timeout
-    explicit event_filter(event_type type, pipeline_stage stage)
+    event_filter(event_type type, pipeline_stage stage)
       : _type(type)
       , _stage(stage) {
         _promise.emplace();
@@ -68,9 +71,11 @@ public:
     event_filter(
       event_type type,
       pipeline_stage stage,
-      typename Clock::time_point deadline)
+      typename Clock::time_point deadline,
+      predicate pred)
       : _type(type)
-      , _stage(stage) {
+      , _stage(stage)
+      , _pred(pred) {
         _promise.emplace();
         _expiry.emplace();
         _expiry->set_callback([this] {
@@ -94,17 +99,21 @@ public:
 
     pipeline_stage get_stage() const noexcept { return _stage; }
 
-    void trigger(const event& e) {
+    bool trigger(const event& e) {
         if (e.type != _type) {
-            return;
+            return false;
         }
         if (e.stage != _stage) {
-            return;
+            return false;
+        }
+        if (e.pending_write_bytes < _pred.min_pending_write_bytes) {
+            return false;
         }
         if (_promise.has_value()) {
             _promise->set_value(e);
             _promise = std::nullopt;
         }
+        return true;
     }
 
     ss::future<event> get_future() noexcept { return _promise->get_future(); }
@@ -113,6 +122,7 @@ private:
     intrusive_list_hook _hook;
     event_type _type{event_type::none};
     pipeline_stage _stage;
+    predicate _pred;
     std::optional<ss::promise<event>> _promise;
     std::optional<ss::timer<Clock>> _expiry;
 

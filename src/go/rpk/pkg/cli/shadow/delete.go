@@ -22,7 +22,10 @@ import (
 )
 
 func newDeleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	var noConfirm bool
+	var (
+		noConfirm   bool
+		forceDelete bool
+	)
 	cmd := &cobra.Command{
 		Use:   "delete [LINK_NAME]",
 		Args:  cobra.ExactArgs(1),
@@ -35,6 +38,10 @@ deletion.
 
 The command prompts for confirmation by default. Use the --no-confirm flag to
 skip the confirmation prompt.
+
+Use the -f/--force flag to delete a Shadow Link even if it has active Shadow
+topics. Effectively has the same result as Failing Over all topics + deleting
+the Shadow Link. This flag also disables the confirmation prompt.
 `,
 		Run: func(cmd *cobra.Command, args []string) {
 			p, err := p.LoadVirtualProfile(fs)
@@ -51,7 +58,7 @@ skip the confirmation prompt.
 			out.MaybeDie(err, "unable to get Redpanda Shadow Link information: %v", err)
 
 			printShadowLinkInfo(link.Msg.GetShadowLink())
-			if !noConfirm {
+			if !noConfirm && !forceDelete {
 				ok, err := out.Confirm("Are you sure you want to delete this Shadow Link?")
 				out.MaybeDie(err, "unable to confirm Shadow Link deletion: %v", err)
 				if !ok {
@@ -60,7 +67,8 @@ skip the confirmation prompt.
 			}
 
 			_, err = cl.ShadowLinkService().DeleteShadowLink(cmd.Context(), connect.NewRequest(&adminv2.DeleteShadowLinkRequest{
-				Name: linkName,
+				Name:  linkName,
+				Force: forceDelete,
 			}))
 			out.MaybeDie(err, "unable to delete Redpanda Shadow Link %q: %v", linkName, err)
 
@@ -68,6 +76,7 @@ skip the confirmation prompt.
 		},
 	}
 	cmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Disable confirmation prompt")
+	cmd.Flags().BoolVarP(&forceDelete, "force", "f", false, "If set, forces a delete while there are active shadow topics; disables confirmation prompt as well")
 	return cmd
 }
 

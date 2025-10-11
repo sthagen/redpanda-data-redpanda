@@ -289,6 +289,29 @@ const (
 	ACLPermissionTypeDeny  ACLPermissionType = "DENY"
 )
 
+// checkRawTLSConfig checks the raw map for TLS config and determines if it's
+// file-based or PEM-based. It also performs validation to ensure that the
+// config is valid.
+func checkRawTLSConfig(raw map[string]any) (hasCA, hasCAPath bool, err error) {
+	var isEnabled bool
+	if val, hasEnabled := raw["enabled"]; hasEnabled {
+		if enabledVal, ok := val.(bool); ok {
+			isEnabled = enabledVal
+		}
+	}
+	// Determine type based on presence of fields; ca_path is mandatory for
+	// file-based and ca is mandatory for PEM-based.
+	_, hasCa := raw["ca"]
+	_, hasCaPath := raw["ca_path"]
+	if hasCaPath && hasCa {
+		return false, false, errors.New("both ca_path and ca are set; only one of these can be set")
+	}
+	if !hasCaPath && !hasCa && !isEnabled {
+		return false, false, errors.New("unrecognized 'tls_settings' neither ca_path nor ca are set; one of these must be set")
+	}
+	return hasCa, hasCaPath, nil
+}
+
 // tlsSettingsWrapper is used for YAML unmarshaling of TLSSettings interface.
 type tlsSettingsWrapper struct {
 	TLSSettings
@@ -301,18 +324,12 @@ func (w *tlsSettingsWrapper) UnmarshalYAML(unmarshal func(interface{}) error) er
 		return err
 	}
 
-	// Determine type based on presence of fields; ca_path is mandatory for
-	// file-based and ca is mandatory for PEM-based.
-	_, hasCaPath := raw["ca_path"]
-	_, hasCa := raw["ca"]
-	if hasCaPath && hasCa {
-		return errors.New("both ca_path and ca are set; only one of these can be set")
-	}
-	if !hasCaPath && !hasCa {
-		return errors.New("unrecognized 'tls_settings' neither ca_path nor ca are set; one of these must be set")
+	_, hasCAPath, err := checkRawTLSConfig(raw)
+	if err != nil {
+		return err
 	}
 
-	if hasCaPath {
+	if hasCAPath {
 		var fileSettings TLSFileSettings
 		if err := unmarshal(&fileSettings); err != nil {
 			return err
@@ -394,18 +411,11 @@ func (w *tlsSettingsWrapper) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	// Determine type based on presence of fields; ca_path is mandatory for
-	// file-based and ca is mandatory for PEM-based.
-	_, hasCaPath := raw["ca_path"]
-	_, hasCa := raw["ca"]
-	if hasCaPath && hasCa {
-		return errors.New("both ca_path and ca are set; only one of these can be set")
+	_, hasCAPath, err := checkRawTLSConfig(raw)
+	if err != nil {
+		return err
 	}
-	if !hasCaPath && !hasCa {
-		return errors.New("unrecognized 'tls_settings' neither ca_path nor ca are set; one of these must be set")
-	}
-
-	if hasCaPath {
+	if hasCAPath {
 		var fileSettings TLSFileSettings
 		if err := json.Unmarshal(data, &fileSettings); err != nil {
 			return err

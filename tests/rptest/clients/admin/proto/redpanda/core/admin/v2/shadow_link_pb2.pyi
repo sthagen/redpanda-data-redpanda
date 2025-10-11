@@ -566,6 +566,13 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
         created as shadow topics on the shadow cluster.  This only controls
         automatic creation of shadow topics and does not effect the state of the
         mirror topic once it is created.
+        Literal filters for __consumer_offsets and _redpanda.audit_log will be
+        rejected as well as prefix filters to match topics prefixed with
+        _redpanda or __redpanda.
+        Wildcard `*` is permitted only for literal filters and will _not_ match
+        any topics that start with _redpanda or __redpanda.  If users wish to
+        shadow topics that start with _redpanda or __redpanda, they should
+        provide a literal filter for those topics.
         """
 
     @property

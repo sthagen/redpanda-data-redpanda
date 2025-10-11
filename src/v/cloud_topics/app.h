@@ -72,6 +72,7 @@ public:
     ss::sharded<l1::frontend>* get_sharded_l1_metastore_fe();
     ss::sharded<state_accessors>* get_state();
     ss::sharded<l1::domain_supervisor>* get_sharded_l1_domain_supervisor();
+    ss::sharded<reconciler::reconciler>* get_reconciler();
 
     // TODO: add 'get_control_plane_api' etc
 

@@ -28,7 +28,7 @@ import (
 type NetCheckersFactory interface {
 	NewNicRxTxQueueCountCheckers(interfaces []string, mode irq.Mode, cpuMask string) []Checker
 	NewNicRxTxQueueCountChecker(nic network.Nic, mode irq.Mode, cpuMask string) Checker
-	NewNicIRQAffinityStaticChecker(interfaces []string) Checker
+	NewNicIRQBalanceChecker(interfaces []string) Checker
 	NewNicIRQAffinityCheckers(interfaces []string, mode irq.Mode, mask string) []Checker
 	NewNicIRQAffinityChecker(nic network.Nic, mode irq.Mode, mask string) Checker
 	NewNicRpsSetCheckers(interfaces []string, mode irq.Mode, mask string) []Checker
@@ -143,12 +143,12 @@ func (f *netCheckersFactory) NewNicRxTxQueueCountCheckers(
 		})
 }
 
-func (f *netCheckersFactory) NewNicIRQAffinityStaticChecker(
+func (f *netCheckersFactory) NewNicIRQBalanceChecker(
 	interfaces []string,
 ) Checker {
 	return NewEqualityChecker(
-		NicIRQsAffinitStaticChecker,
-		"NIC IRQs affinity static",
+		NicIRQBalanceChecker,
+		"NIC IRQs excluded in irqbalance",
 		Warning,
 		true,
 		func() (interface{}, error) {

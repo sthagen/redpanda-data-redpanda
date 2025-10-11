@@ -9,6 +9,7 @@ redpanda_test_cc_library(
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics/level_one/metastore:simple_stm",
         "//src/v/cluster/tests:cluster_test_fixture",
+        "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
         "//src/v/raft",
     ],
@@ -53,6 +54,23 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cloud_topics:object_utils",
         "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "leader_epoch_test",
+    timeout = "short",
+    srcs = [
+        "leader_epoch_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":cluster_fixture",
+        "//src/v/base",
+        "//src/v/kafka/server/tests:kafka_test_utils",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
         "@googletest//:gtest",
     ],
 )

@@ -18,6 +18,8 @@ import re
 
 # only works with --max-parallel 1
 
+CORE_COUNT = 4
+
 
 class NetTunerTest(RedpandaTest):
     TARGET_RFS_TABLE_SIZE = 32768
@@ -46,6 +48,14 @@ class NetTunerTest(RedpandaTest):
                 break
 
         self.logger.info(f"Found interface {self.interface_name}")
+
+    def teardown(self):
+        super().teardown()
+
+        # Reset to what ansible gives you out of the box
+        self.node.account.ssh("rm -rf /etc/redpanda/redpanda.yaml")
+        self.node.account.ssh("sudo rpk redpanda mode prod")
+        self.node.account.ssh("sudo systemctl restart redpanda-tuner")
 
     def start_rp(self):
         # Need to explicitly pass listener config otherwise RP will complain about 0.0.0.0 listeners
@@ -88,6 +98,14 @@ class NetTunerTest(RedpandaTest):
             f"irqbalance is not configured correctly, got {irqbalance_output}"
         )
 
+    def _get_interrupt_ids(self) -> list[int]:
+        interrupts_file = self.node.account.ssh_output("cat /proc/interrupts").decode(
+            "utf-8"
+        )
+        return self.parse_matching_interrupt_num_from_interrupt_file(
+            interrupts_file, self.get_interrupt_match()
+        )
+
     def _test_interrupt_config(
         self,
         node: ClusterNode,
@@ -97,12 +115,7 @@ class NetTunerTest(RedpandaTest):
         self._test_irq_balance()
 
         # test interrupts
-        interrupts_file = node.account.ssh_output("cat /proc/interrupts").decode(
-            "utf-8"
-        )
-        interrupt_ids = self.parse_matching_interrupt_num_from_interrupt_file(
-            interrupts_file, self.get_interrupt_match()
-        )
+        interrupt_ids = self._get_interrupt_ids()
 
         assert len(interrupt_ids) == len(expected_interrupt_setup.interrupts_masks), (
             f"Got more interrupts/queues than expected, got {interrupt_ids} expected {expected_interrupt_setup.interrupts_masks}"
@@ -218,7 +231,7 @@ class NetTunerTest(RedpandaTest):
         self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
 
 
-# Targets 4 core machines
+# Targets CORE_COUNT core machines
 class AwsNetTunerTest(NetTunerTest):
     @cluster(num_nodes=1)
     def test_tune_net_mq(self):
@@ -273,7 +286,7 @@ class AwsNetTunerTest(NetTunerTest):
         self._test_tune_net_dedicated_core(expected_interrupt_setup, 2)
 
 
-# Targets 4 core virtio (this is what our current ansible targets) machines
+# Targets CORE_COUNT core virtio (this is what our current ansible targets) machines
 class GcpNetTunerTest(NetTunerTest):
     def get_interrupt_match(self) -> str:
         return "virtio1-(input|output)"

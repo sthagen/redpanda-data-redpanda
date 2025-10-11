@@ -47,6 +47,7 @@ T handle_error(cluster_link::cl_result<T> result) {
         throw serde::pb::rpc::unavailable_exception(info.message());
     case cluster_link::errc::cluster_link_disabled:
     case cluster_link::errc::link_has_active_shadow_topics:
+    case cluster_link::errc::license_required:
         throw serde::pb::rpc::failed_precondition_exception(info.message());
     case cluster_link::errc::link_id_not_found:
         throw serde::pb::rpc::not_found_exception(info.message());
@@ -279,7 +280,7 @@ shadow_link_service_impl::fail_over(
         auto result = handle_error(
           co_await _service->local().update_mirror_topic_status(
             std::move(link_name),
-            topic,
+            std::move(topic),
             cluster_link::model::mirror_topic_status::failing_over));
         resp.set_shadow_link(metadata_to_shadow_link(std::move(result)));
     }

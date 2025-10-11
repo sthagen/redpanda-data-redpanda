@@ -757,7 +757,28 @@ frontend::get_leader_epoch_last_offset(model::term_id term) const {
         }
     }
 
-    co_return start_offset();
+    // The term falls below the start of the local log -- lookup in L1.
+    auto ct_state = _partition->get_cloud_topics_state();
+    auto l1_metastore = ct_state->local().get_l1_metastore();
+    auto tidp = ntp_to_topic_id_partition(_partition->ntp());
+    vassert(
+      tidp.has_value(), "No topic id for cloud topic {}", _partition->ntp());
+    auto l1_res = co_await l1_metastore->get_end_offset_for_term(*tidp, term);
+    if (!l1_res.has_value()) {
+        switch (l1_res.error()) {
+        case l1::metastore::errc::out_of_range:
+        case l1::metastore::errc::missing_ntp:
+            co_return std::nullopt;
+        case l1::metastore::errc::invalid_request:
+        case l1::metastore::errc::transport_error:
+            throw std::runtime_error(fmt_with_ctx(
+              fmt::format,
+              "unable to read from l1 for end_offset_for_term @ term {} for {}",
+              term,
+              _partition->ntp()));
+        }
+    }
+    co_return *l1_res;
 }
 
 ss::future<std::expected<void, frontend_errc>> frontend::prefix_truncate(

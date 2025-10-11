@@ -20,7 +20,6 @@
 #include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
-#include "cloud_topics/level_zero/throttler/throttler.h"
 #include "model/fundamental.h"
 #include "ssx/sharded_service_container.h"
 #include "storage/api.h"
@@ -52,9 +51,6 @@ public:
         co_await construct_service(_write_pipeline);
 
         co_await construct_service(
-          _throttler, 10_MiB, std::ref(_write_pipeline));
-
-        co_await construct_service(
           _batcher,
           ss::sharded_parameter([this] {
               return _write_pipeline.local().register_write_pipeline_stage();
@@ -81,7 +77,6 @@ public:
     }
 
     seastar::future<> start() override {
-        co_await _throttler.invoke_on_all([](auto& s) { return s.start(); });
         co_await _batcher.invoke_on_all([](auto& s) { return s.start(); });
         co_await _fetch_handler.invoke_on_all(
           [](auto& s) { return s.start(); });
@@ -140,7 +135,6 @@ private:
     ss::sharded<l0::cluster_services> _cluster_services;
     // Write path
     ss::sharded<l0::write_pipeline<>> _write_pipeline;
-    ss::sharded<l0::throttler<>> _throttler;
     ss::sharded<l0::batcher<>> _batcher;
     // Read path
     ss::sharded<l0::read_pipeline<>> _read_pipeline;

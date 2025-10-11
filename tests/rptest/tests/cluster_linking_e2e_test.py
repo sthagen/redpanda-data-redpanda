@@ -12,6 +12,7 @@ import google.protobuf.duration_pb2
 import google.protobuf.field_mask_pb2
 import random
 import re
+import threading
 
 from ducktape.cluster.cluster_spec import ClusterSpec
 from connectrpc.errors import ConnectError, ConnectErrorCode
@@ -545,6 +546,209 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             ConnectError, lambda e: e.code == ConnectErrorCode.NOT_FOUND
         ):
             self.get_link(test_link)
+
+    @cluster(num_nodes=6)
+    def test_toggle_cluster_config(self):
+        first_topic = TopicSpec(
+            name="first-topic", partition_count=1, replication_factor=3
+        )
+        self.source_default_client().create_topic(first_topic)
+
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self._topics_are_present_in_target_cluster([first_topic]),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg="Failed to find first-topic in target cluster",
+        )
+
+        self.logger.info("Disabling cluster linking on target cluster")
+        self.target_cluster_service.set_cluster_config({"enable_shadow_linking": False})
+        with expect_exception(
+            ConnectError, lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION
+        ):
+            self.get_link("test-link")
+
+        # Validate that nothing got replicated
+        self.source_cluster_rpk.produce(
+            first_topic.name, key="test-first", msg="test-first"
+        )
+
+        def _check_hwm(
+            rpk: RpkTool, topic_name: str, partition_id: int, expected_hwm: int
+        ):
+            partition_info = list(rpk.describe_topic(topic_name))
+            for p in partition_info:
+                if p.id == partition_id:
+                    return p.high_watermark >= expected_hwm
+
+            return False
+
+        # Validate that the topic does not contain any data
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            self.target_cluster_service.wait_until(
+                lambda: _check_hwm(self.target_cluster_rpk, first_topic.name, 0, 1),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+        # validate that the topic is still not writable
+        with expect_exception(RpkException, lambda _: True):
+            self.target_cluster_rpk.produce(first_topic.name, key="test", msg="test")
+
+        second_topic = TopicSpec(
+            name="second-topic", partition_count=1, replication_factor=3
+        )
+        self.source_default_client().create_topic(second_topic)
+
+        # Now verify that the second topic is not replicated
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            self.target_cluster.service.wait_until(
+                lambda: self._topics_are_present_in_target_cluster([second_topic]),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # Now re enable shadow linking and wait for the topic to appear
+        self.target_cluster_service.set_cluster_config({"enable_shadow_linking": True})
+        self.target_cluster.service.wait_until(
+            lambda: self._topics_are_present_in_target_cluster([second_topic]),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg="Failed to find second-topic in target cluster",
+        )
+
+        # Now wait for the first topic to have data
+        self.target_cluster_service.wait_until(
+            lambda: _check_hwm(self.target_cluster_rpk, first_topic.name, 0, 1),
+            timeout_sec=20,
+            backoff_sec=1,
+        )
+
+    @cluster(num_nodes=6)
+    def test_rapid_shadow_link_toggling(self):
+        self.create_link("test-link")
+
+        def toggle_shadow_linking(times: int):
+            state: bool = True
+            for _ in range(times):
+                state = not state
+                self.target_cluster_service.set_cluster_config(
+                    {"enable_shadow_linking": state}
+                )
+
+        toggle_thread = threading.Thread(target=toggle_shadow_linking, args=(200,))
+
+        toggle_thread.start()
+        topics: list[TopicSpec] = []
+        for i in range(10):
+            topic = TopicSpec(
+                name=f"source-topic-{i}", partition_count=3, replication_factor=3
+            )
+            self.source_default_client().create_topic(topic)
+            topics.append(topic)
+
+        self.target_cluster.service.wait_until(
+            lambda: self._topics_are_present_in_target_cluster(topics),
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="Failed to find first-topic in target cluster",
+        )
+
+        toggle_thread.join()
+
+    @cluster(num_nodes=6)
+    def test_shadow_link_sanctioning(self):
+        self.target_cluster.service.set_environment(
+            {"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": "true"}
+        )
+        self.target_cluster.service.restart_nodes(self.target_cluster.service.nodes)
+        self.target_cluster.service.wait_until(
+            self.target_cluster_service.healthy,
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="Cluster hasn't stabilized",
+        )
+
+        Admin(self.target_cluster_service).await_stable_leader(
+            namespace="redpanda", topic="controller", partition=0
+        )
+
+        with expect_exception(
+            ConnectError, lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION
+        ):
+            self.create_link("test-link")
+
+    @cluster(num_nodes=6)
+    def test_deny_prefix(self):
+        topics = [
+            TopicSpec(name="__redpanda-topic", partition_count=3, replication_factor=3),
+            TopicSpec(name="_redpanda-topic", partition_count=3, replication_factor=3),
+            TopicSpec(name="normal-topic", partition_count=3, replication_factor=3),
+        ]
+
+        for topic in topics:
+            self.source_default_client().create_topic(topic)
+
+        shadow_link = self.create_link("test-link")
+
+        def _only_normal_topic_present_in_target_cluster():
+            topics_in_target = {t for t in self.target_cluster_rpk.list_topics()}
+            self.logger.info(f"Topics in target cluster: {topics_in_target}")
+            return len(topics_in_target) == 1 and "normal-topic" in topics_in_target
+
+        self.target_cluster_service.wait_until(
+            _only_normal_topic_present_in_target_cluster,
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg="Failed to find only normal-topic in the target cluster",
+        )
+
+        # Now attempt to add a filter to specifically include _redpanda.audit_log
+        update_mask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=[
+                "configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters"
+            ]
+        )
+        shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
+            [
+                shadow_link_pb2.NameFilter(
+                    pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                    filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                    name="_redpanda.audit_log",
+                )
+            ]
+        )
+
+        with expect_exception(
+            ConnectError, lambda e: e.code == ConnectErrorCode.INVALID_ARGUMENT
+        ):
+            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
+
+        shadow_link = self.get_link("test-link")
+        # Now create a link adding the two above topics
+        shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
+            [
+                shadow_link_pb2.NameFilter(
+                    pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                    filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                    name="__redpanda-topic",
+                ),
+                shadow_link_pb2.NameFilter(
+                    pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                    filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                    name="_redpanda-topic",
+                ),
+            ]
+        )
+        self.update_link(shadow_link=shadow_link, update_mask=update_mask)
+
+        self.target_cluster_service.wait_until(
+            lambda: self._topics_are_present_in_target_cluster(topics),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg="Failed to find all topics in the target cluster",
+        )
 
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):

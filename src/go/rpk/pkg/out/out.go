@@ -318,3 +318,11 @@ func (t *TabWriter) PrintColumn(header string, args ...interface{}) {
 func (t *TabWriter) Line(sprint ...interface{}) {
 	fmt.Fprint(t.Writer, append(sprint, "\n")...)
 }
+
+func WithLogBanner(s string, additionalArgs ...interface{}) string {
+	if len(additionalArgs) == 0 {
+		return fmt.Sprintf("================ %s ===============", s)
+	} else {
+		return fmt.Sprintf("================ %s ===============", fmt.Sprintf(s, additionalArgs...))
+	}
+}

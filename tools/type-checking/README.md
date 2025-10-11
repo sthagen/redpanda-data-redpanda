@@ -45,35 +45,35 @@ Python dependencies for type checking (primarily pyright).
 
 ### Local Development
 
-Locally you should be able to run the .py script directly if you have run [local_venv.sh](./local_venv.sh). Alternately, in any of the commands below you can replace `type-check.py` with `type-check.sh` to use docker to run the checker, which does not require any local setup.
+Locally you should be able to run the .py script directly if you have run [local_venv.sh](../../tests/local_venv.sh). Alternately, in any of the commands below you can replace `type-check.py` with `type-check.sh` to use docker to run the checker, which does not require any local setup.
 
 ```bash
 # Run type checking on all files
-type-checking/type-check.py check
+tools/type-checking/type-check.py check
 
 # Check for files ready to be promoted to stricter levels
-type-checking/type-check.py promotion-check
+tools/type-checking/type-check.py promotion-check
 
 # Find low-hanging fruit - files with fewest errors at each target level
-type-checking/type-check.py fruit
+tools/type-checking/type-check.py fruit
 
 # Show top 25 fruit candidates
-type-checking/type-check.py fruit --top 25
+tools/type-checking/type-check.py fruit --top 25
 
 # Show detailed error information with verbose output
-type-checking/type-check.py fruit --verbose 2
+tools/type-checking/type-check.py fruit --verbose 2
 
 # Automatically promote eligible files
-type-checking/type-check.py promotion-check --update
+tools/type-checking/type-check.py promotion-check --update
 
 # Run CI checks (both check and promotion-check)
-type-checking/type-check.py ci
+tools/type-checking/type-check.py ci
 
 # Check specific files
-type-checking/type-check.py check --input-files "rptest/tests/my_test.py"
+tools/type-checking/type-check.py check --input-files "rptest/tests/my_test.py"
 
 # Force all files to be checked at a specific level
-type-checking/type-check.py check --force-level strict
+tools/type-checking/type-check.py check --force-level strict
 ```
 
 ## Strictness Level Management
@@ -89,7 +89,7 @@ In order to have type checking useful immediately, without needing to fix 1000s 
 
 When adding type hints to improve a file:
 
-1. Run `type-checking/type-check.py promotion-check --update`
+1. Run `tools/type-checking/type-check.py promotion-check --update`
 2. This will automatically move the file to the strictest level it now passes
 3. Commit both your type hint changes and the updated `type-check-strictness.json`
 
@@ -99,13 +99,13 @@ The `fruit` command helps identify files that are closest to being promotable to
 
 ```bash
 # Show top 10 files with fewest errors per target level
-type-checking/type-check.py fruit
+tools/type-checking/type-check.py fruit
 
 # Show top 20 files with fewest errors per target level
-type-checking/type-check.py fruit --top 20
+tools/type-checking/type-check.py fruit --top 20
 
 # Show detailed error information with verbose output
-type-checking/type-check.py fruit --verbose 2
+tools/type-checking/type-check.py fruit --verbose 2
 ```
 
 This is useful for:
@@ -121,10 +121,10 @@ You may be here because CI failed with a "promotion check" error. This means tha
 
 ```bash
 # Automatically update the configuration
-type-checking/type-check.py promotion-check --update
+tools/type-checking/type-check.py promotion-check --update
 
 # Commit the updated type-check-strictness.json
-git add type-checking/type-check-strictness.json
+git add tools/type-checking/type-check-strictness.json
 git commit -m "chore: update type checking strictness"
 ```
 

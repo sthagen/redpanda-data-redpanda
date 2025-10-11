@@ -14,6 +14,8 @@ from typing import Any
 
 # pyright: strict
 
+SCRIPT_ROOT = Path(__file__).parent
+
 SCRIPT_RELPATH = "/".join(Path(__file__).parts[-2:])
 
 
@@ -483,14 +485,11 @@ class TypeCheck:
         self, promotable_files: list[tuple[Path, Level, Level]]
     ):
         """Update the type-check-strictness.json file with promoted files."""
-        strictness_config_path = (
-            self._tests_root / "type-checking" / "type-check-strictness.json"
-        )
 
-        print(f"Updating {strictness_config_path}...")
+        print(f"Updating {self.strictness_config_path}...")
 
         # Load current config
-        with open(strictness_config_path, "r") as f:
+        with open(self.strictness_config_path, "r") as f:
             config: dict[str, list[str]] = json.load(f)
 
         # Remove files from their current levels
@@ -554,12 +553,12 @@ class TypeCheck:
             config[level] = sorted(files)
 
         # Write updated config back to file
-        with open(strictness_config_path, "w") as f:
+        with open(self.strictness_config_path, "w") as f:
             json.dump(config, f, indent=4)
             print(file=f)  # trailing newline to make IDEs happy
 
         print(
-            f"Updated {len(promotable_files)} file assignments in {strictness_config_path}"
+            f"Updated {len(promotable_files)} file assignments in {self.strictness_config_path}"
         )
 
     def _get_input_files(self):
@@ -583,12 +582,8 @@ class TypeCheck:
             return strictness_map
 
         # Load strictness configuration
-        strictness_config_path = (
-            self._tests_root / "type-checking" / "type-check-strictness.json"
-        )
-        assert strictness_config_path.exists(), f"missing: {strictness_config_path}"
 
-        with open(strictness_config_path, "r") as f:
+        with open(self.strictness_config_path, "r") as f:
             strictness_config = json.load(f)
 
         # Initialize result map with all strictness levels
@@ -623,6 +618,12 @@ class TypeCheck:
         strictness_map[Level.STRICT] = list(unassigned_files)
 
         return dict(strictness_map)
+
+    @property
+    def strictness_config_path(self) -> Path:
+        p = SCRIPT_ROOT / "type-check-strictness.json"
+        assert p.is_file(), f"missing: {p}"
+        return p
 
     @property
     def verbose(self) -> int:
@@ -690,7 +691,7 @@ def main():
         "--tests-root",
         type=Path,
         help="Path to tests directory",
-        default=Path(__file__).parent.parent,
+        default=Path(__file__).parent.parent.parent / "tests",
     )
     p.add_argument(
         "--config",

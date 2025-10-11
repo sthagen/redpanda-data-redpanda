@@ -35,12 +35,17 @@ struct advance_reconciled_offset_cmd
 
     advance_reconciled_offset_cmd() noexcept = default;
 
-    explicit advance_reconciled_offset_cmd(kafka::offset lro) noexcept
-      : last_reconciled_offset(lro) {}
+    explicit advance_reconciled_offset_cmd(
+      kafka::offset lro, model::offset lrlo) noexcept
+      : last_reconciled_offset(lro)
+      , last_reconciled_log_offset(lrlo) {}
 
-    auto serde_fields() { return std::tie(last_reconciled_offset); }
+    auto serde_fields() {
+        return std::tie(last_reconciled_offset, last_reconciled_log_offset);
+    }
 
     kafka::offset last_reconciled_offset;
+    model::offset last_reconciled_log_offset;
 };
 
 // This command sets the partition's start offset in the ctp_stm.

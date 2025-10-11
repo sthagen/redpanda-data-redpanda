@@ -17,8 +17,8 @@ VENV="${VENV:-.venv}"
 
 # Function to calculate SHA of input files
 calculate_input_sha() {
-  # Hash setup.py and type-checking/requirements.txt which contain dependency information
-  sha256sum local_venv.sh setup.py type-checking/requirements.txt | sha256sum | cut -d' ' -f1
+  # Hash setup.py and tools/type-checking/requirements.txt which contain dependency information
+  sha256sum local_venv.sh setup.py ../tools/type-checking/requirements.txt | sha256sum | cut -d' ' -f1
 }
 
 # Calculate current input SHA
@@ -48,8 +48,8 @@ python3 -m venv $VENV
 # this should be closely aligned with the install step in ./docker/Dockerfile
 python3 -m pip install -e .
 
-# for type-checking/type-check.py
-python3 -m pip install -r type-checking/requirements.txt
+# for tools/type-checking/type-check.py
+python3 -m pip install -r ../tools/type-checking/requirements.txt
 
 # Save the SHA of input files to mark this install as complete
 echo "$CURRENT_SHA" >"$SHA_FILE"

@@ -64,6 +64,8 @@ struct error_category final : public std::error_category {
             return "topic does not exist";
         case errc::topic_metadata_stale:
             return "topic metadata is stale";
+        case errc::license_required:
+            return "license required for operation";
         }
 
         return "(unknown error code)";

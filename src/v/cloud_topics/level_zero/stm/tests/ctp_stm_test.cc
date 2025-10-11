@@ -10,11 +10,9 @@
 
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
-#include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/types.h"
-#include "cluster/state_machine_registry.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
@@ -30,46 +28,26 @@ struct ctp_stm_api_accessor {
     ss::future<std::expected<model::offset, ct::ctp_stm_api_errc>>
     replicated_apply(model::record_batch rb, ss::abort_source& as) {
         // This function is used to access the private method of ctp_stm_api
-        return api->replicated_apply(std::move(rb), model::no_timeout, as);
+        return api.replicated_apply(std::move(rb), model::no_timeout, as);
     }
-    ct::ctp_stm_api* api;
+    ct::ctp_stm_api api;
 };
 
-class ctp_stm_fixture : public raft::raft_fixture {
+class ctp_stm_fixture : public raft::stm_raft_fixture<ct::ctp_stm> {
 public:
-    static constexpr auto node_count = 3;
-
     ss::future<> start() {
         enable_offset_translation();
-        for (auto i = 0; i < node_count; ++i) {
-            add_node(model::node_id(i), model::revision_id(0));
-        }
-
-        for (auto& [id, node] : nodes()) {
-            co_await node->initialise(all_vnodes());
-
-            raft::state_machine_manager_builder builder;
-
-            cloud_topics::l0::ctp_stm_factory stm_factory;
-            stm_factory.create(
-              builder, &*node->raft(), cluster::stm_instance_config{nullptr});
-
-            vlog(ct::cd_log.info, "Starting node {}", id);
-
-            co_await node->start(std::move(builder));
-
-            stm_by_vnode[node->get_vnode()]
-              = node->raft()->stm_manager()->get<ct::ctp_stm>();
-
-            api_by_vnode.emplace(
-              node->get_vnode(),
-              ss::make_shared<ct::ctp_stm_api>(
-                node->raft()->stm_manager()->get<ct::ctp_stm>()));
-        }
+        co_await initialize_state_machines();
     }
 
-    ct::ctp_stm_api& api(raft::raft_node_instance& node) {
-        return *api_by_vnode[node.get_vnode()];
+    stm_shptrs_t create_stms(
+      raft::state_machine_manager_builder& builder,
+      raft::raft_node_instance& node) override {
+        return builder.create_stm<ct::ctp_stm>(ct::cd_log, node.raft().get());
+    }
+
+    ct::ctp_stm_api api(raft::raft_node_instance& node) {
+        return ct::ctp_stm_api(get_stm<0>(node));
     }
 
     model::record_batch make_record_batch(
@@ -107,14 +85,11 @@ public:
     ss::future<std::expected<model::offset, ct::ctp_stm_api_errc>>
     replicate_record_batch(
       raft::raft_node_instance& node, model::record_batch rb) {
-        return ctp_stm_api_accessor{.api = &api(node)}.replicated_apply(
-          std::move(rb), as);
+        ctp_stm_api_accessor accessor{.api = api(node)};
+        co_return co_await accessor.replicated_apply(std::move(rb), as);
     }
 
     ss::abort_source as;
-    absl::flat_hash_map<raft::vnode, ss::shared_ptr<ct::ctp_stm>> stm_by_vnode;
-    absl::flat_hash_map<raft::vnode, ss::shared_ptr<ct::ctp_stm_api>>
-      api_by_vnode;
 };
 
 TEST_F_CORO(ctp_stm_fixture, test_basic) {
@@ -331,7 +306,7 @@ TEST_F_CORO(ctp_stm_fixture, test_start_offset) {
     co_await start();
     co_await wait_for_leader(raft::default_timeout());
     auto& leader = node(*get_leader());
-    auto& leader_api = api(leader);
+    auto leader_api = api(leader);
     auto b1 = make_record_batch(ct::cluster_epoch{1}, model::offset{0}, 0);
     auto res1 = co_await replicate_record_batch(leader, std::move(b1));
     ASSERT_TRUE_CORO(res1.has_value());
@@ -364,14 +339,14 @@ TEST_F_CORO(ctp_stm_fixture, truncates_below_lro) {
     co_await wait_for_leader(raft::default_timeout());
     auto& leader = node(*get_leader());
     EXPECT_EQ(leader.raft()->last_snapshot_index(), model::offset::min());
-    auto& leader_api = api(leader);
+    auto leader_api = api(leader);
     // Write some data
     for (int o = 0; o < 1024; ++o) {
         co_await replicate_record_batch(
           leader, make_record_batch(ct::cluster_epoch{1}, model::offset{o}, 0));
     }
     // Segment roll on all the nodes so we can take a snapshot.
-    for (auto& [vnode, stm] : stm_by_vnode) {
+    for (auto& vnode : all_vnodes()) {
         co_await node(vnode.id()).raft()->log()->force_roll();
     }
     // Write some more data
@@ -383,10 +358,53 @@ TEST_F_CORO(ctp_stm_fixture, truncates_below_lro) {
     co_await leader_api.advance_reconciled_offset(
       kafka::offset{2000}, model::no_timeout, as);
     // Wait for the snapshot to be created
-    for (auto& [vnode, stm] : stm_by_vnode) {
+    for (auto& vnode : all_vnodes()) {
         RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [this, &vnode]() {
             return node(vnode.id()).raft()->last_snapshot_index()
                    == model::offset{1024};
         });
     }
+}
+
+TEST_F_CORO(ctp_stm_fixture, can_replay_truncated_log) {
+    co_await start();
+    co_await wait_for_leader(raft::default_timeout());
+    auto& leader = node(get_leader().value());
+    EXPECT_EQ(leader.raft()->last_snapshot_index(), model::offset::min());
+    auto leader_api = api(leader);
+    // Write some data
+    for (int o = 0; o < 1024; ++o) {
+        co_await replicate_record_batch(
+          leader, make_record_batch(ct::cluster_epoch{1}, model::offset{o}, 0));
+    }
+    // Segment roll on all the nodes so we can take a snapshot.
+    for (auto& vnode : all_vnodes()) {
+        co_await node(vnode.id()).raft()->log()->force_roll();
+    }
+    // Write some more data
+    for (int o = 0; o < 1024; ++o) {
+        co_await replicate_record_batch(
+          leader, make_record_batch(ct::cluster_epoch{1}, model::offset{o}, 0));
+    }
+    // Advance the LRO to a low value that will be truncated away
+    co_await leader_api.advance_reconciled_offset(
+      kafka::offset{1}, model::no_timeout, as);
+    // Advance the LRO to truncate what the previous batch pointed too
+    co_await leader_api.advance_reconciled_offset(
+      kafka::offset{2000}, model::no_timeout, as);
+    // Wait for the snapshot to be created
+    for (auto& vnode : all_vnodes()) {
+        RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [this, &vnode]() {
+            return node(vnode.id()).raft()->last_snapshot_index()
+                   == model::offset{1024};
+        });
+    }
+    auto follower_id = random_follower_id().value();
+    vlog(ct::cd_log.info, "restarting node {}", follower_id);
+    auto dirty_offset = leader.raft()->dirty_offset();
+    co_await restart_node_and_delete_data(follower_id);
+    co_await wait_for_committed_offset(dirty_offset, 10s);
+    auto follower_stm = get_stm<0>(node(follower_id));
+    co_await follower_stm->wait(dirty_offset, model::no_timeout);
+    vlog(ct::cd_log.info, "recovery done: {}", follower_id);
 }

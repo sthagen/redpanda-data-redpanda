@@ -125,7 +125,7 @@ ss::future<> ctp_stm::prefix_truncate_below_lro() {
           truncate_point,
           lro);
         vlog(
-          _log.trace,
+          _log.debug,
           "Calulcated truncation point {} for LRO {}",
           *truncate_point,
           _state.get_last_reconciled_log_offset());
@@ -345,10 +345,9 @@ void ctp_stm::apply_advance_reconciled_offset(model::record record) {
     auto cmd = serde::from_iobuf<advance_reconciled_offset_cmd>(
       record.release_value());
     auto lro = cmd.last_reconciled_offset;
-    vlog(_log.debug, "New LRO value is {}", lro);
-    // LRO is expected to be within the translation range
-    auto lro_log = _raft->log()->to_log_offset(kafka::offset_cast(lro));
-    _state.advance_last_reconciled_offset(lro, lro_log);
+    auto lrlo = cmd.last_reconciled_log_offset;
+    vlog(_log.debug, "New LRO value is {}, log offset {}", lro, lrlo);
+    _state.advance_last_reconciled_offset(lro, lrlo);
     _lro_advanced.signal();
 }
 
