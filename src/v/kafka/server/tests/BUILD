@@ -177,22 +177,6 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_btest(
-    name = "fetch_unit_test",
-    timeout = "short",
-    srcs = [
-        "fetch_unit_test.cc",
-    ],
-    deps = [
-        "//src/v/base",
-        "//src/v/kafka/server",
-        "//src/v/ssx:semaphore",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
-        "@seastar//:testing",
-    ],
-)
-
-redpanda_cc_btest(
     name = "config_utils_test",
     timeout = "short",
     srcs = [
@@ -223,6 +207,23 @@ redpanda_cc_btest(
         "//src/v/utils:to_string",
         "@boost//:test",
         "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "fetch_memory_units_test",
+    timeout = "short",
+    srcs = [
+        "fetch_memory_units_test.cc",
+    ],
+    cpu = 2,
+    deps = [
+        "//src/v/base",
+        "//src/v/kafka/server",
+        "//src/v/ssx:semaphore",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
     ],
 )
 
@@ -759,7 +760,9 @@ redpanda_cc_btest(
     ],
     cpu = 1,
     deps = [
+        "//src/v/base",
         "//src/v/cluster/tests:cluster_test_fixture",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server",
         "//src/v/model",

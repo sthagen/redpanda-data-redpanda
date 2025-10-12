@@ -209,111 +209,6 @@ static ss::future<read_result> read_from_partition(
       std::move(aborted_transactions));
 }
 
-read_result::memory_units_t::memory_units_t(
-  ssx::semaphore& memory_sem, ssx::semaphore& memory_fetch_sem) noexcept
-  : kafka(ss::consume_units(memory_sem, 0))
-  , fetch(ss::consume_units(memory_fetch_sem, 0)) {}
-
-read_result::memory_units_t::~memory_units_t() noexcept {
-    if (shard == ss::this_shard_id() || !has_units()) {
-        return;
-    }
-    auto f = ss::smp::submit_to(
-      shard, [uk = std::move(kafka), uf = std::move(fetch)]() mutable noexcept {
-          uk.return_all();
-          uf.return_all();
-      });
-    if (!f.available()) {
-        ss::engine().run_in_background(std::move(f));
-    }
-}
-
-void read_result::memory_units_t::adopt(memory_units_t&& o) {
-    // Adopts assert internally that the units are from the same semaphore.
-    // So there is no need to assert that they are from the same shard here.
-    kafka.adopt(std::move(o.kafka));
-    fetch.adopt(std::move(o.fetch));
-}
-
-/**
- * Consume proper amounts of units from memory semaphores and return them as
- * semaphore_units. Fetch semaphore units returned are the indication of
- * available resources: if none, there is no memory for the operation;
- * if less than \p max_bytes, the fetch should be capped to that size.
- *
- * \param max_units The maximum number of units the function will attempt to
- * allocate.
- * \param min_units The minimum number of units the function will attempt to
- * allocate. If it can't allocate at least this many units no units will be
- * allocated.
- * \param require_min_units If true then at least \ref min_units will be
- * allocated regardless of the units available in \ref memory_sem and \ref
- * memory_fetch_sem.
- */
-static read_result::memory_units_t reserve_memory_units(
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem,
-  size_t max_units,
-  const size_t min_units,
-  const bool require_min_units) {
-    const size_t available_units = std::min(
-      memory_sem.current(), memory_fetch_sem.current());
-    // Note that it's not currently enforced that max_units >= min_units. Hence
-    // we set max_units to the larger of the two here to ensure that is the
-    // case.
-    max_units = std::max(max_units, min_units);
-
-    size_t units_to_alloc = 0;
-    if (require_min_units) {
-        // if \ref require_min_units is true then we must read at least \ref
-        // min_units. So allocate at least that many even if it causes the
-        // semaphores to become negative.
-        units_to_alloc = std::max(
-          min_units, std::min(max_units, available_units));
-    } else if (available_units >= min_units) {
-        // only reserve memory if we have space for at least \ref min_units,
-        // otherwise allocate none.
-        units_to_alloc = std::min(available_units, max_units);
-    }
-
-    read_result::memory_units_t memory_units;
-    if (units_to_alloc > 0) {
-        memory_units.fetch = ss::consume_units(
-          memory_fetch_sem, units_to_alloc);
-        memory_units.kafka = ss::consume_units(memory_sem, units_to_alloc);
-    }
-
-    return memory_units;
-}
-
-/**
- * Make the \p units hold exactly \p target_bytes, by consuming more units
- * from \p sem or by returning extra units back.
- */
-static void adjust_semaphore_units(
-  ssx::semaphore& sem, ssx::semaphore_units& units, const size_t target_bytes) {
-    if (target_bytes < units.count()) {
-        units.return_units(units.count() - target_bytes);
-    }
-    if (target_bytes > units.count()) {
-        units.adopt(ss::consume_units(sem, target_bytes - units.count()));
-    }
-}
-
-/**
- * Memory units have been reserved before the read op based on an estimation.
- * Now when we know how much data has actually been read, return any extra
- * amount.
- */
-static void adjust_memory_units(
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem,
-  read_result::memory_units_t& memory_units,
-  const size_t read_bytes) {
-    adjust_semaphore_units(memory_sem, memory_units.kafka, read_bytes);
-    adjust_semaphore_units(memory_fetch_sem, memory_units.fetch, read_bytes);
-}
-
 /**
  * Entry point for reading from an ntp. This is executed on NTP home core and
  * build error responses if anything goes wrong.
@@ -326,23 +221,24 @@ static ss::future<read_result> do_read_from_ntp(
   bool foreign_read,
   std::optional<model::timeout_clock::time_point> deadline,
   const bool obligatory_batch_read,
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem) {
+  fetch_memory_units_manager& units_mgr) {
     // control available memory
-    read_result::memory_units_t memory_units(memory_sem, memory_fetch_sem);
-    if (!ntp_config.cfg.skip_read) {
-        memory_units = reserve_memory_units(
-          memory_sem,
-          memory_fetch_sem,
-          ntp_config.cfg.max_bytes,
-          ntp_config.cfg.max_batch_size,
-          obligatory_batch_read);
-        if (!memory_units.fetch) {
-            ntp_config.cfg.skip_read = true;
-        } else if (ntp_config.cfg.max_bytes > memory_units.fetch.count()) {
-            ntp_config.cfg.max_bytes = memory_units.fetch.count();
+    fetch_memory_units memory_units = [&] {
+        if (!ntp_config.cfg.skip_read) {
+            auto memory_units = units_mgr.allocate_memory_units(
+              ntp_config.cfg.max_bytes,
+              ntp_config.cfg.max_batch_size,
+              obligatory_batch_read);
+            if (!memory_units.has_units()) {
+                ntp_config.cfg.skip_read = true;
+            } else if (ntp_config.cfg.max_bytes > memory_units.num_units()) {
+                ntp_config.cfg.max_bytes = memory_units.num_units();
+            }
+            return memory_units;
+        } else {
+            return units_mgr.allocate_memory_units(0, 0, false);
         }
-    }
+    }();
 
     /*
      * lookup the ntp's partition
@@ -427,8 +323,10 @@ static ss::future<read_result> do_read_from_ntp(
       foreign_read,
       deadline);
 
-    adjust_memory_units(
-      memory_sem, memory_fetch_sem, memory_units, result.data_size_bytes());
+    // Note that units can be both increased and decreassed here. Increases
+    // happen because there is no strict limit on read size when reading the
+    // obligatory batch.
+    memory_units.adjust_units(result.data_size_bytes());
     result.memory_units = std::move(memory_units);
     co_return result;
 }
@@ -444,8 +342,7 @@ ss::future<read_result> read_from_ntp(
   bool foreign_read,
   std::optional<model::timeout_clock::time_point> deadline,
   const bool obligatory_batch_read,
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem) {
+  fetch_memory_units_manager& units_mgr) {
     return do_read_from_ntp(
       cluster_pm,
       md_cache,
@@ -454,22 +351,7 @@ ss::future<read_result> read_from_ntp(
       foreign_read,
       deadline,
       obligatory_batch_read,
-      memory_sem,
-      memory_fetch_sem);
-}
-
-read_result::memory_units_t reserve_memory_units(
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem,
-  const size_t max_bytes,
-  const size_t max_batch_size,
-  const bool obligatory_batch_read) {
-    return kafka::reserve_memory_units(
-      memory_sem,
-      memory_fetch_sem,
-      max_bytes,
-      max_batch_size,
-      obligatory_batch_read);
+      units_mgr);
 }
 
 } // namespace testing
@@ -494,12 +376,10 @@ static void fill_fetch_responses(
           0, std::min({results.size(), responses.size()}));
     }
 
-    // Used to aggregate semaphore_units from results.
-    std::optional<read_result::memory_units_t> total_memory_units;
-
     for (auto idx : range) {
         auto& res = results[idx];
         const auto& resp_it = responses[idx];
+        const auto& ktp = resp_it->ktp();
 
         fetch_response::partition_response resp;
         resp.partition_index = res.partition;
@@ -519,7 +399,7 @@ static void fill_fetch_responses(
         // error case
         if (unlikely(resp.error_code != error_code::none)) {
             resp.records = batch_reader();
-            resp_it->set(std::move(resp));
+            resp_it->set(std::move(resp), {});
             continue;
         }
 
@@ -527,10 +407,7 @@ static void fill_fetch_responses(
          * Cache fetch metadata
          */
         octx.rctx.get_fetch_metadata_cache().insert_or_assign(
-          {resp_it->topic(), resp_it->partition_id()},
-          res.start_offset,
-          res.high_watermark,
-          res.last_stable_offset);
+          ktp, res.start_offset, res.high_watermark, res.last_stable_offset);
         /**
          * Over response budget, we will just waste this read, it will cause
          * data to be stored in the cache so next read is fast
@@ -539,19 +416,9 @@ static void fill_fetch_responses(
             resp.preferred_read_replica = *res.preferred_replica;
         }
 
-        // Aggregate memory_units from all results together to avoid
-        // making more than one cross-shard function call to free them.
-        //
-        // Only aggregate non-empty memory_units.
-        if (res.memory_units.has_units()) {
-            if (unlikely(!total_memory_units)) {
-                // Move the first set of semaphore_units to get a copy of the
-                // semaphore pointer and the shard results originates from.
-                total_memory_units = std::move(res.memory_units);
-            } else {
-                total_memory_units->adopt(std::move(res.memory_units));
-            }
-        }
+        std::optional<fetch_memory_units> resp_units{};
+        auto current_response_size = resp_it->response_size();
+        auto bytes_left = octx.bytes_left - current_response_size;
 
         /**
          * According to KIP-74 we have to return first batch even if it would
@@ -559,7 +426,7 @@ static void fill_fetch_responses(
          */
         if (
           res.has_data()
-          && (octx.bytes_left >= res.data_size_bytes() || octx.response_size == 0)) {
+          && (bytes_left >= res.data_size_bytes() || octx.response_size == 0)) {
             /**
              * set aborted transactions if present
              */
@@ -577,13 +444,14 @@ static void fill_fetch_responses(
                   });
                 resp.aborted_transactions = std::move(aborted);
             }
+            resp_units = std::move(res.memory_units);
             resp.records = batch_reader(std::move(res).release_data());
         } else {
             // TODO: add probe to measure how much of read data is discarded
             resp.records = batch_reader();
         }
 
-        resp_it->set(std::move(resp));
+        resp_it->set(std::move(resp), std::move(resp_units));
 
         if (record_latency) {
             std::chrono::microseconds fetch_latency
@@ -603,8 +471,7 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
   bool foreign_read,
   std::optional<model::timeout_clock::time_point> deadline,
   const size_t bytes_left,
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem) {
+  fetch_memory_units_manager& units_mgr) {
     size_t total_read_size = 0;
 
     // bytes_left comes from the fetch plan and also accounts for the max_bytes
@@ -640,8 +507,7 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
           foreign_read,
           deadline,
           obligatory_batch_read,
-          memory_sem,
-          memory_fetch_sem);
+          units_mgr);
 
         res.partition = ntp_cfg.ktp().get_partition();
 
@@ -807,8 +673,7 @@ private:
           _ctx.foreign_read,
           _ctx.deadline,
           _ctx.bytes_left,
-          _ctx.srv.memory(),
-          _ctx.srv.memory_fetch_sem());
+          _ctx.srv.fetch_units_manager());
 
         // If we weren't able to read the last_visible_index for a partition
         // before calling `fetch_ntps_in_parallel` then we need to
@@ -1350,8 +1215,10 @@ class simple_fetch_planner final : public fetch_planner::impl {
 
               auto fail_all_partitions = [&](error_code ec) {
                   for (const auto& fp : partitions) {
-                      resp_it->set(make_partition_response_error(
-                        fp.topic_partition.get_partition(), ec));
+                      resp_it->set(
+                        make_partition_response_error(
+                          fp.topic_partition.get_partition(), ec),
+                        {});
                       ++resp_it;
                   }
               };
@@ -1436,8 +1303,10 @@ class simple_fetch_planner final : public fetch_planner::impl {
 
                   if (unlikely(
                         metadata_cache.is_disabled(tn_view, partition_id))) {
-                      resp_it->set(make_partition_response_error(
-                        partition_id, error_code::replica_not_available));
+                      resp_it->set(
+                        make_partition_response_error(
+                          partition_id, error_code::replica_not_available),
+                        {});
                       ++resp_it;
                       continue;
                   }
@@ -1458,7 +1327,7 @@ class simple_fetch_planner final : public fetch_planner::impl {
                                   ? error_code::not_leader_for_partition
                                   : error_code::unknown_topic_or_partition;
                       resp_it->set(
-                        make_partition_response_error(partition_id, ec));
+                        make_partition_response_error(partition_id, ec), {});
                       ++resp_it;
                       continue;
                   }
@@ -1541,6 +1410,8 @@ fetch_handler::handle(request_context rctx, ss::smp_service_group ssg) {
           }
           octx.response.data.error_code = error_code::none;
           return do_fetch(octx).then([&octx] {
+              auto resp_units_deleter = octx.response_memory_units_deleter();
+
               // NOTE: Audit call doesn't happen until _after_ the fetch
               // is done. This was done for the sake of simplicity and
               // because fetch doesn't alter the state of the broker
@@ -1548,6 +1419,9 @@ fetch_handler::handle(request_context rctx, ss::smp_service_group ssg) {
                   return std::move(octx).send_error_response(
                     error_code::broker_not_available);
               }
+
+              octx.rctx.add_response_resource_deleter(
+                std::move(resp_units_deleter));
               return std::move(octx).send_response();
           });
       });
@@ -1776,19 +1650,46 @@ ss::future<response_ptr> op_context::send_error_response(error_code ec) && {
     return rctx.respond(std::move(resp));
 }
 
+ss::deleter op_context::response_memory_units_deleter() {
+    chunked_vector<fetch_memory_units> mu;
+    for (auto& r : iteration_order) {
+        if (r.has_memory_units()) {
+            mu.push_back(r.release_memory_units().value());
+        }
+    }
+    return ss::make_object_deleter(std::move(mu));
+}
+
+size_t op_context::total_response_memory_units() const {
+    size_t res = 0;
+    for (const auto& r : iteration_order) {
+        res += r.num_memory_units();
+    }
+    return res;
+}
+
 op_context::response_placeholder::response_placeholder(
   fetch_response::iterator it, op_context* ctx)
   : _it(it)
-  , _ctx(ctx) {}
+  , _ctx(ctx)
+  , _ktp(_it->partition->topic, _it->partition_response->partition_index) {}
 
 void op_context::response_placeholder::set(
-  fetch_response::partition_response&& response) {
+  fetch_response::partition_response&& response,
+  std::optional<fetch_memory_units>&& response_memory_units) {
     vassert(
       response.partition_index == _it->partition_response->partition_index,
       "Response and current partition ids have to be the same. Current "
       "response {}, update {}",
       _it->partition_response->partition_index,
       response.partition_index);
+    dassert(
+      (response.records ? response.records->size_bytes() : 0)
+        == (response_memory_units ? response_memory_units->num_units() : 0),
+      "Response units should equal the number of bytes in the response its "
+      "self.");
+
+    replace_or_add_memory_units(std::move(response_memory_units));
 
     if (response.error_code != error_code::none) {
         _ctx->response_error = true;

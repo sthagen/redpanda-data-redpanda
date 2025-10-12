@@ -13,6 +13,7 @@
 #include "container/chunked_vector.h"
 #include "container/intrusive_list_helpers.h"
 #include "kafka/protocol/fetch.h"
+#include "kafka/server/fetch_memory_units.h"
 #include "kafka/server/handlers/fetch/replica_selector.h"
 #include "kafka/server/handlers/handler.h"
 #include "model/fundamental.h"
@@ -48,12 +49,16 @@ struct op_context {
     public:
         response_placeholder(fetch_response::iterator, op_context* ctx);
 
-        void set(fetch_response::partition_response&&);
+        void set(
+          fetch_response::partition_response&&,
+          std::optional<fetch_memory_units>&&);
 
         const model::topic& topic() { return _it->partition->topic; }
         model::partition_id partition_id() {
             return _it->partition_response->partition_index;
         }
+
+        const model::ktp_with_hash& ktp() { return _ktp; }
 
         bool empty() { return _it->partition_response->records->empty(); }
         bool has_error() {
@@ -66,9 +71,40 @@ struct op_context {
         }
         intrusive_list_hook _hook;
 
+        // Returns the number of bytes currently written to the ntp response
+        // this placeholder corresponds to.
+        size_t response_size() const {
+            return _it->partition_response->records
+              .transform(&kafka::batch_reader::size_bytes)
+              .value_or(0);
+        }
+
+        // Returns whether there are memory units held for this ntp.
+        bool has_memory_units() const { return num_memory_units() > 0; }
+
+        // Returns the number of memory units held for this ntp.
+        size_t num_memory_units() const {
+            return _response_memory_units ? _response_memory_units->num_units()
+                                          : 0;
+        }
+
+        // Adds/replaces the memory units that are held for this ntp.
+        void
+        replace_or_add_memory_units(std::optional<fetch_memory_units>&& units) {
+            _response_memory_units = std::move(units);
+        }
+
+        // Releases/returns the memory units that are held for this ntp.
+        std::optional<fetch_memory_units> release_memory_units() {
+            return std::move(_response_memory_units);
+        }
+
     private:
         fetch_response::iterator _it;
         op_context* _ctx;
+        const model::ktp_with_hash _ktp;
+        // Tracks memory used by response data in `_it`.
+        std::optional<fetch_memory_units> _response_memory_units;
     };
 
     using iteration_order_t
@@ -141,6 +177,16 @@ struct op_context {
      * and currently returns 0 for sessionless fetches.
      */
     size_t fetch_partition_count() const;
+
+    /**
+     * @brief Moves all memory units for response data into a `ss::deleter`.
+     */
+    ss::deleter response_memory_units_deleter();
+
+    /**
+     * @brief Returns the total number of units held by the response.
+     */
+    size_t total_response_memory_units() const;
 
     request_context rctx;
     ss::smp_service_group ssg;
@@ -226,35 +272,6 @@ struct read_result {
     using foreign_data_t = ss::foreign_ptr<std::unique_ptr<iobuf>>;
     using data_t = std::unique_ptr<iobuf>;
     using variant_t = std::variant<data_t, foreign_data_t>;
-
-    /// Holds semaphore units from memory semaphores. Can be passed across
-    /// shards, semaphore units will be released in the shard where the instance
-    /// of this class has been created.
-    struct memory_units_t {
-        ssx::semaphore_units kafka;
-        ssx::semaphore_units fetch;
-        ss::shard_id shard = ss::this_shard_id();
-
-        ~memory_units_t() noexcept;
-        memory_units_t() noexcept = default;
-        memory_units_t(memory_units_t&&) noexcept = default;
-        memory_units_t& operator=(memory_units_t&&) noexcept = default;
-        memory_units_t(const memory_units_t&) = delete;
-        memory_units_t& operator=(const memory_units_t&) = delete;
-        memory_units_t(
-          ssx::semaphore& memory_sem,
-          ssx::semaphore& memory_fetch_sem) noexcept;
-
-        /*
-         * Adopts another memory_units_t. This requires that both
-         * memory_units_t are from the same shard.
-         */
-        void adopt(memory_units_t&& o);
-
-        bool has_units() const {
-            return fetch.count() > 0 || kafka.count() > 0;
-        }
-    };
 
     explicit read_result(error_code e)
       : start_offset(-1)
@@ -347,7 +364,7 @@ struct read_result {
     error_code error;
     model::partition_id partition;
     std::vector<cluster::tx::tx_range> aborted_transactions;
-    memory_units_t memory_units;
+    std::optional<fetch_memory_units> memory_units;
 };
 // struct aggregating fetch requests and corresponding response iterators for
 // the same shard
@@ -437,8 +454,7 @@ ss::future<read_result> read_from_ntp(
   bool,
   std::optional<model::timeout_clock::time_point>,
   bool obligatory_batch_read,
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem);
+  fetch_memory_units_manager& units_mgr);
 
 /**
  * Create a fetch plan with the simple fetch planner.
@@ -446,13 +462,6 @@ ss::future<read_result> read_from_ntp(
  * Exposed for testing/benchmarking only.
  */
 kafka::fetch_plan make_simple_fetch_plan(op_context& octx);
-
-read_result::memory_units_t reserve_memory_units(
-  ssx::semaphore& memory_sem,
-  ssx::semaphore& memory_fetch_sem,
-  const size_t max_bytes,
-  const size_t max_batch_size,
-  const bool obligatory_batch_read);
 
 ss::future<> do_fetch(op_context& octx);
 
