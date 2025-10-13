@@ -673,3 +673,14 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "windowed_sum_tracker",
+    hdrs = [
+        "windowed_sum_tracker.h",
+    ],
+    deps = [
+        "//src/v/base",
+        "@seastar",
+    ],
+)

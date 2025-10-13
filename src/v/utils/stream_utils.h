@@ -242,7 +242,7 @@ struct fanout_data_source final : ss::data_source_impl {
     ss::future<> close() final { co_await _isf->detach(_id); }
 
     ss::future<ss::temporary_buffer<char>> skip(uint64_t) final {
-        vassert(false, "Not supported");
+        vunreachable("Not supported");
     }
     ss::future<ss::temporary_buffer<char>> get() final {
         co_return co_await _isf->get(_id);

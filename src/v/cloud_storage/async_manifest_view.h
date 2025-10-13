@@ -164,10 +164,11 @@ private:
     ss::future<result<archive_start_offset_advance, error_outcome>>
     size_based_retention(size_t size_limit) noexcept;
 
-    // Returns a point that corresponds to the beginning of the highest
-    // manifest less than or containing the given offset.
+    // Find the next possible start offset for the archive (spillover region).
+    // If the offset is in the STM manifest, returns start offset of the STM
+    // manifest.
     ss::future<result<archive_start_offset_advance, error_outcome>>
-      find_highest_le(kafka::offset) noexcept;
+      next_possible_start_offset_le(kafka::offset) noexcept;
 
     // Perform a term upper bound search within the spillover manifest list.
     // Returns the index of the first spillover manifest that contains a segment

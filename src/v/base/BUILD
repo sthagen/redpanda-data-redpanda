@@ -16,7 +16,6 @@ redpanda_cc_library(
         "source_location.h",
         "type_traits.h",
         "units.h",
-        "unreachable.h",
         "vassert.h",
         "vassert-register.h",
         "vlog.h",

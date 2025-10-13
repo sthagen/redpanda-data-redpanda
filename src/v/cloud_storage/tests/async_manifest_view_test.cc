@@ -16,8 +16,6 @@
 #include "cloud_storage/tests/util.h"
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
-#include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "test_utils/boost_fixture.h"
 #include "utils/retry_chain_node.h"
@@ -33,9 +31,9 @@
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <iterator>
-#include <numeric>
 
 using namespace cloud_storage;
 using eof = async_manifest_view_cursor::eof;
@@ -855,28 +853,89 @@ FIXTURE_TEST(
       res.value().delta,
       stm_manifest.first_addressable_segment()->delta_offset);
 
-    // Any pin within a given spillover manifest should pin the whole manifest.
-    auto first_manifest = view.stm_manifest().get_spillover_map().begin();
-    for (auto o :
-         {first_manifest->base_kafka_offset(),
-          first_manifest->last_kafka_offset()}) {
-        auto pinned_res = view.compute_retention(0, storage_duration, o).get();
-        BOOST_REQUIRE(pinned_res.has_value());
-        BOOST_CHECK_EQUAL(pinned_res.value().offset, model::offset{0});
-        BOOST_CHECK_EQUAL(pinned_res.value().delta, model::offset_delta{0});
+    // Check that pinning inside spillover manifest works as expected.
+    std::vector<kafka::offset> test_pin_offsets;
+    std::optional<kafka::offset> last_offset;
+    for (const auto& spill_m : view.stm_manifest().get_spillover_map()) {
+        test_pin_offsets.push_back(spill_m.base_kafka_offset());
+        auto mid = kafka::offset{
+          (spill_m.base_kafka_offset() + spill_m.last_kafka_offset()) / 2};
+        test_pin_offsets.push_back(mid);
+        test_pin_offsets.push_back(spill_m.last_kafka_offset());
+
+        last_offset = spill_m.last_kafka_offset();
     }
-    // A pin past a manifest should allow the manifest to be removed.
-    auto second_manifest = std::next(
-      view.stm_manifest().get_spillover_map().begin());
-    for (auto o :
-         {second_manifest->base_kafka_offset(),
-          second_manifest->last_kafka_offset()}) {
-        auto pinned_res = view.compute_retention(0, storage_duration, o).get();
-        BOOST_REQUIRE(pinned_res.has_value());
-        BOOST_CHECK_EQUAL(
-          pinned_res.value().offset, second_manifest->base_offset);
-        BOOST_CHECK_EQUAL(
-          pinned_res.value().delta, second_manifest->delta_offset);
+
+    BOOST_TEST_REQUIRE(last_offset.has_value());
+
+    for (auto pinned_offset : test_pin_offsets) {
+        auto retention_res
+          = view.compute_retention(0, storage_duration, pinned_offset).get();
+        BOOST_REQUIRE(retention_res.has_value());
+
+        auto computed_kafka_start_offset = retention_res.value().offset
+                                           - retention_res.value().delta;
+
+        // The computed start offset should be less than or equal to the pinned
+        // offset.
+        BOOST_CHECK_LE(computed_kafka_start_offset, pinned_offset);
+    }
+
+    // Check that pinning above the spillover region truncates at the start
+    // of the STM manifest.
+    for (auto increment : {1, 2, 3}) {
+        auto pinned_offset = last_offset.value() + kafka::offset{increment};
+        auto retention_res
+          = view.compute_retention(0, storage_duration, pinned_offset).get();
+        BOOST_REQUIRE(retention_res.has_value());
+
+        auto computed_kafka_start_offset = retention_res.value().offset
+                                           - retention_res.value().delta;
+
+        auto expected_start_offset
+          = stm_manifest.get_start_offset().value()
+            - stm_manifest.first_addressable_segment()->delta_offset;
+
+        // The computed start offset should be less than or equal to the pinned
+        // offset.
+        BOOST_CHECK_LE(computed_kafka_start_offset, pinned_offset);
+
+        // And equal to the start of the STM manifest.
+        BOOST_CHECK_EQUAL(computed_kafka_start_offset, expected_start_offset);
+    }
+
+    std::vector<segment_meta> segments_to_check;
+    std::ranges::sample(
+      segments | std::views::filter([&stm_manifest](const auto& m) {
+          // Only check segments that are in the archive.
+          return m.base_offset < stm_manifest.get_start_offset();
+      }),
+      std::back_inserter(segments_to_check),
+      5,
+      std::mt19937{std::random_device{}()});
+
+    // Test pinning on segment boundaries.
+    for (const auto& segment : segments_to_check) {
+        const std::vector<kafka::offset> offsets_to_probe = {
+          segment.base_offset - segment.delta_offset,
+          segment.committed_offset - segment.delta_offset,
+        };
+
+        for (auto pinned_offset : offsets_to_probe) {
+            auto retention_res
+              = view.compute_retention(0, storage_duration, pinned_offset)
+                  .get();
+            BOOST_REQUIRE(retention_res.has_value());
+
+            auto computed_kafka_start_offset = retention_res.value().offset
+                                               - retention_res.value().delta;
+
+            // The computed start offset should be equal to the start of the
+            // segment containing the pinned offset.
+            BOOST_CHECK_EQUAL(
+              computed_kafka_start_offset,
+              segment.base_offset - segment.delta_offset);
+        }
     }
 }
 

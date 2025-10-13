@@ -48,7 +48,7 @@ seeding_mode default_seeding_policy() {
         } else if (mode == "fixed") {
             return seeding_mode::fixed_seed;
         }
-        vassert(false, "Invalid REDPANDA_RNG_SEEDING_MODE: {}", mode);
+        vunreachable("Invalid REDPANDA_RNG_SEEDING_MODE: {}", mode);
     }();
 
     return global_seeding_mode;

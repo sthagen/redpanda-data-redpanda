@@ -589,3 +589,16 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "windowed_sum_tracker_test",
+    timeout = "short",
+    srcs = ["windowed_sum_tracker_test.cc"],
+    deps = [
+        "//src/v/base",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:windowed_sum_tracker",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

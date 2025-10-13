@@ -30,6 +30,7 @@
 #include "utils/log_hist.h"
 #include "utils/mutex.h"
 #include "utils/named_type.h"
+#include "utils/windowed_sum_tracker.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -39,6 +40,7 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/net/socket_defs.hh>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -142,6 +144,28 @@ struct virtual_connection_id {
     friend std::ostream&
     operator<<(std::ostream& o, const virtual_connection_id& id);
 };
+
+struct connection_attributes {
+    struct request_state {
+        constexpr static auto bucket_count = size_t{4};
+        constexpr static auto window_ns = std::chrono::minutes(1)
+                                          / std::chrono::nanoseconds(1);
+        using tracker_t = windowed_sum_tracker<bucket_count, window_ns>;
+        tracker_t recent_stat{};
+        uint64_t total_stat{0};
+
+        void record(uint64_t val) {
+            total_stat += val;
+            recent_stat.record(val);
+        }
+    };
+
+    request_state request_count;
+    request_state produce_bytes;
+    request_state produce_batch_count;
+    request_state fetch_bytes;
+};
+
 class connection_context final
   : public ss::enable_lw_shared_from_this<connection_context>
   , public boost::intrusive::list_base_hook<> {
@@ -202,6 +226,8 @@ public:
     bool tls_enabled() const { return conn->tls_enabled(); }
 
     proto::admin::kafka_connection to_proto() const;
+
+    connection_attributes& attributes() { return _attributes; }
 
 private:
     template<typename T>
@@ -511,6 +537,8 @@ private:
     /// Used to enforce client quotas and ingress/egress quotas broker-side
     /// if the client does not obey the ThrottleTimeMs in the response
     throttling_state _throttling_state;
+
+    connection_attributes _attributes;
 };
 
 } // namespace kafka

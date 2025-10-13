@@ -36,7 +36,7 @@ serialize_schema_type(pandaproxy::schema_registry::schema_type st) {
     case pandaproxy::schema_registry::schema_type::protobuf:
         return protobuf;
     }
-    vassert(false, "unknown schema type: {}", st);
+    vunreachable("unknown schema type: {}", st);
 }
 
 std::optional<pandaproxy::schema_registry::schema_type>

@@ -1913,7 +1913,7 @@ ntp_archiver::schedule_single_upload(const upload_context& upload_ctx) {
     co_return co_await ss::visit(
       candidate_result,
       [](std::monostate) -> ss::future<scheduled_upload> {
-          vassert(false, "Unexpected monostate in candidate stream result");
+          vunreachable("Unexpected monostate in candidate stream result");
       },
       [this, &upload_ctx](segment_collector_stream& strm) {
           return do_schedule_single_upload_streaming(

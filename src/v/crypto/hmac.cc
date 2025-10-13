@@ -41,7 +41,7 @@ static const std::array<OSSL_PARAM, 2>& get_param(digest_type type) {
     case digest_type::SHA512:
         return sha512_params;
     default:
-        vassert(false, "Cannot create an HMAC for digest type {}", type);
+        vunreachable("Cannot create an HMAC for digest type {}", type);
     };
 }
 } // namespace

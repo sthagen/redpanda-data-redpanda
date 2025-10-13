@@ -462,14 +462,14 @@ private:
               [&param1](iceberg::truncate_transform& parametrized_transform) {
                   parametrized_transform.length = param1;
               },
-              [](auto) { vassert(false, "unexpected transform"); });
+              [](auto) { vunreachable("unexpected transform"); });
             return {
               {.source_name = args_res_value.second,
                .transform = std::move(transform)},
               pos};
         }
         default:
-            vassert(false, "parse_transform_name returned unknown option");
+            vunreachable("parse_transform_name returned unknown option");
         }
     }
 

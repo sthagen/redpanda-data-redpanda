@@ -314,6 +314,9 @@ infer_backend_from_uri(const access_point_uri& uri) {
           .match_expr("amazon", model::cloud_storage_backend::aws)
           .match_expr(
             "oraclecloud", model::cloud_storage_backend::oracle_s3_compat)
+          .match_expr(
+            "linodeobjects\\.com",
+            model::cloud_storage_backend::linode_s3_compat)
           .default_match(model::cloud_storage_backend::unknown);
     return result;
 }

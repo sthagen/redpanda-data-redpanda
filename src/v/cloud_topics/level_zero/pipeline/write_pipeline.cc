@@ -263,7 +263,7 @@ ss::future<checked<event, errc>> write_pipeline<Clock>::stage::wait_until(
         break;
     case l0::event_type::new_read_request:
     case l0::event_type::none:
-        vassert(false, "Read request added to the write pipeline");
+        vunreachable("Read request added to the write pipeline");
     }
     co_return event;
 }
@@ -280,7 +280,7 @@ write_pipeline<Clock>::stage::wait_next(ss::abort_source* maybe_as) noexcept {
     case l0::event_type::err_timedout:
     case l0::event_type::new_read_request:
     case l0::event_type::none:
-        vassert(false, "Read request added to the write pipeline");
+        vunreachable("Read request added to the write pipeline");
     case l0::event_type::new_write_request:
         break;
     }

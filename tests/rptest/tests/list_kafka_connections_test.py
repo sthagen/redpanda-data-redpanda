@@ -6,7 +6,7 @@
 #
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
-from typing import Any, Literal, Tuple
+from typing import Any
 
 from ducktape.tests.test import TestContext
 
@@ -17,7 +17,7 @@ from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.rpk_consumer import RpkConsumer
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import wait_until_result
+from rptest.util import wait_until
 
 
 class AdminV2ListKafkaConnectionsTest(RedpandaTest):
@@ -61,32 +61,31 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
             page_size=10,
         )
 
-        def non_empty_result() -> Tuple[
-            bool, broker_pb.ListKafkaConnectionsResponse | None
-        ]:
+        def valid_response() -> bool:
             resp = admin_v2.broker().list_kafka_connections(req)
-            if len(resp.connections) == 0:
-                return False, None
-            return True, resp
 
-        resp = wait_until_result(
-            non_empty_result,
+            self.logger.info(
+                f"ListKafkaConnectionsResponse: total_size={resp.total_size}, connections={len(resp.connections)}"
+            )
+            self.logger.debug(f"ListKafkaConnectionsResponse: {resp}")
+
+            # Sanity check the response
+            assert len(resp.connections) > 0
+            conn = resp.connections[0]
+
+            assert conn.node_id == node_id
+            assert len(conn.source.ip_address) > 0
+            assert conn.source.port != 0
+            assert not conn.tls_info.enabled
+            assert conn.total_request_statistics.request_count > 0
+
+            return True
+
+        wait_until(
+            valid_response,
             timeout_sec=15,
-            err_msg="Unable to observe a non-empty ListKafkaConnectionsResponse",
+            retry_on_exc=True,
+            err_msg="Did not observe a valid ListKafkaConnectionsResponse",
         )
-
-        self.logger.info(
-            f"ListKafkaConnectionsResponse: "
-            f"total_size={resp.total_size}, connections={len(resp.connections)}"
-        )
-        self.logger.debug(f"ListKafkaConnectionsResponse: {resp}")
-
-        # Sanity check response
-        assert len(resp.connections) > 0
-        conn = resp.connections[0]
-        assert conn.node_id == node_id
-        assert len(conn.source.ip_address) > 0
-        assert conn.source.port != 0
-        assert not conn.tls_info.enabled
 
         self.consumer.stop()

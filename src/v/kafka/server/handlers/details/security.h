@@ -285,7 +285,7 @@ inline int8_t to_kafka_registry_resource_type(security::resource_type type) {
     case security::resource_type::group:
     case security::resource_type::cluster:
     case security::resource_type::transactional_id:
-        vassert(false, "Request only for Schema Registry resources");
+        vunreachable("Request only for Schema Registry resources");
     }
 }
 

@@ -696,7 +696,7 @@ feature_state& feature_table::get_state(feature f_id) {
 
     // Should never happen: type of `feature` is enum and
     // _feature_state is initialized to include all possible features
-    vassert(false, "Invalid feature ID {}", static_cast<uint64_t>(f_id));
+    vunreachable("Invalid feature ID {}", static_cast<uint64_t>(f_id));
 }
 
 std::optional<feature>

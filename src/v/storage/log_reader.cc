@@ -259,7 +259,7 @@ log_segment_batch_reader::read_some(model::timeout_clock::time_point timeout) {
       .handle_exception_type(
         [](const std::system_error& ec) -> ss::future<result<records_t>> {
             if (ec.code().value() == EIO) {
-                vassert(false, "I/O error during read!  Disk failure?");
+                vunreachable("I/O error during read!  Disk failure?");
             } else {
                 return ss::make_exception_future<result<records_t>>(
                   std::current_exception());

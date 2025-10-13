@@ -47,7 +47,7 @@ iobuf compressor::compress(const iobuf& io, type t) {
     case type::zstd:
         return internal::zstd_compressor::compress(io);
     }
-    vassert(false, "Unknown compression type {}", t);
+    vunreachable("Unknown compression type {}", t);
 }
 iobuf compressor::uncompress(const iobuf& io, type t) {
     if (io.empty()) {
@@ -64,7 +64,7 @@ iobuf compressor::uncompress(const iobuf& io, type t) {
     case type::zstd:
         return internal::zstd_compressor::uncompress(io);
     }
-    vassert(false, "Unknown uncompression type {}", t);
+    vunreachable("Unknown uncompression type {}", t);
 }
 
 ss::future<iobuf> stream_compressor::compress(iobuf io, type t) {

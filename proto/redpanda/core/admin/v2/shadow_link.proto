@@ -251,10 +251,6 @@ message SecuritySettingsSyncOptions {
     google.protobuf.Duration interval = 1;
     // Whether or not it's enabled
     bool enabled = 2;
-    // Role filters
-    repeated NameFilter role_filters = 3;
-    // SCRAM credential filters
-    repeated NameFilter scram_cred_filters = 4;
     // ACL filters
     repeated ACLFilter acl_filters = 5;
 }

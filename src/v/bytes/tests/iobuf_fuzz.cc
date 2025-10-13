@@ -506,7 +506,7 @@ private:
             return;
 
         default:
-            vassert(false, "Caught wild op {}", op.op);
+            vunreachable("Caught wild op {}", op.op);
         }
     }
 

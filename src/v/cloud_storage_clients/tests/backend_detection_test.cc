@@ -11,56 +11,59 @@
 #include "cloud_storage_clients/configuration.h"
 #include "config/configuration.h"
 
-#include <boost/test/unit_test.hpp>
+#include <gtest/gtest.h>
 
-BOOST_AUTO_TEST_CASE(test_backend_from_url) {
+TEST(BackendDetectionTest, BackendFromUrl) {
     auto cfg = cloud_storage_clients::s3_configuration{};
     cfg.uri = cloud_storage_clients::access_point_uri{"storage.googleapis.com"};
     auto inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::config_file);
-    BOOST_REQUIRE_EQUAL(
-      inferred, model::cloud_storage_backend::google_s3_compat);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::google_s3_compat);
+
+    cfg.uri = cloud_storage_clients::access_point_uri{
+      "gb-lon-1.linodeobjects.com"};
+    inferred = cloud_storage_clients::infer_backend_from_configuration(
+      cfg, model::cloud_credentials_source::config_file);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::linode_s3_compat);
 
     cfg.uri = cloud_storage_clients::access_point_uri{"minio-s3"};
     inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::config_file);
-    BOOST_REQUIRE_EQUAL(inferred, model::cloud_storage_backend::minio);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::minio);
 }
 
-BOOST_AUTO_TEST_CASE(test_backend_from_cred_src) {
+TEST(BackendDetectionTest, BackendFromCredSource) {
     auto cfg = cloud_storage_clients::s3_configuration{};
     auto inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::aws_instance_metadata);
-    BOOST_REQUIRE_EQUAL(inferred, model::cloud_storage_backend::aws);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::aws);
 
     inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::sts);
-    BOOST_REQUIRE_EQUAL(inferred, model::cloud_storage_backend::aws);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::aws);
 
     inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::gcp_instance_metadata);
-    BOOST_REQUIRE_EQUAL(
-      inferred, model::cloud_storage_backend::google_s3_compat);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::google_s3_compat);
 
     inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::config_file);
-    BOOST_REQUIRE_EQUAL(inferred, model::cloud_storage_backend::unknown);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::unknown);
 }
 
-BOOST_AUTO_TEST_CASE(test_backend_when_using_azure) {
+TEST(BackendDetectionTest, BackendWhenUsingAzure) {
     auto cfg = cloud_storage_clients::abs_configuration{};
     auto inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::aws_instance_metadata);
-    BOOST_REQUIRE_EQUAL(inferred, model::cloud_storage_backend::azure);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::azure);
 }
 
-BOOST_AUTO_TEST_CASE(test_backend_override) {
+TEST(BackendDetectionTest, BackendOverride) {
     config::shard_local_cfg().cloud_storage_backend.set_value(
       model::cloud_storage_backend{
         model::cloud_storage_backend::google_s3_compat});
     auto cfg = cloud_storage_clients::abs_configuration{};
     auto inferred = cloud_storage_clients::infer_backend_from_configuration(
       cfg, model::cloud_credentials_source::aws_instance_metadata);
-    BOOST_REQUIRE_EQUAL(
-      inferred, model::cloud_storage_backend::google_s3_compat);
+    EXPECT_EQ(inferred, model::cloud_storage_backend::google_s3_compat);
 }

@@ -600,7 +600,7 @@ ss::future<> audit_client::produce(
             // NOTE: we should never reach here because reserved should
             // always begin with precisely the number of units needed for all
             // input batches.
-            vassert(false, "Error getting units for batch: {}", e.what());
+            vunreachable("Error getting units for batch: {}", e.what());
         }
     });
 

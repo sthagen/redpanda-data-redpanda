@@ -389,7 +389,7 @@ static void run_concurrent_append_flush(
                 case SLEEP:
                     return "SLEEP";
                 }
-                vassert(false, "bad kind");
+                vunreachable("bad kind");
             }();
 
             return fmt::format("{:12}: {}", astr + extra, info.to_string());

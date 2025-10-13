@@ -628,7 +628,7 @@ batch_consumer::consume_result kvstore::replay_consumer::accept_batch_start(
 
 void kvstore::replay_consumer::skip_batch_start(
   model::record_batch_header h, size_t, size_t) {
-    vassert(false, "kvstore should never skip batches, header: {}", h);
+    vunreachable("kvstore should never skip batches, header: {}", h);
 }
 
 void kvstore::replay_consumer::consume_batch_start(

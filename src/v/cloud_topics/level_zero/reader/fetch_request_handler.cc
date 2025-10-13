@@ -10,7 +10,6 @@
 
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 
-#include "base/unreachable.h"
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/read_request.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"

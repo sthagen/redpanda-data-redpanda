@@ -78,7 +78,7 @@ public:
                 co_return errc::timeout;
             case l0::event_type::new_write_request:
             case l0::event_type::none:
-                vassert(false, "Unexpected event type in the read_pipeline");
+                vunreachable("Unexpected event type in the read_pipeline");
             case l0::event_type::new_read_request:
                 break;
             }

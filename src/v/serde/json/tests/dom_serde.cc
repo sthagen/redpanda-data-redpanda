@@ -112,7 +112,7 @@ ss::future<value> parse_document_serde(iobuf buf) {
         }
     }
 
-    vassert(false, "Expected EOF");
+    vunreachable("Expected EOF");
 }
 
 } // namespace serde::json::test::dom

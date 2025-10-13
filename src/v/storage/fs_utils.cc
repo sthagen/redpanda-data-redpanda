@@ -98,7 +98,7 @@ segment_full_path segment_full_path::to_index() const {
     } else if (extension == ".log.compaction.staging") {
         return with_extension(".log.compaction.base_index");
     } else {
-        vassert(false, "Unexpected extension {}", extension);
+        vunreachable("Unexpected extension {}", extension);
     }
 }
 
@@ -108,7 +108,7 @@ segment_full_path segment_full_path::to_compacted_index() const {
     } else if (extension == ".log.compaction.staging") {
         return with_extension(".log.compaction.compaction_index");
     } else {
-        vassert(false, "Unexpected extension {}", extension);
+        vunreachable("Unexpected extension {}", extension);
     }
 }
 
@@ -123,7 +123,7 @@ segment_full_path segment_full_path::to_staging() const {
     } else if (extension == ".log.compaction.staging") {
         return with_extension(".log.compaction.staging.staging");
     } else {
-        vassert(false, "Unexpected extension {}", extension);
+        vunreachable("Unexpected extension {}", extension);
     }
 }
 

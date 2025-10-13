@@ -224,7 +224,7 @@ public:
             return fake_principal;
         }
         ss::future<result<bytes>> authenticate(bytes) final {
-            vassert(false, "Don't call this");
+            vunreachable("Don't call this");
         }
         const security::audit::user& audit_user() const override {
             static const security::audit::user user{

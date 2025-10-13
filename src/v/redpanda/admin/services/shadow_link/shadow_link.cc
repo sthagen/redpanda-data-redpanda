@@ -28,7 +28,7 @@ T handle_error(cluster_link::cl_result<T> result) {
     auto info = result.assume_error();
     switch (info.code()) {
     case cluster_link::errc::success:
-        vassert(false, "Unexpected success code in handle_error");
+        vunreachable("Unexpected success code in handle_error");
     case cluster_link::errc::invalid_task_state_change:
     case cluster_link::errc::task_not_running:
     case cluster_link::errc::task_already_running:

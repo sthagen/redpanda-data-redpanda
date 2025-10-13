@@ -61,15 +61,23 @@ inline void assert_failed_thunk0(
 #define STR_VASSERT2(x) #x
 #define STR_VASSERT(x) STR_VASSERT2(x)
 
-/** Meant to be used in the same way as assert(condition, msg);
- * which means we use the negative conditional.
- * i.e.:
- *
- * open_fileset::~open_fileset() noexcept {
- *   vassert(_closed, "fileset not closed");
- * }
- *
- */
+/// Assertion macro that's always enabled, including in release builds.
+///
+/// This macro provides detailed error messages and backtraces when assertions
+/// fail. Unlike standard assert(), vassert() remains active in release builds,
+/// making it suitable for critical invariant checking in production code.
+///
+/// Use dassert() for expensive debug-only checks that should be compiled out
+/// in release builds.
+///
+/// Meant to be used in the same way as assert(condition, msg);
+/// which means we use the negative conditional.
+/// i.e.:
+///
+/// open_fileset::~open_fileset() noexcept {
+///   vassert(_closed, "fileset not closed");
+/// }
+
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define vassert(x, msg, args...)                                               \
     /* NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while) */                     \
@@ -83,10 +91,14 @@ inline void assert_failed_thunk0(
         }                                                                      \
     } while (0)
 
-/**
- * same as vassert but only debug mode. Use over assert for better
- * error messages.
- */
+/// Debug-only assertion that is compiled out in release builds.
+///
+/// This macro behaves identically to vassert() in debug builds but becomes
+/// a no-op in release builds (when NDEBUG is defined). Use dassert() for
+/// expensive checks that should only run during development and testing.
+///
+/// Prefer over standard assert() for consistent calling conventions and
+/// backtraces.
 #ifndef NDEBUG
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define dassert(x, msg, args...) vassert(x, msg, ##args)
@@ -94,3 +106,20 @@ inline void assert_failed_thunk0(
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define dassert(...)
 #endif
+
+/// Crash the process if this line is ever reached, including in release builds.
+///
+/// This macro provides a safe alternative to std::unreachable() that guarantees
+/// program termination with a clear error message and backtrace when reached.
+/// Unlike std::unreachable() which results in undefined behavior if reached,
+/// vunreachable() will always terminate the process cleanly with diagnostic
+/// information.
+///
+/// Note: This macro might result in slightly worse assembly code and does not
+/// enable certain compiler optimizations like std::unreachable() would.
+#define vunreachable(msg, args...)                                             \
+    /* NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while) */                     \
+    do {                                                                       \
+        ::detail::assert_failed_thunk0(                                        \
+          "(" __FILE__ ":" STR_VASSERT(__LINE__) ")", msg, ##args);            \
+    } while (0)

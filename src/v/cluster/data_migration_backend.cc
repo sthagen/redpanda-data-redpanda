@@ -1657,7 +1657,7 @@ backend::get_work_scope(const migration_metadata& metadata) {
                   // we'd like to investigate how it happened.
                   break;
               case state::deleted:
-                  vassert(false, "A migration cannot be in a deleted state");
+                  vunreachable("A migration cannot be in a deleted state");
               case state::preparing:
               case state::executing:
               case state::cut_over:

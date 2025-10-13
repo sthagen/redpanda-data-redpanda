@@ -1815,7 +1815,7 @@ ss::future<errc> partition::flush_archiver() {
     switch (res) {
     case archival::wait_result::not_in_progress:
         // is partition concurrently flushed/waited by smth else?
-        vassert(false, "Freshly accepted flush cannot be waited for");
+        vunreachable("Freshly accepted flush cannot be waited for");
     case archival::wait_result::lost_leadership:
         co_return errc::leadership_changed;
     case archival::wait_result::failed:

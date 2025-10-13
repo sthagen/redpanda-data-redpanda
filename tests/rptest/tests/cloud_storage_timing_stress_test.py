@@ -12,6 +12,7 @@ import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from typing import Any, Callable
 
 from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until
@@ -31,19 +32,24 @@ from rptest.util import wait_until_result
 from rptest.utils.mode_checks import skip_debug_mode
 from rptest.utils.si_utils import NTPR, BucketView
 
+CheckFn = Callable[..., Any]
+
 
 class CloudStorageCheck:
-    def __init__(self, name, check):
-        self._name = name
-        self._check = check
+    def __init__(self, name: str, check: CheckFn):
+        self._name: str = name
+        self._check: CheckFn = check
 
     @property
-    def check(self):
+    def check(self) -> CheckFn:
         return self._check
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
+
+    def __repr__(self) -> str:
+        return self.name
 
 
 def assert_cloud_storage_usage(test):
@@ -102,7 +108,7 @@ class PartitionStatusValidator:
     def _validate_mode(self, status, bucket_view: BucketView, ntpr: NTPR) -> bool:
         if status["cloud_storage_mode"] != "full":
             self._logger.info(
-                f"Unexpected for cloud_storage_mode: {status['cloud_storage_mode']}"
+                f"{ntpr}: Unexpected for cloud_storage_mode: {status['cloud_storage_mode']}"
             )
             return False
 
@@ -122,14 +128,14 @@ class PartitionStatusValidator:
         reported_stm = status["stm_region_size_bytes"]
         if reported_stm != stm_region:
             self._logger.info(
-                f"Reported cloud log size for stm region does not match manifest: {reported_stm}!={stm_region}"
+                f"{ntpr}: Reported cloud log size for stm region does not match manifest: {reported_stm} != {stm_region}"
             )
             return False
 
         reported_archive = status["archive_size_bytes"]
-        if reported_stm != stm_region:
+        if reported_archive != archive_region:
             self._logger.info(
-                f"Reported cloud log size for archive region does not match manifest: {reported_archive}!={archive_region}"
+                f"{ntpr}: Reported cloud log size for archive region does not match manifest: {reported_archive} != {archive_region}"
             )
             return False
 
@@ -151,7 +157,7 @@ class PartitionStatusValidator:
 
         if cloud_log_start != reported_start:
             self._logger.info(
-                f"Reported cloud log start does not match manifest: {reported_start} != {cloud_log_start}"
+                f"{ntpr}: Reported cloud log start does not match manifest: {reported_start} != {cloud_log_start}"
             )
             return False
 
@@ -160,7 +166,7 @@ class PartitionStatusValidator:
 
         if cloud_log_last != reported_last:
             self._logger.info(
-                f"Reported cloud log end does not match manifest: {reported_last} != {cloud_log_last}"
+                f"{ntpr}: Reported cloud log end does not match manifest: {reported_last} != {cloud_log_last}"
             )
             return False
 
@@ -172,7 +178,7 @@ def cloud_storage_status_endpoint_check(test):
     reported_status_sliding_window = deque(maxlen=5)
     validator = PartitionStatusValidator(test)
 
-    def check():
+    def check() -> bool:
         try:
             bucket_view.reset()
             bucket_view._do_listing()
@@ -415,10 +421,6 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
         # after the partition moves.
         self._initial_revision = self._get_initial_revision()
 
-        self.register_check(
-            "cloud_storage_status_endpoint", cloud_storage_status_endpoint_check
-        )
-
         self.producer = self._create_producer(cleanup_policy)
         self.consumer = self._create_consumer(self.producer)
 
@@ -469,11 +471,16 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
             )
 
         assert_cloud_storage_usage(self)
+        cloud_storage_status_endpoint_check(self)
 
-    def register_check(self, name, check_fn):
+    def register_check(self, name: str, check_fn: CheckFn):
         self.checks.append(CloudStorageCheck(name, check_fn))
 
     def do_checks(self):
+        if len(self.checks) == 0:
+            self.logger.info(f"Nothing to do {self.checks=}")
+            return
+
         with ThreadPoolExecutor(max_workers=len(self.checks)) as executor:
 
             def start_check(check):

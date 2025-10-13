@@ -63,6 +63,9 @@ class NTPR(NamedTuple):
     def to_ntp(self) -> NTP:
         return NTP(self.ns, self.topic, self.partition)
 
+    def __repr__(self) -> str:
+        return f"{{{self.ns}/{self.topic}/{self.partition}_{self.revision}}}"
+
 
 @dataclass
 class LogRegionSize:

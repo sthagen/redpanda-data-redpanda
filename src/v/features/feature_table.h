@@ -178,7 +178,7 @@ constexpr cluster::cluster_version to_cluster_version(release_version rv) {
     case release_version::v25_3_1:
         return cluster::cluster_version{static_cast<int64_t>(rv)};
     }
-    vassert(false, "Invalid release_version");
+    vunreachable("Invalid release_version");
 }
 
 constexpr cluster::cluster_version TEST_VERSION{2001};

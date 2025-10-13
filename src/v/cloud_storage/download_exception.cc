@@ -32,7 +32,7 @@ const char* download_exception::what() const noexcept {
     case download_result::timedout:
         return "TimedOut";
     case download_result::success:
-        vassert(false, "Successful result can't be used as an error");
+        vunreachable("Successful result can't be used as an error");
     }
     __builtin_unreachable();
 }

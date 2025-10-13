@@ -407,6 +407,7 @@ redpanda_cc_library(
         "//src/v/utils:to_string",
         "//src/v/utils:tristate",
         "//src/v/utils:truncating_logger",
+        "//src/v/utils:windowed_sum_tracker",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/container:node_hash_map",

@@ -37,6 +37,7 @@
 #include <exception>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <system_error>
 #include <variant>
 
@@ -829,7 +830,7 @@ async_manifest_view::compute_retention(
           "Start kafka offset override {} exceeds computed retention {}",
           _stm_manifest.get_start_kafka_offset_override(),
           result.offset);
-        auto r = co_await find_highest_le(
+        auto r = co_await next_possible_start_offset_le(
           _stm_manifest.get_start_kafka_offset_override());
         if (r.has_error()) {
             co_return r;
@@ -846,14 +847,14 @@ async_manifest_view::compute_retention(
           "Computed retention Kafka offset {} is above the pinned offset {}",
           result.offset - result.delta,
           *pinned_offset);
-        auto r = co_await find_highest_le(*pinned_offset);
+        auto r = co_await next_possible_start_offset_le(*pinned_offset);
         if (r.has_error()) {
             co_return r;
         }
         result = r.value();
         vlog(
           _ctxlog.debug,
-          "Found Kafka offset {} to pin the start offset to {}",
+          "Found possible start kafka offset {} for pinned offset {}",
           result.offset - result.delta,
           *pinned_offset);
     }
@@ -862,12 +863,12 @@ async_manifest_view::compute_retention(
 
 ss::future<
   result<async_manifest_view::archive_start_offset_advance, error_outcome>>
-async_manifest_view::find_highest_le(kafka::offset o) noexcept {
+async_manifest_view::next_possible_start_offset_le(
+  const kafka::offset max_offset) noexcept {
     archive_start_offset_advance result;
     try {
-        auto boundary = o;
         auto res = co_await get_cursor(
-          boundary, std::nullopt, cursor_base_t::archive_clean_offset);
+          max_offset, std::nullopt, cursor_base_t::archive_clean_offset);
         if (res.has_failure()) {
             if (res.error() == error_outcome::out_of_range) {
                 vlog(
@@ -887,8 +888,71 @@ async_manifest_view::find_highest_le(kafka::offset o) noexcept {
         const auto& manifest = *res.value()->manifest();
         vassert(
           !manifest.empty(), "{} Spillover manifest can't be empty", get_ntp());
-        result.offset = manifest.begin()->base_offset;
-        result.delta = manifest.begin()->delta_offset;
+        switch (res.value()->get_status()) {
+        case async_manifest_view_cursor_status::empty:
+            vassert(
+              false,
+              "{} Cursor status can't be empty when manifest is non-empty",
+              get_ntp());
+            break;
+        case async_manifest_view_cursor_status::materialized_stm:
+            // The maximum offset we can return here is the base of the STM
+            // manifest.
+            vlog(
+              _ctxlog.debug,
+              "Retention found offset {} with delta {} in STM manifest",
+              manifest.begin()->base_offset,
+              manifest.begin()->delta_offset);
+            result.offset = manifest.begin()->base_offset;
+            result.delta = manifest.begin()->delta_offset;
+            break;
+        case async_manifest_view_cursor_status::materialized_spillover: {
+            const auto clean_offset = _stm_manifest.get_archive_clean_offset();
+            vlog(
+              _ctxlog.debug,
+              "Finding highest offset <= {} in spillover manifest {}, "
+              "archive_clean_offset={}",
+              max_offset,
+              manifest.get_manifest_path(path_provider()),
+              clean_offset);
+            for (const auto& meta : manifest) {
+                // Skip segments below the clean offset as they're
+                // already eligible for GC. The reason why we are
+                // using the clean offset and not the start offset
+                // here is that the archive size (used above in
+                // `partition_manifest::cloud_log_size` is updated
+                // with the clean offset.
+                vlog(
+                  _ctxlog.debug, "Considering segment {} for retention", meta);
+                if (meta.base_offset < clean_offset) {
+                    vlog(
+                      _ctxlog.debug,
+                      "Retention skip {}, as it's below the clean "
+                      "offset {}",
+                      meta,
+                      clean_offset);
+                    continue;
+                }
+                if (meta.base_kafka_offset() > max_offset) {
+                    break;
+                }
+                result.offset = meta.base_offset;
+                result.delta = meta.delta_offset;
+            }
+            vlog(
+              _ctxlog.debug,
+              "Retention found offset {} with delta {} in spillover manifest",
+              result.offset,
+              result.delta);
+            break;
+        }
+        case async_manifest_view_cursor_status::evicted:
+            throw std::runtime_error(fmt_with_ctx(
+              fmt::format,
+              "{} manifest was evicted from the cache",
+              get_ntp()));
+        }
+
     } catch (...) {
         vlog(
           _ctxlog.error,
@@ -977,7 +1041,7 @@ async_manifest_view::time_based_retention(
                   && r.value() == async_manifest_view_cursor::eof::yes) {
                     vlog(
                       _ctxlog.info,
-                      "Entire archive is removed by the time-based "
+                      "Entire archive is reclaimable by the time-based "
                       "retention");
                     break;
                 } else if (r.has_failure()) {
@@ -1149,7 +1213,7 @@ async_manifest_view::size_based_retention(size_t size_limit) noexcept {
                         }
                         vlog(
                           _ctxlog.info,
-                          "Entire archive is removed by the size-based "
+                          "Entire archive is reclaimable by the size-based "
                           "retention");
                         break;
                     } else if (r.has_failure()) {

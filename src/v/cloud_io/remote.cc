@@ -10,7 +10,6 @@
 
 #include "cloud_io/remote.h"
 
-#include "base/unreachable.h"
 #include "bytes/iostream.h"
 #include "cloud_io/logger.h"
 #include "cloud_io/provider.h"
@@ -66,6 +65,9 @@ static constexpr auto s3_scheme = "s3";
 cloud_io::provider infer_provider(
   model::cloud_storage_backend backend,
   const cloud_storage_clients::client_configuration& conf) {
+    // The behavior of this function for existing backends MUST NOT change.
+    // They are likely already used by i.e. Iceberg tables and changing the
+    // behavior could break existing deployments.
     switch (backend) {
     case model::cloud_storage_backend::unknown:
         // NOTE: treat unknown cloud storage backend as a valid case
@@ -73,6 +75,7 @@ cloud_io::provider infer_provider(
     case model::cloud_storage_backend::aws:
     case model::cloud_storage_backend::minio:
     case model::cloud_storage_backend::oracle_s3_compat:
+    case model::cloud_storage_backend::linode_s3_compat:
         return cloud_io::s3_compat_provider{s3_scheme};
     case model::cloud_storage_backend::google_s3_compat:
         return cloud_io::s3_compat_provider{gcs_scheme};
@@ -217,6 +220,9 @@ int remote::delete_objects_max_keys() const {
         [[fallthrough]];
     case model::cloud_storage_backend::oracle_s3_compat:
         // https://docs.oracle.com/en-us/iaas/api/#/en/s3objectstorage/20160918/Object/BulkDelete
+        [[fallthrough]];
+    case model::cloud_storage_backend::linode_s3_compat:
+        // Empirically verified, no public docs found.
         [[fallthrough]];
     case model::cloud_storage_backend::minio:
         // https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjects.html

@@ -304,7 +304,7 @@ void manager<ClockType>::on_transform_state_change(
             // become inactive on their own, but only as apart of the startup
             // sequence.
         case processor::state::unknown:
-            vassert(false, "unexpected transform state change: {}", state);
+            vunreachable("unexpected transform state change: {}", state);
         }
     });
 }

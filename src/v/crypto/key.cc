@@ -85,7 +85,7 @@ key_type key::impl::get_key_type() const {
         return key_type::RSA;
     }
 
-    vassert(false, "Unsupported key type {}", key_type);
+    vunreachable("Unsupported key type {}", key_type);
 }
 
 key_type key::get_type() const { return _impl->get_key_type(); }

@@ -102,7 +102,7 @@ seastar::future<> a::from_json(serde::pb::json::peekable_parser* parser, a* self
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -291,7 +291,7 @@ seastar::future<> b::from_json(serde::pb::json::peekable_parser* parser, b* self
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -431,7 +431,7 @@ seastar::future<> c::from_json(serde::pb::json::peekable_parser* parser, c* self
     }
     switch (fields.front().second) {
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -547,7 +547,7 @@ seastar::future<> super_duper_secret::from_json(serde::pb::json::peekable_parser
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -702,7 +702,7 @@ seastar::future<> mask_wrapper::from_json(serde::pb::json::peekable_parser* pars
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -1275,7 +1275,7 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -1537,7 +1537,7 @@ seastar::future<> say_greeting_request::from_json(serde::pb::json::peekable_pars
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;
@@ -1685,7 +1685,7 @@ seastar::future<> say_greeting_response::from_json(serde::pb::json::peekable_par
       break;
     }
     default:
-      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+      vunreachable("codegen error unexpected field number: {}", fields.front().second);
     }
   }
   co_return;

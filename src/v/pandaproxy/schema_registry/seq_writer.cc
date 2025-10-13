@@ -89,7 +89,7 @@ struct batch_builder : public storage::record_batch_builder {
             add_raw_kv(to_json_iobuf(std::move(key)), std::nullopt);
         } break;
         case seq_marker_key_type::invalid:
-            vassert(false, "Unknown key type");
+            vunreachable("Unknown key type");
             break;
         }
     }

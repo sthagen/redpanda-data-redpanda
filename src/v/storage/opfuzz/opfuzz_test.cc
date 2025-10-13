@@ -73,7 +73,7 @@ TEST_F(storage_test_fixture, test_random_workload) {
       logs_to_fuzz,
       [](std::unique_ptr<storage::opfuzz>& w) {
           return w->execute().handle_exception([&w](std::exception_ptr e) {
-              vassert(false, "Error:{} fuzzing log: {}", e, w->log());
+              vunreachable("Error:{} fuzzing log: {}", e, w->log());
           });
       })
       .get();
@@ -114,7 +114,7 @@ TEST_F(storage_test_fixture, test_random_remove) {
       logs_to_fuzz,
       [](std::unique_ptr<storage::opfuzz>& w) {
           return w->execute().handle_exception([&w](std::exception_ptr e) {
-              vassert(false, "Error:{} fuzzing log: {}", e, w->log());
+              vunreachable("Error:{} fuzzing log: {}", e, w->log());
           });
       })
       .get();

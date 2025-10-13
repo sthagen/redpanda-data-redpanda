@@ -628,8 +628,6 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     INTERVAL_FIELD_NUMBER: builtins.int
     ENABLED_FIELD_NUMBER: builtins.int
-    ROLE_FILTERS_FIELD_NUMBER: builtins.int
-    SCRAM_CRED_FILTERS_FIELD_NUMBER: builtins.int
     ACL_FILTERS_FIELD_NUMBER: builtins.int
     enabled: builtins.bool
     "Whether or not it's enabled"
@@ -641,24 +639,16 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
         """
 
     @property
-    def role_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NameFilter]:
-        """Role filters"""
-
-    @property
-    def scram_cred_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NameFilter]:
-        """SCRAM credential filters"""
-
-    @property
     def acl_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ACLFilter]:
         """ACL filters"""
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., role_filters: collections.abc.Iterable[global___NameFilter] | None=..., scram_cred_filters: collections.abc.Iterable[global___NameFilter] | None=..., acl_filters: collections.abc.Iterable[global___ACLFilter] | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., acl_filters: collections.abc.Iterable[global___ACLFilter] | None=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['interval', b'interval']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['acl_filters', b'acl_filters', 'enabled', b'enabled', 'interval', b'interval', 'role_filters', b'role_filters', 'scram_cred_filters', b'scram_cred_filters']) -> None:
+    def ClearField(self, field_name: typing.Literal['acl_filters', b'acl_filters', 'enabled', b'enabled', 'interval', b'interval']) -> None:
         ...
 global___SecuritySettingsSyncOptions = SecuritySettingsSyncOptions
 

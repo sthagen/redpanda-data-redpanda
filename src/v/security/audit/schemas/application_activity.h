@@ -228,7 +228,7 @@ public:
             // The `acl_operation` passed to this function is based off of
             // the ACL check performed by the Kafka handlers.  None of the
             // handlers should be providing `all` to an ACL check.
-            vassert(false, "Cannot convert an ALL acl operation to a CRUD");
+            vunreachable("Cannot convert an ALL acl operation to a CRUD");
         }
     }
 

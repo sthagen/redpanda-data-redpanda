@@ -48,7 +48,7 @@ convert_type(const conversion::json_schema::json_value_type& t) {
         return iceberg::string_type{};
     }
 
-    vassert(false, "Unexpected JSON conversion type {}", t);
+    vunreachable("Unexpected JSON conversion type {}", t);
 }
 
 conversion_outcome<std::optional<iceberg::field_type>>

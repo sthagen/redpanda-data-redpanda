@@ -143,7 +143,7 @@ void trigger_crash(std::unique_ptr<ss::http::request> req) {
         std::abort();
     } else if (crash_type == "assert") {
         vlog(adminlog.info, "Triggering assert from /trigger_crash API");
-        vassert(false, "Intentional assert triggered by admin request");
+        vunreachable("Intentional assert triggered by admin request");
     } else if (crash_type == "asan_crash") {
         volatile char* p = new char[1];
         p[1] = 42; // deliberate out-of-bounds write

@@ -36,6 +36,7 @@
 #include "net/exceptions.h"
 #include "security/authorizer.h"
 #include "security/exceptions.h"
+#include "utils/windowed_sum_tracker.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
@@ -406,6 +407,8 @@ ss::future<> connection_context::process_one_request() {
     if (!sz.has_value()) {
         co_return;
     }
+
+    _attributes.request_count.record(1);
 
     if (sz.value() > _max_request_size()) {
         throw net::invalid_request_error(
@@ -836,6 +839,25 @@ proto::admin::kafka_connection connection_context::to_proto() const {
 
     auto auth_info = proto::admin::authentication_info{};
     auth_info.set_user_principal(ss::sstring{get_principal().name()});
+    res.set_authentication_info(std::move(auth_info));
+
+    using tracker_t = connection_attributes::request_state::tracker_t;
+    auto now = tracker_t::clock::now();
+
+    auto make_stats = [this](auto&& get_value) {
+        auto stats = proto::admin::request_statistics{};
+        stats.set_request_count(get_value(_attributes.request_count));
+        stats.set_produce_bytes(get_value(_attributes.produce_bytes));
+        stats.set_produce_batch_count(
+          get_value(_attributes.produce_batch_count));
+        stats.set_fetch_bytes(get_value(_attributes.fetch_bytes));
+        return stats;
+    };
+
+    res.set_recent_request_statistics(make_stats(
+      [now](auto& attr) { return attr.recent_stat.window_total(now); }));
+    res.set_total_request_statistics(
+      make_stats([](auto& attr) { return attr.total_stat; }));
 
     // TODO: fill out the response with the remaining fields
 

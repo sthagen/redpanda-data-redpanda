@@ -488,7 +488,7 @@ incremental_update_operation_as_string(incremental_update_operation op) {
     case incremental_update_operation::remove:
         return "remove";
     default:
-        vassert(false, "Unknown operation type passed: {}", int8_t(op));
+        vunreachable("Unknown operation type passed: {}", int8_t(op));
     }
 }
 

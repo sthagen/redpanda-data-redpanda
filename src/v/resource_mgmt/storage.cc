@@ -221,7 +221,7 @@ void eviction_policy::schedule::seek(size_t cursor) {
         cursor -= count;
     }
 
-    vassert(false, "Seek could not find cursor location");
+    vunreachable("Seek could not find cursor location");
 }
 
 void eviction_policy::schedule::next() {

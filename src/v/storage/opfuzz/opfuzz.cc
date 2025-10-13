@@ -585,7 +585,7 @@ std::unique_ptr<opfuzz::op> opfuzz::random_operation() {
     case op_name::term_roll:
         return std::make_unique<term_roll_op>();
     }
-    vassert(false, "could not generate random operation for log");
+    vunreachable("could not generate random operation for log");
 }
 
 void opfuzz::generate_workload(size_t count) {

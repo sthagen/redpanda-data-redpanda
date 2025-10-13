@@ -32,7 +32,7 @@ struct tls_visitor {
     template<typename T1, typename T2>
     requires(!std::is_same_v<T1, T2>)
     net::key_store operator()(const T1&, const T2&) {
-        vassert(false, "TLS key and cert must be of the same type");
+        vunreachable("TLS key and cert must be of the same type");
     }
 };
 

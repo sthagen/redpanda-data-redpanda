@@ -606,16 +606,24 @@ class DatalakeE2ETests(RedpandaTest):
                 spark_describe_out = spark.run_query_fetch_all(f"describe {table_name}")
                 assert spark_describe_out == spark_expected_out, str(spark_describe_out)
 
-    # Run json unicode tests with all combinations of query engine and catalog type
-    # because it is the only format that supports unicode characters in field names
-    # and we want to ensure that everyone interoperates correctly with unicode.
+    # We use json because it is the only format that supports unicode
+    # characters in field names and we want to ensure that everyone
+    # interoperates correctly with unicode.
     @cluster(num_nodes=3)
     @matrix(
         cloud_storage_type=supported_storage_types(),
         query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
         catalog_type=supported_catalog_types(),
     )
-    def test_json_schema_unicode(self, cloud_storage_type, query_engine, catalog_type):
+    def test_field_names_compat(self, cloud_storage_type, query_engine, catalog_type):
+        """
+        Test that field names with dots, mixed case, and unicode characters are
+        handled correctly. We are mainly interested in the catalog preserving
+        the original field names so that schema evolution (field name matching)
+        works.
+        Known offender is AWS Glue which forces field names to be lowercase thus
+        breaking schema evolution. Not yet tested here but should be in future.
+        """
         count = 100
 
         schema_str = """{
@@ -623,19 +631,22 @@ class DatalakeE2ETests(RedpandaTest):
             "type": "object",
             "properties": {
                 "my_🍀_number": {"type": "integer"},
-                "col.with.dots": {"type": "integer"}
+                "col.with.dots": {"type": "integer"},
+                "MixedCase": {"type": "integer"}
             },
-            "required": ["my_🍀_number", "col.with.dots"]
+            "required": ["my_🍀_number", "col.with.dots", "MixedCase"]
         }"""
 
         def record_generator(t):
             return {
                 "my_🍀_number": int(t),
                 "col.with.dots": int(t),
+                "MixedCase": int(t),
             }
 
         expected_spark = [
             SPARK_RP_FIELD_TYPE,
+            ("MixedCase", "bigint", None),
             ("col.with.dots", "bigint", None),
             ("my_🍀_number", "bigint", None),
             ("", "", ""),
@@ -645,6 +656,11 @@ class DatalakeE2ETests(RedpandaTest):
 
         expected_trino = [
             TRINO_RP_FIELD_TYPE,
+            # Trino forces lowercase column names. Since this is just a query
+            # engine it does not affect the schema evolution in the catalog.
+            # However, if the table contains both `MixedCase` and `mixedcase`
+            # columns then Trino fails to query the table.
+            ("mixedcase", "bigint", "", ""),
             ("col.with.dots", "bigint", "", ""),
             ("my_🍀_number", "bigint", "", ""),
         ]
@@ -686,11 +702,12 @@ class DatalakeE2ETests(RedpandaTest):
                 assert spark_describe_out == expected_spark, str(spark_describe_out)
 
                 with spark.run_query(
-                    f"SELECT `my_🍀_number`, `col.with.dots` FROM {table_name} LIMIT 1"
+                    f"SELECT `my_🍀_number`, `col.with.dots`, `MixedCase` FROM {table_name} LIMIT 1"
                 ) as cursor:
                     assert cursor.description == [
                         ("my_🍀_number", "BIGINT_TYPE", None, None, None, None, True),
                         ("col.with.dots", "BIGINT_TYPE", None, None, None, None, True),
+                        ("MixedCase", "BIGINT_TYPE", None, None, None, None, True),
                     ]
                     row = cursor.fetchone()
                     assert row is not None
@@ -703,11 +720,12 @@ class DatalakeE2ETests(RedpandaTest):
                 assert trino_describe_out == expected_trino, str(trino_describe_out)
 
                 with trino.run_query(
-                    f"""SELECT "my_🍀_number", "col.with.dots" FROM {table_name} LIMIT 1"""
+                    f"""SELECT "my_🍀_number", "col.with.dots", "MixedCase" FROM {table_name} LIMIT 1"""
                 ) as cursor:
                     assert cursor.description == [
                         ("my_🍀_number", "bigint", None, None, None, None, True),
                         ("col.with.dots", "bigint", None, None, None, None, True),
+                        ("MixedCase", "bigint", None, None, None, None, True),
                     ]
                     row = cursor.fetchone()
                     assert row is not None

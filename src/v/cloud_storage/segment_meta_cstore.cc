@@ -281,7 +281,7 @@ public:
             // bad_alloc is the only exception that 'append' could throw
             // but in this case we will keep c-store in the inconsistent
             // state. It's safer to terminate redpanda after that.
-            vassert(false, "column_store bad_alloc during 'append' operation");
+            vunreachable("column_store bad_alloc during 'append' operation");
         }
 
         if (

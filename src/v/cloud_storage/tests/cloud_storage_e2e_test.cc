@@ -1372,10 +1372,11 @@ TEST_F(ManualFixture, TestSpilloverWithTruncationRetainsStartOffset) {
     deleter.start().get();
 
     // Delete offset from second segment of the first spillover manifest.
-    deleter
-      .delete_records_from_partition(
-        topic_name, ntp.tp.partition, model::offset{8}, timeout)
-      .get();
+    auto new_lwm = deleter
+                     .delete_records_from_partition(
+                       topic_name, ntp.tp.partition, model::offset{8}, timeout)
+                     .get();
+    ASSERT_EQ(new_lwm, model::offset{8});
 
     ASSERT_EQ(
       archiver.manifest().full_log_start_kafka_offset(), kafka::offset{0});
@@ -1394,9 +1395,38 @@ TEST_F(ManualFixture, TestSpilloverWithTruncationRetainsStartOffset) {
     // Due to implementation deficiencies truncation doesn't advance start
     // offset but at least the override should not regress.
     ASSERT_EQ(
-      archiver.manifest().full_log_start_kafka_offset(), kafka::offset{0});
+      archiver.manifest().full_log_start_kafka_offset(), kafka::offset{5});
     ASSERT_EQ(
       archiver.manifest().get_start_kafka_offset_override(), kafka::offset{8});
+
+    vlog(e2e_test_log.info, "Deleting from middle of STM region");
+
+    auto second_to_last_offset = kafka::offset_cast(
+      kafka::prev_offset(archiver.manifest().get_last_kafka_offset().value()));
+    ASSERT_GT(second_to_last_offset, model::offset{0});
+
+    new_lwm = deleter
+                .delete_records_from_partition(
+                  topic_name, ntp.tp.partition, second_to_last_offset, timeout)
+                .get();
+    ASSERT_EQ(new_lwm, second_to_last_offset);
+
+    vlog(e2e_test_log.info, "Housekeeping after second truncation");
+    archiver.housekeeping().get();
+
+    ASSERT_EQ(
+      archiver.manifest().full_log_start_kafka_offset(), kafka::offset{40});
+    ASSERT_EQ(
+      archiver.manifest().get_start_kafka_offset_override(), kafka::offset{48});
+
+    // Offsets will advance as we'll remove from STM region this time too.
+    vlog(e2e_test_log.info, "Last housekeeping");
+    archiver.housekeeping().get();
+
+    ASSERT_EQ(
+      archiver.manifest().full_log_start_kafka_offset(), kafka::offset{45});
+    ASSERT_EQ(
+      archiver.manifest().get_start_kafka_offset_override(), kafka::offset{48});
 }
 
 INSTANTIATE_TEST_SUITE_P(WithOverride, EndToEndFixture, ::testing::Bool());

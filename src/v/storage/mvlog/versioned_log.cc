@@ -162,7 +162,7 @@ size_t versioned_log::compute_max_segment_size() const {
     }
     // TODO(awong): get defaults from log_manager
     // TODO(awong): clamp by min/max configs
-    vassert(false, "Not implemented");
+    vunreachable("Not implemented");
 }
 
 std::optional<ss::lowres_clock::time_point>

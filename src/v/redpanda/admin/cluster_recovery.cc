@@ -88,7 +88,7 @@ admin_server::initialize_cluster_recovery(
     if (error_res.has_error()) {
         switch (error_res.error()) {
         case cluster::cluster_recovery_manager::errc::success:
-            vassert(false, "unreachable");
+            vunreachable("unreachable");
         case cluster::cluster_recovery_manager::errc::unknown:
             throw ss::httpd::base_exception{
               ssx::sformat(

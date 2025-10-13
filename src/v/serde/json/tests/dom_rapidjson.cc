@@ -82,7 +82,7 @@ ss::future<value> parse_document_rapidjson(iobuf buf) {
         /// enabled via kParseNumbersAsStringsFlag, string is not
         /// null-terminated (use length)
         bool RawNumber(const Ch*, SizeType, bool) {
-            vassert(false, "unreachable");
+            vunreachable("unreachable");
         }
         bool String(const Ch* p, SizeType sz, bool) {
             iobuf buf;

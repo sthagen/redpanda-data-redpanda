@@ -3582,7 +3582,7 @@ void application::load_feature_table_snapshot() {
           "Exception decoding feature table snapshot: {}",
           std::current_exception());
 #ifndef NDEBUG
-        vassert(false, "Snapshot decode failed");
+        vunreachable("Snapshot decode failed");
 #endif
         return;
     }

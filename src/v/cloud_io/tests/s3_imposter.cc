@@ -368,7 +368,7 @@ struct s3_imposter_fixture::content_handler {
 
             return R"xml(<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"></DeleteResult>)xml";
         } else {
-            vassert(false, "Unhandled request method {}", request._method);
+            vunreachable("Unhandled request method {}", request._method);
         }
         return "";
     }

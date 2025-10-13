@@ -225,7 +225,7 @@ struct v0_message_codec {
     template<typename T>
     static ss::future<T> decode(iobuf_parser& parser, transport_version) {
         if constexpr (is_rpc_adl_exempt<T>) {
-            vassert(false, "Cannot use serde-only types in v0 server");
+            vunreachable("Cannot use serde-only types in v0 server");
         } else {
             return reflection::async_adl<T>{}.from(parser);
         }
@@ -239,7 +239,7 @@ struct v0_message_codec {
     static ss::future<transport_version>
     encode(iobuf& out, T msg, transport_version) {
         if constexpr (is_rpc_adl_exempt<T>) {
-            vassert(false, "Cannot use serde-only types in v0 server");
+            vunreachable("Cannot use serde-only types in v0 server");
         } else {
             return reflection::async_adl<T>{}.to(out, std::move(msg)).then([] {
                 return transport_version::v0;

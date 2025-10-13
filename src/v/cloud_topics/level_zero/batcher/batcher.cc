@@ -10,7 +10,6 @@
 
 #include "cloud_topics/level_zero/batcher/batcher.h"
 
-#include "base/unreachable.h"
 #include "cloud_io/remote.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/batcher/aggregator.h"
@@ -214,7 +213,6 @@ ss::future<result<bool>> batcher<Clock>::run_once() noexcept {
         vlog(_logger.error, "Unexpected batcher error: {}", err);
         co_return errc::unexpected_failure;
     }
-    unreachable();
 }
 
 template<class Clock>

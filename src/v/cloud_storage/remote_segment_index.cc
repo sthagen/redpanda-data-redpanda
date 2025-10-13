@@ -490,7 +490,7 @@ void remote_segment_index_builder::consume_batch_start(
 
 void remote_segment_index_builder::skip_batch_start(
   model::record_batch_header, size_t, size_t) {
-    vassert(false, "no batches should be skipped by this consumer");
+    vunreachable("no batches should be skipped by this consumer");
 }
 
 void remote_segment_index_builder::consume_records(iobuf&&) {}

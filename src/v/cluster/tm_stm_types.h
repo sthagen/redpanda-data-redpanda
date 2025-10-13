@@ -269,7 +269,7 @@ struct transaction_metadata_v1 {
         case tx_status::tombstone:
             return cluster::tx_status::tombstone;
         }
-        vassert(false, "unknown status: {}", status);
+        vunreachable("unknown status: {}", status);
     };
 
     tx_metadata upcast() {
@@ -342,7 +342,7 @@ struct transaction_metadata_v0 {
         case tx_status::ready:
             return cluster::tx_status::empty;
         }
-        vassert(false, "unknown status: {}", status);
+        vunreachable("unknown status: {}", status);
     };
 
     tx_metadata upcast() {

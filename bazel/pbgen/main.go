@@ -1949,7 +1949,7 @@ func (g *implGenerator) generateMessageReadJson(msg protoreflect.MessageDescript
 	}
 	w.Println("default:")
 	w.Indent()
-	w.Println(`vassert(false, "codegen error unexpected field number: {}", fields.front().second);`)
+	w.Println(`vunreachable("codegen error unexpected field number: {}", fields.front().second);`)
 	w.Dedent()
 }
 

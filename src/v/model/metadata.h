@@ -473,12 +473,13 @@ operator<<(std::ostream& o, const partition_autobalancing_mode& m) {
     }
 }
 
-enum class cloud_storage_backend {
+enum class cloud_storage_backend : uint8_t {
     aws = 0,
     google_s3_compat = 1,
     azure = 2,
     minio = 3,
     oracle_s3_compat = 4,
+    linode_s3_compat = 5,
     unknown
 };
 
@@ -494,6 +495,8 @@ inline std::ostream& operator<<(std::ostream& os, cloud_storage_backend csb) {
         return os << "minio";
     case cloud_storage_backend::oracle_s3_compat:
         return os << "oracle_s3_compat";
+    case cloud_storage_backend::linode_s3_compat:
+        return os << "linode_s3_compat";
     case cloud_storage_backend::unknown:
         return os << "unknown";
     }

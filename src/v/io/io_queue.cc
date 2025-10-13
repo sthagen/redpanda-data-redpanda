@@ -152,7 +152,7 @@ seastar::future<> io_queue::dispatch() noexcept {
             dispatch_write(page, std::move(units));
 
         } else {
-            vassert(false, "Expected a read or write flag");
+            vunreachable("Expected a read or write flag");
         }
     }
 }
@@ -183,7 +183,7 @@ void io_queue::dispatch_read(
                 }
             })
             .handle_exception([this](std::exception_ptr eptr) {
-                vassert(false, "Read failed to {}: {}", path_, eptr);
+                vunreachable("Read failed to {}: {}", path_, eptr);
             });
       });
 }
@@ -221,7 +221,7 @@ void io_queue::dispatch_write(
                 }
             })
             .handle_exception([this](std::exception_ptr eptr) {
-                vassert(false, "Write failed to {}: {}", path_, eptr);
+                vunreachable("Write failed to {}: {}", path_, eptr);
             });
       });
 }

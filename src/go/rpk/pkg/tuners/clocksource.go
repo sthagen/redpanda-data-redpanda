@@ -21,14 +21,24 @@ import (
 	"github.com/spf13/afero"
 )
 
-const preferredClkSource = "tsc"
+func preferredClockSource() string {
+	switch runtime.GOARCH {
+	case "amd64", "386":
+		return "tsc"
+	case "arm64":
+		return "arch_sys_counter"
+	default:
+		return ""
+	}
+}
 
 func NewClockSourceChecker(fs afero.Fs) Checker {
+	pref := preferredClockSource()
 	return NewEqualityChecker(
 		ClockSource,
 		"Clock Source",
 		Warning,
-		preferredClkSource,
+		pref,
 		func() (interface{}, error) {
 			content, err := afero.ReadFile(fs,
 				"/sys/devices/system/clocksource/clocksource0/current_clocksource")
@@ -44,19 +54,24 @@ func NewClockSourceTuner(fs afero.Fs, executor executors.Executor) Tunable {
 	return NewCheckedTunable(
 		NewClockSourceChecker(fs),
 		func() TuneResult {
+			pref := preferredClockSource()
+			if pref == "" {
+				return NewTuneError(fmt.Errorf("clocksource setting not available for this architecture"))
+			}
 			err := executor.Execute(commands.NewWriteFileCmd(fs,
 				"/sys/devices/system/clocksource/clocksource0/current_clocksource",
-				preferredClkSource))
+				pref))
 			if err != nil {
 				return NewTuneError(err)
 			}
 			return NewTuneResult(false)
 		},
 		func() (bool, string) {
-			// tsc clocksource is only available in x86 architectures.
-			if runtime.GOARCH != "amd64" && runtime.GOARCH != "386" {
+			pref := preferredClockSource()
+			if pref == "" {
 				return false, "Clocksource setting not available for this architecture"
 			}
+
 			content, err := afero.ReadFile(fs,
 				"/sys/devices/system/clocksource/clocksource0/available_clocksource")
 			if err != nil {
@@ -65,12 +80,12 @@ func NewClockSourceTuner(fs afero.Fs, executor executors.Executor) Tunable {
 			availableSrcs := strings.Fields(string(content))
 
 			for _, src := range availableSrcs {
-				if src == preferredClkSource {
+				if src == pref {
 					return true, ""
 				}
 			}
 			return false, fmt.Sprintf(
-				"Preferred clocksource '%s' not available", preferredClkSource)
+				"Preferred clocksource '%s' not available", pref)
 		},
 		executor.IsLazy(),
 	)

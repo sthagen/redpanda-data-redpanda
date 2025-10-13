@@ -606,7 +606,7 @@ void segment_appender::dispatch_background_head_write() {
             .finally([head_sem] {});
       })
       .handle_exception([this](std::exception_ptr e) {
-          vassert(false, "Could not dma_write: {} - {}", e, *this);
+          vunreachable("Could not dma_write: {} - {}", e, *this);
       });
 }
 
@@ -641,7 +641,7 @@ ss::future<> segment_appender::flush() {
       *this);
 
     return _out.flush().handle_exception([this](std::exception_ptr e) {
-        vassert(false, "Could not flush: {} - {}", e, *this);
+        vunreachable("Could not flush: {} - {}", e, *this);
     });
 }
 
@@ -662,7 +662,7 @@ ss::future<> segment_appender::hard_flush() {
                  return _out.flush();
              })
       .handle_exception([this](std::exception_ptr e) {
-          vassert(false, "Could not flush: {} - {}", e, *this);
+          vunreachable("Could not flush: {} - {}", e, *this);
       });
 }
 

@@ -2997,7 +2997,7 @@ admin_server::pre_restart_probe(std::unique_ptr<ss::http::request> req) {
 
     if (!maybe_res.has_value()) {
         co_await throw_on_error(*req, maybe_res.error(), model::controller_ntp);
-        vassert(false, "the line above should have thrown");
+        vunreachable("the line above should have thrown");
     }
     const auto& res = maybe_res.value();
     ss::httpd::broker_json::restart_risks risks;
@@ -3021,7 +3021,7 @@ admin_server::post_restart_probe(std::unique_ptr<ss::http::request> req) {
                          model::time_from_now(std::chrono::seconds(5)));
     if (!maybe_res.has_value()) {
         co_await throw_on_error(*req, maybe_res.error(), model::controller_ntp);
-        vassert(false, "the line above should have thrown");
+        vunreachable("the line above should have thrown");
     }
     ss::httpd::broker_json::post_restart_check_result ret;
     // placeholder, to be implemented

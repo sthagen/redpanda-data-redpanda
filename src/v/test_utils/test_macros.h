@@ -81,7 +81,7 @@
 // The fallback macros which accept messages only 1 object which can be
 // formatted via fmt::format, unlike the other macros which can accept <<
 // operator delimited strings.
-#define RPTEST_FAIL(m) vassert(false, "{}", m)
+#define RPTEST_FAIL(m) vunreachable("{}", m)
 #define RPTEST_ADD_FAIL(m) RPTEST_FAIL(m)
 #define RPTEST_FAIL_CORO(m) RPTEST_FAIL(m)
 #define RPTEST_REQUIRE(m) vassert(m, "RPTEST_REQUIRE assertion failed")

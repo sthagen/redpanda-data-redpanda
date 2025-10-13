@@ -56,7 +56,7 @@ struct iobuf_reader {
 
     void refill() {
         if (_io.empty()) {
-            vassert(false, "_io.empty()");
+            vunreachable("_io.empty()");
         }
         _tbuf = _io.begin()->share();
         _io.pop_front();

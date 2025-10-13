@@ -1248,7 +1248,7 @@ public:
                 return *it;
             }
         }
-        vassert(false, "Invalid index {}", ix);
+        vunreachable("Invalid index {}", ix);
     }
 
     /// Get stream position object which can be used as a "hint" to speed up
