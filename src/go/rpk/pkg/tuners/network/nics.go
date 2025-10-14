@@ -21,6 +21,39 @@ import (
 	"go.uber.org/zap"
 )
 
+type EffectiveNicConfig struct {
+	Mode                irq.Mode
+	ComputationsCPUMask string
+	IRQCPUMask          string
+}
+
+func GetEffectiveNicConfig(
+	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners,
+) (EffectiveNicConfig, error) {
+	effectiveConfig := EffectiveNicConfig{}
+	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
+	if err != nil {
+		return EffectiveNicConfig{}, err
+	}
+
+	effectiveConfig.Mode, err = getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, t)
+	if err != nil {
+		return EffectiveNicConfig{}, err
+	}
+
+	effectiveConfig.IRQCPUMask, err = cpuMasks.CPUMaskForIRQs(effectiveConfig.Mode, effectiveCPUMask, t)
+	if err != nil {
+		return EffectiveNicConfig{}, err
+	}
+
+	effectiveConfig.ComputationsCPUMask, err = cpuMasks.CPUMaskForComputations(effectiveConfig.Mode, effectiveCPUMask, t)
+	if err != nil {
+		return EffectiveNicConfig{}, err
+	}
+
+	return effectiveConfig, nil
+}
+
 func GetDefaultMode(
 	nic Nic, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners,
 ) (irq.Mode, error) {

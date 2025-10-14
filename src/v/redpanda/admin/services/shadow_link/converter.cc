@@ -124,10 +124,11 @@ create_topic_metadata_mirroring_config(
       options.get_auto_create_shadow_topic_filters());
 
     std::ranges::copy(
-      options.get_shadowed_topic_properties(),
+      options.get_synced_shadow_topic_properties(),
       std::inserter(
         config.topic_properties_to_mirror,
         config.topic_properties_to_mirror.end()));
+    config.exclude_default = options.get_exclude_default();
 
     return config;
 }
@@ -806,7 +807,8 @@ topic_metadata_sync_options create_topic_metadata_sync_options(
         mirrored_properties.push_back(ss::sstring{prop});
     }
 
-    options.set_shadowed_topic_properties(std::move(mirrored_properties));
+    options.set_synced_shadow_topic_properties(std::move(mirrored_properties));
+    options.set_exclude_default(cfg.exclude_default);
 
     return options;
 }
@@ -847,6 +849,14 @@ create_shadow_link_status(const cluster_link::model::metadata& md) {
     shadow_link_status status;
     status.set_state(convert_link_status(md.state.status));
     status.set_shadow_topic_statuses(create_shadow_topic_statuses(md.state));
+
+    chunked_vector<ss::sstring> properties_synced;
+    auto props = md.configuration.topic_metadata_mirroring_cfg
+                   .get_topic_properties_to_mirror();
+    properties_synced.reserve(props.size());
+    std::ranges::copy(props, std::back_inserter(properties_synced));
+
+    status.set_synced_shadow_topic_properties(std::move(properties_synced));
     return status;
 }
 

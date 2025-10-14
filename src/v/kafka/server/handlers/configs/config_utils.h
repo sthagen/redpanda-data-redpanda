@@ -79,7 +79,7 @@ ss::future<chunked_vector<R>> unsupported_broker_configuration(
     return ss::make_ready_future<chunked_vector<R>>(std::move(responses));
 }
 
-class validation_error final : std::exception {
+class validation_error final : public std::exception {
 public:
     explicit validation_error(ss::sstring what)
       : _what(std::move(what)) {}

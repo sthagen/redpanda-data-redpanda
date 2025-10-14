@@ -31,10 +31,9 @@ class CloudTopicsTest(RedpandaTest):
         to be done after development feature support has been enabled, and nodes
         have been restarted so that development services start at bootup.
         """
-        self.redpanda.enable_development_feature_support()
         self.redpanda.set_cluster_config(
             values={
-                "development_enable_cloud_topics": True,
+                "cloud_topics_enabled": True,
             }
         )
         self.redpanda.restart_nodes(self.redpanda.nodes)

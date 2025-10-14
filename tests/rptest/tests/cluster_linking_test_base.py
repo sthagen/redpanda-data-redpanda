@@ -51,6 +51,34 @@ SOURCE_CLUSTER_SPEC = "source_cluster_spec"
 DEFAULT_SOURCE_CLUSTER_SPEC = SecondaryClusterSpec(ServiceType.REDPANDA)
 
 
+# Topic properties that are always synced
+REQUIRED_SYNCED_TOPIC_PROPERTIES = [
+    "max.message.bytes",
+    "cleanup.policy",
+    "message.timestamp.type",
+]
+
+# Topic properties that are synced by default
+DEFAULT_SYNCED_TOPIC_PROPERTIES = [
+    "compression.type",
+    "retention.bytes",
+    "retention.ms",
+    "replication.factor",
+    "delete.retention.ms",
+    "max.compaction.lag.ms",
+    "min.compaction.lag.ms",
+]
+
+DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
+    "redpanda.remote.readreplica",
+    "redpanda.remote.recovery",
+    "redpanda.remote.allowgaps",
+    "redpanda.virtual.cluster.id",
+    "redpanda.leaders.preference",
+    "redpanda.cloud_topic.enabled",
+]
+
+
 class ClusterLinkingProgressVerifier:
     def __init__(
         self,
@@ -423,7 +451,6 @@ class ShadowLinkTestBase(PreallocNodesTest):
                         name="*",
                     )
                 ],
-                shadowed_topic_properties=["replication.factor"],
             )
 
         if mirror_all_groups:

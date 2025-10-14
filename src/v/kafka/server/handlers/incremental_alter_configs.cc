@@ -364,8 +364,7 @@ create_topic_properties_update(
                 continue;
             }
             if (cfg.name == topic_property_cloud_topic_enabled) {
-                if (config::shard_local_cfg()
-                      .development_enable_cloud_topics()) {
+                if (config::shard_local_cfg().cloud_topics_enabled()) {
                     throw validation_error(
                       "Cloud topics property cannot be changed");
                 }

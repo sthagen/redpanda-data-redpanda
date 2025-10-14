@@ -246,6 +246,7 @@ public:
         ss::abort_source never_abort;
         compaction::compaction_config cfg(
           max_collect_offset,
+          max_collect_offset,
           tombstone_ret_ms,
           std::nullopt,
           never_abort,
@@ -267,6 +268,7 @@ public:
       std::optional<size_t> max_keys = std::nullopt) {
         ss::abort_source never_abort;
         compaction::compaction_config cfg(
+          max_collect_offset,
           max_collect_offset,
           tombstone_ret_ms,
           std::nullopt,
@@ -311,6 +313,7 @@ TEST_P(CompactionFixtureParamTest, TestDedupeOnePass) {
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     compaction::compaction_config cfg(
+      disk_log.segments().back()->offsets().get_base_offset(),
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -383,6 +386,7 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPass) {
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     compaction::compaction_config cfg(
+      disk_log.segments().back()->offsets().get_base_offset(),
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -519,6 +523,7 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
+      disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
       never_abort,
@@ -616,6 +621,7 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
+      disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
       never_abort,
@@ -635,6 +641,7 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
     // But once we add more data, we become eligible for compaction again.
     generate_data(1, cardinality, records_per_segment).get();
     compaction::compaction_config new_cfg(
+      disk_log.segments().back()->offsets().get_base_offset(),
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -679,6 +686,7 @@ TEST_F(CompactionFixtureTest, TestCompactWithNonDataBatches) {
     auto before_compaction_count
       = disk_log.get_probe().get_segments_compacted();
     compaction::compaction_config new_cfg(
+      disk_log.segments().back()->offsets().get_base_offset(),
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -764,6 +772,7 @@ TEST_P(CompactionFilledReaderTest, ReadFilledGaps) {
     // when reading.
     compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
+      disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
       never_abort,
@@ -818,6 +827,7 @@ TEST_F(CompactionFixtureTest, TestReadFilledGapsWithTerms) {
     }
 
     compaction::compaction_config cfg(
+      disk_log.segments().back()->offsets().get_base_offset(),
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -1576,7 +1586,11 @@ TEST_F(CompactionFixtureTest, TestSlidingWindowNoUnecessaryRewrites) {
     auto& segments = disk_log.segments();
 
     compaction::compaction_config cfg(
-      model::offset::max(), std::nullopt, std::nullopt, never_abort);
+      model::offset::max(),
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      never_abort);
 
     for (auto& seg : segments) {
         if (!seg->has_appender()) {
@@ -1683,6 +1697,7 @@ TEST_F(CompactionFixtureParamTest, TestSegmentConcatenation) {
     ss::abort_source never_abort;
     compaction::compaction_config cfg(
       model::offset::max(),
+      model::offset::max(),
       std::nullopt,
       std::nullopt,
       never_abort,
@@ -1723,6 +1738,7 @@ TEST_F(CompactionFixtureTest, TestAdjacentCompaction) {
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     compaction::compaction_config cfg(
+      model::offset::max(),
       model::offset::max(),
       std::nullopt,
       std::nullopt,
@@ -1813,6 +1829,7 @@ TEST_F(CompactionFixtureTest, TestAdjacentCompactionMultipleRanges) {
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     compaction::compaction_config cfg(
       model::offset::max(),
+      model::offset::max(),
       std::nullopt,
       std::nullopt,
       never_abort,
@@ -1880,7 +1897,11 @@ TEST_F(
     auto do_adjacent_compact = [](const auto& l) {
         ss::abort_source never_abort;
         compaction::compaction_config cfg(
-          model::offset::max(), std::nullopt, std::nullopt, never_abort);
+          model::offset::max(),
+          model::offset::max(),
+          std::nullopt,
+          std::nullopt,
+          never_abort);
 
         const auto closed_segment_filter = [](const auto& s) -> bool {
             return !s->has_appender();
@@ -2100,7 +2121,11 @@ TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {
 
     ss::abort_source never_abort;
     compaction::compaction_config cfg(
-      model::offset::max(), std::nullopt, std::nullopt, never_abort);
+      model::offset::max(),
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      never_abort);
 
     // self compact everything up front so that it doesn't happen inline with
     // adjacent merge compaction. this would cause batch caches to be reset

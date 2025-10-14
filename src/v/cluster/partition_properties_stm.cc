@@ -215,9 +215,10 @@ partition_properties_stm::replicate_properties_update(
       _log.debug, "replicating update partition properties command: {}", cmd);
     raft::replicate_options r_opts(
       raft::consistency_level::quorum_ack,
+      _insync_term,
       std::chrono::milliseconds(timeout / 1ms));
     r_opts.set_force_flush();
-    auto r = co_await _raft->replicate(_insync_term, std::move(b), r_opts);
+    auto r = co_await _raft->replicate(std::move(b), r_opts);
 
     if (r.has_error()) {
         vlog(

@@ -384,9 +384,9 @@ ss::future<size_t> group_manager::delete_offsets(
 
     try {
         auto result = co_await group->partition()->raft()->replicate(
-          group->term(),
           std::move(batch),
-          raft::replicate_options(raft::consistency_level::leader_ack));
+          raft::replicate_options(
+            raft::consistency_level::leader_ack, group->term()));
 
         if (result) {
             vlog(
@@ -762,9 +762,8 @@ ss::future<result<model::offset>> group_manager::set_blocked_for_groups(
     }
 
     auto result = co_await p->partition->raft()->replicate(
-      p->term,
       std::move(builder).build(),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, p->term));
 
     if (!result) {
         co_return result.error();
@@ -1271,9 +1270,9 @@ ss::future<> group_manager::write_version_fence(
 
         try {
             auto result = co_await p->partition->raft()->replicate(
-              term,
               std::move(batch),
-              raft::replicate_options(raft::consistency_level::quorum_ack));
+              raft::replicate_options(
+                raft::consistency_level::quorum_ack, term));
 
             if (result) {
                 vlog(

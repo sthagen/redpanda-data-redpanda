@@ -10,6 +10,7 @@
 #pragma once
 
 #include "metrics/metrics.h"
+#include "utils/hdr_hist.h"
 #include "utils/log_hist.h"
 
 #include <seastar/core/metrics_registration.hh>
@@ -138,6 +139,7 @@ public:
     void register_upload(uint64_t size_bytes) {
         _objects_uploaded += 1;
         _bytes_uploaded += size_bytes;
+        _upload_size_hist.record(size_bytes);
     }
 
     void register_error() { ++_upload_errors; }
@@ -151,6 +153,7 @@ private:
     uint64_t _bytes_uploaded{0};
     uint64_t _upload_errors{0};
     uint64_t _epoch_errors{0};
+    hdr_hist _upload_size_hist;
 
     metrics::internal_metric_groups _metrics;
 };

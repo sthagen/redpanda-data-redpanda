@@ -246,6 +246,7 @@ func (factory *tunersFactory) newNetworkTuner(
 		factory.irqProcFile,
 		ethtool,
 		factory.executor,
+		factory.proc,
 	)
 }
 

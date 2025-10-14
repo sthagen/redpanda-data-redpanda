@@ -30,7 +30,6 @@ public:
           size_t record_count,
           chunked_vector<model::record_batch> batches,
           ssx::semaphore_units u,
-          std::optional<model::term_id> expected_term,
           replicate_options opts);
 
         item(item&&) noexcept = default;
@@ -42,7 +41,7 @@ public:
         ~item() = default;
 
         std::optional<model::term_id> get_expected_term() const {
-            return _expected_term;
+            return _replicate_opts.expected_term;
         }
 
         size_t get_record_count() const { return _record_count; }
@@ -72,7 +71,6 @@ public:
         size_t _record_count;
         chunked_vector<model::record_batch> _data;
         ssx::semaphore_units _units;
-        std::optional<model::term_id> _expected_term;
         replicate_options _replicate_opts;
         /**
          * Item keeps semaphore units until replicate batcher is done with
@@ -93,10 +91,8 @@ public:
     replicate_batcher& operator=(const replicate_batcher&) = delete;
     ~replicate_batcher() noexcept = default;
 
-    replicate_stages replicate(
-      std::optional<model::term_id>,
-      chunked_vector<model::record_batch>,
-      replicate_options);
+    replicate_stages
+      replicate(chunked_vector<model::record_batch>, replicate_options);
 
     ss::future<> flush(ssx::semaphore_units u, const bool transfer_flush);
 
@@ -109,20 +105,14 @@ private:
       std::vector<ssx::semaphore_units>,
       absl::flat_hash_map<vnode, follower_req_seq>);
 
-    ss::future<item_ptr> do_cache(
-      std::optional<model::term_id>,
-      chunked_vector<model::record_batch>,
-      replicate_options);
+    ss::future<item_ptr>
+      do_cache(chunked_vector<model::record_batch>, replicate_options);
 
     ss::future<replicate_batcher::item_ptr> do_cache_with_backpressure(
-      std::optional<model::term_id>,
-      chunked_vector<model::record_batch>,
-      size_t,
-      replicate_options);
+      chunked_vector<model::record_batch>, size_t, replicate_options);
 
     ss::future<result<replicate_result>> cache_and_wait_for_result(
       ss::promise<> enqueued,
-      std::optional<model::term_id> expected_term,
       chunked_vector<model::record_batch> r,
       replicate_options);
 

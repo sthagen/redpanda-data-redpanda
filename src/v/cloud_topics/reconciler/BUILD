@@ -68,6 +68,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/common:object_utils",
         "//src/v/cloud_topics/level_one/metastore",
         "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
+        "//src/v/cloud_topics/level_one/metastore:retry",
         "//src/v/cluster",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",

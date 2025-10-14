@@ -26,16 +26,15 @@ import (
 	vos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
 	rp "github.com/redpanda-data/redpanda/src/go/rpk/pkg/redpanda"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/factory"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/hwloc"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/iotune"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/network"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 type prestartConfig struct {
@@ -455,47 +454,40 @@ func prestart(
 	return nil
 }
 
-// Check whether we are net tuned correctly and in dedicated mode. If so, return
-// the cpuset for the non-interrupt cores ("MaskForComputations").
-func checkNetDedicatedMode(fs afero.Fs, y *config.RedpandaYaml) (string, error) {
-	if !y.Rpk.Tuners.GetAllowDedicatedInterruptMode() {
+// Tries to read the tuner config file and extract the RedpandaCpuset from it.
+// Returns empty string in case no cpuset/file was found.
+func readTunerConfigCpuset(fs afero.Fs) (string, error) {
+	exists, err := afero.Exists(fs, network.NetTunerConfigFile)
+	if err != nil {
+		return "", err
+	}
+
+	if !exists {
 		return "", nil
 	}
 
-	params := factory.TunerParams{}
-	err := factory.FillTunerParamsWithValuesFromConfig(&params, y)
+	content, err := afero.ReadFile(fs, network.NetTunerConfigFile)
 	if err != nil {
 		return "", err
-	}
-	ethtool, err := ethtool.NewEthtoolWrapper()
-	if err != nil {
-		return "", err
-	}
-	proc := vos.NewProc()
-	timeout := 10 * time.Second
-	executor := executors.NewDirectExecutor()
-	hwloc := hwloc.NewHwLocCmd(proc, timeout)
-	cpuMasks := irq.NewCPUMasks(fs, hwloc, executor)
-	irqProcFile := irq.NewProcFile(fs)
-	irqDeviceInfo := irq.NewDeviceInfo(fs, irqProcFile)
-	balanceService := irq.NewBalanceService(fs, proc, executor, timeout)
-	netCheckersFactory := tuners.NewNetCheckersFactory(
-		fs, y.Rpk.Tuners, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks)
-	mask := netCheckersFactory.DedicatedMaskForComputations(params.Nics)
-	if mask != "" {
-		// TODO: Need to add various checks here:
-		//  - Run the checkers to confirm we are tuned correctly
-		//  - Check no existing --cpuset is configured
-		//  - Check if --smp is passed and adapt accordingly (we have some leeway here)
-		seastarMask, err := hwloc.MaskToListFormat(mask)
-		if err != nil {
-			return "", err
-		}
-		fmt.Println("Dedicated mode detected, starting Redpanda with cpuset", mask)
-		return seastarMask, nil
 	}
 
-	return "", nil
+	if len(content) == 0 {
+		fmt.Println("Net tuner config file found but empty")
+		return "", nil
+	}
+
+	config := tuners.NetTunerConfig{}
+	err = yaml.Unmarshal(content, &config)
+	if err != nil {
+		return "", err
+	}
+
+	if config.Cpusets == nil {
+		fmt.Println("Net tuner config file found but no cpusets (v1) section")
+		return "", nil
+	}
+
+	return config.Cpusets.RedpandaCpuset, nil
 }
 
 func buildRedpandaFlags(
@@ -519,18 +511,16 @@ func buildRedpandaFlags(
 
 	preserve := make(map[string]bool, 2)
 
-	// If network tuning is enabled and we are in dedicated mode, we will start
-	// redpanda with a cpuset that automatically moves it away from the
-	// interrupt cores.
-	if y.Rpk.Tuners.TuneNetwork {
-		mask, err := checkNetDedicatedMode(fs, y)
-		if err != nil {
-			return nil, err
-		}
-		if mask != "" {
-			sFlags.cpuSet = mask
-			preserve[cpuSetFlag] = true
-		}
+	// Check if tuner config file exists and read redpanda cpuset from it
+	tunerConfigCpuset, err := readTunerConfigCpuset(fs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read tuner config file: %w", err)
+	}
+
+	if tunerConfigCpuset != "" {
+		sFlags.cpuSet = tunerConfigCpuset
+		preserve[cpuSetFlag] = true
+		fmt.Printf("Using cpuset from tuner config: %s\n", tunerConfigCpuset)
 	}
 
 	// We want to preserve the IOProps flags in case we find them either by

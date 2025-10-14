@@ -97,7 +97,6 @@ private:
     // A function invoked in a background loop that attempts to truncate the log
     // below the current start offset.
     ss::future<> prefix_truncate_below_lro();
-    ss::future<> do_write_raft_snapshot(model::offset truncation_point);
 
 private:
     /// Lock to protect the state from concurrent access.

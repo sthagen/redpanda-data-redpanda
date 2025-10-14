@@ -1766,7 +1766,7 @@ void application::wire_up_redpanda_services(
     producer_manager.invoke_on_all(&cluster::tx::producer_state_manager::start)
       .get();
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         vassert(
           archival_storage_enabled(),
           "cloud topics currently requires archival storage to be enabled");
@@ -3177,7 +3177,7 @@ void application::start_runtime_services(
           pm.register_factory<datalake::coordinator::stm_factory>();
           pm.register_factory<datalake::translation::stm_factory>(
             config::shard_local_cfg().iceberg_enabled());
-          if (config::shard_local_cfg().development_enable_cloud_topics()) {
+          if (config::shard_local_cfg().cloud_topics_enabled()) {
               pm.register_factory<cloud_topics::l0::ctp_stm_factory>();
               pm.register_factory<cloud_topics::l1::stm_factory>();
           }
@@ -3407,7 +3407,7 @@ void application::start_runtime_services(
               smp_service_groups.cluster_smp_sg(),
               std::ref(_consumer_group_lag_metrics_frontend)));
           if (
-            config::shard_local_cfg().development_enable_cloud_topics()
+            config::shard_local_cfg().cloud_topics_enabled()
             && cloud_topics_app) {
               runtime_services.push_back(
                 std::make_unique<cloud_topics::l1::rpc::service>(

@@ -50,8 +50,9 @@ const (
 	DiskIRQsAffinityChecker
 	FstrimChecker
 	NicRxTxQueueCountChecker
-	NicIRQsAffinitChecker
 	NicIRQBalanceChecker
+	NicIRQsAffinitChecker
+	NetTunerConfigFileChecker
 	NicRfsChecker
 	NicXpsChecker
 	NicRpsChecker

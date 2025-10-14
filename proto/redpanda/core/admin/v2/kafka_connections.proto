@@ -172,7 +172,7 @@ message RequestStatistics {
     uint64 fetch_bytes = 2;
     // Number of requests the client has made.
     uint64 request_count = 3;
-    // Number of produced batches
+    // Number of produced batches.
     // Average batch size = produce_bytes / produce_batch_count
     uint64 produce_batch_count = 4;
 }

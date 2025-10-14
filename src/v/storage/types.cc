@@ -134,7 +134,7 @@ operator<<(std::ostream& o, const ntp_config::default_overrides& v) {
       v.min_compaction_lag_ms,
       v.max_compaction_lag_ms);
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         fmt::print(o, ", cloud_topic_enabled: {}", v.cloud_topic_enabled);
     }
 

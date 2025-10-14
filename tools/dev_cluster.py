@@ -62,6 +62,7 @@ class RedpandaConfig:
     rack: Optional[str] = None
     cloud_storage_enabled: bool = False
     iceberg_enabled: bool = False
+    cloud_topics_enabled: bool = False
     enable_developmental_unrecoverable_data_corrupting_features: int = int(time.time())
 
 
@@ -77,6 +78,7 @@ class DefaultMinioRedpandaConfig:
     cloud_storage_disable_tls: bool = True
     cloud_storage_backend: str = "aws"
     iceberg_enabled: bool = True
+    cloud_topics_enabled: bool = True
 
 
 @dataclasses.dataclass
@@ -223,15 +225,6 @@ async def run_command(cmd):
         print(f"[{cmd!r}].[stderr]\n{stderr.decode()}")
 
     return proc.returncode == 0
-
-
-async def post_start_configure(stop_event: asyncio.Event, rpk):
-    while not stop_event.is_set():
-        if await run_command(
-            f"{rpk} cluster config set development_enable_cloud_topics true"
-        ):
-            return
-        await asyncio.sleep(1)
 
 
 async def ensure_bucket_exists(cfg: dict):
@@ -460,13 +453,9 @@ async def main():
         env["LSAN_OPTIONS"] = f"suppressions={args.lsan_suppression_file}"
     nodes = [Redpanda(args.executable, cores, m, extra_args, env) for m in node_metas]
 
-    stop_event = asyncio.Event()
-    redpanda_coros = [r.run() for r in nodes]
-    other_coros = [post_start_configure(stop_event, args.rpk)]
-    all_coros = redpanda_coros + other_coros
+    all_coros = [r.run() for r in nodes]
 
     def stop():
-        stop_event.set()
         for n in nodes:
             n.stop()
         if minio:

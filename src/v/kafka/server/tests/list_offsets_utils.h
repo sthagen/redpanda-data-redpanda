@@ -52,6 +52,9 @@ public:
         co_return out_map[pid];
     }
 
+    ss::future<kafka::offset>
+    timequery(model::topic_partition tp, model::timestamp time);
+
 private:
     kafka::client::transport _transport;
 };

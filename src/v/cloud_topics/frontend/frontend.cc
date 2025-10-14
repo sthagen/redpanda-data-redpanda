@@ -393,7 +393,7 @@ frontend::l0_timequery(storage::timequery_config cfg) {
       /*as=*/cfg.abort_source,
       /*client_addr=*/cfg.client_address,
     });
-    auto type_filter = std::to_array({
+    static constexpr auto type_filter = std::to_array({
       model::record_batch_type::raft_data,
       model::record_batch_type::ctp_placeholder,
     });
@@ -461,7 +461,8 @@ frontend::refine_timequery_result(
 
 namespace {
 
-raft::replicate_options update_replicate_options(raft::replicate_options opts) {
+raft::replicate_options update_replicate_options(
+  raft::replicate_options opts, model::term_id expected_term) {
     // We overwrite the consistency level in cloud topics. Since you're already
     // willing to wait for object storage uploads, it's much safer to make sure
     // metadata is written to a majority before acking the write as well. This
@@ -473,6 +474,7 @@ raft::replicate_options update_replicate_options(raft::replicate_options opts) {
     // consumers - and to prevent situations where we have to suffix truncate
     // the log, we just force a majority to persist the write before responding.
     opts.consistency = raft::consistency_level::quorum_ack;
+    opts.expected_term = expected_term;
     return opts;
 }
 
@@ -496,7 +498,7 @@ struct upload_and_replicate_stages {
       , ctp_stm_api(make_ctp_stm_api(this->partition))
       , batches(std::move(batches))
       , batch_id(batch_id)
-      , opts(update_replicate_options(opts))
+      , opts(opts)
       , timeout(timeout) {}
 
     ss::promise<> request_enqueued;
@@ -575,6 +577,7 @@ ss::future<> bg_upload_and_replicate(
       placeholders.batches.size());
 
     // Replicate
+    op->opts = update_replicate_options(op->opts, fence.term);
     auto replicate_stages = partition->replicate_in_stages(
       op->batch_id, std::move(placeholders.batches.front()), op->opts);
 
@@ -639,7 +642,6 @@ ss::future<> bg_upload_and_replicate(
 
 ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
   chunked_vector<model::record_batch> batches, raft::replicate_options opts) {
-    opts = update_replicate_options(opts);
     chunked_vector<model::record_batch_header> headers;
     headers.reserve(batches.size());
     for (const auto& batch : batches) {
@@ -695,6 +697,7 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
         placeholder_batches.push_back(std::move(batch));
     }
 
+    opts = update_replicate_options(opts, fence.term);
     auto result = co_await _partition->replicate(
       std::move(placeholder_batches), opts);
 

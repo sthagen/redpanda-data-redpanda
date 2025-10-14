@@ -40,6 +40,17 @@ struct replicate_options {
       , _force_flush(false)
       , as(as) {}
 
+    replicate_options(
+      consistency_level l,
+      std::optional<model::term_id> expected_term,
+      std::optional<std::chrono::milliseconds> timeout = std::nullopt,
+      std::optional<std::reference_wrapper<ss::abort_source>> as = std::nullopt)
+      : consistency(l)
+      , timeout(timeout)
+      , _force_flush(false)
+      , as(as)
+      , expected_term(expected_term) {}
+
     // Callers may choose to force flush on an individual replicate request
     // basis. This is useful if certain callers intend to override any
     // default behavior at global/topic scope.
@@ -53,6 +64,10 @@ struct replicate_options {
     std::optional<std::chrono::milliseconds> timeout;
     bool _force_flush;
     std::optional<std::reference_wrapper<ss::abort_source>> as;
+
+    /// If set, the replicate request will only be processed if the current
+    /// term matches the expected term.
+    std::optional<model::term_id> expected_term{std::nullopt};
 };
 
 struct replicate_result {

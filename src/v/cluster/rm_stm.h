@@ -25,6 +25,7 @@
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "raft/persisted_stm.h"
+#include "raft/replicate.h"
 #include "raft/state_machine.h"
 #include "storage/snapshot.h"
 #include "utils/available_promise.h"
@@ -278,8 +279,10 @@ private:
       raft::replicate_options,
       ss::lw_shared_ptr<available_promise<>>);
 
-    ss::future<result<kafka_result>>
-      transactional_replicate(model::batch_identity, model::record_batch);
+    ss::future<result<kafka_result>> transactional_replicate(
+      model::batch_identity,
+      model::record_batch,
+      std::optional<model::term_id>);
 
     ss::future<result<kafka_result>> transactional_replicate(
       model::term_id,
@@ -300,7 +303,6 @@ private:
       ss::lw_shared_ptr<available_promise<>>);
 
     ss::future<result<kafka_result>> do_idempotent_replicate(
-      model::term_id,
       tx::producer_ptr,
       model::batch_identity,
       model::record_batch,
@@ -310,7 +312,6 @@ private:
       producer_previously_known);
 
     ss::future<result<kafka_result>> idempotent_replicate(
-      model::term_id,
       tx::producer_ptr,
       model::batch_identity,
       model::record_batch,

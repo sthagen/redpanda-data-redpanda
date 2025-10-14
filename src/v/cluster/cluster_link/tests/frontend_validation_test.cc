@@ -58,8 +58,9 @@ public:
         _validator = std::make_unique<frontend::validator>(
           &_table.local(),
           max_links,
-          chunked_vector<ss::sstring>{
-            "redpanda.remote.readreplica", "redpanda.remote.recovery"});
+          absl::flat_hash_set<std::string_view>(
+            ::cluster_link::model::disallowed_topic_properties.begin(),
+            ::cluster_link::model::disallowed_topic_properties.end()));
     }
     ss::future<> TearDownAsync() override {
         _validator.reset(nullptr);
@@ -911,14 +912,70 @@ TEST_F_CORO(
 
 TEST_F_CORO(
   frontend_validation_test, test_mirror_properties_invalid_topic_property) {
-    auto m1 = create_base_metadata();
-    m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
-      = ::cluster_link::model::topic_metadata_mirroring_config::properties_set{
-        "redpanda.remote.readreplica"};
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{ss::sstring{kafka::topic_property_read_replica}};
 
-    EXPECT_EQ(
-      co_await upsert_cluster_link(std::move(m1)),
-      cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+    }
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{ss::sstring{kafka::topic_property_recovery}};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+    }
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{
+              ss::sstring{kafka::topic_property_remote_allow_gaps}};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+    }
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{
+              ss::sstring{kafka::topic_property_mpx_virtual_cluster_id}};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+    }
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{
+              ss::sstring{kafka::topic_property_leaders_preference}};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+    }
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{
+              ss::sstring{kafka::topic_property_cloud_topic_enabled}};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_property_excluded_from_mirroring);
+    }
 }
 
 TEST_F_CORO(frontend_validation_test, update_mirror_topic_properties_success) {

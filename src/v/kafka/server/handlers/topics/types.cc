@@ -358,7 +358,7 @@ cluster::topic_configuration to_topic_config(
           name, value, kafka::config_resource_operation::set);
     }
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         cfg.properties.cloud_topic_enabled
           = get_bool_value(config_entries, topic_property_cloud_topic_enabled)
               .value_or(storage::ntp_config::default_cloud_topic_enabled);

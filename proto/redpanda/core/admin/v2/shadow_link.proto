@@ -229,10 +229,37 @@ message TopicMetadataSyncOptions {
     // shadow topics that start with _redpanda or __redpanda, they should
     // provide a literal filter for those topics.
     repeated NameFilter auto_create_shadow_topic_filters = 2;
-    // Additional topic properties to shadow
-    // Partition count, `max.message.bytes`, `cleanup.policy` and
-    // `timestamp.type` will always be replicated
-    repeated string shadowed_topic_properties = 3;
+    // List of topic properties that should be synced from the source topic.
+    // The following properties will always be replicated
+    // - Partition count
+    // - `max.message.bytes`
+    // - `cleanup.policy`
+    // - `timestamp.type`
+    //
+    // The following properties are not allowed to be replicated and adding them
+    // to this list will result in an error:
+    // - `redpanda.remote.readreplica`
+    // - `redpanda.remote.recovery`
+    // - `redpanda.remote.allowgaps`
+    // - `redpanda.virtual.cluster.id`
+    // - `redpanda.leaders.preference`
+    // - `redpanda.cloud_topic.enabled`
+    //
+    // This list is a list of properties in addition to the default properties
+    // that will be synced.  See `exclude_default`.
+    repeated string synced_shadow_topic_properties = 3;
+    // If false, then the following topic properties will be synced by default:
+    // - `compression.type`
+    // - `retention.bytes`
+    // - `retention.ms`
+    // - `delete.retention.ms`
+    // - Replication Factor
+    // - `min.compaction.lag.ms`
+    // - `max.compaction.lag.ms`
+    //
+    // If this is true, then only the properties listed in
+    // `synced_shadow_topic_properties` will be synced.
+    bool exclude_default = 4;
 }
 // Options for syncing consumer offsets
 message ConsumerOffsetSyncOptions {
@@ -361,6 +388,8 @@ message ShadowLinkStatus {
     repeated ShadowLinkTaskStatus task_statuses = 2;
     // Status of shadow topics
     repeated ShadowTopicStatus shadow_topic_statuses = 3;
+    // List of topic properties that are being synced
+    repeated string synced_shadow_topic_properties = 4;
 }
 // Status of a task
 message ShadowLinkTaskStatus {

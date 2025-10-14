@@ -22,6 +22,7 @@ redpanda_cc_btest(
     srcs = [
         "conn_quota_test.cc",
     ],
+    cpu = 4,
     deps = [
         "//src/v/base",
         "//src/v/config",

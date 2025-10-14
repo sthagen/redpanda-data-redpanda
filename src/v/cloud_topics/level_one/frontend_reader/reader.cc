@@ -10,10 +10,12 @@
 #include "cloud_topics/level_one/frontend_reader/reader.h"
 
 #include "bytes/iostream.h"
+#include "cloud_topics/level_one/metastore/retry.h"
 #include "cloud_topics/logger.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
+#include "utils/retry_chain_node.h"
 
 #include <seastar/coroutine/as_future.hh>
 
@@ -122,21 +124,18 @@ ss::future<> level_one_log_reader_impl::fetch_metadata(
         co_return;
     }
 
-    auto response_fut = co_await ss::coroutine::as_future(
-      _metastore->get_first_ge(_tidp, _next_offset));
-    if (response_fut.failed()) {
-        auto ex = response_fut.get_exception();
-        vlog(
-          cd_log.error,
-          "Exception fetching metadata from metastore for {} ({}): {}",
-          _ntp,
-          _tidp,
-          ex);
-        _state = state::end_of_stream;
-        std::rethrow_exception(ex);
-    }
-
-    auto response = response_fut.get();
+    ss::abort_source default_abort_source;
+    auto* abort_source = _config.abort_source
+                           ? &_config.abort_source.value().get()
+                           : &default_abort_source;
+    retry_chain_node rtc = l1::make_default_metastore_rtc(*abort_source);
+    auto response = co_await l1::retry_metastore_op(
+      [this]()
+        -> ss::future<
+          std::expected<l1::metastore::object_response, l1::metastore::errc>> {
+          return _metastore->get_first_ge(_tidp, _next_offset);
+      },
+      rtc);
     if (!response.has_value()) {
         switch (response.error()) {
         case l1::metastore::errc::out_of_range:

@@ -52,9 +52,12 @@ ctp_stm_api::replicated_apply(
     vlog(cd_log.debug, "Replicating batch {} in term {}", batch.header(), term);
 
     auto opts = raft::replicate_options(
-      raft::consistency_level::quorum_ack, as);
+      raft::consistency_level::quorum_ack,
+      /*expected_term=*/term,
+      /*timeout=*/std::nullopt,
+      as);
     opts.set_force_flush();
-    auto res = co_await _stm->_raft->replicate(term, std::move(batch), opts);
+    auto res = co_await _stm->_raft->replicate(std::move(batch), opts);
 
     if (res.has_error()) {
         vlog(cd_log.debug, "Failed to replicate batch: {}", res.error());

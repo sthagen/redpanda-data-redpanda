@@ -40,6 +40,7 @@ type CPUMasks interface {
 	GetAllCpusMask() (string, error)
 	GetLogicalCoreIDsFromPhysCore(core uint) ([]uint, error)
 	IsSupported() bool
+	MaskToListFormat(mask string) (string, error)
 }
 
 func NewCPUMasks(
@@ -239,6 +240,10 @@ func (masks *cpuMasks) GetLogicalCoreIDsFromPhysCore(
 
 func (masks *cpuMasks) GetAllCpusMask() (string, error) {
 	return masks.hwloc.All()
+}
+
+func (masks *cpuMasks) MaskToListFormat(mask string) (string, error) {
+	return masks.hwloc.MaskToListFormat(mask)
 }
 
 func MasksEqual(a, b string) (bool, error) {

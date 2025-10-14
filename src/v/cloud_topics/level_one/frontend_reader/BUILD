@@ -17,9 +17,11 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/common:object",
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/metastore",
+        "//src/v/cloud_topics/level_one/metastore:retry",
         "//src/v/config",
         "//src/v/model",
         "//src/v/model:timeout_clock",
+        "//src/v/utils:retry_chain_node",
         "@seastar",
     ],
 )

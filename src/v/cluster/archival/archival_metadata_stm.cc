@@ -898,11 +898,11 @@ ss::future<std::error_code> archival_metadata_stm::do_replicate_commands(
                           .handle_exception_type(broken_promise_to_shutdown);
     auto op_state_reset = ss::defer([&] { _active_operation_res.reset(); });
 
-    auto opts = raft::replicate_options(raft::consistency_level::quorum_ack);
+    auto opts = raft::replicate_options(
+      raft::consistency_level::quorum_ack, current_term);
     opts.set_force_flush();
 
-    auto result = co_await _raft->replicate(
-      current_term, std::move(batch), opts);
+    auto result = co_await _raft->replicate(std::move(batch), opts);
     if (!result) {
         vlog(
           _logger.warn,

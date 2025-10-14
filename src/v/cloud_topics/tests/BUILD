@@ -60,7 +60,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_gtest(
     name = "leader_epoch_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "leader_epoch_test.cc",
     ],

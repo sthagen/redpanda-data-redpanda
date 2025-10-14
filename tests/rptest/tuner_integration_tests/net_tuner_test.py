@@ -19,6 +19,7 @@ import re
 # only works with --max-parallel 1
 
 CORE_COUNT = 4
+NET_TUNER_CONFIG_FILE_PATH = "/var/run/redpanda_net_tuner_config"
 
 
 class NetTunerTest(RedpandaTest):
@@ -54,8 +55,9 @@ class NetTunerTest(RedpandaTest):
 
         # Reset to what ansible gives you out of the box
         self.node.account.ssh("rm -rf /etc/redpanda/redpanda.yaml")
-        self.node.account.ssh("sudo rpk redpanda mode prod")
-        self.node.account.ssh("sudo systemctl restart redpanda-tuner")
+        self.node.account.ssh("rpk redpanda mode prod")
+        self.node.account.ssh("systemctl restart redpanda-tuner")
+        self.node.account.ssh(f"rm -rf {NET_TUNER_CONFIG_FILE_PATH}")
 
     def start_rp(self):
         # Need to explicitly pass listener config otherwise RP will complain about 0.0.0.0 listeners
@@ -205,8 +207,13 @@ class NetTunerTest(RedpandaTest):
                 assert line.endswith("true"), f"NIC check failed: {line}"
 
     def _test_tune_net_mq(self, expected_interrupt_setup: ExpectedInterruptSetup):
+        # Create an empty dummy file. This should be deleted by the tuner
+        self.redpanda.nodes[0].account.ssh(f"sudo touch {NET_TUNER_CONFIG_FILE_PATH}")
         self.rpk.tune("net")
+        self.redpanda.nodes[0].account.ssh(f"test ! -e {NET_TUNER_CONFIG_FILE_PATH}")
 
+        # Create it again. It should be ignored by rpk start as it's empty
+        self.redpanda.nodes[0].account.ssh(f"sudo touch {NET_TUNER_CONFIG_FILE_PATH}")
         self.start_rp()
 
         self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
@@ -220,11 +227,34 @@ class NetTunerTest(RedpandaTest):
         self.rpk.config_set(
             "rpk.cores_per_dedicated_interrupt_core", str(dedicated_cores)
         )
-        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
+
         if not rps_rfs:
             self.rpk.config_set("rpk.allow_rps_rfs_tuner", "false")
 
-        self.rpk.tune("net")
+        self.rpk.tune("net", ["--mode", "dedicated"])
+
+        self.start_rp()
+
+        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+
+    def _test_tune_net_dedicated_core_auto_detect(
+        self,
+        expected_interrupt_setup: ExpectedInterruptSetup,
+        dedicated_cores: int,
+    ):
+        self.rpk.config_set(
+            "rpk.cores_per_dedicated_interrupt_core", str(dedicated_cores)
+        )
+
+        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
+
+        # In this test also confirm that the net tuner config file mode is set correctly
+        # Tune with very restrictive umask
+        self.node.account.ssh("umask 077 && rpk redpanda tune net -v")
+        # And then confirm the redpanda user can read it
+        self.node.account.ssh(
+            f"sudo -u redpanda bash -c 'test -r {NET_TUNER_CONFIG_FILE_PATH}'"
+        )
 
         self.start_rp()
 
@@ -258,6 +288,19 @@ class AwsNetTunerTest(NetTunerTest):
         )
 
         self._test_tune_net_dedicated_core(expected_interrupt_setup, 4)
+
+    @cluster(num_nodes=1)
+    def test_tune_net_dedicated_1_core_auto_detect(self):
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["8"],
+            redpanda_cores={0, 1, 2},
+            rps_cpu_mask="7",
+            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 1),
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=1,
+        )
+
+        self._test_tune_net_dedicated_core_auto_detect(expected_interrupt_setup, 4)
 
     @cluster(num_nodes=1)
     def test_tune_net_dedicated_1_core_no_rps_rfs(self):
@@ -320,6 +363,19 @@ class GcpNetTunerTest(NetTunerTest):
         )
 
         self._test_tune_net_dedicated_core(expected_interrupt_setup, 4)
+
+    @cluster(num_nodes=1)
+    def test_tune_net_dedicated_1_core_auto_detect(self):
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["8", "8", "8", "8", "8", "8", "8", "8"],
+            redpanda_cores={0, 1, 2},
+            rps_cpu_mask="7",
+            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 1),
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+            rx_tx_queue_count=1,
+        )
+
+        self._test_tune_net_dedicated_core_auto_detect(expected_interrupt_setup, 4)
 
     @cluster(num_nodes=1)
     def test_tune_net_dedicated_1_core_no_rps_rfs(self):

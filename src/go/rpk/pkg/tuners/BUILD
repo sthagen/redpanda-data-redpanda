@@ -59,6 +59,7 @@ go_library(
             "@com_github_lorenzosaino_go_sysctl//:go-sysctl",
             "@com_github_pkg_errors//:errors",
             "@com_github_spf13_afero//:afero",
+            "@in_gopkg_yaml_v3//:yaml_v3",
             "@org_uber_go_zap//:zap",
         ],
         "@rules_go//go/platform:linux": [
@@ -86,6 +87,7 @@ go_library(
             "@com_github_lorenzosaino_go_sysctl//:go-sysctl",
             "@com_github_pkg_errors//:errors",
             "@com_github_spf13_afero//:afero",
+            "@in_gopkg_yaml_v3//:yaml_v3",
             "@org_uber_go_zap//:zap",
         ],
         "//conditions:default": [],
@@ -131,6 +133,7 @@ go_test(
             "@com_github_spf13_afero//:afero",
             "@com_github_stretchr_testify//assert",
             "@com_github_stretchr_testify//require",
+            "@in_gopkg_yaml_v3//:yaml_v3",
         ],
         "@rules_go//go/platform:linux": [
             "//src/go/rpk/pkg/cloud/provider",
@@ -147,6 +150,7 @@ go_test(
             "@com_github_spf13_afero//:afero",
             "@com_github_stretchr_testify//assert",
             "@com_github_stretchr_testify//require",
+            "@in_gopkg_yaml_v3//:yaml_v3",
         ],
         "//conditions:default": [],
     }),

@@ -911,7 +911,6 @@ redpanda_cc_btest(
         "describe_user_scram_credentials_test.cc",
     ],
     env = {"RP_FIXTURE_ENV": "1"},
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/protocol",
@@ -934,7 +933,6 @@ redpanda_cc_btest(
         "alter_user_scram_credentials_test.cc",
     ],
     env = {"RP_FIXTURE_ENV": "1"},
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/protocol",
@@ -957,7 +955,6 @@ redpanda_cc_btest(
         "describe_acls_test.cc",
     ],
     env = {"RP_FIXTURE_ENV": "1"},
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/protocol",

@@ -63,12 +63,12 @@ class RpkRemoteTool:
     def cluster_config_lint(self):
         return self._execute([self._rpk_binary(), "cluster", "config", "lint"])
 
-    def tune(self, tuner: str, verbose: bool = True) -> str:
+    def tune(self, tuner: str, extra_args: list[str] = [], verbose: bool = True) -> str:
         verbose_args: list[str] = []
         if verbose:
             verbose_args = ["-v"]
         return self._execute(
-            [self._rpk_binary(), "redpanda", "tune", tuner] + verbose_args
+            [self._rpk_binary(), "redpanda", "tune", tuner] + verbose_args + extra_args
         )
 
     def check(self) -> str:

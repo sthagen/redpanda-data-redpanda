@@ -250,6 +250,11 @@ void batcher_probe::setup_internal_metrics(bool disable) {
           sm::description("Number of epoch errors encountered by the batcher."),
           labels),
 
+        sm::make_histogram(
+          "level_zero_object_size_bytes",
+          [this] { return _upload_size_hist.seastar_histogram_logform(); },
+          sm::description("Level zero object size histogram in bytes."),
+          labels),
       });
 }
 

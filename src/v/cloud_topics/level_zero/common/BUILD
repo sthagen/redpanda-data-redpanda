@@ -41,6 +41,7 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/metrics",
+        "//src/v/utils:hdr_hist",
         "//src/v/utils:log_hist",
         "@fmt",
         "@seastar",

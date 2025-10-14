@@ -40,23 +40,13 @@ using config_map_t
  */
 inline constexpr std::string_view topic_property_compaction_strategy
   = "compaction.strategy";
-inline constexpr std::string_view topic_property_timestamp_type
-  = "message.timestamp.type";
 inline constexpr std::string_view topic_property_segment_size = "segment.bytes";
-inline constexpr std::string_view topic_property_max_message_bytes
-  = "max.message.bytes";
-inline constexpr std::string_view topic_property_recovery
-  = "redpanda.remote.recovery";
+
 inline constexpr std::string_view topic_property_remote_write
   = "redpanda.remote.write";
 inline constexpr std::string_view topic_property_remote_read
   = "redpanda.remote.read";
-inline constexpr std::string_view topic_property_read_replica
-  = "redpanda.remote.readreplica";
-inline constexpr std::string_view topic_property_remote_allow_gaps
-  = "redpanda.remote.allowgaps";
-inline constexpr std::string_view topic_property_replication_factor
-  = "replication.factor";
+
 inline constexpr std::string_view topic_property_remote_delete
   = "redpanda.remote.delete";
 inline constexpr std::string_view topic_property_segment_ms = "segment.ms";
@@ -65,9 +55,6 @@ inline constexpr std::string_view topic_property_write_caching
 
 inline constexpr std::string_view topic_property_flush_ms = "flush.ms";
 inline constexpr std::string_view topic_property_flush_bytes = "flush.bytes";
-
-inline constexpr std::string_view topic_property_delete_retention_ms
-  = "delete.retention.ms";
 
 // Server side schema id validation
 inline constexpr std::string_view topic_property_record_key_schema_id_validation
@@ -96,17 +83,8 @@ inline constexpr std::string_view
   topic_property_record_value_subject_name_strategy_compat
   = "confluent.value.subject.name.strategy";
 
-inline constexpr std::string_view topic_property_mpx_virtual_cluster_id
-  = "redpanda.virtual.cluster.id";
-
 inline constexpr std::string_view topic_property_iceberg_mode
   = "redpanda.iceberg.mode";
-
-inline constexpr std::string_view topic_property_leaders_preference
-  = "redpanda.leaders.preference";
-
-inline constexpr std::string_view topic_property_cloud_topic_enabled
-  = "redpanda.cloud_topic.enabled";
 
 inline constexpr std::string_view topic_property_iceberg_delete
   = "redpanda.iceberg.delete";
@@ -122,12 +100,6 @@ inline constexpr std::string_view topic_property_iceberg_target_lag_ms
 
 inline constexpr std::string_view topic_property_min_cleanable_dirty_ratio
   = "min.cleanable.dirty.ratio";
-
-inline constexpr std::string_view topic_property_min_compaction_lag_ms
-  = "min.compaction.lag.ms";
-
-inline constexpr std::string_view topic_property_max_compaction_lag_ms
-  = "max.compaction.lag.ms";
 
 inline constexpr std::string_view topic_property_message_timestamp_before_max_ms
   = "message.timestamp.before.max.ms";

@@ -655,9 +655,10 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 "iceberg_rest_catalog_crl_file",
             ]
         )
-        # Cloud storage and iceberg depend on properly configured cloud IO.
-        # Skip them to avoid breaking the test.
+        # Cloud storage, cloud topics, and iceberg depend on properly
+        # configured cloud IO. Skip them to avoid breaking the test.
         exclude_settings.add("cloud_storage_enabled")
+        exclude_settings.add("cloud_topics_enabled")
         exclude_settings.add("iceberg_enabled")
 
         # List of settings that must be odd

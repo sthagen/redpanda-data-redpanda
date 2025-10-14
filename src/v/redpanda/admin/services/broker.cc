@@ -11,9 +11,12 @@
 
 #include "redpanda/admin/services/broker.h"
 
+#include "features/feature_table.h"
 #include "kafka/server/connection_context.h"
 #include "kafka/server/server.h"
 #include "proto/redpanda/core/admin/v2/kafka_connections.proto.h"
+#include "redpanda/admin/aip_filter.h"
+#include "serde/protobuf/rpc.h"
 #include "ssx/async_algorithm.h"
 #include "version/version.h"
 
@@ -34,10 +37,12 @@ ss::logger brlog{"admin_api_server/broker_service"};
 broker_service_impl::broker_service_impl(
   admin::proxy::client client,
   std::vector<std::unique_ptr<serde::pb::rpc::base_service>>* services,
-  ss::sharded<kafka::server>& kafka_server)
+  ss::sharded<kafka::server>& kafka_server,
+  ss::sharded<features::feature_table>& feature_table)
   : _proxy_client(std::move(client))
   , _services(services)
-  , _kafka_server(kafka_server) {}
+  , _kafka_server(kafka_server)
+  , _feature_table(feature_table) {}
 
 ss::future<proto::admin::get_broker_response> broker_service_impl::get_broker(
   serde::pb::rpc::context ctx, proto::admin::get_broker_request req) {
@@ -93,19 +98,18 @@ struct connection_gather_result {
     size_t total_matching_count;
 };
 
-ss::future<connection_gather_result>
-gather_connections(const kafka::server& server, size_t limit) {
+ss::future<connection_gather_result> gather_connections(
+  const kafka::server& server, size_t limit, const filter_predicate& filter) {
     auto result = connection_gather_result{};
 
     auto conn_ptrs = server.list_connections();
-    co_await ss::maybe_yield();
+    co_await ss::coroutine::maybe_yield();
 
     co_await ssx::async_for_each(
-      conn_ptrs, [&result, limit](const auto& conn_ptr) {
+      conn_ptrs, [&result, limit, &filter](const auto& conn_ptr) {
           auto conn_proto = conn_ptr->to_proto();
 
-          // TODO: Apply filtering here when implemented
-          bool matches_filter = true;
+          bool matches_filter = filter(conn_proto);
 
           if (matches_filter) {
               result.total_matching_count++;
@@ -119,6 +123,19 @@ gather_connections(const kafka::server& server, size_t limit) {
     co_return result;
 }
 
+void check_license(const features::feature_table& ft) {
+    if (ft.should_sanction()) {
+        const auto& license = ft.get_license();
+        auto status = [&license]() {
+            return !license.has_value()    ? "not present"
+                   : license->is_expired() ? "expired"
+                                           : "unknown error";
+        };
+        throw serde::pb::rpc::failed_precondition_exception(
+          fmt::format("Invalid license: {}", status()));
+    }
+}
+
 } // namespace
 
 ss::future<proto::admin::list_kafka_connections_response>
@@ -126,6 +143,8 @@ broker_service_impl::list_kafka_connections(
   serde::pb::rpc::context ctx,
   proto::admin::list_kafka_connections_request req) {
     vlog(brlog.trace, "list_kafka_connections: {}", req);
+
+    check_license(_feature_table.local());
 
     // Proxy to the target node id specified in the request
     auto target = model::node_id{req.get_node_id()};
@@ -142,6 +161,10 @@ broker_service_impl::list_kafka_connections(
     auto limit = (req.get_page_size() == 0) ? default_limit
                                             : req.get_page_size();
 
+    auto filter_cfg = make_aip_filter_config<proto::kafka_connection>(
+      req.get_filter());
+    auto filter = aip_filter_parser::create_aip_filter(std::move(filter_cfg));
+
     // Iterate across shards sequentially to bound memory usage while
     // calculating total size
     auto result_connections = chunked_vector<proto::kafka_connection>{};
@@ -152,16 +175,16 @@ broker_service_impl::list_kafka_connections(
         auto remaining_limit = limit - result_connections.size();
         auto shard_result = co_await _kafka_server.invoke_on(
           shard,
-          [remaining_limit](
+          [remaining_limit, &filter](
             kafka::server& server) -> ss::future<connection_gather_result> {
-              return gather_connections(server, remaining_limit);
+              return gather_connections(server, remaining_limit, filter);
           });
 
         total_matching_connections += shard_result.total_matching_count;
         std::ranges::move(
           shard_result.connections, std::back_inserter(result_connections));
 
-        co_await ss::maybe_yield();
+        co_await ss::coroutine::maybe_yield();
     }
 
     resp.set_total_size(total_matching_connections);

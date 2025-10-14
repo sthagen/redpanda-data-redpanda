@@ -27,6 +27,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func mockNetTunersFactory(
@@ -49,6 +50,7 @@ func mockNetTunersFactory(
 		irq.NewBalanceService(fs, proc, exec, timeout),
 		irq.NewCPUMasks(fs, hwlocCmd, exec),
 		exec,
+		proc,
 	), nil
 }
 
@@ -214,4 +216,28 @@ func TestListenBacklogTuner(t *testing.T) {
 			require.Exactly(st, expected, string(contents))
 		})
 	}
+}
+
+func TestYaml(t *testing.T) {
+	yml := `cpusets:
+    irq_mode: dedicated
+    redpanda_cpuset: 0-2
+    redpanda_cpuset_size: 3
+    interrupts_cpuset: "3"
+    interrupts_cpuset_size: 1
+`
+
+	var cfg tuners.NetTunerConfig
+	err := yaml.Unmarshal([]byte(yml), &cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, irq.Dedicated, cfg.Cpusets.IrqMode)
+	require.Equal(t, "0-2", cfg.Cpusets.RedpandaCpuset)
+	require.Equal(t, 3, cfg.Cpusets.RedpandaCpusetSize)
+	require.Equal(t, "3", cfg.Cpusets.IrqCpuset)
+	require.Equal(t, 1, cfg.Cpusets.IrqCpusetSize)
+
+	data, err := yaml.Marshal(&cfg)
+	require.NoError(t, err)
+	require.Equal(t, yml, string(data))
 }

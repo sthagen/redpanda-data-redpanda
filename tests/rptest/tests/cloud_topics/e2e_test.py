@@ -48,10 +48,7 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         self.topic = self.s3_topic_name
 
         conf = dict(
-            enable_developmental_unrecoverable_data_corrupting_features=int(
-                time.time()
-            ),
-            development_enable_cloud_topics=True,
+            cloud_topics_enabled=True,
             enable_cluster_metadata_upload_loop=False,
         )
 
@@ -173,6 +170,7 @@ class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
             transaction_abort_rate=0.1,
             msgs_per_transaction=self.per_transaction,
             debug_logs=True,
+            tolerate_failed_produce=True,
         )
         self.kgo_producer.start()
         self.kgo_producer.wait()

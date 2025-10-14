@@ -225,7 +225,7 @@ def _redpanda_cc_unit_test(cpu, memory, **kwargs):
     # TODO(bazel): What are the right defaults here?
     _redpanda_cc_test(
         memory = memory or "1GiB",
-        cpu = cpu or 4,
+        cpu = cpu or 2,
         extra_args = extra_args,
         **kwargs
     )

@@ -511,9 +511,9 @@ errc frontend::validate_mutation(const cluster_link_cmd& cmd) const {
     validator v{
       _table,
       max_links,
-      {"redpanda.remote.readreplica",
-       "redpanda.remote.recovery",
-       "redpanda.remote.allowgaps"}};
+      absl::flat_hash_set<std::string_view>(
+        ::cluster_link::model::disallowed_topic_properties.begin(),
+        ::cluster_link::model::disallowed_topic_properties.end())};
     return v.validate_mutation(cmd);
 }
 
@@ -522,7 +522,7 @@ bool frontend::is_sanctioned() { return _features->should_sanction(); }
 frontend::validator::validator(
   table* table,
   size_t max_links,
-  chunked_vector<ss::sstring> excluded_topic_properties)
+  absl::flat_hash_set<std::string_view> excluded_topic_properties)
   : _table(table)
   , _max_links(max_links)
   , _excluded_topic_properties(std::move(excluded_topic_properties)) {}
@@ -1031,9 +1031,7 @@ errc frontend::validator::validate_metadata_mirroring_config(
         return errc::topic_filter_invalid;
     }
     for (const auto& prop : config.topic_properties_to_mirror) {
-        if (
-          std::ranges::find(_excluded_topic_properties, prop)
-          != _excluded_topic_properties.end()) {
+        if (_excluded_topic_properties.contains(prop)) {
             vlog(
               cluster::clusterlog.info,
               "Topic property '{}' is excluded from mirroring",

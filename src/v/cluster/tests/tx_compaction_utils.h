@@ -102,12 +102,16 @@ public:
                 return ss::make_ready_future<>();
             }
             return log->apply_segment_ms().then([&] {
+                // TODO: for now max_tombstone_remove_offset is set to
+                // max_removable_local_log_offset, change when coordinated
+                // compaction is implemented
                 return log
                   ->housekeeping(
                     storage::housekeeping_config{
                       model::timestamp(
                         model::timestamp::now().value() - ret_duration.count()),
                       std::nullopt,
+                      log->stm_manager()->max_removable_local_log_offset(),
                       log->stm_manager()->max_removable_local_log_offset(),
                       std::nullopt,
                       std::nullopt,
@@ -237,6 +241,7 @@ public:
         storage::housekeeping_config ccfg(
           model::timestamp::min(),
           std::nullopt,
+          model::offset::max(),
           model::offset::max(),
           std::nullopt,
           std::nullopt,

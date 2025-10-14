@@ -24,6 +24,7 @@ namespace compaction {
 struct compaction_config {
     compaction_config(
       model::offset max_collect_offset,
+      model::offset max_tombstone_remove_offset,
       std::optional<std::chrono::milliseconds> tombstone_ret_ms,
       std::optional<std::chrono::milliseconds> tx_ret_ms,
       ss::abort_source& as,
@@ -33,6 +34,7 @@ struct compaction_config {
       hash_key_offset_map* key_map = nullptr,
       storage::scoped_file_tracker::set_t* to_clean = nullptr)
       : max_removable_local_log_offset(max_collect_offset)
+      , max_tombstone_remove_offset(max_tombstone_remove_offset)
       , tombstone_retention_ms(tombstone_ret_ms)
       , tx_retention_ms(tx_ret_ms)
       , sanitizer_config(std::move(san_cfg))
@@ -45,6 +47,9 @@ struct compaction_config {
     // Cannot delete or compact past this offset (i.e. for unresolved txn
     // records): that is, only offsets <= this may be compacted.
     model::offset max_removable_local_log_offset;
+
+    // Cannot remove tombstones past this offset
+    model::offset max_tombstone_remove_offset;
 
     // The retention time for tombstones. Tombstone removal occurs only for
     // "clean" compacted segments past the tombstone deletion horizon timestamp,

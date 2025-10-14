@@ -112,6 +112,11 @@ get_enterprise_features(const cluster::topic_configuration& cfg) {
             features.emplace_back("iceberg");
         }
     }
+    if (config::shard_local_cfg().cloud_topics_enabled.is_restricted()) {
+        if (cfg.properties.cloud_topic_enabled) {
+            features.emplace_back("cloud topics");
+        }
+    }
     return features;
 }
 
@@ -209,6 +214,11 @@ std::vector<std::string_view> get_enterprise_features(
     if (config::shard_local_cfg().iceberg_enabled.is_restricted()) {
         if (properties.iceberg_mode != model::iceberg_mode::disabled) {
             features.emplace_back("iceberg");
+        }
+    }
+    if (config::shard_local_cfg().cloud_topics_enabled.is_restricted()) {
+        if (properties.cloud_topic_enabled) {
+            features.emplace_back("cloud topics");
         }
     }
     return features;
@@ -636,7 +646,7 @@ topic_result topics_frontend::validate_topic_configuration(
 
     // the only way that cloud topics can be enabled on a topic is if the cloud
     // topics development feature is also enabled.
-    if (!config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (!config::shard_local_cfg().cloud_topics_enabled()) {
         if (assignable_config.cfg.properties.cloud_topic_enabled) {
             auto msg = ssx::sformat(
               "Cloud topic flag on {} is set but development feature is "

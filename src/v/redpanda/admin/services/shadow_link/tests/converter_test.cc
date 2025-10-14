@@ -461,7 +461,8 @@ TEST(converter_test, create_with_metadata_sync_options) {
       "test-prefix-exclude"));
     topic_metadata_sync_options.set_auto_create_shadow_topic_filters(
       std::move(filters));
-    topic_metadata_sync_options.set_shadowed_topic_properties({"prop"});
+    topic_metadata_sync_options.set_synced_shadow_topic_properties({"prop"});
+    topic_metadata_sync_options.set_exclude_default(true);
 
     shadow_link_client_options.set_bootstrap_servers({"localhost:9092"});
     shadow_link_configurations.set_client_options(
@@ -487,6 +488,7 @@ TEST(converter_test, create_with_metadata_sync_options) {
     ASSERT_EQ(
       md.configuration.topic_metadata_mirroring_cfg.topic_name_filters.size(),
       2);
+    EXPECT_TRUE(md.configuration.topic_metadata_mirroring_cfg.exclude_default);
 
     chunked_vector<cluster_link::model::resource_name_filter_pattern> expected{
       cluster_link::model::resource_name_filter_pattern{
@@ -714,6 +716,7 @@ TEST(converter_test, metadata_to_shadow_link_topic_mirroring_cfg) {
         .filter = cluster_link::model::filter_type::exclude,
         .pattern = "test-prefix-exclude",
       }};
+    md.configuration.topic_metadata_mirroring_cfg.exclude_default = true;
 
     auto sl = admin::metadata_to_shadow_link(std::move(md));
     const auto& topic_metadata_sync_options
@@ -722,10 +725,10 @@ TEST(converter_test, metadata_to_shadow_link_topic_mirroring_cfg) {
     EXPECT_EQ(topic_metadata_sync_options.get_interval(), absl::Seconds(15));
     chunked_vector<ss::sstring> expected_properties{"prop1", "prop2"};
     std::ranges::sort(expected_properties);
-    auto shadowed_topic_properties = copy_chunked_vector(
-      topic_metadata_sync_options.get_shadowed_topic_properties());
-    std::ranges::sort(shadowed_topic_properties);
-    EXPECT_EQ(shadowed_topic_properties, expected_properties);
+    auto synced_shadow_topic_properties = copy_chunked_vector(
+      topic_metadata_sync_options.get_synced_shadow_topic_properties());
+    std::ranges::sort(synced_shadow_topic_properties);
+    EXPECT_EQ(synced_shadow_topic_properties, expected_properties);
 
     chunked_vector<proto::admin::name_filter> expected_filters;
     expected_filters.reserve(2);
@@ -741,6 +744,8 @@ TEST(converter_test, metadata_to_shadow_link_topic_mirroring_cfg) {
     EXPECT_EQ(
       topic_metadata_sync_options.get_auto_create_shadow_topic_filters(),
       expected_filters);
+
+    EXPECT_TRUE(topic_metadata_sync_options.get_exclude_default());
 }
 
 proto::admin::shadow_topic_status create_shadow_topic_status(

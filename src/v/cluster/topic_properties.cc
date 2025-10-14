@@ -99,7 +99,7 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       properties.message_timestamp_before_max_ms,
       properties.message_timestamp_after_max_ms);
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         fmt::print(
           o, ", cloud_topic_enabled: {}", properties.cloud_topic_enabled);
     }
@@ -153,7 +153,7 @@ bool topic_properties::has_overrides() const {
         || message_timestamp_before_max_ms.has_value()
         || message_timestamp_after_max_ms.has_value();
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         return overrides
                || (cloud_topic_enabled != storage::ntp_config::default_cloud_topic_enabled);
     }

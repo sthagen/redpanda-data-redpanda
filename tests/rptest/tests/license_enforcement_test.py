@@ -345,6 +345,58 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
         cfgs = self.rpk.describe_topic_configs("test")
         assert cfgs["redpanda.iceberg.mode"][0] == "key_value", cfgs
 
+    @cluster(num_nodes=1)
+    def test_cloud_topics_enabled_cluster_property(self):
+        si_settings = SISettings(self.test_context)
+        self.redpanda.set_si_settings(si_settings)
+        super().setUp()
+        self.redpanda.set_environment(
+            {"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": True}
+        )
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+        self.redpanda.wait_until(
+            self.redpanda.healthy,
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="The cluster hasn't stabilized",
+        )
+        # We shouldn't be able to set cloud_topics_enabled without a license.
+        try:
+            self.rpk.cluster_config_set("cloud_topics_enabled", "true")
+            assert False, "Enabling cloud_topics_enabled must fail without the license"
+        except RpkException as e:
+            pass
+
+    @cluster(num_nodes=1)
+    def test_cloud_topics_topic_property(self):
+        si_settings = SISettings(self.test_context)
+        self.redpanda.set_si_settings(si_settings)
+        super().setUp()
+
+        self.rpk.cluster_config_set("cloud_topics_enabled", "true")
+
+        self.redpanda.set_environment(
+            {"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": True}
+        )
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+        self.redpanda.wait_until(
+            self.redpanda.healthy,
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="The cluster hasn't stabilized",
+        )
+        # We shouldn't be able to set the topic property without a license,
+        # even with the cluster property set.
+        try:
+            self.rpk.create_topic(
+                "test", config={"redpanda.cloud_topic.enabled": "true"}
+            )
+            assert False, (
+                "Should have failed to create topic with redpanda.cloud_topic.enabled set"
+            )
+        except RpkException as e:
+            pass
+
     @cluster(num_nodes=3)
     def test_upgrade_with_topic_configs(self):
         """

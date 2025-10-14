@@ -130,6 +130,7 @@ ss::future<> disk_log_builder::gc(
         collection_upper_bound,
         max_partition_retention_size,
         model::offset::max(),
+        model::offset::max(),
         tombstone_retention_ms,
         std::nullopt,
         std::chrono::milliseconds{0},

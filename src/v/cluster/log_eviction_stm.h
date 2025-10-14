@@ -130,7 +130,6 @@ private:
     bool should_process_evict(model::offset);
 
     ss::future<> monitor_log_eviction();
-    ss::future<> do_write_raft_snapshot(model::offset);
     ss::future<> handle_log_eviction_events();
     ss::future<> do_apply(const model::record_batch&) final;
     ss::future<> apply_raft_snapshot(const iobuf&) final;

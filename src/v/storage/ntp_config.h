@@ -430,7 +430,7 @@ public:
     }
 
     bool cloud_topic_enabled() const {
-        if (!config::shard_local_cfg().development_enable_cloud_topics()) {
+        if (!config::shard_local_cfg().cloud_topics_enabled()) {
             return false;
         }
         return _overrides ? _overrides->cloud_topic_enabled

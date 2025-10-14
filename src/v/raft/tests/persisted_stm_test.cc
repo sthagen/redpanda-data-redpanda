@@ -153,9 +153,8 @@ public:
         }
 
         auto r_result = co_await _raft->replicate(
-          _insync_term,
           build_batch({std::move(op)}),
-          replicate_options(consistency_level::quorum_ack));
+          replicate_options(consistency_level::quorum_ack, _insync_term));
         if (!r_result) {
             co_return r_result.error();
         }

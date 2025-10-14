@@ -184,6 +184,26 @@ sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthL
                 "--config",
                 f"min.cleanable.dirty.ratio={spec.min_cleanable_dirty_ratio}",
             ]
+        if spec.message_timestamp_type is not None:
+            args += [
+                "--config",
+                f"message.timestamp.type={spec.message_timestamp_type}",
+            ]
+        if spec.compression_type is not None:
+            args += [
+                "--config",
+                f"compression.type={spec.compression_type}",
+            ]
+        if spec.min_compaction_lag_ms is not None:
+            args += [
+                "--config",
+                f"min.compaction.lag.ms={spec.min_compaction_lag_ms}",
+            ]
+        if spec.max_compaction_lag_ms is not None:
+            args += [
+                "--config",
+                f"max.compaction.lag.ms={spec.max_compaction_lag_ms}",
+            ]
         return self._run("kafka-topics.sh", args, desc="create_topic")
 
     def create_topic_partitions(self, topic: str, partitions: int):

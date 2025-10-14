@@ -380,7 +380,7 @@ struct cloud_topic_config_validator {
         if (it == c.configs.end()) {
             return true;
         }
-        if (!config::shard_local_cfg().development_enable_cloud_topics()) {
+        if (!config::shard_local_cfg().cloud_topics_enabled()) {
             return false;
         }
         try {

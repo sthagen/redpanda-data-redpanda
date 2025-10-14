@@ -159,7 +159,7 @@ public:
         explicit validator(
           table*,
           size_t max_links,
-          chunked_vector<ss::sstring> excluded_topic_properties);
+          absl::flat_hash_set<std::string_view> excluded_topic_properties);
 
         cluster::cluster_link::errc
         validate_mutation(const cluster_link_cmd&) const;
@@ -174,7 +174,7 @@ public:
     private:
         table* _table;
         size_t _max_links;
-        chunked_vector<ss::sstring> _excluded_topic_properties;
+        absl::flat_hash_set<std::string_view> _excluded_topic_properties;
     };
 
 private:

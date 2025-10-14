@@ -348,7 +348,7 @@ class RequestStatistics(google.protobuf.message.Message):
     request_count: builtins.int
     'Number of requests the client has made.'
     produce_batch_count: builtins.int
-    'Number of produced batches\n    Average batch size = produce_bytes / produce_batch_count\n    '
+    'Number of produced batches.\n    Average batch size = produce_bytes / produce_batch_count\n    '
 
     def __init__(self, *, produce_bytes: builtins.int=..., fetch_bytes: builtins.int=..., request_count: builtins.int=..., produce_batch_count: builtins.int=...) -> None:
         ...

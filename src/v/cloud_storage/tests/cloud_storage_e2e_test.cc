@@ -252,6 +252,7 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloud) {
       model::timestamp::min(),
       1,
       log->stm_manager()->max_removable_local_log_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
       std::nullopt,
       std::chrono::milliseconds{0},
@@ -698,6 +699,7 @@ TEST_P(CloudStorageEndToEndManualTest, TestTimequeryAfterArchivalGC) {
       model::timestamp::min(),
       1, // max_bytes_in_log
       log->stm_manager()->max_removable_local_log_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
       std::nullopt,
       std::chrono::milliseconds{0},
@@ -1009,6 +1011,7 @@ TEST_P(EndToEndFixture, TestCloudStorageTimequery) {
     storage::housekeeping_config housekeeping_conf(
       model::timestamp::max(),
       0,
+      log->stm_manager()->max_removable_local_log_offset(),
       log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
       std::nullopt,

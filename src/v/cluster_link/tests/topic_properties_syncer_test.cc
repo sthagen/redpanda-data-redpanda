@@ -24,7 +24,7 @@ using model::resource_name_filter_pattern;
 namespace {
 const ::model::topic test_topic{"test_topic"};
 const model::name_t test_link_name{"test_link"};
-model::metadata get_default_metadata() {
+model::metadata get_default_metadata(bool exclude_default_properties = false) {
     model::link_state link_state;
     model::link_configuration link_configuration;
     link_configuration.topic_metadata_mirroring_cfg.task_interval = 1s;
@@ -34,6 +34,8 @@ model::metadata get_default_metadata() {
           .pattern_type = filter_pattern_type::literal,
           .filter = filter_type::include,
           .pattern = resource_name_filter_pattern::wildcard});
+    link_configuration.topic_metadata_mirroring_cfg.exclude_default
+      = exclude_default_properties;
     link_state.mirror_topics.emplace(
       test_topic,
       model::mirror_topic_metadata{
@@ -79,7 +81,7 @@ public:
 
         fixture()->elect_leader(::model::controller_ntp, self(), std::nullopt);
 
-        co_await fixture()->upsert_link(get_default_metadata());
+        co_await fixture()->upsert_link(get_default_metadata(true));
         fixture()->get_cluster_mock().add_topic(
           test_topic, 1, 1, kafka::topic_authorized_operations(0x508));
 

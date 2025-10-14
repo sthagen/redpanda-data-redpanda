@@ -105,9 +105,9 @@ ss::future<bool> id_allocator_stm::set_state(
     auto batch = serialize_cmd(
       state_cmd{.next_state = value}, model::record_batch_type::id_allocator);
     auto r = co_await _raft->replicate(
-      _insync_term,
       std::move(batch),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(
+        raft::consistency_level::quorum_ack, _insync_term));
     if (!r) {
         co_return false;
     }

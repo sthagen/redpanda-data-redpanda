@@ -77,6 +77,19 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "retry",
+    hdrs = [
+        "retry.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":metastore",
+        "//src/v/utils:retry_chain_node",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "replicated_metastore",
     srcs = [
         "replicated_metastore.cc",

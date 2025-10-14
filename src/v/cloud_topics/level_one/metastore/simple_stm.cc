@@ -21,6 +21,8 @@
 
 #include <seastar/coroutine/as_future.hh>
 
+#include <optional>
+
 namespace cloud_topics::l1 {
 
 namespace {
@@ -83,9 +85,12 @@ ss::future<std::expected<void, simple_stm::errc>>
 simple_stm::replicate_and_wait(
   model::term_id term, model::record_batch batch, ss::abort_source& as) {
     auto opts = raft::replicate_options(
-      raft::consistency_level::quorum_ack, std::ref(as));
+      raft::consistency_level::quorum_ack,
+      /*expected_term=*/term,
+      /*timeout=*/std::nullopt,
+      std::ref(as));
     opts.set_force_flush();
-    auto res = co_await _raft->replicate(term, std::move(batch), opts);
+    auto res = co_await _raft->replicate(std::move(batch), opts);
     if (res.has_error()) {
         co_return std::unexpected(errc::raft_error);
     }

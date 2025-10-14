@@ -252,9 +252,9 @@ ss::future<result<raft::replicate_result>> mux_state_machine<T...>::replicate(
       _gate, [this, batch = std::move(batch), term]() mutable {
           if (term) {
               return _c->replicate(
-                term.value(),
                 std::move(batch),
-                raft::replicate_options{raft::consistency_level::quorum_ack});
+                raft::replicate_options{
+                  raft::consistency_level::quorum_ack, term.value()});
           }
 
           return _c->replicate(

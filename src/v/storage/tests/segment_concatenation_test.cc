@@ -126,7 +126,11 @@ void concatenate_segments_from_log(
   storage::kvstore& kvs,
   bool maybe_compress) {
     compaction::compaction_config cfg(
-      model::offset::max(), std::nullopt, std::nullopt, never_abort);
+      model::offset::max(),
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      never_abort);
 
     const auto closed_segment_filter = [](const auto& s) -> bool {
         return !s->has_appender();

@@ -10,6 +10,7 @@
 
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
+#include "kafka/server/tests/list_offsets_utils.h"
 #include "kafka/server/tests/produce_consume_utils.h"
 #include "model/batch_builder.h"
 #include "model/fundamental.h"
@@ -72,6 +73,15 @@ public:
         auto* c = consumer.get();
         cleanup.emplace_back([c = std::move(consumer)] { c->stop().get(); });
         return c;
+    }
+
+    tests::kafka_list_offsets_transport* make_list_offsets_client() {
+        auto transport = std::make_unique<tests::kafka_list_offsets_transport>(
+          make_kafka_client().get());
+        transport->start().get();
+        auto* t = transport.get();
+        cleanup.emplace_back([t = std::move(transport)] { t->stop().get(); });
+        return t;
     }
 
     std::vector<ss::noncopyable_function<void()>> cleanup;
@@ -146,6 +156,8 @@ TEST_F(e2e_fixture, timequery) {
       // For broker time, we should be ignoring the timestamp deltas
       {.relative_timestamps = {0, 1, 2, 3, 5}, .broker_time = true},
       {.relative_timestamps = {16, 17, 17, 18, 16, 20}},
+      {.relative_timestamps = {22, 23, 24}},
+      {.relative_timestamps = {25, 26, 27}},
     };
     model::timestamp now = model::timestamp::now();
     auto* producer = make_producer();
@@ -191,17 +203,16 @@ TEST_F(e2e_fixture, timequery) {
       {.relative_timestamp = 18, .expected_offset = 24},
       {.relative_timestamp = 19, .expected_offset = 26},
       {.relative_timestamp = 20, .expected_offset = 26},
-      {.relative_timestamp = 21, .expected_offset = -1},
+      {.relative_timestamp = 21, .expected_offset = 27},
+      {.relative_timestamp = 22, .expected_offset = 27},
+      {.relative_timestamp = 23, .expected_offset = 28},
+      {.relative_timestamp = 28, .expected_offset = -1},
     };
-    auto* consumer = make_consumer();
+    auto* client = make_list_offsets_client();
     for (const auto& testcase : timequery_tests) {
-        auto offset = consumer
-                        ->timequery(
-                          ntp.tp,
-                          model::timestamp{
-                            now()
-                            + (testcase.relative_timestamp * hour_in_milli)})
-                        .get();
+        model::timestamp ts{
+          now() + (testcase.relative_timestamp * hour_in_milli)};
+        auto offset = client->timequery(ntp.tp, ts).get();
         EXPECT_EQ(offset, testcase.expected_offset)
           << "for timequery at relative timestamp: "
           << testcase.relative_timestamp;
@@ -220,7 +231,7 @@ TEST_F(e2e_fixture, timequery) {
     });
     // Retry now that the data is in L1
     for (const auto& testcase : timequery_tests) {
-        auto offset = consumer
+        auto offset = client
                         ->timequery(
                           ntp.tp,
                           model::timestamp{

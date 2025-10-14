@@ -20,15 +20,21 @@ def main():
         )
         sys.exit(1)
 
+    def getenv_default(var: str, default: int = 0):
+        return int(os.getenv(var, os.getenv(var + "_DEFAULT", str(default))))
+
+    redirect_stderr = getenv_default("MB_REDIRECT_STDERR")
+    verbose = getenv_default("MB_VERBOSE")
+    disable_aslr = getenv_default("MB_DISABLE_ASLR", 1)
+    exec_in_shm = getenv_default("MB_EXEC_IN_SHM", 1)
+
     exe = Path(sys.argv[1]).resolve()
-    exec_in_shm = os.getenv("MB_EXEC_IN_SHM", "1") == "1"
+
+    exe_prefix = ["setarch", "--addr-no-randomize"] if disable_aslr else []
+
     rundir = Path(
-        os.getenv("MB_RUNDIR", "/dev/shm/vectorized_io" if exec_in_shm == 1 else ".")
+        os.getenv("MB_RUNDIR", "/dev/shm/vectorized_io" if exec_in_shm else ".")
     )
-    redirect_stderr = int(
-        os.getenv("MB_REDIRECT_STDERR", os.getenv("MB_REDIRECT_STDERR_DEFAULT", "0"))
-    )
-    verbose = int(os.getenv("MB_VERBOSE", "0"))
 
     # Resolve environment variables we pass to our benchmarks to absolute paths
     # this way we don't have errors
@@ -59,7 +65,7 @@ def main():
 
     print(f"[bench-wrapper] running benchmark : {exe.name}", file=sys.stderr)
     print(
-        f"[bench-wrapper] verbose={verbose}, exec_in_shm={exec_in_shm}, redirect_stderr={redirect_stderr}",
+        f"[bench-wrapper] verbose={verbose}, exec_in_shm={exec_in_shm}, redirect_stderr={redirect_stderr}, disable_aslr={disable_aslr}",
         file=sys.stderr,
     )
     print(f"[bench-wrapper] rundir            : {rundir}", file=sys.stderr)
@@ -85,7 +91,7 @@ def main():
 
     rundir.mkdir(parents=True, exist_ok=True)
     proc = subprocess.run(
-        [exe] + sys.argv[2:],
+        exe_prefix + [exe] + sys.argv[2:],
         stderr=subprocess.PIPE if redirect_stderr else None,
         text=True,
         cwd=rundir,

@@ -207,8 +207,8 @@ public:
     get_first_ge(const model::topic_id_partition&, kafka::offset) = 0;
 
     // Finds the first object of a given partition with data greater than or
-    // equal to the given timestamp, that starts after the provided offset. If
-    // no such timestamp exists, returns `out_of_range`.
+    // equal to the given timestamp, that starts at or after the provided
+    // offset. If no such timestamp exists, returns `out_of_range`.
     virtual ss::future<std::expected<object_response, errc>> get_first_ge(
       const model::topic_id_partition&, kafka::offset, model::timestamp)
       = 0;

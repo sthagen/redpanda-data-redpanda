@@ -82,9 +82,12 @@ ss::future<checked<std::nullopt_t, coordinator_stm::errc>>
 coordinator_stm::replicate_and_wait(
   model::term_id term, model::record_batch batch, ss::abort_source& as) {
     auto opts = raft::replicate_options(
-      raft::consistency_level::quorum_ack, std::ref(as));
+      raft::consistency_level::quorum_ack,
+      /*expected_term=*/term,
+      /*timeout=*/std::nullopt,
+      std::ref(as));
     opts.set_force_flush();
-    auto res = co_await _raft->replicate(term, std::move(batch), opts);
+    auto res = co_await _raft->replicate(std::move(batch), opts);
     if (res.has_error()) {
         co_return errc::raft_error;
     }

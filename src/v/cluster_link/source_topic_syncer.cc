@@ -14,7 +14,6 @@
 #include "cluster_link/link.h"
 #include "cluster_link/model/filter_utils.h"
 #include "cluster_link/model/types.h"
-#include "kafka/server/handlers/topics/types.h"
 #include "model/namespace.h"
 
 #include <fmt/ranges.h>
@@ -24,11 +23,6 @@ namespace cluster_link {
 using properties_set = model::topic_metadata_mirroring_config::properties_set;
 
 namespace {
-const absl::flat_hash_set<ss::sstring> required_topic_properties{
-  ss::sstring{kafka::topic_property_max_message_bytes},
-  ss::sstring{kafka::topic_property_cleanup_policy},
-  ss::sstring{kafka::topic_property_timestamp_type},
-};
 
 /*
  * This map contains topic properties that will be overridden when creating
@@ -318,7 +312,7 @@ ss::future<> source_topic_syncer::run_impl() {
           controller_id.value(),
           describe_configs_version,
           topics_to_describe,
-          _config.topic_properties_to_mirror);
+          _config.get_topic_properties_to_mirror());
         vlog(logger().trace, "Describe topics response: {}", response);
     } catch (const std::exception& e) {
         auto msg = ssx::sformat("Failed to describe topics: {}", e.what());
@@ -574,7 +568,7 @@ source_topic_syncer::find_candidate_topics_for_update(
         return {};
     }
 
-    auto mirror_rf = _config.topic_properties_to_mirror.contains(
+    auto mirror_rf = _config.get_topic_properties_to_mirror().contains(
       kafka::topic_property_replication_factor);
 
     candidate_update_map candidate_topics;
@@ -628,7 +622,7 @@ source_topic_syncer::find_candidate_topics_for_creation(
     candidate_create_map candidate_topics;
     candidate_topics.reserve(topics.size());
 
-    auto mirror_rf = _config.topic_properties_to_mirror.contains(
+    auto mirror_rf = _config.get_topic_properties_to_mirror().contains(
       kafka::topic_property_replication_factor);
 
     for (const auto& topic : topics) {
@@ -722,11 +716,15 @@ source_topic_syncer::describe_topics(
   kafka::api_version describe_configs_version,
   const chunked_vector<::model::topic>& topics,
   const properties_set& configs) {
-    properties_set requested_configs_set = configs;
-    requested_configs_set.insert(
-      required_topic_properties.begin(), required_topic_properties.end());
-    chunked_vector<ss::sstring> requested_configs(
-      requested_configs_set.begin(), requested_configs_set.end());
+    chunked_vector<ss::sstring> requested_configs;
+    requested_configs.reserve(configs.size());
+    for (const auto& c : configs) {
+        if (c != kafka::topic_property_replication_factor) {
+            // Replication factor is synced via topic metadata
+            requested_configs.emplace_back(c);
+        }
+    }
+
     kafka::describe_configs_request request;
     request.data.include_documentation = false;
     request.data.include_synonyms = false;

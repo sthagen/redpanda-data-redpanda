@@ -247,15 +247,6 @@ private:
       const chunked_vector<built_object_metadata>& objects,
       std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder);
 
-    /*
-     * Retry metastore add_objects calls on transport errors.
-     * Other metastore errors are not retried.
-     */
-    ss::future<std::expected<l1::metastore::add_response, reconcile_error>>
-    add_objects_with_retry(
-      std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder,
-      l1::metastore::term_offset_map_t terms);
-
     l1::io* _l1_io;
     l1::metastore* _metastore;
     ss::gate _gate;

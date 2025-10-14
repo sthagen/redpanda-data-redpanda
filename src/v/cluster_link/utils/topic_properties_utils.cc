@@ -44,7 +44,8 @@ bool parse_and_set(
               prop,
               raw_value,
               kafka::config_resource_operation::set,
-              validator);
+              validator,
+              true);
         } else if constexpr (std::is_same_v<ValT, ss::sstring>) {
             kafka::parse_and_set_optional(
               prop,
@@ -248,7 +249,7 @@ bool maybe_append_update(
           kafka::noop_validator<config::leaders_preference>{});
     }
     if (config_name == kafka::topic_property_cloud_topic_enabled) {
-        if (config::shard_local_cfg().development_enable_cloud_topics()) {
+        if (config::shard_local_cfg().cloud_topics_enabled()) {
             throw kafka::validation_error(
               "Cloud topics property cannot be changed");
         }

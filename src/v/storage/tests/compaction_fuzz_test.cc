@@ -159,7 +159,11 @@ ss::future<ot_state> arrange_and_compact(
             }
         }
         auto compact_cfg = compaction::compaction_config(
-          batches.back().last_offset(), std::nullopt, std::nullopt, as);
+          batches.back().last_offset(),
+          batches.back().last_offset(),
+          std::nullopt,
+          std::nullopt,
+          as);
         std::ignore = co_await b1.apply_sliding_window_compaction(compact_cfg);
         co_await b1.apply_adjacent_merge_compaction(compact_cfg);
     } catch (...) {

@@ -225,7 +225,7 @@ public:
     /**
      * \brief Persist snapshot with given data and start offset
      *
-     * The write snaphot API is called by the state machine implementation
+     * The write snapshot API is called by the state machine implementation
      * whenever it decides to take a snapshot. Write snapshot is executed under
      * consensus operations lock.
      */
@@ -246,6 +246,14 @@ public:
         return _snapshot_mgr.snapshot_path();
     }
 
+    // This method will snapshot the log at somepoint <= `eviction_point` and
+    // then truncate the log. This should be used by retention mechansims to
+    // truncate the log safely.
+    //
+    // Returns true if the log was evicted fully up to some possible truncation
+    // point (which is the last segment boundary <= `eviction_point`).
+    ss::future<bool> snapshot_and_truncate_log(model::offset eviction_point);
+
     /// Increment and returns next append_entries order tracking sequence for
     /// follower with given node id
     follower_req_seq next_follower_sequence(vnode);
@@ -256,25 +264,14 @@ public:
       follower_req_seq,
       model::offset);
 
-    ss::future<result<replicate_result>>
-      replicate(chunked_vector<model::record_batch>, replicate_options);
-    ss::future<result<replicate_result>>
-      replicate(model::record_batch, replicate_options);
-    replicate_stages replicate_in_stages(
-      chunked_vector<model::record_batch>, replicate_options);
-    replicate_stages
-      replicate_in_stages(model::record_batch, replicate_options);
-    uint64_t get_snapshot_size() const { return _snapshot_size; }
-
-    std::optional<state_machine_manager>& stm_manager() { return _stm_manager; }
-
     /**
-     * Replication happens only when expected_term matches the current _term
-     * otherwise consensus returns not_leader. This feature is needed to keep
-     * ingestion-time state machine in sync with the log. The conventional
-     * state machines running on top on the log are optimistic: to execute a
-     * command a user should add a command to a log (replicate) then continue
-     * reading the commands from the log and executing them one after another.
+     * Replication happens only when replicated_options::expected_term matches
+     * the current _term otherwise consensus returns not_leader.
+     * This feature is needed to keep ingestion-time state machine in sync
+     * with the log. The conventional state machines running on top on the log
+     * are optimistic: to execute a command a user should add a command to a
+     * log (replicate) then continue reading the commands from the log and
+     * executing them one after another.
      * When the commands are conditional the conventional approach is wasteful
      * because we even when a condition resolves to false we still pay the
      * replication costs. An alternative approach is to check the conditions
@@ -291,14 +288,19 @@ public:
      *      d. cache the term
      *      e. continue with step #1
      */
-    ss::future<result<replicate_result>> replicate(
-      model::term_id, chunked_vector<model::record_batch>, replicate_options);
     ss::future<result<replicate_result>>
-      replicate(model::term_id, model::record_batch, replicate_options);
+      replicate(chunked_vector<model::record_batch>, replicate_options);
+    ss::future<result<replicate_result>>
+      replicate(model::record_batch, replicate_options);
     replicate_stages replicate_in_stages(
-      model::term_id, chunked_vector<model::record_batch>, replicate_options);
-    replicate_stages replicate_in_stages(
-      model::term_id, model::record_batch, replicate_options);
+      chunked_vector<model::record_batch>, replicate_options);
+    replicate_stages
+      replicate_in_stages(model::record_batch, replicate_options);
+
+    uint64_t get_snapshot_size() const { return _snapshot_size; }
+
+    std::optional<state_machine_manager>& stm_manager() { return _stm_manager; }
+
     ss::future<model::record_batch_reader> make_reader(
       storage::local_log_reader_config,
       std::optional<clock_type::time_point> = std::nullopt);
@@ -621,14 +623,13 @@ private:
     ss::future<install_snapshot_reply>
       finish_snapshot(install_snapshot_request, install_snapshot_reply);
 
+    ss::future<> do_snapshot_and_truncate_log(model::offset);
     ss::future<> do_write_snapshot(model::offset, iobuf&&);
     append_entries_reply
       make_append_entries_reply(vnode, storage::append_result);
 
-    replicate_stages do_replicate(
-      std::optional<model::term_id>,
-      chunked_vector<model::record_batch>,
-      replicate_options);
+    replicate_stages
+      do_replicate(chunked_vector<model::record_batch>, replicate_options);
 
     ss::future<result<replicate_result>> chain_stages(replicate_stages);
 

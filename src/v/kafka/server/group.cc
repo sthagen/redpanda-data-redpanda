@@ -1940,9 +1940,8 @@ group::begin_tx(cluster::begin_group_tx_request r) {
       r.pid, std::move(fence), use_dedicated_batch_type_for_fence());
 
     auto result = co_await _partition->raft()->replicate(
-      _term,
       std::move(batch),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, _term));
 
     if (!result) {
         vlog(
@@ -2087,9 +2086,8 @@ group::store_txn_offsets(txn_offset_commit_request r) {
       std::move(tx_entry));
 
     auto result = co_await _partition->raft()->replicate(
-      _term,
       std::move(batch),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, _term));
 
     if (!result) {
         if (
@@ -2287,9 +2285,8 @@ group::offset_commit_stages group::store_offsets(offset_commit_request&& r) {
     }
 
     auto replicate_stages = _partition->raft()->replicate_in_stages(
-      _term,
       chunked_vector<model::record_batch>::single(std::move(builder).build()),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, _term));
 
     auto f = replicate_stages.replicate_finished.then(
       [this, req = std::move(r), commits = std::move(offset_commits)](
@@ -2670,9 +2667,8 @@ ss::future<error_code> group::remove() {
 
     try {
         auto result = co_await _partition->raft()->replicate(
-          _term,
           std::move(batch),
-          raft::replicate_options(raft::consistency_level::quorum_ack));
+          raft::replicate_options(raft::consistency_level::quorum_ack, _term));
         if (result) {
             vlog(
               cg_klog.trace,
@@ -2759,9 +2755,8 @@ ss::future<> group::remove_topic_partitions(
 
     try {
         auto result = co_await _partition->raft()->replicate(
-          _term,
           std::move(batch),
-          raft::replicate_options(raft::consistency_level::quorum_ack));
+          raft::replicate_options(raft::consistency_level::quorum_ack, _term));
         if (result) {
             vlog(
               cg_klog.trace,
@@ -2794,9 +2789,8 @@ ss::future<> group::remove_topic_partitions(
 ss::future<result<raft::replicate_result>>
 group::store_group(model::record_batch batch) {
     return _partition->raft()->replicate(
-      _term,
       std::move(batch),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, _term));
 }
 
 error_code group::validate_existing_member(
@@ -3027,9 +3021,8 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
       std::move(tx));
 
     auto result = co_await _partition->raft()->replicate(
-      _term,
       std::move(batch),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, _term));
 
     if (!result) {
         vlog(
@@ -3180,9 +3173,8 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
     batches.push_back(std::move(batch));
 
     auto result = co_await _partition->raft()->replicate(
-      _term,
       std::move(batches),
-      raft::replicate_options(raft::consistency_level::quorum_ack));
+      raft::replicate_options(raft::consistency_level::quorum_ack, _term));
 
     if (!result) {
         vlog(

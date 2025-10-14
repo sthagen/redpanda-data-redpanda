@@ -92,7 +92,7 @@ redpanda_thread_fixture::redpanda_thread_fixture(
   bool enable_data_transforms,
   bool enable_legacy_upload_mode,
   bool iceberg_enabled,
-  bool development_enable_cloud_topics,
+  bool enable_cloud_topics,
   bool development_cluster_linking_enabled)
   : app(ssx::sformat("redpanda-{}", node_id()))
   , proxy_port(proxy_port)
@@ -114,7 +114,7 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       enable_data_transforms,
       enable_legacy_upload_mode,
       iceberg_enabled,
-      development_enable_cloud_topics,
+      enable_cloud_topics,
       development_cluster_linking_enabled);
     app.initialize(
       proxy_config(proxy_port),
@@ -348,7 +348,7 @@ void redpanda_thread_fixture::configure(
   bool data_transforms_enabled,
   bool legacy_upload_mode_enabled,
   bool iceberg_enabled,
-  bool development_enable_cloud_topics,
+  bool cloud_topics_enabled,
   bool development_cluster_linking_enabled) {
     auto base_path = std::filesystem::path(data_dir);
     ss::smp::invoke_on_all([=]() {
@@ -442,16 +442,8 @@ void redpanda_thread_fixture::configure(
           .set_value(legacy_upload_mode_enabled);
         config.get("iceberg_enabled").set_value(iceberg_enabled);
 
-        if (development_enable_cloud_topics) {
-            const auto time_since_epoch
-              = std::chrono::system_clock::now().time_since_epoch();
-            config
-              .get(
-                "enable_developmental_unrecoverable_data_corrupting_"
-                "features")
-              .set_value(ssx::sformat("{}", time_since_epoch));
-
-            config.get("development_enable_cloud_topics").set_value(true);
+        if (cloud_topics_enabled) {
+            config.get("cloud_topics_enabled").set_value(true);
         }
 
         config.get("enable_shadow_linking")

@@ -30,9 +30,10 @@ namespace cluster {
 
 ss::future<result<raft::replicate_result>>
 tm_stm::replicate_quorum_ack(model::term_id term, model::record_batch&& batch) {
-    auto opts = raft::replicate_options{raft::consistency_level::quorum_ack};
+    auto opts = raft::replicate_options{
+      raft::consistency_level::quorum_ack, term};
     opts.set_force_flush();
-    return _raft->replicate(term, std::move(batch), opts);
+    return _raft->replicate(std::move(batch), opts);
 }
 
 model::record_batch tm_stm::serialize_tx(tx_metadata tx) {
@@ -143,9 +144,9 @@ tm_stm::quorum_write_empty_batch(model::timeout_clock::time_point timeout) {
     // replicate checkpoint batch
     return _raft
       ->replicate(
-        _insync_term,
         make_checkpoint(),
-        raft::replicate_options(raft::consistency_level::quorum_ack))
+        raft::replicate_options(
+          raft::consistency_level::quorum_ack, _insync_term))
       .then([this, timeout](ret_t r) {
           if (!r) {
               return ss::make_ready_future<ret_t>(r);

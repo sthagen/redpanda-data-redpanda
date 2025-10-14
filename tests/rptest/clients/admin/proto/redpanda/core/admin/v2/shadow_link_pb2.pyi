@@ -552,7 +552,10 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     INTERVAL_FIELD_NUMBER: builtins.int
     AUTO_CREATE_SHADOW_TOPIC_FILTERS_FIELD_NUMBER: builtins.int
-    SHADOWED_TOPIC_PROPERTIES_FIELD_NUMBER: builtins.int
+    SYNCED_SHADOW_TOPIC_PROPERTIES_FIELD_NUMBER: builtins.int
+    EXCLUDE_DEFAULT_FIELD_NUMBER: builtins.int
+    exclude_default: builtins.bool
+    'If false, then the following topic properties will be synced by default:\n    - `compression.type`\n    - `retention.bytes`\n    - `retention.ms`\n    - `delete.retention.ms`\n    - Replication Factor\n    - `min.compaction.lag.ms`\n    - `max.compaction.lag.ms`\n\n    If this is true, then only the properties listed in\n    `synced_shadow_topic_properties` will be synced.\n    '
 
     @property
     def interval(self) -> google.protobuf.duration_pb2.Duration:
@@ -576,19 +579,34 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
         """
 
     @property
-    def shadowed_topic_properties(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """Additional topic properties to shadow
-        Partition count, `max.message.bytes`, `cleanup.policy` and
-        `timestamp.type` will always be replicated
+    def synced_shadow_topic_properties(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """List of topic properties that should be synced from the source topic.
+        The following properties will always be replicated
+        - Partition count
+        - `max.message.bytes`
+        - `cleanup.policy`
+        - `timestamp.type`
+
+        The following properties are not allowed to be replicated and adding them
+        to this list will result in an error:
+        - `redpanda.remote.readreplica`
+        - `redpanda.remote.recovery`
+        - `redpanda.remote.allowgaps`
+        - `redpanda.virtual.cluster.id`
+        - `redpanda.leaders.preference`
+        - `redpanda.cloud_topic.enabled`
+
+        This list is a list of properties in addition to the default properties
+        that will be synced.  See `exclude_default`.
         """
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., shadowed_topic_properties: collections.abc.Iterable[builtins.str] | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['interval', b'interval']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'interval', b'interval', 'shadowed_topic_properties', b'shadowed_topic_properties']) -> None:
+    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'exclude_default', b'exclude_default', 'interval', b'interval', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties']) -> None:
         ...
 global___TopicMetadataSyncOptions = TopicMetadataSyncOptions
 
@@ -885,6 +903,7 @@ class ShadowLinkStatus(google.protobuf.message.Message):
     STATE_FIELD_NUMBER: builtins.int
     TASK_STATUSES_FIELD_NUMBER: builtins.int
     SHADOW_TOPIC_STATUSES_FIELD_NUMBER: builtins.int
+    SYNCED_SHADOW_TOPIC_PROPERTIES_FIELD_NUMBER: builtins.int
     state: global___ShadowLinkState.ValueType
 
     @property
@@ -895,10 +914,14 @@ class ShadowLinkStatus(google.protobuf.message.Message):
     def shadow_topic_statuses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShadowTopicStatus]:
         """Status of shadow topics"""
 
-    def __init__(self, *, state: global___ShadowLinkState.ValueType=..., task_statuses: collections.abc.Iterable[global___ShadowLinkTaskStatus] | None=..., shadow_topic_statuses: collections.abc.Iterable[global___ShadowTopicStatus] | None=...) -> None:
+    @property
+    def synced_shadow_topic_properties(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """List of topic properties that are being synced"""
+
+    def __init__(self, *, state: global___ShadowLinkState.ValueType=..., task_statuses: collections.abc.Iterable[global___ShadowLinkTaskStatus] | None=..., shadow_topic_statuses: collections.abc.Iterable[global___ShadowTopicStatus] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['shadow_topic_statuses', b'shadow_topic_statuses', 'state', b'state', 'task_statuses', b'task_statuses']) -> None:
+    def ClearField(self, field_name: typing.Literal['shadow_topic_statuses', b'shadow_topic_statuses', 'state', b'state', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties', 'task_statuses', b'task_statuses']) -> None:
         ...
 global___ShadowLinkStatus = ShadowLinkStatus
 

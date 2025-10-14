@@ -144,9 +144,6 @@ public:
       model::partition_id pid,
       model::offset kafka_offset_inclusive);
 
-    ss::future<kafka::offset>
-    timequery(model::topic_partition tp, model::timestamp time);
-
 private:
     ss::future<kafka::fetch_response> raw_consume(
       model::topic topic_name,

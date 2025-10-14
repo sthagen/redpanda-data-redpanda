@@ -42,6 +42,9 @@ from rptest.services.multi_cluster_services import (
 )
 from rptest.services.redpanda import SchemaRegistryConfig
 from rptest.tests.cluster_linking_test_base import (
+    DEFAULT_SYNCED_TOPIC_PROPERTIES,
+    DISALLOWED_SYNCED_TOPIC_PROPERTIES,
+    REQUIRED_SYNCED_TOPIC_PROPERTIES,
     ShadowLinkPreAllocTestBase,
     ShadowLinkTestBase,
 )
@@ -749,6 +752,209 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             backoff_sec=1,
             err_msg="Failed to find all topics in the target cluster",
         )
+
+    def set_exclude_default(
+        self, val: bool, shadow_link: shadow_link_pb2.ShadowLink
+    ) -> shadow_link_pb2.ShadowLink:
+        # Now update the link to not replicate default properties
+        shadow_link.configurations.topic_metadata_sync_options.exclude_default = val
+
+        update_mask: google.protobuf.field_mask_pb2.FieldMask = (
+            google.protobuf.field_mask_pb2.FieldMask(
+                paths=["configurations.topic_metadata_sync_options.exclude_default"]
+            )
+        )
+        return self.update_link(shadow_link, update_mask)
+
+    @cluster(num_nodes=6)
+    def test_topic_properties_options(self):
+        """
+        This test verifies the new field added for listing out which topic properties
+        are synced and that it's updated appropriately
+        """
+        topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
+
+        self.source_default_client().create_topic(topic)
+        shadow_link = self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        shadow_link = self.get_link("test-link")
+        expected_properties_list = (
+            REQUIRED_SYNCED_TOPIC_PROPERTIES + DEFAULT_SYNCED_TOPIC_PROPERTIES
+        )
+        expected_properties_list.sort()
+
+        synced_properties = shadow_link.status.synced_shadow_topic_properties
+        synced_properties.sort()
+
+        # By default we should see all those properties
+        assert synced_properties == expected_properties_list, (
+            f"Expected synced properties to be {expected_properties_list}, got {synced_properties}"
+        )
+
+        # Now update the link to not replicate default properties
+        self.set_exclude_default(True, shadow_link)
+
+        shadow_link = self.get_link("test-link")
+
+        synced_properties = shadow_link.status.synced_shadow_topic_properties
+        synced_properties.sort()
+        expected_properties_list = REQUIRED_SYNCED_TOPIC_PROPERTIES
+        expected_properties_list.sort()
+
+        assert synced_properties == expected_properties_list, (
+            f"Expected synced properties to be {expected_properties_list}, got {synced_properties}"
+        )
+
+    @cluster(num_nodes=6)
+    @matrix(
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_topic_properties_replicated(self, source_cluster_spec):
+        """
+        This test verifies that the default topic properties are replicated
+        """
+        topic_properties: dict[str, Any] = {
+            "max.message.bytes": 1024,
+            "cleanup.policy": "compact,delete",
+            "message.timestamp.type": TopicSpec.TIMESTAMP_LOG_APPEND_TIME,
+            "compression.type": TopicSpec.COMPRESSION_ZSTD.value,
+            "retention.bytes": 512,
+            "retention.ms": 100,
+            "delete.retention.ms": 200,
+            "min.compaction.lag.ms": 300,
+            "max.compaction.lag.ms": 400,
+        }
+        topic = TopicSpec(
+            name="source-topic",
+            partition_count=5,
+            replication_factor=3,
+            max_message_bytes=topic_properties["max.message.bytes"],
+            cleanup_policy=topic_properties["cleanup.policy"],
+            message_timestamp_type=topic_properties["message.timestamp.type"],
+            compression_type=topic_properties["compression.type"],
+            retention_bytes=topic_properties["retention.bytes"],
+            retention_ms=topic_properties["retention.ms"],
+            delete_retention_ms=topic_properties["delete.retention.ms"],
+            min_compaction_lag_ms=topic_properties["min.compaction.lag.ms"],
+            max_compaction_lag_ms=topic_properties["max.compaction.lag.ms"],
+        )
+        self.source_default_client().create_topic(topic)
+        source_topic = self.source_cluster_rpk.describe_topic_configs(topic.name)
+
+        def validate_topic_properties(properties_to_check: dict[str, tuple[str, str]]):
+            for key, val in topic_properties.items():
+                assert str(properties_to_check[key][0]) == str(val), (
+                    f"Expected {key} to be {str(val)}, got {str(properties_to_check[key][0])}.  Full config: {properties_to_check}"
+                )
+
+        validate_topic_properties(source_topic)
+
+        shadow_link = self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        target_topic = self.target_cluster_rpk.describe_topic_configs(topic.name)
+
+        validate_topic_properties(target_topic)
+
+        # Now do not include default properties and update the default ones and one non-default one
+        shadow_link = self.set_exclude_default(True, shadow_link)
+        modified_configs = {
+            "compression.type": "gzip",
+            "retention.bytes": 1024 * 1024,
+            "retention.ms": 1000 * 60,
+            "delete.retention.ms": 1000 * 60 * 10,
+            "min.compaction.lag.ms": 1000 * 60 * 20,
+            "max.compaction.lag.ms": 1000 * 60 * 30,
+            "max.message.bytes": 4096,
+        }
+        if source_cluster_spec == SecondaryClusterSpec(ServiceType.REDPANDA):
+            modified_configs["replication.factor"] = 1
+        self.source_default_client().alter_topic_configs(
+            "source-topic",
+            modified_configs,
+        )
+
+        self.target_cluster_service.wait_until(
+            lambda: self.target_cluster_rpk.describe_topic_configs(topic.name)[
+                "max.message.bytes"
+            ][0]
+            == "4096",
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} in target cluster did not get updated max.message.bytes",
+        )
+
+        topic_properties["max.message.bytes"] = 4096
+        target_topic = self.target_cluster_rpk.describe_topic_configs(topic.name)
+
+        validate_topic_properties(target_topic)
+
+        # Now add in "replication.factor" and see that it is changed
+        shadow_link.configurations.topic_metadata_sync_options.synced_shadow_topic_properties.extend(
+            ["retention.ms"]
+        )
+        update_mask: google.protobuf.field_mask_pb2.FieldMask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=[
+                "configurations.topic_metadata_sync_options.synced_shadow_topic_properties"
+            ]
+        )
+        shadow_link = self.update_link(shadow_link, update_mask)
+
+        self.target_cluster_service.wait_until(
+            lambda: self.target_cluster_rpk.describe_topic_configs(topic.name)[
+                "retention.ms"
+            ][0]
+            == "60000",
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} in target cluster did not get updated retention.ms",
+        )
+
+        topic_properties["retention.ms"] = 60000
+        target_topic = self.target_cluster_rpk.describe_topic_configs(topic.name)
+        validate_topic_properties(target_topic)
+
+    @cluster(num_nodes=6)
+    def test_disallowed_topic_properties(self):
+        """
+        This test verifies that the disallowed topic properties cannot be added to the
+        synced_shadow_topic_properties list
+        """
+        shadow_link = self.create_link("test-link")
+
+        for prop in DISALLOWED_SYNCED_TOPIC_PROPERTIES:
+            shadow_link = self.get_link("test-link")
+            shadow_link.configurations.topic_metadata_sync_options.synced_shadow_topic_properties.extend(
+                [prop]
+            )
+            update_mask: google.protobuf.field_mask_pb2.FieldMask = google.protobuf.field_mask_pb2.FieldMask(
+                paths=[
+                    "configurations.topic_metadata_sync_options.synced_shadow_topic_properties"
+                ]
+            )
+            with expect_exception(
+                ConnectError,
+                lambda e: e.code == ConnectErrorCode.INVALID_ARGUMENT,
+            ):
+                self.update_link(shadow_link, update_mask)
 
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):

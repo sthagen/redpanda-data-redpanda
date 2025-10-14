@@ -18,6 +18,7 @@
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
+#include "cloud_topics/level_one/metastore/retry.h"
 #include "cloud_topics/log_reader_config.h"
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
 #include "cloud_topics/reconciler/reconciliation_source.h"
@@ -208,7 +209,23 @@ ss::future<> reconciler::reconcile() {
     }
 
     // Begin by creating the set of objects to be built.
-    auto metadata_builder_res = co_await _metastore->object_builder();
+    retry_chain_node rtc = l1::make_default_metastore_rtc(_as);
+    auto metadata_builder_res = co_await l1::retry_metastore_op(
+      [this]() {
+          return _metastore->object_builder().then(
+            [this](
+              std::expected<
+                std::unique_ptr<l1::metastore::object_metadata_builder>,
+                l1::metastore::errc> result) {
+                if (
+                  !result.has_value()
+                  && result.error() == l1::metastore::errc::transport_error) {
+                    _probe.increment_metastore_retries();
+                }
+                return result;
+            });
+      },
+      rtc);
     if (!metadata_builder_res.has_value()) {
         vlog(
           lg.warn,
@@ -571,40 +588,6 @@ std::expected<void, reconcile_error> reconciler::add_object_metadata(
     return {};
 }
 
-ss::future<std::expected<l1::metastore::add_response, reconcile_error>>
-reconciler::add_objects_with_retry(
-  std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder,
-  l1::metastore::term_offset_map_t terms) {
-    static constexpr auto timeout = 5s;
-    static constexpr auto backoff = 100ms;
-
-    retry_chain_node rtc(_as, ss::lowres_clock::now() + timeout, backoff);
-    retry_chain_logger ctxlog(lg, rtc, "add_objects");
-    for (auto permit = rtc.retry(); permit.is_allowed; permit = rtc.retry()) {
-        auto metrics_duration_add_objects
-          = _probe.measure_metastore_add_objects_duration();
-        auto add_result = co_await _metastore->add_objects(
-          *meta_builder, terms);
-        metrics_duration_add_objects.reset();
-
-        if (add_result.has_value()) {
-            co_return std::move(add_result).value();
-        }
-
-        if (add_result.error() != l1::metastore::errc::transport_error) {
-            co_return std::unexpected(reconcile_error(
-              "Non-retryable error adding objects to the L1 metastore: {}",
-              add_result.error()));
-        }
-
-        _probe.increment_metastore_retries();
-        co_await ss::sleep_abortable(permit.delay, rtc.root_abort_source());
-    }
-
-    co_return std::unexpected(reconcile_error(
-      "ran out of retries attempt to add objects to L1 metastore"));
-}
-
 ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
   const chunked_vector<built_object_metadata>& objects,
   std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder) {
@@ -623,13 +606,37 @@ ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
         }
     }
 
-    auto add_objects_result = co_await add_objects_with_retry(
-      std::move(meta_builder), std::move(terms));
+    retry_chain_node rtc = l1::make_default_metastore_rtc(_as);
+    auto add_objects_result = co_await l1::retry_metastore_op(
+      [this, &meta_builder, &terms]() {
+          auto metrics_duration_add_objects
+            = _probe.measure_metastore_add_objects_duration();
+          return _metastore->add_objects(*meta_builder, terms)
+            .then(
+              [this,
+               metrics_duration_add_objects = std::move(
+                 metrics_duration_add_objects)](
+                std::expected<l1::metastore::add_response, l1::metastore::errc>
+                  result) mutable {
+                  metrics_duration_add_objects.reset();
+
+                  if (
+                    !result.has_value()
+                    && result.error() == l1::metastore::errc::transport_error) {
+                      _probe.increment_metastore_retries();
+                  }
+
+                  return result;
+              });
+      },
+      rtc);
+
     if (!add_objects_result.has_value()) {
         // TODO: The objects have been uploaded. The reconciler could
         //       attempt cleanup (or notify a cleanup subsystem).
-        co_return std::unexpected(add_objects_result.error().with_context(
-          "Failed to add objects to the L1 metastore"));
+        co_return std::unexpected(reconcile_error(
+          "Failed to add objects to the L1 metastore: {}",
+          add_objects_result.error()));
     }
 
     // Now update the LRO, taking into account any corrections from

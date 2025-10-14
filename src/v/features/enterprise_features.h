@@ -68,6 +68,7 @@ public:
     // | Cluster     | `enable_schema_id_validation`   | `compat`      |
     // | Cluster     | `iceberg_enabled`               | `true`        |
     // | Cluster     | `enable_shadow_linking`         | `true`        |
+    // | Cluster     | `cloud_topics_enabled`          | `true`        |
     // | Node        | `fips_mode`                     | `enabled`     |
     // | Node        | `fips_mode`                     | `permissive`  |
     // +-------------+---------------------------------+---------------+

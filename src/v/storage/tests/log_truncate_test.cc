@@ -341,6 +341,7 @@ TEST_F(
         ts,
         std::nullopt,
         model::offset::max(),
+        model::offset::max(),
         std::nullopt,
         std::nullopt,
         std::chrono::milliseconds{0},
@@ -514,6 +515,7 @@ TEST_F(storage_test_fixture, test_concurrent_prefix_truncate_and_gc) {
       ts,
       std::nullopt,
       model::offset::max(),
+      model::offset::max(),
       std::nullopt,
       std::nullopt,
       std::chrono::milliseconds{0},
@@ -564,7 +566,11 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
     // leaving room for further windowed compaction.
     ss::abort_source as;
     compaction::compaction_config compaction_cfg(
-      model::offset::max(), std::nullopt, std::nullopt, as);
+      model::offset::max(),
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      as);
     auto& disk_log = *dynamic_cast<disk_log_impl*>(log.get());
     disk_log.adjacent_merge_compact(disk_log.segments().copy(), compaction_cfg)
       .get();
@@ -584,6 +590,7 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
     housekeeping_config housekeeping_cfg(
       ts,
       std::nullopt,
+      model::offset::max(),
       model::offset::max(),
       std::nullopt,
       std::nullopt,

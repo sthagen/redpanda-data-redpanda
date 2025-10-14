@@ -9,6 +9,7 @@
 
 #include "cluster/rm_stm.h"
 
+#include "base/vassert.h"
 #include "bytes/iostream.h"
 #include "cluster/logger.h"
 #include "cluster/producer_state_manager.h"
@@ -25,6 +26,7 @@
 #include "model/record.h"
 #include "model/timestamp.h"
 #include "raft/persisted_stm.h"
+#include "raft/replicate.h"
 #include "raft/state_machine_base.h"
 #include "ssx/future-util.h"
 
@@ -61,8 +63,9 @@ ss::sstring abort_idx_name(model::offset first, model::offset last) {
     return fmt::format("abort.idx.{}.{}", first, last);
 }
 
-raft::replicate_options make_replicate_options() {
-    auto opts = raft::replicate_options(raft::consistency_level::quorum_ack);
+raft::replicate_options make_replicate_options(model::term_id synced_term) {
+    auto opts = raft::replicate_options(
+      raft::consistency_level::quorum_ack, synced_term);
     opts.set_force_flush();
     return opts;
 }
@@ -441,7 +444,7 @@ ss::future<checked<model::term_id, tx::errc>> rm_stm::do_begin_tx(
       pid, tx_seq, transaction_timeout_ms, tm);
 
     auto r = co_await _raft->replicate(
-      synced_term, std::move(batch), make_replicate_options());
+      std::move(batch), make_replicate_options(synced_term));
 
     if (!r) {
         vlog(
@@ -605,7 +608,7 @@ ss::future<tx::errc> rm_stm::do_commit_tx(
       pid, model::control_record_type::tx_commit);
 
     auto r = co_await _raft->replicate(
-      synced_term, std::move(batch), make_replicate_options());
+      std::move(batch), make_replicate_options(synced_term));
 
     if (!r) {
         vlog(
@@ -774,7 +777,7 @@ ss::future<tx::errc> rm_stm::do_abort_tx(
     auto batch = make_tx_control_batch(
       pid, model::control_record_type::tx_abort);
     auto r = co_await _raft->replicate(
-      synced_term, std::move(batch), make_replicate_options());
+      std::move(batch), make_replicate_options(synced_term));
 
     if (!r) {
         vlog(
@@ -853,7 +856,10 @@ ss::future<result<kafka_result>> rm_stm::do_replicate(
     auto holder = _gate.hold();
     auto unit = co_await _state_lock.hold_read_lock();
     if (bid.is_transactional) {
-        co_return co_await transactional_replicate(bid, std::move(batch));
+        // NOTE: transactional replicate doesn't respect the timeout value from
+        // the replicate_options. Only the expected term is taken into account.
+        co_return co_await transactional_replicate(
+          bid, std::move(batch), opts.expected_term);
     } else if (bid.is_idempotent()) {
         co_return co_await idempotent_replicate(
           bid, std::move(batch), opts, enqueued);
@@ -928,12 +934,12 @@ ss::future<tx::errc> rm_stm::mark_expired(model::producer_identity pid) {
 }
 
 ss::future<result<kafka_result>> rm_stm::transactional_replicate(
-  model::term_id synced_term,
+  model::term_id expected_term,
   producer_ptr producer,
   model::batch_identity bid,
   model::record_batch batch) {
     auto result = co_await do_transactional_replicate(
-      synced_term, producer, bid, std::move(batch));
+      expected_term, producer, bid, std::move(batch));
     if (!result) {
         vlog(
           _ctx_log.trace,
@@ -947,7 +953,7 @@ ss::future<result<kafka_result>> rm_stm::transactional_replicate(
             if (!barrier) {
                 co_return cluster::errc::not_leader;
             }
-        } else if (_raft->is_leader() && _raft->term() == synced_term) {
+        } else if (_raft->is_leader() && _raft->term() == expected_term) {
             co_await _raft->step_down(
               "Failed replication during transactional replicate.");
         }
@@ -1004,7 +1010,7 @@ ss::future<result<kafka_result>> rm_stm::do_transactional_replicate(
     req_ptr->mark_request_in_progress();
 
     auto r = co_await _raft->replicate(
-      synced_term, std::move(batch), make_replicate_options());
+      std::move(batch), make_replicate_options(synced_term));
     if (!r) {
         vlog(
           _ctx_log.warn,
@@ -1037,7 +1043,9 @@ ss::future<result<kafka_result>> rm_stm::do_transactional_replicate(
 }
 
 ss::future<result<kafka_result>> rm_stm::transactional_replicate(
-  model::batch_identity bid, model::record_batch batch) {
+  model::batch_identity bid,
+  model::record_batch batch,
+  std::optional<model::term_id> expected_term) {
     if (!check_tx_permitted()) {
         co_return cluster::errc::generic_tx_error;
     }
@@ -1048,22 +1056,23 @@ ss::future<result<kafka_result>> rm_stm::transactional_replicate(
           bid.pid);
         co_return cluster::errc::not_leader;
     }
-    auto synced_term = _insync_term;
+    if (!expected_term.has_value()) {
+        expected_term = _insync_term;
+    }
     auto result = maybe_create_producer(bid.pid);
     if (result.has_error()) {
         co_return result.error();
     }
     auto producer = result.value().first;
     co_return co_await producer->run_with_lock(
-      [&, synced_term](ssx::semaphore_units units) {
+      [&, expected_term](ssx::semaphore_units units) {
           return do_transactional_replicate(
-                   synced_term, producer, bid, std::move(batch))
+                   expected_term.value(), producer, bid, std::move(batch))
             .finally([units = std::move(units)] {});
       });
 }
 
 ss::future<result<kafka_result>> rm_stm::idempotent_replicate(
-  model::term_id synced_term,
   producer_ptr producer,
   model::batch_identity bid,
   model::record_batch batch,
@@ -1071,8 +1080,8 @@ ss::future<result<kafka_result>> rm_stm::idempotent_replicate(
   ss::lw_shared_ptr<available_promise<>> enqueued,
   ssx::semaphore_units units,
   producer_previously_known producer_known) {
+    vassert(opts.expected_term.has_value(), "expected term must be set");
     auto result = co_await do_idempotent_replicate(
-      synced_term,
       producer,
       bid,
       std::move(batch),
@@ -1105,7 +1114,9 @@ ss::future<result<kafka_result>> rm_stm::idempotent_replicate(
             // if the request enqueue failed, its important to step down
             // under units scope so that the next request in the pipeline
             // fails on sync.
-            if (_raft->is_leader() && _raft->term() == synced_term) {
+            if (
+              _raft->is_leader()
+              && _raft->term() == opts.expected_term.value()) {
                 co_await _raft->step_down(
                   "Failed replication during idempotent replicate.");
             }
@@ -1116,7 +1127,6 @@ ss::future<result<kafka_result>> rm_stm::idempotent_replicate(
 }
 
 ss::future<result<kafka_result>> rm_stm::do_idempotent_replicate(
-  model::term_id synced_term,
   producer_ptr producer,
   model::batch_identity bid,
   model::record_batch batch,
@@ -1124,6 +1134,7 @@ ss::future<result<kafka_result>> rm_stm::do_idempotent_replicate(
   ss::lw_shared_ptr<available_promise<>> enqueued,
   ssx::semaphore_units& units,
   producer_previously_known known_producer) {
+    vassert(opts.expected_term.has_value(), "expected term must be set");
     // Check if the producer bumped the epoch and reset accordingly.
     if (bid.pid.epoch > producer->id().epoch()) {
         producer->reset_with_new_epoch(bid.pid.epoch);
@@ -1143,10 +1154,10 @@ ss::future<result<kafka_result>> rm_stm::do_idempotent_replicate(
           "Accepting batch from unknown producer that likely got evicted: {}, "
           "term: {}",
           bid,
-          synced_term);
+          opts.expected_term.value());
     }
     auto request = producer->try_emplace_request(
-      bid, synced_term, skip_sequence_checks);
+      bid, opts.expected_term.value(), skip_sequence_checks);
     if (!request) {
         co_return request.error();
     }
@@ -1157,8 +1168,7 @@ ss::future<result<kafka_result>> rm_stm::do_idempotent_replicate(
     }
 
     req_ptr->mark_request_in_progress();
-    auto stages = _raft->replicate_in_stages(
-      synced_term, std::move(batch), opts);
+    auto stages = _raft->replicate_in_stages(std::move(batch), opts);
     auto req_enqueued = co_await ss::coroutine::as_future(
       std::move(stages.request_enqueued));
     if (req_enqueued.failed()) {
@@ -1204,7 +1214,9 @@ ss::future<result<kafka_result>> rm_stm::idempotent_replicate(
         // the safety check in replicate_in_stages sets it automatically
         co_return cluster::errc::not_leader;
     }
-    auto synced_term = _insync_term;
+    if (!opts.expected_term.has_value()) {
+        opts.expected_term = _insync_term;
+    }
     auto result = maybe_create_producer(bid.pid);
     if (result.has_error()) {
         co_return result.error();
@@ -1213,7 +1225,6 @@ ss::future<result<kafka_result>> rm_stm::idempotent_replicate(
     co_return co_await producer->run_with_lock(
       [&, known_producer](ssx::semaphore_units units) {
           return idempotent_replicate(
-            synced_term,
             producer,
             bid,
             std::move(batch),
@@ -1234,7 +1245,11 @@ ss::future<result<kafka_result>> rm_stm::replicate_msg(
         co_return cluster::errc::not_leader;
     }
 
-    auto ss = _raft->replicate_in_stages(_insync_term, std::move(batch), opts);
+    if (!opts.expected_term.has_value()) {
+        opts.expected_term = _insync_term;
+    }
+
+    auto ss = _raft->replicate_in_stages(std::move(batch), opts);
     co_await std::move(ss.request_enqueued);
     enqueued->set_value();
     auto r = co_await std::move(ss.replicate_finished);
@@ -1499,7 +1514,7 @@ ss::future<tx::errc> rm_stm::do_try_abort_old_tx(producer_ptr producer) {
                 auto batch = make_tx_control_batch(
                   pid, model::control_record_type::tx_commit);
                 auto cr = co_await _raft->replicate(
-                  synced_term, std::move(batch), make_replicate_options());
+                  std::move(batch), make_replicate_options(synced_term));
                 if (!cr) {
                     vlog(
                       _ctx_log.warn,
@@ -1538,7 +1553,7 @@ ss::future<tx::errc> rm_stm::do_try_abort_old_tx(producer_ptr producer) {
                 auto batch = make_tx_control_batch(
                   pid, model::control_record_type::tx_abort);
                 auto cr = co_await _raft->replicate(
-                  synced_term, std::move(batch), make_replicate_options());
+                  std::move(batch), make_replicate_options(synced_term));
                 if (!cr) {
                     vlog(
                       _ctx_log.warn,
@@ -1591,7 +1606,7 @@ ss::future<tx::errc> rm_stm::do_try_abort_old_tx(producer_ptr producer) {
           pid, model::control_record_type::tx_abort);
 
         auto cr = co_await _raft->replicate(
-          _insync_term, std::move(batch), make_replicate_options());
+          std::move(batch), make_replicate_options(_insync_term));
 
         if (!cr) {
             vlog(

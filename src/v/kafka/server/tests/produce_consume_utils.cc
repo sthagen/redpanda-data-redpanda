@@ -368,34 +368,4 @@ ss::future<kafka::offset> kafka_produce_transport::produce_to_partition(
       ntp.tp.topic, ntp.tp.partition, std::move(batch));
 }
 
-ss::future<kafka::offset> kafka_consume_transport::timequery(
-  model::topic_partition tp, model::timestamp time) {
-    kafka::list_offsets_request req;
-    req.data.isolation_level = std::to_underlying(
-      model::isolation_level::read_uncommitted);
-    req.data.topics.push_back(
-      kafka::list_offset_topic{
-        .name = tp.topic,
-        .partitions = {{
-          .partition_index = tp.partition,
-          .current_leader_epoch = kafka::invalid_leader_epoch,
-          .timestamp = time,
-        }},
-      });
-    auto api_resp = co_await _transport.dispatch(
-      std::move(req), kafka::api_version(5));
-    for (const auto& topic : api_resp.data.topics) {
-        if (topic.name != tp.topic) {
-            continue;
-        }
-        for (const auto& partition : topic.partitions) {
-            if (partition.partition_index != tp.partition) {
-                continue;
-            }
-            co_return model::offset_cast(partition.offset);
-        }
-    }
-    throw std::runtime_error(fmt::format("list offsets result missing {}", tp));
-}
-
 } // namespace tests

@@ -42,11 +42,11 @@ func NewWriteFileCmd(fs afero.Fs, path string, content string) Command {
 func (c *writeFileCommand) Execute() error {
 	zap.L().Sugar().Debugf("Writing '%s' to file '%s'", c.content, c.path)
 	mode := c.mode
-	info, err := c.fs.Stat(c.path)
-	if err != nil {
+	info, statErr := c.fs.Stat(c.path)
+	if statErr != nil {
 		// Ignore the error if the file doesn't exist
-		if !os.IsNotExist(err) {
-			return err
+		if !os.IsNotExist(statErr) {
+			return statErr
 		}
 	} else {
 		mode = info.Mode()
@@ -54,6 +54,12 @@ func (c *writeFileCommand) Execute() error {
 	file, err := c.fs.OpenFile(c.path, os.O_CREATE|os.O_TRUNC|os.O_RDWR|os.O_SYNC, mode)
 	if err != nil {
 		return err
+	}
+	if statErr != nil && os.IsNotExist(statErr) {
+		// If the file didn't exist before, set its mode to prevent against too defensive umask
+		if err = c.fs.Chmod(c.path, mode); err != nil {
+			return err
+		}
 	}
 	defer file.Close()
 	n, err := file.WriteString(c.content)

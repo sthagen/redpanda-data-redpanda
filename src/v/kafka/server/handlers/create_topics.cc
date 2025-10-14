@@ -102,7 +102,7 @@ bool is_supported(std::string_view name) {
      * enabled, the system should behave as if the feature does not exist.
      */
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         if (name == topic_property_cloud_topic_enabled) {
             return true;
         }

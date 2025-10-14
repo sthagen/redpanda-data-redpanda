@@ -868,7 +868,7 @@ config_response_container_t make_topic_configs(
           });
     }
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+    if (config::shard_local_cfg().cloud_topics_enabled()) {
         if (config_property_requested(
               config_keys, topic_property_cloud_topic_enabled)) {
             add_topic_config<bool>(

@@ -15,6 +15,7 @@
 #include "base/format_to.h"
 #include "cluster_link/errc.h"
 #include "container/chunked_hash_map.h"
+#include "kafka/protocol/topic_properties.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "serde/rw/enum.h"
@@ -42,6 +43,34 @@ using uuid_t = named_type<uuid_t, struct uuid_tag>;
 using name_t = named_type<ss::sstring, struct name_tag>;
 /// Type to indicate if the task is enabled or not
 using enabled_t = ss::bool_class<struct enabled_tag>;
+
+inline auto required_topic_properties_to_sync = std::to_array<std::string_view>(
+  {
+    kafka::topic_property_max_message_bytes,
+    kafka::topic_property_cleanup_policy,
+    kafka::topic_property_timestamp_type,
+  });
+
+/// List of topic properties that are synced by default
+inline auto default_synced_topic_properties = std::to_array<std::string_view>({
+  kafka::topic_property_compression,
+  kafka::topic_property_retention_bytes,
+  kafka::topic_property_retention_duration,
+  kafka::topic_property_replication_factor,
+  kafka::topic_property_delete_retention_ms,
+  kafka::topic_property_min_compaction_lag_ms,
+  kafka::topic_property_max_compaction_lag_ms,
+});
+
+/// List of topic properties that are not permitted to be synced
+inline auto disallowed_topic_properties = std::to_array<std::string_view>({
+  kafka::topic_property_read_replica,
+  kafka::topic_property_recovery,
+  kafka::topic_property_remote_allow_gaps,
+  kafka::topic_property_mpx_virtual_cluster_id,
+  kafka::topic_property_leaders_preference,
+  kafka::topic_property_cloud_topic_enabled,
+});
 
 /**
  *
@@ -405,6 +434,10 @@ struct topic_metadata_mirroring_config
       = absl::flat_hash_set<ss::sstring, sstring_hash, sstring_eq>;
     /// List of topic properties to mirror
     properties_set topic_properties_to_mirror;
+    /// If set, do not include the default properties
+    bool exclude_default{false};
+
+    properties_set get_topic_properties_to_mirror() const;
 
     ss::lowres_clock::duration get_task_interval() const {
         return task_interval.value_or(task_interval_default);
@@ -420,7 +453,8 @@ struct topic_metadata_mirroring_config
           is_enabled,
           task_interval,
           topic_name_filters,
-          topic_properties_to_mirror);
+          topic_properties_to_mirror,
+          exclude_default);
     }
 
     topic_metadata_mirroring_config copy() const;

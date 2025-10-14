@@ -25,7 +25,7 @@ using model::filter_type;
 using model::resource_name_filter_pattern;
 
 namespace {
-model::metadata get_default_metadata() {
+model::metadata get_default_metadata(bool exclude_default_properties = false) {
     model::link_state link_state;
     model::metadata metadata{
       .name = model::name_t("test_link"),
@@ -40,6 +40,8 @@ model::metadata get_default_metadata() {
           .pattern_type = filter_pattern_type::literal,
           .filter = filter_type::include,
           .pattern = resource_name_filter_pattern::wildcard});
+    metadata.configuration.topic_metadata_mirroring_cfg.exclude_default
+      = exclude_default_properties;
     return metadata;
 }
 } // namespace
@@ -100,7 +102,7 @@ TEST_F_CORO(source_topic_syncer_test, create_auto_topic_sensor_task) {
 }
 
 TEST_F_CORO(source_topic_syncer_test, select_all_filter) {
-    co_await fixture()->upsert_link(get_default_metadata());
+    co_await fixture()->upsert_link(get_default_metadata(true));
 
     auto report = co_await fixture()->await_status_report(
       5s, 100ms, [](const model::cluster_link_task_status_report& report) {

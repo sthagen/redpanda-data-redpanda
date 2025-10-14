@@ -28,12 +28,10 @@ replicate_batcher::item::item(
   size_t record_count,
   chunked_vector<model::record_batch> batches,
   ssx::semaphore_units u,
-  std::optional<model::term_id> expected_term,
   replicate_options opts)
   : _record_count(record_count)
   , _data(std::move(batches))
   , _units(std::move(u))
-  , _expected_term(expected_term)
   , _replicate_opts(opts) {
     _timeout_timer.set_callback([this] { expire_with_timeout(); });
     if (_replicate_opts.timeout) {
@@ -89,9 +87,7 @@ replicate_batcher::replicate_batcher(consensus* ptr, size_t cache_size)
   , _max_batch_size(cache_size) {}
 
 replicate_stages replicate_batcher::replicate(
-  std::optional<model::term_id> expected_term,
-  chunked_vector<model::record_batch> batches,
-  replicate_options opts) {
+  chunked_vector<model::record_batch> batches, replicate_options opts) {
     if (opts.as) [[unlikely]] {
         if (opts.as->get().abort_requested()) {
             return replicate_stages{
@@ -104,20 +100,19 @@ replicate_stages replicate_batcher::replicate(
     auto enqueued_f = enqueued.get_future();
 
     auto f = cache_and_wait_for_result(
-      std::move(enqueued), expected_term, std::move(batches), opts);
+      std::move(enqueued), std::move(batches), opts);
     return {std::move(enqueued_f), std::move(f)};
 }
 
 ss::future<result<replicate_result>>
 replicate_batcher::cache_and_wait_for_result(
   ss::promise<> enqueued,
-  std::optional<model::term_id> expected_term,
   chunked_vector<model::record_batch> r,
   replicate_options opts) {
     item_ptr item;
     try {
         auto holder = _bg.hold();
-        item = co_await do_cache(expected_term, std::move(r), opts);
+        item = co_await do_cache(std::move(r), opts);
 
         // now request is already enqueued, we can release first
         // stage future
@@ -175,9 +170,7 @@ ss::future<> replicate_batcher::stop() {
 }
 
 ss::future<replicate_batcher::item_ptr> replicate_batcher::do_cache(
-  std::optional<model::term_id> expected_term,
-  chunked_vector<model::record_batch> batches,
-  replicate_options opts) {
+  chunked_vector<model::record_batch> batches, replicate_options opts) {
     size_t bytes = std::accumulate(
       batches.cbegin(),
       batches.cend(),
@@ -186,12 +179,11 @@ ss::future<replicate_batcher::item_ptr> replicate_batcher::do_cache(
           return sum + b.size_bytes();
       });
     co_return co_await do_cache_with_backpressure(
-      expected_term, std::move(batches), bytes, opts);
+      std::move(batches), bytes, opts);
 }
 
 ss::future<replicate_batcher::item_ptr>
 replicate_batcher::do_cache_with_backpressure(
-  std::optional<model::term_id> expected_term,
   chunked_vector<model::record_batch> batches,
   size_t bytes,
   replicate_options opts) {
@@ -223,7 +215,7 @@ replicate_batcher::do_cache_with_backpressure(
         record_count += b.record_count();
     }
     auto i = ss::make_lw_shared<item>(
-      record_count, std::move(batches), std::move(u), expected_term, opts);
+      record_count, std::move(batches), std::move(u), opts);
 
     _item_cache.emplace_back(i);
     co_return i;

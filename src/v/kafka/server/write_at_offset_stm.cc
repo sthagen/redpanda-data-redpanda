@@ -280,9 +280,12 @@ raft::replicate_stages write_at_offset_stm::try_replicate_in_stages(
   std::optional<std::reference_wrapper<ss::abort_source>> as) {
     try {
         return _raft->replicate_in_stages(
-          _insync_term,
           std::move(batches),
-          raft::replicate_options(raft::consistency_level::quorum_ack, as));
+          raft::replicate_options(
+            raft::consistency_level::quorum_ack,
+            /*expected_term=*/_insync_term,
+            /*timeout=*/std::nullopt,
+            as));
     } catch (...) {
         vlog(
           _log.warn,

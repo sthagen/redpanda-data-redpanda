@@ -103,34 +103,13 @@ ss::future<> ctp_stm::prefix_truncate_below_lro() {
         }
         auto lro = _state.get_max_collectible_offset();
         auto snapshot_index = _raft->last_snapshot_index();
-        if (snapshot_index >= lro) {
-            vlog(
-              _log.trace,
-              "Last snapshot index {} past LRO {}",
-              _raft->last_snapshot_index(),
-              _state.get_max_collectible_offset());
-            continue;
-        }
-        auto truncate_point = _raft->log()->index_lower_bound(lro);
-        if (!truncate_point) {
-            vlog(
-              _log.warn,
-              "unable to find index lower bound for {}",
-              truncate_point);
-            continue;
-        }
-        vassert(
-          truncate_point <= lro,
-          "Calculated boundary {} must be <= LRO {}",
-          truncate_point,
-          lro);
         vlog(
-          _log.debug,
-          "Calulcated truncation point {} for LRO {}",
-          *truncate_point,
-          _state.get_last_reconciled_log_offset());
+          _log.trace,
+          "Attempting to snapshot ctp at {}, last snapshot at {}",
+          _state.get_max_collectible_offset(),
+          _raft->last_snapshot_index());
         try {
-            co_await do_write_raft_snapshot(*truncate_point);
+            co_await _raft->snapshot_and_truncate_log(lro);
         } catch (...) {
             auto ex = std::current_exception();
             vlogl(
@@ -148,63 +127,6 @@ ss::future<> ctp_stm::prefix_truncate_below_lro() {
             co_await ss::sleep_abortable(min_truncate_period, _as);
         }
     }
-}
-
-ss::future<> ctp_stm::do_write_raft_snapshot(model::offset truncation_point) {
-    vlog(
-      _log.trace,
-      "requested to write raft snapshot (prefix_truncate) at {}",
-      truncation_point);
-    co_await _raft->visible_offset_monitor().wait(
-      truncation_point, model::no_timeout, _as);
-    co_await _raft->refresh_commit_index();
-    co_await _raft->log()->stm_manager()->ensure_snapshot_exists(
-      truncation_point);
-    const auto max_removable_local_log_offset
-      = _raft->log()->stm_manager()->max_removable_local_log_offset();
-    if (truncation_point > max_removable_local_log_offset) {
-        truncation_point = max_removable_local_log_offset;
-        if (truncation_point <= _raft->last_snapshot_index()) {
-            /// Cannot truncate, have already reached maximum allowable
-            co_return;
-        }
-        vlog(
-          _log.trace,
-          "Can only evict up to offset: {}, asked to evict to: {} ",
-          max_removable_local_log_offset,
-          truncation_point);
-    }
-    if (truncation_point <= _raft->last_snapshot_index()) {
-        vlog(
-          _log.trace,
-          "Skipping writing snapshot as Raft already progressed with the new "
-          "snapshot. Current raft snapshot index: {}, requested truncation "
-          "point: {}",
-          _raft->last_snapshot_index(),
-          truncation_point);
-        co_return;
-    }
-    vlog(
-      _log.debug,
-      "Requesting raft snapshot with final offset: {}",
-      truncation_point);
-    auto snapshot_result = co_await _raft->stm_manager()->take_snapshot(
-      truncation_point);
-    // we need to check snapshot index again as it may already progressed after
-    // snapshot is taken by stm_manager
-    if (truncation_point <= _raft->last_snapshot_index()) {
-        vlog(
-          _log.trace,
-          "Skipping writing snapshot as Raft already progressed with the new "
-          "snapshot. Current raft snapshot index: {}, requested truncation "
-          "point: {}",
-          _raft->last_snapshot_index(),
-          truncation_point);
-        co_return;
-    }
-    co_await _raft->write_snapshot(
-      raft::write_snapshot_cfg(
-        snapshot_result.last_included_offset, std::move(snapshot_result.data)));
 }
 
 const model::ntp& ctp_stm::ntp() const noexcept { return _raft->ntp(); }

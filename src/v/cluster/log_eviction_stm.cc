@@ -73,8 +73,9 @@ ss::future<> log_eviction_stm::handle_log_eviction_events() {
                 // to try again soon even if no other notifications come in.
                 co_await _has_pending_truncation.wait(retry_backoff_time);
             }
-        } catch (const ss::condition_variable_timed_out&) {
+        } catch (const ss::condition_variable_timed_out& ex) {
             /// There is still more data to truncate
+            std::ignore = ex;
         } catch (const ss::abort_requested_exception&) {
             break;
         } catch (const ss::broken_condition_variable&) {
@@ -87,40 +88,17 @@ ss::future<> log_eviction_stm::handle_log_eviction_events() {
 
         auto evict_until = std::max(
           _delete_records_eviction_offset, _storage_eviction_offset);
-        if (_raft->last_snapshot_index() >= evict_until) {
-            previous_iter_truncated_everything = true;
-            continue;
-        }
-        auto truncation_point = _raft->log()->index_lower_bound(evict_until);
-        if (!truncation_point) {
-            vlog(
-              _log.warn,
-              "unable to find index lower bound for {}",
-              evict_until);
-            previous_iter_truncated_everything = false;
-            continue;
-        }
-
-        vassert(
-          truncation_point <= evict_until,
-          "Calculated boundary {} must be <= eviction offset {} ",
-          truncation_point,
-          evict_until);
         try {
-            co_await do_write_raft_snapshot(*truncation_point);
-            if (_raft->last_snapshot_index() < truncation_point) {
-                previous_iter_truncated_everything = false;
-                continue;
-            }
-            // NOTE: the offsets changed such that the truncation point may
-            // have changed, it will be caught in the next iteration, since we
-            // would have been signaled.
-            previous_iter_truncated_everything = true;
-        } catch (const ss::abort_requested_exception&) {
+            previous_iter_truncated_everything
+              = co_await _raft->snapshot_and_truncate_log(evict_until);
+        } catch (const ss::abort_requested_exception& ex) {
             // ignore abort requested exception, shutting down
-        } catch (const ss::gate_closed_exception&) {
+            std::ignore = ex;
+        } catch (const ss::gate_closed_exception& ex) {
             // ignore gate closed exception, shutting down
-        } catch (const ss::broken_semaphore&) {
+            std::ignore = ex;
+        } catch (const ss::broken_semaphore& ex) {
+            std::ignore = ex;
         } catch (const std::exception& e) {
             vlog(
               _log.error,
@@ -154,67 +132,6 @@ ss::future<> log_eviction_stm::monitor_log_eviction() {
             vlog(_log.info, "Error handling log eviction - {}", e);
         }
     }
-}
-
-ss::future<>
-log_eviction_stm::do_write_raft_snapshot(model::offset truncation_point) {
-    vlog(
-      _log.trace,
-      "requested to write raft snapshot (prefix_truncate) at {}",
-      truncation_point);
-    if (truncation_point <= _raft->last_snapshot_index()) {
-        co_return;
-    }
-    co_await _raft->visible_offset_monitor().wait(
-      truncation_point, model::no_timeout, _as);
-    co_await _raft->refresh_commit_index();
-    co_await _raft->log()->stm_manager()->ensure_snapshot_exists(
-      truncation_point);
-    const auto max_removable_local_log_offset
-      = _raft->log()->stm_manager()->max_removable_local_log_offset();
-    if (truncation_point > max_removable_local_log_offset) {
-        truncation_point = max_removable_local_log_offset;
-        if (truncation_point <= _raft->last_snapshot_index()) {
-            /// Cannot truncate, have already reached maximum allowable
-            co_return;
-        }
-        vlog(
-          _log.trace,
-          "Can only evict up to offset: {}, asked to evict to: {} ",
-          max_removable_local_log_offset,
-          truncation_point);
-    }
-    if (truncation_point <= _raft->last_snapshot_index()) {
-        vlog(
-          _log.trace,
-          "Skipping writing snapshot as Raft already progressed with the new "
-          "snapshot. Current raft snapshot index: {}, requested truncation "
-          "point: {}",
-          _raft->last_snapshot_index(),
-          truncation_point);
-        co_return;
-    }
-    vlog(
-      _log.debug,
-      "Requesting raft snapshot with final offset: {}",
-      truncation_point);
-    auto snapshot_result = co_await _raft->stm_manager()->take_snapshot(
-      truncation_point);
-    // we need to check snapshot index again as it may already progressed after
-    // snapshot is taken by stm_manager
-    if (truncation_point <= _raft->last_snapshot_index()) {
-        vlog(
-          _log.trace,
-          "Skipping writing snapshot as Raft already progressed with the new "
-          "snapshot. Current raft snapshot index: {}, requested truncation "
-          "point: {}",
-          _raft->last_snapshot_index(),
-          truncation_point);
-        co_return;
-    }
-    co_await _raft->write_snapshot(
-      raft::write_snapshot_cfg(
-        snapshot_result.last_included_offset, std::move(snapshot_result.data)));
 }
 
 kafka::offset log_eviction_stm::kafka_start_offset_override() {
@@ -327,9 +244,10 @@ ss::future<log_eviction_stm::offset_result> log_eviction_stm::replicate_command(
   model::record_batch batch,
   ss::lowres_clock::time_point deadline,
   std::optional<std::reference_wrapper<ss::abort_source>> as) {
-    auto opts = raft::replicate_options(raft::consistency_level::quorum_ack);
+    auto opts = raft::replicate_options(
+      raft::consistency_level::quorum_ack, _raft->term());
     opts.set_force_flush();
-    auto fut = _raft->replicate(_raft->term(), std::move(batch), opts);
+    auto fut = _raft->replicate(std::move(batch), opts);
 
     /// Execute the replicate command bound by timeout and cancellable via
     /// abort_source mechanism

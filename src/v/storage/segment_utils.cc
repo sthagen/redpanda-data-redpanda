@@ -1383,7 +1383,9 @@ bool is_past_tombstone_delete_horizon(
   ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
     if (
       seg->has_clean_compact_timestamp()
-      && cfg.tombstone_retention_ms.has_value()) {
+      && cfg.tombstone_retention_ms.has_value()
+      && seg->offsets().get_stable_offset()
+           <= cfg.max_tombstone_remove_offset) {
         const auto now = model::to_time_point(model::timestamp::now());
         return (now
                 - model::to_time_point(

@@ -824,57 +824,23 @@ consensus::chain_stages(replicate_stages stages) {
 
 ss::future<result<replicate_result>> consensus::replicate(
   chunked_vector<model::record_batch> batches, replicate_options opts) {
-    return chain_stages(do_replicate({}, std::move(batches), opts));
+    return chain_stages(do_replicate(std::move(batches), opts));
 }
 ss::future<result<replicate_result>>
 consensus::replicate(model::record_batch batch, replicate_options opts) {
     return chain_stages(do_replicate(
-      {}, chunked_vector<model::record_batch>::single(std::move(batch)), opts));
-}
-
-ss::future<result<replicate_result>> consensus::replicate(
-  model::term_id expected_term,
-  model::record_batch batch,
-  replicate_options opts) {
-    return chain_stages(do_replicate(
-      expected_term,
-      chunked_vector<model::record_batch>::single(std::move(batch)),
-      opts));
-}
-
-ss::future<result<replicate_result>> consensus::replicate(
-  model::term_id expected_term,
-  chunked_vector<model::record_batch> batches,
-  replicate_options opts) {
-    return chain_stages(do_replicate(expected_term, std::move(batches), opts));
+      chunked_vector<model::record_batch>::single(std::move(batch)), opts));
 }
 
 replicate_stages consensus::replicate_in_stages(
   chunked_vector<model::record_batch> batches, replicate_options opts) {
-    return do_replicate({}, std::move(batches), opts);
+    return do_replicate(std::move(batches), opts);
 }
 
 replicate_stages consensus::replicate_in_stages(
   model::record_batch batch, replicate_options opts) {
     return do_replicate(
-      {}, chunked_vector<model::record_batch>::single(std::move(batch)), opts);
-}
-
-replicate_stages consensus::replicate_in_stages(
-  model::term_id expected_term,
-  chunked_vector<model::record_batch> batches,
-  replicate_options opts) {
-    return do_replicate(expected_term, std::move(batches), opts);
-}
-
-replicate_stages consensus::replicate_in_stages(
-  model::term_id expected_term,
-  model::record_batch batch,
-  replicate_options opts) {
-    return do_replicate(
-      expected_term,
-      chunked_vector<model::record_batch>::single(std::move(batch)),
-      opts);
+      chunked_vector<model::record_batch>::single(std::move(batch)), opts);
 }
 
 replicate_stages
@@ -890,9 +856,7 @@ wrap_stages_with_gate(ss::gate& gate, replicate_stages stages) {
       }));
 }
 replicate_stages consensus::do_replicate(
-  std::optional<model::term_id> expected_term,
-  chunked_vector<model::record_batch> batches,
-  replicate_options opts) {
+  chunked_vector<model::record_batch> batches, replicate_options opts) {
     // if gate is closed return fast, after this check we are certain that
     // `ss::with_gate` will succeed
     if (unlikely(_bg.is_closed())) {
@@ -921,7 +885,7 @@ replicate_stages consensus::do_replicate(
     }
 
     return wrap_stages_with_gate(
-      _bg, _batcher.replicate(expected_term, std::move(batches), opts));
+      _bg, _batcher.replicate(std::move(batches), opts));
 }
 
 ss::future<model::record_batch_reader>
@@ -4380,6 +4344,88 @@ consensus::do_remake_learner_state(remake_learner_state_request req) {
     }
 
     co_return reply;
+}
+
+ss::future<bool>
+consensus::snapshot_and_truncate_log(model::offset eviction_point) {
+    if (_last_snapshot_index >= eviction_point) {
+        co_return true;
+    }
+    auto truncation_point = _log->index_lower_bound(eviction_point);
+    if (!truncation_point) {
+        vlog(
+          _ctxlog.warn,
+          "unable to find index lower bound for {}",
+          eviction_point);
+        co_return false;
+    }
+    vassert(
+      truncation_point <= eviction_point,
+      "Calculated boundary {} must be <= eviction offset {} ",
+      truncation_point,
+      eviction_point);
+    co_await do_snapshot_and_truncate_log(*truncation_point);
+    co_return _last_snapshot_index >= truncation_point;
+}
+
+ss::future<>
+consensus::do_snapshot_and_truncate_log(model::offset truncation_point) {
+    vlog(
+      _ctxlog.trace,
+      "requested to write raft snapshot (prefix_truncate) at {}",
+      truncation_point);
+    if (truncation_point <= _last_snapshot_index) {
+        co_return;
+    }
+    co_await _consumable_offset_monitor.wait(
+      truncation_point, model::no_timeout, _as);
+    co_await refresh_commit_index();
+    co_await _log->stm_manager()->ensure_snapshot_exists(truncation_point);
+    const auto max_removable_local_log_offset
+      = _log->stm_manager()->max_removable_local_log_offset();
+    if (truncation_point > max_removable_local_log_offset) {
+        truncation_point = max_removable_local_log_offset;
+        if (truncation_point <= _last_snapshot_index) {
+            /// Cannot truncate, have already reached maximum allowable
+            co_return;
+        }
+        vlog(
+          _ctxlog.trace,
+          "Can only evict up to offset: {}, asked to evict to: {} ",
+          max_removable_local_log_offset,
+          truncation_point);
+    }
+    if (truncation_point <= _last_snapshot_index) {
+        vlog(
+          _ctxlog.trace,
+          "Skipping writing snapshot as Raft already progressed with the new "
+          "snapshot. Current raft snapshot index: {}, requested truncation "
+          "point: {}",
+          _last_snapshot_index,
+          truncation_point);
+        co_return;
+    }
+    vlog(
+      _ctxlog.debug,
+      "Requesting raft snapshot with final offset: {}",
+      truncation_point);
+    auto snapshot_result = co_await _stm_manager->take_snapshot(
+      truncation_point);
+    // we need to check snapshot index again as it may already progressed after
+    // snapshot is taken by stm_manager
+    if (truncation_point <= _last_snapshot_index) {
+        vlog(
+          _ctxlog.trace,
+          "Skipping writing snapshot as Raft already progressed with the new "
+          "snapshot. Current raft snapshot index: {}, requested truncation "
+          "point: {}",
+          _last_snapshot_index,
+          truncation_point);
+        co_return;
+    }
+    co_await write_snapshot(
+      raft::write_snapshot_cfg(
+        snapshot_result.last_included_offset, std::move(snapshot_result.data)));
 }
 
 } // namespace raft
