@@ -97,8 +97,7 @@ struct ot_state {
     std::deque<int64_t> gap_length;
 };
 
-/// Consumer that builds the map of all non-data
-/// batches!
+/// Consumer that builds the map of all non-data batches!
 struct ot_state_consumer {
     ss::future<ss::stop_iteration> operator()(model::record_batch rb) {
         static const auto translation_batches

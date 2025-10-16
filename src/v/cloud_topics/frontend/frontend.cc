@@ -65,26 +65,28 @@ static constexpr auto L0_replicate_default_timeout = 1s;
 
 // Utility function to convert array of extent_meta structs to
 // array of placeholder batches.
-static placeholder_batches_with_size convert_to_placeholders(
+static ss::future<placeholder_batches_with_size> convert_to_placeholders(
   const chunked_vector<cloud_topics::extent_meta>& extents,
   const chunked_vector<model::record_batch_header>& headers) {
     placeholder_batches_with_size result;
     result.batches.reserve(extents.size());
-    for (const auto& [extent, header] : std::views::zip(extents, headers)) {
-        vassert(
-          extent.base_offset() <= extent.last_offset(),
-          "Extent base offset {} is greater than committed offset {}",
-          extent.base_offset(),
-          extent.last_offset());
+    co_await ssx::async_for_each(
+      std::views::zip(extents, headers), [&result](const auto& pair) {
+          const auto& [extent, header] = pair;
+          vassert(
+            extent.base_offset() <= extent.last_offset(),
+            "Extent base offset {} is greater than committed offset {}",
+            extent.base_offset(),
+            extent.last_offset());
 
-        // Every extent maps to a single batch produced by the client
-        // and therefore we need to create a placeholder batch for it.
-        auto batch = encode_placeholder_batch(header, extent);
+          // Every extent maps to a single batch produced by the client
+          // and therefore we need to create a placeholder batch for it.
+          auto batch = encode_placeholder_batch(header, extent);
 
-        result.batches.push_back(std::move(batch));
-        result.extent_size += extent.byte_range_size;
-    }
-    return result;
+          result.batches.push_back(std::move(batch));
+          result.extent_size += extent.byte_range_size;
+      });
+    co_return result;
 }
 
 /// Get original record batch and prepare it for the record batch cache
@@ -568,7 +570,7 @@ ss::future<> bg_upload_and_replicate(
 
     chunked_vector<model::record_batch_header> headers;
     headers.push_back(header);
-    auto placeholders = convert_to_placeholders(
+    auto placeholders = co_await convert_to_placeholders(
       res.value(), std::move(headers));
 
     vassert(
@@ -690,7 +692,7 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
           kafka::make_error_code(kafka::error_code::request_timed_out));
     }
 
-    auto placeholders = convert_to_placeholders(res.value(), headers);
+    auto placeholders = co_await convert_to_placeholders(res.value(), headers);
 
     chunked_vector<model::record_batch> placeholder_batches;
     for (auto&& batch : placeholders.batches) {

@@ -273,6 +273,8 @@ public:
       earliest_removable_timestamp(model::offset) const = 0;
 
     virtual std::optional<model::offset> max_removed_offset() const = 0;
+    virtual model::offset cleanly_compacted_prefix_offset() const = 0;
+
     virtual bool needs_compaction() const = 0;
 
 private:

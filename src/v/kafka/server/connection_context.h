@@ -14,6 +14,7 @@
 #include "base/seastarx.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
+#include "kafka/protocol/types.h"
 #include "kafka/server/fwd.h"
 #include "kafka/server/handlers/details/security.h"
 #include "kafka/server/handlers/handler_probe.h"
@@ -145,7 +146,27 @@ struct virtual_connection_id {
     operator<<(std::ostream& o, const virtual_connection_id& id);
 };
 
+class last_value {
+public:
+    void update(std::optional<std::string_view> new_value);
+    template<typename Tag>
+    void update(const named_type<ss::sstring, Tag>& new_value) {
+        update(new_value());
+    }
+    template<typename Tag>
+    void update(const std::optional<named_type<ss::sstring, Tag>>& new_value) {
+        if (new_value) {
+            update((*new_value)());
+        }
+    }
+    const std::optional<ss::sstring>& get() const { return value; }
+
+private:
+    std::optional<ss::sstring> value{std::nullopt};
+};
+
 struct connection_attributes {
+    using sys_clock = ss::lowres_system_clock;
     struct request_state {
         constexpr static auto bucket_count = size_t{4};
         constexpr static auto window_ns = std::chrono::minutes(1)
@@ -160,10 +181,54 @@ struct connection_attributes {
         }
     };
 
+    class in_flight_request_tracker {
+    public:
+        using clock = ss::lowres_clock;
+        constexpr static auto max_count = size_t{5};
+
+        explicit in_flight_request_tracker(
+          std::optional<clock::time_point> idle_since = clock::now())
+          : _idle_since(idle_since) {}
+
+        void record_begin_request(api_key key);
+        void record_end_request();
+
+        proto::admin::in_flight_requests to_proto(clock::time_point now) const;
+        clock::duration get_idle_duration(clock::time_point now) const {
+            return _idle_since ? (now - *_idle_since) : clock::duration::zero();
+        }
+
+    private:
+        struct in_flight_request {
+            api_key key;
+            clock::time_point recv_time;
+        };
+        using queue_t = std::deque<in_flight_request>;
+
+        queue_t _in_flight_request_samples{};
+        size_t _total_in_flight_count{0};
+        std::optional<clock::time_point> _idle_since;
+    };
+
+    void record_api_version(api_key key, api_version);
+
     request_state request_count;
     request_state produce_bytes;
     request_state produce_batch_count;
     request_state fetch_bytes;
+
+    uuid_t connection_id{uuid_t::create()};
+    sys_clock::time_point open_time{sys_clock::now()};
+    last_value last_client_id{};
+    last_value last_client_software_name{};
+    last_value last_client_software_version{};
+    last_value last_transactional_id{};
+    last_value last_group_id{};
+    last_value last_group_instance_id{};
+    last_value last_group_member_id{};
+
+    chunked_hash_map<api_key, api_version> api_versions{};
+    in_flight_request_tracker in_flight_requests;
 };
 
 class connection_context final
@@ -241,7 +306,7 @@ private:
     security::acl_principal get_principal() const {
         if (_mtls_state) {
             return _mtls_state->principal();
-        } else if (_sasl) {
+        } else if (_sasl && _sasl->complete()) {
             return _sasl->principal();
         }
         // anonymous user

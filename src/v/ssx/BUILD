@@ -260,3 +260,16 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "single_fiber_executor",
+    hdrs = [
+        "single_fiber_executor.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":future_util",
+        "//src/v/utils:retry_chain_node",
+        "@seastar",
+    ],
+)

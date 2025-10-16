@@ -2474,6 +2474,29 @@ auto disk_log_impl::get_file_offset(
     };
 }
 
+model::offset disk_log_impl::cleanly_compacted_prefix_offset() const {
+    _cleanly_compacted_offset = std::max(
+      _cleanly_compacted_offset, _start_offset);
+    if (!_segs.empty()) {
+        auto first_seg_to_check_it = _segs.lower_bound(
+          _cleanly_compacted_offset);
+        auto first_non_clean_seg_it = std::find_if(
+          first_seg_to_check_it, _segs.end(), [](const segment_set::type& seg) {
+              return !seg->index().has_clean_compact_timestamp();
+          });
+        if (first_non_clean_seg_it == _segs.end()) [[unlikely]] {
+            // This should not happen, as we never compact the last segment.
+            // If it does for any reason, underreport cleanly compacted offset
+            // by the length of the last segment rather than use its max_offset
+            // which may be uninitialized.
+            --first_non_clean_seg_it;
+        }
+        _cleanly_compacted_offset
+          = (*first_non_clean_seg_it)->index().base_offset();
+    }
+    return _cleanly_compacted_offset;
+}
+
 bool disk_log_impl::log_contains_offset(model::offset o) const noexcept {
     auto log_offsets = offsets();
     auto log_interval = model::bounded_offset_interval::optional(

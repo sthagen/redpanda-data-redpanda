@@ -634,6 +634,9 @@ produce_handler::handle(request_context ctx, ss::smp_service_group ssg) {
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
 
+    ctx.connection()->attributes().last_transactional_id.update(
+      request.data.transactional_id);
+
     if (unlikely(ctx.recovery_mode_enabled())) {
         return process_result_stages::single_stage(ctx.respond(
           request.make_error_response(error_code::policy_violation)));

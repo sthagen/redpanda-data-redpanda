@@ -476,6 +476,10 @@ TEST_F(CompactionFixtureTest, TestChunkedCompaction) {
     ASSERT_TRUE(segs[2]->finished_windowed_compaction());
     ASSERT_TRUE(segs[2]->has_clean_compact_timestamp());
 
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs[0]->offsets().get_base_offset());
+
     ASSERT_TRUE(disk_log.get_last_compaction_window_start_offset().has_value());
     ASSERT_EQ(
       disk_log.get_last_compaction_window_start_offset().value(),
@@ -496,6 +500,10 @@ TEST_F(CompactionFixtureTest, TestChunkedCompaction) {
     // Now the first two segments should be marked as clean.
     ASSERT_TRUE(segs[0]->has_clean_compact_timestamp());
     ASSERT_TRUE(segs[1]->has_clean_compact_timestamp());
+    ASSERT_TRUE(segs[2]->has_clean_compact_timestamp());
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs.back()->offsets().get_base_offset());
 
     ASSERT_FALSE(
       disk_log.get_last_compaction_window_start_offset().has_value());
@@ -507,6 +515,61 @@ TEST_F(CompactionFixtureTest, TestChunkedCompaction) {
     for (const auto& seg : disk_log.segments()) {
         ASSERT_EQ(seg->offsets().get_base_offset(), seg->index().base_offset());
     }
+}
+
+TEST_F(CompactionFixtureTest, TestCleanCompactionAndTruncation) {
+    constexpr auto num_segments = 5;
+    constexpr auto cardinality = 100;
+    size_t batches_per_segment = 5;
+    size_t records_per_batch = 10;
+    map_t latest_kv_map;
+
+    ASSERT_EQ(log->cleanly_compacted_prefix_offset(), model::offset{0});
+    generate_data(
+      num_segments,
+      cardinality,
+      batches_per_segment,
+      records_per_batch,
+      0,
+      false,
+      &latest_kv_map)
+      .get();
+
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+    const auto& segs = disk_log.segments();
+
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs[0]->offsets().get_base_offset());
+
+    // Compact segments 0 and 1
+    bool did_compact = do_sliding_window_compact(
+                         segs[2]->offsets().get_base_offset(), std::nullopt)
+                         .get();
+    ASSERT_TRUE(did_compact);
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs[2]->offsets().get_base_offset());
+
+    // Truncate segments 0, 1 and 2
+    log->truncate_prefix({segs[3]->offsets().get_base_offset()}).get();
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs.front()->offsets().get_base_offset());
+
+    // Compact the rest
+    did_compact = do_sliding_window_compact(
+                    segs.back()->offsets().get_base_offset(), std::nullopt)
+                    .get();
+    ASSERT_TRUE(did_compact);
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs.back()->offsets().get_base_offset());
+
+    // Truncate everything
+    log->truncate_prefix({segs.back()->offsets().get_base_offset()}).get();
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(), log->offsets().start_offset);
 }
 
 TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
@@ -561,6 +624,9 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
     ASSERT_FALSE(segs[segs.size() - 2]->finished_windowed_compaction());
     ASSERT_FALSE(segs[segs.size() - 2]->has_self_compact_timestamp());
     ASSERT_FALSE(segs[segs.size() - 2]->has_clean_compact_timestamp());
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs[segs.size() - 2]->offsets().get_base_offset());
 
     // We should have compacted all the way down to the start of the log, and
     // reset the start offset.
@@ -574,6 +640,9 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
     ASSERT_TRUE(segs[segs.size() - 2]->finished_windowed_compaction());
     ASSERT_TRUE(segs[segs.size() - 2]->has_self_compact_timestamp());
     ASSERT_TRUE(segs[segs.size() - 2]->has_clean_compact_timestamp());
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      segs[segs.size() - 1]->offsets().get_base_offset());
 
     auto segments_compacted_3 = disk_log.get_probe().get_segments_compacted();
     ASSERT_LT(segments_compacted_2, segments_compacted_3);
@@ -1029,6 +1098,10 @@ TEST_P(CompactionFixtureTombstonesParamTest, TestTombstonesCompletelyEmptyLog) {
     for (size_t i = 0; i < num_segments; ++i) {
         ASSERT_TRUE(log->segments()[i]->has_clean_compact_timestamp());
     }
+    ASSERT_EQ(
+      log->cleanly_compacted_prefix_offset(),
+      model::next_offset(
+        log->segments()[num_segments - 1]->offsets().get_dirty_offset()));
 
     {
         tests::kafka_consume_transport consumer(make_kafka_client().get());
@@ -1089,8 +1162,13 @@ INSTANTIATE_TEST_SUITE_P(
 
 struct TombstonesRandomArgs {
     static TombstonesRandomArgs create() {
+#ifdef NDEBUG
         static constexpr size_t max_segments = 100;
         static constexpr size_t max_records = 1000;
+#else
+        static constexpr size_t max_segments = 10;
+        static constexpr size_t max_records = 100;
+#endif
         static constexpr size_t max_cardinality = max_records;
         static constexpr size_t max_batches_per_segment = 5;
         return TombstonesRandomArgs{

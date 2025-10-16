@@ -44,7 +44,7 @@ public:
 
     const audit::user& audit_user() const override { return _audit_user; }
 
-    const char* mechanism_name() const override { return "SASL-PLAIN"; }
+    const char* mechanism_name() const override { return name; }
 
 private:
     enum class state {

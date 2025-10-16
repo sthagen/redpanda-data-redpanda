@@ -497,6 +497,12 @@ ss::future<response_ptr> heartbeat_handler::handle(
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
 
+    ctx.connection()->attributes().last_group_id.update(request.data.group_id);
+    ctx.connection()->attributes().last_group_instance_id.update(
+      request.data.group_instance_id);
+    ctx.connection()->attributes().last_group_member_id.update(
+      request.data.member_id);
+
     if (unlikely(ctx.recovery_mode_enabled())) {
         co_return co_await ctx.respond(
           heartbeat_response(error_code::policy_violation));
@@ -608,6 +614,12 @@ process_result_stages sync_group_handler::handle(
     sync_group_request request;
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
+
+    ctx.connection()->attributes().last_group_id.update(request.data.group_id);
+    ctx.connection()->attributes().last_group_instance_id.update(
+      request.data.group_instance_id);
+    ctx.connection()->attributes().last_group_member_id.update(
+      request.data.member_id);
 
     if (ctx.recovery_mode_enabled()) {
         return process_result_stages::single_stage(
@@ -842,6 +854,12 @@ process_result_stages join_group_handler::handle(
       fmt::format("{}", ctx.connection()->client_host()));
     log_request(ctx.header(), request);
 
+    ctx.connection()->attributes().last_group_id.update(request.data.group_id);
+    ctx.connection()->attributes().last_group_instance_id.update(
+      request.data.group_instance_id);
+    ctx.connection()->attributes().last_group_member_id.update(
+      request.data.member_id);
+
     if (ctx.recovery_mode_enabled()) {
         return process_result_stages::single_stage(
           ctx.respond(join_group_response(error_code::policy_violation)));
@@ -865,6 +883,8 @@ process_result_stages join_group_handler::handle(
       std::move(ctx),
       [f = std::move(stages.result)](request_context& ctx) mutable {
           return f.then([&ctx](join_group_response response) {
+              ctx.connection()->attributes().last_group_member_id.update(
+                response.data.member_id);
               return ctx.respond(std::move(response));
           });
       });
@@ -932,6 +952,10 @@ ss::future<response_ptr> end_txn_handler::handle(
         end_txn_request request;
         request.decode(ctx.reader(), ctx.header().version);
         log_request(ctx.header(), request);
+
+        ctx.connection()->attributes().last_transactional_id.update(
+          request.data.transactional_id);
+
         if (ctx.recovery_mode_enabled()) {
             end_txn_response response;
             response.data.error_code = error_code::policy_violation;
@@ -975,6 +999,11 @@ add_offsets_to_txn_handler::handle(request_context ctx, ss::smp_service_group) {
         add_offsets_to_txn_request request;
         request.decode(ctx.reader(), ctx.header().version);
         log_request(ctx.header(), request);
+
+        ctx.connection()->attributes().last_transactional_id.update(
+          request.data.transactional_id);
+        ctx.connection()->attributes().last_group_id.update(
+          request.data.group_id);
 
         if (unlikely(ctx.recovery_mode_enabled())) {
             add_offsets_to_txn_response response;
@@ -1028,6 +1057,9 @@ ss::future<response_ptr> add_partitions_to_txn_handler::handle(
         add_partitions_to_txn_request request;
         request.decode(ctx.reader(), ctx.header().version);
         log_request(ctx.header(), request);
+
+        ctx.connection()->attributes().last_transactional_id.update(
+          request.data.transactional_id);
 
         if (ctx.recovery_mode_enabled()) {
             add_partitions_to_txn_response response{
@@ -1197,6 +1229,11 @@ offset_fetch_handler::handle(request_context ctx, ss::smp_service_group) {
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
     convert_to_latest(request, ctx.header().version);
+
+    if (request.data.groups.size() == 1) {
+        ctx.connection()->attributes().last_group_id.update(
+          request.data.groups[0].group_id);
+    }
 
     constexpr auto has_topics = [](const auto& g) {
         return g.topics.has_value();
@@ -1760,6 +1797,9 @@ ss::future<response_ptr> init_producer_id_handler::handle(
         request.decode(ctx.reader(), ctx.header().version);
         log_request(ctx.header(), request);
 
+        ctx.connection()->attributes().last_transactional_id.update(
+          request.data.transactional_id);
+
         if (unlikely(ctx.recovery_mode_enabled())) {
             init_producer_id_response reply;
             reply.data.error_code = error_code::policy_violation;
@@ -1988,6 +2028,12 @@ offset_commit_handler::handle(request_context ctx, ss::smp_service_group ssg) {
     offset_commit_request request;
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
+
+    ctx.connection()->attributes().last_group_id.update(request.data.group_id);
+    ctx.connection()->attributes().last_group_instance_id.update(
+      request.data.group_instance_id);
+    ctx.connection()->attributes().last_group_member_id.update(
+      request.data.member_id);
 
     // check authorization for this group
     const auto group_authorized = ctx.authorized(

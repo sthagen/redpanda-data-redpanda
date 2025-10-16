@@ -18,6 +18,9 @@
 namespace security {
 
 template<typename ScramMechanism>
+struct scram_mechanism_traits;
+
+template<typename ScramMechanism>
 class scram_authenticator final : public sasl_mechanism {
     static constexpr int nonce_size = 130;
 
@@ -43,7 +46,9 @@ public:
 
     const audit::user& audit_user() const override { return _audit_user; }
 
-    const char* mechanism_name() const override { return "SASL-SCRAM"; }
+    const char* mechanism_name() const override {
+        return scram_mechanism_traits<scram>::name;
+    }
 
 private:
     enum class state {
@@ -71,14 +76,26 @@ private:
     std::unique_ptr<server_first_message> _server_first;
 };
 
+template<>
+struct scram_mechanism_traits<scram_sha256> {
+    static constexpr const char* name = "SCRAM-SHA-256";
+};
+
+template<>
+struct scram_mechanism_traits<scram_sha512> {
+    static constexpr const char* name = "SCRAM-SHA-512";
+};
+
 struct scram_sha256_authenticator {
     using auth = scram_authenticator<scram_sha256>;
-    static constexpr const char* name = "SCRAM-SHA-256";
+    static constexpr const char* name
+      = scram_mechanism_traits<scram_sha256>::name;
 };
 
 struct scram_sha512_authenticator {
     using auth = scram_authenticator<scram_sha512>;
-    static constexpr const char* name = "SCRAM-SHA-512";
+    static constexpr const char* name
+      = scram_mechanism_traits<scram_sha512>::name;
 };
 
 std::optional<std::string_view> validate_scram_credential(

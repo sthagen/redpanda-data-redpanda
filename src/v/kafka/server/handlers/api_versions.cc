@@ -123,6 +123,13 @@ api_versions_response api_versions_handler::handle_raw(request_context& ctx) {
         api_versions_request request;
         request.decode(ctx.reader(), ctx.header().version);
         r.data.error_code = error_code::none;
+
+        if (ctx.header().version >= api_version(3)) {
+            ctx.connection()->attributes().last_client_software_name.update(
+              request.data.client_software_name);
+            ctx.connection()->attributes().last_client_software_version.update(
+              request.data.client_software_version);
+        }
     }
 
     if (

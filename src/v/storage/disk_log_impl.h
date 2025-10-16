@@ -330,6 +330,10 @@ public:
       model::offset target,
       boundary_type boundary);
 
+    // Exclusive: returns the first offset that is not within the cleanly
+    // compacted prefix
+    model::offset cleanly_compacted_prefix_offset() const final;
+
 private:
     friend class disk_log_appender; // for multi-term appends
     friend class disk_log_builder;  // for tests
@@ -561,6 +565,10 @@ private:
     void reset_dirty_and_closed_bytes() const;
 
     bool _compaction_enabled;
+
+    // Exclusive: the offset that marks the first offset beyond the cleanly
+    // compacted prefix.
+    mutable model::offset _cleanly_compacted_offset{0};
 };
 
 } // namespace storage

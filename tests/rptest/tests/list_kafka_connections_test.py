@@ -6,15 +6,17 @@
 #
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
+from datetime import datetime
 from typing import Any
 
 from ducktape.tests.test import TestContext
 
 from rptest.clients.admin.v2 import Admin as AdminV2
-from rptest.clients.admin.v2 import broker_pb
+from rptest.clients.admin.v2 import broker_pb, kafka_connections_pb
 from rptest.clients.rpk import RpkTool
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
+from rptest.services.redpanda import SecurityConfig
 from rptest.services.rpk_consumer import RpkConsumer
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import wait_until
@@ -26,21 +28,37 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
     """
 
     test_topic: str = "test-list-connections"
+    test_group: str = "test-cg-group"
 
     def __init__(self, test_ctx: TestContext, *args: Any, **kwargs: Any):
-        super().__init__(test_ctx, *args, **kwargs)
+        security = SecurityConfig()
+        security.enable_sasl = True
+
+        super().__init__(test_ctx, *args, security=security, **kwargs)
         self.superuser = self.redpanda.SUPERUSER_CREDENTIALS
         self.superuser_admin = Admin(
             self.redpanda, auth=(self.superuser.username, self.superuser.password)
         )
-        self.consumer = RpkConsumer(test_ctx, self.redpanda, self.test_topic)
+        self.consumer = RpkConsumer(
+            test_ctx,
+            self.redpanda,
+            self.test_topic,
+            group=self.test_group,
+            username=self.superuser.username,
+            password=self.superuser.password,
+            mechanism=self.superuser.mechanism,
+        )
+        self.super_rpk = RpkTool(
+            self.redpanda,
+            username=self.superuser.username,
+            password=self.superuser.password,
+            sasl_mechanism=self.superuser.algorithm,
+        )
 
     def setUp(self):
         super().setUp()
-        self.redpanda.set_cluster_config({"admin_api_require_auth": True})
 
-        rpk = RpkTool(self.redpanda)
-        rpk.create_topic(self.test_topic)
+        self.super_rpk.create_topic(self.test_topic)
 
     @cluster(num_nodes=2)
     def test_list_kafka_connections(self):
@@ -71,12 +89,33 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
 
             # Sanity check the response
             assert len(resp.connections) > 0
-            conn = resp.connections[0]
+
+            # Find the connection used for consumer group requests
+            # Note: this is different from the connection used for fetch requests
+            conn: kafka_connections_pb.KafkaConnection = next(
+                filter(lambda conn: conn.group_id == self.test_group, resp.connections)
+            )
 
             assert conn.node_id == node_id
+            assert conn.state == kafka_connections_pb.KAFKA_CONNECTION_STATE_OPEN
+            assert conn.open_time.ToDatetime() > datetime(year=2025, month=1, day=1)
             assert len(conn.source.ip_address) > 0
             assert conn.source.port != 0
+            assert (
+                conn.authentication_info.state
+                == kafka_connections_pb.AUTHENTICATION_STATE_SUCCESS
+            )
+            assert (
+                conn.authentication_info.mechanism
+                == kafka_connections_pb.AUTHENTICATION_MECHANISM_SASL_SCRAM
+            )
+            assert conn.authentication_info.user_principal == self.superuser.username
             assert not conn.tls_info.enabled
+            assert conn.client_id == "rpk"
+            assert conn.client_software_name == "kgo"
+            assert len(conn.client_software_version) > 0
+            assert len(conn.group_member_id) > 0
+            assert len(conn.api_versions) > 0
             assert conn.total_request_statistics.request_count > 0
 
             return True

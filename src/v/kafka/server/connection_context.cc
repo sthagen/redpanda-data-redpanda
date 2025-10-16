@@ -19,6 +19,7 @@
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
+#include "container/chunked_hash_map.h"
 #include "kafka/protocol/sasl_authenticate.h"
 #include "kafka/server/datalake_throttle_manager.h"
 #include "kafka/server/handlers/fetch.h"
@@ -36,6 +37,10 @@
 #include "net/exceptions.h"
 #include "security/authorizer.h"
 #include "security/exceptions.h"
+#include "security/gssapi_authenticator.h"
+#include "security/oidc_authenticator.h"
+#include "security/plain_authenticator.h"
+#include "security/scram_authenticator.h"
 #include "utils/windowed_sum_tracker.h"
 
 #include <seastar/core/coroutine.hh>
@@ -448,6 +453,9 @@ ss::future<> connection_context::process_one_request() {
         co_return;
     }
     _server.handler_probe(h->key).add_bytes_received(sz.value());
+    _attributes.last_client_id.update(h->client_id);
+    _attributes.record_api_version(h->key, h->version);
+    _attributes.in_flight_requests.record_begin_request(h->key);
     /**
      * An entry point for the MPX serverless extensions. If the first request
      * for a given connection has a special client_id then MPX extensions are
@@ -816,6 +824,14 @@ connection_context::dispatch_method_once(request_header hdr, size_t size) {
       shared_from_this(), std::move(rctx), rres);
 }
 
+namespace {
+absl::Time
+ss_sys_clock_to_absl(const ss::lowres_system_clock::time_point& lowres_tp) {
+    return absl::FromChrono(
+      std::chrono::system_clock::time_point{lowres_tp.time_since_epoch()});
+}
+} // namespace
+
 proto::admin::kafka_connection connection_context::to_proto() const {
     using proto::admin::kafka_connection_state;
 
@@ -823,13 +839,15 @@ proto::admin::kafka_connection connection_context::to_proto() const {
     res.set_shard_id(ss::this_shard_id());
     res.set_node_id(
       config::node().node_id.value().value_or(model::unassigned_node_id));
+    res.set_uid(ssx::sformat("{}", _attributes.connection_id));
     res.set_listener_name(ss::sstring{listener()});
     res.set_state(
       _as.abort_requested() ? kafka_connection_state::aborting
                             : kafka_connection_state::open);
+    res.set_open_time(ss_sys_clock_to_absl(_attributes.open_time));
 
     auto src = proto::admin::source{};
-    src.set_ip_address(fmt::format("{}", client_host()));
+    src.set_ip_address(ssx::sformat("{}", client_host()));
     src.set_port(client_port());
     res.set_source(std::move(src));
 
@@ -837,12 +855,77 @@ proto::admin::kafka_connection connection_context::to_proto() const {
     tls_info.set_enabled(conn->tls_enabled());
     res.set_tls_info(std::move(tls_info));
 
+    auto auth_state = [this]() {
+        if (_mtls_state) {
+            return proto::admin::authentication_state::success;
+        } else if (_sasl) {
+            switch (_sasl->state()) {
+            case security::sasl_server::sasl_state::initial:
+            case security::sasl_server::sasl_state::handshake:
+            case security::sasl_server::sasl_state::authenticate:
+                return proto::admin::authentication_state::unauthenticated;
+            case security::sasl_server::sasl_state::complete:
+                return proto::admin::authentication_state::success;
+            case security::sasl_server::sasl_state::failed:
+                return proto::admin::authentication_state::failure;
+            }
+        }
+        return proto::admin::authentication_state::unauthenticated;
+    }();
+    auto auth_mechanism = [this]() -> proto::admin::authentication_mechanism {
+        if (_mtls_state) {
+            return proto::admin::authentication_mechanism::mtls;
+        } else if (_sasl && _sasl->has_mechanism()) {
+            return string_switch<proto::admin::authentication_mechanism>(
+                     _sasl->mechanism().mechanism_name())
+              .match(
+                security::scram_sha256_authenticator::name,
+                proto::admin::authentication_mechanism::sasl_scram)
+              .match(
+                security::scram_sha512_authenticator::name,
+                proto::admin::authentication_mechanism::sasl_scram)
+              .match(
+                security::gssapi_authenticator::name,
+                proto::admin::authentication_mechanism::sasl_gssapi)
+              .match(
+                security::oidc::sasl_authenticator::name,
+                proto::admin::authentication_mechanism::sasl_oauthbearer)
+              .match(
+                security::plain_authenticator::name,
+                proto::admin::authentication_mechanism::sasl_plain)
+              .default_match(
+                proto::admin::authentication_mechanism::unspecified);
+        }
+        return proto::admin::authentication_mechanism::unspecified;
+    }();
     auto auth_info = proto::admin::authentication_info{};
     auth_info.set_user_principal(ss::sstring{get_principal().name()});
+    auth_info.set_state(auth_state);
+    auth_info.set_mechanism(auth_mechanism);
     res.set_authentication_info(std::move(auth_info));
 
-    using tracker_t = connection_attributes::request_state::tracker_t;
-    auto now = tracker_t::clock::now();
+    constexpr auto get_last_str = [](const last_value& val) {
+        return val.get().value_or("");
+    };
+
+    res.set_client_id(get_last_str(_attributes.last_client_id));
+    res.set_client_software_name(
+      get_last_str(_attributes.last_client_software_name));
+    res.set_client_software_version(
+      get_last_str(_attributes.last_client_software_version));
+    res.set_transactional_id(get_last_str(_attributes.last_transactional_id));
+    res.set_group_id(get_last_str(_attributes.last_group_id));
+    res.set_group_instance_id(get_last_str(_attributes.last_group_instance_id));
+    res.set_group_member_id(get_last_str(_attributes.last_group_member_id));
+
+    res.set_api_versions(
+      chunked_hash_map<int32_t, int32_t>{
+        _attributes.api_versions.cbegin(), _attributes.api_versions.cend()});
+
+    auto now = ss::lowres_clock::now();
+    res.set_in_flight_requests(_attributes.in_flight_requests.to_proto(now));
+    res.set_idle_duration(
+      absl::FromChrono(_attributes.in_flight_requests.get_idle_duration(now)));
 
     auto make_stats = [this](auto&& get_value) {
         auto stats = proto::admin::request_statistics{};
@@ -858,8 +941,6 @@ proto::admin::kafka_connection connection_context::to_proto() const {
       [now](auto& attr) { return attr.recent_stat.window_total(now); }));
     res.set_total_request_statistics(
       make_stats([](auto& attr) { return attr.total_stat; }));
-
-    // TODO: fill out the response with the remaining fields
 
     return res;
 }
@@ -1038,6 +1119,8 @@ connection_context::client_protocol_state::do_process_responses(
 
     _responses.erase(it);
 
+    connection_ctx->attributes().in_flight_requests.record_end_request();
+
     if (resp_and_res.response->is_noop()) {
         co_return ss::stop_iteration::no;
     }
@@ -1099,6 +1182,64 @@ std::ostream& operator<<(std::ostream& o, const virtual_connection_id& id) {
       id.virtual_cluster_id,
       id.connection_id);
     return o;
+}
+
+void last_value::update(std::optional<std::string_view> new_value) {
+    if (new_value && value != *new_value) {
+        value = ss::sstring{*new_value};
+    }
+}
+
+void connection_attributes::record_api_version(
+  api_key key, api_version version) {
+    auto [it, inserted] = api_versions.try_emplace(key, version);
+    if (!inserted) {
+        it->second = std::max(it->second, version);
+    }
+}
+
+void connection_attributes::in_flight_request_tracker::record_begin_request(
+  api_key key) {
+    while (_in_flight_request_samples.size() >= max_count) {
+        _in_flight_request_samples.pop_front();
+    }
+    ++_total_in_flight_count;
+    _in_flight_request_samples.emplace_back(key, clock::now());
+    _idle_since.reset();
+}
+void connection_attributes::in_flight_request_tracker::record_end_request() {
+    --_total_in_flight_count;
+
+    // We can rely on the assumption here that responses are sent in
+    // request-order to always pop_front instead of having to search for the
+    // request corresponding to the response
+
+    if (!_in_flight_request_samples.empty()) {
+        _in_flight_request_samples.pop_front();
+    }
+
+    if (_total_in_flight_count == 0) {
+        _idle_since = clock::now();
+    }
+}
+
+proto::admin::in_flight_requests
+connection_attributes::in_flight_request_tracker::to_proto(
+  clock::time_point now) const {
+    proto::admin::in_flight_requests res;
+
+    chunked_vector<proto::admin::in_flight_requests_request> reqs;
+    for (auto& req : _in_flight_request_samples) {
+        auto& proto_req = reqs.emplace_back();
+        proto_req.set_api_key(req.key);
+        proto_req.set_in_flight_duration(absl::FromChrono(now - req.recv_time));
+    }
+    res.set_sampled_in_flight_requests(std::move(reqs));
+
+    res.set_has_more_requests(
+      _in_flight_request_samples.size() < _total_in_flight_count);
+
+    return res;
 }
 
 } // namespace kafka

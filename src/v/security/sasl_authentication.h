@@ -85,6 +85,7 @@ public:
     }
 
     bool has_mechanism() const { return bool(_mechanism); }
+    const sasl_mechanism& mechanism() const { return *_mechanism; }
     sasl_mechanism& mechanism() { return *_mechanism; }
 
     ss::future<result<bytes>> authenticate(bytes data) {

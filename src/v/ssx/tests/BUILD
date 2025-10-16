@@ -301,3 +301,18 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "single_fiber_executor_test",
+    timeout = "short",
+    srcs = [
+        "single_fiber_executor_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/ssx:single_fiber_executor",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
