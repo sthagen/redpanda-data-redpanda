@@ -51,6 +51,9 @@ namespace kafka {
 
 using response_ptr = ss::foreign_ptr<std::unique_ptr<response>>;
 
+using closed_connections_t
+  = std::deque<ss::lw_shared_ptr<const proto::admin::kafka_connection>>;
+
 class kafka_api_version_not_supported_exception : public std::runtime_error {
 public:
     explicit kafka_api_version_not_supported_exception(const std::string& m)
@@ -238,6 +241,7 @@ public:
     connection_context(
       std::optional<std::reference_wrapper<
         boost::intrusive::list<connection_context>>> hook,
+      std::optional<std::reference_wrapper<closed_connections_t>> closed_list,
       server& s,
       ss::lw_shared_ptr<net::connection> conn,
       std::optional<security::sasl_server> sasl,
@@ -381,6 +385,8 @@ private:
     // Returns handler specific connection override if available.
     std::optional<ss::scheduling_group>
       get_scheduling_group_override(api_key) const;
+
+    proto::admin::kafka_connection to_closed_proto() const;
 
     class ctx_log {
     public:
@@ -564,6 +570,7 @@ private:
     std::optional<
       std::reference_wrapper<boost::intrusive::list<connection_context>>>
       _hook;
+    std::optional<std::reference_wrapper<closed_connections_t>> _closed_list;
     class server& _server;
     ss::lw_shared_ptr<net::connection> conn;
 

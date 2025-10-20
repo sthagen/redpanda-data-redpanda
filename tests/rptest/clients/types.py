@@ -45,6 +45,7 @@ class TopicSpec:
     PROPERTY_MIN_CLEANABLE_DIRTY_RATIO = "min.cleanable.dirty.ratio"
     PROPERTY_MIN_COMPACTION_LAG_MS = "min.compaction.lag.ms"
     PROPERTY_MAX_COMPACTION_LAG_MS = "max.compaction.lag.ms"
+    PROPERTY_MAX_MESSAGE_BYTES = "max.message.bytes"
 
     # requires dev features enabled. only valid at topic create time
     PROPERTY_CLOUD_TOPIC_ENABLE = "redpanda.cloud_topic.enabled"

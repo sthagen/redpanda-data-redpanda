@@ -13,6 +13,8 @@ package network
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
@@ -28,7 +30,7 @@ type EffectiveNicConfig struct {
 }
 
 func GetEffectiveNicConfig(
-	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners,
+	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
 ) (EffectiveNicConfig, error) {
 	effectiveConfig := EffectiveNicConfig{}
 	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
@@ -36,17 +38,17 @@ func GetEffectiveNicConfig(
 		return EffectiveNicConfig{}, err
 	}
 
-	effectiveConfig.Mode, err = getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, t)
+	effectiveConfig.Mode, err = getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
 	if err != nil {
 		return EffectiveNicConfig{}, err
 	}
 
-	effectiveConfig.IRQCPUMask, err = cpuMasks.CPUMaskForIRQs(effectiveConfig.Mode, effectiveCPUMask, t)
+	effectiveConfig.IRQCPUMask, err = cpuMasks.CPUMaskForIRQs(effectiveConfig.Mode, effectiveCPUMask, rnc)
 	if err != nil {
 		return EffectiveNicConfig{}, err
 	}
 
-	effectiveConfig.ComputationsCPUMask, err = cpuMasks.CPUMaskForComputations(effectiveConfig.Mode, effectiveCPUMask, t)
+	effectiveConfig.ComputationsCPUMask, err = cpuMasks.CPUMaskForComputations(effectiveConfig.Mode, effectiveCPUMask, rnc)
 	if err != nil {
 		return EffectiveNicConfig{}, err
 	}
@@ -54,8 +56,106 @@ func GetEffectiveNicConfig(
 	return effectiveConfig, nil
 }
 
+func checkAdditionalFlagsHasCpuset(additionalFlags map[string]string) bool {
+	if _, hasCpuset := additionalFlags["cpuset"]; hasCpuset {
+		return true
+	}
+	return false
+}
+
+func checkHasTunerCliCpuset(cpuMask string, cpuMasks irq.CPUMasks) (bool, error) {
+	allMask, err := cpuMasks.GetAllCpusMask()
+	if err != nil {
+		return false, err
+	}
+	return allMask != cpuMask, nil
+}
+
+func maybeGetSmp(rnc config.RpkNodeConfig, additionalFlags map[string]string) (*int, error) {
+	// Get either from additional flags or from the special rpk.smp config field
+	// Note we don't need to handle the case where both are set as that is already rejected by rpk:start
+	if smpStr, ok := additionalFlags["smp"]; ok {
+		smp, err := strconv.Atoi(smpStr)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse smp value '%s': %w", smpStr, err)
+		}
+		return &smp, nil
+	}
+	return rnc.SMP, nil
+}
+
+func checkHasAcceptableSmp(numOfPUs int, additionalFlags map[string]string, rnc config.RpkNodeConfig) (bool, string, error) {
+	// Handle custom SMP flags
+	smp, err := maybeGetSmp(rnc, additionalFlags)
+	if err != nil {
+		return false, "", err
+	}
+	if smp != nil {
+		// We differentiate between two cases here:
+
+		// smp is slightly lowered, specifically we define "slightly" as lowered
+		// less than amount of potential interrupt cores. This is to still allow
+		// dedicated mode in case where people already lowered smp to give room
+		// to the "OS". Likely in practice.
+		potentialInterruptCores := int(math.Ceil(float64(numOfPUs) / float64(rnc.Tuners.GetCoresPerDedicatedInterruptCore())))
+		if numOfPUs >= *smp && potentialInterruptCores >= (numOfPUs-*smp) {
+			zap.L().Sugar().Debugf("allowing dedicated mode as smp is only slightly lowered - smp: %d, interrupt-cores: %d, num PUs: %d",
+				*smp, potentialInterruptCores, numOfPUs)
+			return true, "", nil
+		}
+
+		// smp is lowered by a larger amount. In this case we disallow dedicated
+		// mode as we are likely not running on a RP-only system
+		reason := fmt.Sprintf("smp: %d, interrupt-cores: %d, num PUs: %d", *smp, potentialInterruptCores, numOfPUs)
+
+		return false, reason, nil
+	}
+
+	return true, "", nil
+}
+
+func canDefaultToDedicatedMode(numOfPUs int, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) (bool, error) {
+	additionalFlags := config.ParseAdditionalStartFlags(rnc.AdditionalStartFlags)
+
+	// Handle a custom cpuset, note this is incredibly unlikely to be the case in
+	// practice as additional_start_flags isn't even documented and it's
+	// unlikely anybody invokes the tuner with a custom cpuset.
+
+	// If a custom cpuset is specified don't bother with defaulting to dedicated
+	// mode. Just going to get it wrong and we are likely not running in a
+	// RP-only environment.
+	if checkAdditionalFlagsHasCpuset(additionalFlags) {
+		zap.L().Sugar().Debugf("additional_start_flags contains cpuset, won't default to dedicated mode")
+		return false, nil
+	}
+
+	// If the user specified a custom cpu-set to the tuner (likely via manual
+	// non-systemd invocation) then we also bail out. We would still get things
+	// right but it's safer to just require explicitly passing the mode in that
+	// case as well.
+	hasTunerCpuset, err := checkHasTunerCliCpuset(cpuMask, cpuMasks)
+	if err != nil {
+		return false, err
+	}
+	if hasTunerCpuset {
+		zap.L().Sugar().Debugf("--cpu-mask passed on the tuner command line, won't default to dedicated mode")
+		return false, nil
+	}
+
+	checkHasAcceptableSmp, reason, err := checkHasAcceptableSmp(numOfPUs, additionalFlags, rnc)
+	if err != nil {
+		return false, err
+	}
+	if !checkHasAcceptableSmp {
+		zap.L().Sugar().Debugf("not defaulting to dedicated mode as smp is not acceptable: %s", reason)
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func GetDefaultMode(
-	nic Nic, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners,
+	nic Nic, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
 ) (irq.Mode, error) {
 	if nic.IsHwInterface() {
 		numOfPUs, err := cpuMasks.GetNumberOfPUs(cpuMask)
@@ -63,11 +163,12 @@ func GetDefaultMode(
 			return "", err
 		}
 
-		// TODO: check
-		//   - no cpuset specified in config
-		//   - --smp is compatible
+		canDoDedicated, err := canDefaultToDedicatedMode(int(numOfPUs), cpuMask, cpuMasks, rnc)
+		if err != nil {
+			return "", err
+		}
 		var mode irq.Mode
-		if numOfPUs >= uint(t.GetCoresPerDedicatedInterruptCore()) && t.GetAllowDedicatedInterruptMode() {
+		if numOfPUs >= uint(rnc.Tuners.GetCoresPerDedicatedInterruptCore()) && rnc.Tuners.GetAllowDedicatedInterruptMode() && canDoDedicated {
 			mode = irq.Dedicated
 		} else {
 			mode = irq.Mq
@@ -86,7 +187,7 @@ func GetDefaultMode(
 			return "", err
 		}
 		for _, slave := range slaves {
-			slaveDefaultMode, err := GetDefaultMode(slave, cpuMask, cpuMasks, t)
+			slaveDefaultMode, err := GetDefaultMode(slave, cpuMask, cpuMasks, rnc)
 			if err != nil {
 				return "", err
 			}
@@ -101,11 +202,43 @@ func GetDefaultMode(
 	return "", fmt.Errorf("virtual device %s is not supported", nic.Name())
 }
 
-func getEffectiveMode(mode irq.Mode, nic Nic, effectiveCPUMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners) (irq.Mode, error) {
+func checkDedicatedCompatibleConfig(cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) error {
+	additionalFlags := config.ParseAdditionalStartFlags(rnc.AdditionalStartFlags)
+	numOfPUs, err := cpuMasks.GetNumberOfPUs(cpuMask)
+	if err != nil {
+		return err
+	}
+
+	// If there is a --cpuset specified in additional_start_flags we hard bail out. rpk:start doesn't support this
+	if checkAdditionalFlagsHasCpuset(additionalFlags) {
+		return fmt.Errorf("additional_start_flags contains cpuset which is incompatible with dedicated mode")
+	}
+
+	// Note, while for auto detection we don't allow a custom --cpu-set argument
+	// we do for explicit invocation. The user likely knows what they are doing
+
+	checkHasAcceptableSmp, reason, err := checkHasAcceptableSmp(int(numOfPUs), additionalFlags, rnc)
+	if err != nil {
+		return err
+	}
+	if !checkHasAcceptableSmp {
+		return fmt.Errorf("dedicated mode is only compatible with smp values that are lowered by less than the number of potential interrupt cores: %s", reason)
+	}
+
+	return nil
+}
+
+func getEffectiveMode(mode irq.Mode, nic Nic, effectiveCPUMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) (irq.Mode, error) {
 	var err error
 	effectiveMode := mode
 	if mode == irq.Default {
-		effectiveMode, err = GetDefaultMode(nic, effectiveCPUMask, cpuMasks, t)
+		effectiveMode, err = GetDefaultMode(nic, effectiveCPUMask, cpuMasks, rnc)
+		if err != nil {
+			return "", err
+		}
+	} else if mode == irq.Dedicated {
+		// dedicated specified via cli arg --mode dedicated
+		err := checkDedicatedCompatibleConfig(effectiveCPUMask, cpuMasks, rnc)
 		if err != nil {
 			return "", err
 		}
@@ -114,9 +247,9 @@ func getEffectiveMode(mode irq.Mode, nic Nic, effectiveCPUMask string, cpuMasks 
 }
 
 func GetRpsCPUMask(
-	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners,
+	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
 ) (string, error) {
-	if !t.GetAllowRpsRfsTuner() {
+	if !rnc.Tuners.GetAllowRpsRfsTuner() {
 		return "0x0", nil
 	}
 
@@ -125,7 +258,7 @@ func GetRpsCPUMask(
 		return "", err
 	}
 
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, t)
+	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +278,7 @@ func GetRpsCPUMask(
 	}
 
 	computationsCPUMask, err := cpuMasks.CPUMaskForComputations(
-		effectiveMode, effectiveCPUMask, t)
+		effectiveMode, effectiveCPUMask, rnc)
 	if err != nil {
 		return "", err
 	}
@@ -153,14 +286,14 @@ func GetRpsCPUMask(
 }
 
 func GetHwInterfaceIRQsDistribution(
-	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners,
+	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
 ) (map[int]string, error) {
 	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
 	if err != nil {
 		return nil, err
 	}
 
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, t)
+	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +308,7 @@ func GetHwInterfaceIRQsDistribution(
 		return nil, err
 	}
 
-	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, effectiveCPUMask, t)
+	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, effectiveCPUMask, rnc)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +441,7 @@ func GetCurrentAndTargetChannels(
 	mode irq.Mode,
 	cpuMask string,
 	cpuMasks irq.CPUMasks,
-	t config.RpkNodeTuners,
+	rnc config.RpkNodeConfig,
 	ethtool ethtool.EthtoolWrapper,
 ) (currentChannels et.Channels, targetChannels et.Channels, err error) {
 	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
@@ -316,12 +449,12 @@ func GetCurrentAndTargetChannels(
 		return et.Channels{}, et.Channels{}, err
 	}
 
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, t)
+	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
 	if err != nil {
 		return et.Channels{}, et.Channels{}, err
 	}
 
-	irqMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, effectiveCPUMask, t)
+	irqMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, effectiveCPUMask, rnc)
 	if err != nil {
 		return et.Channels{}, et.Channels{}, err
 	}
@@ -371,13 +504,13 @@ func CollectIRQs(nic Nic) ([]int, error) {
 	return IRQs, nil
 }
 
-func OneRPSQueueLimit(limits []string, nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, t config.RpkNodeTuners) (int, error) {
+func OneRPSQueueLimit(limits []string, nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) (int, error) {
 	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
 	if err != nil {
 		return 0, err
 	}
 
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, t)
+	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
 	if err != nil {
 		return 0, err
 	}
@@ -396,7 +529,7 @@ func OneRPSQueueLimit(limits []string, nic Nic, mode irq.Mode, cpuMask string, c
 	if queueCount >= int(puCount) && effectiveMode == irq.Mq {
 		return 0, nil
 	}
-	if !t.GetAllowRpsRfsTuner() {
+	if !rnc.Tuners.GetAllowRpsRfsTuner() {
 		return 0, nil
 	}
 	return RfsTableSize / len(limits), nil

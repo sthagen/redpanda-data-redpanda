@@ -20,13 +20,8 @@ namespace admin {
 ss::logger sllog("shadow_link_service");
 namespace {
 
-template<typename T>
-T handle_error(cluster_link::cl_result<T> result) {
-    if (result.has_value()) {
-        return std::move(result).assume_value();
-    }
-    auto info = result.assume_error();
-    switch (info.code()) {
+void handle_error(cluster_link::errc err, ss::sstring info) {
+    switch (err) {
     case cluster_link::errc::success:
         vunreachable("Unexpected success code in handle_error");
     case cluster_link::errc::invalid_task_state_change:
@@ -39,27 +34,49 @@ T handle_error(cluster_link::cl_result<T> result) {
     case cluster_link::errc::link_creation_failed:
     case cluster_link::errc::topic_does_not_exist:
     case cluster_link::errc::topic_metadata_stale:
-        throw serde::pb::rpc::internal_exception(info.message());
+        throw serde::pb::rpc::internal_exception(std::move(info));
     case cluster_link::errc::failed_to_connect_to_remote_cluster:
     case cluster_link::errc::remote_cluster_does_not_support_required_api:
     case cluster_link::errc::link_connection_failed:
     case cluster_link::errc::service_shutting_down:
-        throw serde::pb::rpc::unavailable_exception(info.message());
+        throw serde::pb::rpc::unavailable_exception(std::move(info));
     case cluster_link::errc::cluster_link_disabled:
     case cluster_link::errc::link_has_active_shadow_topics:
     case cluster_link::errc::license_required:
-        throw serde::pb::rpc::failed_precondition_exception(info.message());
+        throw serde::pb::rpc::failed_precondition_exception(std::move(info));
     case cluster_link::errc::link_id_not_found:
-        throw serde::pb::rpc::not_found_exception(info.message());
+        throw serde::pb::rpc::not_found_exception(std::move(info));
     case cluster_link::errc::invalid_configuration:
-        throw serde::pb::rpc::invalid_argument_exception(info.message());
+        throw serde::pb::rpc::invalid_argument_exception(std::move(info));
     case cluster_link::errc::topic_already_mirrored:
     case cluster_link::errc::topic_mirrored_by_other_link:
     case cluster_link::errc::topic_not_being_mirrored:
-        throw serde::pb::rpc::already_exists_exception(info.message());
+        throw serde::pb::rpc::already_exists_exception(std::move(info));
     case cluster_link::errc::link_limit_reached:
-        throw serde::pb::rpc::resource_exhausted_exception(info.message());
+        throw serde::pb::rpc::resource_exhausted_exception(std::move(info));
     }
+}
+
+template<typename T>
+T handle_error(cluster_link::cl_result<T> result) {
+    if (result.has_value()) {
+        return std::move(result).assume_value();
+    }
+    auto info = result.assume_error();
+    auto code = info.code();
+    handle_error(code, std::move(info).message());
+    // Handle error should throw
+    std::unreachable();
+}
+
+template<typename T>
+T handle_error(std::expected<T, cluster_link::errc> result) {
+    if (result.has_value()) {
+        return std::move(result).value();
+    }
+    handle_error(result.error(), ssx::sformat("{}", result.error()));
+    // Handle error should throw
+    __builtin_unreachable();
 }
 
 const std::vector<serde::pb::field_mask::path> disallowed_paths_in_update = {
@@ -117,7 +134,7 @@ shadow_link_service_impl::create_shadow_link(
       co_await _service->local().upsert_cluster_link(std::move(md)));
 
     proto::admin::create_shadow_link_response sl_resp;
-    sl_resp.set_shadow_link(metadata_to_shadow_link(std::move(resp)));
+    sl_resp.set_shadow_link(metadata_to_shadow_link(std::move(resp), {}));
 
     co_return sl_resp;
 }
@@ -164,10 +181,9 @@ shadow_link_service_impl::get_shadow_link(
           .get_shadow_link(ctx, std::move(req));
     }
 
-    auto resp = handle_error(_service->local().get_cluster_link(
-      cluster_link::model::name_t{req.get_name()}));
     proto::admin::get_shadow_link_response get_resp;
-    get_resp.set_shadow_link(metadata_to_shadow_link(std::move(resp)));
+    get_resp.set_shadow_link(
+      co_await build_shadow_link(cluster_link::model::name_t{req.get_name()}));
     co_return get_resp;
 }
 
@@ -194,7 +210,10 @@ shadow_link_service_impl::list_shadow_links(
     chunked_vector<proto::admin::shadow_link> links;
     links.reserve(resp.size());
     for (auto& md : resp) {
-        links.emplace_back(metadata_to_shadow_link(std::move(md)));
+        auto status_report = handle_error(
+          co_await _service->local().shadow_link_report(md.name));
+        links.emplace_back(
+          metadata_to_shadow_link(std::move(md), std::move(status_report)));
     }
 
     list_resp.set_shadow_links(std::move(links));
@@ -239,10 +258,14 @@ shadow_link_service_impl::update_shadow_link(
 
     auto updated_md = handle_error(
       co_await _service->local().update_cluster_link(
-        std::move(link_name), std::move(update_cmd)));
+        link_name, std::move(update_cmd)));
+
+    auto status_report = handle_error(
+      co_await _service->local().shadow_link_report(link_name));
 
     proto::admin::update_shadow_link_response resp;
-    resp.set_shadow_link(metadata_to_shadow_link(std::move(updated_md)));
+    resp.set_shadow_link(
+      metadata_to_shadow_link(std::move(updated_md), std::move(status_report)));
 
     co_return resp;
 }
@@ -266,6 +289,8 @@ shadow_link_service_impl::fail_over(
     auto link_name = cluster_link::model::name_t{req.get_name()};
     auto current_link = handle_error(
       _service->local().get_cluster_link(link_name));
+    auto status_report = handle_error(
+      co_await _service->local().shadow_link_report(link_name));
     const auto& failover_topic = req.get_shadow_topic_name();
     proto::admin::fail_over_response resp;
     if (failover_topic.empty()) {
@@ -273,7 +298,8 @@ shadow_link_service_impl::fail_over(
         auto result = handle_error(
           co_await _service->local().failover_link_topics(
             std::move(link_name)));
-        resp.set_shadow_link(metadata_to_shadow_link(std::move(result)));
+        resp.set_shadow_link(
+          metadata_to_shadow_link(std::move(result), std::move(status_report)));
     } else {
         // failover the specific shadow topic
         auto topic = model::topic{failover_topic};
@@ -282,9 +308,92 @@ shadow_link_service_impl::fail_over(
             std::move(link_name),
             std::move(topic),
             cluster_link::model::mirror_topic_status::failing_over));
-        resp.set_shadow_link(metadata_to_shadow_link(std::move(result)));
+        resp.set_shadow_link(
+          metadata_to_shadow_link(std::move(result), std::move(status_report)));
     }
     co_return resp;
+}
+
+ss::future<proto::admin::get_shadow_topic_response>
+shadow_link_service_impl::get_shadow_topic(
+  serde::pb::rpc::context ctx, proto::admin::get_shadow_topic_request req) {
+    vlog(sllog.trace, "get_shadow_topic: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .get_shadow_topic(ctx, std::move(req));
+    }
+    auto resp = handle_error(_service->local().get_cluster_link(
+      cluster_link::model::name_t{req.get_shadow_link_name()}));
+
+    const auto& it = resp.state.mirror_topics.find(
+      model::topic_view{req.get_name()});
+    if (it == resp.state.mirror_topics.end()) {
+        throw serde::pb::rpc::not_found_exception(
+          ssx::sformat(
+            "Shadow topic {} not found on link {}",
+            req.get_name(),
+            req.get_shadow_link_name()));
+    }
+
+    auto shadow_link_report = handle_error(
+      co_await _service->local().shadow_link_report(
+        cluster_link::model::name_t{req.get_shadow_link_name()}));
+
+    vlog(sllog.trace, "shadow link report: {}", shadow_link_report);
+
+    proto::admin::get_shadow_topic_response get_resp;
+    get_resp.set_shadow_topic(
+      model_to_shadow_topic(it->first, it->second, shadow_link_report));
+
+    vlog(sllog.trace, "get_shadow_topic response: {}", get_resp);
+    co_return get_resp;
+}
+
+ss::future<proto::admin::list_shadow_topics_response>
+shadow_link_service_impl::list_shadow_topics(
+  serde::pb::rpc::context ctx, proto::admin::list_shadow_topics_request req) {
+    vlog(sllog.trace, "list_shadow_topics: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .list_shadow_topics(ctx, std::move(req));
+    }
+
+    auto resp = handle_error(_service->local().get_cluster_link(
+      cluster_link::model::name_t{req.get_shadow_link_name()}));
+    auto shadow_link_report = handle_error(
+      co_await _service->local().shadow_link_report(
+        cluster_link::model::name_t{req.get_shadow_link_name()}));
+
+    chunked_vector<proto::admin::shadow_topic> shadow_topics;
+    shadow_topics.reserve(resp.state.mirror_topics.size());
+    std::ranges::transform(
+      resp.state.mirror_topics,
+      std::back_inserter(shadow_topics),
+      [&shadow_link_report](const auto& p) {
+          return model_to_shadow_topic(p.first, p.second, shadow_link_report);
+      });
+
+    proto::admin::list_shadow_topics_response list_resp;
+    list_resp.set_shadow_topics(std::move(shadow_topics));
+
+    vlog(sllog.trace, "list_shadow_topics response: {}", list_resp);
+    co_return list_resp;
 }
 
 std::optional<model::node_id>
@@ -299,5 +408,16 @@ shadow_link_service_impl::redirect_to(const model::ntp& ntp) {
         return std::nullopt;
     }
     return *leader_node;
+}
+
+ss::future<proto::admin::shadow_link>
+shadow_link_service_impl::build_shadow_link(
+  cluster_link::model::name_t shadow_link_name) {
+    auto md = handle_error(
+      _service->local().get_cluster_link(shadow_link_name));
+    auto link_status = handle_error(
+      co_await _service->local().shadow_link_report(shadow_link_name));
+
+    co_return metadata_to_shadow_link(std::move(md), std::move(link_status));
 }
 } // namespace admin

@@ -18,6 +18,7 @@ import (
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/redpanda"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/iotune"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
@@ -83,6 +84,55 @@ func TestParseNamedAuthNAddress(t *testing.T) {
 				return
 			}
 			require.Exactly(st, tt.expected, *res)
+		})
+	}
+}
+
+func TestCheckTunerConfigCpusetCompatibilityAndUpdateFlags(t *testing.T) {
+	tests := []struct {
+		name       string
+		finalFlags map[string]string
+		cpusets    *tuners.CpusetConfig
+		wantErr    bool
+		wantFlags  map[string]string
+	}{
+		{
+			name:       "conflict with existing cpuset flag",
+			finalFlags: map[string]string{cpuSetFlag: "0-1"},
+			cpusets:    &tuners.CpusetConfig{RedpandaCpuset: "0-2", RedpandaCpusetSize: 3},
+			wantErr:    true,
+		},
+		{
+			name:       "sets cpuset when none present",
+			finalFlags: map[string]string{},
+			cpusets:    &tuners.CpusetConfig{RedpandaCpuset: "0-2", RedpandaCpusetSize: 3},
+			wantErr:    false,
+			wantFlags:  map[string]string{cpuSetFlag: "0-2"},
+		},
+		{
+			name:       "lowers smp when larger than cpuset size",
+			finalFlags: map[string]string{smpFlag: "4"},
+			cpusets:    &tuners.CpusetConfig{RedpandaCpuset: "0-2", RedpandaCpusetSize: 3},
+			wantErr:    false,
+			wantFlags:  map[string]string{cpuSetFlag: "0-2", smpFlag: "3"},
+		},
+		{
+			name:       "smp parse error",
+			finalFlags: map[string]string{smpFlag: "notanint"},
+			cpusets:    &tuners.CpusetConfig{RedpandaCpuset: "0-2", RedpandaCpusetSize: 3},
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkTunerConfigCpusetCompatibilityAndUpdateFlags(tt.finalFlags, tt.cpusets)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantFlags, tt.finalFlags)
 		})
 	}
 }
@@ -1787,7 +1837,7 @@ func Test_buildRedpandaFlags(t *testing.T) {
 			// We can safely pass 'skipCheck:true' to buildRedpandaFlags since
 			// this is only used for the ioResolver function, and we are mocking
 			// it.
-			rpArgs, err := buildRedpandaFlags(fs, tt.args.y, tt.args.args, tt.args.sFlags, cmdFlag, true, ioResolver)
+			rpArgs, err := buildRedpandaFlags(fs, tt.args.y, tt.args.args, tt.args.sFlags, cmdFlag, true, ioResolver, "")
 			if tt.expErr {
 				require.Error(t, err)
 				return
@@ -1798,37 +1848,6 @@ func Test_buildRedpandaFlags(t *testing.T) {
 			// field of the struct is the config file location which we are
 			// writing in a MemMap FS in the test
 			require.Equal(t, tt.exp, rpArgs.SeastarFlags)
-		})
-	}
-}
-
-func Test_ParseFlags(t *testing.T) {
-	for _, tt := range []struct {
-		name string
-		in   []string
-		exp  map[string]string
-	}{
-		{
-			name: "empty flags",
-			in:   []string{"", "-", "--"},
-			exp:  map[string]string{},
-		}, {
-			name: "bool flags - no value",
-			in:   []string{"--overprovisioned", "-true"},
-			exp:  map[string]string{"overprovisioned": "", "true": ""},
-		}, {
-			name: "flags with value",
-			in:   []string{"--smp=2", "--memory=4G", "--default-log-level=info"},
-			exp:  map[string]string{"smp": "2", "memory": "4G", "default-log-level": "info"},
-		}, {
-			name: "flags with value and quotes",
-			in:   []string{`--logger-log-level="rpc=debug"`},
-			exp:  map[string]string{"logger-log-level": "rpc=debug"},
-		},
-	} {
-		t.Run(tt.name, func(st *testing.T) {
-			got := parseFlags(tt.in)
-			require.Equal(st, tt.exp, got)
 		})
 	}
 }

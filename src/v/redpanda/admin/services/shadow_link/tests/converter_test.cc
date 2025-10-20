@@ -218,8 +218,9 @@ TEST(converter_test, create_with_tls_flag_only) {
     EXPECT_FALSE(md.connection.ca.has_value());
     EXPECT_FALSE(md.connection.key.has_value());
     EXPECT_FALSE(md.connection.cert.has_value());
+    EXPECT_TRUE(md.connection.tls_provide_sni);
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     ASSERT_TRUE(
       sl.get_configurations().get_client_options().has_tls_settings());
@@ -256,6 +257,7 @@ TEST(converter_test, create_with_tls_files) {
     tls_file_settings.set_key_path(ss::sstring{key_file});
     tls_file_settings.set_cert_path(ss::sstring{cert_file});
     tls_settings.set_tls_file_settings(std::move(tls_file_settings));
+    tls_settings.set_do_not_set_sni_hostname(true);
     shadow_link_client_options.set_tls_settings(std::move(tls_settings));
 
     shadow_link_client_options.set_bootstrap_servers({"localhost:9092"});
@@ -268,6 +270,7 @@ TEST(converter_test, create_with_tls_files) {
 
     auto md = admin::convert_create_to_metadata(std::move(req));
     EXPECT_TRUE(md.connection.tls_enabled);
+    EXPECT_FALSE(md.connection.tls_provide_sni);
     ASSERT_TRUE(md.connection.ca.has_value());
     ASSERT_TRUE(
       std::holds_alternative<cluster_link::model::tls_file_path>(
@@ -522,7 +525,7 @@ TEST(converter_test, metadata_to_shadow_link) {
     md.connection.bootstrap_servers = {
       net::unresolved_address("localhost", 9092)};
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
     EXPECT_EQ(sl.get_name(), "test-link");
     EXPECT_EQ(sl.get_uid(), fmt::format("{}", uuid));
 
@@ -544,7 +547,7 @@ TEST(converter_test, metadata_to_shadow_link_authn_scram_256) {
       .password = "test-password",
       .mechanism = "SCRAM-SHA-256"};
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& client_options = sl.get_configurations().get_client_options();
     ASSERT_TRUE(client_options.has_authentication_configuration());
@@ -567,7 +570,7 @@ TEST(converter_test, metadata_to_shadow_link_authn_scram_512) {
       .password = "test-password",
       .mechanism = "SCRAM-SHA-512"};
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& client_options = sl.get_configurations().get_client_options();
     ASSERT_TRUE(client_options.has_authentication_configuration());
@@ -590,7 +593,7 @@ TEST(converter_test, metadata_to_shadow_link_authn_invalid_scram) {
       .password = "test-password",
       .mechanism = "SCRAM-SHA-NOPE"};
     EXPECT_THROW(
-      admin::metadata_to_shadow_link(std::move(md)), std::invalid_argument);
+      admin::metadata_to_shadow_link(std::move(md), {}), std::invalid_argument);
 }
 
 TEST(converter_test, metadata_to_shadow_link_tls_file) {
@@ -602,7 +605,7 @@ TEST(converter_test, metadata_to_shadow_link_tls_file) {
     md.connection.key = cluster_link::model::tls_file_path(key_file);
     md.connection.cert = cluster_link::model::tls_file_path(cert_file);
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& client_options = sl.get_configurations().get_client_options();
     ASSERT_TRUE(client_options.has_tls_settings());
@@ -612,14 +615,17 @@ TEST(converter_test, metadata_to_shadow_link_tls_file) {
     EXPECT_EQ(tls_file_settings.get_ca_path(), ca_file);
     EXPECT_EQ(tls_file_settings.get_key_path(), key_file);
     EXPECT_EQ(tls_file_settings.get_cert_path(), cert_file);
+    EXPECT_FALSE(tls_settings.get_do_not_set_sni_hostname());
 }
 
 TEST(converter_test, metadata_to_shadow_link_tls_file_on_ca) {
     const auto ca_file = "ca_file.pem";
     cluster_link::model::metadata md;
     md.connection.ca = cluster_link::model::tls_file_path(ca_file);
+    md.connection.tls_provide_sni
+      = cluster_link::model::connection_config::tls_provide_sni_t::no;
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& client_options = sl.get_configurations().get_client_options();
     ASSERT_TRUE(client_options.has_tls_settings());
@@ -629,6 +635,7 @@ TEST(converter_test, metadata_to_shadow_link_tls_file_on_ca) {
     EXPECT_EQ(tls_file_settings.get_ca_path(), ca_file);
     EXPECT_TRUE(tls_file_settings.get_key_path().empty());
     EXPECT_TRUE(tls_file_settings.get_cert_path().empty());
+    EXPECT_TRUE(tls_settings.get_do_not_set_sni_hostname());
 }
 
 TEST(converter_test, metadata_to_shadow_link_tls_value) {
@@ -641,7 +648,7 @@ TEST(converter_test, metadata_to_shadow_link_tls_value) {
     md.connection.key = cluster_link::model::tls_value(key);
     md.connection.cert = cluster_link::model::tls_value(cert);
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& client_options = sl.get_configurations().get_client_options();
     ASSERT_TRUE(client_options.has_tls_settings());
@@ -659,7 +666,7 @@ TEST(converter_test, metadata_to_shadow_link_tls_value_only_ca) {
     cluster_link::model::metadata md;
     md.connection.ca = cluster_link::model::tls_value(ca);
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& client_options = sl.get_configurations().get_client_options();
     ASSERT_TRUE(client_options.has_tls_settings());
@@ -679,7 +686,8 @@ TEST(converter_test, metadata_to_shadow_link_mismatch_tls) {
         md.connection.cert = cluster_link::model::tls_value("cert");
 
         EXPECT_THROW(
-          admin::metadata_to_shadow_link(std::move(md)), std::invalid_argument);
+          admin::metadata_to_shadow_link(std::move(md), {}),
+          std::invalid_argument);
     }
     {
         cluster_link::model::metadata md;
@@ -688,7 +696,8 @@ TEST(converter_test, metadata_to_shadow_link_mismatch_tls) {
         md.connection.cert = cluster_link::model::tls_file_path("cert");
 
         EXPECT_THROW(
-          admin::metadata_to_shadow_link(std::move(md)), std::invalid_argument);
+          admin::metadata_to_shadow_link(std::move(md), {}),
+          std::invalid_argument);
     }
     {
         cluster_link::model::metadata md;
@@ -697,7 +706,8 @@ TEST(converter_test, metadata_to_shadow_link_mismatch_tls) {
         md.connection.cert = cluster_link::model::tls_value("cert");
 
         EXPECT_THROW(
-          admin::metadata_to_shadow_link(std::move(md)), std::invalid_argument);
+          admin::metadata_to_shadow_link(std::move(md), {}),
+          std::invalid_argument);
     }
 }
 
@@ -718,7 +728,7 @@ TEST(converter_test, metadata_to_shadow_link_topic_mirroring_cfg) {
       }};
     md.configuration.topic_metadata_mirroring_cfg.exclude_default = true;
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
     const auto& topic_metadata_sync_options
       = sl.get_configurations().get_topic_metadata_sync_options();
 
@@ -748,13 +758,16 @@ TEST(converter_test, metadata_to_shadow_link_topic_mirroring_cfg) {
     EXPECT_TRUE(topic_metadata_sync_options.get_exclude_default());
 }
 
-proto::admin::shadow_topic_status create_shadow_topic_status(
-  ss::sstring name, proto::admin::shadow_topic_state state) {
-    proto::admin::shadow_topic_status status;
-    status.set_name(std::move(name));
-    status.set_state(state);
+proto::admin::shadow_topic
+create_shadow_topic(ss::sstring name, proto::admin::shadow_topic_state state) {
+    proto::admin::shadow_topic st;
+    proto::admin::shadow_topic_status sts;
 
-    return status;
+    st.set_name(std::move(name));
+    sts.set_state(state);
+    st.set_status(std::move(sts));
+
+    return st;
 }
 
 TEST(converter_test, metadata_to_shadow_link_topic_status) {
@@ -775,19 +788,19 @@ TEST(converter_test, metadata_to_shadow_link_topic_status) {
 
     md.state.set_mirror_topics(std::move(mirror_topic_states));
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
-    auto& mirror_topics = sl.get_status().get_shadow_topic_statuses();
+    auto& mirror_topics = sl.get_status().get_shadow_topics();
 
-    chunked_vector<proto::admin::shadow_topic_status> expected;
+    chunked_vector<proto::admin::shadow_topic> expected;
     expected.reserve(4);
-    expected.emplace_back(create_shadow_topic_status(
-      "active", proto::admin::shadow_topic_state::active));
-    expected.emplace_back(create_shadow_topic_status(
-      "failed", proto::admin::shadow_topic_state::faulted));
-    expected.emplace_back(create_shadow_topic_status(
-      "paused", proto::admin::shadow_topic_state::paused));
-    expected.emplace_back(create_shadow_topic_status(
+    expected.emplace_back(
+      create_shadow_topic("active", proto::admin::shadow_topic_state::active));
+    expected.emplace_back(
+      create_shadow_topic("failed", proto::admin::shadow_topic_state::faulted));
+    expected.emplace_back(
+      create_shadow_topic("paused", proto::admin::shadow_topic_state::paused));
+    expected.emplace_back(create_shadow_topic(
       "promoted", proto::admin::shadow_topic_state::promoted));
 
     std::ranges::sort(mirror_topics, [](const auto& a, const auto& b) {
@@ -1010,7 +1023,7 @@ TEST(converter_test, metadata_to_shadow_link_security) {
           acl_access_filter{.principal = "User:*", .operation = cluster_link::model::acl_operation::any, .permission_type = cluster_link::model::acl_permission_type::any, .host = "*"},
       });
 
-    auto sl = admin::metadata_to_shadow_link(std::move(md));
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
 
     const auto& security_settings
       = sl.get_configurations().get_security_sync_options();

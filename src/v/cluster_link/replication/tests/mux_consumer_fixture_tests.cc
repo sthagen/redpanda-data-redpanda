@@ -27,16 +27,20 @@ class MuxConsumerFixture : public BasicConsumerFixture {
 public:
     void SetUp() override {
         basic_consumer_fixture::SetUp();
-        auto consumer = make_consumer();
-        _raw_consumer = consumer.get();
         auto* rp = instance(model::node_id{0});
+
         _mux_consumer = std::make_unique<mux_remote_consumer>(
-          client_id,
-          std::move(consumer),
+          *cluster,
           rp->app.snc_quota_mgr.local(),
-          partition_max_buffered,
-          fetch_max_wait);
+          mux_remote_consumer::configuration{
+            .client_id = client_id,
+            .direct_consumer_configuration = direct_consumer::
+              configuration{.with_sessions = fetch_sessions_enabled{GetParam() == kafka::client::tests::session_config::with_sessions}},
+            .partition_max_buffered = partition_max_buffered,
+            .fetch_max_wait = fetch_max_wait,
+          });
         _mux_consumer->start().get();
+        _raw_consumer = _mux_consumer->_consumer.get();
     }
     void TearDown() override {
         if (_mux_consumer) {

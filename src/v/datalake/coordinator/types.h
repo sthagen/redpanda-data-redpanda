@@ -17,6 +17,7 @@
 #include "model/fundamental.h"
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
+#include "serde/rw/map.h"
 
 namespace datalake::coordinator {
 
@@ -329,6 +330,56 @@ struct usage_stats_request
     }
 
     auto serde_fields() { return std::tie(coordinator_partition); }
+};
+
+struct get_topic_state_reply
+  : serde::envelope<
+      get_topic_state_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    get_topic_state_reply() = default;
+    explicit get_topic_state_reply(errc err)
+      : errc(err) {}
+
+    friend std::ostream&
+    operator<<(std::ostream&, const get_topic_state_reply&);
+
+    errc errc;
+    // Map from topic to its state. Only valid if errc == errc::ok
+    chunked_hash_map<model::topic, topic_state> topic_states;
+
+    auto serde_fields() { return std::tie(errc, topic_states); }
+};
+
+struct get_topic_state_request
+  : serde::envelope<
+      get_topic_state_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = get_topic_state_reply;
+
+    get_topic_state_request() = default;
+    explicit get_topic_state_request(
+      model::partition_id coordinator_partition,
+      chunked_vector<model::topic> topics_filter)
+      : coordinator_partition(coordinator_partition)
+      , topics_filter(std::move(topics_filter)) {}
+
+    model::partition_id coordinator_partition;
+
+    // Topics to return. If empty, returns all topics.
+    chunked_vector<model::topic> topics_filter;
+
+    model::partition_id get_coordinator_partition() const {
+        return coordinator_partition;
+    }
+
+    friend std::ostream&
+    operator<<(std::ostream&, const get_topic_state_request&);
+
+    auto serde_fields() {
+        return std::tie(coordinator_partition, topics_filter);
+    }
 };
 
 } // namespace datalake::coordinator

@@ -104,3 +104,16 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+redpanda_cc_library(
+    name = "priority_queue",
+    hdrs = [
+        "priority_queue.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":chunked_vector",
+        "//src/v/base",
+        "//src/v/ssx:async_algorithm",
+    ],
+)

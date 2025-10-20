@@ -12,10 +12,10 @@
 #include "cloud_storage/types.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
-#include "cloud_topics/level_one/frontend_reader/reader.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
-#include "cloud_topics/level_zero/frontend_reader/reader.h"
+#include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
@@ -236,32 +236,24 @@ ss::future<storage::translating_reader> frontend::make_reader(
   std::optional<model::timeout_clock::time_point>) {
     vassert(_data_plane != nullptr, "cloud topics api not initialized");
 
-    auto ot_state = _partition->get_offset_translator_state();
-    auto lro = _ctp_stm_api->get_last_reconciled_offset();
-    if (lro > kafka::offset::min() && cfg.start_offset <= lro) {
-        // Read from L1 if some reconciliation has happened (lro > min) and the
-        // range overlaps L1.
-        vlog(
-          cd_log.debug,
-          "Start offset {} <= LRO {}: using L1 reader",
-          cfg.start_offset,
-          lro);
+    const auto lro = _ctp_stm_api->get_last_reconciled_offset();
 
-        auto impl = make_l1_reader(cfg);
-        co_return storage::translating_reader{
-          model::record_batch_reader(std::move(impl)), std::move(ot_state)};
-    }
+    const auto level_one = lro > kafka::offset::min()
+                           && cfg.start_offset <= lro;
 
     vlog(
       cd_log.debug,
-      "Start offset {} > LRO {}: using L0 reader",
+      "Building {} reader for {} from {} lro {}",
+      (level_one ? "L1" : "L0"),
+      _partition->ntp(),
       cfg.start_offset,
       lro);
 
-    auto impl = std::make_unique<level_zero_log_reader_impl>(
-      cfg, _partition, _data_plane);
+    auto impl = level_one ? make_l1_reader(cfg) : make_l0_reader(cfg);
+
     co_return storage::translating_reader{
-      model::record_batch_reader(std::move(impl)), std::move(ot_state)};
+      model::record_batch_reader(std::move(impl)),
+      _partition->get_offset_translator_state()};
 }
 
 ss::future<std::vector<cluster::tx::tx_range>> frontend::aborted_transactions(
@@ -302,7 +294,13 @@ frontend::ntp_to_topic_id_partition(const model::ntp& ntp) const {
 }
 
 std::unique_ptr<model::record_batch_reader::impl>
-frontend::make_l1_reader(cloud_topic_log_reader_config& cfg) const {
+frontend::make_l0_reader(const cloud_topic_log_reader_config& cfg) const {
+    return std::make_unique<level_zero_log_reader_impl>(
+      cfg, _partition, _data_plane);
+}
+
+std::unique_ptr<model::record_batch_reader::impl>
+frontend::make_l1_reader(const cloud_topic_log_reader_config& cfg) const {
     auto ct_state = _partition->get_cloud_topics_state();
     auto l1_metastore = ct_state->local().get_l1_metastore();
     auto l1_io = ct_state->local().get_l1_io();

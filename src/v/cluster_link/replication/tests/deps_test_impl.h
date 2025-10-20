@@ -26,6 +26,7 @@ public:
       ::model::timeout_clock::duration timeout,
       ss::abort_source& as) override;
     void notify_replicator_failure(::model::term_id) override;
+    kafka::offset high_watermark() const final;
 
 private:
     size_t _records_consumed;
@@ -39,6 +40,7 @@ public:
     ss::future<> stop() noexcept override;
     ss::future<> reset(kafka::offset) override;
     ss::future<data_source::data> fetch_next(ss::abort_source&) override;
+    std::optional<source_partition_offsets_report> get_offsets() final;
 
 private:
     kafka::offset _next{};

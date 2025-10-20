@@ -40,7 +40,7 @@ func (m *cpuMasksMock) BaseCPUMask(cpuMask string) (string, error) {
 }
 
 func (m *cpuMasksMock) CPUMaskForIRQs(
-	mode irq.Mode, cpuMask string, t config.RpkNodeTuners,
+	mode irq.Mode, cpuMask string, rnc config.RpkNodeConfig,
 ) (string, error) {
 	return m.cpuMaskForIRQs(mode, cpuMask)
 }

@@ -39,6 +39,7 @@ class DatalakeThrottlingTest(RedpandaTest):
             extra_rp_conf={
                 "iceberg_enabled": "true",
                 "iceberg_catalog_commit_interval_ms": 5000,
+                "iceberg_throttle_backlog_size_ratio": 0.3,
             },
             schema_registry_config=SchemaRegistryConfig(),
             pandaproxy_config=PandaproxyConfig(),

@@ -208,6 +208,13 @@ template auto frontend::process<
   &frontend::get_usage_stats_locally,
   &frontend::client::get_usage_stats>(usage_stats_request, bool);
 
+template auto frontend::remote_dispatch<&frontend::client::get_topic_state>(
+  get_topic_state_request, model::node_id);
+
+template auto frontend::process<
+  &frontend::get_topic_state_locally,
+  &frontend::client::get_topic_state>(get_topic_state_request, bool);
+
 // -- explicit instantiations ---
 
 frontend::frontend(
@@ -245,6 +252,15 @@ frontend::coordinator_partition(const model::topic& topic) const {
     auto partition = murmur2(bytes.data(), bytes.size())
                      % md->get().get_configuration().partition_count;
     return model::partition_id{static_cast<int32_t>(partition)};
+}
+
+std::optional<int32_t> frontend::coordinator_partition_count() const {
+    const auto md = _metadata->local().get_topic_metadata_ref(
+      model::datalake_coordinator_nt);
+    if (!md) {
+        return std::nullopt;
+    }
+    return md->get().get_configuration().partition_count;
 }
 
 ss::future<bool> frontend::ensure_topic_exists() {
@@ -441,6 +457,41 @@ ss::future<usage_stats_reply> frontend::get_usage_stats(
     co_return co_await process<
       &frontend::get_usage_stats_locally,
       &client::get_usage_stats>(std::move(request), bool(local_only_exec));
+}
+
+ss::future<get_topic_state_reply> frontend::get_topic_state_locally(
+  get_topic_state_request request,
+  const model::ntp& coordinator_partition,
+  ss::shard_id shard) {
+    auto holder = _gate.hold();
+    co_return co_await _coordinator_mgr->invoke_on(
+      shard,
+      [coordinator_partition, &request](coordinator_manager& mgr) mutable {
+          auto partition = mgr.get(coordinator_partition);
+          if (!partition) {
+              return ssx::now(get_topic_state_reply{errc::not_leader});
+          }
+          return partition
+            ->sync_get_topic_state(std::move(request.topics_filter))
+            .then([](auto result) {
+                get_topic_state_reply resp{};
+                if (result.has_error()) {
+                    resp.errc = to_rpc_errc(result.error());
+                } else {
+                    resp.errc = errc::ok;
+                    resp.topic_states = std::move(result.value());
+                }
+                return ssx::now(std::move(resp));
+            });
+      });
+}
+
+ss::future<get_topic_state_reply> frontend::get_topic_state(
+  get_topic_state_request request, local_only local_only_exec) {
+    auto holder = _gate.hold();
+    co_return co_await process<
+      &frontend::get_topic_state_locally,
+      &client::get_topic_state>(std::move(request), bool(local_only_exec));
 }
 
 } // namespace datalake::coordinator

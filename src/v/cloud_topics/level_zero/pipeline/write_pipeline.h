@@ -68,7 +68,14 @@ public:
         /// Return write request back into the pipeline.
         /// The write request advances to the next stage of the
         /// pipeline.
-        void push_next_stage(write_request<Clock>&);
+        /// \param r Write request to reenqueue
+        /// \param signal If true signal the next stage that new write request
+        void push_next_stage(write_request<Clock>& r, bool signal = true);
+
+        /// Notify the next stage that new write requests are available.
+        /// This method should be invoked after 'push_next_stage(..., false)'
+        /// to avoid stalling the pipeline.
+        void signal_next_stage();
 
         /// Extract write requests out of the pipeline atomically.
         /// The caller is responsible for handling each write request.
@@ -181,7 +188,10 @@ private:
     /// before back into the pipeline.
     /// The method allows to reenqueue requests returned by get_write_requests
     /// method.
-    void reenqueue(write_request<Clock>&);
+    /// \param req Write request to reenqueue
+    /// \param signal If true signal the next stage that new write request is
+    /// available
+    void reenqueue(write_request<Clock>& req, bool signal = true);
 
     // Current bytes (gauge)
     size_t _current_size{0};

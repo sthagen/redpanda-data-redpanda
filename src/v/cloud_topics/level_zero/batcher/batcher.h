@@ -108,7 +108,6 @@ private:
     cloud_storage_clients::bucket_name _bucket;
     config::binding<std::chrono::milliseconds> _upload_timeout;
     config::binding<std::chrono::milliseconds> _upload_backoff_interval;
-    config::binding<std::chrono::milliseconds> _upload_interval;
 
     ss::gate _gate;
     ss::abort_source _as;

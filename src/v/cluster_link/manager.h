@@ -36,6 +36,9 @@ namespace cluster_link {
  */
 class manager {
 public:
+    using notification_id = named_type<uint32_t, struct mgr_notification_tag>;
+    using link_cfg_change_notification_cb
+      = ss::noncopyable_function<void(model::id_t, const model::metadata&)>;
     manager(
       ::model::node_id self,
       std::unique_ptr<kafka::data::rpc::partition_leader_cache>
@@ -179,7 +182,19 @@ public:
         return _scheduling_group;
     }
 
+    notification_id
+    register_link_config_changes_callback(link_cfg_change_notification_cb cb);
+    void unregister_link_config_changes_callback(notification_id cb);
+
     std::unique_ptr<link_registry>& registry() noexcept { return _registry; }
+
+    cl_result<
+      chunked_hash_map<::model::ntp, replication::partition_offsets_report>>
+    get_partition_offsets_report_for_link(const model::name_t& name) const;
+
+    cl_result<
+      chunked_hash_map<::model::ntp, replication::partition_offsets_report>>
+    get_partition_offsets_report_for_link(model::id_t link_id) const;
 
 private:
     /// Called periodically to reconcile registered tasks on created links
@@ -207,6 +222,8 @@ private:
 
     chunked_vector<std::unique_ptr<task_factory>> _task_factories;
     absl::flat_hash_map<id_t, std::unique_ptr<link>> _links;
+    notification_list<link_cfg_change_notification_cb, notification_id>
+      _cfg_change_notifications;
 
     ss::lowres_clock::duration _task_reconciler_interval;
     mutex _link_task_reconciler_mutex{

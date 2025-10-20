@@ -85,7 +85,7 @@ class DatalakeVerifierTest(RedpandaTest):
 
             # Insert duplicate
             dl.trino().run_query_fetch_all(
-                f"INSERT INTO redpanda.{topic_name}  VALUES ( ROW(0, 10, TIMESTAMP '2024-11-29 10:00:00' , ARRAY[], CAST('key' as VARBINARY )), CAST('value' AS VARBINARY))"
+                f"INSERT INTO redpanda.{topic_name}  VALUES ( ROW(0, 10, TIMESTAMP '2024-11-29 10:00:00' , ARRAY[], CAST('key' as VARBINARY ), 0), CAST('value' AS VARBINARY))"
             )
 
             verifier = DatalakeVerifier(self.redpanda, topic_name, dl.trino())

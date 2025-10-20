@@ -326,35 +326,35 @@ domain_manager::get_offsets(rpc::get_offsets_request req) {
     };
 }
 
-ss::future<rpc::get_compaction_offsets_reply>
-domain_manager::get_compaction_offsets(
-  rpc::get_compaction_offsets_request req) {
+ss::future<rpc::get_compaction_info_reply>
+domain_manager::get_compaction_info(rpc::get_compaction_info_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
-        co_return rpc::get_compaction_offsets_reply{
+        co_return rpc::get_compaction_info_reply{
           .ec = rpc::errc::not_leader,
         };
     }
     auto sync_res = co_await stm_->sync(10s);
     if (!sync_res.has_value()) {
-        co_return rpc::get_compaction_offsets_reply{
+        co_return rpc::get_compaction_info_reply{
           .ec = convert_stm_errc(sync_res.error()),
         };
     }
     auto& stm_state = stm_->state();
-    auto get_res = simple_metastore::get_compaction_offsets(
+    auto get_res = simple_metastore::get_compaction_info(
       stm_state, req.tp, req.tombstone_removal_upper_bound_ts);
     if (!get_res.has_value()) {
-        co_return rpc::get_compaction_offsets_reply{
+        co_return rpc::get_compaction_info_reply{
           .ec = convert_metastore_errc(get_res.error()),
         };
     }
-    co_return rpc::get_compaction_offsets_reply{
+    co_return rpc::get_compaction_info_reply{
       .ec = rpc::errc::ok,
-      .dirty_ranges = std::move(get_res->dirty_ranges),
+      .dirty_ranges = std::move(get_res->offsets_response.dirty_ranges),
       .removable_tombstone_ranges = std::move(
-        get_res->removable_tombstone_ranges),
-    };
+        get_res->offsets_response.removable_tombstone_ranges),
+      .dirty_ratio = get_res->dirty_ratio,
+      .earliest_dirty_ts = get_res->earliest_dirty_ts};
 }
 
 ss::future<rpc::get_term_for_offset_reply>

@@ -26,6 +26,7 @@ from rptest.services.redpanda import (
     SchemaRegistryConfig,
     get_cloud_provider,
 )
+from rptest.tests.datalake.datalake_e2e_test import SPARK_RP_FIELD_TYPE
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
@@ -134,8 +135,8 @@ class DatabricksTest(RedpandaTest):
             actual_schema = fetch_dbx_schema(dl, f"redpanda.{self.topic_name}")
             expected_schema = [
                 Row(
-                    col_name="redpanda",
-                    data_type="struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
+                    col_name=SPARK_RP_FIELD_TYPE[0],
+                    data_type=SPARK_RP_FIELD_TYPE[1],
                     comment=None,
                 ),
                 Row(col_name="value", data_type="binary", comment=None),
@@ -175,8 +176,8 @@ class DatabricksTest(RedpandaTest):
                 record_generator=lambda: 42,
                 dbx_schema=[
                     Row(
-                        col_name="redpanda",
-                        data_type="struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
+                        col_name=SPARK_RP_FIELD_TYPE[0],
+                        data_type=SPARK_RP_FIELD_TYPE[1],
                         comment=None,
                     ),
                     Row(col_name="root", data_type="bigint", comment=None),
@@ -202,8 +203,8 @@ class DatabricksTest(RedpandaTest):
                 record_generator=lambda: {"id": 42, "name": "test_name"},
                 dbx_schema=[
                     Row(
-                        col_name="redpanda",
-                        data_type="struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
+                        col_name=SPARK_RP_FIELD_TYPE[0],
+                        data_type=SPARK_RP_FIELD_TYPE[1],
                         comment=None,
                     ),
                     Row(col_name="id", data_type="bigint", comment=None),
@@ -310,8 +311,8 @@ class DatabricksTest(RedpandaTest):
             actual_schema = fetch_dbx_schema(dl, f"redpanda.{self.topic_name}")
             expected_schema = [
                 Row(
-                    col_name="redpanda",
-                    data_type="struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
+                    col_name=SPARK_RP_FIELD_TYPE[0],
+                    data_type=SPARK_RP_FIELD_TYPE[1],
                     comment=None,
                 ),
                 Row(col_name="value", data_type="binary", comment=None),

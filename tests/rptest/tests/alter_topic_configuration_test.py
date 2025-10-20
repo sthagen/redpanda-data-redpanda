@@ -307,6 +307,43 @@ class AlterTopicConfiguration(RedpandaTest):
         )
 
     @cluster(num_nodes=3)
+    def test_batch_max_bytes_validation(self):
+        self.redpanda.set_cluster_config(
+            {"kafka_max_message_size_upper_limit_bytes": 10}
+        )
+
+        topic = self.topics[0].name
+        kafka_tools = KafkaCliTools(self.redpanda)
+        initial_spec = kafka_tools.describe_topic(topic)
+
+        try:
+            self.client().alter_topic_configs(
+                topic, {TopicSpec.PROPERTY_MAX_MESSAGE_BYTES: 100}
+            )
+        except subprocess.CalledProcessError as e:
+            assert "is outside of the allowed range" in e.output
+
+        try:
+            self.client().alter_topic_configs(
+                topic, {TopicSpec.PROPERTY_MAX_MESSAGE_BYTES: 0}
+            )
+        except subprocess.CalledProcessError as e:
+            assert "is outside of the allowed range" in e.output
+
+        not_updated = kafka_tools.describe_topic(topic)
+        assert initial_spec.max_message_bytes == not_updated.max_message_bytes, (
+            "max.message.bytes should not have changed"
+        )
+
+        self.client().alter_topic_configs(
+            topic, {TopicSpec.PROPERTY_MAX_MESSAGE_BYTES: 1}
+        )
+        updated = kafka_tools.describe_topic(topic)
+        assert updated.max_message_bytes and int(updated.max_message_bytes) == 1, (
+            "max.message.bytes should have changed"
+        )
+
+    @cluster(num_nodes=3)
     def test_min_and_max_compaction_lag_ms_validation(self):
         topic = self.topics[0].name
         kafka_tools = KafkaCliTools(self.redpanda)

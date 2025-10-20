@@ -1289,3 +1289,25 @@ redpanda_cc_gtest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "controller_forced_reconfiguration_test",
+    timeout = "moderate",
+    srcs = [
+        "controller_forced_reconfiguration_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/cluster/tests:cluster_test_fixture",
+        "//src/v/config",
+        "//src/v/container:zip",
+        "//src/v/model",
+        "//src/v/raft:fundamental",
+        "//src/v/random:generators",
+        "//src/v/security",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

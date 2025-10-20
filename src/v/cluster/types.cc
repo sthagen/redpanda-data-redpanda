@@ -892,6 +892,11 @@ operator<<(std::ostream& o, const cluster::feature_update_cmd_data& r) {
     return o;
 }
 
+fmt::iterator error_info::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{err: {}, message: {}}}", this->err, this->message);
+}
+
 } // namespace cluster
 
 namespace reflection {

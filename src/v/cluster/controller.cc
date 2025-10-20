@@ -30,6 +30,7 @@
 #include "cluster/config_frontend.h"
 #include "cluster/controller_api.h"
 #include "cluster/controller_backend.h"
+#include "cluster/controller_forced_reconfiguration_manager.h"
 #include "cluster/controller_log_limiter.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_stm.h"
@@ -73,9 +74,11 @@
 #include "config/configuration.h"
 #include "config/node_config.h"
 #include "features/feature_table.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
+#include "raft/fundamental.h"
 #include "raft/fwd.h"
 #include "security/acl.h"
 #include "security/authorizer.h"
@@ -93,9 +96,11 @@
 #include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/later.hh>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <system_error>
 namespace cluster {
 
 bytes controller::invariants_key() {
@@ -132,6 +137,7 @@ controller::controller(
   , _node_status_table(node_status_table)
   , _metadata_cache(metadata_cache)
   , _probe(*this)
+  , _cfr_m(std::make_unique<controller_forced_reconfiguration_manager>(this))
   , _scheduling_group(scheduling_group) {}
 
 // Explicit destructor in the .cc file just to avoid bloating the header with
@@ -869,6 +875,8 @@ ss::future<> controller::start(
       ss::sharded_parameter([] {
           return config::shard_local_cfg().topic_label_aggregation_limit.bind();
       }));
+
+    co_await _cfr_m->start(shard0_as);
 }
 
 ss::future<> controller::set_ready() {
@@ -904,6 +912,8 @@ ss::future<> controller::stop() {
     if (!_as.local().abort_requested()) {
         co_await shutdown_input();
     }
+
+    co_await _cfr_m->stop();
 
     co_await ss::smp::submit_to(controller_stm_shard, [&stm = _stm] {
         return stm.local_is_initialized() ? stm.local().shutdown() : ss::now();
@@ -1303,6 +1313,19 @@ ss::future<> controller::set_raft_manager_remake_cb() {
 
 ss::future<> controller::clear_raft_manager_remake_cb() {
     co_await _raft_manager.invoke_on_all(&raft::group_manager::clear_remake_cb);
+}
+
+ss::future<cluster::error_info>
+controller::initialize_controller_forced_reconfiguration(
+  std::vector<model::node_id> dead_nodes, uint16_t surviving_node_count) {
+    vassert(
+      ss::this_shard_id() == controller_stm_shard,
+      "programmer error, controller_force_recovery should only be called on "
+      "shard {}",
+      controller_stm_shard);
+
+    co_return co_await _cfr_m->initialize_controller_forced_reconfiguration(
+      std::move(dead_nodes), surviving_node_count);
 }
 
 } // namespace cluster

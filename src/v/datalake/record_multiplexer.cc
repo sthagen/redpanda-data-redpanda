@@ -129,8 +129,8 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
       raw_size_bytes,
       decompressed_size_bytes);
 
-    auto is_broker_time = batch.header().attrs.timestamp_type()
-                          == model::timestamp_type::append_time;
+    auto timestamp_type = batch.header().attrs.timestamp_type();
+    auto is_broker_time = timestamp_type == model::timestamp_type::append_time;
     auto first_timestamp = batch.header().first_timestamp.value();
     auto max_timestamp = batch.header().max_timestamp;
     auto it = model::record_batch_iterator::create(batch);
@@ -182,6 +182,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                   record.share_key(),
                   record.share_value(),
                   timestamp,
+                  timestamp_type,
                   std::move(header_kvs),
                   as);
                 if (invalid_res.has_error()) {
@@ -199,6 +200,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
           val_type_res.value().type,
           std::move(val_type_res.value().parsable_buf),
           timestamp,
+          timestamp_type,
           header_kvs);
         if (record_data_res.has_error()) {
             auto err = record_data_res.error();
@@ -218,6 +220,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                   record.share_key(),
                   record.share_value(),
                   timestamp,
+                  timestamp_type,
                   std::move(header_kvs),
                   as);
                 if (invalid_res.has_error()) {
@@ -244,6 +247,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                       record.share_key(),
                       record.share_value(),
                       timestamp,
+                      timestamp_type,
                       std::move(header_kvs),
                       as);
                     if (invalid_res.has_error()) {
@@ -474,6 +478,7 @@ record_multiplexer::handle_invalid_record(
   std::optional<iobuf> key,
   std::optional<iobuf> val,
   model::timestamp ts,
+  model::timestamp_type ts_t,
   chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>> headers,
   ss::abort_source& as) {
     _translation_probe.increment_invalid_record(cause);
@@ -590,6 +595,7 @@ record_multiplexer::handle_invalid_record(
           resolved_buf_type.value().type,
           std::move(resolved_buf_type.value().parsable_buf),
           ts,
+          ts_t,
           headers);
         if (record_data_res.has_error()) {
             vlog(

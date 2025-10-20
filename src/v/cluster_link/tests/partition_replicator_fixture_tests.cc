@@ -8,15 +8,15 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cluster_link/replication/deps_impl.h"
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "cluster_link/replication/partition_replicator.h"
+#include "cluster_link/service.h"
 #include "kafka/client/direct_consumer/tests/direct_consumer_fixture.h"
 
 namespace {
 ss::logger logger{"replicator-fixture-test"};
 }
-using namespace cluster_link::replication;
+
 using BasicConsumerFixture = kafka::client::tests::basic_consumer_fixture;
 
 static constexpr std::chrono::milliseconds fetch_max_wait{10};
@@ -28,12 +28,19 @@ public:
         basic_consumer_fixture::SetUp();
         auto consumer = make_consumer();
         auto* rp = instance(model::node_id{0});
-        _mux_consumer = std::make_unique<mux_remote_consumer>(
-          client_id,
-          make_consumer(),
-          rp->app.snc_quota_mgr.local(),
-          partition_max_buffered,
-          fetch_max_wait);
+        direct_consumer::configuration dc_cfg{
+          .with_sessions = fetch_sessions_enabled{
+            GetParam() == kafka::client::tests::session_config::with_sessions}};
+
+        _mux_consumer
+          = std::make_unique<cluster_link::replication::mux_remote_consumer>(
+            *cluster,
+            rp->app.snc_quota_mgr.local(),
+            cluster_link::replication::mux_remote_consumer::configuration{
+              .client_id = client_id,
+              .direct_consumer_configuration = dc_cfg,
+              .partition_max_buffered = partition_max_buffered,
+              .fetch_max_wait = fetch_max_wait});
         _mux_consumer->start().get();
         // create source and target topics;
         create_topic(model::topic_namespace_view{_source}).get();
@@ -42,11 +49,12 @@ public:
         auto [_, partition] = get_leader(_target);
         vassert(partition, "no partition for {}", _target);
 
-        auto source = std::make_unique<remote_partition_source>(
+        auto source = cluster_link::make_default_data_source(
           _source.tp, *_mux_consumer);
-        auto sink = std::make_unique<local_partition_sink>(partition);
-        _replicator = std::make_unique<partition_replicator>(
-          _source, model::term_id{0}, std::move(source), std::move(sink));
+        auto sink = cluster_link::make_default_data_sink(partition);
+        _replicator
+          = std::make_unique<cluster_link::replication::partition_replicator>(
+            _source, model::term_id{0}, std::move(source), std::move(sink));
         _replicator->start().get();
     }
 
@@ -78,8 +86,10 @@ public:
 
 protected:
     const ss::sstring client_id = "replicator_fixture_test";
-    std::unique_ptr<mux_remote_consumer> _mux_consumer;
-    std::unique_ptr<partition_replicator> _replicator;
+    std::unique_ptr<cluster_link::replication::mux_remote_consumer>
+      _mux_consumer;
+    std::unique_ptr<cluster_link::replication::partition_replicator>
+      _replicator;
     model::ntp _source{model::kafka_namespace, "source", 0};
     model::ntp _target{model::kafka_namespace, "target", 0};
 };

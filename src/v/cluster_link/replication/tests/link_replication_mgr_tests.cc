@@ -44,6 +44,10 @@ public:
         batches.push_back(std::move(batch));
         co_return data_source::data{std::move(batches), ssx::semaphore_units{}};
     }
+    std::optional<data_source::source_partition_offsets_report>
+    get_offsets() final {
+        return std::nullopt;
+    }
 
 private:
     ss::gate _gate;
@@ -80,6 +84,8 @@ public:
     };
 
     void notify_replicator_failure(model::term_id) final {}
+
+    kafka::offset high_watermark() const final { return {}; }
 
 private:
     ss::gate _gate;

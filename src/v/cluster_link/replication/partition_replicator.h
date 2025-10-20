@@ -10,6 +10,7 @@
 #pragma once
 
 #include "cluster_link/replication/deps.h"
+#include "cluster_link/replication/types.h"
 #include "ssx/semaphore.h"
 #include "utils/prefix_logger.h"
 
@@ -66,6 +67,8 @@ public:
     ::model::term_id term() const { return _term; }
 
     void notify_sink_on_failure(::model::term_id) const;
+
+    partition_offsets_report get_partition_offsets_report() const;
 
 private:
     struct replicate_ctx {

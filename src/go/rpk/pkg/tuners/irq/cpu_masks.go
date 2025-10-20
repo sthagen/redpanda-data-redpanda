@@ -27,8 +27,8 @@ import (
 
 type CPUMasks interface {
 	BaseCPUMask(cpuMask string) (string, error)
-	CPUMaskForComputations(mode Mode, cpuMask string, t config.RpkNodeTuners) (string, error)
-	CPUMaskForIRQs(mode Mode, cpuMask string, t config.RpkNodeTuners) (string, error)
+	CPUMaskForComputations(mode Mode, cpuMask string, t config.RpkNodeConfig) (string, error)
+	CPUMaskForIRQs(mode Mode, cpuMask string, t config.RpkNodeConfig) (string, error)
 	SetMask(path string, mask string) error
 	ReadMask(path string) (string, error)
 	ReadIRQMask(IRQ int) (string, error)
@@ -72,7 +72,7 @@ func (masks *cpuMasks) IsSupported() bool {
 }
 
 func (masks *cpuMasks) CPUMaskForComputations(
-	mode Mode, cpuMask string, t config.RpkNodeTuners,
+	mode Mode, cpuMask string, rnc config.RpkNodeConfig,
 ) (string, error) {
 	zap.L().Sugar().Debugf("Computing CPU mask for '%s' mode and input CPU mask '%s'", mode, cpuMask)
 	computationsMask := ""
@@ -91,7 +91,7 @@ func (masks *cpuMasks) CPUMaskForComputations(
 		if err != nil {
 			return "", err
 		}
-		rpPUs := numOfPUs - uint(math.Ceil(float64(numOfPUs)/float64(t.GetCoresPerDedicatedInterruptCore())))
+		rpPUs := numOfPUs - uint(math.Ceil(float64(numOfPUs)/float64(rnc.Tuners.GetCoresPerDedicatedInterruptCore())))
 		separateMasks, err := masks.hwloc.DistributeRestrict(rpPUs, cpuMask)
 		if err != nil {
 			return "", err
@@ -114,14 +114,14 @@ func (masks *cpuMasks) CPUMaskForComputations(
 }
 
 func (masks *cpuMasks) CPUMaskForIRQs(
-	mode Mode, cpuMask string, t config.RpkNodeTuners,
+	mode Mode, cpuMask string, rnc config.RpkNodeConfig,
 ) (string, error) {
 	zap.L().Sugar().Debugf("Computing IRQ CPU mask for '%s' mode and input CPU mask '%s'",
 		mode, cpuMask)
 	var err error
 	var maskForIRQs string
 	if mode != Mq {
-		maskForComputations, err := masks.CPUMaskForComputations(mode, cpuMask, t)
+		maskForComputations, err := masks.CPUMaskForComputations(mode, cpuMask, rnc)
 		if err != nil {
 			return "", err
 		}

@@ -48,10 +48,6 @@ batcher<Clock>::batcher(
   , _upload_backoff_interval(
       config::shard_local_cfg()
         .cloud_storage_upload_loop_initial_backoff_ms.bind())
-  , _upload_interval(
-      config::shard_local_cfg()
-        .cloud_storage_upload_loop_initial_backoff_ms
-        .bind()) // TODO: use different config
   , _rtc(_as)
   , _logger(cd_log, _rtc)
   , _stage(std::move(stage))
@@ -224,8 +220,7 @@ ss::future<> batcher<Clock>::bg_controller_loop() {
     bool more_work = false;
     while (!_as.abort_requested()) {
         if (!more_work) {
-            auto wait_res = co_await _stage.wait_until(
-              10_MiB, Clock::now() + _upload_interval(), &_as);
+            auto wait_res = co_await _stage.wait_next(&_as);
             if (wait_res.has_error()) {
                 // Shutting down
                 vlog(

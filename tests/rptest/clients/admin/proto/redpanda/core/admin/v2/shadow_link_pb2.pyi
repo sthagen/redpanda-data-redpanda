@@ -231,6 +231,38 @@ class ShadowLink(google.protobuf.message.Message):
 global___ShadowLink = ShadowLink
 
 @typing.final
+class ShadowTopic(google.protobuf.message.Message):
+    """A ShadowTopic resource contained by the ShadowLink"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NAME_FIELD_NUMBER: builtins.int
+    TOPIC_ID_FIELD_NUMBER: builtins.int
+    SOURCE_TOPIC_NAME_FIELD_NUMBER: builtins.int
+    SOURCE_TOPIC_ID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    'Name of the shadow topic'
+    topic_id: builtins.str
+    'The topic ID of the shadow topic'
+    source_topic_name: builtins.str
+    'The name of the source topic'
+    source_topic_id: builtins.str
+    'The topic ID of the source topic'
+
+    @property
+    def status(self) -> global___ShadowTopicStatus:
+        """The status of the shadow topic"""
+
+    def __init__(self, *, name: builtins.str=..., topic_id: builtins.str=..., source_topic_name: builtins.str=..., source_topic_id: builtins.str=..., status: global___ShadowTopicStatus | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['status', b'status']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['name', b'name', 'source_topic_id', b'source_topic_id', 'source_topic_name', b'source_topic_name', 'status', b'status', 'topic_id', b'topic_id']) -> None:
+        ...
+global___ShadowTopic = ShadowTopic
+
+@typing.final
 class CreateShadowLinkRequest(google.protobuf.message.Message):
     """RPC Requests and Responses
 
@@ -447,6 +479,75 @@ class FailOverResponse(google.protobuf.message.Message):
 global___FailOverResponse = FailOverResponse
 
 @typing.final
+class GetShadowTopicRequest(google.protobuf.message.Message):
+    """Request to get a shadow topic"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_LINK_NAME_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    shadow_link_name: builtins.str
+    'The name of the shadow link the topic is contained in'
+    name: builtins.str
+    'The name of the shadow topic to get'
+
+    def __init__(self, *, shadow_link_name: builtins.str=..., name: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['name', b'name', 'shadow_link_name', b'shadow_link_name']) -> None:
+        ...
+global___GetShadowTopicRequest = GetShadowTopicRequest
+
+@typing.final
+class GetShadowTopicResponse(google.protobuf.message.Message):
+    """Response of to getting a shadow topic"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_TOPIC_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_topic(self) -> global___ShadowTopic:
+        ...
+
+    def __init__(self, *, shadow_topic: global___ShadowTopic | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['shadow_topic', b'shadow_topic']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_topic', b'shadow_topic']) -> None:
+        ...
+global___GetShadowTopicResponse = GetShadowTopicResponse
+
+@typing.final
+class ListShadowTopicsRequest(google.protobuf.message.Message):
+    """Request to list all shadow topics in a shadow link"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_LINK_NAME_FIELD_NUMBER: builtins.int
+    shadow_link_name: builtins.str
+
+    def __init__(self, *, shadow_link_name: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_link_name', b'shadow_link_name']) -> None:
+        ...
+global___ListShadowTopicsRequest = ListShadowTopicsRequest
+
+@typing.final
+class ListShadowTopicsResponse(google.protobuf.message.Message):
+    """Response to listing all shadow topics in a shadow link"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_TOPICS_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_topics(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShadowTopic]:
+        ...
+
+    def __init__(self, *, shadow_topics: collections.abc.Iterable[global___ShadowTopic] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_topics', b'shadow_topics']) -> None:
+        ...
+global___ListShadowTopicsResponse = ListShadowTopicsResponse
+
+@typing.final
 class ShadowLinkConfigurations(google.protobuf.message.Message):
     """Other Messages
 
@@ -499,22 +600,25 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
     FETCH_WAIT_MAX_MS_FIELD_NUMBER: builtins.int
     FETCH_MIN_BYTES_FIELD_NUMBER: builtins.int
     FETCH_MAX_BYTES_FIELD_NUMBER: builtins.int
+    FETCH_PARTITION_MAX_BYTES_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     'The Client ID for the Kafka RPC requests setn by this cluster to the\n    source cluster\n    '
     source_cluster_id: builtins.str
     'If provided, this is the expected ID of the source cluster.  If it does\n    not match then the connection will be rejected.  If provided, this value\n    must match the `ClusterId` field returned in the Kafka Metadata response\n    message\n    '
     metadata_max_age_ms: builtins.int
-    'Max metadata age\n    If 0 is provided, defaults to 10 seconds\n    '
+    'Max metadata age.\n    If 0 is provided, defaults to 10 seconds\n    '
     connection_timeout_ms: builtins.int
-    'Connection timeout\n    If 0 is provided, defaults to 1 second\n    '
+    'Connection timeout.\n    If 0 is provided, defaults to 1 second\n    '
     retry_backoff_ms: builtins.int
-    'Retry base backoff\n    If 0 is provided, defaults to 100ms\n    '
+    'Retry base backoff.\n    If 0 is provided, defaults to 100ms\n    '
     fetch_wait_max_ms: builtins.int
-    'Fetch request timeout\n    If 0 is provided, defaults to 100ms\n    '
+    'Fetch request timeout.\n    If 0 is provided, defaults to 500ms\n    '
     fetch_min_bytes: builtins.int
-    'Fetch min bytes\n    If 0 is provided, defaults to 1 byte\n    '
+    'Fetch min bytes.\n    If 0 is provided, defaults to 5 MiB\n    '
     fetch_max_bytes: builtins.int
-    'Fetch max bytes\n    If 0 is provided, defaults to 1MiB\n    '
+    'Fetch max bytes.\n    If 0 is provided, defaults to 20 MiB\n    '
+    fetch_partition_max_bytes: builtins.int
+    'Fetch partition max bytes.\n    If 0 is provided, defaults to 1 MiB\n    '
 
     @property
     def bootstrap_servers(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
@@ -528,13 +632,13 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
     def authentication_configuration(self) -> global___AuthenticationConfiguration:
         """Authentication settings"""
 
-    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=...) -> None:
+    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=..., fetch_partition_max_bytes: builtins.int=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'tls_settings', b'tls_settings']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'bootstrap_servers', b'bootstrap_servers', 'client_id', b'client_id', 'connection_timeout_ms', b'connection_timeout_ms', 'fetch_max_bytes', b'fetch_max_bytes', 'fetch_min_bytes', b'fetch_min_bytes', 'fetch_wait_max_ms', b'fetch_wait_max_ms', 'metadata_max_age_ms', b'metadata_max_age_ms', 'retry_backoff_ms', b'retry_backoff_ms', 'source_cluster_id', b'source_cluster_id', 'tls_settings', b'tls_settings']) -> None:
+    def ClearField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'bootstrap_servers', b'bootstrap_servers', 'client_id', b'client_id', 'connection_timeout_ms', b'connection_timeout_ms', 'fetch_max_bytes', b'fetch_max_bytes', 'fetch_min_bytes', b'fetch_min_bytes', 'fetch_partition_max_bytes', b'fetch_partition_max_bytes', 'fetch_wait_max_ms', b'fetch_wait_max_ms', 'metadata_max_age_ms', b'metadata_max_age_ms', 'retry_backoff_ms', b'retry_backoff_ms', 'source_cluster_id', b'source_cluster_id', 'tls_settings', b'tls_settings']) -> None:
         ...
 
     @typing.overload
@@ -677,8 +781,11 @@ class TLSSettings(google.protobuf.message.Message):
     ENABLED_FIELD_NUMBER: builtins.int
     TLS_FILE_SETTINGS_FIELD_NUMBER: builtins.int
     TLS_PEM_SETTINGS_FIELD_NUMBER: builtins.int
+    DO_NOT_SET_SNI_HOSTNAME_FIELD_NUMBER: builtins.int
     enabled: builtins.bool
     'Whether or not TLS is enabled'
+    do_not_set_sni_hostname: builtins.bool
+    'If true, the SNI hostname will not be provided when TLS is used'
 
     @property
     def tls_file_settings(self) -> global___TLSFileSettings:
@@ -688,13 +795,13 @@ class TLSSettings(google.protobuf.message.Message):
     def tls_pem_settings(self) -> global___TLSPEMSettings:
         """Certificates and keys are provided in PEM format"""
 
-    def __init__(self, *, enabled: builtins.bool=..., tls_file_settings: global___TLSFileSettings | None=..., tls_pem_settings: global___TLSPEMSettings | None=...) -> None:
+    def __init__(self, *, enabled: builtins.bool=..., tls_file_settings: global___TLSFileSettings | None=..., tls_pem_settings: global___TLSPEMSettings | None=..., do_not_set_sni_hostname: builtins.bool=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['tls_file_settings', b'tls_file_settings', 'tls_pem_settings', b'tls_pem_settings', 'tls_settings', b'tls_settings']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['enabled', b'enabled', 'tls_file_settings', b'tls_file_settings', 'tls_pem_settings', b'tls_pem_settings', 'tls_settings', b'tls_settings']) -> None:
+    def ClearField(self, field_name: typing.Literal['do_not_set_sni_hostname', b'do_not_set_sni_hostname', 'enabled', b'enabled', 'tls_file_settings', b'tls_file_settings', 'tls_pem_settings', b'tls_pem_settings', 'tls_settings', b'tls_settings']) -> None:
         ...
 
     def WhichOneof(self, oneof_group: typing.Literal['tls_settings', b'tls_settings']) -> typing.Literal['tls_file_settings', 'tls_pem_settings'] | None:
@@ -902,7 +1009,7 @@ class ShadowLinkStatus(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     STATE_FIELD_NUMBER: builtins.int
     TASK_STATUSES_FIELD_NUMBER: builtins.int
-    SHADOW_TOPIC_STATUSES_FIELD_NUMBER: builtins.int
+    SHADOW_TOPICS_FIELD_NUMBER: builtins.int
     SYNCED_SHADOW_TOPIC_PROPERTIES_FIELD_NUMBER: builtins.int
     state: global___ShadowLinkState.ValueType
 
@@ -911,17 +1018,17 @@ class ShadowLinkStatus(google.protobuf.message.Message):
         """Statuses of the running tasks"""
 
     @property
-    def shadow_topic_statuses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShadowTopicStatus]:
+    def shadow_topics(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShadowTopic]:
         """Status of shadow topics"""
 
     @property
     def synced_shadow_topic_properties(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """List of topic properties that are being synced"""
 
-    def __init__(self, *, state: global___ShadowLinkState.ValueType=..., task_statuses: collections.abc.Iterable[global___ShadowLinkTaskStatus] | None=..., shadow_topic_statuses: collections.abc.Iterable[global___ShadowTopicStatus] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=...) -> None:
+    def __init__(self, *, state: global___ShadowLinkState.ValueType=..., task_statuses: collections.abc.Iterable[global___ShadowLinkTaskStatus] | None=..., shadow_topics: collections.abc.Iterable[global___ShadowTopic] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['shadow_topic_statuses', b'shadow_topic_statuses', 'state', b'state', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties', 'task_statuses', b'task_statuses']) -> None:
+    def ClearField(self, field_name: typing.Literal['shadow_topics', b'shadow_topics', 'state', b'state', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties', 'task_statuses', b'task_statuses']) -> None:
         ...
 global___ShadowLinkStatus = ShadowLinkStatus
 
@@ -953,14 +1060,8 @@ global___ShadowLinkTaskStatus = ShadowLinkTaskStatus
 class ShadowTopicStatus(google.protobuf.message.Message):
     """Status of a ShadowTopic"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    NAME_FIELD_NUMBER: builtins.int
-    TOPIC_ID_FIELD_NUMBER: builtins.int
     STATE_FIELD_NUMBER: builtins.int
     PARTITION_INFORMATION_FIELD_NUMBER: builtins.int
-    name: builtins.str
-    'Name of the shadow topic'
-    topic_id: builtins.str
-    'Topic ID of the shadow topic'
     state: global___ShadowTopicState.ValueType
     'State of the shadow topic'
 
@@ -968,10 +1069,10 @@ class ShadowTopicStatus(google.protobuf.message.Message):
     def partition_information(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TopicPartitionInformation]:
         """List of partition information for the shadow topic"""
 
-    def __init__(self, *, name: builtins.str=..., topic_id: builtins.str=..., state: global___ShadowTopicState.ValueType=..., partition_information: collections.abc.Iterable[global___TopicPartitionInformation] | None=...) -> None:
+    def __init__(self, *, state: global___ShadowTopicState.ValueType=..., partition_information: collections.abc.Iterable[global___TopicPartitionInformation] | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['name', b'name', 'partition_information', b'partition_information', 'state', b'state', 'topic_id', b'topic_id']) -> None:
+    def ClearField(self, field_name: typing.Literal['partition_information', b'partition_information', 'state', b'state']) -> None:
         ...
 global___ShadowTopicStatus = ShadowTopicStatus
 
@@ -983,6 +1084,7 @@ class TopicPartitionInformation(google.protobuf.message.Message):
     SOURCE_LAST_STABLE_OFFSET_FIELD_NUMBER: builtins.int
     SOURCE_HIGH_WATERMARK_FIELD_NUMBER: builtins.int
     HIGH_WATERMARK_FIELD_NUMBER: builtins.int
+    SOURCE_LAST_UPDATED_TIMESTAMP_FIELD_NUMBER: builtins.int
     partition_id: builtins.int
     'Partition ID'
     source_last_stable_offset: builtins.int
@@ -992,9 +1094,16 @@ class TopicPartitionInformation(google.protobuf.message.Message):
     high_watermark: builtins.int
     "Shadowed partition's HWM"
 
-    def __init__(self, *, partition_id: builtins.int=..., source_last_stable_offset: builtins.int=..., source_high_watermark: builtins.int=..., high_watermark: builtins.int=...) -> None:
+    @property
+    def source_last_updated_timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        """Timestamp of the last time the source partition information was updated"""
+
+    def __init__(self, *, partition_id: builtins.int=..., source_last_stable_offset: builtins.int=..., source_high_watermark: builtins.int=..., high_watermark: builtins.int=..., source_last_updated_timestamp: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['high_watermark', b'high_watermark', 'partition_id', b'partition_id', 'source_high_watermark', b'source_high_watermark', 'source_last_stable_offset', b'source_last_stable_offset']) -> None:
+    def HasField(self, field_name: typing.Literal['source_last_updated_timestamp', b'source_last_updated_timestamp']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['high_watermark', b'high_watermark', 'partition_id', b'partition_id', 'source_high_watermark', b'source_high_watermark', 'source_last_stable_offset', b'source_last_stable_offset', 'source_last_updated_timestamp', b'source_last_updated_timestamp']) -> None:
         ...
 global___TopicPartitionInformation = TopicPartitionInformation

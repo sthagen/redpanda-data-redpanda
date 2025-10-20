@@ -39,6 +39,7 @@ TEST(cluster_link_utils_test, test_tls_file_config) {
     EXPECT_FALSE(cfg.sasl_cfg.has_value());
     ASSERT_TRUE(cfg.broker_tls.has_value());
     auto& tls_cfg = cfg.broker_tls.value();
+    EXPECT_TRUE(tls_cfg.provide_sni_hostname);
     ASSERT_TRUE(tls_cfg.truststore.has_value());
     ASSERT_TRUE(
       std::holds_alternative<std::filesystem::path>(
@@ -61,12 +62,16 @@ TEST(cluster_link_utils_test, test_tls_value_config) {
     md.connection.ca = model::tls_value("ca-cert");
     md.connection.cert = model::tls_value("cert-value");
     md.connection.key = model::tls_value("key-value");
+    md.connection.tls_provide_sni
+      = model::connection_config::tls_provide_sni_t::no;
 
     auto cfg = metadata_to_kafka_config(md);
     EXPECT_FALSE(cfg.sasl_cfg.has_value());
 
     ASSERT_TRUE(cfg.broker_tls.has_value());
     auto& tls_cfg = cfg.broker_tls.value();
+
+    EXPECT_FALSE(tls_cfg.provide_sni_hostname);
 
     ASSERT_TRUE(tls_cfg.truststore.has_value());
     ASSERT_TRUE(

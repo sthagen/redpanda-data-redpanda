@@ -74,11 +74,6 @@ ss::future<> write_request_scheduler::stop() {
     co_await _gate.close();
 }
 
-struct shard_info {
-    ss::shard_id shard;
-    size_t bytes;
-};
-
 size_t write_request_scheduler::shard_bytes() noexcept {
     // Count bytes but take limits into account.
     size_t total_bytes = 0;
@@ -132,6 +127,83 @@ ss::future<> write_request_scheduler::bg_data_threshold() {
     }
 }
 
+ss::future<>
+write_request_scheduler::pull_and_roundtrip(std::vector<shard_info> infos) {
+    // This method is invoked by the target shard to pull requests from
+    // other shards and forward them to its own pipeline.
+    std::vector<ss::future<>> in_flight;
+    // 1. Schedule all other shards to forward their requests.
+    // 2. Process own requests to trigger the signal.
+    ss::gate target_gate;
+    for (const auto& info : infos) {
+        if (ss::this_shard_id() != info.shard) {
+            // Forward requests to target shard by proxying
+            // write requests
+            if (info.bytes > 0) {
+                // This is not conventional use of the gate. The unique_ptr is
+                // used as a RAII container to pass this gate holder into the
+                // 'roundtrip' method. The 'roundtrip' method will be invoked on
+                // another shard. It guarantees that the gate holder will not be
+                // destroyed while it's running on another shard. To make it
+                // safe the pointer is wrapped with the foreign_ptr. Even if the
+                // exception will be thrown while on another shard the gate
+                // holder will be disposed on the target shard.
+                //
+                // The 'roundtrip' method will submit the continuation back to
+                // the target shard that owns the gate and will eventually
+                // destroy the holder. The target gate will be kept open until
+                // all shards finish forwarding their requests. The foreign_ptr
+                // has zero overhead when disposed on the original shard. It's
+                // just a safety measure, not a correctness requirement.
+                auto ptr = ss::make_foreign(
+                  std::make_unique<ss::gate::holder>(target_gate.hold()));
+                in_flight.push_back(
+                  container().invoke_on(
+                    info.shard,
+                    [target = ss::this_shard_id(),
+                     ptr = std::move(ptr)](write_request_scheduler& s) mutable {
+                        return s.forward_to(target, std::move(ptr));
+                    }));
+            }
+        }
+    }
+    // Wait until all shards have scheduled their requests.
+    // This gate is only closed after every shard has forwarded all its
+    // requests to the target shard's pipeline. This means that we can
+    // notify the next pipeline stage about the requests and await futures
+    // accumulated in the 'in_flight' vector. Instead of simply signalling
+    // the gate we first forwarding target shard's own requests to the pipeline
+    // which also signals the pipeline stage.
+    // After the gate is closed the method awaits in-flight futures. Every
+    // future awaits until the target shard uploads its write requests to the
+    // cloud storage and then it acknowledges the source write requests (which
+    // were proxied).
+    co_await target_gate.close();
+    // Submit own requests to the pipeline
+    bool signaled = false;
+    for (const auto& info : infos) {
+        if (ss::this_shard_id() == info.shard && info.bytes > 0) {
+            // Fast path: process requests locally
+            // This shard is the one that has the most data.
+            _stage.process([&signaled](write_request<>&) noexcept {
+                signaled = true;
+                return request_processing_result::advance_and_continue;
+            });
+            break;
+        }
+    }
+    if (!signaled) {
+        // It is guaranteed that the shard that has the most data will become
+        // the target shard. But it is also possible that the data threshold
+        // policy will trigger the upload on this shard. In this case the loop
+        // above will see no write requests. Other shards are depositing their
+        // requests to the target shard without signalling the next stage. So we
+        // need to signal it here.
+        _stage.signal_next_stage();
+    }
+    co_await ss::when_all_succeed(in_flight.begin(), in_flight.end());
+}
+
 ss::future<> write_request_scheduler::apply_time_based_fallback() {
     // The time based fallback works in three stages:
     // 1. Collect information about the requests from every shard.
@@ -160,12 +232,14 @@ ss::future<> write_request_scheduler::apply_time_based_fallback() {
     // will always be able to handle the addition L0 upload (e.g. it has
     // borrowing mechanism to do this).
 
-    for (auto& req : shard_bytes) {
-        vlog(
-          cd_log.trace,
-          "map result: {} requests, {} bytes",
-          req.shard,
-          req.bytes);
+    if (cd_log.is_enabled(ss::log_level::trace)) {
+        for (auto& req : shard_bytes) {
+            vlog(
+              cd_log.trace,
+              "map result: {} requests, {} bytes",
+              req.shard,
+              req.bytes);
+        }
     }
 
     // Find the shard with the most bytes to write
@@ -185,27 +259,28 @@ ss::future<> write_request_scheduler::apply_time_based_fallback() {
       max_shard_bytes);
 
     // We can forward write requests to the target shard now
-    // Every shards forwards its own requests. This shard sends
-    // the requests accumulated in the previous step to the
-    // original shard first. There is a fast path for the
-    // requests that are already on the target shard.
+    // Every shards forwards its own requests.
+    //
+    // The information flow:
+    // shard 0:      collect information -> decide target shard
+    // target shard: call 'pull_and_roundtrip' and pass the gate holder
+    // target shard: invoke 'forward_to' on every shard that has data
+    // shard[i]:     call 'roundtrip' method on shard[i], pass gate holder
+    // shard[i]:     invoke 'proxy_write_request' on target shard, pass gate
+    //               holder
+    // target shard: enqueue shard[i] requests to the target shard's pipeline
+    //               and dispose the gate holder that belongs to the
+    //               target shard
+    // target shard: wait until all requests are enqueued by waiting
+    //               on the gate
+    // target shard: process own requests and wait until all
+    //               'proxy_write_request' calls are done on all shards
+    //               by waiting on the gate.
 
     if (max_shard_bytes > 0) {
-        co_await container().invoke_on_all(
-          [this, target_shard](write_request_scheduler& scheduler) {
-              if (ss::this_shard_id() == target_shard) {
-                  // Fast path: process requests locally
-                  // This shard is the one that has the most data.
-                  scheduler._stage.process([this](write_request<>& r) noexcept {
-                      _probe.register_time_fallback(r.size_bytes());
-                      return request_processing_result::advance_and_continue;
-                  });
-              } else {
-                  // Forward requests to target shard by proxying
-                  // write requests
-                  return scheduler.forward_to(target_shard);
-              }
-              return ss::now();
+        co_await container().invoke_on(
+          target_shard, [shard_bytes](write_request_scheduler& scheduler) {
+              return scheduler.pull_and_roundtrip(shard_bytes);
           });
     }
 }
@@ -250,7 +325,12 @@ ss::future<> write_request_scheduler::bg_time_based_fallback() {
 /// then copy it and enqueue it to the pipeline on this shard.
 /// Then await the response and return it.
 ss::future<std::expected<write_request_scheduler::foreign_ptr_t, errc>>
-write_request_scheduler::proxy_write_request(write_request<>* req) noexcept {
+write_request_scheduler::proxy_write_request(
+  write_request<>* req, ss::gate::holder target_gate_holder) noexcept {
+    // This is executed in the context of the target shard.
+    // It is safe to dispose the gate holder here because
+    // the holder was created on the target shard and
+    // it will be destroyed on the target shard as well.
     auto h = _gate.hold();
     _probe.register_time_fallback(req->size_bytes());
     _probe.register_receive_xshard(req->size_bytes());
@@ -260,7 +340,8 @@ write_request_scheduler::proxy_write_request(write_request<>* req) noexcept {
       req->expiration_time,
       _stage.id());
     auto fut = proxy.response.get_future();
-    _stage.push_next_stage(proxy);
+    _stage.push_next_stage(proxy, false);
+    target_gate_holder.release();
     auto extents_fut = co_await ss::coroutine::as_future(std::move(fut));
     if (extents_fut.failed()) {
         auto ex = extents_fut.get_exception();
@@ -272,7 +353,7 @@ write_request_scheduler::proxy_write_request(write_request<>* req) noexcept {
         // Normal errors (S3 upload failure or timeout)
         // are handled here
         errc e = extents.error();
-        vlog(cd_log.error, "Proxy write request failed: {}", e);
+        vlog(cd_log.info, "Proxy write request failed: {}", e);
         co_return std::unexpected(e);
     }
     auto ptr = ss::make_lw_shared<chunked_vector<extent_meta>>();
@@ -296,7 +377,12 @@ void write_request_scheduler::ack_write_response(
 }
 
 ss::future<> write_request_scheduler::roundtrip(
-  ss::shard_id shard, write_pipeline<>::write_requests_list list) {
+  ss::shard_id shard,
+  write_pipeline<>::write_requests_list list,
+  ss::foreign_ptr<gate_holder_ptr> target_shard_gate_holder) {
+    // This is executed in the context of the shard that owns the data.
+    // The method submits the continuation back to the target shard
+    // to complete the operation.
     auto h = _gate.hold();
     // Temporary storage for x-shard request and response correlation.
     using response_t
@@ -311,14 +397,19 @@ ss::future<> write_request_scheduler::roundtrip(
         _probe.register_send_xshard(req.size_bytes());
     }
     co_await container().invoke_on(
-      shard, [&results](write_request_scheduler& balancer) mutable {
+      shard,
+      [&results, gh = std::move(target_shard_gate_holder)](
+        write_request_scheduler& balancer) mutable {
+          // This is executed on the target shard
           chunked_vector<ss::future<response_t>> futures;
           for (auto& r : results) {
               vassert(
                 r.response.has_value() == false,
                 "Should not have response yet");
-              futures.emplace_back(balancer.proxy_write_request(r.request));
+              futures.emplace_back(balancer.proxy_write_request(
+                r.request, /*copy gate holder*/ *gh));
           }
+          gh->release();
           return ss::when_all(futures.begin(), futures.end())
             .then([&results](auto fut) {
                 for (size_t i = 0; i < results.size(); i++) {
@@ -336,10 +427,14 @@ ss::future<> write_request_scheduler::roundtrip(
     }
 }
 
-ss::future<> write_request_scheduler::forward_to(ss::shard_id target_shard) {
+ss::future<> write_request_scheduler::forward_to(
+  ss::shard_id target_shard,
+  ss::foreign_ptr<gate_holder_ptr> target_shard_gate_holder) {
+    // Owning shard
     auto req = _stage.pull_write_requests(
       _max_buffer_size(), _max_cardinality());
-    co_await roundtrip(target_shard, std::move(req));
+    co_await roundtrip(
+      target_shard, std::move(req), std::move(target_shard_gate_holder));
 }
 
 } // namespace cloud_topics::l0

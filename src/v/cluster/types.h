@@ -3687,6 +3687,13 @@ struct get_current_cluster_epoch_response
     auto serde_fields() { return std::tie(ec, epoch); }
 };
 
+struct error_info {
+    std::error_code err;
+    ss::sstring message;
+
+    fmt::iterator format_to(fmt::iterator it) const;
+};
+
 } // namespace cluster
 
 namespace reflection {

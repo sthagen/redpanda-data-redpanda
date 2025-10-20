@@ -56,6 +56,8 @@ create_tls_configuration(const model::connection_config& link) {
           tls_visitor{}, link.key.value(), link.cert.value());
     }
 
+    tls_cfg.provide_sni_hostname = bool(link.tls_provide_sni);
+
     return tls_cfg;
 }
 

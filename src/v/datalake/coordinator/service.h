@@ -36,6 +36,9 @@ public:
     ss::future<usage_stats_reply>
     get_usage_stats(usage_stats_request, ::rpc::streaming_context&) override;
 
+    ss::future<get_topic_state_reply> get_topic_state(
+      get_topic_state_request, ::rpc::streaming_context&) override;
+
 private:
     ss::sharded<frontend>* _frontend;
 };

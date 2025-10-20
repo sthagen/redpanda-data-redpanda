@@ -300,6 +300,9 @@ ss::future<shared_broker_t> remote_broker_factory::create_broker(
     if (_config.broker_tls) {
         transport_cfg.credentials
           = co_await _config.broker_tls->build_credentials();
+        if (_config.broker_tls->provide_sni_hostname) {
+            transport_cfg.tls_sni_hostname = addr.host();
+        }
     }
     auto broker_transport = std::make_unique<transport>(
       std::move(transport_cfg), _config.client_id);

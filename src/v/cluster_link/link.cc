@@ -14,6 +14,7 @@
 #include "cluster_link/logger.h"
 #include "cluster_link/manager.h"
 #include "cluster_link/model/types.h"
+#include "model/fundamental.h"
 #include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
@@ -376,6 +377,11 @@ partition_metadata_provider& link::get_partition_metadata_provider() {
 std::optional<chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
 link::get_mirror_topics_for_link() const {
     return _manager->get_mirror_topics_for_link(_link_id);
+}
+
+chunked_hash_map<::model::ntp, replication::partition_offsets_report>
+link::get_partition_offsets_report() const {
+    return _replication_mgr.get_partition_offsets_report();
 }
 
 bool link::should_start_task(task* t) const {

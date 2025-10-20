@@ -1796,6 +1796,14 @@ configuration::configuration()
       "then no limit is enforced.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       std::nullopt)
+  , kafka_max_message_size_upper_limit_bytes(
+      *this,
+      "kafka_max_message_size_upper_limit_bytes",
+      "Maximum allowed value for the `max.message.size` topic "
+      "property. When set to `null`, then no limit is enforced.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      100_MiB,
+      {.min = 1})
   , compaction_ctrl_update_interval_ms(
       *this,
       "compaction_ctrl_update_interval_ms",
@@ -4278,10 +4286,11 @@ configuration::configuration()
   , iceberg_throttle_backlog_size_ratio(
       *this,
       "iceberg_throttle_backlog_size_ratio",
-      "Ration of the total backlog size to the disk space at which the "
-      "throttle to iceberg producers is applied",
+      "Ratio of total backlog size to disk space "
+      "that triggers throttling for Iceberg producers. "
+      "Set to `null` to disable throttling.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      0.3)
+      std::nullopt)
   , iceberg_delete(
       *this,
       "iceberg_delete",

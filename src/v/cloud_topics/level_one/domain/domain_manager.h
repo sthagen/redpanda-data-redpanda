@@ -46,8 +46,8 @@ public:
 
     ss::future<rpc::get_offsets_reply> get_offsets(rpc::get_offsets_request);
 
-    ss::future<rpc::get_compaction_offsets_reply>
-      get_compaction_offsets(rpc::get_compaction_offsets_request);
+    ss::future<rpc::get_compaction_info_reply>
+      get_compaction_info(rpc::get_compaction_info_request);
 
     ss::future<rpc::get_term_for_offset_reply>
       get_term_for_offset(rpc::get_term_for_offset_request);

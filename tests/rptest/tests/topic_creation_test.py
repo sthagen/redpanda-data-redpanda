@@ -408,6 +408,36 @@ class CreateTopicsTest(RedpandaTest):
         rpk.create_topic("should-succeed", replicas=None)
 
     @cluster(num_nodes=3)
+    def test_batch_max_bytes_validation(self):
+        """
+        Validates that a `max.message.bytes` value outside of the allowed range
+        results in an invalid configuration response.
+        """
+        self.redpanda.set_cluster_config(
+            {"kafka_max_message_size_upper_limit_bytes": 10}
+        )
+
+        rpk = RpkTool(self.redpanda)
+
+        with expect_exception(
+            RpkException,
+            lambda e: "value must be positive and less than or equal to the" in str(e),
+        ):
+            rpk.create_topic(
+                "topic-1", config={TopicSpec.PROPERTY_MAX_MESSAGE_BYTES: 100}
+            )
+
+        with expect_exception(
+            RpkException,
+            lambda e: "value must be positive and less than or equal to the" in str(e),
+        ):
+            rpk.create_topic(
+                "topic-1", config={TopicSpec.PROPERTY_MAX_MESSAGE_BYTES: 0}
+            )
+
+        rpk.create_topic("topic-1", config={TopicSpec.PROPERTY_MAX_MESSAGE_BYTES: 10})
+
+    @cluster(num_nodes=3)
     def test_min_rf_log(self):
         """
         Validates that a log message appears when minimum_topic_replications

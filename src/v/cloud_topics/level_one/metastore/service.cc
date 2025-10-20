@@ -82,9 +82,9 @@ ss::future<get_term_for_offset_reply> service::get_term_for_offset(
       std::move(request), frontend::local_only::yes);
 }
 
-ss::future<get_compaction_offsets_reply> service::get_compaction_offsets(
-  get_compaction_offsets_request request, ::rpc::streaming_context&) {
-    return _frontend->local().get_compaction_offsets(
+ss::future<get_compaction_info_reply> service::get_compaction_info(
+  get_compaction_info_request request, ::rpc::streaming_context&) {
+    return _frontend->local().get_compaction_info(
       std::move(request), frontend::local_only::yes);
 }
 

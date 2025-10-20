@@ -164,6 +164,23 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_gtest(
+    name = "async_merge_top_k",
+    timeout = "short",
+    srcs = [
+        "async_merge_top_k_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/base",
+        "//src/v/container:chunked_vector",
+        "//src/v/ssx:async_merge_top_k",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "when_all_test",
     timeout = "short",
     srcs = [

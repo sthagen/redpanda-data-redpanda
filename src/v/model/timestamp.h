@@ -27,7 +27,7 @@ class iobuf_parser;
 
 namespace model {
 
-enum class timestamp_type : uint8_t { create_time, append_time };
+enum class timestamp_type : uint8_t { create_time = 0, append_time = 1 };
 
 std::ostream& operator<<(std::ostream&, timestamp_type);
 std::istream& operator>>(std::istream&, timestamp_type&);

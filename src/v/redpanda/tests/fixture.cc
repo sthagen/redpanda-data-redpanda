@@ -796,6 +796,7 @@ conn_ptr redpanda_thread_fixture::make_connection_context(bool use_authz) {
     sasl.set_mechanism(std::make_unique<fake_sasl_mech>());
     return ss::make_lw_shared<kafka::connection_context>(
       std::nullopt,
+      std::nullopt,
       proto.local(),
       nullptr,
       std::move(sasl),

@@ -627,12 +627,31 @@ ss::future<
   std::expected<metastore::compaction_offsets_response, metastore::errc>>
 replicated_metastore::get_compaction_offsets(
   const model::topic_id_partition& tidp, model::timestamp ts) {
-    rpc::get_compaction_offsets_request req;
-    req.tp = tidp;
-    req.tombstone_removal_upper_bound_ts = ts;
+    auto reply_res = co_await get_compaction_info(
+      compaction_info_spec{
+        .tidp = tidp, .tombstone_removal_upper_bound_ts = ts});
+
+    if (!reply_res.has_value()) {
+        co_return std::unexpected(reply_res.error());
+    }
+
+    auto reply = std::move(reply_res).value();
+
+    metastore::compaction_offsets_response resp;
+    resp.dirty_ranges = std::move(reply.offsets_response.dirty_ranges);
+    resp.removable_tombstone_ranges = std::move(
+      reply.offsets_response.removable_tombstone_ranges);
+    co_return resp;
+}
+
+ss::future<std::expected<metastore::compaction_info_response, metastore::errc>>
+replicated_metastore::get_compaction_info(const compaction_info_spec& log) {
+    rpc::get_compaction_info_request req;
+    req.tp = log.tidp;
+    req.tombstone_removal_upper_bound_ts = log.tombstone_removal_upper_bound_ts;
 
     auto reply_fut = co_await ss::coroutine::as_future(
-      fe_.get_compaction_offsets(std::move(req)));
+      fe_.get_compaction_info(std::move(req)));
     if (reply_fut.failed()) {
         auto ex = reply_fut.get_exception();
         vlog(cd_log.warn, "Error while sending request: {}", ex);
@@ -644,16 +663,14 @@ replicated_metastore::get_compaction_offsets(
         co_return std::unexpected(rpc_to_meta_errc(reply.ec));
     }
 
-    metastore::compaction_offsets_response resp;
-    resp.dirty_ranges = reply.dirty_ranges;
-    resp.removable_tombstone_ranges = reply.removable_tombstone_ranges;
-    co_return resp;
-}
+    metastore::compaction_info_response resp;
+    resp.dirty_ratio = reply.dirty_ratio;
+    resp.earliest_dirty_ts = reply.earliest_dirty_ts;
+    resp.offsets_response = {
+      .dirty_ranges = reply.dirty_ranges,
+      .removable_tombstone_ranges = reply.removable_tombstone_ranges};
 
-ss::future<std::expected<metastore::compaction_info_response, metastore::errc>>
-replicated_metastore::get_compaction_info(
-  [[maybe_unused]] const compaction_info_spec& log) {
-    co_return compaction_info_response{};
+    co_return resp;
 }
 
 } // namespace cloud_topics::l1

@@ -71,6 +71,8 @@ struct tls_configuration {
 
     ss::future<ss::shared_ptr<ss::tls::certificate_credentials>>
     build_credentials() const;
+
+    bool provide_sni_hostname{false};
 };
 
 struct sasl_configuration {

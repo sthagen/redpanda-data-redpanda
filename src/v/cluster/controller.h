@@ -45,6 +45,7 @@ class topic_mount_handler;
 namespace cluster {
 
 class cluster_discovery;
+class controller_forced_reconfiguration_manager;
 
 class controller {
 public:
@@ -277,8 +278,13 @@ public:
 
     static bytes invariants_key();
 
+    ss::future<cluster::error_info>
+    initialize_controller_forced_reconfiguration(
+      std::vector<model::node_id> dead_nodes, uint16_t surviving_node_count);
+
 private:
     friend controller_probe;
+    friend class controller_forced_reconfiguration_manager;
 
     using remake_cb_t
       = ss::noncopyable_function<ss::future<std::error_code>(model::ntp)>;
@@ -302,6 +308,7 @@ private:
     // Checks configuration invariants stored in kvstore
     ss::future<configuration_invariants> validate_configuration_invariants();
 
+private:
     config_manager::preload_result _config_preload;
 
     ss::sharded<ss::abort_source> _as;                     // instance per core
@@ -384,6 +391,8 @@ private:
       _cluster_link_table; // instance per core
 
     ss::sharded<cluster_epoch_service<>> _epoch_service; // instance per core
+
+    std::unique_ptr<controller_forced_reconfiguration_manager> _cfr_m;
 
     bool _is_ready = false;
     ss::scheduling_group _scheduling_group;

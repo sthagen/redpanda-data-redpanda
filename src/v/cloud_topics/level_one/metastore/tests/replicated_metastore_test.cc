@@ -315,13 +315,17 @@ TEST_F(ReplicatedMetastoreTest, TestBasicAdd) {
 
         // Sanity check the compaction offsets. Since no range is cleaned, the
         // entire log is dirty.
-        auto cmp_offsets
-          = meta.get_compaction_offsets(tp, model::timestamp::now()).get();
-        ASSERT_TRUE(cmp_offsets.has_value());
-        EXPECT_FALSE(cmp_offsets->dirty_ranges.empty());
+        auto spec = metastore::compaction_info_spec{
+          .tidp = tp,
+          .tombstone_removal_upper_bound_ts = model::timestamp::now()};
+        auto cmp_info = meta.get_compaction_info(spec).get();
+        ASSERT_TRUE(cmp_info.has_value());
+        EXPECT_FALSE(cmp_info->offsets_response.dirty_ranges.empty());
         EXPECT_THAT(
-          cmp_offsets->dirty_ranges.to_vec(),
+          cmp_info->offsets_response.dirty_ranges.to_vec(),
           testing::ElementsAre(MatchesRange(o{0}, o{999})));
+        EXPECT_FLOAT_EQ(cmp_info->dirty_ratio, 1.0);
+        EXPECT_TRUE(cmp_info->earliest_dirty_ts.has_value());
     }
 }
 
@@ -404,11 +408,15 @@ TEST_F(ReplicatedMetastoreTest, TestBasicCompact) {
 
         // Now check the compacted offsets. Since we've cleaned everything, we
         // should see the dirty ranges be empty.
-        auto cmp_offsets
-          = meta.get_compaction_offsets(tp, model::timestamp::now()).get();
-        ASSERT_TRUE(cmp_offsets.has_value());
-        EXPECT_TRUE(cmp_offsets->dirty_ranges.empty())
+        auto spec = metastore::compaction_info_spec{
+          .tidp = tp,
+          .tombstone_removal_upper_bound_ts = model::timestamp::now()};
+        auto cmp_info = meta.get_compaction_info(spec).get();
+        ASSERT_TRUE(cmp_info.has_value());
+        EXPECT_TRUE(cmp_info->offsets_response.dirty_ranges.empty())
           << fmt::format("{} is not cleaned", tp);
+        EXPECT_FLOAT_EQ(cmp_info->dirty_ratio, 0.0);
+        EXPECT_TRUE(!cmp_info->earliest_dirty_ts.has_value());
     }
 }
 

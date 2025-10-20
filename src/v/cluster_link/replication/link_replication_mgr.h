@@ -41,6 +41,12 @@ public:
     // is specified.
     void stop_replicators(std::optional<::model::topic> topic = std::nullopt);
 
+    chunked_hash_map<::model::ntp, partition_offsets_report>
+    get_partition_offsets_report() const;
+
+    std::optional<partition_offsets_report>
+    get_partition_offsets_report(const ::model::ntp&) const;
+
 private:
     ss::future<> do_start_replicator(::model::ntp, ::model::term_id);
     ss::future<>

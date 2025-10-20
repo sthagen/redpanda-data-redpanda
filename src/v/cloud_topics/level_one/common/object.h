@@ -180,7 +180,7 @@ struct footer
     // while a search for offsets 25 or 40 would yield batch[2]. Searching for
     // offset 50 would yield `npos`.
     seek_result file_position_before_kafka_offset(
-      const model::topic_id_partition&, kafka::offset);
+      const model::topic_id_partition&, kafka::offset) const;
 
     // Return the file position of the latest record batch that has a
     // max_timestamp at or before the given timestamp. If the timestamp is

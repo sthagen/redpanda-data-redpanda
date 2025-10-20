@@ -8,10 +8,10 @@ package(default_visibility = [
 redpanda_cc_library(
     name = "frontend_reader",
     srcs = [
-        "reader.cc",
+        "level_zero_reader.cc",
     ],
     hdrs = [
-        "reader.h",
+        "level_zero_reader.h",
     ],
     implementation_deps = [
         "//src/v/cloud_topics:data_plane_api",

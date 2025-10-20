@@ -541,14 +541,26 @@ fetcher::process_fetch_response(
                 dirty_partitions[topic_data.topic].insert(
                   part_data.partition_id);
             } else {
-                part_data.high_watermark = model::offset_cast(
-                  part_response.high_watermark);
-                part_data.last_stable_offset = model::offset_cast(
-                  part_response.last_stable_offset);
+                source_partition_offsets offsets{
+                  .log_start_offset = model::offset_cast(
+                    part_response.log_start_offset),
+                  .high_watermark = model::offset_cast(
+                    part_response.high_watermark),
+                  .last_stable_offset = model::offset_cast(
+                    part_response.last_stable_offset),
+                  .last_offset_update_timestamp = ss::lowres_clock::now(),
+                };
+                part_data.start_offset = offsets.log_start_offset;
+                part_data.high_watermark = offsets.high_watermark;
+                part_data.last_stable_offset = offsets.last_stable_offset;
                 part_data.leader_epoch
                   = part_response.current_leader.leader_epoch;
                 part_data.aborted_transactions = std::move(
                   part_response.aborted_transactions);
+
+                _parent->maybe_update_source_partition_offsets(
+                  {topic_data.topic, part_response.partition_index},
+                  std::move(offsets));
 
                 vlog(
                   logger().trace,
@@ -775,6 +787,7 @@ ss::future<kafka::error_code> fetcher::maybe_initialise_fetch_offsets(
               response_partition.partition_id,
               response_partition.offset);
             fetch_state.fetch_offset = response_partition.offset;
+            fetch_state.fetcher_epoch = next_epoch();
             fetch_state.high_watermark.reset();
             fetch_state.incremental_include = true;
         }

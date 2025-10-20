@@ -64,6 +64,24 @@ service ShadowLinkService {
             authz: SUPERUSER
         };
     }
+
+    // This operation returns information about a Shadow Topic on a Shadow Link.
+    // A Shadow Topic is a resource created automatically by a Shadow Link.  The
+    // Shadow Topic 'shadows' a topic on a source cluster, mirroring the data
+    // and properties of that topic.
+    rpc GetShadowTopic(GetShadowTopicRequest) returns (GetShadowTopicResponse) {
+        option (redpanda.core.pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+    // This operation returns a list of all Shadow Topics on a Shadow Link and
+    // their status
+    rpc ListShadowTopics(ListShadowTopicsRequest)
+        returns (ListShadowTopicsResponse) {
+        option (redpanda.core.pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
 }
 
 /* Resources */
@@ -80,6 +98,26 @@ message ShadowLink {
     ShadowLinkConfigurations configurations = 3;
     // Status of the shadow link
     ShadowLinkStatus status = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// A ShadowTopic resource contained by the ShadowLink
+message ShadowTopic {
+    // Name of the shadow topic
+    string name = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // The topic ID of the shadow topic
+    string topic_id = 2 [
+        (google.api.field_behavior) = OUTPUT_ONLY,
+        (google.api.field_info).format = UUID4
+    ];
+    // The name of the source topic
+    string source_topic_name = 3;
+    // The topic ID of the source topic
+    string source_topic_id = 4 [
+        (google.api.field_behavior) = OUTPUT_ONLY,
+        (google.api.field_info).format = UUID4
+    ];
+    // The status of the shadow topic
+    ShadowTopicStatus status = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 /* RPC Requests and Responses */
@@ -163,6 +201,25 @@ message FailOverResponse {
     // The shadow link that was failed over
     ShadowLink shadow_link = 1;
 }
+// Request to get a shadow topic
+message GetShadowTopicRequest {
+    // The name of the shadow link the topic is contained in
+    string shadow_link_name = 1 [(google.api.field_behavior) = REQUIRED];
+    // The name of the shadow topic to get
+    string name = 2 [(google.api.field_behavior) = REQUIRED];
+}
+// Response of to getting a shadow topic
+message GetShadowTopicResponse {
+    ShadowTopic shadow_topic = 1;
+}
+// Request to list all shadow topics in a shadow link
+message ListShadowTopicsRequest {
+    string shadow_link_name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+// Response to listing all shadow topics in a shadow link
+message ListShadowTopicsResponse {
+    repeated ShadowTopic shadow_topics = 1;
+}
 
 /* Other Messages */
 // ShadowLink options
@@ -193,24 +250,27 @@ message ShadowLinkClientOptions {
     optional TLSSettings tls_settings = 4;
     // Authentication settings
     optional AuthenticationConfiguration authentication_configuration = 5;
-    // Max metadata age
+    // Max metadata age.
     // If 0 is provided, defaults to 10 seconds
     int32 metadata_max_age_ms = 6;
-    // Connection timeout
+    // Connection timeout.
     // If 0 is provided, defaults to 1 second
     int32 connection_timeout_ms = 7;
-    // Retry base backoff
+    // Retry base backoff.
     // If 0 is provided, defaults to 100ms
     int32 retry_backoff_ms = 8;
-    // Fetch request timeout
-    // If 0 is provided, defaults to 100ms
+    // Fetch request timeout.
+    // If 0 is provided, defaults to 500ms
     int32 fetch_wait_max_ms = 9;
-    // Fetch min bytes
-    // If 0 is provided, defaults to 1 byte
+    // Fetch min bytes.
+    // If 0 is provided, defaults to 5 MiB
     int32 fetch_min_bytes = 10;
-    // Fetch max bytes
-    // If 0 is provided, defaults to 1MiB
+    // Fetch max bytes.
+    // If 0 is provided, defaults to 20 MiB
     int32 fetch_max_bytes = 11;
+    // Fetch partition max bytes.
+    // If 0 is provided, defaults to 1 MiB
+    int32 fetch_partition_max_bytes = 12;
 }
 // Options for syncing topic metadata
 message TopicMetadataSyncOptions {
@@ -292,6 +352,8 @@ message TLSSettings {
         // Certificates and keys are provided in PEM format
         TLSPEMSettings tls_pem_settings = 2;
     }
+    // If true, the SNI hostname will not be provided when TLS is used
+    bool do_not_set_sni_hostname = 4;
 }
 // Authentication config.  Currently only supporting SASL/SCRAM,
 // however made as a oneof for expansion
@@ -387,7 +449,7 @@ message ShadowLinkStatus {
     // Statuses of the running tasks
     repeated ShadowLinkTaskStatus task_statuses = 2;
     // Status of shadow topics
-    repeated ShadowTopicStatus shadow_topic_statuses = 3;
+    repeated ShadowTopic shadow_topics = 3;
     // List of topic properties that are being synced
     repeated string synced_shadow_topic_properties = 4;
 }
@@ -404,14 +466,10 @@ message ShadowLinkTaskStatus {
 }
 // Status of a ShadowTopic
 message ShadowTopicStatus {
-    // Name of the shadow topic
-    string name = 1;
-    // Topic ID of the shadow topic
-    string topic_id = 2;
     // State of the shadow topic
-    ShadowTopicState state = 3;
+    ShadowTopicState state = 1;
     // List of partition information for the shadow topic
-    repeated TopicPartitionInformation partition_information = 4;
+    repeated TopicPartitionInformation partition_information = 2;
 }
 // Topic partition information
 message TopicPartitionInformation {
@@ -423,6 +481,8 @@ message TopicPartitionInformation {
     int64 source_high_watermark = 3;
     // Shadowed partition's HWM
     int64 high_watermark = 4;
+    // Timestamp of the last time the source partition information was updated
+    google.protobuf.Timestamp source_last_updated_timestamp = 5;
 }
 
 /* Enums */

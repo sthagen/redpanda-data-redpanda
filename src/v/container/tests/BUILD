@@ -127,3 +127,34 @@ redpanda_cc_bench(
         "@seastar//:benchmark",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "priority_queue_test",
+    timeout = "short",
+    srcs = [
+        "priority_queue_test.cc",
+    ],
+    deps = [
+        "//src/v/container:priority_queue",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "priority_queue_rpbench",
+    srcs = [
+        "priority_queue_bench.cc",
+    ],
+    deps = [
+        ":bench_utils",
+        "//src/v/container:chunked_vector",
+        "//src/v/container:priority_queue",
+        "//src/v/random:generators",
+        "//src/v/ssx:async_algorithm",
+        "//src/v/ssx:async_clear",
+        "//src/v/ssx:async_merge_top_k",
+        "@seastar",
+        "@seastar//:benchmark",
+    ],
+)

@@ -22,5 +22,5 @@ const (
 	// We store the config in /var/run such that it survives till reboot (but only until then - tmpfs).
 	// /var/run requires root but the tuner requires that anyway.
 	// /tmp is not suitable because of things like systemd-tmpfiles that can clear it out.
-	NetTunerConfigFile = "/var/run/redpanda_net_tuner_config"
+	DefaultNodeTunerStateFile = "/var/run/redpanda_node_tuner_state.yaml"
 )

@@ -56,7 +56,7 @@ public:
       ss::sharded<storage::node>&,
       config::binding<std::chrono::milliseconds>,
       config::binding<std::chrono::milliseconds>,
-      config::binding<double>);
+      config::binding<std::optional<double>>);
 
     void start();
     ss::future<> stop();
@@ -96,7 +96,7 @@ private:
     ss::sharded<storage::node>& _storage_node;
     config::binding<std::chrono::milliseconds> _producer_gc_threshold;
     config::binding<std::chrono::milliseconds> _max_kafka_throttle;
-    config::binding<double> _backlog_size_throttling_ratio;
+    config::binding<std::optional<double>> _backlog_size_throttling_ratio;
 
     // Timestamp marking a last time when the Iceberg translation reported no
     // issues. This timestamp is used to calculate the throttle, the longer the

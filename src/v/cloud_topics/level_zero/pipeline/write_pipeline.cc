@@ -127,7 +127,7 @@ write_pipeline<Clock>::write_and_debounce(
 }
 
 template<class Clock>
-void write_pipeline<Clock>::reenqueue(write_request<Clock>& r) {
+void write_pipeline<Clock>::reenqueue(write_request<Clock>& r, bool signal) {
     if (r._hook.is_linked()) {
         r._hook.unlink();
     }
@@ -143,7 +143,9 @@ void write_pipeline<Clock>::reenqueue(write_request<Clock>& r) {
         // and notify the corresponding event filter.
         r.stage = this->next_stage(r.stage);
         this->get_pending().push_back(r);
-        this->signal(r.stage);
+        if (signal) {
+            this->signal(r.stage);
+        }
     }
 }
 
@@ -223,8 +225,14 @@ bool write_pipeline<Clock>::stage::stopped() const noexcept {
 }
 
 template<class Clock>
-void write_pipeline<Clock>::stage::push_next_stage(write_request<Clock>& req) {
-    _parent->reenqueue(req);
+void write_pipeline<Clock>::stage::push_next_stage(
+  write_request<Clock>& req, bool signal) {
+    _parent->reenqueue(req, signal);
+}
+
+template<class Clock>
+void write_pipeline<Clock>::stage::signal_next_stage() {
+    _parent->signal(_parent->next_stage(_ps));
 }
 
 template<class Clock>

@@ -16,12 +16,26 @@
 #include <seastar/testing/perf_tests.hh>
 
 #include <algorithm>
+#include <concepts>
 #include <iterator>
 #include <vector>
 
 template<typename Vector, size_t Size>
 struct VectorBenchTest {
     using value_type = typename Vector::value_type;
+
+    const value_type val = make_value();
+    const Vector filled = make_filled();
+
+    // copy overloads copy a T either via ctor (this one)
+    auto copy(const std::copy_constructible auto& t) { return t; }
+
+    // or a .copy method (this one)
+    template<typename T>
+    requires requires(const T& t) { t.copy(); }
+    auto copy(const T& t) {
+        return t.copy();
+    }
 
     static auto make_value() {
         return ::make_value<typename Vector::value_type>();
@@ -33,8 +47,6 @@ struct VectorBenchTest {
         return v;
     }
 
-    value_type val = make_value();
-    Vector filled = make_filled();
     std::vector<size_t> indexes = [] {
         random_generators::rng rng{0};
         std::vector<size_t> indexes;
@@ -46,13 +58,15 @@ struct VectorBenchTest {
 
     [[gnu::noinline]]
     void run_sort_test() {
-        std::sort(filled.begin(), filled.end());
+        auto v = copy(filled);
+        std::sort(v.begin(), v.end());
     }
 
     [[gnu::noinline]]
     void run_fifo_test() {
         Vector v;
         for (size_t i = 0; i < Size; ++i) {
+            // NOLINTNEXTLINE(performance-inefficient-vector-operation)
             v.push_back(val);
         }
         perf_tests::do_not_optimize(v);

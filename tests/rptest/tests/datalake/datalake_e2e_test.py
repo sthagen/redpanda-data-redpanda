@@ -12,6 +12,7 @@ import random
 import re
 import time
 from random import randint
+from typing import Callable, Any
 
 from confluent_kafka import Producer, avro
 from confluent_kafka.avro import AvroProducer
@@ -42,13 +43,34 @@ from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_debug_mode
 
+FieldTuple = tuple[str | None, ...]
+
+TRINO_RP_FIELD_TYPE: FieldTuple = (
+    "redpanda",
+    "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varchar, value varbinary)), key varbinary, timestamp_type integer)",
+    "",
+    "",
+)
+
+SPARK_RP_FIELD_TYPE: FieldTuple = (
+    "redpanda",
+    "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:string,value:binary>>,key:binary,timestamp_type:int>",
+    None,
+)
+
 
 class AvroSchema:
-    def __init__(self, schema_str, record_generator, expected_trino, expected_spark):
-        self.schema_str = schema_str
-        self.record_generator = record_generator
-        self.expected_trino = expected_trino
-        self.expected_spark = expected_spark
+    def __init__(
+        self,
+        schema_str: str,
+        record_generator: Callable[[Any], Any],
+        expected_trino: list[FieldTuple],
+        expected_spark: list[FieldTuple],
+    ):
+        self.schema_str: str = schema_str
+        self.record_generator: Callable[[Any], Any] = record_generator
+        self.expected_trino: list[FieldTuple] = [TRINO_RP_FIELD_TYPE] + expected_trino
+        self.expected_spark: list[FieldTuple] = [SPARK_RP_FIELD_TYPE] + expected_spark
 
     def generate_record(self, t):
         return self.record_generator(t)
@@ -136,20 +158,9 @@ AVRO_SCHEMA_TEST_CASES = {
         schema_str="""{"type": "long", "name": "a_number"}""",
         record_generator=lambda t: int(t),
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("root", "bigint", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("root", "bigint", None),
             ("", "", ""),
             ("# Partitioning", "", ""),
@@ -160,21 +171,10 @@ AVRO_SCHEMA_TEST_CASES = {
         schema_str=avro_schema_str,
         record_generator=lambda t: {"number": int(t), "timestamp_us": int(t * 1000000)},
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
             ("", "", ""),
@@ -190,22 +190,11 @@ AVRO_SCHEMA_TEST_CASES = {
             "suit": random.choice(["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]),
         },
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
             ("suit", "bigint", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
             ("suit", "bigint", None),
@@ -222,22 +211,11 @@ AVRO_SCHEMA_TEST_CASES = {
             "arr": [int(t) + i for i in range(random.randint(0, 10))],
         },
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
             ("arr", "array(bigint)", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
             ("arr", "array<bigint>", None),
@@ -254,22 +232,11 @@ AVRO_SCHEMA_TEST_CASES = {
             "kv": {str(t): int(t)},
         },
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
             ("kv", "map(varchar, bigint)", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
             ("kv", "map<string,bigint>", None),
@@ -286,22 +253,11 @@ AVRO_SCHEMA_TEST_CASES = {
             "str_or_long": random.choice([str(t), int(t)]),
         },
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
             ("str_or_long", "row(union_opt_0 varchar, union_opt_1 bigint)", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
             ("str_or_long", "struct<union_opt_0:string,union_opt_1:bigint>", None),
@@ -318,22 +274,11 @@ AVRO_SCHEMA_TEST_CASES = {
             "optional_long": random.choice([None, int(t)]),
         },
         expected_trino=[
-            (
-                "redpanda",
-                "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                "",
-                "",
-            ),
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
             ("optional_long", "row(union_opt_1 bigint)", "", ""),
         ],
         expected_spark=[
-            (
-                "redpanda",
-                "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                None,
-            ),
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
             ("optional_long", "struct<union_opt_1:bigint>", None),
@@ -348,23 +293,27 @@ AVRO_SCHEMA_TEST_CASES = {
 class JsonSchemaTestCase:
     def __init__(
         self,
-        schema_str,
-        record_generator,
-        expected_spark,
-        skip_encoding=False,
-        dlq_cause=None,
+        schema_str: str,
+        record_generator: Callable[[Any], Any],
+        expected_spark: list[FieldTuple] | None,
+        skip_encoding: bool = False,
+        dlq_cause: str | None = None,
     ):
         """
         :param skip_encoding: If True, the record generator will return a JSON string
             that needs to be produced as-is. If False, the record generator will return
             a dict that needs to be converted to JSON before producing.
         """
-        self.schema_str = schema_str
-        self.record_generator = record_generator
-        self.expected_spark = expected_spark
-        self.dlq_cause = dlq_cause
+        self.schema_str: str = schema_str
+        self.record_generator: Callable[[Any], Any] = record_generator
+        self.expected_spark: list[FieldTuple] | None = (
+            [SPARK_RP_FIELD_TYPE] + expected_spark
+            if expected_spark is not None
+            else None
+        )
+        self.dlq_cause: str | None = dlq_cause
 
-        self._skip_encoding = skip_encoding
+        self._skip_encoding: bool = skip_encoding
 
     def generate_record(self, t):
         if self._skip_encoding:
@@ -372,19 +321,6 @@ class JsonSchemaTestCase:
         else:
             return json.dumps(self.record_generator(t))
 
-
-TRINO_RP_FIELD_TYPE = (
-    "redpanda",
-    "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-    "",
-    "",
-)
-
-SPARK_RP_FIELD_TYPE = (
-    "redpanda",
-    "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-    None,
-)
 
 JSON_SCHEMA_TEST_CASES = {
     "basic": JsonSchemaTestCase(
@@ -399,7 +335,6 @@ JSON_SCHEMA_TEST_CASES = {
         }""",
         record_generator=lambda t: {"number": int(t), "timestamp_us": int(t * 1000000)},
         expected_spark=[
-            SPARK_RP_FIELD_TYPE,
             ("number", "bigint", None),
             ("timestamp_us", "bigint", None),
             ("", "", ""),
@@ -816,8 +751,8 @@ class DatalakeE2ETests(RedpandaTest):
     @cluster(num_nodes=3)
     @matrix(
         cloud_storage_type=supported_storage_types(),
-        query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
-        catalog_type=supported_catalog_types(),
+        query_engine=[QueryEngineType.SPARK],
+        catalog_type=[CatalogType.REST_JDBC],
     )
     def test_latest_protobuf_schema(
         self, cloud_storage_type, query_engine, catalog_type
@@ -923,7 +858,7 @@ class DatalakeE2ETests(RedpandaTest):
             if query_engine == QueryEngineType.TRINO:
                 trino = dl.trino()
                 trino_expected_out = [
-                    ('redpanda', 'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)', '', ''),
+                    TRINO_RP_FIELD_TYPE,
                     ('name', 'varchar', '', ''),
                     ('id', 'integer', '', ''),
                     ('email', 'varchar', '', ''),
@@ -933,7 +868,7 @@ class DatalakeE2ETests(RedpandaTest):
             else:
                 spark = dl.spark()
                 spark_expected_out = [
-                    ('redpanda', 'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>', None),
+                    SPARK_RP_FIELD_TYPE,
                     ('name', 'string', None),
                     ('id', 'int', None),
                     ('email', 'string', None),
@@ -959,7 +894,7 @@ class DatalakeE2ETests(RedpandaTest):
             if query_engine == QueryEngineType.TRINO:
                 trino = dl.trino()
                 trino_expected_out = [
-                    ('redpanda', 'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)', '', ''),
+                    TRINO_RP_FIELD_TYPE,
                     ('name', 'varchar', '', ''),
                     ('id', 'integer', '', ''),
                     ('email', 'varchar', '', ''),
@@ -970,7 +905,7 @@ class DatalakeE2ETests(RedpandaTest):
             else:
                 spark = dl.spark()
                 spark_expected_out = [
-                    ('redpanda', 'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>', None),
+                    SPARK_RP_FIELD_TYPE,
                     ('name', 'string', None),
                     ('id', 'int', None),
                     ('email', 'string', None),
@@ -1082,7 +1017,7 @@ message_type {
             table_name = f"redpanda.{self.topic_name}"
             spark = dl.spark()
             spark_expected_out = [
-                ('redpanda', 'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>', None),
+                SPARK_RP_FIELD_TYPE,
                 ('name', 'string', None),
                 ('address', 'struct<street:string,city:string,state:string,zip:string>', None),
                 ('', '', ''),

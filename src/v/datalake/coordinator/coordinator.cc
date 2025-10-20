@@ -857,6 +857,34 @@ coordinator::sync_get_usage_stats() {
     co_return result;
 }
 
+ss::future<
+  checked<chunked_hash_map<model::topic, topic_state>, coordinator::errc>>
+coordinator::sync_get_topic_state(chunked_vector<model::topic> topics_filter) {
+    auto gate = maybe_gate();
+    if (gate.has_error()) {
+        co_return gate.error();
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (sync_res.has_error()) {
+        co_return convert_stm_errc(sync_res.error());
+    }
+
+    chunked_hash_map<model::topic, topic_state> result;
+    if (topics_filter.empty()) {
+        for (const auto& [t, state] : stm_->state().topic_to_state) {
+            result.emplace(t, state.copy());
+        }
+        co_return result;
+    }
+    for (const auto& topic : topics_filter) {
+        auto topic_it = stm_->state().topic_to_state.find(topic);
+        if (topic_it != stm_->state().topic_to_state.end()) {
+            result.insert({topic, topic_it->second.copy()});
+        }
+    }
+    co_return result;
+}
+
 ss::sstring coordinator::get_effective_default_partition_spec(
   const std::optional<ss::sstring>& partition_spec) const {
     const auto& cfg = config::shard_local_cfg();

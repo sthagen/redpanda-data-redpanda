@@ -20,4 +20,9 @@ ss::future<shadow_topic_report_response> service_impl::shadow_topic_report(
     return _svc.local().node_local_shadow_topic_report(std::move(request));
 }
 
+ss::future<shadow_link_status_report_response> service_impl::shadow_link_report(
+  shadow_link_status_report_request request, ::rpc::streaming_context&) {
+    return _svc.local().node_local_shadow_link_report(std::move(request));
+}
+
 }; // namespace cluster_link::rpc

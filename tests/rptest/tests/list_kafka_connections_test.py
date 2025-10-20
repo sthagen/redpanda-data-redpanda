@@ -75,8 +75,7 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
         )
         node_id = self.redpanda.node_id(self.redpanda.nodes[0])
         req = broker_pb.ListKafkaConnectionsRequest(
-            node_id=node_id,
-            page_size=10,
+            node_id=node_id, page_size=10, order_by="source.port desc"
         )
 
         def valid_response() -> bool:
@@ -88,35 +87,39 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
             self.logger.debug(f"ListKafkaConnectionsResponse: {resp}")
 
             # Sanity check the response
-            assert len(resp.connections) > 0
+            assert len(resp.connections) >= 2
 
-            # Find the connection used for consumer group requests
+            # Check the ordering is correct
+            assert resp.connections[0].source.port >= resp.connections[1].source.port
+
+            # Find the connection used for franz-go consumer group requests
             # Note: this is different from the connection used for fetch requests
-            conn: kafka_connections_pb.KafkaConnection = next(
-                filter(lambda conn: conn.group_id == self.test_group, resp.connections)
-            )
-
-            assert conn.node_id == node_id
-            assert conn.state == kafka_connections_pb.KAFKA_CONNECTION_STATE_OPEN
-            assert conn.open_time.ToDatetime() > datetime(year=2025, month=1, day=1)
-            assert len(conn.source.ip_address) > 0
-            assert conn.source.port != 0
-            assert (
-                conn.authentication_info.state
+            matching_conns = [
+                conn
+                for conn in resp.connections
+                if conn.group_id == self.test_group
+                and conn.node_id == node_id
+                and conn.state == kafka_connections_pb.KAFKA_CONNECTION_STATE_OPEN
+                and conn.open_time.ToDatetime() > datetime(year=2025, month=1, day=1)
+                and len(conn.source.ip_address) > 0
+                and conn.source.port != 0
+                and conn.authentication_info.state
                 == kafka_connections_pb.AUTHENTICATION_STATE_SUCCESS
-            )
-            assert (
-                conn.authentication_info.mechanism
+                and conn.authentication_info.mechanism
                 == kafka_connections_pb.AUTHENTICATION_MECHANISM_SASL_SCRAM
+                and conn.authentication_info.user_principal == self.superuser.username
+                and not conn.tls_info.enabled
+                and conn.client_id == "rpk"
+                and conn.client_software_name == "kgo"
+                and len(conn.client_software_version) > 0
+                and len(conn.group_member_id) > 0
+                and len(conn.api_versions) > 0
+                and conn.total_request_statistics.request_count > 0
+            ]
+
+            assert matching_conns, (
+                f"No connection in response matched expected criteria for group_id={self.test_group}"
             )
-            assert conn.authentication_info.user_principal == self.superuser.username
-            assert not conn.tls_info.enabled
-            assert conn.client_id == "rpk"
-            assert conn.client_software_name == "kgo"
-            assert len(conn.client_software_version) > 0
-            assert len(conn.group_member_id) > 0
-            assert len(conn.api_versions) > 0
-            assert conn.total_request_statistics.request_count > 0
 
             return True
 
@@ -141,6 +144,21 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
         assert filtered_resp.total_size == 0
 
         self.consumer.stop()
+
+        self.logger.info(
+            "Test that closed connections can also be included in the response"
+        )
+        closed_conns_resp = admin_v2.broker().list_kafka_connections(
+            broker_pb.ListKafkaConnectionsRequest(
+                node_id=-1,
+                filter="state = KAFKA_CONNECTION_STATE_CLOSED",
+            )
+        )
+        self.logger.debug(f"Closed connections response: {closed_conns_resp}")
+        assert len(closed_conns_resp.connections) > 0
+        conn = closed_conns_resp.connections[0]
+        assert conn.state == kafka_connections_pb.KAFKA_CONNECTION_STATE_CLOSED
+        assert conn.close_time.ToDatetime() > datetime(year=2025, month=1, day=1)
 
 
 class AdminV2ListKafkaConnectionsLicenseTest(RedpandaTest):

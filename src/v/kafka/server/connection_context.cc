@@ -170,6 +170,7 @@ parse_virtual_connection_id(const kafka::request_header& header) {
 connection_context::connection_context(
   std::optional<
     std::reference_wrapper<boost::intrusive::list<connection_context>>> hook,
+  std::optional<std::reference_wrapper<closed_connections_t>> closed_list,
   class server& s,
   ss::lw_shared_ptr<net::connection> conn,
   std::optional<security::sasl_server> sasl,
@@ -179,6 +180,7 @@ connection_context::connection_context(
   config::conversion_binding<std::vector<bool>, std::vector<ss::sstring>>
     kafka_throughput_controlled_api_keys) noexcept
   : _hook(hook)
+  , _closed_list(closed_list)
   , _server(s)
   , conn(conn)
   , _protocol_state()
@@ -218,10 +220,19 @@ ss::future<> connection_context::start() {
     }
 }
 
-ss::future<> connection_context::stop() {
-    if (_hook && is_linked()) {
-        _hook.value().get().erase(_hook.value().get().iterator_to(*this));
+namespace {
+constexpr static size_t closed_list_size_per_shard = 5;
+
+void push_limited(
+  closed_connections_t& queue, closed_connections_t::value_type&& value) {
+    if (queue.size() == closed_list_size_per_shard) {
+        queue.pop_front();
     }
+    queue.push_back(std::move(value));
+}
+} // namespace
+
+ss::future<> connection_context::stop() {
     if (conn) {
         vlog(klog.trace, "stopping connection context for {}", conn->addr);
         conn->shutdown_input();
@@ -230,6 +241,14 @@ ss::future<> connection_context::stop() {
     co_await _as.request_abort_ex(ssx::connection_aborted_exception{});
     co_await _gate.close();
     co_await _as.stop();
+
+    if (_hook && is_linked()) {
+        _hook.value().get().erase(_hook.value().get().iterator_to(*this));
+    }
+    if (_closed_list) {
+        push_limited(
+          _closed_list.value().get(), ss::make_lw_shared(to_closed_proto()));
+    }
 
     if (conn) {
         vlog(klog.trace, "stopped connection context for {}", conn->addr);
@@ -375,7 +394,8 @@ connection_context::authorized_user<security::acl_cluster_name>(
 
 ss::future<> connection_context::revoke_credentials(std::string_view name) {
     if (
-      !_sasl.has_value() || !_sasl->has_mechanism()
+      !_as.local_is_initialized() || _as.abort_requested() || !_sasl.has_value()
+      || !_sasl->has_mechanism()
       || _sasl->mechanism().mechanism_name() != name) {
         return ss::now();
     }
@@ -841,9 +861,13 @@ proto::admin::kafka_connection connection_context::to_proto() const {
       config::node().node_id.value().value_or(model::unassigned_node_id));
     res.set_uid(ssx::sformat("{}", _attributes.connection_id));
     res.set_listener_name(ss::sstring{listener()});
-    res.set_state(
-      _as.abort_requested() ? kafka_connection_state::aborting
-                            : kafka_connection_state::open);
+    auto conn_state = [this]() {
+        if (!_as.local_is_initialized() || _as.abort_requested()) {
+            return kafka_connection_state::aborting;
+        }
+        return kafka_connection_state::open;
+    }();
+    res.set_state(conn_state);
     res.set_open_time(ss_sys_clock_to_absl(_attributes.open_time));
 
     auto src = proto::admin::source{};
@@ -942,6 +966,13 @@ proto::admin::kafka_connection connection_context::to_proto() const {
     res.set_total_request_statistics(
       make_stats([](auto& attr) { return attr.total_stat; }));
 
+    return res;
+}
+
+proto::admin::kafka_connection connection_context::to_closed_proto() const {
+    auto res = to_proto();
+    res.set_state(proto::admin::kafka_connection_state::closed);
+    res.set_close_time(ss_sys_clock_to_absl(ss::lowres_system_clock::now()));
     return res;
 }
 

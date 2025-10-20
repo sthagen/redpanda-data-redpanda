@@ -92,16 +92,15 @@ ss::future<rpc::get_offsets_reply> do_get_offsets(
     co_return co_await domain_mgr->get_offsets(std::move(req));
 }
 
-ss::future<rpc::get_compaction_offsets_reply> do_get_compaction_offsets(
+ss::future<rpc::get_compaction_info_reply> do_get_compaction_info(
   domain_supervisor& domain_supervisor,
   const model::ntp& ntp,
-  rpc::get_compaction_offsets_request req) {
+  rpc::get_compaction_info_request req) {
     auto domain_mgr = domain_supervisor.get(ntp);
     if (!domain_mgr) {
-        co_return rpc::get_compaction_offsets_reply{
-          .ec = rpc::errc::not_leader};
+        co_return rpc::get_compaction_info_reply{.ec = rpc::errc::not_leader};
     }
-    co_return co_await domain_mgr->get_compaction_offsets(std::move(req));
+    co_return co_await domain_mgr->get_compaction_info(std::move(req));
 }
 
 ss::future<rpc::get_term_for_offset_reply> do_get_term_for_offset(
@@ -264,13 +263,13 @@ template ss::future<rpc::get_offsets_reply> frontend::process<
   &frontend::get_offsets_locally,
   &frontend::client::get_offsets>(rpc::get_offsets_request, bool);
 
-template ss::future<rpc::get_compaction_offsets_reply>
-  frontend::remote_dispatch<&frontend::client::get_compaction_offsets>(
-    rpc::get_compaction_offsets_request, model::node_id);
-template ss::future<rpc::get_compaction_offsets_reply> frontend::process<
-  &frontend::get_compaction_offsets_locally,
-  &frontend::client::get_compaction_offsets>(
-  rpc::get_compaction_offsets_request, bool);
+template ss::future<rpc::get_compaction_info_reply>
+  frontend::remote_dispatch<&frontend::client::get_compaction_info>(
+    rpc::get_compaction_info_request, model::node_id);
+template ss::future<rpc::get_compaction_info_reply> frontend::process<
+  &frontend::get_compaction_info_locally,
+  &frontend::client::get_compaction_info>(
+  rpc::get_compaction_info_request, bool);
 
 template ss::future<rpc::get_term_for_offset_reply>
   frontend::remote_dispatch<&frontend::client::get_term_for_offset>(
@@ -459,25 +458,24 @@ ss::future<rpc::get_offsets_reply> frontend::get_offsets(
       &client::get_offsets>(std::move(request), bool(local_only_exec));
 }
 
-ss::future<rpc::get_compaction_offsets_reply>
-frontend::get_compaction_offsets_locally(
-  rpc::get_compaction_offsets_request request,
+ss::future<rpc::get_compaction_info_reply>
+frontend::get_compaction_info_locally(
+  rpc::get_compaction_info_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
     co_return co_await container().invoke_on(
       shard, [metastore_ntp, req = std::move(request)](frontend& fe) mutable {
-          return do_get_compaction_offsets(
+          return do_get_compaction_info(
             *(fe._domain_supervisor), metastore_ntp, std::move(req));
       });
 }
 
-ss::future<rpc::get_compaction_offsets_reply> frontend::get_compaction_offsets(
-  rpc::get_compaction_offsets_request request, local_only local_only_exec) {
+ss::future<rpc::get_compaction_info_reply> frontend::get_compaction_info(
+  rpc::get_compaction_info_request request, local_only local_only_exec) {
     auto holder = _gate.hold();
     co_return co_await process<
-      &frontend::get_compaction_offsets_locally,
-      &client::get_compaction_offsets>(
-      std::move(request), bool(local_only_exec));
+      &frontend::get_compaction_info_locally,
+      &client::get_compaction_info>(std::move(request), bool(local_only_exec));
 }
 
 ss::future<rpc::get_term_for_offset_reply>

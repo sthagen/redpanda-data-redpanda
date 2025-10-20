@@ -583,7 +583,7 @@ ss::future<> ntp_archiver::upload_until_abort() {
         vlog(_rtclog.warn, "Skipping upload loop start");
         co_return;
     }
-    if (!_probe) {
+    if (!_probe.has_value()) {
         initialize_probe();
     }
 
@@ -682,7 +682,7 @@ ss::future<> ntp_archiver::upload_until_abort() {
                   "anomalies",
                   sync_timeout.count(),
                   _start_term);
-                auto hold = _probe->register_archiver_on_hold(true);
+                auto hold = _probe.value().register_archiver_on_hold(true);
                 co_await ss::sleep_abortable(sync_timeout, _as);
                 continue;
             } else {
@@ -770,7 +770,7 @@ ss::future<> ntp_archiver::sync_manifest_until_abort() {
         vlog(_rtclog.warn, "Skipping read replica sync loop start");
         co_return;
     }
-    if (!_probe) {
+    if (!_probe.has_value()) {
         initialize_probe();
     }
 
@@ -1080,7 +1080,8 @@ ss::future<> ntp_archiver::upload_until_term_change_legacy() {
         bool uploads_paused
           = !config::shard_local_cfg().cloud_storage_enable_segment_uploads();
         std::optional<batch_result> result;
-        auto track_paused = _probe->register_archiver_on_hold(uploads_paused);
+        auto track_paused = _probe.value().register_archiver_on_hold(
+          uploads_paused);
         if (!uploads_paused) {
             result = co_await upload_next_candidates(emit_rw_fence());
         }
@@ -1315,8 +1316,8 @@ ss::future<> ntp_archiver::stop() {
     _flush_cond.broken();
     _wakeup_event.broken();
 
-    _probe.reset();
     co_await _gate.close();
+    _probe.reset();
 }
 
 const model::ntp& ntp_archiver::get_ntp() const { return _ntp; }
@@ -1522,7 +1523,7 @@ ss::future<cloud_storage::upload_result> ntp_archiver::upload_manifest(
 
     // now that manifest() is updated in cloud, updated the
     // compacted_away_cloud_bytes metric
-    _probe->compacted_replaced_bytes(
+    _probe.value().compacted_replaced_bytes(
       _parent.archival_meta_stm()->get_compacted_replaced_bytes());
 
     if (result == cloud_storage::upload_result::success) {
@@ -2046,7 +2047,8 @@ ntp_archiver::schedule_uploads(std::vector<upload_context> loop_contexts) {
 
         // this metric is only relevant for non compacted uploads.
         if (ctx.upload_kind == segment_upload_kind::non_compacted) {
-            _probe->upload_lag(ctx.end_offset_exclusive - ctx.start_offset);
+            _probe.value().upload_lag(
+              ctx.end_offset_exclusive - ctx.start_offset);
         }
 
         std::exception_ptr ep;
@@ -2230,7 +2232,7 @@ ntp_archiver::wait_uploads_complete(
               "{} can be added",
               segment_results.size(),
               num_accepted);
-            _probe->gap_detected(
+            _probe.value().gap_detected(
               model::offset(
                 static_cast<int64_t>(segment_results.size() - num_accepted)));
         }
@@ -2274,8 +2276,8 @@ ntp_archiver::wait_uploads_complete(
         }
 
         if (segment_kind == segment_upload_kind::non_compacted) {
-            _probe->uploaded(*upload.delta);
-            _probe->uploaded_bytes(upload.meta->size_bytes);
+            _probe.value().uploaded(*upload.delta);
+            _probe.value().uploaded_bytes(upload.meta->size_bytes);
 
             model::offset expected_base_offset;
             if (manifest().get_last_offset() < model::offset{0}) {
@@ -2990,7 +2992,7 @@ ss::future<> ntp_archiver::garbage_collect_archive() {
         }
     }
 
-    _probe->segments_deleted(
+    _probe.value().segments_deleted(
       static_cast<int64_t>(
         all_deletes_succeeded ? segments_to_remove_count : 0));
     vlog(
@@ -3426,7 +3428,7 @@ ss::future<> ntp_archiver::garbage_collect() {
           "retry on the next housekeeping run.");
     }
 
-    _probe->segments_deleted(
+    _probe.value().segments_deleted(
       static_cast<int64_t>(all_deletes_succeeded ? to_remove.size() : 0));
     vlog(
       _rtclog.debug,

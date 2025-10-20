@@ -264,6 +264,8 @@ public:
     chunked_vector<ss::lw_shared_ptr<const connection_context>>
     list_connections() const;
 
+    closed_connections_t list_closed_connections() const;
+
 private:
     void setup_metrics();
 
@@ -315,6 +317,7 @@ private:
     std::unique_ptr<replica_selector> _replica_selector;
     const std::unique_ptr<pandaproxy::schema_registry::api>& _schema_registry;
     boost::intrusive::list<connection_context> _connections;
+    closed_connections_t _closed_connections{};
 };
 
 } // namespace kafka

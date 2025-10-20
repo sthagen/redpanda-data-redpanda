@@ -118,6 +118,9 @@ public:
 
     ::model::node_id self() const { return _self; }
 
+    chunked_hash_map<::model::ntp, replication::partition_offsets_report>
+    get_partition_offsets_report() const;
+
 private:
     bool should_start_task(task* t) const;
     bool should_stop_task(task* t) const;

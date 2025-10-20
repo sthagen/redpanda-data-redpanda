@@ -183,7 +183,9 @@ struct remote_read_and_write_are_not_supported_for_read_replica {
 struct batch_max_bytes_limits {
     static constexpr error_code ec = error_code::invalid_config;
     static constexpr const char* error_message
-      = "Property max.message.bytes value must be positive";
+      = "Property max.message.bytes value must be positive and less than or "
+        "equal to the `kafka_max_message_size_upper_limit` broker "
+        "configuration";
 
     static bool is_valid(const creatable_topic& c) {
         auto it = std::find_if(
@@ -193,7 +195,11 @@ struct batch_max_bytes_limits {
               return cfg.name == topic_property_max_message_bytes;
           });
         if (it != c.configs.end() && it->value.has_value()) {
-            return boost::lexical_cast<int32_t>(it->value.value()) > 0;
+            auto val = boost::lexical_cast<int32_t>(it->value.value());
+            auto upper_limit = config::shard_local_cfg()
+                                 .kafka_max_message_size_upper_limit_bytes()
+                                 .value_or(std::numeric_limits<int32_t>::max());
+            return val > 0 && val <= upper_limit;
         }
 
         return true;

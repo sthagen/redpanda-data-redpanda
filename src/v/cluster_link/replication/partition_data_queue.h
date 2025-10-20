@@ -56,11 +56,14 @@ public:
     bool empty() const { return _batches.empty(); }
     bool full() const { return _sem.available_units() <= 0; }
 
+    void update_max_buffered(size_t max_buffered_bytes);
+
 private:
     void do_reset(kafka::offset next);
     kafka::offset _next{};
     void maybe_notify_waiter();
     std::optional<ss::promise<fetch_data>> _waiter;
+    size_t _max_buffered_bytes;
     ssx::semaphore _sem;
     ssx::semaphore_units _batch_units;
     chunked_vector<::model::record_batch> _batches;

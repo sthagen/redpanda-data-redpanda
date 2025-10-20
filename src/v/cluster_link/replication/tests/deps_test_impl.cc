@@ -49,6 +49,8 @@ raft::replicate_stages accounting_sink::replicate(
 
 void accounting_sink::notify_replicator_failure(model::term_id) {}
 
+kafka::offset accounting_sink::high_watermark() const { return {}; }
+
 ss::future<> random_data_source::start(kafka::offset offset) noexcept {
     _next = offset;
     return ss::now();
@@ -69,6 +71,11 @@ random_data_source::fetch_next(ss::abort_source& as) {
     co_await ss::sleep_abortable(
       std::chrono::milliseconds{random_generators::get_int(1, 3)}, as);
     co_return data_source::data{std::move(batches), ssx::semaphore_units{}};
+}
+
+std::optional<data_source::source_partition_offsets_report>
+random_data_source::get_offsets() {
+    return std::nullopt;
 }
 
 std::unique_ptr<data_source>

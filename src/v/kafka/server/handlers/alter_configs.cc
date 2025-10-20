@@ -258,7 +258,8 @@ create_topic_properties_update(
                 parse_and_set_optional(
                   update.properties.batch_max_bytes,
                   cfg.value,
-                  kafka::config_resource_operation::set);
+                  kafka::config_resource_operation::set,
+                  batch_max_bytes_limits_validator{});
                 continue;
             }
             if (cfg.name == topic_property_retention_local_target_ms) {

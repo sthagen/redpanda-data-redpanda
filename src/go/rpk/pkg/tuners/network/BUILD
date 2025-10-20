@@ -35,16 +35,21 @@ go_library(
 go_test(
     name = "network_test",
     size = "small",
-    srcs = ["nic_test.go"],
+    srcs = [
+        "nic_test.go",
+        "nics_test.go",
+    ],
     embed = [":network"],
     deps = select({
         "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/tuners/ethtool",
             "//src/go/rpk/pkg/tuners/irq",
             "@com_github_spf13_afero//:afero",
             "@com_github_stretchr_testify//require",
         ],
         "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/tuners/ethtool",
             "//src/go/rpk/pkg/tuners/irq",
             "@com_github_spf13_afero//:afero",

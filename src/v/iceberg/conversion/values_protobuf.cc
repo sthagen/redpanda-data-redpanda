@@ -459,11 +459,20 @@ ss::future<optional_value_outcome> single_field_to_value(
             if (field_descriptor.has_presence()) {
                 co_return std::nullopt;
             }
-            co_return iceberg::int_value(
-              field_descriptor.default_value_enum()->number());
+            co_return iceberg::string_value(
+              iobuf::from(field_descriptor.default_value_enum()->name()));
+        } else {
+            auto enum_number = std::get<int32_t>(std::move(field.value()));
+            auto enum_value_desc
+              = field_descriptor.enum_type()->FindValueByNumber(enum_number);
+            if (!enum_value_desc) {
+                // Use the default for invalid enum values (closed enums).
+                co_return iceberg::string_value(
+                  iobuf::from(field_descriptor.default_value_enum()->name()));
+            }
+            co_return iceberg::string_value(
+              iobuf::from(enum_value_desc->name()));
         }
-        co_return iceberg::int_value(
-          std::get<int32_t>(std::move(field.value())));
     case pb::FieldDescriptor::TYPE_BOOL:
         co_return convert<bool, iceberg::boolean_value>(
           std::move(field),

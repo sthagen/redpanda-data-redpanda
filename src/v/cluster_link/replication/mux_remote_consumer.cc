@@ -17,16 +17,16 @@
 namespace cluster_link::replication {
 
 mux_remote_consumer::mux_remote_consumer(
-  ss::sstring client_id,
-  std::unique_ptr<kafka::client::direct_consumer> consumer,
+  kafka::client::cluster& cluster,
   kafka::snc_quota_manager& snc_quota_mgr,
-  size_t partition_max_buffered,
-  std::chrono::milliseconds fetch_max_wait)
-  : _client_id(std::move(client_id))
-  , _consumer(std::move(consumer))
+  mux_remote_consumer::configuration consumer_configuration)
+  : _client_id(std::move(consumer_configuration.client_id))
+  , _consumer(
+      std::make_unique<kafka::client::direct_consumer>(
+        cluster, consumer_configuration.direct_consumer_configuration))
   , _snc_quota_mgr(snc_quota_mgr)
-  , _partition_max_buffered(partition_max_buffered)
-  , _fetch_max_wait(fetch_max_wait)
+  , _partition_max_buffered(consumer_configuration.partition_max_buffered)
+  , _fetch_max_wait(consumer_configuration.fetch_max_wait)
   , _kafka_tput_controlled_api_keys(
       config::shard_local_cfg().kafka_throughput_controlled_api_keys.bind())
   , _produce_throttling_enabled(should_throttle_produce()) {
@@ -125,6 +125,12 @@ mux_remote_consumer::fetch(
     co_return co_await it->second->fetch(as);
 }
 
+std::optional<kafka::client::source_partition_offsets>
+mux_remote_consumer::get_source_offsets(
+  const ::model::topic_partition& tp) const {
+    return _consumer->get_source_offsets(tp);
+}
+
 ss::future<> mux_remote_consumer::assign_pending_partitions() {
     if (_pending_assignment.empty()) {
         co_return;
@@ -140,9 +146,9 @@ ss::future<> mux_remote_consumer::assign_pending_partitions() {
             vassert(it != _partitions.end(), "Partition {} not found", tp);
             const auto& queue = it->second;
             if (queue->full()) {
-                // The queue is still full which indicates it was not drained,
-                // so we do not assign it in this round. This usually indicates
-                // there is an issue with the data sink.
+                // The queue is still full which indicates it was not
+                // drained, so we do not assign it in this round. This
+                // usually indicates there is an issue with the data sink.
                 vlog(
                   cllog.debug,
                   "[{}] Skipping assignment due to full queue",
@@ -190,8 +196,9 @@ bool mux_remote_consumer::can_ignore_partition_data(
   const model::topic_partition& tp) {
     auto partition_inactive = _partitions.find(tp) == _partitions.end();
     auto it = _pending_assignment.find(tp.topic);
-    // If a partition is in pending_assignment, it got reseeked to a new offset
-    // ignore data for now and reassign to the new offset in the next iteration.
+    // If a partition is in pending_assignment, it got reseeked to a new
+    // offset ignore data for now and reassign to the new offset in the next
+    // iteration.
     auto partition_got_reset = (it != _pending_assignment.end())
                                && it->second.contains(tp.partition);
     return partition_inactive || partition_got_reset;
@@ -231,20 +238,20 @@ ss::future<> mux_remote_consumer::process_fetched_data(
             }
             auto it = _partitions.find(tp);
             vassert(it != _partitions.end(), "Partition {} not found", tp);
-            // Note: enqueue _always_ succeeds and may oversubscribe memory by
-            // a tiny amount since the consumed batches (per partition) are
-            // usually not that large and it is very unlikely that the sink is
-            // not able to catch up. This keeps the design simple. Here we try
-            // to be good citizen and not overwhelm the queue further and
-            // unassign the partition temporarily if the queue is full and then
-            // retry at a later time.
+            // Note: enqueue _always_ succeeds and may oversubscribe memory
+            // by a tiny amount since the consumed batches (per partition)
+            // are usually not that large and it is very unlikely that the
+            // sink is not able to catch up. This keeps the design simple.
+            // Here we try to be good citizen and not overwhelm the queue
+            // further and unassign the partition temporarily if the queue
+            // is full and then retry at a later time.
             auto can_enqueue_more = it->second->enqueue(
               std::move(partition.data));
             if (!can_enqueue_more) {
-                // the queue is full, this is usually a rare case indicating the
-                // sink is not able to catchup with the rate of incoming data.
-                // We put it to the pending_assignments map and retry in the
-                // next pass once the queue has some space.
+                // the queue is full, this is usually a rare case indicating
+                // the sink is not able to catchup with the rate of incoming
+                // data. We put it to the pending_assignments map and retry
+                // in the next pass once the queue has some space.
                 to_unassign.push_back(tp);
             }
         }
@@ -275,6 +282,29 @@ ss::future<> mux_remote_consumer::fetch_loop() {
         }
         co_await process_fetched_data(std::move(fetch_result.value()));
     }
+}
+
+void mux_remote_consumer::update_configuration(const configuration& cfg) {
+    vlog(cllog.info, "Updating mux consumer configuration: {}", cfg);
+    _consumer->update_configuration(cfg.direct_consumer_configuration);
+    _partition_max_buffered = cfg.partition_max_buffered;
+    _fetch_max_wait = cfg.fetch_max_wait;
+    for (auto& [tp, queue] : _partitions) {
+        queue->update_max_buffered(_partition_max_buffered);
+    }
+}
+
+fmt::iterator
+mux_remote_consumer::configuration::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{ client_id: {}, direct_consumer_configuration: {}, "
+      "partition_max_buffered: {}, "
+      "fetch_max_wait: {}ms }}",
+      client_id,
+      direct_consumer_configuration,
+      partition_max_buffered,
+      fetch_max_wait.count());
 }
 } // namespace cluster_link::replication
 

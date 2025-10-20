@@ -13,7 +13,7 @@
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/frontend/frontend.h"
-#include "cloud_topics/level_zero/frontend_reader/reader.h"
+#include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 #include "cloud_topics/log_reader_config.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm.h"

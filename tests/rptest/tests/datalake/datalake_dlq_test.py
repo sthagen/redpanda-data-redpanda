@@ -28,6 +28,10 @@ from rptest.tests.datalake.catalog_service_factory import (
     filesystem_catalog_type,
     supported_catalog_types,
 )
+from rptest.tests.datalake.datalake_e2e_test import (
+    SPARK_RP_FIELD_TYPE,
+    TRINO_RP_FIELD_TYPE,
+)
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
@@ -303,12 +307,7 @@ class DatalakeDLQTest(RedpandaTest):
             if query_engine == QueryEngineType.TRINO:
                 trino = dl.trino()
                 trino_expected_out = [
-                    (
-                        "redpanda",
-                        "row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)",
-                        "",
-                        "",
-                    ),
+                    TRINO_RP_FIELD_TYPE,
                     ("value", "varbinary", "", ""),
                 ]
                 trino_describe_out = trino.run_query_fetch_all(
@@ -318,11 +317,7 @@ class DatalakeDLQTest(RedpandaTest):
             else:
                 spark = dl.spark()
                 spark_expected_out = [
-                    (
-                        "redpanda",
-                        "struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>",
-                        None,
-                    ),
+                    SPARK_RP_FIELD_TYPE,
                     ("value", "binary", None),
                     ("", "", ""),
                     ("# Partitioning", "", ""),

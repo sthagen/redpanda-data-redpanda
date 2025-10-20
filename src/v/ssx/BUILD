@@ -99,6 +99,20 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "async_merge_top_k",
+    hdrs = [
+        "async_merge_top_k.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":async_algorithm",
+        "//src/v/base",
+        "//src/v/container:priority_queue",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "async_clear",
     hdrs = [
         "async-clear.h",

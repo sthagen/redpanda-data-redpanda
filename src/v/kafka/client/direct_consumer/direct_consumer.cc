@@ -108,6 +108,19 @@ void direct_consumer::update_configuration(configuration cfg) {
     });
 }
 
+std::optional<source_partition_offsets>
+direct_consumer::get_source_offsets(model::topic_partition_view tp) const {
+    auto it = _subscriptions.find(tp.topic);
+    if (it == _subscriptions.end()) {
+        return std::nullopt;
+    }
+    auto p_it = it->second.find(tp.partition);
+    if (p_it == it->second.end()) {
+        return std::nullopt;
+    }
+    return p_it->second.last_known_source_offsets;
+}
+
 ss::future<> direct_consumer::update_fetchers(
   [[maybe_unused]] mutex::units lock_holder,
   topic_partition_map<subscription> removals) {
@@ -324,6 +337,24 @@ ss::future<> direct_consumer::handle_metadata_update() {
 
 void direct_consumer::on_metadata_update(const metadata_update&) {
     ssx::spawn_with_gate(_gate, [this] { return handle_metadata_update(); });
+}
+
+void direct_consumer::maybe_update_source_partition_offsets(
+  model::topic_partition_view tp, source_partition_offsets offsets) {
+    auto it = _subscriptions.find(tp.topic);
+    if (it == _subscriptions.end()) {
+        return;
+    }
+    auto p_it = it->second.find(tp.partition);
+    if (p_it == it->second.end()) {
+        return;
+    }
+    auto& sub = p_it->second;
+    if (
+      offsets.last_offset_update_timestamp
+      > sub.last_known_source_offsets.last_offset_update_timestamp) {
+        sub.last_known_source_offsets = offsets;
+    }
 }
 
 direct_consumer::~direct_consumer() = default;

@@ -137,4 +137,24 @@ void link_replication_manager::stop_replicators(
     }
 }
 
+chunked_hash_map<::model::ntp, partition_offsets_report>
+link_replication_manager::get_partition_offsets_report() const {
+    chunked_hash_map<::model::ntp, partition_offsets_report> results;
+    results.reserve(_replicators.size());
+
+    for (const auto& [ntp, replicator] : _replicators) {
+        results.emplace(ntp, replicator->get_partition_offsets_report());
+    }
+    return results;
+}
+
+std::optional<partition_offsets_report>
+link_replication_manager::get_partition_offsets_report(
+  const ::model::ntp& ntp) const {
+    auto it = _replicators.find(ntp);
+    if (it == _replicators.end()) {
+        return std::nullopt;
+    }
+    return it->second->get_partition_offsets_report();
+}
 } // namespace cluster_link::replication

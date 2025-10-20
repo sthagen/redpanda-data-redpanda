@@ -12,7 +12,7 @@
 
 #include "cloud_topics/level_one/compaction/filter.h"
 #include "cloud_topics/level_one/compaction/logger.h"
-#include "cloud_topics/level_one/frontend_reader/reader.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "cloud_topics/log_reader_config.h"
 #include "compaction/key.h"

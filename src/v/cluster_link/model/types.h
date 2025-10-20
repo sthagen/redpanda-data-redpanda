@@ -18,8 +18,11 @@
 #include "kafka/protocol/topic_properties.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
+#include "serde/envelope.h"
+#include "serde/rw/chrono.h"
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
+#include "serde/rw/map.h"
 #include "serde/rw/named_type.h"
 #include "serde/rw/variant.h"
 #include "serde/rw/vector.h"
@@ -217,7 +220,7 @@ std::ostream& operator<<(std::ostream& os, const tls_file_or_value& t);
  */
 struct connection_config
   : serde::
-      envelope<connection_config, serde::version<0>, serde::compat_version<0>> {
+      envelope<connection_config, serde::version<1>, serde::compat_version<0>> {
     /// List of addresses to bootstrap the connection
     std::vector<net::unresolved_address> bootstrap_servers;
     /// Support authn variants.  Currently only SCRAM but update this to add
@@ -234,6 +237,9 @@ struct connection_config
     std::optional<tls_file_or_value> key;
     /// The CA file to use
     std::optional<tls_file_or_value> ca;
+    using tls_provide_sni_t = ss::bool_class<struct tls_provide_sni_tag>;
+    /// Whether or not to set the SNI hostname when TLS is enabled
+    tls_provide_sni_t tls_provide_sni{tls_provide_sni_t::yes};
     /// The client ID to use
     ss::sstring client_id;
     // Max metadata age
@@ -250,16 +256,22 @@ struct connection_config
     static constexpr auto retry_backoff_ms_default = 100;
     // Maximum fetch wait time
     std::optional<int32_t> fetch_wait_max_ms;
-    // Default value for fetch_wait_max_ms (100ms)
-    static constexpr auto fetch_wait_max_ms_default = 100;
+    // Default value for fetch_wait_max_ms (500ms)
+    static constexpr auto fetch_wait_max_ms_default = 500;
     // Minimum number of bytes to fetch
     std::optional<int32_t> fetch_min_bytes;
-    // Default minimum number of bytes to fetch (1B)
-    static constexpr auto fetch_min_bytes_default = 1;
+    // Default minimum number of bytes to fetch (5MiB)
+    static constexpr auto fetch_min_bytes_default = 5_MiB;
     // Maximum number of bytes to fetch
     std::optional<int32_t> fetch_max_bytes;
-    // Default maximum number of bytes to fetch (1MiB)
-    static constexpr auto fetch_max_bytes_default = 1 * 1024 * 1024;
+    // Maximum number of bytes to fetch per partition, this value represents the
+    // max amount of data that the broker returns for a single partition in a
+    // fetch response.
+    std::optional<int32_t> fetch_partition_max_bytes;
+    // Default maximum number of bytes to fetch per partition
+    static constexpr auto default_fetch_partition_max_bytes = 1_MiB;
+    // Default maximum number of bytes to fetch (20MiB)
+    static constexpr auto fetch_max_bytes_default = 20 * 1024 * 1024;
 
     // Returns the metadata_max_age_ms value
     int32_t get_metadata_max_age_ms() const {
@@ -291,6 +303,11 @@ struct connection_config
         return fetch_max_bytes.value_or(fetch_max_bytes_default);
     }
 
+    int32_t get_fetch_partition_max_bytes() const {
+        return fetch_partition_max_bytes.value_or(
+          default_fetch_partition_max_bytes);
+    }
+
     friend bool operator==(const connection_config&, const connection_config&)
       = default;
 
@@ -308,7 +325,9 @@ struct connection_config
           fetch_wait_max_ms,
           fetch_min_bytes,
           fetch_max_bytes,
-          tls_enabled);
+          tls_enabled,
+          fetch_partition_max_bytes,
+          tls_provide_sni);
     }
 
     friend std::ostream&
@@ -1009,9 +1028,11 @@ struct shadow_topic_partition_leader_report
       serde::version<0>,
       serde::compat_version<0>> {
     ::model::partition_id partition;
-    // todo: add offset information for promotion
-    // todo: add hwm information for fail over state
-    // checkpointing
+    kafka::offset source_partition_start_offset;
+    kafka::offset source_partition_high_watermark;
+    kafka::offset source_partition_last_stable_offset;
+    std::chrono::milliseconds last_update_time;
+    kafka::offset shadow_partition_high_watermark;
 
     friend bool operator==(
       const shadow_topic_partition_leader_report&,
@@ -1020,7 +1041,15 @@ struct shadow_topic_partition_leader_report
 
     fmt::iterator format_to(fmt::iterator) const;
 
-    auto serde_fields() { return std::tie(partition); }
+    auto serde_fields() {
+        return std::tie(
+          partition,
+          source_partition_start_offset,
+          source_partition_high_watermark,
+          source_partition_last_stable_offset,
+          last_update_time,
+          shadow_partition_high_watermark);
+    }
 };
 
 // aggregated report from a single broker about a shadow topic
@@ -1049,7 +1078,80 @@ struct shadow_topic_report_response
     }
 };
 
+// request a full report of all topics on a shadow link
+struct shadow_link_status_report_request
+  : serde::envelope<
+      shadow_link_status_report_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    model::id_t link_id;
+
+    friend bool operator==(
+      const shadow_link_status_report_request&,
+      const shadow_link_status_report_request&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+
+    auto serde_fields() { return std::tie(link_id); }
+};
+
+struct shadow_link_status_topic_response
+  : serde::envelope<
+      shadow_link_status_topic_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    model::mirror_topic_status status;
+    chunked_hash_map<
+      ::model::partition_id,
+      shadow_topic_partition_leader_report>
+      partition_reports;
+
+    friend bool operator==(
+      const shadow_link_status_topic_response&,
+      const shadow_link_status_topic_response&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+
+    auto serde_fields() { return std::tie(status, partition_reports); }
+};
+
+struct shadow_link_status_report_response
+  : serde::envelope<
+      shadow_link_status_report_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    errc err_code{errc::success};
+    model::id_t link_id;
+
+    chunked_hash_map<::model::topic, shadow_link_status_topic_response>
+      topic_responses;
+
+    friend bool operator==(
+      const shadow_link_status_report_response&,
+      const shadow_link_status_report_response&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+
+    auto serde_fields() { return std::tie(err_code, link_id, topic_responses); }
+};
+
 } // namespace cluster_link::rpc
+
+namespace cluster_link::model {
+struct shadow_link_status_report {
+    id_t link_id;
+
+    chunked_hash_map<::model::topic, rpc::shadow_link_status_topic_response>
+      topic_responses;
+
+    fmt::iterator format_to(fmt::iterator) const;
+};
+
+using status_report_ret_t = std::expected<shadow_link_status_report, errc>;
+} // namespace cluster_link::model
 
 template<>
 struct fmt::formatter<cluster_link::model::mirror_topic_status>

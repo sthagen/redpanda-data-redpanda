@@ -360,6 +360,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
                     "kafka/client": "trace",
                     "kafka": "trace",
                     "tx": "trace",
+                    "shadow_link_service": "trace",
                 },
             ),
             *args,
@@ -575,6 +576,26 @@ class ShadowLinkTestBase(PreallocNodesTest):
         )
         return resp.shadow_link
 
+    def get_shadow_topic(
+        self, shadow_link_name: str, shadow_topic_name: str
+    ) -> shadow_link_pb2.ShadowTopic:
+        resp = self.service_client.get_shadow_topic(
+            req=shadow_link_pb2.GetShadowTopicRequest(
+                shadow_link_name=shadow_link_name, name=shadow_topic_name
+            )
+        )
+        return resp.shadow_topic
+
+    def list_shadow_topics(
+        self, shadow_link_name: str
+    ) -> list[shadow_link_pb2.ShadowTopic]:
+        resp = self.service_client.list_shadow_topics(
+            req=shadow_link_pb2.ListShadowTopicsRequest(
+                shadow_link_name=shadow_link_name
+            )
+        )
+        return resp.shadow_topics
+
     def source_default_client(self):
         return DefaultClient(self.source_cluster.service)
 
@@ -600,8 +621,8 @@ class ShadowLinkTestBase(PreallocNodesTest):
             try:
                 metadata = self.get_link(name=link)
                 topic_status = [
-                    s.state
-                    for s in metadata.status.shadow_topic_statuses
+                    s.status.state
+                    for s in metadata.status.shadow_topics
                     if s.name == topic
                 ]
                 self.target_cluster_service.logger.debug(
@@ -656,9 +677,9 @@ class ShadowLinkTestBase(PreallocNodesTest):
                 )
                 return all(
                     [
-                        s.state
+                        s.status.state
                         == shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER
-                        for s in metadata.status.shadow_topic_statuses
+                        for s in metadata.status.shadow_topics
                     ]
                 )
             except Exception as e:

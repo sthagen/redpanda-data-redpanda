@@ -263,6 +263,7 @@ redpanda_cc_library(
     hdrs = [
         "state.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":translated_offset_range",
         "//src/v/container:chunked_hash_map",
@@ -288,8 +289,10 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/serde",
         "//src/v/serde:enum",
+        "//src/v/serde:map",
         # todo: split writer further once it evolves
         "//src/v/datalake:writer",
+        "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/utils:to_string",
     ],

@@ -221,11 +221,13 @@ public:
       bool legacy_upload_mode_enabled = true,
       bool iceberg_enabled = false,
       bool cloud_topics_enabled = false,
-      bool cluster_linking_enabled = false) {
+      bool cluster_linking_enabled = false,
+      model::node_id seed_node_id = model::node_id{0}) {
         std::vector<config::seed_server> seeds = {};
         if (!empty_seed_starts_cluster_val || node_id != 0) {
             seeds.push_back(
-              {.addr = net::unresolved_address("127.0.0.1", 11000)});
+              {.addr = net::unresolved_address(
+                 "127.0.0.1", rpc_port_base + seed_node_id())});
         }
         add_node(
           node_id,

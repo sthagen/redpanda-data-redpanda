@@ -78,6 +78,7 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
   kafka::offset o,
   std::optional<iobuf> key,
   model::timestamp ts,
+  model::timestamp_type ts_t,
   const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
     headers) {
     auto system_data = std::make_unique<iceberg::struct_value>();
@@ -95,7 +96,7 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
             auto header_kv_struct = std::make_unique<iceberg::struct_value>();
             header_kv_struct->fields.emplace_back(
               k ? std::make_optional<iceberg::value>(
-                    iceberg::binary_value(k->copy()))
+                    iceberg::string_value(k->copy()))
                 : std::nullopt);
             header_kv_struct->fields.emplace_back(
               v ? std::make_optional<iceberg::value>(
@@ -110,6 +111,10 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
       key ? std::make_optional<iceberg::value>(
               iceberg::binary_value(std::move(*key)))
           : std::nullopt);
+
+    system_data->fields.emplace_back(
+      iceberg::int_value{static_cast<int32_t>(ts_t)});
+
     return system_data;
 }
 
@@ -140,6 +145,7 @@ default_translator::translate_data(
   const std::optional<resolved_type>& val_type,
   std::optional<iobuf> parsable_val,
   model::timestamp ts,
+  model::timestamp_type ts_t,
   const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
     headers) {
     if (val_type.has_value()) {
@@ -150,17 +156,25 @@ default_translator::translate_data(
           val_type,
           std::move(parsable_val),
           ts,
+          ts_t,
           headers);
     }
     co_return co_await kv_translator.translate_data(
-      pid, o, std::move(key), val_type, std::move(parsable_val), ts, headers);
+      pid,
+      o,
+      std::move(key),
+      val_type,
+      std::move(parsable_val),
+      ts,
+      ts_t,
+      headers);
 }
 
 record_type key_value_translator::build_type(std::optional<resolved_type>) {
     auto ret_type = schemaless_struct_type();
     ret_type.fields.emplace_back(
       iceberg::nested_field::create(
-        10, "value", iceberg::field_required::no, iceberg::binary_type{}));
+        11, "value", iceberg::field_required::no, iceberg::binary_type{}));
     return record_type{
       .comps = record_schema_components{
           .key_identifier = std::nullopt,
@@ -178,6 +192,7 @@ key_value_translator::translate_data(
   const std::optional<resolved_type>& val_type,
   std::optional<iobuf> parsable_val,
   model::timestamp ts,
+  model::timestamp_type ts_t,
   const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
     headers) {
     if (val_type.has_value()) {
@@ -188,7 +203,8 @@ key_value_translator::translate_data(
     }
     auto ret_data = iceberg::struct_value{};
 
-    auto system_data = build_rp_struct(pid, o, std::move(key), ts, headers);
+    auto system_data = build_rp_struct(
+      pid, o, std::move(key), ts, ts_t, headers);
     ret_data.fields.emplace_back(std::move(system_data));
     ret_data.fields.emplace_back(
       parsable_val ? std::make_optional<iceberg::value>(
@@ -261,6 +277,7 @@ structured_data_translator::translate_data(
   const std::optional<resolved_type>& val_type,
   std::optional<iobuf> parsable_val,
   model::timestamp ts,
+  model::timestamp_type ts_t,
   const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
     headers) {
     if (!val_type.has_value()) {
@@ -274,7 +291,8 @@ structured_data_translator::translate_data(
         co_return record_translator::errc::translation_error;
     }
     auto ret_data = iceberg::struct_value{};
-    auto system_data = build_rp_struct(pid, o, std::move(key), ts, headers);
+    auto system_data = build_rp_struct(
+      pid, o, std::move(key), ts, ts_t, headers);
     // Fill in the internal value field.
     ret_data.fields.emplace_back(std::move(system_data));
 

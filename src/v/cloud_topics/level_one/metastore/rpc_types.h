@@ -189,25 +189,32 @@ struct get_offsets_request
     model::topic_id_partition tp;
 };
 
-struct get_compaction_offsets_reply
+struct get_compaction_info_reply
   : serde::envelope<
-      get_compaction_offsets_reply,
+      get_compaction_info_reply,
       serde::version<0>,
       serde::compat_version<0>> {
     auto serde_fields() {
-        return std::tie(ec, dirty_ranges, removable_tombstone_ranges);
+        return std::tie(
+          ec,
+          dirty_ranges,
+          removable_tombstone_ranges,
+          dirty_ratio,
+          earliest_dirty_ts);
     }
 
     errc ec;
     offset_interval_set dirty_ranges;
     offset_interval_set removable_tombstone_ranges;
+    double dirty_ratio;
+    std::optional<model::timestamp> earliest_dirty_ts;
 };
-struct get_compaction_offsets_request
+struct get_compaction_info_request
   : serde::envelope<
-      get_compaction_offsets_request,
+      get_compaction_info_request,
       serde::version<0>,
       serde::compat_version<0>> {
-    using resp_t = get_compaction_offsets_reply;
+    using resp_t = get_compaction_info_reply;
     auto serde_fields() {
         return std::tie(tp, tombstone_removal_upper_bound_ts);
     }

@@ -14,6 +14,7 @@
         "rptest/clients/admin/google/api/resource_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/kafka_connections_pb2.py",
+        "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/datalake_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/shadow_link_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/common/acl_pb2.py",
@@ -282,6 +283,7 @@
     "off": [
         "rptest/chaos_tests/single_fault_test.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2_connect.py",
+        "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/datalake_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/shadow_link_pb2_connect.py",
         "rptest/clients/ping_pong.py",
@@ -373,6 +375,7 @@
         "rptest/tests/crash_loop_checks_test.py",
         "rptest/tests/data_migrations_api_test.py",
         "rptest/tests/data_transforms_test.py",
+        "rptest/tests/datalake/admin_endpoint_test.py",
         "rptest/tests/datalake/biglake_test.py",
         "rptest/tests/datalake/compaction_test.py",
         "rptest/tests/datalake/custom_partitioning_test.py",

@@ -46,7 +46,7 @@ type NetCheckersFactory interface {
 
 type netCheckersFactory struct {
 	fs             afero.Fs
-	t              config.RpkNodeTuners
+	rnc            config.RpkNodeConfig
 	irqProcFile    irq.ProcFile
 	irqDeviceInfo  irq.DeviceInfo
 	ethtool        ethtool.EthtoolWrapper
@@ -56,7 +56,7 @@ type netCheckersFactory struct {
 
 func NewNetCheckersFactory(
 	fs afero.Fs,
-	t config.RpkNodeTuners,
+	rnc config.RpkNodeConfig,
 	irqProcFile irq.ProcFile,
 	irqDeviceInfo irq.DeviceInfo,
 	ethtool ethtool.EthtoolWrapper,
@@ -65,7 +65,7 @@ func NewNetCheckersFactory(
 ) NetCheckersFactory {
 	return &netCheckersFactory{
 		fs:             fs,
-		t:              t,
+		rnc:            rnc,
 		irqProcFile:    irqProcFile,
 		irqDeviceInfo:  irqDeviceInfo,
 		ethtool:        ethtool,
@@ -83,7 +83,7 @@ func (f *netCheckersFactory) NewNicRxTxQueueCountChecker(
 		Warning,
 		true,
 		func() (interface{}, error) {
-			if !f.t.GetAllowRxTxQueueTuner() {
+			if !f.rnc.Tuners.GetAllowRxTxQueueTuner() {
 				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as it's disabled by configuration")
 				return true, nil
 			}
@@ -97,7 +97,7 @@ func (f *netCheckersFactory) NewNicRxTxQueueCountChecker(
 				return true, nil
 			}
 
-			currentChannels, targetChannels, err := network.GetCurrentAndTargetChannels(nic, mode, cpuMask, f.cpuMasks, f.t, f.ethtool)
+			currentChannels, targetChannels, err := network.GetCurrentAndTargetChannels(nic, mode, cpuMask, f.cpuMasks, f.rnc, f.ethtool)
 			if err != nil {
 				return false, err
 			}
@@ -155,7 +155,7 @@ func (f *netCheckersFactory) NewNicIRQAffinityChecker(
 		func() (interface{}, error) {
 			return isSet(nic, func(currentNic network.Nic) (bool, error) {
 				dist, err := network.GetHwInterfaceIRQsDistribution(
-					currentNic, mode, cpuMask, f.cpuMasks, f.t)
+					currentNic, mode, cpuMask, f.cpuMasks, f.rnc)
 				if err != nil {
 					return false, err
 				}
@@ -210,7 +210,7 @@ func (f *netCheckersFactory) NewNicRpsSetChecker(
 				if err != nil {
 					return false, err
 				}
-				rfsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks, f.t)
+				rfsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks, f.rnc)
 				if err != nil {
 					return false, err
 				}
@@ -252,7 +252,7 @@ func (f *netCheckersFactory) NewNicRfsChecker(nic network.Nic, mode irq.Mode, cp
 				if err != nil {
 					return false, err
 				}
-				queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks, f.t)
+				queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks, f.rnc)
 				if err != nil {
 					return false, err
 				}

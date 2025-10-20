@@ -8,9 +8,11 @@ redpanda_cc_library(
     hdrs = ["broker.h"],
     deps = [
         "//proto/redpanda/core/admin/v2:broker_redpanda_proto",
+        "//src/v/container:priority_queue",
         "//src/v/features",
         "//src/v/kafka/server",
         "//src/v/redpanda/admin:aip_filter",
+        "//src/v/redpanda/admin:aip_ordering",
         "//src/v/redpanda/admin/proxy:client",
         "//src/v/serde/protobuf:rpc",
         "//src/v/ssx:async_algorithm",

@@ -286,7 +286,20 @@ fmt::iterator shadow_topic_report_request::format_to(fmt::iterator it) const {
 
 fmt::iterator
 shadow_topic_partition_leader_report::format_to(fmt::iterator it) const {
-    return fmt::format_to(it, "{{ partition: {} }}", partition);
+    auto time_point = std::chrono::system_clock::time_point{
+      std::chrono::duration_cast<std::chrono::system_clock::duration>(
+        last_update_time)};
+
+    auto time = std::format("Time: {:%FT%H:%M:%S.3}", time_point);
+    return fmt::format_to(
+      it,
+      "{{ source_start_offset: {}, source_hwm: {}, source_lso: {}, "
+      "last_update_time: {}, shadow_hwm: {} }}",
+      source_partition_start_offset,
+      source_partition_high_watermark,
+      source_partition_last_stable_offset,
+      time,
+      shadow_partition_high_watermark);
 }
 
 fmt::iterator shadow_topic_report_response::format_to(fmt::iterator it) const {
@@ -298,7 +311,57 @@ fmt::iterator shadow_topic_report_response::format_to(fmt::iterator it) const {
       err_code);
 }
 
+fmt::iterator
+shadow_link_status_report_request::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{ link_id: {} }}", link_id);
+}
+
+fmt::iterator
+shadow_link_status_topic_response::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{ status: {}, partition_reports: {} }}",
+      status,
+      fmt::join(
+        partition_reports | std::views::transform([](auto& p) {
+            return fmt::format("{}: {}", p.first, p.second);
+        }),
+        ","));
+}
+
+fmt::iterator
+shadow_link_status_report_response::format_to(fmt::iterator it) const {
+    fmt::format_to(
+      it,
+      "{{ err_code: {}, link_id: {}, topic_responses: [",
+      err_code,
+      link_id);
+    bool first = true;
+    for (const auto& [topic, response] : topic_responses) {
+        if (!first) {
+            fmt::format_to(it, ", ");
+        }
+        first = false;
+        fmt::format_to(it, "{}: {}", topic, response);
+    }
+    return fmt::format_to(it, "] }}");
+}
+
 } // namespace cluster_link::rpc
+
+namespace cluster_link::model {
+fmt::iterator shadow_link_status_report::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{ link_id: {}, topic_responses: {} }}",
+      link_id,
+      fmt::join(
+        topic_responses | std::views::transform([](auto& t) {
+            return fmt::format("{}: {}", t.first, t.second);
+        }),
+        ", "));
+}
+} // namespace cluster_link::model
 
 auto fmt::formatter<cluster_link::model::task_state>::format(
   cluster_link::model::task_state st, format_context& ctx) const
@@ -367,15 +430,16 @@ auto fmt::formatter<cluster_link::model::connection_config>::format(
     return fmt::format_to(
       ctx.out(),
       "{{bootstrap_servers: {}, authn_config: {}, tls_enabled: {}, cert: {}, "
-      "key: {:s}, ca: {}, client_id: {}, metadata_max_age_ms: {}, "
-      "connection_timeout_ms: {}, retry_backoff_ms: {}, fetch_wait_max_ms: {}, "
-      "fetch_min_bytes: {}, fetch_max_bytes: {}}}",
+      "key: {:s}, ca: {}, tls_provide_sni: {}, client_id: {}, "
+      "metadata_max_age_ms: {}, connection_timeout_ms: {}, retry_backoff_ms: "
+      "{}, fetch_wait_max_ms: {}, fetch_min_bytes: {}, fetch_max_bytes: {}}}",
       c.bootstrap_servers,
       c.authn_config,
       c.tls_enabled,
       c.cert,
       c.key,
       c.ca,
+      c.tls_provide_sni,
       c.client_id,
       c.metadata_max_age_ms,
       c.connection_timeout_ms,

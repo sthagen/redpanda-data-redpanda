@@ -96,8 +96,7 @@ public:
       const chunked_vector<object_metadata>&, const compaction_map_t&);
 
     ss::future<std::expected<compaction_offsets_response, errc>>
-    get_compaction_offsets(
-      const model::topic_id_partition&, model::timestamp) override;
+    get_compaction_offsets(const model::topic_id_partition&, model::timestamp);
 
     ss::future<std::expected<compaction_info_response, errc>>
     get_compaction_info(const compaction_info_spec&) override;
@@ -122,6 +121,8 @@ private:
     get_dirty_ratio(const state&, const model::topic_id_partition&);
     static std::expected<std::optional<model::timestamp>, errc>
     get_earliest_dirty_ts(const state&, const model::topic_id_partition&);
+    static std::expected<compaction_info_response, errc> get_compaction_info(
+      const state&, const model::topic_id_partition&, model::timestamp);
     static std::expected<kafka::offset, errc> get_end_offset_for_term(
       const state&, const model::topic_id_partition&, model::term_id);
     static std::expected<model::term_id, errc> get_term_for_offset(

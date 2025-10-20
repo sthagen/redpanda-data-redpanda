@@ -228,6 +228,11 @@ class ClusterLinkingTopicSyncingTestBase(ShadowLinkTestBase):
             err_msg="Not all topics created on target cluster",
         )
 
+        mirror_topics = self.list_shadow_topics(shadow_link_name="test-link")
+        assert len(mirror_topics) == len(expected_topics), (
+            f"Expected {len(expected_topics)} topics in mirror but found {len(mirror_topics)}: {mirror_topics}"
+        )
+
     @cluster(num_nodes=6)
     def test_topic_partition_count_sync(self):
         topic_name = "test-topic"

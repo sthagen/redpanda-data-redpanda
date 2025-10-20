@@ -164,8 +164,9 @@ public:
       std::optional<model::offset> learner_start_offset = std::nullopt);
 
     /**
-     * Force appends a new configuration to the local log with provided
-     * replicas. This is unclean by design and can cause a data loss. Should
+     * This forcibly replaces the group configuration on this replica.
+     * This operation is volatile only, and does not persist data to disk.
+     * This is unclean by design and can cause a data loss. Should
      * only be used in exceptional circumstances trying to recover from a lost
      * majority.
      */

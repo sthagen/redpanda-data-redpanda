@@ -32,7 +32,7 @@ from rptest.services.redpanda import (
 )
 from rptest.tests.redpanda_test import RedpandaTest
 
-GB = 1_000_000_000
+MiB = 1024 * 1024
 
 
 class ExpectedMetric(NamedTuple):
@@ -144,7 +144,7 @@ class ClusterRateQuotaTest(RedpandaTest):
     Ducktape tests for rate quota
     """
 
-    topics = (TopicSpec(replication_factor=1, max_message_bytes=1 * GB),)
+    topics = (TopicSpec(replication_factor=1, max_message_bytes=100 * MiB),)
 
     def __init__(self, *args, **kwargs):
         # Note: the quotas apply based on the full size of the request (for
@@ -550,12 +550,12 @@ class ClusterRateQuotaTest(RedpandaTest):
         # Create two producers sharing a client.id
         producer1 = self.make_producer(
             "shared_client_id",
-            max_request_size=1 * GB,
+            max_request_size=100 * MiB,
             max_in_flight_requests_per_connection=1,
         )
         producer2 = self.make_producer(
             "shared_client_id",
-            max_request_size=1 * GB,
+            max_request_size=100 * MiB,
             max_in_flight_requests_per_connection=1,
         )
         consumer = self.make_consumer("shared_client_id")

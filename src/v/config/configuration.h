@@ -367,6 +367,8 @@ struct configuration final : public config_store {
     property<std::vector<ss::sstring>> kafka_nodelete_topics;
     property<std::vector<ss::sstring>> kafka_noproduce_topics;
     property<std::optional<uint32_t>> kafka_topics_max;
+    bounded_property<std::optional<int32_t>>
+      kafka_max_message_size_upper_limit_bytes;
 
     // Compaction controller
     property<std::chrono::milliseconds> compaction_ctrl_update_interval_ms;
@@ -771,7 +773,7 @@ struct configuration final : public config_store {
     property<double> iceberg_backlog_controller_p_coeff;
     property<double> iceberg_backlog_controller_i_coeff;
     bounded_property<uint32_t> iceberg_target_backlog_size;
-    property<double> iceberg_throttle_backlog_size_ratio;
+    property<std::optional<double>> iceberg_throttle_backlog_size_ratio;
 
     property<bool> iceberg_delete;
     property<ss::sstring> iceberg_default_partition_spec;

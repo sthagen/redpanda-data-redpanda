@@ -15,8 +15,26 @@
 namespace cluster_link::replication {
 
 partition_data_queue::partition_data_queue(size_t max_buffered_bytes)
-  : _sem(max_buffered_bytes, "partition_data_queue") {}
+  : _max_buffered_bytes(max_buffered_bytes)
+  , _sem(max_buffered_bytes, "partition_data_queue") {}
 
+void partition_data_queue::update_max_buffered(size_t new_value) {
+    // ignore update if gate is closed, the queue is stopping
+    if (_gate.is_closed()) {
+        return;
+    }
+
+    if (new_value == _max_buffered_bytes) {
+        return;
+    }
+    if (new_value > _max_buffered_bytes) {
+        _sem.signal(new_value - _max_buffered_bytes);
+
+    } else {
+        _sem.consume(_max_buffered_bytes - new_value);
+    }
+    _max_buffered_bytes = new_value;
+}
 void partition_data_queue::reset(kafka::offset next) {
     _gate.check();
     do_reset(next);

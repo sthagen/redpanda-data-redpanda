@@ -471,6 +471,7 @@ manager::handle_on_link_change(model::id_t id, ::model::revision_id revision) {
           id,
           link_metadata);
         it->second->update_config(link_metadata.copy(), revision);
+        _cfg_change_notifications.notify(id, link_metadata);
     } else {
         // Create a new link
         vlog(
@@ -580,6 +581,29 @@ const partition_manager& manager::partition_manager() const noexcept {
 }
 
 topic_creator& manager::topic_creator() noexcept { return *_topic_creator; }
+
+cl_result<chunked_hash_map<::model::ntp, replication::partition_offsets_report>>
+manager::get_partition_offsets_report_for_link(
+  const model::name_t& name) const {
+    auto link_id = _registry->find_link_id_by_name(name);
+    if (!link_id) {
+        return err_info(
+          errc::link_id_not_found,
+          ssx::sformat("Unable to find link by name '{}'", name));
+    }
+    return get_partition_offsets_report_for_link(*link_id);
+}
+
+cl_result<chunked_hash_map<::model::ntp, replication::partition_offsets_report>>
+manager::get_partition_offsets_report_for_link(model::id_t link_id) const {
+    auto link_it = _links.find(link_id);
+    if (link_it == _links.end()) {
+        return err_info(
+          errc::link_id_not_found,
+          ssx::sformat("Link with id '{}' not found", link_id));
+    }
+    return link_it->second->get_partition_offsets_report();
+}
 
 ss::future<> manager::link_task_reconciler() {
     vlog(cllog.trace, "Reconciling tasks for all cluster links");
@@ -757,6 +781,15 @@ ss::future<> manager::on_controller_stepdown() {
               10s, [this] { return on_controller_stepdown(); });
         }
     }
+}
+
+manager::notification_id manager::register_link_config_changes_callback(
+  link_cfg_change_notification_cb cb) {
+    return _cfg_change_notifications.register_cb(std::move(cb));
+}
+
+void manager::unregister_link_config_changes_callback(notification_id id) {
+    _cfg_change_notifications.unregister_cb(id);
 }
 
 consumer_groups_router& manager::get_group_router() noexcept {

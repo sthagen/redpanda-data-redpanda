@@ -147,8 +147,8 @@ TEST(SchemaProtobuf, TestComplexSchema) {
     auto& replica_list_type = std::get<list_type>(
       partition_type.fields[1]->type);
 
-    // enum is mapped to signed integer
-    EXPECT_THAT(partition_type.fields[2], IsField(3, "state", int_type{}));
+    // Enum is mapped to string.
+    EXPECT_THAT(partition_type.fields[2], IsField(3, "state", string_type{}));
 
     auto& broker_shard_type = std::get<struct_type>(
       replica_list_type.element_field->type);
@@ -337,7 +337,7 @@ TEST_CORO(values_protobuf, TestComplexValueConversion) {
                     IcebergStruct(
                       OptionalIcebergPrimitive<iceberg::long_value>(11),
                       OptionalIcebergPrimitive<iceberg::int_value>(0)))),
-                  OptionalIcebergPrimitive<int_value>(0)))))),
+                  OptionalIcebergPrimitive<string_value>("ACTIVE")))))),
           IcebergKeyValue(
             IcebergPrimitive<string_value>("topic_1"),
             // topic
@@ -450,8 +450,8 @@ TEST_CORO(values_protobuf, TestEmptyMessage) {
                 case google::protobuf::FieldDescriptor::TYPE_ENUM:
                     EXPECT_THAT(
                       field_value,
-                      OptionalIcebergPrimitive<int_value>(
-                        field_descriptor->default_value_enum()->number()));
+                      OptionalIcebergPrimitive<string_value>(
+                        field_descriptor->default_value_enum()->name()));
                     break;
                 }
             }
@@ -889,4 +889,33 @@ TEST(values_protobuf, TestStructDepthLimit) {
       HasSubstr(
         fmt::format(
           "Maximum recursion depth {} exceeded", max_recursion_depth)));
+}
+
+TEST_CORO(values_protobuf, TestInvalidEnumValue) {
+    Partition partition;
+    partition.set_id(123);
+
+    // Use reflection to set an invalid enum value.
+    auto descriptor = partition.GetDescriptor();
+    auto reflection = partition.GetReflection();
+    auto state_field = descriptor->FindFieldByName("state");
+    reflection->SetEnumValue(&partition, state_field, 99);
+
+    auto result = co_await serialize_and_convert(partition);
+    ASSERT_TRUE_CORO(result.has_value());
+    auto r_opt = std::move(result.value());
+    ASSERT_TRUE_CORO(r_opt.has_value());
+    auto struct_v = std::get<std::unique_ptr<iceberg::struct_value>>(
+      std::move(r_opt.value()));
+
+    // The partition should have:
+    // - id field with value 123
+    // - replicas field (empty list)
+    // - state field with "ACTIVE" (the default enum value, not 99)
+    EXPECT_THAT(
+      struct_v->fields,
+      ElementsAre(
+        OptionalIcebergPrimitive<int_value>(123),
+        IcebergList(ElementsAre()),
+        OptionalIcebergPrimitive<string_value>("ACTIVE")));
 }

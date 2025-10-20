@@ -302,6 +302,44 @@ func precompiledData() map[string]map[string]map[string]io {
 				"default": {"", 4 * 269588, 4 * 1263357056, 4 * 134608, 4 * 604995968, true},
 			},
 
+			// m8gd values are taken from direct measurement with iotune except
+			// where noted.
+			"m8gd.large": {
+				"default": {"", 33638, 224 * 1024 * 1024, 16836, 109 * 1024 * 1024, true},
+			},
+
+			"m8gd.xlarge": {
+				"default": {"", 67274, 450 * 1024 * 1024, 33676, 215 * 1024 * 1024, true},
+			},
+
+			"m8gd.2xlarge": {
+				"default": {"", 134550, 904 * 1024 * 1024, 67358, 431 * 1024 * 1024, true},
+			},
+
+			"m8gd.4xlarge": {
+				"default": {"", 269588, 1821 * 1024 * 1024, 134608, 865 * 1024 * 1024, true},
+			},
+
+			// These disks aren't 100% full-duplex (more like 50% full
+			// duplex or so). Nevertheless we still mark them as full duplex.
+			// Otherwise we let too much perf go to waste compared to running
+			// without io-properties.
+			"m8gd.8xlarge": {
+				"default": {"", 541806, 3699 * 1024 * 1024, 268818, 1743 * 1024 * 1024, true},
+			},
+
+			// Read IOPS values are upscaled because default iotune struggles to
+			// reach full RIOPS with default settings (needs either lowered smp
+			// or increased iodepth) but I was too lazy to implement that but
+			// have confirmed that we can reach those numbers otherwise.
+			"m8gd.12xlarge": {
+				"default": {"", 3 * 269588, 5465 * 1024 * 1024, 402765, 2596 * 1024 * 1024, true},
+			},
+
+			"m8gd.16xlarge": {
+				"default": {"", 4 * 269588, 7398 * 1024 * 1024, 540197, 3590 * 1024 * 1024, true},
+			},
+
 			// m6id values are copied from m7gd as they should have the same
 			// disks and behave the same from tests.
 			"m6id.large": {

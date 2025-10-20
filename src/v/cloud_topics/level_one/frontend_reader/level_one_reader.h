@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/log_reader_config.h"
 #include "model/record_batch_reader.h"
+#include "utils/prefix_logger.h"
 
 namespace cloud_topics {
 
@@ -61,7 +62,7 @@ namespace cloud_topics {
 class level_one_log_reader_impl : public model::record_batch_reader::impl {
 public:
     level_one_log_reader_impl(
-      cloud_topic_log_reader_config& cfg,
+      const cloud_topic_log_reader_config& cfg,
       model::ntp ntp,
       model::topic_id_partition tidp,
       l1::metastore* metastore,
@@ -75,42 +76,57 @@ public:
     void print(std::ostream& o) final;
 
 private:
-    enum class state {
-        empty,
-        ready,
-        materialized,
-        end_of_stream,
-    };
-
-    // Represents the current L1 object being read.
-    struct current_object {
+    struct object_info {
         l1::object_id oid;
         l1::footer footer;
         kafka::offset last_offset;
     };
 
-    ss::future<> fetch_metadata(model::timeout_clock::time_point deadline);
+    /*
+     * Contacts the L1 metastore to retrieve metadata for an L1 object that
+     * contains the target offset.
+     */
+    ss::future<std::optional<object_info>> lookup_object_for_offset(
+      kafka::offset, model::timeout_clock::time_point deadline);
 
-    ss::future<> materialize_batches(model::timeout_clock::time_point deadline);
+    /*
+     * Materialize batches from the L1 object starting from the given offset.
+     */
+    ss::future<chunked_circular_buffer<model::record_batch>>
+    materialize_batches_from_object_offset(
+      const object_info&,
+      kafka::offset,
+      model::timeout_clock::time_point deadline);
 
-    void consume_materialized_batches(
-      chunked_circular_buffer<model::record_batch>* dest);
+    /*
+     * Return batches from the reader's current position until the next
+     * partition or the end of the object is reached. The set of batches
+     * returned may further be limited by restrictions (e.g. byte limit)
+     * imposed by the reader configuration.
+     */
+    ss::future<chunked_circular_buffer<model::record_batch>>
+    read_batches(l1::object_reader& reader);
 
     ss::future<l1::footer>
     read_footer(l1::object_id oid, size_t footer_pos, size_t object_size);
 
-    ss::future<> read_batches(l1::object_reader& reader);
+    /*
+     * Returns batches starting at next offset. It will continue to advance next
+     * offset until batches are read or end-of-stream is reached.
+     */
+    ss::future<model::record_batch_reader::storage_t>
+      read_some(model::timeout_clock::time_point);
 
-    bool is_over_limit(size_t size) const;
+    /*
+     * Returns true if accepting the given number of bytes would cause the
+     * reader to exceed its configured bytes limit.
+     */
+    bool is_over_limit_with_bytes(size_t size) const;
 
-    state _state{state::empty};
+    ss::future<> close_reader_safe(l1::object_reader&);
 
-    // Current object being processed.
-    // Present in ready and materialized states, empty in empty state.
-    std::optional<current_object> _current_obj;
-
-    // Materialized batches ready to be consumed.
-    chunked_circular_buffer<model::record_batch> _batches;
+    void set_end_of_stream();
+    bool _end_of_stream{false};
 
     cloud_topic_log_reader_config _config;
     model::ntp _ntp;
@@ -118,6 +134,7 @@ private:
     kafka::offset _next_offset;
     l1::metastore* _metastore;
     l1::io* _io;
+    prefix_logger _log;
 };
 
 } // namespace cloud_topics

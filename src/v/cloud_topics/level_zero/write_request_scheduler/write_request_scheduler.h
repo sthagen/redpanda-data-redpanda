@@ -50,6 +50,11 @@ class write_request_scheduler
   : public ss::peering_sharded_service<write_request_scheduler> {
     friend struct write_request_balancer_accessor;
 
+    struct shard_info {
+        ss::shard_id shard;
+        size_t bytes;
+    };
+
 public:
     explicit write_request_scheduler(write_pipeline<>::stage s);
 
@@ -64,9 +69,21 @@ private:
     /// it collects write requests and triggers
     /// uploads.
     ss::future<> bg_time_based_fallback();
+
     /// This method implements the actual fallback mechanism.
     /// It is invoked by the 'bg_time_based_fallback' method.
     ss::future<> apply_time_based_fallback();
+
+    /// Target shard pulls write requests from pipelines of
+    /// other shards and forwards them to its own pipeline.
+    /// Then it propagates the responses back to the original
+    /// shards.
+    /// \param infos is a list of shards that have write requests
+    ///        to forward (could be outdated).
+    /// \note The method is invoked on the target shard. It communicates
+    ///       with other shards to instruct them to forward their requests
+    ///       to the target shard to upload.
+    ss::future<> pull_and_roundtrip(std::vector<shard_info> infos);
 
     /// This fiber runs on every shard and is triggered by
     /// the data accumulation threshold. If enough data is accumulated
@@ -83,18 +100,49 @@ private:
     using foreign_ptr_t
       = ss::foreign_ptr<ss::lw_shared_ptr<chunked_vector<extent_meta>>>;
 
-    /// Make a copy of the write request and enqueue it
-    ss::future<std::expected<foreign_ptr_t, errc>>
-    proxy_write_request(write_request<>* req) noexcept;
+    using gate_holder_ptr = std::unique_ptr<ss::gate::holder>;
 
-    ss::future<>
-    roundtrip(ss::shard_id shard, write_pipeline<>::write_requests_list list);
+    /// Make a copy of a single write request and enqueue it
+    /// to the pipeline on the target shard. Wait until it's
+    /// processed and return the response.
+    ///
+    /// \param req is a write request to forward
+    /// \param target_gate_holder is a pointer to the gate holder owned by the
+    ///        target shard
+    /// \note The method is invoked on the target shard (the shard that uploads
+    /// the data).
+    ss::future<std::expected<foreign_ptr_t, errc>> proxy_write_request(
+      write_request<>* req, ss::gate::holder target_gate_holder) noexcept;
 
+    /// Forward all write requests to the target shard
+    /// \param shard is a target shard that should perform the upload
+    /// \param list is a list of write requests to forward
+    /// \param target_shard_gate_holder is a pointer to the gate holder owned by
+    /// the
+    ///        target shard
+    /// \note The method is invoked on the shard that owns the data. It submits
+    /// the continuation
+    ///       to the target shard to complete the operation.
+    ss::future<> roundtrip(
+      ss::shard_id shard,
+      write_pipeline<>::write_requests_list list,
+      ss::foreign_ptr<gate_holder_ptr> target_shard_gate_holder);
+
+    /// Acknowledge the write request with the response
+    /// \param req is a write request to acknowledge
+    /// \param resp is a response to propagate
+    /// \note The response is created on the target shard, the method
+    ///       is invoked on the shard that owns the write request.
     void ack_write_response(
       write_request<>* req, std::expected<foreign_ptr_t, errc> resp);
 
     /// Forward all write requests to the target shard
-    ss::future<> forward_to(ss::shard_id shard);
+    /// \param shard is a target shard that should perform the upload
+    /// \param target_shard_gate_holder is a pointer to the gate holder
+    /// \note The method is invoked on the shard that owns the data.
+    ss::future<> forward_to(
+      ss::shard_id shard,
+      ss::foreign_ptr<gate_holder_ptr> target_shard_gate_holder);
 
     write_pipeline<>::stage _stage;
     ss::abort_source _as;

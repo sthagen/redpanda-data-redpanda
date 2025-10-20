@@ -198,7 +198,7 @@ func GetExpectedIRQsDistribution(
 	nonNvmeDisksInfo := diskInfoByType[disk.NonNvme]
 	nvmeDisksInfo := diskInfoByType[disk.Nvme]
 	// dedicated mode is never used for disks
-	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, finalCPUMask, config.RpkNodeTuners{})
+	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, finalCPUMask, config.RpkNodeConfig{})
 	if err != nil {
 		return nil, err
 	}

@@ -13,6 +13,7 @@
 
 #include "cluster/fwd.h"
 #include "cluster_link/fwd.h"
+#include "cluster_link/model/types.h"
 #include "proto/redpanda/core/admin/v2/shadow_link.proto.h"
 #include "redpanda/admin/proxy/client.h"
 
@@ -48,6 +49,12 @@ public:
     ss::future<proto::admin::fail_over_response> fail_over(
       serde::pb::rpc::context, proto::admin::fail_over_request) override;
 
+    ss::future<proto::admin::get_shadow_topic_response> get_shadow_topic(
+      serde::pb::rpc::context, proto::admin::get_shadow_topic_request) final;
+
+    ss::future<proto::admin::list_shadow_topics_response> list_shadow_topics(
+      serde::pb::rpc::context, proto::admin::list_shadow_topics_request) final;
+
 private:
     /**
      * @brief Returns a node to redirect the message to
@@ -59,6 +66,11 @@ private:
      * @p ntp
      */
     std::optional<model::node_id> redirect_to(const model::ntp& ntp);
+
+    /// Used to build a shadow link by gathering metadata and status from shadow
+    /// link service
+    ss::future<proto::admin::shadow_link>
+    build_shadow_link(cluster_link::model::name_t shadow_link_name);
 
 private:
     admin::proxy::client _proxy_client;

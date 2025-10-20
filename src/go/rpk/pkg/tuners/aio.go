@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	maxAIOEvents     = 1048576
+	maxAIOEvents     = 10_000_137
 	maxAIOEventsFile = "/proc/sys/fs/aio-max-nr"
 )
 

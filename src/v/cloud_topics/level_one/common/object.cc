@@ -192,7 +192,7 @@ ss::future<> footer::serde_async_write(iobuf& buf) const {
 }
 
 footer::seek_result footer::file_position_before_kafka_offset(
-  const model::topic_id_partition& tidp, kafka::offset target) {
+  const model::topic_id_partition& tidp, kafka::offset target) const {
     auto [it, end] = partitions.equal_range(tidp);
     auto min_partition_after_target = end;
     for (; it != end; ++it) {

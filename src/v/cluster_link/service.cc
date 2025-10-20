@@ -12,14 +12,16 @@
 #include "cluster_link/service.h"
 
 #include "cluster/cluster_link/frontend.h"
+#include "cluster/controller.h"
 #include "cluster/health_monitor_frontend.h"
+#include "cluster/members_table.h"
 #include "cluster/partition_manager.h"
 #include "cluster_link/group_mirroring_task.h"
 #include "cluster_link/link.h"
 #include "cluster_link/logger.h"
 #include "cluster_link/manager.h"
 #include "cluster_link/model/types.h"
-#include "cluster_link/replication/deps_impl.h"
+#include "cluster_link/replication/deps.h"
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "cluster_link/security_migrator.h"
 #include "cluster_link/shadow_linking_rpc_service.h"
@@ -27,7 +29,7 @@
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/server/group_router.h"
 #include "kafka/server/snc_quota_manager.h"
-#include "ssx/future-util.h"
+#include "kafka/server/write_at_offset_stm.h"
 
 #include <seastar/coroutine/switch_to.hh>
 
@@ -74,6 +76,36 @@ struct shard_report_reducer {
     }
     std::optional<result_t> result;
 };
+
+struct shard_link_report_reducer {
+    using result_t = ::cluster_link::rpc::shadow_link_status_report_response;
+    void operator()(result_t shard_result) {
+        if (!result) {
+            result = std::move(shard_result);
+            return;
+        }
+        if (
+          shard_result.err_code != ::cluster_link::errc::success
+          && result->err_code == ::cluster_link::errc::success) {
+            // Keep the first error we see
+            result->err_code = shard_result.err_code;
+        }
+        for (auto& [topic, response] : shard_result.topic_responses) {
+            auto& existing = result->topic_responses[topic];
+            existing.status = response.status;
+            for (auto& [pid, report] : response.partition_reports) {
+                existing.partition_reports.emplace(pid, std::move(report));
+            }
+        }
+    }
+    std::optional<result_t> get() && {
+        if (!result) {
+            return std::nullopt;
+        }
+        return std::move(result);
+    }
+    std::optional<result_t> result;
+};
 } // namespace
 
 namespace cluster_link {
@@ -83,8 +115,6 @@ using kafka::data::rpc::partition_leader_cache;
 using kafka::data::rpc::partition_manager;
 using kafka::data::rpc::topic_creator;
 using kafka::data::rpc::topic_metadata_cache;
-using data_src_factory = replication::remote_data_source_factory;
-using data_sink_factory = replication::local_partition_data_sink_factory;
 
 class link_registry_adapter : public link_registry {
 public:
@@ -179,6 +209,320 @@ private:
     frontend* _plf;
     service* _svc;
 };
+namespace {
+replication::mux_remote_consumer::configuration
+make_remote_consumer_configuration(const model::connection_config& conn_cfg) {
+    const size_t max_buffered_bytes = 2 * conn_cfg.get_fetch_max_bytes();
+    kafka::client::direct_consumer::configuration dc_configuration;
+    const auto max_wait_time = std::chrono::milliseconds(
+      conn_cfg.get_fetch_wait_max_ms());
+
+    dc_configuration.min_bytes = conn_cfg.get_fetch_min_bytes();
+    dc_configuration.max_fetch_size = conn_cfg.get_fetch_max_bytes();
+    dc_configuration.isolation_level = ::model::isolation_level::read_committed;
+    dc_configuration.max_buffered_bytes = max_buffered_bytes;
+    // We are not interested in limiting the number of buffered fetches as
+    // we already set bytes limit
+    dc_configuration.max_buffered_elements = std::numeric_limits<size_t>::max();
+    dc_configuration.with_sessions = kafka::client::fetch_sessions_enabled::yes;
+
+    dc_configuration.max_wait_time = max_wait_time;
+    dc_configuration.partition_max_bytes
+      = conn_cfg.get_fetch_partition_max_bytes();
+
+    return replication::mux_remote_consumer::configuration{
+      .client_id = conn_cfg.client_id,
+      .direct_consumer_configuration = dc_configuration,
+      .partition_max_buffered = max_buffered_bytes,
+      .fetch_max_wait = max_wait_time,
+    };
+}
+
+} // namespace
+
+class remote_partition_source : public replication::data_source {
+public:
+    explicit remote_partition_source(
+      ::model::topic_partition tp, replication::mux_remote_consumer& consumer)
+      : _tp(std::move(tp))
+      , _consumer(consumer) {}
+
+    ss::future<> start(kafka::offset offset) final {
+        vlog(cllog.trace, "[{}] Starting remote partition source", _tp);
+        auto result = _consumer.add(_tp, offset);
+        if (!result.has_value()) [[unlikely]] {
+            // this is usually indicative of a bug in the manager where
+            // a previous source is not deregistered, bubble it up.
+            auto err = result.error();
+            vlog(
+              cllog.error,
+              "[{}] Failed to add remote partition source: {}",
+              _tp,
+              err);
+            return ss::make_exception_future<>(err);
+        }
+        return ss::now();
+    }
+
+    ss::future<> stop() noexcept final {
+        vlog(cllog.trace, "[{}] Stopping remote partition source", _tp);
+        auto f = _gate.close();
+        co_await _consumer.remove(_tp);
+        co_await std::move(f);
+    }
+
+    ss::future<> reset(kafka::offset offset) final {
+        _gate.check();
+        auto result = _consumer.reset(_tp, offset);
+        if (!result.has_value()) [[unlikely]] {
+            auto err = result.error();
+            vlog(
+              cllog.error,
+              "[{}] Failed to reset remote partition source: {}",
+              _tp,
+              err);
+            return ss::make_exception_future<>(err);
+        }
+        return ss::now();
+    }
+
+    ss::future<replication::data_source::data>
+    fetch_next(ss::abort_source& as) final {
+        auto holder = _gate.hold();
+        auto result = co_await _consumer.fetch(_tp, as);
+        if (!result.has_value()) [[unlikely]] {
+            auto err = result.error();
+            vlog(
+              cllog.error,
+              "[{}] Failed to fetch from remote partition source: {}",
+              _tp,
+              result.error());
+            throw std::runtime_error(
+              fmt::format(
+                "[{}] Failed to fetch from remote partition source: {}",
+                _tp,
+                err));
+        }
+        auto [batches, units] = std::move(*result);
+        co_return data_source::data{
+          .batches = std::move(batches), .units = std::move(units)};
+    }
+
+    std::optional<data_source::source_partition_offsets_report> get_offsets() {
+        auto offsets = _consumer.get_source_offsets(_tp);
+        if (!offsets.has_value()) {
+            return std::nullopt;
+        }
+        return data_source::source_partition_offsets_report{
+          .source_start_offset = offsets->log_start_offset,
+          .source_hwm = offsets->high_watermark,
+          .source_lso = offsets->last_stable_offset,
+          .update_time = offsets->last_offset_update_timestamp,
+        };
+    }
+
+private:
+    ::model::topic_partition _tp;
+    replication::mux_remote_consumer& _consumer;
+    ss::gate _gate;
+};
+
+class remote_data_source_factory : public replication::data_source_factory {
+public:
+    explicit remote_data_source_factory(
+      model::id_t link_id,
+      manager* manager,
+      std::unique_ptr<replication::mux_remote_consumer> consumer)
+      : _link_id(link_id)
+      , _manager(manager)
+      , _consumer(std::move(consumer)) {}
+
+    ss::future<> start() final {
+        _notification_id = _manager->register_link_config_changes_callback(
+          [this](model::id_t link_id, const model::metadata& md) {
+              // Ignore updates for other links
+              if (link_id != _link_id) {
+                  return;
+              }
+              _consumer->update_configuration(
+                make_remote_consumer_configuration(md.connection));
+          });
+        return _consumer->start();
+    }
+
+    ss::future<> stop() noexcept final {
+        _manager->unregister_link_config_changes_callback(_notification_id);
+        return _consumer->stop();
+    }
+
+    std::unique_ptr<replication::data_source>
+    make_source(const ::model::ntp& ntp) final {
+        return make_default_data_source(ntp.tp, *_consumer);
+    }
+
+private:
+    model::id_t _link_id;
+    manager* _manager;
+    manager::notification_id _notification_id;
+    std::unique_ptr<replication::mux_remote_consumer> _consumer;
+};
+
+/*
+ * Sink for writing partition data to the partition leader on the local shard.
+ */
+class local_partition_sink : public replication::data_sink {
+public:
+    static constexpr auto sync_timeout = 10s;
+    explicit local_partition_sink(
+      ss::lw_shared_ptr<cluster::partition> partition)
+      : _partition(std::move(partition))
+      , _stm(_partition->raft()
+               ->stm_manager()
+               ->get<kafka::write_at_offset_stm>()) {
+        vassert(
+          _stm,
+          "write_at_offset_stm not attached to partition {}",
+          _partition->ntp());
+    }
+    ss::future<> start() final {
+        auto holder = _gate.hold();
+        auto sync_offset = co_await _stm->get_expected_last_offset(
+          sync_timeout);
+        if (sync_offset.has_error()) {
+            throw std::runtime_error(
+              fmt::format(
+                "Failed to sync write_at_offset_stm for partition {}: {}",
+                _partition->ntp(),
+                sync_offset.error().message()));
+        }
+        vlog(
+          cllog.trace,
+          "[{}] Starting local partition sink at offset {}",
+          _partition->ntp(),
+          sync_offset.value());
+        _last_replicated_offset = sync_offset.value();
+    }
+
+    ss::future<> stop() noexcept final {
+        vlog(
+          cllog.trace, "[{}] Stopping local partition sink", _partition->ntp());
+        co_await _gate.close();
+    }
+
+    kafka::offset last_replicated_offset() const final {
+        vassert(_last_replicated_offset, "Sink has not been started");
+        return _last_replicated_offset.value();
+    }
+
+    raft::replicate_stages replicate(
+      chunked_vector<::model::record_batch> batches,
+      ::model::timeout_clock::duration timeout,
+      ss::abort_source& as) final {
+        _gate.check();
+        vassert(_last_replicated_offset, "Sink has not been started");
+        vassert(
+          !batches.empty(),
+          "Cannot replicate empty batch vector {}",
+          _partition->ntp());
+        chunked_vector<kafka::offset> expected_offsets;
+        expected_offsets.reserve(batches.size());
+        for (const auto& batch : batches) {
+            expected_offsets.push_back(
+              ::model::offset_cast(batch.base_offset()));
+        }
+        auto new_last_replicated_begin = ::model::offset_cast(
+          batches.front().base_offset());
+        auto new_last_replicated_end = ::model::offset_cast(
+          batches.back().last_offset());
+        vassert(
+          new_last_replicated_begin > _last_replicated_offset
+            && new_last_replicated_end > _last_replicated_offset,
+          "[{}] Replicating offsets must be monotonically increasing last "
+          "replicated: {}, attempting to replicate: [{}, {}]",
+          _partition->ntp(),
+          _last_replicated_offset,
+          new_last_replicated_begin,
+          new_last_replicated_end);
+        vlog(
+          cllog.trace,
+          "[{}] Replicating batches in range [{} - {}], last_replicated: {}, "
+          "new_last_replicated: {}",
+          _partition->ntp(),
+          batches.front().header(),
+          batches.back().header(),
+          _last_replicated_offset,
+          new_last_replicated_end);
+        auto stages = _stm->replicate(
+          std::move(batches),
+          std::move(expected_offsets),
+          _last_replicated_offset,
+          timeout,
+          as);
+        _last_replicated_offset = new_last_replicated_end;
+        return stages;
+    }
+
+    void notify_replicator_failure(::model::term_id term) final {
+        if (_gate.is_closed()) {
+            return;
+        }
+        // If the replicator failed to start _and_ the partition is still the
+        // leader in the same term we are effectively stuck without a
+        // replicator. Here we step down to ensure a new leader comes up and a
+        // replicator start is triggered again on the new leader.
+        if (_partition->term() == term) {
+            ssx::spawn_with_gate(_gate, [this, term] {
+                return _partition->raft()->step_down(
+                  fmt::format("Unable to start replicator in term: {}", term));
+            });
+        }
+    }
+
+    kafka::offset high_watermark() const final {
+        _gate.check();
+        return ::model::offset_cast(
+          _partition->log()->from_log_offset(_partition->high_watermark()));
+    }
+
+private:
+    ss::gate _gate;
+    ss::lw_shared_ptr<cluster::partition> _partition;
+    ss::shared_ptr<kafka::write_at_offset_stm> _stm;
+    // set in start();
+    std::optional<kafka::offset> _last_replicated_offset;
+};
+
+class local_partition_data_sink_factory
+  : public replication::data_sink_factory {
+public:
+    explicit local_partition_data_sink_factory(
+      ss::sharded<cluster::partition_manager>& pm)
+      : _partition_manager(pm) {}
+
+    std::unique_ptr<replication::data_sink>
+    make_sink(const ::model::ntp& ntp) final {
+        auto partition = _partition_manager.local().get(ntp);
+        if (!partition) {
+            throw std::runtime_error(
+              fmt::format("Partition not found: {} on this shard", ntp));
+        }
+        return make_default_data_sink(std::move(partition));
+    }
+
+private:
+    ss::sharded<cluster::partition_manager>& _partition_manager;
+};
+
+std::unique_ptr<replication::data_source> make_default_data_source(
+  const ::model::topic_partition& tp,
+  replication::mux_remote_consumer& consumer) {
+    return std::make_unique<remote_partition_source>(tp, consumer);
+}
+
+std::unique_ptr<replication::data_sink>
+make_default_data_sink(ss::lw_shared_ptr<cluster::partition> partition) {
+    return std::make_unique<local_partition_sink>(std::move(partition));
+}
 
 class default_link_factory : public link_factory {
 public:
@@ -204,43 +548,18 @@ public:
           link_reconciler_period,
           std::move(config),
           std::move(cluster_connection),
-          std::make_unique<data_src_factory>(make_remote_consumer(
-            std::move(client_id),
-            *cluster_connection,
-            _snc_quota_mgr->local(),
-            config.connection)),
-          std::make_unique<data_sink_factory>(*_partition_manager));
+          std::make_unique<remote_data_source_factory>(
+            link_id,
+            manager,
+            std::make_unique<replication::mux_remote_consumer>(
+              *cluster_connection,
+              _snc_quota_mgr->local(),
+              make_remote_consumer_configuration(config.connection))),
+          std::make_unique<local_partition_data_sink_factory>(
+            *_partition_manager));
     }
 
 private:
-    std::unique_ptr<replication::mux_remote_consumer> make_remote_consumer(
-      ss::sstring client_id,
-      kafka::client::cluster& cluster,
-      kafka::snc_quota_manager& snc_quota_mgr,
-      const model::connection_config& conn_cfg) {
-        // todo0: make more these configurable at connection level
-        // todo1: make these dynamic
-        kafka::client::direct_consumer::configuration cfg;
-        cfg.min_bytes = conn_cfg.get_fetch_min_bytes();
-        cfg.max_fetch_size = conn_cfg.get_fetch_max_bytes();
-        cfg.partition_max_bytes = 512_KiB;
-        cfg.max_wait_time = 200ms;
-        cfg.isolation_level = ::model::isolation_level::read_committed;
-        cfg.max_buffered_bytes = 5_MiB;
-        cfg.max_buffered_elements = std::numeric_limits<size_t>::max();
-        cfg.with_sessions = kafka::client::fetch_sessions_enabled::yes;
-        static constexpr size_t partition_max_buffered_bytes = 5_MiB;
-        static constexpr auto fetch_max_wait = 100ms;
-        auto direct_consumer = std::make_unique<kafka::client::direct_consumer>(
-          cluster, cfg);
-
-        return std::make_unique<replication::mux_remote_consumer>(
-          std::move(client_id),
-          std::move(direct_consumer),
-          snc_quota_mgr,
-          partition_max_buffered_bytes,
-          fetch_max_wait);
-    }
     ss::sharded<cluster::partition_manager>* _partition_manager;
     ss::sharded<kafka::snc_quota_manager>* _snc_quota_mgr;
 };
@@ -560,21 +879,21 @@ ss::future<> service::maybe_stop_manager() {
     co_await mgr->stop();
 }
 
-ss::future<rpc::shadow_topic_report_response> service::shard_local_topic_report(
+rpc::shadow_topic_report_response service::shard_local_topic_report(
   const model::id_t& link_id, const ::model::topic& topic) {
     auto h = _gate.hold();
     if (auto err = check_manager_state(); err != errc::success) {
-        co_return rpc::shadow_topic_report_response{.err_code = err};
+        return rpc::shadow_topic_report_response{.err_code = err};
     }
     auto& registry = _manager->registry();
     const auto& md = registry->find_link_by_id(link_id);
     if (!md.has_value()) {
-        co_return ::cluster_link::rpc::shadow_topic_report_response{
+        return ::cluster_link::rpc::shadow_topic_report_response{
           .err_code = errc::link_id_not_found};
     }
     const auto& topics = md->get().state.mirror_topics;
     if (topics.find(topic) == topics.end()) {
-        co_return ::cluster_link::rpc::shadow_topic_report_response{
+        return ::cluster_link::rpc::shadow_topic_report_response{
           .err_code = errc::topic_not_being_mirrored};
     }
     auto maybe_rev = registry->get_last_update_revision(link_id);
@@ -585,7 +904,7 @@ ss::future<rpc::shadow_topic_report_response> service::shard_local_topic_report(
           "the link revision does not exist",
           topic,
           link_id);
-        co_return ::cluster_link::rpc::shadow_topic_report_response{
+        return ::cluster_link::rpc::shadow_topic_report_response{
           .err_code = ::cluster_link::errc::link_id_not_found};
     }
     rpc::shadow_topic_report_response result;
@@ -602,7 +921,7 @@ ss::future<rpc::shadow_topic_report_response> service::shard_local_topic_report(
           ::cluster_link::rpc::shadow_topic_partition_leader_report{
             .partition = ntp.tp.partition});
     }
-    co_return result;
+    return result;
 }
 
 ss::future<rpc::shadow_topic_report_response>
@@ -729,6 +1048,7 @@ service::shadow_topic_report(model::id_t link_id, const ::model::topic& topic) {
                           "Error getting shadow topic report from node {}: {}",
                           node_id,
                           r.err_code);
+                        return ss::now();
                     }
                     ::cluster_link::model::aggregated_shadow_topic_report::
                       broker_report broker_report;
@@ -750,6 +1070,152 @@ service::shadow_topic_report(model::id_t link_id, const ::model::topic& topic) {
         co_return std::unexpected<errc>(errc::rpc_error);
     }
     co_return result;
+}
+
+ss::future<rpc::shadow_link_status_report_response>
+service::node_local_shadow_link_report(
+  rpc::shadow_link_status_report_request req) {
+    shard_link_report_reducer reducer{};
+    const auto& link_id = req.link_id;
+
+    co_await container().map_reduce(
+      reducer,
+      [](service& s, const model::id_t& id) {
+          return s.shard_local_shadow_link_report(id);
+      },
+      link_id);
+    auto result = std::move(reducer).get();
+    if (result) {
+        vlog(cllog.trace, "shadow link report for node {}: {}", _self, *result);
+        co_return std::move(*result);
+    }
+    vlog(
+      cllog.error,
+      "No result from shard link report reducer for link {}",
+      link_id);
+
+    co_return rpc::shadow_link_status_report_response{
+      .err_code = errc::link_id_not_found, .link_id = link_id};
+}
+
+rpc::shadow_link_status_report_response
+service::shard_local_shadow_link_report(model::id_t id) {
+    rpc::shadow_link_status_report_response result;
+    result.link_id = id;
+
+    auto res = _manager->get_partition_offsets_report_for_link(id);
+    if (!res.has_value()) {
+        vlog(
+          cllog.warn,
+          "Failed to get shard local shadow link report for link {}: {} ({})",
+          id,
+          res.assume_error().code(),
+          res.assume_error().message());
+        result.err_code = res.assume_error().code();
+        return result;
+    }
+    auto value = std::move(res.assume_value());
+    result.err_code = errc::success;
+
+    for (const auto& [topic, offsets] : value) {
+        if (offsets.update_time == ss::lowres_clock::time_point{}) {
+            // no offsets have been set for this partition
+            continue;
+        }
+        result.topic_responses[topic.tp.topic]
+          .partition_reports[topic.tp.partition]
+          = rpc::shadow_topic_partition_leader_report{
+            .partition = topic.tp.partition,
+            .source_partition_start_offset = offsets.source_start_offset,
+            .source_partition_high_watermark = offsets.source_hwm,
+            .source_partition_last_stable_offset = offsets.source_lso,
+            .last_update_time
+            = std::chrono::duration_cast<std::chrono::milliseconds>(
+              offsets.update_time.time_since_epoch()),
+            .shadow_partition_high_watermark = offsets.shadow_hwm,
+          };
+    }
+
+    vlog(
+      cllog.trace,
+      "shadow link report for shard {}/{}: {}",
+      _self,
+      ss::this_shard_id(),
+      result);
+
+    return result;
+}
+
+ss::future<model::status_report_ret_t>
+service::shadow_link_report(model::name_t name) {
+    vlog(cllog.trace, "Generating shadow link report for link {}", name);
+    auto link_id = _plf->local().find_link_id_by_name(name);
+    if (!link_id.has_value()) {
+        co_return std::unexpected<errc>(errc::link_id_not_found);
+    }
+    auto& members_table = _controller->get_members_table();
+    const auto& node_ids = members_table.local().node_ids();
+    vlog(cllog.trace, "Issuing rpcs to nodes {}", node_ids);
+    model::shadow_link_status_report results;
+    results.link_id = link_id.value();
+    try {
+        co_await ss::max_concurrent_for_each(
+          node_ids,
+          32,
+          [this, &results, link_id = link_id.value()](::model::node_id node) {
+              rpc::shadow_link_status_report_request request{
+                .link_id = link_id};
+              return shadow_link_report(node, std::move(request))
+                .then([&results](rpc::shadow_link_status_report_response resp) {
+                    for (const auto& [topic, topic_response] :
+                         resp.topic_responses) {
+                        auto& existing = results.topic_responses[topic];
+                        for (const auto& [pid, report] :
+                             topic_response.partition_reports) {
+                            existing.partition_reports.emplace(pid, report);
+                        }
+                    }
+                });
+          });
+    } catch (const std::exception& e) {
+        vlog(cllog.warn, "Exception during shadow link reporting: {}", e);
+        co_return std::unexpected<errc>(errc::rpc_error);
+    }
+
+    co_return results;
+}
+
+ss::future<rpc::shadow_link_status_report_response> service::shadow_link_report(
+  ::model::node_id node, rpc::shadow_link_status_report_request req) {
+    using resp_t = rpc::shadow_link_status_report_response;
+    if (node == _self) {
+        co_return co_await node_local_shadow_link_report(std::move(req));
+    }
+
+    static constexpr auto rpc_timeout = 5s;
+    vlog(cllog.trace, "Issuing rpc to node {}", node);
+    auto resp = co_await _connections->local()
+                  .with_node_client<rpc::shadow_linking_rpc_client_protocol>(
+                    _self,
+                    ss::this_shard_id(),
+                    node,
+                    ::model::timeout_clock::now() + rpc_timeout,
+                    [request = std::move(req)](
+                      rpc::shadow_linking_rpc_client_protocol client) mutable {
+                        return client
+                          .shadow_link_report(
+                            std::move(request), ::rpc::client_opts(rpc_timeout))
+                          .then(&::rpc::get_ctx_data<resp_t>);
+                    });
+    if (resp.has_error()) {
+        vlog(
+          cllog.warn,
+          "Error getting shadow link report for node {}: {}",
+          node,
+          resp.error());
+        co_return resp_t{.err_code = errc::rpc_error};
+    }
+    co_return std::move(resp.value());
 }
 
 } // namespace cluster_link

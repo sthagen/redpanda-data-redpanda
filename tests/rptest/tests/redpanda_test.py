@@ -161,16 +161,25 @@ class RedpandaTest(RedpandaTestBase):
     def client(self):
         return self._client
 
-    def load_version_range(self, initial_version: RedpandaVersion):
+    def load_version_range(
+        self,
+        initial_version: RedpandaVersion,
+        max_version: RedpandaVersion | None = None,
+    ) -> Sequence[RedpandaVersion]:
         """
         For tests that do upgrades: find all the latest versions from feature branches
-        between the initial version and the head version.  Result is a list, inclusive of both initial
-        version and head.
+        between the initial version and the specifid max_version. If no max_version is supplied,
+        use the head version as upper bound.  Result is a list, inclusive of both initial
+        version and max/head.
         """
 
         k = 0
-        v = self.redpanda._installer.head_version()
-        versions = [v]
+        v = (
+            max_version
+            if max_version is not None
+            else self.redpanda._installer.head_version()
+        )
+        versions: Sequence[RedpandaVersion] = [v]
         while (v[0], v[1]) != initial_version[0:2]:
             k += 1
 

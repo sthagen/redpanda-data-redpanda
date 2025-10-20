@@ -163,6 +163,25 @@ ss::future<> partition_replicator::replicate_and_wait(
       });
 }
 
+partition_offsets_report
+partition_replicator::get_partition_offsets_report() const {
+    auto source_info = _source->get_offsets();
+    auto sink_info = _sink->high_watermark();
+
+    return {
+      .source_start_offset = source_info.has_value()
+                               ? source_info->source_start_offset
+                               : kafka::offset{},
+      .source_hwm = source_info.has_value() ? source_info->source_hwm
+                                            : kafka::offset{},
+      .source_lso = source_info.has_value() ? source_info->source_lso
+                                            : kafka::offset{},
+      .update_time = source_info.has_value() ? source_info->update_time
+                                             : ss::lowres_clock::time_point{},
+      .shadow_hwm = sink_info,
+    };
+}
+
 ss::future<> partition_replicator::fetch_and_replicate() {
     _gate.check();
     // abort source for this iteration of fetch_and_replicate

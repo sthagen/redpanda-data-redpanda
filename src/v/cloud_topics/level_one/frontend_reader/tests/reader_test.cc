@@ -12,7 +12,7 @@
 #include "cloud_topics/level_one/common/fake_io.h"
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
-#include "cloud_topics/level_one/frontend_reader/reader.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/frontend_reader/tests/l1_reader_fixture.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/log_reader_config.h"
@@ -469,5 +469,110 @@ TEST_F(l1_reader_test, max_bytes_zero_behavior) {
           ntp, tidp, kafka::offset::min(), kafka::offset::max(), 0, true);
         auto result = read_all(std::move(reader));
         EXPECT_TRUE(result.empty());
+    }
+}
+
+TEST_F(l1_reader_test, read_offset_range_multiple_objects2) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+
+    /*
+     * Populate test with 50 L1 objects. Each batch will contain 10 records.
+     */
+    auto source_batches = model::test::make_random_batches(
+                            model::offset{0}, 50, false, std::nullopt, 10)
+                            .get();
+
+    /*
+     * After the source batches, add a bunch of batches that are
+     * predictably smaller than the ones created above (1 record vs 10 records).
+     * We add a bunch because we need one of these smaller batches to land as
+     * the first batch in an L1 object.
+     */
+    {
+        auto small_batches = model::test::make_random_batches(
+                               source_batches.back().last_offset()
+                                 + model::offset{1},
+                               100,
+                               false,
+                               std::nullopt,
+                               1)
+                               .get();
+        for (auto& batch : small_batches) {
+            source_batches.push_back(std::move(batch));
+        }
+    }
+
+    // Populate all the the l1 objects from the 50 batches
+    for (int i = 0; i < 15; ++i) {
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, slice(source_batches, i * 10, 10));
+        make_l1_objects(tidp_batches);
+    }
+
+    /*
+     * Calculate max_bytes for the reader used in the next phase of the test.
+     * What we want is a value that will be rejected by the speculative size
+     * check in reader::read_batches, but not be rejected by the size check in
+     * reader::fetch_metadata.
+     *
+     * When this condition is encountered the reader will bump the next offset
+     * (read_batches returns 0 batches because byte limit has been exceeded),
+     * but the higher level reader won't observe byte limits exceeded and
+     * transition to end-of-stream state because the speculative byte limit
+     * exceeded doesn't bump consumed bytes (or do anything else that causes the
+     * reader to enter end-of-stream state).
+     *
+     * So the reader will keep going. If it happens to encounter a small enough
+     * batch, one that is small enough be accepted by the speculative limit
+     * check, then the batch will be read and cause the reader to return a batch
+     * that skips offsets / creates a gap to the reader. The only time gaps are
+     * allowed is when there are true gaps, such as those caused by compaction.
+     *
+     * NOTE: the bug that exists further requires that the small batch that ends
+     * up being accepted is the first batch in an L1 object because
+     * reader::read_batches will stop reading from an object as soon as
+     * speculative byte limit is exceeeded, thus the errant acceptance needs to
+     * be the first batch.
+     */
+    size_t max_bytes = 0;
+    {
+        auto batches = model::consume_reader_to_memory(
+                         make_reader(ntp, tidp), model::no_timeout)
+                         .get();
+        ASSERT_EQ(batches.size(), 150);
+
+        auto expected_offset = batches.front().base_offset();
+        for (const auto& batch : batches) {
+            ASSERT_EQ(batch.base_offset(), expected_offset);
+            expected_offset += model::offset(batch.record_count() - 1);
+            ASSERT_EQ(batch.last_offset(), expected_offset);
+            expected_offset += 1;
+        }
+
+        // accumulated size of the first three batches
+        max_bytes += batches[0].size_bytes();
+        max_bytes += batches[1].size_bytes();
+        max_bytes += batches[2].size_bytes();
+
+        // add in enough extra allowance for one of the smaller batches so that
+        // when the reader will accept it speculatively.
+        max_bytes += batches[100].size_bytes() + 1;
+    }
+
+    auto batches
+      = model::consume_reader_to_memory(
+          make_reader(
+            ntp, tidp, kafka::offset{0}, kafka::offset::max(), max_bytes),
+          model::no_timeout)
+          .get();
+
+    EXPECT_EQ(batches.size(), 3);
+
+    auto expected_offset = batches.front().base_offset();
+    for (const auto& batch : batches) {
+        EXPECT_EQ(batch.base_offset(), expected_offset);
+        expected_offset += model::offset(batch.record_count() - 1);
+        EXPECT_EQ(batch.last_offset(), expected_offset);
+        expected_offset += 1;
     }
 }

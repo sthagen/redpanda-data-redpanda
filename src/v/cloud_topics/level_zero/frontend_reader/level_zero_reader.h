@@ -68,7 +68,7 @@ back to 'empty' state.
 class level_zero_log_reader_impl : public model::record_batch_reader::impl {
 public:
     level_zero_log_reader_impl(
-      cloud_topic_log_reader_config& cfg,
+      const cloud_topic_log_reader_config& cfg,
       ss::lw_shared_ptr<cluster::partition> underlying,
       data_plane_api* ct_api);
 

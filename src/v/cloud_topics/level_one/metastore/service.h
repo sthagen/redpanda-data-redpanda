@@ -56,8 +56,8 @@ public:
     ss::future<get_term_for_offset_reply> get_term_for_offset(
       get_term_for_offset_request, ::rpc::streaming_context&) override;
 
-    ss::future<get_compaction_offsets_reply> get_compaction_offsets(
-      get_compaction_offsets_request, ::rpc::streaming_context&) override;
+    ss::future<get_compaction_info_reply> get_compaction_info(
+      get_compaction_info_request, ::rpc::streaming_context&) override;
 
 private:
     ss::sharded<frontend>* _frontend;

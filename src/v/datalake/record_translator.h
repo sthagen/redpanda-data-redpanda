@@ -41,6 +41,7 @@ public:
       const std::optional<resolved_type>& val_type,
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
+      model::timestamp_type ts_t,
       const chunked_vector<
         std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
       = 0;
@@ -57,6 +58,7 @@ public:
       const std::optional<resolved_type>& val_type,
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
+      model::timestamp_type ts_t,
       const chunked_vector<
         std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
       override;
@@ -73,6 +75,7 @@ public:
       const std::optional<resolved_type>& val_type,
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
+      model::timestamp_type ts_t,
       const chunked_vector<
         std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
       override;
@@ -93,6 +96,7 @@ public:
       const std::optional<resolved_type>& val_type,
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
+      model::timestamp_type ts_t,
       const chunked_vector<
         std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
       override;

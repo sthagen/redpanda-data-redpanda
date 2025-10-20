@@ -11,6 +11,7 @@
 
 #include "schema/tests/fake_registry.h"
 
+#include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/types.h"
 
 #include <seastar/core/coroutine.hh>
@@ -46,6 +47,9 @@ ss::future<ppsr::stored_schema> schema::fake_store::get_subject_schema(
             continue;
         }
         found.emplace(s.share());
+    }
+    if (!found) {
+        throw as_exception(not_found(sub));
     }
     co_return std::move(found).value();
 }

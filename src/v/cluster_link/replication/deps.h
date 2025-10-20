@@ -39,6 +39,9 @@ public:
     // Notifies the sink of any terminal failure that can
     // result in replicator not being able to start/progress.
     virtual void notify_replicator_failure(::model::term_id) = 0;
+
+    // Returns the HWM of the partition
+    virtual kafka::offset high_watermark() const = 0;
 };
 
 class data_sink_factory {
@@ -52,6 +55,14 @@ public:
  */
 class data_source {
 public:
+    struct source_partition_offsets_report {
+        kafka::offset source_start_offset;
+        kafka::offset source_hwm;
+        kafka::offset source_lso;
+        ss::lowres_clock::time_point update_time;
+
+        fmt::iterator format_to(fmt::iterator it) const;
+    };
     virtual ~data_source() = default;
 
     virtual ss::future<> start(kafka::offset) = 0;
@@ -72,6 +83,9 @@ public:
      * Fetches some data, if any.
      */
     virtual ss::future<data> fetch_next(ss::abort_source&) = 0;
+
+    /// \brief Returns the source partitions offsets (HWM and LSO)
+    virtual std::optional<source_partition_offsets_report> get_offsets() = 0;
 };
 
 class data_source_factory {

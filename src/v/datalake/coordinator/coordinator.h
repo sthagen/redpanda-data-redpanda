@@ -86,6 +86,9 @@ public:
 
     ss::future<checked<datalake_usage_stats, errc>> sync_get_usage_stats();
 
+    ss::future<checked<chunked_hash_map<model::topic, topic_state>, errc>>
+    sync_get_topic_state(chunked_vector<model::topic> topics);
+
     void notify_leadership(std::optional<model::node_id>);
 
     bool leader_loop_running() const { return term_as_.has_value(); }

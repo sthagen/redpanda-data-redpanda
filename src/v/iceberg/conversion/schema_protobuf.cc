@@ -181,7 +181,7 @@ field_outcome from_protobuf(
     case pb::FieldDescriptor::TYPE_BYTES:
         return success(fd, iceberg::binary_type{});
     case pb::FieldDescriptor::TYPE_ENUM:
-        [[fallthrough]];
+        return success(fd, iceberg::string_type{});
     case pb::FieldDescriptor::TYPE_SFIXED32:
         return success(fd, iceberg::int_type{});
     case pb::FieldDescriptor::TYPE_SFIXED64:

@@ -55,7 +55,7 @@ You may use 'rpk redpanda config set' to enable or disable a tuner.
 			// Using cpu mask and timeout defaults since we are not executing
 			// any tuner.
 			tunerParams.CPUMask = "all"
-			tunerFactory := factory.NewDirectExecutorTunersFactory(fs, y.Rpk.Tuners, 10000*time.Millisecond)
+			tunerFactory := factory.NewDirectExecutorTunersFactory(fs, y.Rpk, 10000*time.Millisecond)
 
 			params, err := factory.MergeTunerParamsConfig(&tunerParams, y)
 			out.MaybeDieErr(err)

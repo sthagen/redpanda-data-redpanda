@@ -39,6 +39,10 @@ class DatalakeUpgradeTest(RedpandaTest):
         # Initial version that supported Iceberg.
         self.initial_version: RedpandaVersionTriple = (24, 3, 1)
         self.min_version_with_lag_support: RedpandaVersionTriple = (25, 1, 1)
+        # NOTE: v25.3 introduces some changes that break table compatibility
+        # across the upgrade, so we'll stop upgrading at 25.2 for now.
+        # TODO: Implement post-25.3 table migration as an integration test
+        self.max_version: RedpandaVersionTriple = (25, 2, 1)
 
     def setUp(self):
         self.redpanda._installer.install(self.redpanda.nodes, self.initial_version)
@@ -55,7 +59,7 @@ class DatalakeUpgradeTest(RedpandaTest):
         of Redpanda (e.g. ensuring that data format changes or additional
         Iceberg fields don't block progress).
         """
-        versions = self.load_version_range(self.initial_version)
+        versions = self.load_version_range(self.initial_version, self.max_version)
         lag_set = self.initial_version >= self.min_version_with_lag_support
 
         total_count = 0

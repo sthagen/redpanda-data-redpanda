@@ -7,7 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_zero/frontend_reader/reader.h"
+#include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
@@ -25,7 +25,7 @@
 namespace cloud_topics {
 
 level_zero_log_reader_impl::level_zero_log_reader_impl(
-  cloud_topic_log_reader_config& cfg,
+  const cloud_topic_log_reader_config& cfg,
   ss::lw_shared_ptr<cluster::partition> ctp,
   data_plane_api* ct_api)
   : _config(cfg)

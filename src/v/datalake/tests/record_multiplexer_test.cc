@@ -101,7 +101,19 @@ struct records_param {
 
     size_t num_records() const { return records_per_hr() * hrs; }
     size_t records_per_hr() const { return records_per_batch * batches_per_hr; }
+
+    friend std::ostream& operator<<(std::ostream&, const records_param&);
 };
+
+std::ostream& operator<<(std::ostream& os, const records_param& rp) {
+    fmt::print(
+      os,
+      "{{records_per_batch: {}, batches_per_hr: {}, hrs: {}}}",
+      rp.records_per_batch,
+      rp.batches_per_hr,
+      rp.hrs);
+    return os;
+}
 
 class RecordMultiplexerTestBase
   : public datalake::tests::catalog_and_registry_fixture {
@@ -311,7 +323,7 @@ TEST_P(RecordMultiplexerParamTest, TestSimpleAvroRecords) {
 
     // 4 default columns + RootRecord + mylong
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 11);
+    EXPECT_EQ(schema->highest_field_id(), 12);
 
     // No DLQ table when all records are valid.
     assert_dlq_table(ntp.tp.topic, false);
@@ -353,7 +365,7 @@ TEST_P(RecordMultiplexerParamTest, TestAvroRecordsMultipleSchemas) {
     }
     EXPECT_EQ(hrs.size(), GetParam().hrs);
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 21);
+    EXPECT_EQ(schema->highest_field_id(), 22);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -411,12 +423,12 @@ TEST_F(RecordMultiplexerTest, TestAvroRecordsWithRedpandaField) {
     // 1 nested redpanda column + 4 default columns + mylong + 1 user redpanda
     // column + 1 nested
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 12);
+    EXPECT_EQ(schema->highest_field_id(), 13);
 
     // The redpanda system fields should include the 'data' column.
     const auto& rp_struct = std::get<iceberg::struct_type>(
       schema->schema_struct.fields[0]->type);
-    EXPECT_EQ(6, rp_struct.fields.size());
+    EXPECT_EQ(7, rp_struct.fields.size());
     EXPECT_EQ("data", rp_struct.fields.back()->name);
 }
 
@@ -515,7 +527,7 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
 
     // This should have registered the valid schema.
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 11);
+    EXPECT_EQ(schema->highest_field_id(), 12);
 
     files.data_files.clear();
     files.dlq_files.clear();
@@ -540,7 +552,7 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
 
     // The schema for the main table should not have changed.
     schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 11);
+    EXPECT_EQ(schema->highest_field_id(), 12);
 
     // Metrics updated.
     EXPECT_EQ(

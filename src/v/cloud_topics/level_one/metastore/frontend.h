@@ -74,8 +74,8 @@ public:
     ss::future<rpc::get_offsets_reply>
       get_offsets(rpc::get_offsets_request, local_only = local_only::no);
 
-    ss::future<rpc::get_compaction_offsets_reply> get_compaction_offsets(
-      rpc::get_compaction_offsets_request, local_only = local_only::no);
+    ss::future<rpc::get_compaction_info_reply> get_compaction_info(
+      rpc::get_compaction_info_request, local_only = local_only::no);
 
     ss::future<rpc::get_term_for_offset_reply> get_term_for_offset(
       rpc::get_term_for_offset_request, local_only = local_only::no);
@@ -148,9 +148,8 @@ private:
     ss::future<rpc::get_offsets_reply> get_offsets_locally(
       rpc::get_offsets_request, const model::ntp& metastore_ntp, ss::shard_id);
 
-    ss::future<rpc::get_compaction_offsets_reply>
-    get_compaction_offsets_locally(
-      rpc::get_compaction_offsets_request,
+    ss::future<rpc::get_compaction_info_reply> get_compaction_info_locally(
+      rpc::get_compaction_info_request,
       const model::ntp& metastore_ntp,
       ss::shard_id);
 

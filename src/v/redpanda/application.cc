@@ -141,6 +141,7 @@
 #include "redpanda/admin/proxy/client.h"
 #include "redpanda/admin/proxy/service.h"
 #include "redpanda/admin/server.h"
+#include "redpanda/admin/services/datalake/datalake.h"
 #include "redpanda/admin/services/internal/debug.h"
 #include "redpanda/admin/services/shadow_link/shadow_link.h"
 #include "resource_mgmt/memory_groups.h"
@@ -1166,6 +1167,9 @@ void application::configure_admin_server(model::node_id node_id) {
           s.add_service(
             std::make_unique<admin::debug_service_impl>(
               create_client(), stress_fiber_manager));
+          s.add_service(
+            std::make_unique<admin::datalake_service_impl>(
+              create_client(), &_datalake_coordinator_fe));
       })
       .get();
 }

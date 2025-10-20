@@ -56,7 +56,7 @@ func TestMaxAIOEventsCheck(t *testing.T) {
 			before: func(fs afero.Fs) error {
 				_, err := utils.WriteBytes(
 					fs,
-					[]byte("1048576"),
+					[]byte("10000137"),
 					maxAIOEventsFile,
 				)
 				return err
@@ -67,13 +67,13 @@ func TestMaxAIOEventsCheck(t *testing.T) {
 			before: func(fs afero.Fs) error {
 				_, err := utils.WriteBytes(
 					fs,
-					[]byte("1048575"),
+					[]byte("10000136"),
 					maxAIOEventsFile,
 				)
 				return err
 			},
 			expectChange: true,
-			expected:     1048576,
+			expected:     10000137,
 		},
 		{
 			name:           "it should fail if the file is missing",

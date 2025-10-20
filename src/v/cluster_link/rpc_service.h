@@ -30,6 +30,10 @@ public:
     ss::future<shadow_topic_report_response> shadow_topic_report(
       shadow_topic_report_request request, ::rpc::streaming_context&) override;
 
+    ss::future<shadow_link_status_report_response> shadow_link_report(
+      shadow_link_status_report_request request,
+      ::rpc::streaming_context&) final;
+
 private:
     ss::sharded<cluster_link::service>& _svc;
 };

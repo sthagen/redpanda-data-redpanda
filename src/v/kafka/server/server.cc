@@ -256,6 +256,10 @@ server::list_connections() const {
            | std::ranges::to<ret_t>();
 }
 
+closed_connections_t server::list_closed_connections() const {
+    return _closed_connections;
+}
+
 void server::setup_metrics() {
     namespace sm = ss::metrics;
     if (config::shard_local_cfg().disable_metrics()) {
@@ -379,6 +383,7 @@ ss::future<> server::apply(ss::lw_shared_ptr<net::connection> conn) {
 
     auto ctx = ss::make_lw_shared<connection_context>(
       _connections,
+      _closed_connections,
       *this,
       conn,
       std::move(sasl),

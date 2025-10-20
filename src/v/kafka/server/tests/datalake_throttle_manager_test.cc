@@ -31,7 +31,7 @@ struct IcebergThrottlingManagerTest : ::testing::Test {
                 return shard_state.local().producer_gc_threshold.bind();
             }),
             ss::sharded_parameter(
-              [] { return config::mock_binding<double>(0.01); }))
+              [] { return config::mock_binding<std::optional<double>>(0.01); }))
           .get();
         manager.invoke_on_all(&kafka::datalake_throttle_manager::start).get();
         storage_node.local().set_disk_metrics(

@@ -287,57 +287,14 @@ public:
         offset_interval_set removable_tombstone_ranges;
     };
     // Similar to replace_objects(), but with additional constraints based on
-    // compaction metadata. See get_compaction_offsets() for more details on
+    // compaction metadata. See get_compaction_info() for more details on
     // expected usage.
     virtual ss::future<std::expected<void, errc>>
     compact_objects(const object_metadata_builder&, const compaction_map_t&)
       = 0;
 
-    // Returns metadata required to determine what to compact for the given
-    // partition. Cleaned ranges with tombstones that were cleaned at or below
-    // tombstone_removal_upper_bound_ts are eligible to have tombstones
-    // entirely removed. These ranges will be returned in the response.
-    //
-    // Below is pseudocode for sample usage:
-    //
-    // offsets = co_await metastore.get_compaction_offsets( \
-    //   partition, tombstone_removal_upper_bound_ts);
-    //
-    // key_offset_map m;
-    // cleaned_ranges new_cleaned_ranges;
-    // offset_interval_set removed_tombstones_ranges;
-    //
-    // # Build an offset map based on the dirty ranges.
-    // for dirty_range in offsets.dirty_ranges:
-    //     reader = log.reader(dirty_range.base, dirty_range.last)
-    //     co_await m.add_latest_offset_per_key(reader)
-    //
-    //     cleaned_range r(...offset range that was actually read...);
-    //     if ...reader witnessed tombstones...:
-    //         cleaned_range.cleaned_with_tombstones_at = now()
-    //
-    //     new_cleaned_ranges.insert(cleaned_range)
-    //
-    // # Determine what ranges to remove tombstones from.
-    // removed_tombstones_ranges = \
-    //   ...offsets.removable_tombstone_ranges that fall below m.max_offset()...
-    //
-    // # This operation deduplicates based on the offset map and removes
-    // # tombstones in the given ranges, up to the max indexed by the map.
-    // objects = co_await log.compact( \
-    //   m.max_offset(), m, removed_tombstones_ranges)
-    //
-    // co_await metastore.compact_objects( \
-    //   objects, {{tp, {new_cleaned_ranges, removed_tombstones_ranges}}})
-    virtual ss::future<std::expected<compaction_offsets_response, errc>>
-    get_compaction_offsets(
-      const model::topic_id_partition&,
-      model::timestamp tombstone_removal_upper_bound_ts)
-      = 0;
-
     // All the information required to query a `compaction_info_response` from
-    // the metastore. Parameters are used for call to
-    // `get_compaction_offsets()`.
+    // the metastore. Parameters are used for call to `get_compaction_info()`.
     struct compaction_info_spec {
         model::topic_id_partition tidp;
         model::timestamp tombstone_removal_upper_bound_ts;
@@ -349,16 +306,49 @@ public:
         // The earliest dirty timestamp in the log. `std::nullopt` if there is
         // no such timestamp.
         std::optional<model::timestamp> earliest_dirty_ts;
-        // Compaction offsets returned by call to `get_compaction_offsets()`
-        // (see above).
+        // Dirty ranges & removable tombstone ranges.
         compaction_offsets_response offsets_response;
     };
 
-    // Obtains compaction state for a provided `compaction_info_spec` on the
-    // basis of a single partition. Provides information relevant to determining
-    // if a partition requires compaction - e.g dirty ratio and earliest dirty
-    // timestamp, as well as compaction offsets (see `get_compaction_offsets()`
-    // above).
+    // Returns metadata required to determine what to compact for the given
+    // partition - e.g dirty ratio and earliest dirty timestamp, as well as
+    // compaction offsets.
+    //
+    // Cleaned ranges with tombstones that were cleaned at or below
+    // tombstone_removal_upper_bound_ts are eligible to have tombstones
+    // entirely removed. These ranges will be returned in the response.
+    //
+    // Below is pseudocode for sample usage:
+    //
+    // info = co_await metastore.get_compaction_info( \
+    //   partition, tombstone_removal_upper_bound_ts);
+    //
+    // key_offset_map m;
+    // cleaned_ranges new_cleaned_ranges;
+    // offset_interval_set removed_tombstones_ranges;
+    //
+    // # Build an offset map based on the dirty ranges.
+    // for dirty_range in info.dirty_ranges:
+    //     reader = log.reader(dirty_range.base, dirty_range.last)
+    //     co_await m.add_latest_offset_per_key(reader)
+    //
+    //     cleaned_range r(...offset range that was actually read...);
+    //     if ...reader witnessed tombstones...:
+    //         cleaned_range.cleaned_with_tombstones_at = now()
+    //
+    //     new_cleaned_ranges.insert(cleaned_range)
+    //
+    // # Determine what ranges to remove tombstones from.
+    // removed_tombstones_ranges = \
+    //   ...info.removable_tombstone_ranges that fall below m.max_offset()...
+    //
+    // # This operation deduplicates based on the offset map and removes
+    // # tombstones in the given ranges, up to the max indexed by the map.
+    // objects = co_await log.compact( \
+    //   m.max_offset(), m, removed_tombstones_ranges)
+    //
+    // co_await metastore.compact_objects( \
+    //   objects, {{tp, {new_cleaned_ranges, removed_tombstones_ranges}}})
     virtual ss::future<std::expected<compaction_info_response, errc>>
     get_compaction_info(const compaction_info_spec&) = 0;
 

@@ -164,3 +164,25 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "partition_replicator_fixture_test",
+    timeout = "short",
+    srcs = [
+        "partition_replicator_fixture_tests.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/cluster_link",
+        "//src/v/cluster_link/replication:deps",
+        "//src/v/cluster_link/replication:mux_remote_consumer",
+        "//src/v/cluster_link/replication:partition_replicator",
+        "//src/v/kafka/client/direct_consumer/tests:direct_consumer_fixture",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)

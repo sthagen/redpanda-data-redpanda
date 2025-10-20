@@ -347,4 +347,72 @@ async_for_each_counter(async_counter& counter, Container&& container, Fn f) {
       counter, std::begin(container), std::end(container), std::move(f));
 }
 
+/**
+ * @brief Call f until cond is false, yielding occasionally and accepting
+ * an externally provided counter for yield control.
+ *
+ * This is equivalent to while (cond()) f(); except that the computational
+ * loop yields every Traits::interval (default 100) iterations in order
+ * to avoid reactor stalls. The returned future resolves when cond() is false.
+ *
+ * The counter is taken by reference and must live at least until the
+ * returned future resolves: this usually trivial when the caller is a
+ * coroutine but may require some care when continuation style is used.
+ *
+ * The functions are taken by value.
+ *
+ * @param counter the counter object to use, may be reused across invocations
+ * @param cond the synchronous nullary predicate to call to check the condition
+ * @param f the synchronous nullary function to call on each element
+ * @return ss::future<> a future which resolves when !cond()
+ */
+template<
+  typename Traits = async_algo_traits,
+  std::predicate Cond,
+  std::invocable Fn>
+requires std::same_as<std::invoke_result_t<Fn&>, void>
+ss::future<> async_while_counter(async_counter& counter, Cond cond, Fn f) {
+    bool stop{false};
+    while (!stop) {
+        int i = 0;
+        for (; i < Traits::interval; ++i) {
+            if (cond()) {
+                f();
+            } else {
+                stop = true;
+            }
+        }
+        counter.count += i;
+        if (!stop && counter.count >= Traits::interval) {
+            co_await ss::coroutine::maybe_yield();
+            counter.count = 0;
+            Traits::yield_called();
+        }
+    }
+}
+
+/**
+ * @brief Call f until cond is false, yielding occasionally.
+ *
+ * This is equivalent to while (cond()) f(); except that the computational
+ * loop yields every Traits::interval (default 100) iterations in order
+ * to avoid reactor stalls. The returned future resolves when cond() is false.
+ *
+ * The functions are taken by value.
+ *
+ * @param cond the synchronous nullary predicate to call to check the condition
+ * @param f the synchronous nullary function to call on each element
+ * @return ss::future<> a future which resolves when !cond()
+ */
+template<
+  typename Traits = async_algo_traits,
+  std::predicate Cond,
+  std::invocable Fn>
+requires std::same_as<std::invoke_result_t<Fn&>, void>
+ss::future<> async_while(Cond cond, Fn f) {
+    async_counter counter{0};
+    co_await async_while_counter<Traits>(
+      counter, std::move(cond), std::move(f));
+}
+
 } // namespace ssx

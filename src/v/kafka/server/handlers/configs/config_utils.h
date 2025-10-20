@@ -326,6 +326,29 @@ struct min_cleanable_dirty_ratio_validator {
     }
 };
 
+struct batch_max_bytes_limits_validator {
+    std::optional<ss::sstring>
+    operator()(const ss::sstring&, const std::optional<uint32_t>& value) {
+        if (!value) {
+            return {};
+        }
+
+        const auto v = value.value();
+        const uint32_t upper_limit
+          = config::shard_local_cfg()
+              .kafka_max_message_size_upper_limit_bytes()
+              .value_or(std::numeric_limits<int32_t>::max());
+        if (v == 0 || v > upper_limit) {
+            return fmt::format(
+              "max.message.bytes {} is outside of the allowed range [1, {}]",
+              v,
+              upper_limit);
+        }
+
+        return {};
+    }
+};
+
 template<typename T, typename... ValidatorTypes>
 requires requires(
   model::topic_namespace_view tns,

@@ -273,7 +273,10 @@ create_topic_properties_update(
             }
             if (cfg.name == topic_property_max_message_bytes) {
                 parse_and_set_optional(
-                  update.properties.batch_max_bytes, cfg.value, op);
+                  update.properties.batch_max_bytes,
+                  cfg.value,
+                  op,
+                  batch_max_bytes_limits_validator{});
                 continue;
             }
             if (cfg.name == topic_property_replication_factor) {
