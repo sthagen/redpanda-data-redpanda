@@ -148,6 +148,18 @@ model::record_batch copy_data_segment_reducer::make_placeholder_batch(
 
 ss::future<std::optional<model::record_batch>>
 copy_data_segment_reducer::filter(model::record_batch batch) {
+    const auto is_last_batch_in_segment = batch.last_offset()
+                                          == _segment_last_offset;
+    // Compaction placeholder batches can actually be removed under one
+    // condition- that they are _not_ the last batch in a segment. This can
+    // happen if e.g. two segments containing placeholder batches are adjacently
+    // merged.
+    if (
+      (batch.header().type == model::record_batch_type::compaction_placeholder)
+      && !is_last_batch_in_segment) {
+        co_return std::nullopt;
+    }
+
     // do not filter non-removable batch types under any circumstances
     if (!compaction::is_filterable(batch.header().type)) {
         co_return std::move(batch);
@@ -166,8 +178,8 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
       });
 
     if (
-      _compaction_placeholder_enabled
-      && batch.last_offset() == _segment_last_offset && offset_deltas.empty()) {
+      _compaction_placeholder_enabled && is_last_batch_in_segment
+      && offset_deltas.empty()) {
         // last batch in the segment has been compacted away.
         // This is most likely caused by aborted data batches getting compacted
         // away during self compaction of the segment if they are the last batch

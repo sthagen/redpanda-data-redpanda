@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func shadowLinkConfigToCreateReq(slCfg *ShadowLinkConfig) *adminv2.CreateShadowLinkRequest {
+func shadowLinkConfigToProto(slCfg *ShadowLinkConfig) *adminv2.ShadowLink {
 	if slCfg == nil {
 		return nil
 	}
@@ -31,10 +31,7 @@ func shadowLinkConfigToCreateReq(slCfg *ShadowLinkConfig) *adminv2.CreateShadowL
 		ConsumerOffsetSyncOptions: mapConsumerOffsetSyncOptions(slCfg.ConsumerOffsetSyncOptions),
 		SecuritySyncOptions:       mapSecuritySyncOptions(slCfg.SecuritySyncOptions),
 	}
-
-	return &adminv2.CreateShadowLinkRequest{
-		ShadowLink: shadowLink,
-	}
+	return shadowLink
 }
 
 func mapClientOptions(opts *ShadowLinkClientOptions) *adminv2.ShadowLinkClientOptions {
@@ -337,5 +334,324 @@ func mapACLPermissionType(permType ACLPermissionType) common.ACLPermissionType {
 		return common.ACLPermissionType_ACL_PERMISSION_TYPE_DENY
 	default:
 		return common.ACLPermissionType_ACL_PERMISSION_TYPE_UNSPECIFIED
+	}
+}
+
+func shadowLinkToConfig(sl *adminv2.ShadowLink) *ShadowLinkConfig {
+	if sl == nil {
+		return nil
+	}
+
+	cfg := &ShadowLinkConfig{
+		Name: sl.Name,
+		// uid and status are output-only fields, not included in config
+	}
+
+	if sl.GetConfigurations() != nil {
+		cfg.ClientOptions = adminClientOptsToCfg(sl.GetConfigurations().GetClientOptions())
+		cfg.TopicMetadataSyncOptions = adminTopicMetadataSyncToCfg(sl.GetConfigurations().GetTopicMetadataSyncOptions())
+		cfg.ConsumerOffsetSyncOptions = adminConsumerOffsetSyncToCfg(sl.GetConfigurations().GetConsumerOffsetSyncOptions())
+		cfg.SecuritySyncOptions = adminSecuritySyncToCfg(sl.GetConfigurations().GetSecuritySyncOptions())
+	}
+
+	return cfg
+}
+
+func adminClientOptsToCfg(opts *adminv2.ShadowLinkClientOptions) *ShadowLinkClientOptions {
+	if opts == nil {
+		return nil
+	}
+
+	cfg := &ShadowLinkClientOptions{
+		BootstrapServers:    opts.GetBootstrapServers(),
+		SourceClusterID:     opts.GetSourceClusterId(),
+		MetadataMaxAgeMs:    opts.GetMetadataMaxAgeMs(),
+		ConnectionTimeoutMs: opts.GetConnectionTimeoutMs(),
+		RetryBackoffMs:      opts.GetRetryBackoffMs(),
+		FetchWaitMaxMs:      opts.GetFetchWaitMaxMs(),
+		FetchMinBytes:       opts.GetFetchMinBytes(),
+		FetchMaxBytes:       opts.GetFetchMaxBytes(),
+	}
+
+	if opts.GetTlsSettings() != nil {
+		cfg.TLSSettings = adminTLSToCfg(opts.GetTlsSettings())
+	}
+
+	if opts.GetAuthenticationConfiguration() != nil {
+		cfg.AuthenticationConfiguration = adminAuthToCfg(opts.GetAuthenticationConfiguration())
+	}
+
+	return cfg
+}
+
+func adminTLSToCfg(tls *adminv2.TLSSettings) TLSSettings {
+	if tls == nil {
+		return nil
+	}
+
+	switch t := tls.GetTlsSettings().(type) {
+	case *adminv2.TLSSettings_TlsFileSettings:
+		if t.TlsFileSettings == nil {
+			return nil
+		}
+		return &TLSFileSettings{
+			Enabled:  tls.GetEnabled(),
+			CAPath:   t.TlsFileSettings.GetCaPath(),
+			KeyPath:  t.TlsFileSettings.GetKeyPath(),
+			CertPath: t.TlsFileSettings.GetCertPath(),
+		}
+	case *adminv2.TLSSettings_TlsPemSettings:
+		if t.TlsPemSettings == nil {
+			return nil
+		}
+		return &TLSPEMSettings{
+			Enabled: tls.GetEnabled(),
+			CA:      t.TlsPemSettings.GetCa(),
+			Key:     t.TlsPemSettings.GetKey(),
+			Cert:    t.TlsPemSettings.GetCert(),
+		}
+	}
+
+	return nil
+}
+
+func adminAuthToCfg(auth *adminv2.AuthenticationConfiguration) AuthenticationConfiguration {
+	if auth == nil {
+		return nil
+	}
+
+	if a, ok := auth.GetAuthentication().(*adminv2.AuthenticationConfiguration_ScramConfiguration); ok {
+		if a.ScramConfiguration == nil {
+			return nil
+		}
+		return &ScramConfig{
+			Username:       a.ScramConfiguration.GetUsername(),
+			Password:       a.ScramConfiguration.GetPassword(),
+			ScramMechanism: adminScramMechanismToCfg(a.ScramConfiguration.GetScramMechanism()),
+		}
+	}
+
+	return nil
+}
+
+func adminScramMechanismToCfg(m adminv2.ScramMechanism) ScramMechanism {
+	switch m {
+	case adminv2.ScramMechanism_SCRAM_MECHANISM_SCRAM_SHA_256:
+		return ScramMechanismScramSha256
+	case adminv2.ScramMechanism_SCRAM_MECHANISM_SCRAM_SHA_512:
+		return ScramMechanismScramSha512
+	default:
+		return ""
+	}
+}
+
+func adminTopicMetadataSyncToCfg(opts *adminv2.TopicMetadataSyncOptions) *TopicMetadataSyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	cfg := &TopicMetadataSyncOptions{
+		SyncedShadowTopicProperties: opts.GetSyncedShadowTopicProperties(),
+		ExcludeDefault:              opts.GetExcludeDefault(),
+	}
+
+	if opts.GetInterval() != nil {
+		cfg.Interval = opts.GetInterval().AsDuration()
+	}
+
+	for _, filter := range opts.GetAutoCreateShadowTopicFilters() {
+		cfg.AutoCreateShadowTopicFilters = append(cfg.AutoCreateShadowTopicFilters, adminMapFilterToCfg(filter))
+	}
+
+	return cfg
+}
+
+func adminConsumerOffsetSyncToCfg(opts *adminv2.ConsumerOffsetSyncOptions) *ConsumerOffsetSyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	cfg := &ConsumerOffsetSyncOptions{
+		Enabled: opts.GetEnabled(),
+	}
+
+	if opts.GetInterval() != nil {
+		cfg.Interval = opts.GetInterval().AsDuration()
+	}
+
+	for _, filter := range opts.GetGroupFilters() {
+		cfg.GroupFilters = append(cfg.GroupFilters, adminMapFilterToCfg(filter))
+	}
+
+	return cfg
+}
+
+func adminSecuritySyncToCfg(opts *adminv2.SecuritySettingsSyncOptions) *SecuritySettingsSyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	cfg := &SecuritySettingsSyncOptions{
+		Enabled: opts.GetEnabled(),
+	}
+
+	if opts.GetInterval() != nil {
+		cfg.Interval = opts.GetInterval().AsDuration()
+	}
+
+	for _, filter := range opts.GetAclFilters() {
+		cfg.ACLFilters = append(cfg.ACLFilters, adminACLFilterToCfg(filter))
+	}
+
+	return cfg
+}
+
+func adminMapFilterToCfg(filter *adminv2.NameFilter) *NameFilter {
+	if filter == nil {
+		return nil
+	}
+
+	return &NameFilter{
+		PatternType: adminPatternTypeToCfg(filter.GetPatternType()),
+		FilterType:  adminFilterTypeToCfg(filter.GetFilterType()),
+		Name:        filter.GetName(),
+	}
+}
+
+func adminACLFilterToCfg(filter *adminv2.ACLFilter) *ACLFilter {
+	if filter == nil {
+		return nil
+	}
+
+	return &ACLFilter{
+		ResourceFilter: adminACLResourceFilterToCfg(filter.GetResourceFilter()),
+		AccessFilter:   adminACLAccessFilterToCfg(filter.GetAccessFilter()),
+	}
+}
+
+func adminACLResourceFilterToCfg(filter *adminv2.ACLResourceFilter) *ACLResourceFilter {
+	if filter == nil {
+		return nil
+	}
+
+	return &ACLResourceFilter{
+		ResourceType: adminACLResourceToCfg(filter.GetResourceType()),
+		PatternType:  adminACLPatternToCfg(filter.GetPatternType()),
+		Name:         filter.GetName(),
+	}
+}
+
+func adminACLAccessFilterToCfg(filter *adminv2.ACLAccessFilter) *ACLAccessFilter {
+	if filter == nil {
+		return nil
+	}
+
+	return &ACLAccessFilter{
+		Principal:      filter.GetPrincipal(),
+		Operation:      adminACLOperationToCfg(filter.GetOperation()),
+		PermissionType: adminPermissionTypeToCfg(filter.GetPermissionType()),
+		Host:           filter.GetHost(),
+	}
+}
+
+func adminPatternTypeToCfg(pt adminv2.PatternType) PatternType {
+	switch pt {
+	case adminv2.PatternType_PATTERN_TYPE_LITERAL:
+		return PatternTypeLiteral
+	case adminv2.PatternType_PATTERN_TYPE_PREFIX:
+		return PatternTypePrefix
+	default:
+		return ""
+	}
+}
+
+func adminFilterTypeToCfg(ft adminv2.FilterType) FilterType {
+	switch ft {
+	case adminv2.FilterType_FILTER_TYPE_INCLUDE:
+		return FilterTypeInclude
+	case adminv2.FilterType_FILTER_TYPE_EXCLUDE:
+		return FilterTypeExclude
+	default:
+		return ""
+	}
+}
+
+func adminACLResourceToCfg(resource common.ACLResource) ACLResource {
+	switch resource {
+	case common.ACLResource_ACL_RESOURCE_ANY:
+		return ACLResourceAny
+	case common.ACLResource_ACL_RESOURCE_CLUSTER:
+		return ACLResourceCluster
+	case common.ACLResource_ACL_RESOURCE_GROUP:
+		return ACLResourceGroup
+	case common.ACLResource_ACL_RESOURCE_TOPIC:
+		return ACLResourceTopic
+	case common.ACLResource_ACL_RESOURCE_TXN_ID:
+		return ACLResourceTXNID
+	case common.ACLResource_ACL_RESOURCE_SR_SUBJECT:
+		return ACLResourceSRSubject
+	case common.ACLResource_ACL_RESOURCE_SR_REGISTRY:
+		return ACLResourceSRRegistry
+	case common.ACLResource_ACL_RESOURCE_SR_ANY:
+		return ACLResourceSRAny
+	default:
+		return ""
+	}
+}
+
+func adminACLPatternToCfg(pattern common.ACLPattern) ACLPattern {
+	switch pattern {
+	case common.ACLPattern_ACL_PATTERN_ANY:
+		return ACLPatternAny
+	case common.ACLPattern_ACL_PATTERN_LITERAL:
+		return ACLPatternLiteral
+	case common.ACLPattern_ACL_PATTERN_PREFIXED:
+		return ACLPatternPrefixed
+	case common.ACLPattern_ACL_PATTERN_MATCH:
+		return ACLPatternMatch
+	default:
+		return ""
+	}
+}
+
+func adminACLOperationToCfg(operation common.ACLOperation) ACLOperation {
+	switch operation {
+	case common.ACLOperation_ACL_OPERATION_ANY:
+		return ACLOperationAny
+	case common.ACLOperation_ACL_OPERATION_READ:
+		return ACLOperationRead
+	case common.ACLOperation_ACL_OPERATION_WRITE:
+		return ACLOperationWrite
+	case common.ACLOperation_ACL_OPERATION_CREATE:
+		return ACLOperationCreate
+	case common.ACLOperation_ACL_OPERATION_REMOVE:
+		return ACLOperationRemove
+	case common.ACLOperation_ACL_OPERATION_ALTER:
+		return ACLOperationAlter
+	case common.ACLOperation_ACL_OPERATION_DESCRIBE:
+		return ACLOperationDescribe
+	case common.ACLOperation_ACL_OPERATION_CLUSTER_ACTION:
+		return ACLOperationClusterAction
+	case common.ACLOperation_ACL_OPERATION_DESCRIBE_CONFIGS:
+		return ACLOperationDescribeConfigs
+	case common.ACLOperation_ACL_OPERATION_ALTER_CONFIGS:
+		return ACLOperationAlterConfigs
+	case common.ACLOperation_ACL_OPERATION_IDEMPOTENT_WRITE:
+		return ACLOperationIdempotentWrite
+	default:
+		return ""
+	}
+}
+
+func adminPermissionTypeToCfg(permType common.ACLPermissionType) ACLPermissionType {
+	switch permType {
+	case common.ACLPermissionType_ACL_PERMISSION_TYPE_ANY:
+		return ACLPermissionTypeAny
+	case common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW:
+		return ACLPermissionTypeAllow
+	case common.ACLPermissionType_ACL_PERMISSION_TYPE_DENY:
+		return ACLPermissionTypeDeny
+	default:
+		return ""
 	}
 }

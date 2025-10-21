@@ -29,6 +29,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		newDescribeCommand(fs, p),
 		newStatusCommand(fs, p),
 		newListCommand(fs, p),
+		newUpdateCommand(fs, p),
 	)
 	p.InstallAdminFlags(cmd)
 	p.InstallSASLFlags(cmd)

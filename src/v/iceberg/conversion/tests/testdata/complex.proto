@@ -2,6 +2,8 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "redpanda/datalake/date.proto";
+import "testdata/unsupported_rp_type.proto";
 
 enum State {
     ACTIVE = 0;
@@ -72,4 +74,12 @@ message StructWithValue {
 
 message StructWithListValue {
     google.protobuf.ListValue list_value_field = 1;
+}
+
+message StructWithDate {
+    redpanda.datalake.Date date = 1;
+}
+
+message StructWithUnsupportedRPType {
+    redpanda.datalake.Foo foo = 1;
 }

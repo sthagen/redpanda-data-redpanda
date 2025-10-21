@@ -654,10 +654,29 @@ global___ShadowLinkClientOptions = ShadowLinkClientOptions
 class TopicMetadataSyncOptions(google.protobuf.message.Message):
     """Options for syncing topic metadata"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    @typing.final
+    class EarliestOffset(google.protobuf.message.Message):
+        """Start at the earliest offset in the partition"""
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(self) -> None:
+            ...
+
+    @typing.final
+    class LatestOffset(google.protobuf.message.Message):
+        """Start at the latest offset in the partition"""
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(self) -> None:
+            ...
     INTERVAL_FIELD_NUMBER: builtins.int
     AUTO_CREATE_SHADOW_TOPIC_FILTERS_FIELD_NUMBER: builtins.int
     SYNCED_SHADOW_TOPIC_PROPERTIES_FIELD_NUMBER: builtins.int
     EXCLUDE_DEFAULT_FIELD_NUMBER: builtins.int
+    EARLIEST_FIELD_NUMBER: builtins.int
+    LATEST_FIELD_NUMBER: builtins.int
+    TIMESTAMP_FIELD_NUMBER: builtins.int
     exclude_default: builtins.bool
     'If false, then the following topic properties will be synced by default:\n    - `compression.type`\n    - `retention.bytes`\n    - `retention.ms`\n    - `delete.retention.ms`\n    - Replication Factor\n    - `min.compaction.lag.ms`\n    - `max.compaction.lag.ms`\n\n    If this is true, then only the properties listed in\n    `synced_shadow_topic_properties` will be synced.\n    '
 
@@ -704,13 +723,28 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
         that will be synced.  See `exclude_default`.
         """
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=...) -> None:
+    @property
+    def earliest(self) -> global___TopicMetadataSyncOptions.EarliestOffset:
         ...
 
-    def HasField(self, field_name: typing.Literal['interval', b'interval']) -> builtins.bool:
+    @property
+    def latest(self) -> global___TopicMetadataSyncOptions.LatestOffset:
         ...
 
-    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'exclude_default', b'exclude_default', 'interval', b'interval', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties']) -> None:
+    @property
+    def timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        ...
+
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=..., earliest: global___TopicMetadataSyncOptions.EarliestOffset | None=..., latest: global___TopicMetadataSyncOptions.LatestOffset | None=..., timestamp: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['earliest', b'earliest', 'interval', b'interval', 'latest', b'latest', 'start_offset', b'start_offset', 'timestamp', b'timestamp']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'earliest', b'earliest', 'exclude_default', b'exclude_default', 'interval', b'interval', 'latest', b'latest', 'start_offset', b'start_offset', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties', 'timestamp', b'timestamp']) -> None:
+        ...
+
+    def WhichOneof(self, oneof_group: typing.Literal['start_offset', b'start_offset']) -> typing.Literal['earliest', 'latest', 'timestamp'] | None:
         ...
 global___TopicMetadataSyncOptions = TopicMetadataSyncOptions
 

@@ -18,6 +18,13 @@
 
 namespace cluster_link::replication {
 
+class link_configuration_provider {
+public:
+    virtual ~link_configuration_provider() = default;
+    virtual ss::future<kafka::offset>
+    start_offset(const ::model::ntp&, ss::abort_source&) = 0;
+};
+
 /**
  * Interface to which the data from source is replicated to.
  */

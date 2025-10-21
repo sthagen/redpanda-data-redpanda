@@ -24,6 +24,14 @@ std::chrono::milliseconds sleep_for() {
 
 namespace cluster_link::replication {
 
+class test_config_provider : public link_configuration_provider {
+public:
+    ss::future<kafka::offset>
+    start_offset(const ::model::ntp&, ss::abort_source&) override {
+        co_return kafka::offset{0};
+    }
+};
+
 class test_data_source : public data_source {
 public:
     ss::future<> reset(kafka::offset) override { return ss::now(); }
@@ -109,6 +117,7 @@ class LinkReplicationMgrFixture : public seastar_test {
     ss::future<> SetUpAsync() override {
         _mgr = std::make_unique<link_replication_manager>(
           ss::default_scheduling_group(),
+          std::make_unique<test_config_provider>(),
           std::make_unique<test_data_source_factory>(),
           std::make_unique<test_data_sink_factory>());
         co_await _mgr->start();

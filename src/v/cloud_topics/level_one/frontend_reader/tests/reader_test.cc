@@ -92,7 +92,7 @@ TEST_F(l1_reader_test, read_single_object) {
 
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     // Read everything.
     auto reader = make_reader(ntp, tidp);
@@ -110,7 +110,7 @@ TEST_F(l1_reader_test, read_multiple_objects) {
         std::vector<tidp_batches_t> tidp_batches;
         auto subbatches = slice(batches, start, 50);
         tidp_batches.emplace_back(tidp, std::move(subbatches));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     auto reader = make_reader(ntp, tidp);
@@ -137,7 +137,7 @@ TEST_F(l1_reader_test, read_multiple_ntps_multiple_objects) {
             auto subbatches = slice(batches[i], start, 50);
             tidp_batches.emplace_back(ntps[i].second, std::move(subbatches));
         }
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     for (auto i = 0; i < 3; i++) {
@@ -157,7 +157,7 @@ TEST_F(l1_reader_test, read_offset_range_one_object) {
 
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     auto min = kafka::offset{10};
     auto max = kafka::offset{250};
@@ -174,12 +174,12 @@ TEST_F(l1_reader_test, read_offset_range_multiple_objects) {
     {
         std::vector<tidp_batches_t> tidp_batches;
         tidp_batches.emplace_back(tidp, slice(batches, 0, 10));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
     {
         std::vector<tidp_batches_t> tidp_batches;
         tidp_batches.emplace_back(tidp, slice(batches, 10, 10));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     auto offset_in_second_obj = batches[15].base_offset();
@@ -200,7 +200,7 @@ TEST_F(l1_reader_test, read_with_max_bytes) {
 
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     {
         // Set tiny max bytes to check we get one batch.
@@ -229,7 +229,7 @@ TEST_F(l1_reader_test, read_with_strict_max_bytes) {
 
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     {
         // Set tiny max bytes to check we get no batches
@@ -258,7 +258,7 @@ TEST_F(l1_reader_test, out_of_range) {
 
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     // Test reading before the available range.
     {
@@ -321,7 +321,7 @@ TEST_F(l1_reader_test, empty_offset_range) {
         std::vector<tidp_batches_t> tidp_batches;
         auto subbatches = slice(batches, start, 50);
         tidp_batches.emplace_back(tidp, std::move(subbatches));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     // Mimic an object from which all partition data has been compacted.
@@ -376,7 +376,7 @@ TEST_F(l1_reader_test, empty_offset_range) {
         std::vector<tidp_batches_t> tidp_batches;
         auto subbatches = slice(final_batches, start, 50);
         tidp_batches.emplace_back(tidp, std::move(subbatches));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     auto reader = make_reader(ntp, tidp);
@@ -408,17 +408,17 @@ TEST_F(l1_reader_test, sparse_offset_ranges) {
     {
         std::vector<tidp_batches_t> tidp_batches;
         tidp_batches.emplace_back(tidp, copy(slice0));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
     {
         std::vector<tidp_batches_t> tidp_batches;
         tidp_batches.emplace_back(tidp, copy(slice1));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
     {
         std::vector<tidp_batches_t> tidp_batches;
         tidp_batches.emplace_back(tidp, copy(slice2));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     auto reader = make_reader(ntp, tidp);
@@ -450,7 +450,7 @@ TEST_F(l1_reader_test, max_bytes_zero_behavior) {
 
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     {
         // Test max_bytes=0 with strict_max_bytes=false
@@ -506,7 +506,7 @@ TEST_F(l1_reader_test, read_offset_range_multiple_objects2) {
     for (int i = 0; i < 15; ++i) {
         std::vector<tidp_batches_t> tidp_batches;
         tidp_batches.emplace_back(tidp, slice(source_batches, i * 10, 10));
-        make_l1_objects(tidp_batches);
+        make_l1_objects(std::move(tidp_batches)).get();
     }
 
     /*

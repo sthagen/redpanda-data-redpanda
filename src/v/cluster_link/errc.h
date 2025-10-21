@@ -41,6 +41,7 @@ enum class errc : int {
     topic_does_not_exist,
     topic_metadata_stale,
     license_required,
+    service_not_ready,
 };
 
 std::error_code make_error_code(errc) noexcept;

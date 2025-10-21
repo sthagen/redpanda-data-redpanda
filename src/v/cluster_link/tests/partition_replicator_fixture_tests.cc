@@ -10,6 +10,7 @@
 
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "cluster_link/replication/partition_replicator.h"
+#include "cluster_link/replication/tests/deps_test_impl.h"
 #include "cluster_link/service.h"
 #include "kafka/client/direct_consumer/tests/direct_consumer_fixture.h"
 
@@ -48,13 +49,18 @@ public:
         // setup the replicator
         auto [_, partition] = get_leader(_target);
         vassert(partition, "no partition for {}", _target);
-
+        _config_provider = std::make_unique<
+          cluster_link::replication::tests::test_config_provider>();
         auto source = cluster_link::make_default_data_source(
           _source.tp, *_mux_consumer);
         auto sink = cluster_link::make_default_data_sink(partition);
         _replicator
           = std::make_unique<cluster_link::replication::partition_replicator>(
-            _source, model::term_id{0}, std::move(source), std::move(sink));
+            _source,
+            model::term_id{0},
+            *_config_provider,
+            std::move(source),
+            std::move(sink));
         _replicator->start().get();
     }
 
@@ -92,6 +98,10 @@ protected:
       _replicator;
     model::ntp _source{model::kafka_namespace, "source", 0};
     model::ntp _target{model::kafka_namespace, "target", 0};
+
+private:
+    std::unique_ptr<cluster_link::replication::link_configuration_provider>
+      _config_provider;
 };
 
 TEST_P(ReplicatorFixture, TestProduceConsume) {

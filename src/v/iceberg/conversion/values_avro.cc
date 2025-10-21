@@ -12,6 +12,7 @@
 
 #include "bytes/iobuf_parser.h"
 #include "iceberg/avro_decimal.h"
+#include "iceberg/conversion/avro_utils.h"
 #include "serde/avro/parser.h"
 
 #include <seastar/core/coroutine.hh>
@@ -21,7 +22,7 @@ namespace iceberg {
 
 namespace {
 
-ss::future<value_outcome> avro_parsed_to_value(
+ss::future<optional_value_outcome> avro_parsed_to_value(
   std::unique_ptr<serde::avro::parsed::message> parsed_msg, avro::NodePtr node);
 
 template<typename T, typename ValueT>
@@ -125,7 +126,8 @@ struct primitive_visitor {
 };
 
 struct parsed_msg_visitor {
-    ss::future<value_outcome> operator()(serde::avro::parsed::record record) {
+    ss::future<optional_value_outcome>
+    operator()(serde::avro::parsed::record record) {
         auto ret = std::make_unique<iceberg::struct_value>();
         ret->fields.reserve(node->leaves());
         for (size_t i = 0; i < node->leaves(); ++i) {
@@ -142,7 +144,8 @@ struct parsed_msg_visitor {
         }
         co_return ret;
     }
-    ss::future<value_outcome> operator()(serde::avro::parsed::map parsed_map) {
+    ss::future<optional_value_outcome>
+    operator()(serde::avro::parsed::map parsed_map) {
         auto ret = std::make_unique<iceberg::map_value>();
         ret->kvs.reserve(parsed_map.entries.size());
         const auto key_node = node->leafAt(0);
@@ -169,7 +172,7 @@ struct parsed_msg_visitor {
         }
         co_return ret;
     }
-    ss::future<value_outcome> operator()(serde::avro::parsed::list v) {
+    ss::future<optional_value_outcome> operator()(serde::avro::parsed::list v) {
         auto ret = std::make_unique<iceberg::list_value>();
         ret->elements.reserve(v.elements.size());
         auto element_node = node->leafAt(0);
@@ -183,9 +186,20 @@ struct parsed_msg_visitor {
         }
         co_return ret;
     }
-    ss::future<value_outcome> operator()(serde::avro::parsed::avro_union v) {
+    ss::future<optional_value_outcome>
+    operator()(serde::avro::parsed::avro_union v) {
         // union is represented as a struct with all possible types but only one
-        // present
+        // present. if the union follows the "optional" pattern, flatten the
+        // taken branch into either an instance of the non-null alternative or
+        // nullopt
+        if (auto opt = iceberg::maybe_flatten_union(node); opt.has_value()) {
+            if (node->leafAt(v.branch) == opt.value()) {
+                co_return co_await avro_parsed_to_value(
+                  std::move(v.message), opt.value());
+            }
+            co_return std::nullopt;
+        }
+
         auto ret = std::make_unique<iceberg::struct_value>();
         ret->fields.reserve(node->leaves());
         for (size_t i = 0; i < node->leaves(); ++i) {
@@ -211,13 +225,14 @@ struct parsed_msg_visitor {
         }
         co_return ret;
     }
-    ss::future<value_outcome> operator()(serde::avro::parsed::primitive v) {
+    ss::future<optional_value_outcome>
+    operator()(serde::avro::parsed::primitive v) {
         co_return std::visit(primitive_visitor{node}, std::move(v));
     }
     avro::NodePtr node;
 };
 
-ss::future<value_outcome> avro_parsed_to_value(
+ss::future<optional_value_outcome> avro_parsed_to_value(
   std::unique_ptr<serde::avro::parsed::message> parsed_msg,
   avro::NodePtr node) {
     if (node->type() == avro::AVRO_NULL) {
@@ -265,8 +280,16 @@ deserialize_avro(iobuf buffer, avro::ValidSchema schema) {
             ret->fields.push_back(std::move(root_field.value()));
             co_return ret;
         }
-        co_return co_await avro_parsed_to_value(
+        auto res = co_await avro_parsed_to_value(
           std::move(parsed), schema.root());
+        if (res.has_error()) {
+            co_return res.error();
+        }
+        auto val = std::move(res).value();
+        if (!val.has_value()) {
+            throw std::runtime_error("Avro root record was unexpectedly null");
+        }
+        co_return value_outcome{std::move(val).value()};
     } catch (...) {
         co_return value_outcome{value_conversion_exception(
           fmt::format(

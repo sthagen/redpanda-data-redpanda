@@ -55,8 +55,8 @@ protected:
         return std::make_pair(ntp, tidp);
     }
 
-    void make_l1_objects(std::vector<tidp_batches_t>& batches_by_tidp) {
-        auto meta_builder = _metastore.object_builder().get().value();
+    ss::future<> make_l1_objects(std::vector<tidp_batches_t> batches_by_tidp) {
+        auto meta_builder = (co_await _metastore.object_builder()).value();
 
         // First record the object ID for each tidp,
         std::map<model::topic_id_partition, l1::object_id> oid_by_tidp;
@@ -92,17 +92,17 @@ protected:
         for (auto& [tidp, batches] : batches_by_tidp) {
             auto& oid = oid_by_tidp[tidp];
             auto& builder = builders_by_oid[oid];
-            builder->start_partition(tidp).get();
+            co_await builder->start_partition(tidp);
             for (auto& batch : batches) {
-                builder->add_batch(std::move(batch)).get();
+                co_await builder->add_batch(std::move(batch));
             }
         }
 
         // Finish all the objects, upload them, and use the metadata
         // to prepare the metastore registration.
         for (auto& [oid, builder] : builders_by_oid) {
-            auto obj_info = builder->finish().get();
-            builder->close().get();
+            auto obj_info = co_await builder->finish();
+            co_await builder->close();
 
             _io.put_object(oid, std::move(bufs_by_oid[oid]));
 
@@ -126,7 +126,7 @@ protected:
               .value();
         }
 
-        _metastore.add_objects(*meta_builder, term_map).get().value();
+        auto res = co_await _metastore.add_objects(*meta_builder, term_map);
     }
 
     model::record_batch_reader make_reader(

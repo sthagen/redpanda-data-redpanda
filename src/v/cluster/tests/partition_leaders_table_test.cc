@@ -123,12 +123,12 @@ TEST_F_CORO(test_fixture, test_counting_leaderless_partitions) {
             random_generators::get_int(partitions_per_topic)));
 
         if (tests::random_bool()) {
-            leaders->update_partition_leader(
+            co_await leaders->update_partition_leader(
               ntp, model::term_id(i), tests::random_optional([] {
                   return model::node_id(0);
               }));
         } else {
-            leaders->remove_leader(ntp, model::revision_id{0});
+            co_await leaders->remove_leader(ntp, model::revision_id{0});
         }
 
         auto expected = co_await count_leaderless_partitions();
@@ -165,7 +165,7 @@ TEST_F_CORO(test_fixture, test_waiting_for_leader) {
     ASSERT_FALSE_CORO(f_2.available());
     ASSERT_FALSE_CORO(f_3.available());
 
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_0, model::term_id(0), model::node_id(20));
     // after leadership was set futures should be available
     // ASSERT_TRUE_CORO(f_1.available());
@@ -208,18 +208,19 @@ TEST_F_CORO(test_fixture, test_leadership_notification) {
       });
 
     // notification should not be triggered when leader_id is set to nullopt
-    leaders->update_partition_leader(p_0, model::term_id{1}, std::nullopt);
+    co_await leaders->update_partition_leader(
+      p_0, model::term_id{1}, std::nullopt);
 
     EXPECT_THAT(notifies, Each(Pair(An<model::ntp>(), Eq(0))));
 
     // notification should be triggered as we have new leader
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_0, model::revision_id{10}, model::term_id{1}, model::node_id(10));
     EXPECT_EQ(notifies[p_0], 1);
     EXPECT_EQ(notifies[p_1], 0);
     EXPECT_EQ(notifies[p_2], 0);
     // notifications for each partition should be independent
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_1, model::revision_id{10}, model::term_id{1}, model::node_id(10));
     EXPECT_EQ(notifies[p_0], 1);
     EXPECT_EQ(notifies[p_1], 1);
@@ -227,26 +228,26 @@ TEST_F_CORO(test_fixture, test_leadership_notification) {
 
     // notifications should not be triggered if update was ignored due to
     // out of date revision revision change
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_1, model::revision_id{8}, model::term_id{2}, model::node_id(2));
     EXPECT_EQ(notifies[p_0], 1);
     EXPECT_EQ(notifies[p_1], 1);
     EXPECT_EQ(notifies[p_2], 0);
 
     // notifications should be triggered when leadership changes 10 -> 5
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_0, model::revision_id{10}, model::term_id{2}, model::node_id(5));
     EXPECT_EQ(notifies[p_0], 2);
 
     // notifications should be triggered when leader does not change but
     // term does
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_0, model::revision_id{10}, model::term_id{3}, model::node_id(5));
     EXPECT_EQ(notifies[p_0], 3);
 
     // notifications should be triggered when leader and term does not change
     // but revision does
-    leaders->update_partition_leader(
+    co_await leaders->update_partition_leader(
       p_0, model::revision_id{11}, model::term_id{3}, model::node_id(5));
     EXPECT_EQ(notifies[p_0], 4);
     EXPECT_EQ(notifies[p_1], 1);

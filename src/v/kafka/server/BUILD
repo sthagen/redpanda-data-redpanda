@@ -400,6 +400,7 @@ redpanda_cc_library(
         "//src/v/utils:absl_sstring_hash",
         "//src/v/utils:ema",
         "//src/v/utils:log_hist",
+        "//src/v/utils:moving_average",
         "//src/v/utils:mutex",
         "//src/v/utils:named_type",
         "//src/v/utils:queue_depth_control",

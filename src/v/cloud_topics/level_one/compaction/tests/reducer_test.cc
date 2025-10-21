@@ -119,7 +119,7 @@ TEST_F(ReducerTestFixture, Reducer) {
     auto batches = gen(spec, num_batches);
     std::vector<tidp_batches_t> tidp_batches;
     tidp_batches.emplace_back(tidp, std::move(batches));
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
 
     ss::abort_source as;
 
@@ -136,7 +136,7 @@ TEST_F(ReducerTestFixture, Reducer) {
       start_offset, last_offset));
 
     auto committer = l1::compaction_committer(
-      std::make_unique<never_commit>(), &_metastore, &_io);
+      std::make_unique<never_commit>(), &_io, &_metastore);
     auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
     auto src = std::make_unique<l1::compaction_source>(
       ntp,

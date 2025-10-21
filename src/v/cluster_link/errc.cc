@@ -66,6 +66,8 @@ struct error_category final : public std::error_category {
             return "topic metadata is stale";
         case errc::license_required:
             return "license required for operation";
+        case errc::service_not_ready:
+            return "shadow linking service is not ready";
         }
 
         return "(unknown error code)";

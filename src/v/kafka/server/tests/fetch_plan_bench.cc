@@ -188,7 +188,9 @@ struct fetch_plan : redpanda_thread_fixture {
                   {topic, model::partition_id(i)},
                   model::offset(0),
                   model::offset(100),
-                  model::offset(100));
+                  model::offset(100),
+                  0,
+                  0);
             }
         }
 

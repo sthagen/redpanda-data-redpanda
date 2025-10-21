@@ -33,6 +33,7 @@ class LeaderEpochTest
   , public ::testing::Test {
 public:
     void SetUp() override {
+        cfg.get("enable_leader_balancer").set_value(false);
         cfg.get("cloud_topics_disable_reconciliation_loop").set_value(true);
         cfg.get("raft_heartbeat_interval_ms").set_value(50ms);
         cfg.get("raft_heartbeat_timeout_ms").set_value(500ms);

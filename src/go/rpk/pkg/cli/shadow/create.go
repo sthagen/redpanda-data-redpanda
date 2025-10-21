@@ -12,6 +12,8 @@ package shadow
 import (
 	"fmt"
 
+	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
+
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -65,9 +67,10 @@ skip the confirmation prompt.
 				}
 			}
 			fmt.Println()
-			createReq := shadowLinkConfigToCreateReq(slCfg)
 
-			link, err := cl.ShadowLinkService().CreateShadowLink(cmd.Context(), connect.NewRequest(createReq))
+			link, err := cl.ShadowLinkService().CreateShadowLink(cmd.Context(), connect.NewRequest(&adminv2.CreateShadowLinkRequest{
+				ShadowLink: shadowLinkConfigToProto(slCfg),
+			}))
 			out.MaybeDie(err, "unable to create shadow link: %v", err)
 
 			fmt.Printf("Successfully created shadow link %q with ID %q. To query the status, run:\n  'rpk shadow status %[1]v'\n", link.Msg.GetShadowLink().GetName(), link.Msg.GetShadowLink().GetUid())

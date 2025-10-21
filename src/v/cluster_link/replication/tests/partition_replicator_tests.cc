@@ -10,6 +10,7 @@
 
 #include "base/units.h"
 #include "cluster_link/replication/partition_replicator.h"
+#include "cluster_link/replication/tests/deps_test_impl.h"
 #include "model/tests/random_batch.h"
 #include "ssx/future-util.h"
 #include "test_utils/async.h"
@@ -114,7 +115,7 @@ public:
       model::timeout_clock::duration duration,
       ss::abort_source&) final {
         if (_fail_replication) {
-            if (tests::random_bool()) {
+            if (::tests::random_bool()) {
                 throw std::runtime_error("Simulated replication failure");
             }
             result<raft::replicate_result> err{raft::errc::not_leader};
@@ -153,10 +154,15 @@ public:
     ss::future<> SetUpAsync() override {
         auto source = std::make_unique<test_data_source>();
         auto sink = std::make_unique<test_data_sink>();
+        _config_provider = std::make_unique<tests::test_config_provider>();
         _source = source.get();
         _sink = sink.get();
         _replicator = std::make_unique<partition_replicator>(
-          _ntp, model::term_id(0), std::move(source), std::move(sink));
+          _ntp,
+          model::term_id(0),
+          *_config_provider,
+          std::move(source),
+          std::move(sink));
         return _replicator->start();
     }
 
@@ -173,6 +179,9 @@ protected:
     test_data_sink* _sink;
     std::unique_ptr<partition_replicator> _replicator;
     model::ntp _ntp{"kafka", "test", 0};
+
+private:
+    std::unique_ptr<link_configuration_provider> _config_provider;
 };
 
 TEST_F_CORO(PartitionReplicatorFixture, TestHappyPath) {
@@ -219,7 +228,7 @@ TEST_F_CORO(PartitionReplicatorFixture, TestMemoryExhaustion) {
     // fetches should be blocked at this point
     auto num_fetches = _source->num_fetches();
     ASSERT_THROW_CORO(
-      co_await tests::cooperative_spin_wait_with_timeout(
+      co_await ::tests::cooperative_spin_wait_with_timeout(
         3s, [&] { return _source->num_fetches() > num_fetches; }),
       ss::timed_out_error);
 

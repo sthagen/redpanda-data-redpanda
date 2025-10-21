@@ -47,7 +47,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.65.0
 	github.com/redpanda-data/common-go/proto v0.0.0-20250820120127-9b518fca5ecf
-	github.com/redpanda-data/common-go/rpadmin v0.1.17-0.20251001175055-902a29f7fa07
+	github.com/redpanda-data/common-go/rpadmin v0.1.17-0.20251014175421-41be4739ddaa
 	github.com/redpanda-data/common-go/rpsr v0.1.2
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250812151819-7e5d5fef8241
 	github.com/rs/xid v1.6.0
@@ -73,7 +73,7 @@ require (
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.35.0
 	golang.org/x/term v0.34.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251007200510-49b9836ed3ff
 	google.golang.org/protobuf v1.36.10
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -166,7 +166,7 @@ require (
 	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	google.golang.org/genproto v0.0.0-20250409194420-de1ac958c67a // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20251002232023-7c0ddcbb5797 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251014184007-4626949a642f // indirect
 	google.golang.org/grpc v1.73.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

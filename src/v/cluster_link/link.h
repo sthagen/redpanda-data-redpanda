@@ -35,6 +35,7 @@ public:
       ss::lowres_clock::duration task_reconciler_interval,
       model::metadata config,
       std::unique_ptr<kafka::client::cluster> cluster_connection,
+      std::unique_ptr<replication::link_configuration_provider>,
       std::unique_ptr<replication::data_source_factory>,
       std::unique_ptr<replication::data_sink_factory>);
     link(const link&) = delete;

@@ -187,3 +187,11 @@ TEST_F_CORO(ClusterEpochService, CacheInvalidation) {
     EXPECT_THAT(co_await all_epochs(), ElementsAre(2, 2));
     EXPECT_EQ(accesses, 2);
 }
+
+TEST_F_CORO(ClusterEpochService, InjectedError) {
+    using ::testing::ElementsAre;
+    ++cluster_epoch;
+    ++injected_failure_count;
+    EXPECT_ANY_THROW(
+      co_await ss::smp::submit_to(1, [this] { return get_cached_epoch(); }));
+}

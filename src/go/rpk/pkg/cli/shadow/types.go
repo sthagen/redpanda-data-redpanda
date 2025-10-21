@@ -17,7 +17,7 @@ import (
 
 type ShadowLinkConfig struct {
 	// Name is the name of the shadow link
-	Name string
+	Name string `json:"name" yaml:"name"`
 	// Configuration for the internal kafka client
 	ClientOptions *ShadowLinkClientOptions `json:"client_options,omitempty" yaml:"client_options,omitempty"`
 	// Topic metadata sync options

@@ -10,6 +10,7 @@
 #include "bytes/iobuf_parser.h"
 #include "gtest/gtest.h"
 #include "iceberg/avro_decimal.h"
+#include "iceberg/conversion/avro_utils.h"
 #include "iceberg/conversion/schema_avro.h"
 #include "iceberg/conversion/values_avro.h"
 #include "iceberg/datatypes.h"
@@ -33,6 +34,7 @@ static constexpr auto tl_array = R"J({ "type" : "array", "items" : "int" })J";
 
 static constexpr auto tl_map = R"J({"type": "map","values": {"type":"int"}})J";
 static constexpr auto tl_union = R"J([ "int" , "long" , "float" ])J";
+static constexpr auto tl_optional = R"J([ "null", "long" ])J";
 avro::NodePtr load_json_schema(std::string_view sch) {
     return avro::compileJsonSchemaFromString(std::string(sch)).root();
 }
@@ -99,6 +101,9 @@ TEST(AvroSchema, TestNonRecordSchema) {
         0, "union_opt_2", iceberg::field_required::no, iceberg::float_type{}));
 
     tl_type_expectations.emplace_back("root", tl_union, std::move(union_st));
+
+    tl_type_expectations.emplace_back(
+      "root", tl_optional, iceberg::long_type{});
 
     for (auto& [name, schema, type] : tl_type_expectations) {
         auto root = load_json_schema(schema);
@@ -190,7 +195,7 @@ constexpr auto big_record = R"J(
             ]
         },
         {
-            "name": "anotherunion",
+            "name": "optional_bytes",
             "type": [
                 "bytes",
                 "null"
@@ -323,14 +328,9 @@ TEST(AvroSchema, TestRecordType) {
 
     ASSERT_TRUE(
       field_matches(struct_t.fields[6], "myunion", std::move(union_struct)));
-    iceberg::struct_type another_union_struct;
-
-    another_union_struct.fields.push_back(
-      iceberg::nested_field::create(
-        0, "union_opt_0", iceberg::field_required::no, iceberg::binary_type{}));
 
     ASSERT_TRUE(field_matches(
-      struct_t.fields[7], "anotherunion", std::move(another_union_struct)));
+      struct_t.fields[7], "optional_bytes", iceberg::binary_type{}));
 
     ASSERT_TRUE(
       field_matches(struct_t.fields[8], "mybool", iceberg::boolean_type{}));
@@ -756,14 +756,19 @@ AssertionResult primitive_equal(
 }
 
 AssertionResult value_matches(
-  const avro::GenericDatum& datum, const iceberg::value& value, bool is_union);
+  const avro::GenericDatum& datum,
+  const iceberg::value& value,
+  bool is_union,
+  const iceberg::field_type& iceberg_schema);
 
 AssertionResult value_matches(
   const avro::GenericDatum& datum,
   const std::optional<iceberg::value>& optional_val,
-  bool is_union) {
+  bool is_union,
+  const iceberg::field_type& iceberg_schema) {
     if (optional_val) {
-        return value_matches(datum, optional_val.value(), is_union);
+        return value_matches(
+          datum, optional_val.value(), is_union, iceberg_schema);
     }
     if (datum.type() != avro::AVRO_NULL) {
         return AssertionFailure() << "Empty optional must be represented as "
@@ -790,8 +795,13 @@ std::vector<uint8_t> decimal_to_vector(absl::int128 decimal) {
  * Check if avro generic datum matches iceberg value
  */
 AssertionResult value_matches(
-  const avro::GenericDatum& datum, const iceberg::value& value, bool is_union) {
-    if (is_union) {
+  const avro::GenericDatum& datum,
+  const iceberg::value& value,
+  bool is_union,
+  const iceberg::field_type& iceberg_schema) {
+    if (
+      is_union
+      && std::holds_alternative<iceberg::struct_type>(iceberg_schema)) {
         if (!std::holds_alternative<std::unique_ptr<iceberg::struct_value>>(
               value)) {
             return AssertionFailure() << fmt::format(
@@ -800,6 +810,7 @@ AssertionResult value_matches(
 
         auto& struct_v = std::get<std::unique_ptr<iceberg::struct_value>>(
           value);
+        auto& struct_s = std::get<iceberg::struct_type>(iceberg_schema);
         if (datum.type() == avro::AVRO_NULL) {
             auto all_empty = std::ranges::all_of(
               struct_v->fields,
@@ -818,7 +829,8 @@ AssertionResult value_matches(
           struct_v->fields, [](const std::optional<iceberg::value>& field) {
               return field.has_value();
           });
-        return value_matches(datum, *field, false);
+        auto i = std::distance(struct_v->fields.begin(), field);
+        return value_matches(datum, *field, false, struct_s.fields[i]->type);
     }
     switch (datum.type()) {
     case avro::AVRO_STRING:
@@ -976,6 +988,7 @@ AssertionResult value_matches(
         }
         auto& record_v = std::get<std::unique_ptr<iceberg::struct_value>>(
           value);
+        auto& record_s = std::get<iceberg::struct_type>(iceberg_schema);
         // since the nulls are skipped in iceberg schema the field count in
         // record_value is always greater than or equal to the field count in
         // avro record
@@ -995,7 +1008,8 @@ AssertionResult value_matches(
             auto r = value_matches(
               avro_field,
               record_v->fields.at(i - null_count),
-              avro_field.isUnion());
+              avro_field.isUnion(),
+              record_s.fields[i - null_count]->type);
             if (!r) {
                 return AssertionFailure() << "Record field value mismatch at "
                                           << i << " - " << r.message();
@@ -1033,6 +1047,7 @@ AssertionResult value_matches(
                    << fmt::format("Expected value {} to be a list", value);
         }
         auto& list = std::get<std::unique_ptr<iceberg::list_value>>(value);
+        auto& list_s = std::get<iceberg::list_type>(iceberg_schema);
         if (avro_array.value().size() != list->elements.size()) {
             return AssertionFailure() << fmt::format(
                      "Array size mismatch {} != {}",
@@ -1043,7 +1058,8 @@ AssertionResult value_matches(
             auto r = value_matches(
               avro_array.value()[i],
               list->elements[i],
-              avro_array.value()[i].isUnion());
+              avro_array.value()[i].isUnion(),
+              list_s.element_field->type);
             if (!r) {
                 return AssertionFailure()
                        << "Array element mismatch - " << r.message();
@@ -1060,6 +1076,7 @@ AssertionResult value_matches(
                    << fmt::format("Expected value {} to be a map", value);
         }
         auto& map_v = std::get<std::unique_ptr<iceberg::map_value>>(value);
+        auto& map_s = std::get<iceberg::map_type>(iceberg_schema);
         if (avro_map.value().size() != map_v->kvs.size()) {
             return AssertionFailure() << fmt::format(
                      "Map size mismatch {} != {}",
@@ -1088,7 +1105,10 @@ AssertionResult value_matches(
               parser.read_string(key_value.val.size_bytes()), avro_kv.first);
 
             auto r = value_matches(
-              avro_kv.second, kv.val, avro_kv.second.isUnion());
+              avro_kv.second,
+              kv.val,
+              avro_kv.second.isUnion(),
+              map_s.value_field->type);
             if (!r) {
                 return AssertionFailure()
                        << "Map value mismatch - " << r.message();
@@ -1149,6 +1169,7 @@ std::unordered_map<std::string_view, std::string_view> test_cases{
   {"tl_array", tl_array},
   {"tl_map", tl_map},
   {"tl_union", tl_union},
+  {"tl_optional", tl_optional},
   {"big_record", big_record},
   {"logical_types", logical_types}};
 
@@ -1157,8 +1178,8 @@ TEST_P(AvroValueTest, RoundtripTest) {
     for (int i = 0; i < 100; ++i) {
         auto [value_result, schema_result, datum] = prepare_avro_test(
           test_cases[test_case_key]);
-        ASSERT_TRUE(value_result.has_value());
-        ASSERT_TRUE(schema_result.has_value());
+        ASSERT_TRUE(value_result.has_value()) << value_result.error().what();
+        ASSERT_TRUE(schema_result.has_value()) << schema_result.error().what();
         auto& iceberg_value = value_result.value();
         auto& iceberg_schema = schema_result.value();
 
@@ -1172,11 +1193,16 @@ TEST_P(AvroValueTest, RoundtripTest) {
             auto& struct_value
               = std::get<std::unique_ptr<iceberg::struct_value>>(iceberg_value);
 
+            auto& struct_schema = std::get<iceberg::struct_type>(
+              iceberg_schema);
             ASSERT_TRUE(value_matches(
-              datum, struct_value->fields[0].value(), datum.isUnion()));
+              datum,
+              struct_value->fields[0],
+              datum.isUnion(),
+              struct_schema.fields[0]->type));
         } else {
-            ASSERT_TRUE(
-              value_matches(datum, value_result.value(), datum.isUnion()));
+            ASSERT_TRUE(value_matches(
+              datum, value_result.value(), datum.isUnion(), iceberg_schema));
         }
     }
 }
@@ -1192,5 +1218,54 @@ INSTANTIATE_TEST_SUITE_P(
     "tl_array",
     "tl_map",
     "tl_union",
+    "tl_optional",
     "big_record",
     "logical_types"));
+
+struct maybe_optional_test_case {
+    std::string_view schema;
+    std::optional<avro::Type> expected;
+};
+
+struct MaybeOptionalTest
+  : ::testing::TestWithParam<maybe_optional_test_case> {};
+
+TEST_P(MaybeOptionalTest, DetectOptionalTest) {
+    auto [schema, expected] = GetParam();
+
+    auto root = load_json_schema(schema);
+    ASSERT_NE(root, nullptr);
+
+    auto opt = iceberg::maybe_flatten_union(root);
+    if (!expected.has_value()) {
+        ASSERT_FALSE(opt.has_value());
+    } else {
+        ASSERT_EQ(opt.value()->type(), expected);
+    }
+}
+
+using tc = maybe_optional_test_case;
+INSTANTIATE_TEST_SUITE_P(
+  DetectOptionalTest,
+  MaybeOptionalTest,
+  Values(
+    tc{
+      .schema = R"J([ "null", {"type": "array", "items": "int" } ])J",
+      .expected = avro::AVRO_ARRAY,
+    },
+    tc{
+      .schema = R"J([ "long", "null" ])J",
+      .expected = avro::AVRO_LONG,
+    },
+    tc{
+      .schema = R"J([ "long", "int" ])J",
+      .expected = std::nullopt,
+    },
+    tc{
+      .schema = R"J([ "long", "int", "null" ])J",
+      .expected = std::nullopt,
+    },
+    tc{
+      .schema = R"J({"type": "long"})J",
+      .expected = std::nullopt,
+    }));

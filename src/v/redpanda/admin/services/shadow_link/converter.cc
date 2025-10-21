@@ -14,6 +14,7 @@
 #include "cluster_link/model/types.h"
 
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 
 using namespace std::chrono_literals;
@@ -42,6 +43,8 @@ using proto::admin::tls_file_settings;
 using proto::admin::tls_settings;
 using proto::admin::tlspem_settings;
 using proto::admin::topic_metadata_sync_options;
+using proto::admin::topic_metadata_sync_options_earliest_offset;
+using proto::admin::topic_metadata_sync_options_latest_offset;
 using proto::admin::topic_partition_information;
 using proto::admin::update_shadow_link_request;
 namespace {
@@ -132,6 +135,18 @@ create_topic_metadata_mirroring_config(
         config.topic_properties_to_mirror,
         config.topic_properties_to_mirror.end()));
     config.exclude_default = options.get_exclude_default();
+
+    options.visit_start_offset(
+      [&config](std::monostate) { config.starting_offset = std::nullopt; },
+      [&config](const topic_metadata_sync_options_earliest_offset&) {
+          config.starting_offset = cluster_link::model::earliest_offset_ts;
+      },
+      [&config](const topic_metadata_sync_options_latest_offset&) {
+          config.starting_offset = cluster_link::model::latest_offset_ts;
+      },
+      [&config](absl::Time t) {
+          config.starting_offset = model::timestamp(absl::ToUnixMillis(t));
+      });
 
     return config;
 }
@@ -806,6 +821,25 @@ security_settings_sync_options create_security_settings_sync_options(
     return options;
 }
 
+void starting_offset_to_proto(
+  std::optional<model::timestamp> ts, topic_metadata_sync_options& options) {
+    if (!ts.has_value()) {
+        return;
+    }
+
+    if (*ts == cluster_link::model::earliest_offset_ts) {
+        options.set_earliest(topic_metadata_sync_options_earliest_offset{});
+        return;
+    }
+
+    if (*ts == cluster_link::model::latest_offset_ts) {
+        options.set_latest(topic_metadata_sync_options_latest_offset{});
+        return;
+    }
+
+    options.set_timestamp(absl::FromUnixMillis(ts.value()()));
+}
+
 topic_metadata_sync_options create_topic_metadata_sync_options(
   const cluster_link::model::topic_metadata_mirroring_config& cfg) {
     topic_metadata_sync_options options;
@@ -825,6 +859,8 @@ topic_metadata_sync_options create_topic_metadata_sync_options(
 
     options.set_synced_shadow_topic_properties(std::move(mirrored_properties));
     options.set_exclude_default(cfg.exclude_default);
+
+    starting_offset_to_proto(cfg.starting_offset, options);
 
     return options;
 }

@@ -13,14 +13,34 @@ redpanda_test_cc_library(
 )
 
 proto_library(
+    name = "unsupported_rp_type_proto",
+    srcs = ["testdata/unsupported_rp_type.proto"],
+    import_prefix = "testdata",
+    strip_import_prefix = "testdata",
+)
+
+cc_proto_library(
+    name = "unsupported_rp_type_cc_proto",
+    deps = [":unsupported_rp_type_proto"],
+)
+
+cc_proto_library(
+    name = "date_cc_proto",
+    deps = ["//proto/redpanda/datalake:date_proto"],
+)
+
+proto_library(
     name = "person_proto",
     srcs = ["testdata/person.proto"],
+    deps = ["//proto/redpanda/datalake:date_proto"],
 )
 
 proto_library(
     name = "complex_proto",
     srcs = ["testdata/complex.proto"],
     deps = [
+        ":unsupported_rp_type_proto",
+        "//proto/redpanda/datalake:date_proto",
         "@protobuf//:struct_proto",
         "@protobuf//:timestamp_proto",
     ],
@@ -89,6 +109,7 @@ redpanda_cc_gtest(
         "//src/v/bytes:iobuf_parser",
         "//src/v/iceberg:avro_decimal",
         "//src/v/iceberg:datatypes",
+        "//src/v/iceberg/conversion:avro_utils",
         "//src/v/iceberg/conversion:schema_avro",
         "//src/v/iceberg/conversion:values_avro",
         "//src/v/serde/avro/tests:data_generator",

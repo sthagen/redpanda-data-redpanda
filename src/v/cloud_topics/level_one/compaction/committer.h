@@ -25,7 +25,9 @@ namespace cloud_topics::l1 {
 // metastore and uploading new data to cloud storage.
 class compaction_committer {
 public:
-    compaction_committer(std::unique_ptr<committing_policy>, metastore*, io*);
+    compaction_committer(std::unique_ptr<committing_policy>, io*, metastore*);
+
+    ss::future<> start();
 
     // Shuts down concurrency primitives, thereby stopping the backgrounded
     // committing loop.
@@ -75,11 +77,11 @@ private:
     ss::abort_source _as;
     ss::gate _gate;
 
-    // Commits of newly compacted objects go to the `metastore`.
-    [[maybe_unused]] metastore* _metastore;
-
     // Newly compacted objects are uploaded using `io`.
     [[maybe_unused]] io* _io;
+
+    // Commits of newly compacted objects go to the `metastore`.
+    [[maybe_unused]] metastore* _metastore;
 };
 
 } // namespace cloud_topics::l1

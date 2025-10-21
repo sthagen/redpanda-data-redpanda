@@ -90,3 +90,67 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_test_cc_library(
+    name = "scheduler_fixture",
+    hdrs = [
+        "scheduler_fixture.h",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/compaction:committer",
+        "//src/v/cloud_topics/level_one/compaction:committing_policy",
+        "//src/v/cloud_topics/level_one/compaction:log_info_collector",
+        "//src/v/cloud_topics/level_one/compaction:scheduler",
+        "//src/v/cloud_topics/level_one/compaction:scheduling_policies",
+        "//src/v/cloud_topics/level_one/compaction:worker",
+        "//src/v/cloud_topics/level_one/frontend_reader/tests:l1_reader_fixture",
+        "//src/v/cluster",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/random:generators",
+        "//src/v/storage/tests:batch_generators",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "scheduler_test",
+    timeout = "short",
+    srcs = [
+        "scheduler_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":scheduler_fixture",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/random:generators",
+        "//src/v/storage/tests:batch_generators",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "scheduler_multithread_test",
+    timeout = "short",
+    srcs = [
+        "scheduler_multithread_test.cc",
+    ],
+    cpu = 8,
+    deps = [
+        ":scheduler_fixture",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/random:generators",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@googletest//:gtest",
+    ],
+)

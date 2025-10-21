@@ -11,10 +11,17 @@
 #pragma once
 
 #include "cluster_link/replication/deps.h"
+#include "cluster_link/replication/link_replication_mgr.h"
 
 #include <seastar/core/gate.hh>
 
 namespace cluster_link::replication::tests {
+
+class test_config_provider : public link_configuration_provider {
+public:
+    ss::future<kafka::offset>
+    start_offset(const ::model::ntp&, ss::abort_source&) override;
+};
 
 class accounting_sink : public data_sink {
 public:

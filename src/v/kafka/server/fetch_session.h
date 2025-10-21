@@ -39,6 +39,7 @@ struct fetch_session_partition {
       const fetch_request::partition& p)
       : topic_partition(id, tp, p.partition)
       , max_bytes(p.partition_max_bytes)
+      , start_offset(p.log_start_offset)
       , fetch_offset(p.fetch_offset)
       , high_watermark(model::offset(-1))
       , last_stable_offset(model::offset(-1))

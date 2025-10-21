@@ -13,6 +13,7 @@ go_library(
         "shadow.go",
         "status.go",
         "types.go",
+        "update.go",
     ],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/shadow",
     visibility = ["//visibility:public"],

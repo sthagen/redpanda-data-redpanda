@@ -752,6 +752,24 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "fetch_metadata_cache_test",
+    timeout = "short",
+    srcs = [
+        "fetch_metadata_cache_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/base",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_btest(
     name = "fetch_test",
     timeout = "short",

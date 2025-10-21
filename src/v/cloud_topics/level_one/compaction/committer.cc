@@ -17,11 +17,14 @@
 namespace cloud_topics::l1 {
 
 compaction_committer::compaction_committer(
-  std::unique_ptr<committing_policy> policy, metastore* metastore, io* io)
+  std::unique_ptr<committing_policy> policy, io* io, metastore* metastore)
   : _policy(std::move(policy))
-  , _metastore(metastore)
-  , _io(io) {
+  , _io(io)
+  , _metastore(metastore) {}
+
+ss::future<> compaction_committer::start() {
     start_bg_loop();
+    co_return;
 }
 
 void compaction_committer::start_bg_loop() {
@@ -43,7 +46,12 @@ void compaction_committer::start_bg_loop() {
 ss::future<> compaction_committer::stop() {
     _as.request_abort();
     _sem.broken();
-    co_await _gate.close();
+    auto close_fut = _gate.close();
+    auto updates = std::exchange(_updates, {});
+    for (auto& update : updates) {
+        co_await update.staging_file->remove();
+    }
+    co_await std::move(close_fut);
 }
 
 ss::future<> compaction_committer::committing_loop() {
@@ -90,11 +98,12 @@ compaction_committer::build_objects([[maybe_unused]] updates_t updates) {
     co_return ret;
 }
 
-ss::future<>
-compaction_committer::commit_some([[maybe_unused]] updates_t updates) {
+ss::future<> compaction_committer::commit_some(updates_t updates) {
     // auto objects_fut = co_await ss::coroutine::as_future(
     //   build_objects(std::move(updates)));
-
+    for (auto& update : updates) {
+        co_await update.staging_file->remove();
+    }
     co_return;
 }
 

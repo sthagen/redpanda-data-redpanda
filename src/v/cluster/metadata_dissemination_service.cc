@@ -182,10 +182,10 @@ ss::future<> metadata_dissemination_service::apply_leadership_notification(
       _bg, [this, ntp = std::move(ntp), lid, revision, term]() mutable {
           // update partition leaders
           vlog(clusterlog.trace, "updating {} leadership locally", ntp);
-          auto f = _leaders.invoke_on_all(
-            [ntp, lid, revision, term](partition_leaders_table& leaders) {
-                leaders.update_partition_leader(ntp, revision, term, lid);
-            });
+          auto f = _leaders.invoke_on_all([ntp, lid, revision, term](
+                                            partition_leaders_table& leaders) {
+              return leaders.update_partition_leader(ntp, revision, term, lid);
+          });
           if (lid == _self.id()) {
               // only disseminate from current leader
               f = f.then(
@@ -263,10 +263,11 @@ ss::future<> metadata_dissemination_service::process_get_update_reply(
              [this](auto& reply) {
                  return _leaders.invoke_on_all(
                    [&reply](partition_leaders_table& leaders) {
-                       for (const auto& l : reply) {
-                           leaders.update_partition_leader(
-                             l.ntp, l.term, l.leader_id);
-                       }
+                       return ss::do_for_each(
+                         reply, [&leaders](const ntp_leader& l) {
+                             return leaders.update_partition_leader(
+                               l.ntp, l.term, l.leader_id);
+                         });
                    });
              })
       .then([&meta] { meta.success = true; });

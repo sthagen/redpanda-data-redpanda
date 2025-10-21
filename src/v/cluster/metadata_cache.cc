@@ -213,7 +213,9 @@ std::optional<model::node_id> metadata_cache::get_controller_leader_id() {
     return _leaders.local().get_leader(model::controller_ntp);
 }
 
-void metadata_cache::reset_leaders() { _leaders.local().reset(); }
+ss::future<> metadata_cache::reset_leaders() {
+    return _leaders.local().reset();
+}
 
 ss::future<> metadata_cache::refresh_health_monitor() {
     co_await _health_monitor.local().refresh_info();

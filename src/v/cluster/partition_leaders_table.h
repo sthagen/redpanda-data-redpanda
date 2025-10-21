@@ -21,6 +21,7 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "ssx/async_algorithm.h"
+#include "utils/mutex.h"
 #include "utils/named_type.h"
 
 #include <seastar/core/abort_source.hh>
@@ -39,23 +40,6 @@ private:
     using version = named_type<uint64_t, struct plt_version_tag>;
 
 public:
-    class concurrent_modification_error final : public std::exception {
-    public:
-        concurrent_modification_error(
-          version initial_version, version current_version)
-          : _msg(
-              ssx::sformat(
-                "Partition leaders table was modified during operation. "
-                "(initial_version: {}, current_version: {}) ",
-                initial_version,
-                current_version)) {}
-
-        const char* what() const noexcept final { return _msg.c_str(); }
-
-    private:
-        ss::sstring _msg;
-    };
-
     explicit partition_leaders_table(
       ss::sharded<topic_table>&, ss::sharded<ss::abort_source>&);
 
@@ -93,38 +77,33 @@ public:
       model::term_id term) {
         { f(tp_ns, pid, leader, term) } -> std::same_as<void>;
     }
-    ss::future<> for_each_leader(Func&& f) const {
-        auto version_snapshot = _version;
+    ss::future<> for_each_leader(Func&& f) {
+        auto holder = _gate.hold();
+        auto u = co_await _mutex.get_units();
         ssx::async_counter counter;
         for (auto& [tp_ns, partition_leaders] : _topic_leaders) {
             co_await ssx::async_for_each_counter(
               counter,
               partition_leaders.begin(),
               partition_leaders.end(),
-              [this, &tp_ns, version_snapshot, f = std::forward<Func>(f)](
+              [&tp_ns, f = std::forward<Func>(f)](
                 const partition_leaders::value_type& p) mutable {
-                  /**
-                   * Modification validation must happen before accessing the
-                   * element as previous iteration might have yield
-                   */
-                  throw_if_modified(version_snapshot);
                   f(tp_ns,
                     model::partition_id(p.first),
                     p.second.current_leader,
                     p.second.update_term);
               });
-            throw_if_modified(version_snapshot);
         }
     }
 
-    void remove_leader(const model::ntp&, model::revision_id);
+    ss::future<> remove_leader(const model::ntp&, model::revision_id);
 
-    void reset();
+    ss::future<> reset();
 
-    void update_partition_leader(
+    ss::future<> update_partition_leader(
       const model::ntp&, model::term_id, std::optional<model::node_id>);
 
-    void update_partition_leader(
+    ss::future<> update_partition_leader(
       const model::ntp&,
       model::revision_id,
       model::term_id,
@@ -157,7 +136,7 @@ public:
      *
      * @throws if the set of leaders changes during iteration.
      */
-    ss::future<leaders_info_t> get_leaders() const;
+    ss::future<leaders_info_t> get_leaders();
 
     uint64_t leaderless_partition_count() const {
         return _leaderless_partition_count;
@@ -209,12 +188,6 @@ private:
     std::optional<std::reference_wrapper<const leader_meta>>
       find_leader_meta(model::topic_namespace_view, model::partition_id) const;
 
-    void throw_if_modified(version current_version) const {
-        if (unlikely(current_version != _version)) {
-            throw concurrent_modification_error(current_version, _version);
-        }
-    }
-
     void do_update_partition_leader(
       bool is_controller,
       topics_t::iterator,
@@ -231,11 +204,10 @@ private:
 
     ntp_callbacks<leader_change_cb_t> _watchers;
     /**
-     * Store version to check for concurrent updates, when version was
-     * incremented while iterating over the list of leaders
+     * Store version to check for concurrent updates
      */
-    version _version{0};
     version _topic_map_version{0};
+    mutex _mutex{"leaders_table/state"};
     ss::gate _gate;
     ss::abort_source& _as;
 };

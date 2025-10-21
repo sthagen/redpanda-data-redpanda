@@ -79,6 +79,7 @@ link::link(
   ss::lowres_clock::duration task_reconciler_interval,
   model::metadata config,
   std::unique_ptr<kafka::client::cluster> cluster_connection,
+  std::unique_ptr<replication::link_configuration_provider> config_provider,
   std::unique_ptr<replication::data_source_factory> data_source_factory,
   std::unique_ptr<replication::data_sink_factory> data_sink_factory)
   : _self(self)
@@ -88,6 +89,7 @@ link::link(
   , _cluster_connection(std::move(cluster_connection))
   , _replication_mgr(
       _manager->scheduling_group(),
+      std::move(config_provider),
       std::move(data_source_factory),
       std::move(data_sink_factory))
   , _task_reconciler_interval(task_reconciler_interval) {}

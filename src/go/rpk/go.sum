@@ -251,8 +251,8 @@ github.com/redpanda-data/common-go/net v0.1.0 h1:JnJioRJuL961r1QXiJQ1tW9+yEaJfu8
 github.com/redpanda-data/common-go/net v0.1.0/go.mod h1:iOdNkjxM7a1T8F3cYHTaKIPFCHzzp/ia6TN+Z+7Tt5w=
 github.com/redpanda-data/common-go/proto v0.0.0-20250820120127-9b518fca5ecf h1:Oe0Sc3+/37Xgdpze7klkWyvB6eAt/nuUhrn93Rd4ESA=
 github.com/redpanda-data/common-go/proto v0.0.0-20250820120127-9b518fca5ecf/go.mod h1:GMoRcdMz6CIpr+8vKrSJvr8fJDlojETRV45BD6A0DvU=
-github.com/redpanda-data/common-go/rpadmin v0.1.17-0.20251001175055-902a29f7fa07 h1:k/+Hy9oRYvcJZsny5THNefxylUe9OjwhPD4F1+nAhqQ=
-github.com/redpanda-data/common-go/rpadmin v0.1.17-0.20251001175055-902a29f7fa07/go.mod h1:9l5bznk8s0JnwnbvC70pQMaLERhqlTrpOzxhv3tF8J4=
+github.com/redpanda-data/common-go/rpadmin v0.1.17-0.20251014175421-41be4739ddaa h1:WjYobfeDbXDMk9vtWE9duGJpHBB5vTqg5ByEeyGv2cM=
+github.com/redpanda-data/common-go/rpadmin v0.1.17-0.20251014175421-41be4739ddaa/go.mod h1:GXYT3f4rjuPgPmzGdtlBWULI82GEd6mA8fr05SM5s3I=
 github.com/redpanda-data/common-go/rpsr v0.1.2 h1:DThUeyfBH8fkL9WoP1sEbRhT2NVV22zmsTpcCtzfusQ=
 github.com/redpanda-data/common-go/rpsr v0.1.2/go.mod h1:2j2416onosg5FKaKz52NooRE+q/9EJqQn0kyTcTXWHc=
 github.com/redpanda-data/go-avro/v2 v2.0.0-20240405204525-77b1144dc525 h1:vskZrV6q8W8flL0Ud23AJUYAd8ZgTadO45+loFnG2G0=
@@ -448,10 +448,10 @@ golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8T
 golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 google.golang.org/genproto v0.0.0-20250409194420-de1ac958c67a h1:AoyioNVZR+nS6zbvnvW5rjQdeQu7/BWwIT7YI8Gq5wU=
 google.golang.org/genproto v0.0.0-20250409194420-de1ac958c67a/go.mod h1:qD4k1RhYfNmRjqaHJxKLG/HRtqbXVclhjop2mPlxGwA=
-google.golang.org/genproto/googleapis/api v0.0.0-20251002232023-7c0ddcbb5797 h1:D/zZ8knc/wLq9imidPFpHsGuRUYTCWWCwemZ2dxACGs=
-google.golang.org/genproto/googleapis/api v0.0.0-20251002232023-7c0ddcbb5797/go.mod h1:NnuHhy+bxcg30o7FnVAZbXsPHUDQ9qKWAQKCD7VxFtk=
-google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9 h1:V1jCN2HBa8sySkR5vLcCSqJSTMv093Rw9EJefhQGP7M=
-google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9/go.mod h1:HSkG/KdJWusxU1F6CNrwNDjBMgisKxGnc5dAZfT0mjQ=
+google.golang.org/genproto/googleapis/api v0.0.0-20251014184007-4626949a642f h1:OiFuztEyBivVKDvguQJYWq1yDcfAHIID/FVrPR4oiI0=
+google.golang.org/genproto/googleapis/api v0.0.0-20251014184007-4626949a642f/go.mod h1:kprOiu9Tr0JYyD6DORrc4Hfyk3RFXqkQ3ctHEum3ZbM=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20251007200510-49b9836ed3ff h1:A90eA31Wq6HOMIQlLfzFwzqGKBTuaVztYu/g8sn+8Zc=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20251007200510-49b9836ed3ff/go.mod h1:7i2o+ce6H/6BluujYR+kqX3GKH+dChPTQU19wjRPiGk=
 google.golang.org/grpc v1.73.0 h1:VIWSmpI2MegBtTuFt5/JWy2oXxtjJ/e89Z70ImfD2ok=
 google.golang.org/grpc v1.73.0/go.mod h1:50sbHOUqWoCQGI8V2HQLJM0B+LMlIUjNSZmow7EVBQc=
 google.golang.org/protobuf v1.36.10 h1:AYd7cD/uASjIL6Q9LiTjz8JLcrh/88q5UObnmY3aOOE=

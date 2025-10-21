@@ -816,7 +816,7 @@ class RpkTool:
             )
 
     def describe_topic(
-        self, topic: str, tolerant: bool = False
+        self, topic: str, tolerant: bool = False, timeout: int | None = None
     ) -> Iterator[RpkPartition]:
         """
         By default this will omit any partitions which do not have full
@@ -838,7 +838,7 @@ class RpkTool:
             return None
 
         cmd = ["describe", topic, "-p"]
-        output = self._run_topic(cmd)
+        output = self._run_topic(cmd, timeout=timeout)
         table = parse_rpk_table(output)
 
         expected_columns = set(

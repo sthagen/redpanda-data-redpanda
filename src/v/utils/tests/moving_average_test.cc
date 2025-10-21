@@ -33,6 +33,23 @@ BOOST_AUTO_TEST_CASE(test_moving_average) {
 
     BOOST_REQUIRE_EQUAL(ma.get(), 5);
 }
+BOOST_AUTO_TEST_CASE(test_timed_moving_average_no_int_val) {
+    const auto eps = 0.001;
+    constexpr auto depth = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      1s);
+    constexpr auto resolution
+      = std::chrono::duration_cast<std::chrono::nanoseconds>(100ms);
+    timed_moving_average<double, ss::lowres_clock> ma(depth, resolution);
+    BOOST_REQUIRE(!ma.has_samples());
+    auto bt = ss::lowres_clock::now();
+    ma.update(0, bt);
+    BOOST_REQUIRE_CLOSE(ma.get(), 0, eps);
+    ma.update(1, bt + 100ms);
+    BOOST_REQUIRE_CLOSE(ma.get(), 0.5, eps);
+    // evict everything
+    ma.update(0, bt + 5s);
+    BOOST_REQUIRE_CLOSE(ma.get(), 0, eps);
+}
 
 BOOST_AUTO_TEST_CASE(test_timed_moving_average) {
     const auto eps = 0.001;

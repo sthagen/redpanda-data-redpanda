@@ -29,7 +29,13 @@ compaction_worker::compaction_worker(
   io* io,
   metastore* metastore,
   compaction_committer* committer)
-  : _worker_manager(worker_manager)
+  : _worker_update_queue([](const std::exception_ptr& ex) {
+      vlog(
+        compaction_log.error,
+        "Unexpected compaction worker update queue error: {}",
+        ex);
+  })
+  , _worker_manager(worker_manager)
   , _io(io)
   , _metastore(metastore)
   , _committer(committer) {}
@@ -42,9 +48,11 @@ ss::future<> compaction_worker::start() {
 ss::future<> compaction_worker::stop() {
     terminate_current_job();
     _worker_state = worker_state::stopped;
+    co_await _worker_update_queue.shutdown();
 
     _as.request_abort();
     _worker_cv.broken();
+
     auto close_fut = _gate.close();
 
     co_await clear_work_fut();
@@ -53,6 +61,9 @@ ss::future<> compaction_worker::stop() {
 }
 
 void compaction_worker::start_work_loop() {
+    vassert(
+      !_work_fut.has_value(),
+      "Cannot set value of _work_fut when it already has a value.");
     _work_fut = ssx::spawn_with_gate_then(
       _gate, [this]() { return work_loop(); });
 }
@@ -100,8 +111,8 @@ ss::future<> compaction_worker::work_loop() {
 
 ss::future<> compaction_worker::clear_work_fut() {
     if (_work_fut.has_value()) {
-        auto work_fut = std::exchange(_work_fut, std::nullopt);
-        co_await std::move(work_fut).value();
+        co_await std::move(_work_fut).value();
+        _work_fut.reset();
     }
 }
 
@@ -142,6 +153,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
     vlog(compaction_log.info, "Compacting CTP {}", tidp);
 
     _job_state = compaction_job_state::running;
+    _inflight_ntp = ntp;
 
     // Copy
     auto compaction_offsets = log->info_and_ts->info.offsets_response;
@@ -182,6 +194,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
     }
 
     _job_state = compaction_job_state::idle;
+    _inflight_ntp.reset();
 }
 
 ss::future<std::optional<foreign_log_compaction_meta_ptr>>
@@ -209,30 +222,65 @@ bool compaction_worker::is_active() const {
 }
 
 void compaction_worker::interrupt_current_job() {
+    if (_inflight_ntp.has_value()) {
+        vlog(
+          compaction_log.debug,
+          "Interrupting compaction job for CTP {}",
+          _inflight_ntp);
+    }
     _job_state = compaction_job_state::soft_stop;
 }
 
 void compaction_worker::terminate_current_job() {
+    if (_inflight_ntp.has_value()) {
+        vlog(
+          compaction_log.debug,
+          "Terminating compaction job for CTP {}",
+          _inflight_ntp);
+    }
     _job_state = compaction_job_state::hard_stop;
 }
 
 ss::future<> compaction_worker::pause_worker() {
+    ss::promise<> p;
+    _worker_update_queue.submit(
+      [&, this] { return do_pause_worker().finally([&] { p.set_value(); }); });
+    co_await p.get_future();
+}
+
+ss::future<> compaction_worker::do_pause_worker() {
     // If worker is `stopped`, we shouldn't be able to resume it. If it is
     // already `paused`, this is a no-op.
     if (_worker_state != worker_state::active) {
         co_return;
     }
 
+    vlog(
+      compaction_log.info,
+      "Pausing compaction worker on shard {}",
+      ss::this_shard_id());
+
     interrupt_current_job();
 
     _worker_state = worker_state::paused;
-
     // Signal `_worker_cv` in case work_loop is currently waiting.
     alert_worker();
     co_await clear_work_fut();
+
+    vlog(
+      compaction_log.info,
+      "Paused compaction worker on shard {}",
+      ss::this_shard_id());
 }
 
 ss::future<> compaction_worker::resume_worker() {
+    ss::promise<> p;
+    _worker_update_queue.submit(
+      [&, this] { return do_resume_worker().finally([&] { p.set_value(); }); });
+    co_await p.get_future();
+}
+
+ss::future<> compaction_worker::do_resume_worker() {
     // If worker is `stopped`, we shouldn't be able to resume it. If it is
     // already `active`, this is a no-op.
     if (_worker_state != worker_state::paused) {
@@ -242,6 +290,10 @@ ss::future<> compaction_worker::resume_worker() {
     // Set state back to active and start a new background loop.
     _worker_state = worker_state::active;
     start_work_loop();
+    vlog(
+      compaction_log.info,
+      "Resumed compaction worker on shard {}",
+      ss::this_shard_id());
 }
 
 void compaction_worker::alert_worker() { _worker_cv.signal(); }

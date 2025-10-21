@@ -1,5 +1,23 @@
 load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
+redpanda_test_cc_library(
+    name = "deps_test_impl",
+    srcs = [
+        "deps_test_impl.cc",
+    ],
+    hdrs = [
+        "deps_test_impl.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cluster_link/replication:deps",
+        "//src/v/cluster_link/replication:link_replication_mgr",
+        "//src/v/model/tests:random",
+        "//src/v/random:generators",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "partition_replicator_test",
     timeout = "short",
@@ -7,6 +25,7 @@ redpanda_cc_gtest(
         "partition_replicator_tests.cc",
     ],
     deps = [
+        ":deps_test_impl",
         "//src/v/base",
         "//src/v/cluster_link/replication:partition_replicator",
         "//src/v/model/tests:random",
@@ -70,22 +89,5 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",
-    ],
-)
-
-redpanda_test_cc_library(
-    name = "deps_test_impl",
-    srcs = [
-        "deps_test_impl.cc",
-    ],
-    hdrs = [
-        "deps_test_impl.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//src/v/cluster_link/replication:deps",
-        "//src/v/model/tests:random",
-        "//src/v/random:generators",
-        "@seastar",
     ],
 )

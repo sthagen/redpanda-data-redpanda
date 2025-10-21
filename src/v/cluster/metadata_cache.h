@@ -169,7 +169,7 @@ public:
     /// If present returns a leader of raft0 group
     std::optional<model::node_id> get_controller_leader_id();
 
-    void reset_leaders();
+    ss::future<> reset_leaders();
     ss::future<> refresh_health_monitor();
 
     /**

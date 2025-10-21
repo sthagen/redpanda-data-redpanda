@@ -663,7 +663,13 @@ void controller_backend::process_delta(const topic_table::ntp_delta& d) {
     // update partition_leaders_table if needed
 
     if (d.type == topic_table_ntp_delta_type::removed) {
-        _partition_leaders_table.local().remove_leader(d.ntp, d.revision);
+        ssx::spawn_with_gate(
+          _gate, [this, ntp = d.ntp, rev = d.revision] mutable {
+              return ss::do_with(std::move(ntp), [this, rev](const auto& ntp) {
+                  return _partition_leaders_table.local().remove_leader(
+                    ntp, rev);
+              });
+          });
     }
 
     // notify reconciliation fiber

@@ -320,6 +320,25 @@ message TopicMetadataSyncOptions {
     // If this is true, then only the properties listed in
     // `synced_shadow_topic_properties` will be synced.
     bool exclude_default = 4;
+    // Start at the earliest offset in the partition.
+    message EarliestOffset {}
+    // Start at the latest offset in the partition.
+    message LatestOffset {}
+    // The starting offset for new shadow topic partitions.
+    // Defaults to earliest.
+    // Only applies if the shadow partition is empty.
+    oneof start_offset {
+        // Enables data replication from the earliest offset
+        // on the source topic/partition.
+        EarliestOffset earliest = 5;
+        // Enables data replication from the latest offset
+        // on the source topic/partition.
+        LatestOffset latest = 6;
+        // Enables data replication from the first offset on the
+        // source topic/partition where the record's timestamp is
+        // at or after the specified timestamp.
+        google.protobuf.Timestamp timestamp = 7;
+    }
 }
 // Options for syncing consumer offsets
 message ConsumerOffsetSyncOptions {

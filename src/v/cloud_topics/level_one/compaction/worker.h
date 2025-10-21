@@ -16,6 +16,7 @@
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "compaction/key_offset_map.h"
+#include "ssx/work_queue.h"
 
 class WorkerManagerTestFixture;
 
@@ -66,17 +67,10 @@ public:
     // after this function is called.
     void terminate_current_job();
 
-    // Pauses the compaction worker by setting `_worker_state` to `paused` and
-    // waiting for the backgrounded `_work_fut` to complete. `_work_fut` is left
-    // as `std::nullopt` as a result of this function- no new compaction jobs
-    // will be processed until the worker is resumed. If `_worker_state` is not
-    // `active`, this function is a no-op.
+    // Submits a `do_pause_worker()` job to the `_worker_update_queue`.
     ss::future<> pause_worker();
 
-    // Resumes the compaction worker by setting `_worker_state` to `active` and
-    // launching a new backgrounded job held in `_work_fut`, allowing this
-    // worker to process new compaction jobs. If `_worker_state` is not
-    // `paused`, this function is a no-op.
+    // Submits a `do_resume_worker()` job to the `_worker_update_queue`.
     ss::future<> resume_worker();
 
     // Alert the worker that new work has become available by signalling
@@ -91,9 +85,22 @@ private:
     // The main compaction loop which waits for jobs to become available.
     ss::future<> work_loop();
 
-    // Waits for `_work_fut`'s future to resolve and clears its value. Leaves
-    // `_work_fut`'s value as `std::nullopt`.
+    // Waits for `_work_fut`'s future to resolve and clears its value (if it has
+    // one). Leaves `_work_fut`'s value as `std::nullopt`.
     ss::future<> clear_work_fut();
+
+    // Pauses the compaction worker by setting `_worker_state` to `paused` and
+    // waits for the backgrounded `_work_fut` to complete. `_work_fut` is left
+    // as `std::nullopt` as a result of this function- no new compaction jobs
+    // will be processed until the worker is resumed. If `_worker_state` is not
+    // `active`, this function is a no-op.
+    ss::future<> do_pause_worker();
+
+    // Resumes the compaction worker by setting `_worker_state` to `active` and
+    // launches a new backgrounded job held in `_work_fut`, allowing this worker
+    // to process new compaction jobs. If `_worker_state` is not `paused`, this
+    // function is a no-op.
+    ss::future<> do_resume_worker();
 
     // Requests a compaction of the provided CTP and its `compaction_offsets`
     // as obtained from the `metastore`.
@@ -142,9 +149,14 @@ private:
     //   compaction jobs.
     worker_state _worker_state{worker_state::active};
 
+    std::optional<model::ntp> _inflight_ntp;
+
     // If set, this is the active background loop for taking jobs from the
     // `_worker_manager` and compacting them.
     std::optional<ss::future<>> _work_fut;
+
+    // A queue which is used to linearize pause/resume requests of this worker.
+    ssx::work_queue _worker_update_queue;
 
     // The shard local key-offset map used for de-duplication during compaction.
     // This is lazily initialized when a compaction job is first ran on this

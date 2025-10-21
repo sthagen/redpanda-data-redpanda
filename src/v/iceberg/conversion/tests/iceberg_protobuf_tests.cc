@@ -219,6 +219,24 @@ TEST_CORO(SchemaProtobuf, TestMessageWithListValue) {
       field.fields, ElementsAre(IsField(1, "list_value_field", string_type{})));
 }
 
+TEST_CORO(SchemaProtobuf, TestMessageWithDate) {
+    auto d = StructWithDate::GetDescriptor();
+    auto result = iceberg::type_to_iceberg(*d);
+    ASSERT_FALSE_CORO(result.has_error());
+    auto field = std::move(result.value());
+    EXPECT_THAT(field.fields, ElementsAre(IsField(1, "date", date_type{})));
+}
+
+TEST_CORO(SchemaProtobuf, UnhandledRPType) {
+    auto d = StructWithUnsupportedRPType::GetDescriptor();
+    auto result = iceberg::type_to_iceberg(*d);
+    ASSERT_TRUE_CORO(result.has_error());
+    ASSERT_STREQ_CORO(
+      result.error().what(),
+      "Protocol buffer field .redpanda.datalake.Foo foo = 1;\n not supported - "
+      "unhandled redpanda.datalake type redpanda.datalake.Foo");
+}
+
 TEST_CORO(SchemaProtobuf, TestProtoTestMessages) {
     auto d = protobuf_test_messages::editions::TestAllTypesEdition2023::
       GetDescriptor();
@@ -717,6 +735,21 @@ TEST(values_protobuf, TestListValue) {
       std::get<iceberg::primitive_value>(struct_v->fields[0].value()));
 
     EXPECT_THAT(list_json, IsJSON(R"(["first", 2])"));
+}
+
+TEST(values_protobuf, TestDate) {
+    StructWithDate ts;
+    ts.mutable_date()->set_date(-19754);
+    auto result = serialize_and_convert(ts).get();
+    ASSERT_TRUE(result.has_value());
+    auto r_opt = std::move(result.value());
+    ASSERT_TRUE(r_opt.has_value());
+    auto struct_v = std::get<std::unique_ptr<iceberg::struct_value>>(
+      std::move(r_opt.value()));
+
+    ASSERT_THAT(
+      struct_v->fields,
+      ElementsAre(OptionalIcebergPrimitive<date_value>(-19754)));
 }
 
 TEST_CORO(values_protobuf, TestNotSupportedMessageType) {

@@ -115,6 +115,7 @@ using kafka::data::rpc::partition_leader_cache;
 using kafka::data::rpc::partition_manager;
 using kafka::data::rpc::topic_creator;
 using kafka::data::rpc::topic_metadata_cache;
+using config_provider = replication::link_configuration_provider;
 
 class link_registry_adapter : public link_registry {
 public:
@@ -472,8 +473,15 @@ public:
         // replicator start is triggered again on the new leader.
         if (_partition->term() == term) {
             ssx::spawn_with_gate(_gate, [this, term] {
+                vlog(
+                  cllog.warn,
+                  "[{}] Stepping down partition due to replicator failure in "
+                  "term "
+                  "{}",
+                  _partition->ntp(),
+                  term);
                 return _partition->raft()->step_down(
-                  fmt::format("Unable to start replicator in term: {}", term));
+                  "replicator_start_failure");
             });
         }
     }
@@ -524,6 +532,205 @@ make_default_data_sink(ss::lw_shared_ptr<cluster::partition> partition) {
     return std::make_unique<local_partition_sink>(std::move(partition));
 }
 
+class default_link_config_provider
+  : public replication::link_configuration_provider {
+public:
+    default_link_config_provider(
+      model::id_t link_id,
+      cluster_link::manager* mgr,
+      kafka::client::cluster& cluster)
+      : _link_id(link_id)
+      , _mgr(mgr)
+      , _cluster(cluster) {}
+    ss::future<kafka::offset>
+    start_offset(const ::model::ntp& ntp, ss::abort_source& as) override {
+        constexpr auto max_timeout = 2min;
+        constexpr auto backoff = 200ms;
+        retry_chain_node rcn(as, max_timeout, backoff);
+        while (true) {
+            auto permit = rcn.retry();
+            if (!permit.is_allowed) {
+                break;
+            }
+            auto ts_opt = get_start_offset_timestamp(ntp);
+            if (!ts_opt) {
+                // not a retryable error, the topic is not being mirrored
+                throw std::runtime_error(
+                  fmt::format("Topic {} not being mirrored", ntp));
+            }
+            try {
+                auto offset = co_await fetch_offset_for_timestamp(
+                  rcn, ntp.tp, *ts_opt);
+                if (offset) {
+                    co_return offset.value();
+                }
+                vlog(
+                  cllog.warn,
+                  "Failed to fetch offset for timestamp {} for {}, attempt: {}",
+                  *ts_opt,
+                  ntp,
+                  rcn.retry_count());
+            } catch (...) {
+                auto ex = std::current_exception();
+                auto log_level = ssx::is_shutdown_exception(ex)
+                                   ? ss::log_level::debug
+                                   : ss::log_level::warn;
+                vlogl(
+                  cllog,
+                  log_level,
+                  "Exception fetching offset for timestamp {} for {}, "
+                  "attempt: {}, error: {}",
+                  *ts_opt,
+                  ntp,
+                  rcn.retry_count(),
+                  ex);
+            }
+            co_await ss::sleep_abortable(permit.delay, *permit.abort_source);
+        }
+        throw std::runtime_error(
+          fmt::format(
+            "Failed to get starting offset for {}, retries exhausted", ntp));
+    }
+
+private:
+    ss::future<std::optional<kafka::offset>> fetch_offset_for_timestamp(
+      retry_chain_node& rcn,
+      const ::model::topic_partition& tp,
+      ::model::timestamp ts) {
+        auto api_version = co_await get_list_offset_api_version(rcn);
+        if (!api_version) {
+            vlog(cllog.warn, "Unable to determine ListOffset API version");
+            co_return std::nullopt;
+        }
+        auto leader_and_epoch = co_await get_leader_and_epoch_for_tp(rcn, tp);
+        if (!leader_and_epoch) {
+            vlog(cllog.warn, "[{}] No leader found for partition", tp);
+            co_return std::nullopt;
+        }
+        auto [leader_id, leader_epoch] = *leader_and_epoch;
+        kafka::list_offsets_request req;
+        req.data.replica_id = ::model::node_id{-1}; // normal consumer
+        req.data.isolation_level = 1;               // read committed only
+        req.data.topics.emplace_back(
+          kafka::list_offset_topic{
+            .name = tp.topic,
+            .partitions = {{
+              .partition_index = tp.partition,
+              .current_leader_epoch = leader_epoch,
+              .timestamp = ts,
+            }},
+          });
+
+        auto resp = co_await _cluster.dispatch_to(
+          leader_id, std::move(req), *api_version);
+        if (resp.data.topics.empty()) {
+            vlog(cllog.warn, "[{}] No topics in ListOffsets response", tp);
+            co_return std::nullopt;
+        }
+        auto& topic = resp.data.topics[0];
+        if (topic.name != tp.topic) {
+            vlog(
+              cllog.warn,
+              "[{}] Topic name mismatch in ListOffsets response: {}",
+              tp,
+              topic.name);
+            co_return std::nullopt;
+        }
+        if (topic.partitions.empty()) {
+            vlog(cllog.warn, "[{}] No partitions in ListOffsets response", tp);
+            co_return std::nullopt;
+        }
+        auto& partition = topic.partitions[0];
+        if (partition.partition_index != tp.partition) {
+            vlog(
+              cllog.warn,
+              "[{}] Partition index mismatch in ListOffsets response: {}",
+              tp,
+              partition.partition_index);
+            co_return std::nullopt;
+        }
+        if (partition.error_code != kafka::error_code::none) {
+            vlog(
+              cllog.warn,
+              "[{}] Error in ListOffsets response: {}",
+              tp,
+              partition.error_code);
+            co_return std::nullopt;
+        }
+        vlog(
+          cllog.debug,
+          "[{}] Fetched offset {} for timestamp {}",
+          tp,
+          partition.offset,
+          ts);
+        co_return partition.offset;
+    }
+
+    ss::future<std::optional<kafka::api_version>>
+    get_list_offset_api_version(retry_chain_node& rcn) {
+        rcn.check_abort();
+        auto supported_versions = co_await _cluster.supported_api_versions(
+          kafka::list_offsets_api::key);
+        if (!supported_versions) {
+            co_return std::nullopt;
+        }
+        if (
+          supported_versions.value().min > kafka::list_offsets_api::max_valid) {
+            co_return std::nullopt;
+        }
+        co_return std::min(
+          supported_versions.value().max, kafka::list_offsets_api::max_valid);
+    }
+
+    std::optional<std::tuple<::model::node_id, kafka::leader_epoch>>
+    do_get_leader_and_epoch_for_tp(const ::model::topic_partition& tp) {
+        const auto& topics = _cluster.get_topics().cache();
+        auto it = topics.find(tp.topic);
+        if (it == topics.end()) {
+            vlog(cllog.debug, "[{}] Topic not found in metadata", tp);
+            return std::nullopt;
+        }
+        auto pit = it->second.partitions.find(tp.partition);
+        if (pit == it->second.partitions.end()) {
+            vlog(cllog.debug, "[{}] Partition not found in metadata", tp);
+            return std::nullopt;
+        }
+        return std::make_tuple(pit->second.leader, pit->second.leader_epoch);
+    }
+
+    ss::future<std::optional<std::tuple<::model::node_id, kafka::leader_epoch>>>
+    get_leader_and_epoch_for_tp(
+      retry_chain_node& rcn, const ::model::topic_partition& tp) {
+        auto leader_and_epoch = do_get_leader_and_epoch_for_tp(tp);
+        if (leader_and_epoch) {
+            co_return leader_and_epoch;
+        }
+        // refresh metadata and try again
+        vlog(cllog.debug, "[{}] NTP has no leader, refreshing metadata", tp);
+        rcn.check_abort();
+        co_await _cluster.request_metadata_update();
+        co_return do_get_leader_and_epoch_for_tp(tp);
+    }
+
+    std::optional<::model::timestamp>
+    get_start_offset_timestamp(const ::model::ntp& ntp) {
+        auto link_md_opt = _mgr->registry()->find_link_by_id(_link_id);
+        if (!link_md_opt) {
+            return std::nullopt;
+        }
+        const auto& link_md = link_md_opt->get();
+        auto mirror_it = link_md.state.mirror_topics.find(ntp.tp.topic);
+        if (mirror_it == link_md.state.mirror_topics.end()) {
+            return std::nullopt;
+        }
+        return mirror_it->second.get_starting_offset_ts();
+    }
+
+    model::id_t _link_id;
+    cluster_link::manager* _mgr;
+    kafka::client::cluster& _cluster;
+};
+
 class default_link_factory : public link_factory {
 public:
     explicit default_link_factory(
@@ -541,6 +748,7 @@ public:
       model::metadata config,
       std::unique_ptr<kafka::client::cluster> cluster_connection) override {
         auto client_id = config.connection.client_id;
+        auto cluster = cluster_connection.get();
         return std::make_unique<link>(
           self,
           link_id,
@@ -548,6 +756,8 @@ public:
           link_reconciler_period,
           std::move(config),
           std::move(cluster_connection),
+          std::make_unique<default_link_config_provider>(
+            link_id, manager, *cluster),
           std::make_unique<remote_data_source_factory>(
             link_id,
             manager,
@@ -940,6 +1150,10 @@ service::node_local_shadow_topic_report(
         service& s,
         const ::cluster_link::model::id_t& link_id,
         const ::model::topic& topic) {
+          if (!s.container().local_is_initialized()) {
+              return rpc::shadow_topic_report_response{
+                .err_code = errc::service_not_ready};
+          }
           return s.shard_local_topic_report(link_id, topic);
       },
       link_id,
@@ -1081,6 +1295,10 @@ service::node_local_shadow_link_report(
     co_await container().map_reduce(
       reducer,
       [](service& s, const model::id_t& id) {
+          if (!s.container().local_is_initialized()) {
+              return rpc::shadow_link_status_report_response{
+                .err_code = errc::service_not_ready};
+          }
           return s.shard_local_shadow_link_report(id);
       },
       link_id);
@@ -1100,6 +1318,9 @@ service::node_local_shadow_link_report(
 
 rpc::shadow_link_status_report_response
 service::shard_local_shadow_link_report(model::id_t id) {
+    if (auto err = check_manager_state(); err != errc::success) {
+        return rpc::shadow_link_status_report_response{.err_code = err};
+    }
     rpc::shadow_link_status_report_response result;
     result.link_id = id;
 

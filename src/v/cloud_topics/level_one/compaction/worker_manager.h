@@ -23,6 +23,7 @@
 #include <seastar/core/sharded.hh>
 
 class WorkerManagerTestFixture;
+class SchedulerTestFixture;
 
 namespace cloud_topics::l1 {
 
@@ -86,6 +87,7 @@ public:
 
 private:
     friend class ::WorkerManagerTestFixture;
+    friend class ::SchedulerTestFixture;
 
     // Owned by `scheduler`.
     log_compaction_queue& _work_queue;

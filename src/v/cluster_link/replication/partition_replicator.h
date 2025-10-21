@@ -58,6 +58,7 @@ public:
     explicit partition_replicator(
       const ::model::ntp& ntp,
       ::model::term_id,
+      link_configuration_provider& config_provider,
       std::unique_ptr<data_source> source,
       std::unique_ptr<data_sink> sink,
       ss::scheduling_group sg = ss::default_scheduling_group());
@@ -86,7 +87,9 @@ private:
       ss::future<result<raft::replicate_result>>,
       ::model::offset begin,
       ::model::offset end) noexcept;
+    ::model::ntp _ntp;
     ::model::term_id _term;
+    link_configuration_provider& _config_provider;
     prefix_logger _log;
     ss::gate _gate;
     ss::abort_source _as;

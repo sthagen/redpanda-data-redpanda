@@ -65,6 +65,7 @@ public:
     using clock_t = Clock;
     using duration_t = typename Clock::duration;
     using timestamp_t = typename Clock::time_point;
+
     timed_moving_average(
       T initial_value,
       std::chrono::nanoseconds depth,
@@ -78,9 +79,27 @@ public:
           .value = initial_value, .num_samples = 1, .ix = _end};
     }
 
-    // Update moving average
-    // \note time should never go back
-    void update(T v, timestamp_t ts) noexcept {
+    timed_moving_average(
+      std::chrono::nanoseconds depth, std::chrono::nanoseconds resolution)
+      : _num_buckets(depth.count() / resolution.count())
+      , _resolution(resolution)
+      , _buckets(_num_buckets, bucket{})
+      , _end(_num_buckets) {
+        vassert(_num_buckets > 0, "Resolution is too small");
+    }
+
+    /**
+     * @brief Updates moving average. Note that timestamps shouldn't ever move
+     * backwards
+     *
+     * @param v The new sample to be added to the average
+     * @param ts The timestamp for when the sample occurred.
+     * @param num_samples If `v` contains more than one sample indicate how many
+     * here. Note that this must be greater than 0.
+     */
+    void update(T v, timestamp_t ts, size_t num_samples = 1) noexcept {
+        vassert(
+          num_samples > 0, "at least one sample needs to be in the update");
         // NOTE: we have to add num_buckets to the value to avoid
         // overflow.
         auto end = normalize(ts) + normalized_timestamp_t(_num_buckets);
@@ -93,14 +112,18 @@ public:
         auto& bucket = _buckets[index(end)];
         if (bucket.ix == _end) {
             bucket.value += v;
-            bucket.num_samples += 1;
+            bucket.num_samples += num_samples;
         } else {
             bucket.ix = _end;
             bucket.value = v;
-            bucket.num_samples = 1;
+            bucket.num_samples = num_samples;
         }
     }
 
+    /**
+     * @brief Returns the current average. Note that at least one sample needs
+     * to be added to the average before calling this method.
+     */
     T get() const noexcept {
         T running_sum{};
         size_t num_samples = 0;
@@ -117,6 +140,21 @@ public:
         return running_sum / num_samples;
     }
 
+    /**
+     * @brief Returns whether any samples have been added to this average.
+     */
+    bool has_samples() const noexcept {
+        // The only time the average won't have any samples is between when it
+        // was created without an initial value and when the first update
+        // occurs. Hence that is the only case that is checked here.
+        const auto& b = _buckets[index(_end)];
+        if (b.ix != _end) {
+            return false;
+        }
+
+        return b.num_samples > 0;
+    }
+
 private:
     size_t index(normalized_timestamp_t ts) const noexcept {
         return ts() % _num_buckets;
@@ -127,7 +165,7 @@ private:
         auto norm = nanos.count() / _resolution.count();
         return normalized_timestamp_t(norm);
     }
-    const size_t _num_buckets;
+    size_t _num_buckets;
     std::chrono::nanoseconds _resolution;
     std::vector<bucket> _buckets;
     normalized_timestamp_t _end;

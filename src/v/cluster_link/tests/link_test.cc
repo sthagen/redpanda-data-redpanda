@@ -25,6 +25,9 @@
 using namespace std::chrono_literals;
 
 using kafka::data::rpc::test::fake_topic_creator;
+
+using default_config_provider
+  = cluster_link::replication::tests::test_config_provider;
 using data_src_factory
   = cluster_link::replication::tests::random_data_source_factory;
 using data_sink_factory
@@ -240,6 +243,7 @@ test_link::test_link(
       task_reconciler_interval,
       std::move(metadata),
       std::move(cluster_connection),
+      std::make_unique<default_config_provider>(),
       std::make_unique<data_src_factory>(),
       std::make_unique<data_sink_factory>())
   , _link_test(link_test) {}
@@ -392,6 +396,7 @@ public:
           1s,
           std::move(metadata),
           std::move(cluster_connection),
+          std::make_unique<default_config_provider>(),
           std::make_unique<data_src_factory>(),
           std::make_unique<data_sink_factory>());
     }

@@ -177,6 +177,7 @@ redpanda_cc_gtest(
         "//src/v/cluster_link/replication:deps",
         "//src/v/cluster_link/replication:mux_remote_consumer",
         "//src/v/cluster_link/replication:partition_replicator",
+        "//src/v/cluster_link/replication/tests:deps_test_impl",
         "//src/v/kafka/client/direct_consumer/tests:direct_consumer_fixture",
         "//src/v/model",
         "//src/v/redpanda/tests:fixture",

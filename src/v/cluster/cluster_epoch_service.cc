@@ -394,17 +394,24 @@ cluster_epoch_service<Clock>::get_cached_epoch(seastar::abort_source* as) {
 template<typename Clock>
 ss::future<std::error_code>
 cluster_epoch_service<Clock>::do_update_epoch(ss::abort_source* as) {
-    auto maybe_epoch = co_await this->container().invoke_on(
-      controller_stm_shard, &cluster_epoch_service::get_current_epoch);
-    auto update_time = Clock::now();
-    if (!maybe_epoch && ss::this_shard_id() == controller_stm_shard) {
-        auto epoch_result = co_await fetch_leader_epoch(as);
-        if (!epoch_result) {
-            co_return epoch_result.error();
-        }
-        maybe_epoch = epoch_result.value();
+    std::optional<int64_t> maybe_epoch;
+    typename Clock::time_point update_time;
+    if (ss::this_shard_id() == controller_stm_shard) {
+        // If we are the leader, get our epoch
+        maybe_epoch = co_await get_current_epoch();
         update_time = Clock::now();
-    } else if (!maybe_epoch) {
+        // Otherwise go fetch from the leader the epoch
+        if (!maybe_epoch) {
+            auto epoch_result = co_await fetch_leader_epoch(as);
+            if (!epoch_result) {
+                co_return epoch_result.error();
+            }
+            maybe_epoch = epoch_result.value();
+            update_time = Clock::now();
+        }
+    } else {
+        // If we're not shard0 we have to ask shard0 for it's epoch, we strictly
+        // follow the epoch on shard0.
         ssx::sharded_abort_source sharded_as;
         co_await sharded_as.start(*as);
         using result_t = std::invoke_result_t<
@@ -435,9 +442,9 @@ cluster_epoch_service<Clock>::do_update_epoch(ss::abort_source* as) {
     vlog(clusterlog.debug, "updated cluster epoch to {}", maybe_epoch);
     int64_t new_epoch = maybe_epoch.value();
     vassert(
-      new_epoch >= _cached_epoch,
-      "epochs must monotonically increase, but new epoch {} is less "
-      "than the cached epoch of {}",
+      new_epoch >= _cached_epoch && new_epoch >= 0,
+      "epochs must monotonically increase and be non-negative, but new "
+      "epoch {} is less than the cached epoch of {}",
       new_epoch,
       _cached_epoch);
     _cached_epoch_time = Clock::now();
@@ -465,7 +472,7 @@ cluster_epoch_service<Clock>::shard0_get_epoch(ssx::sharded_abort_source* as) {
     }
     ssx::composite_abort_source combined(as->local(), _abort_source);
     auto ec = co_await do_update_epoch(&combined.as());
-    if (!ec) {
+    if (ec) {
         co_return std::unexpected(ec);
     }
     co_return std::make_tuple(_cached_epoch, _cached_epoch_time);

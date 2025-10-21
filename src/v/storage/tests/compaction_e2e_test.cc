@@ -2246,3 +2246,86 @@ TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {
     auto after_merge = consume(reader_cfg);
     ASSERT_TRUE(after_merge.empty());
 }
+
+TEST_F(CompactionFixtureTest, SuperfluousPlaceholderRemoval) {
+    // Three segments, one record with the same key in each.
+    const int num_segments = 3;
+    generate_data(num_segments, 1, 1, 1).get();
+    ASSERT_EQ(log->segment_count(), num_segments + 1);
+
+    bool did_compact = do_sliding_window_compact(
+                         model::offset::max(), std::chrono::milliseconds{1})
+                         .get();
+    ASSERT_TRUE(did_compact);
+    auto rdr_cfg = storage::local_log_reader_config(
+      model::offset{0}, model::offset::max());
+
+    {
+        auto reader = log->make_reader(rdr_cfg).get();
+        auto batches = model::consume_reader_to_memory(
+                         std::move(reader), model::no_timeout)
+                         .get();
+        int num_placeholder_batches = 0;
+        for (const auto& batch : batches) {
+            num_placeholder_batches
+              += (batch.header().type == model::record_batch_type::compaction_placeholder);
+        }
+        // We have two placeholder batches in two segments which have been
+        // fully de-duplicated.
+        ASSERT_EQ(num_placeholder_batches, num_segments - 1);
+    }
+
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+    ss::abort_source never_abort;
+    compaction::compaction_config cfg(
+      model::offset::max(),
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      never_abort);
+
+    // Merge the first two segments in the log.
+    test_local_cfg.get("log_compaction_merge_max_segments_per_range")
+      .set_value(std::make_optional<uint32_t>(2));
+    disk_log.adjacent_merge_compact(disk_log.segments().copy(), cfg).get();
+    ASSERT_EQ(disk_log.segment_count(), 3);
+
+    {
+        auto reader = log->make_reader(rdr_cfg).get();
+        auto batches = model::consume_reader_to_memory(
+                         std::move(reader), model::no_timeout)
+                         .get();
+        int num_placeholder_batches = 0;
+        for (const auto& batch : batches) {
+            num_placeholder_batches
+              += (batch.header().type == model::record_batch_type::compaction_placeholder);
+        }
+
+        // Expect that we filter out the un-needed placeholder batch in the
+        // adjacently merged segment created from the first two segments while
+        // maintaining the placeholder batch at the end of the segment.
+        ASSERT_EQ(num_placeholder_batches, 1);
+    }
+
+    // Merge the first two segments in the log, again.
+    disk_log.adjacent_merge_compact(disk_log.segments().copy(), cfg).get();
+    ASSERT_EQ(disk_log.segment_count(), 2);
+
+    {
+        auto reader = log->make_reader(rdr_cfg).get();
+        auto batches = model::consume_reader_to_memory(
+                         std::move(reader), model::no_timeout)
+                         .get();
+        int num_placeholder_batches = 0;
+        for (const auto& batch : batches) {
+            num_placeholder_batches
+              += (batch.header().type == model::record_batch_type::compaction_placeholder);
+        }
+
+        // We have merged together the 3 originally produced segments, which
+        // means there is a record entry in the last batch of the adjacently
+        // merged segment, and no compaction placeholder batches should exist in
+        // the log.
+        ASSERT_EQ(num_placeholder_batches, 0);
+    }
+}

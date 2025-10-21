@@ -21,6 +21,7 @@ from ducktape.utils.util import wait_until
 from google import protobuf
 from google.protobuf import json_format as pb_json_format
 from google.protobuf import text_format as pb_text_format
+from google.protobuf import message_factory
 
 from rptest.clients.rpk import RpkTool
 from rptest.services.admin import Admin
@@ -276,12 +277,12 @@ AVRO_SCHEMA_TEST_CASES = {
         expected_trino=[
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6)", "", ""),
-            ("optional_long", "row(union_opt_1 bigint)", "", ""),
+            ("optional_long", "bigint", "", ""),
         ],
         expected_spark=[
             ("number", "bigint", None),
             ("timestamp_us", "timestamp_ntz", None),
-            ("optional_long", "struct<union_opt_1:bigint>", None),
+            ("optional_long", "bigint", None),
             ("", "", ""),
             ("# Partitioning", "", ""),
             ("Part 0", "hours(redpanda.timestamp)", ""),
@@ -924,6 +925,16 @@ class DatalakeE2ETests(RedpandaTest):
         catalog_type=[CatalogType.REST_JDBC],
     )
     def test_protobuf_references(self, cloud_storage_type, query_engine, catalog_type):
+        proto_date = """
+syntax = "proto3";
+
+package redpanda.datalake;
+
+message Date {
+  int32 date = 1;
+}
+"""
+
         proto_addr = """
 syntax = "proto3";
 
@@ -938,11 +949,23 @@ message Address {
         proto_person = """
 syntax = "proto3";
 import "address.proto";
+import "date.proto";
 
 message Person {
   string name = 1;
   Address address = 2;
+  redpanda.datalake.Date dob = 3;
 }"""
+
+        date_file_descriptor = """
+name: "date.proto"
+package: "redpanda.datalake"
+message_type {
+  name: "Date"
+  field { name: "date" number: 1 label: LABEL_OPTIONAL type: TYPE_INT32 }
+}
+    """
+
         protobuf_file_descriptor = """
 name: "example.proto"
 message_type {
@@ -956,17 +979,22 @@ message_type {
   name: "Person"
   field { name: "name" number: 1 label: LABEL_OPTIONAL type: TYPE_STRING }
   field { name: "address" number: 2 label: LABEL_OPTIONAL type: TYPE_MESSAGE type_name: ".Address" }
+  field { name: "dob" number: 3 label: LABEL_OPTIONAL type: TYPE_MESSAGE type_name: ".redpanda.datalake.Date" }
 }
-"""
+    """
         # Using the protobuf text format, parse the raw descriptor and create a
         # dynamic message from it.
+        pool = protobuf.descriptor_pool.DescriptorPool()
+        date_desc_pb = protobuf.descriptor_pb2.FileDescriptorProto()
+        pb_text_format.Merge(date_file_descriptor, date_desc_pb)
+        pool.Add(date_desc_pb)
+
         file_desc_pb = protobuf.descriptor_pb2.FileDescriptorProto()
         pb_text_format.Merge(protobuf_file_descriptor, file_desc_pb)
-        pool = protobuf.descriptor_pool.DescriptorPool()
         pool.Add(file_desc_pb)
-        factory = protobuf.message_factory.MessageFactory(pool)
+
         person_desc = pool.FindMessageTypeByName("Person")
-        Person = factory.GetPrototype(person_desc)
+        Person = message_factory.GetMessageClass(person_desc)
         count = 100
 
         def produce_protos():
@@ -981,6 +1009,7 @@ message_type {
                             "state": "District 13" if i % 3 == 0 else "Hooli",
                             "zip": "8675309" if i % 4 == 0 else "12345",
                         },
+                        "dob": {"date": i},
                     }
                 )
                 person_proto = Person()
@@ -1000,13 +1029,15 @@ message_type {
 
             subj_person = "subject_for_person"
             subj_addr = "subject_for_addr"
+            subj_date = "subject_for_date"
             rpk.create_schema_from_str(subj_addr, proto_addr, "proto")  # ID 1
+            rpk.create_schema_from_str(subj_date, proto_date, "proto")  # ID 2
             rpk.create_schema_from_str(
                 subj_person,
                 proto_person,
                 "proto",
-                references=f"address.proto:{subj_addr}:1",
-            )  # ID 2
+                references=f"address.proto:{subj_addr}:1,date.proto:{subj_date}:1",
+            )  # ID 3
             dl.create_iceberg_enabled_topic(
                 self.topic_name,
                 iceberg_mode=f"value_schema_latest:subject={subj_person},protobuf_name=Person",
@@ -1020,6 +1051,7 @@ message_type {
                 SPARK_RP_FIELD_TYPE,
                 ('name', 'string', None),
                 ('address', 'struct<street:string,city:string,state:string,zip:string>', None),
+                ('dob', 'date', None),
                 ('', '', ''),
                 ('# Partitioning', '', ''),
                 ('Part 0', 'hours(redpanda.timestamp)', '')

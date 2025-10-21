@@ -66,7 +66,7 @@ TEST_F(LogInfoCollectorTestFixture, TestInfoCollector) {
         tidp_batches.emplace_back(tidp, std::move(batches));
     }
 
-    make_l1_objects(tidp_batches);
+    make_l1_objects(std::move(tidp_batches)).get();
     log_info_collector.collect_info_for_logs(logs, logs_list, cached_metadata)
       .get();
     ASSERT_EQ(cached_metadata.size(), num_topics);

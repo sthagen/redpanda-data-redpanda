@@ -24,6 +24,8 @@
 
 #include <seastar/util/defer.hh>
 
+using test_config_provider
+  = cluster_link::replication::tests::test_config_provider;
 using data_src_factory
   = cluster_link::replication::tests::random_data_source_factory;
 using data_sink_factory
@@ -49,6 +51,7 @@ public:
           _task_reconciler_interval,
           std::move(metadata),
           std::move(cluster_connection),
+          std::make_unique<test_config_provider>(),
           std::make_unique<data_src_factory>(),
           std::make_unique<data_sink_factory>());
 

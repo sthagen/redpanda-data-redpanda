@@ -17,6 +17,12 @@
 #include <seastar/core/sleep.hh>
 
 namespace cluster_link::replication::tests {
+
+ss::future<kafka::offset>
+test_config_provider::start_offset(const ::model::ntp&, ss::abort_source&) {
+    co_return kafka::offset{0};
+}
+
 ss::future<> accounting_sink::start() { return ss::now(); }
 
 ss::future<> accounting_sink::stop() noexcept { return _gate.close(); };

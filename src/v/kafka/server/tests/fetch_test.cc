@@ -185,7 +185,6 @@ FIXTURE_TEST(read_from_ntp_max_bytes, redpanda_thread_fixture) {
                       octx.rctx.server().local().get_replica_selector(),
                       ktp,
                       config,
-                      true,
                       model::no_timeout,
                       false,
                       octx.rctx.server().local().fetch_units_manager());

@@ -8,6 +8,7 @@
 # by the Apache License, Version 2.0
 
 from collections import defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 import time
 from typing import Any
@@ -89,11 +90,12 @@ class ClusterLinkingProgressVerifier:
         preallocated_nodes: list,
         logger,
         use_transactions: bool = False,
-        transaction_abort_rate: float = 0.3,
-        msgs_per_transaction=10,
         msg_count: int = 40000,
         msg_size: int = 4 * 1024,
         timeout_sec: int = 600,
+        producer_properties: dict[str, Any] | None = None,
+        consumer_properties: dict[str, Any] | None = None,
+        validate_number_of_messages_on_target: bool = True,
     ):
         self.test_context = test_context
         self.source_cluster = source_cluster
@@ -105,64 +107,72 @@ class ClusterLinkingProgressVerifier:
         self.preallocated_nodes = preallocated_nodes
         self.logger = logger
         self.use_transactions = use_transactions
-        self.transaction_abort_rate = transaction_abort_rate
-        self.msgs_per_transaction = msgs_per_transaction
+
         self.msg_count = msg_count
         self.msg_size = msg_size
-
+        self.producer_properties: dict[str, Any] = (
+            producer_properties if producer_properties else {}
+        )
+        self.consumer_properties: dict[str, Any] = (
+            consumer_properties if consumer_properties else {}
+        )
         self.timeout_sec = timeout_sec
+        self.validate_number_of_messages_on_target = (
+            validate_number_of_messages_on_target
+        )
 
     def start(self):
         self.producer = KgoVerifierProducer(
-            self.test_context,
-            self.source_cluster.service,
+            context=self.test_context,
+            redpanda=self.source_cluster.service,
             topic=self.topic,
             msg_size=self.msg_size,
             msg_count=self.msg_count,
             use_transactions=self.use_transactions,
-            transaction_abort_rate=self.transaction_abort_rate,
-            msgs_per_transaction=self.msgs_per_transaction,
             custom_node=self.preallocated_nodes,
+            **self.producer_properties,
         )
         self.producer.start(clean=False)
         self.producer.wait_for_acks(10, 40, 1)
-        readers = 16
+        readers = 8
 
         self.source_consumer = KgoVerifierConsumerGroupConsumer(
-            self.test_context,
-            self.source_cluster.service,
+            context=self.test_context,
+            redpanda=self.source_cluster.service,
             topic=self.topic,
             msg_size=self.msg_size,
             readers=readers,
-            group_name="source-cg",
-            continuous=True,
             use_transactions=self.use_transactions,
+            group_name=f"source-cg-{self.topic}",
+            continuous=True,
+            **self.consumer_properties,
         )
         self.source_consumer.start(clean=False)
 
         self.target_consumer = KgoVerifierConsumerGroupConsumer(
-            self.test_context,
-            self.target_cluster.service,
+            context=self.test_context,
+            redpanda=self.target_cluster.service,
             topic=self.topic,
             msg_size=self.msg_size,
             max_msgs=self.msg_count,
             readers=readers,
-            group_name="test-kgo-consumer-group",
+            use_transactions=self.use_transactions,
+            group_name=f"test-kgo-consumer-group-{self.topic}",
             nodes=self.preallocated_nodes,
             continuous=True,
-            use_transactions=self.use_transactions,
+            **self.consumer_properties,
         )
 
         self.target_consumer.start(clean=False)
+
+    def producer_finished(self):
+        return self.producer.produce_status.acked >= self.msg_count
 
     def expected_read_messages(self):
         return (
             self.producer.produce_status.acked
             - self.producer.produce_status.aborted_transaction_messages
         )
-
-    def producer_finished(self):
-        return self.producer.produce_status.acked >= self.msg_count
 
     def source_consumer_finished(self):
         return self.producer_finished() and (
@@ -171,6 +181,8 @@ class ClusterLinkingProgressVerifier:
         )
 
     def target_consumer_finished(self):
+        if not self.validate_number_of_messages_on_target:
+            return True
         return self.producer_finished() and (
             self.target_consumer.consumer_status.validator.total_reads
             >= self.expected_read_messages()
@@ -292,7 +304,7 @@ class ClusterLinkingProgressVerifier:
                     continue
 
                 if p.current_offset != target_partitions[key].current_offset:
-                    self.logger.error(
+                    self.logger.debug(
                         f"Partition {key} offset mismatch: {p.current_offset} != {target_partitions[key].current_offset}"
                     )
                     errors.append(
@@ -305,22 +317,23 @@ class ClusterLinkingProgressVerifier:
                     )
         if len(errors) > 0:
             for e in errors:
-                self.logger.error(f"Consumer group inconsistency: {e}")
+                self.logger.debug(f"Consumer group inconsistency: {e}")
             return False
 
         return True
 
-    def wait_and_verify(self, progress_timeout=60):
+    def wait_and_verify(self, progress_timeout=60) -> tuple[bool, str | None]:
         try:
             self.validate_progress(progress_timeout=progress_timeout)
         except Exception as e:
             self.logger.error(f"Replication progress validation failed: {e}")
-            return (False, e)
+            return (False, str(e))
 
         wait_until(
             lambda: self.consumer_groups_state_consistent(),
             timeout_sec=3 * progress_timeout,
             backoff_sec=3,
+            retry_on_exc=True,
         )
 
         return (True, None)
@@ -339,6 +352,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
         test_context: TestContext,
         num_prealloc_nodes: int = 0,
         secondary_cluster_args: SecondaryClusterArgs = SecondaryClusterArgs(),
+        num_brokers=3,
         *args: Any,
         **kwargs: Any,
     ):
@@ -352,13 +366,15 @@ class ShadowLinkTestBase(PreallocNodesTest):
             test_context=test_context,
             # For running kgo producer/consumer
             node_prealloc_count=num_prealloc_nodes,
-            num_brokers=3,
+            num_brokers=num_brokers,
             log_config=LoggingConfig(
                 "info",
                 logger_levels={
+                    "cluster": "trace",
                     "cluster_link": "trace",
                     "kafka/client": "trace",
                     "kafka": "trace",
+                    "archival": "trace",
                     "tx": "trace",
                     "shadow_link_service": "trace",
                 },
@@ -606,9 +622,19 @@ class ShadowLinkTestBase(PreallocNodesTest):
         topics = RpkTool(self.source_cluster_service).list_topics()
         return topic in topics
 
-    def topic_exists_in_target(self, topic: str) -> bool:
+    def topic_exists_in_target(
+        self, topic: str, partition_count: int | None = None
+    ) -> bool:
         topics = RpkTool(self.target_cluster.service).list_topics()
-        return topic in topics
+        topic_exists = topic in topics
+
+        if partition_count is None:
+            return topic_exists
+
+        partitions = [
+            p for p in RpkTool(self.target_cluster.service).describe_topic(topic)
+        ]
+        return topic_exists and len(partitions) == partition_count
 
     def wait_for_topic_status(
         self,
@@ -755,7 +781,7 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
             msg_count=msg_cnt,
             msg_size=msg_size,
             use_transactions=use_transactions,
-            transaction_abort_rate=transaction_abort_rate,
+            producer_properties={"transaction_abort_rate": transaction_abort_rate},
             timeout_sec=180,
         )
         self.verifier.start()

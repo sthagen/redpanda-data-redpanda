@@ -25,10 +25,13 @@ static constexpr std::chrono::seconds max_backoff{10};
 partition_replicator::partition_replicator(
   const model::ntp& ntp,
   model::term_id term,
+  link_configuration_provider& config_provider,
   std::unique_ptr<data_source> source,
   std::unique_ptr<data_sink> sink,
   ss::scheduling_group scheduling_group)
-  : _term(term)
+  : _ntp(ntp)
+  , _term(term)
+  , _config_provider(config_provider)
   , _log(cllog, fmt::format("[{}-term-{}] replicator", ntp, term))
   , _source(std::move(source))
   , _sink(std::move(sink))
@@ -41,8 +44,21 @@ ss::future<> partition_replicator::start() {
     co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(_log.trace, "Starting replicator");
     co_await _sink->start();
-    co_await _source->start(
-      kafka::next_offset(_sink->last_replicated_offset()));
+    auto last_replicated = _sink->last_replicated_offset();
+    kafka::offset start_offset{};
+    if (last_replicated < kafka::offset{0}) {
+        // Sink has not replicated anything yet.
+        // We will start from configured start offset.
+        start_offset = co_await _config_provider.start_offset(_ntp, _as);
+        vlog(
+          _log.debug,
+          "Starting replication from configured start offset {}",
+          start_offset);
+    } else {
+        start_offset = kafka::next_offset(last_replicated);
+        vlog(_log.debug, "Resuming replication from offset {}", start_offset);
+    }
+    co_await _source->start(start_offset);
     ssx::repeat_until_gate_closed(_gate, [this] {
         return fetch_and_replicate().handle_exception(
           [this](const std::exception_ptr& e) {

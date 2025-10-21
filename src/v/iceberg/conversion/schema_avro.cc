@@ -9,6 +9,8 @@
  */
 #include "iceberg/conversion/schema_avro.h"
 
+#include "iceberg/conversion/avro_utils.h"
+
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
@@ -45,12 +47,20 @@ struct_from_avro_record(const avro::NodePtr& node, state& state) {
         }
 
         auto field = std::move(result.value());
+        // Incidentally, all columns are forced nullable when we push the
+        // resulting schema into the table. This is an implementation detail on
+        // our side to simplify schema evolution, so we may as well detect the
+        // Avro optional pattern and set any such field optional as a matter of
+        // course.
+        auto required = iceberg::maybe_flatten_union(leaf).has_value()
+                          ? iceberg::field_required::no
+                          : iceberg::field_required::yes;
         if (field.has_value()) {
             ret.fields.push_back(
               iceberg::nested_field::create(
                 placeholder_field_id,
                 node->nameAt(i),
-                iceberg::field_required::yes,
+                required,
                 std::move(field.value())));
         }
     }
@@ -195,6 +205,9 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
     case avro::AVRO_UNION: {
         // Avro union is flattened as a struct with fields that are not
         // required, only one of the fields will be present at a time.
+        if (auto opt = iceberg::maybe_flatten_union(node); opt.has_value()) {
+            return field_type_from_avro(opt.value(), state);
+        }
         iceberg::struct_type ret;
         ret.fields.reserve(node->leaves());
         for (size_t i = 0; i < node->leaves(); ++i) {

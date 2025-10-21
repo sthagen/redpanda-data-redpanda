@@ -38,6 +38,7 @@ void handle_error(cluster_link::errc err, ss::sstring info) {
     case cluster_link::errc::failed_to_connect_to_remote_cluster:
     case cluster_link::errc::remote_cluster_does_not_support_required_api:
     case cluster_link::errc::link_connection_failed:
+    case cluster_link::errc::service_not_ready:
     case cluster_link::errc::service_shutting_down:
         throw serde::pb::rpc::unavailable_exception(std::move(info));
     case cluster_link::errc::cluster_link_disabled:
