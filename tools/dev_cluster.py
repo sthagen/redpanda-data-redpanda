@@ -156,6 +156,198 @@ class Minio:
         await self.process.wait()
 
 
+class Prometheus:
+    def __init__(
+        self,
+        binary,
+        directory,
+        listen_address="127.0.0.1",
+        port=3001,
+        redpanda_admin_ports=[],
+    ):
+        self.binary = binary
+        self.directory = directory
+        self.stopped = False
+        self.listen_address = listen_address
+        self.port = port
+        self.redpanda_admin_ports = redpanda_admin_ports
+
+    def stop(self):
+        if not self.stopped:
+            self.stopped = True
+            self.process.send_signal(signal.SIGINT)
+
+    async def run(self):
+        log_path = self.directory / "prometheus.log"
+        data_dir = self.directory / "data"
+        config_file = self.directory / "prometheus.yml"
+
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a basic Prometheus configuration
+        config = {
+            "global": {
+                "scrape_interval": "5s",
+                "evaluation_interval": "5s",
+            },
+            "scrape_configs": [
+                {
+                    "job_name": "prometheus",
+                    "static_configs": [
+                        {"targets": [f"{self.listen_address}:{self.port}"]}
+                    ],
+                },
+                {
+                    "job_name": "redpanda_internal",
+                    "static_configs": [
+                        {
+                            "targets": [
+                                f"{self.listen_address}:{port}"
+                                for port in self.redpanda_admin_ports
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "job_name": "redpanda_public",
+                    "metrics_path": "/public_metrics",
+                    "static_configs": [
+                        {
+                            "targets": [
+                                f"{self.listen_address}:{port}"
+                                for port in self.redpanda_admin_ports
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        with open(config_file, "w") as f:
+            yaml.dump(config, f)
+
+        args = [
+            str(self.binary),
+            f"--config.file={config_file}",
+            f"--storage.tsdb.path={data_dir}",
+            f"--web.listen-address={self.listen_address}:{self.port}",
+        ]
+        args = " ".join(args)
+        cmd = f"{args} 2>&1 | tee -i {log_path}"
+        print(f"Running: {cmd}")
+        print(f"Prometheus UI available at: http://{self.listen_address}:{self.port}")
+
+        self.process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        while True:
+            line = await self.process.stdout.readline()
+            if not line:
+                break
+            line = line.decode("utf8").rstrip()
+            print(f"prometheus: {line}")
+
+        await self.process.wait()
+
+
+class Grafana:
+    def __init__(
+        self,
+        binary,
+        directory,
+        port=3000,
+        prometheus_url=None,
+    ):
+        self.binary = binary
+        self.directory = directory
+        self.stopped = False
+        self.port = port
+        self.prometheus_url = prometheus_url
+
+    def stop(self):
+        if not self.stopped:
+            self.stopped = True
+            self.process.send_signal(signal.SIGINT)
+
+    async def run(self):
+        log_path = self.directory / "grafana.log"
+        grafana_home = self.directory / "home"
+        grafana_home.mkdir(parents=True, exist_ok=True)
+
+        # Copy grafana files (conf, public) into grafana_home
+        grafana_binary = pathlib.Path(self.binary).resolve()
+        grafana_root = grafana_binary.parent.parent
+
+        # Copy conf and public directories
+        for subdir in ["conf", "public"]:
+            src = grafana_root / subdir
+            dest = grafana_home / subdir
+            if src.exists() and not dest.exists():
+                shutil.copytree(src, dest)
+            elif not src.exists():
+                print(f"Warning: Could not find {src}")
+
+        # Configure Prometheus as a datasource via provisioning
+        if self.prometheus_url:
+            provisioning_dir = grafana_home / "conf" / "provisioning" / "datasources"
+            provisioning_dir.mkdir(parents=True, exist_ok=True)
+
+            datasource_config = {
+                "apiVersion": 1,
+                "datasources": [
+                    {
+                        "name": "Prometheus",
+                        "type": "prometheus",
+                        "access": "proxy",
+                        "url": self.prometheus_url,
+                        "isDefault": True,
+                        "editable": True,
+                    }
+                ],
+            }
+
+            datasource_file = provisioning_dir / "prometheus.yml"
+            with open(datasource_file, "w") as f:
+                yaml.dump(datasource_config, f)
+            print(f"Configured Prometheus datasource at {self.prometheus_url}")
+
+        env = os.environ.copy()
+        env["GF_SERVER_HTTP_ADDR"] = "0.0.0.0"
+        env["GF_SERVER_HTTP_PORT"] = str(self.port)
+        env["GF_SECURITY_ADMIN_PASSWORD"] = "admin"
+        env["GF_SECURITY_ADMIN_USER"] = "admin"
+        env["GF_AUTH_BASIC_ENABLED"] = "false"
+        env["GF_AUTH_DISABLE_LOGIN_FORM"] = "true"
+        env["GF_AUTH_ANONYMOUS_ENABLED"] = "true"
+        env["GF_AUTH_ANONYMOUS_ORG_ROLE"] = "Admin"
+
+        args = [str(grafana_binary), "server"]
+        args = " ".join(args)
+        cmd = f"{args} 2>&1 | tee -i {log_path}"
+        print(f"Running: {cmd}")
+        print(f"Grafana UI available on port {self.port}")
+
+        self.process = await asyncio.create_subprocess_shell(
+            cmd,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=grafana_home,
+        )
+
+        while True:
+            line = await self.process.stdout.readline()
+            if not line:
+                break
+            line = line.decode("utf8").rstrip()
+            print(f"grafana: {line}")
+
+        await self.process.wait()
+
+
 class Redpanda:
     def __init__(self, binary, cores: int, node_meta: NodeMetadata, extra_args, env):
         self.binary = binary
@@ -323,6 +515,30 @@ async def main():
         "--rpk", type=pathlib.Path, help="path to rpk executable", default=None
     )
     parser.add_argument(
+        "--prometheus",
+        type=pathlib.Path,
+        help="path to prometheus executable",
+        default=None,
+    )
+    parser.add_argument(
+        "--use-prometheus",
+        action=argparse.BooleanOptionalAction,
+        help="whether to spin up an instance of prometheus",
+        default=True,
+    )
+    parser.add_argument(
+        "--grafana",
+        type=pathlib.Path,
+        help="path to grafana executable",
+        default=None,
+    )
+    parser.add_argument(
+        "--use-grafana",
+        action=argparse.BooleanOptionalAction,
+        help="whether to spin up an instance of grafana",
+        default=True,
+    )
+    parser.add_argument(
         "--config-overrides",
         type=str,
         help="JSON dictionary of config overrides to apply to all nodes",
@@ -437,6 +653,37 @@ async def main():
         minio_task = asyncio.create_task(minio.run())
         await ensure_bucket_exists(node_metas[0].config_dict["redpanda"])
 
+    prometheus = None
+    prometheus_task = None
+    if args.use_prometheus and args.prometheus:
+        prometheus_dir = args.directory / "prometheus"
+        prometheus_dir.mkdir(parents=True, exist_ok=True)
+        prometheus = Prometheus(
+            args.prometheus,
+            prometheus_dir,
+            args.listen_address,
+            redpanda_admin_ports=[args.base_admin_port + i for i in range(args.nodes)],
+        )
+        prometheus_task = asyncio.create_task(prometheus.run())
+
+    grafana = None
+    grafana_task = None
+    if args.use_grafana and args.grafana:
+        grafana_dir = args.directory / "grafana"
+        grafana_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build Prometheus URL if Prometheus is enabled
+        prometheus_url = None
+        if prometheus:
+            prometheus_url = f"http://{prometheus.listen_address}:{prometheus.port}"
+
+        grafana = Grafana(
+            args.grafana,
+            grafana_dir,
+            prometheus_url=prometheus_url,
+        )
+        grafana_task = asyncio.create_task(grafana.run())
+
     cores = args.cores
     if cores is None:
         # Use 75% of cores for redpanda.  e.g. 3 node cluster on a 16 node system
@@ -460,15 +707,26 @@ async def main():
             n.stop()
         if minio:
             minio.stop()
+        if prometheus:
+            prometheus.stop()
+        if grafana:
+            grafana.stop()
 
     asyncio.get_event_loop().add_signal_handler(signal.SIGINT, stop)
 
     await asyncio.gather(*all_coros)
+
+    # Cleanup: if redpanda shuts down but we didn't request the shutdown
+    # then let's go ahead and tear down other services too so we exit
     if minio_task and minio:
-        # send stop again. if redpanda shuts down but we didn't request the
-        # shutdown then let's go ahead and tear down minio too so we exit
         minio.stop()
         await minio_task
+    if prometheus_task and prometheus:
+        prometheus.stop()
+        await prometheus_task
+    if grafana_task and grafana:
+        grafana.stop()
+        await grafana_task
 
 
 asyncio.run(main())

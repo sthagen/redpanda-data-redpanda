@@ -24,6 +24,7 @@ struct test_config : public config_store {
     enterprise<property<std::vector<ss::sstring>>> enterprise_str_vec;
     enterprise<property<std::optional<int>>> enterprise_opt_int;
     enterprise<enum_property<tls_version>> enterprise_enum;
+    enterprise<property<int>> enterprise_sanctioned_int;
 
     using meta = base_property::metadata;
 
@@ -69,7 +70,17 @@ struct test_config : public config_store {
             tls_version::v1_0,
             tls_version::v1_1,
             tls_version::v1_2,
-            tls_version::v1_3}) {}
+            tls_version::v1_3})
+      , enterprise_sanctioned_int(
+          *this,
+          3,
+          2,
+          "enterprise_sanctioned_int",
+          "An enterprise-only sanctioned int config",
+          meta{.needs_restart = needs_restart::no},
+          1,
+          property<int>::noop_validator,
+          std::nullopt) {}
 };
 
 } // namespace
@@ -94,6 +105,10 @@ TEST(EnterprisePropertyTest, TestRestriction) {
 
     EXPECT_FALSE(cfg.enterprise_enum.check_restricted(N(tls_version::v1_0)));
     EXPECT_TRUE(cfg.enterprise_enum.check_restricted(N(tls_version::v1_3)));
+
+    EXPECT_FALSE(cfg.enterprise_sanctioned_int.check_restricted(N(1)));
+    EXPECT_FALSE(cfg.enterprise_sanctioned_int.check_restricted(N(1)));
+    EXPECT_TRUE(cfg.enterprise_sanctioned_int.check_restricted(N(3)));
 }
 
 TEST(EnterprisePropertyTest, TestTypeName) {
@@ -103,6 +118,7 @@ TEST(EnterprisePropertyTest, TestTypeName) {
     EXPECT_EQ(cfg.enterprise_str_vec.type_name(), "string");
     EXPECT_EQ(cfg.enterprise_opt_int.type_name(), "integer");
     EXPECT_EQ(cfg.enterprise_enum.type_name(), "string");
+    EXPECT_EQ(cfg.enterprise_sanctioned_int.type_name(), "integer");
 }
 
 TEST(EnterprisePropertyTest, TestIsRestricted) {
@@ -133,6 +149,21 @@ TEST(EnterprisePropertyTest, TestIsRestricted) {
     EXPECT_FALSE(cfg.enterprise_enum.is_restricted());
     cfg.enterprise_enum.set_value(tls_version::v1_3);
     EXPECT_TRUE(cfg.enterprise_enum.is_restricted());
+
+    cfg.enterprise_sanctioned_int.set_value(2);
+    EXPECT_FALSE(cfg.enterprise_sanctioned_int.is_restricted());
+    cfg.enterprise_sanctioned_int.set_value(3);
+    EXPECT_TRUE(cfg.enterprise_sanctioned_int.is_restricted());
 }
 
+TEST(EnterprisePropertyTest, TestSanctionedValue) {
+    test_config cfg;
+    EXPECT_EQ(cfg.enterprise_bool.sanctioned_value(), false);
+    EXPECT_EQ(cfg.enterprise_str_enum.sanctioned_value(), "foo");
+    EXPECT_EQ(
+      cfg.enterprise_str_vec.sanctioned_value(), std::vector<ss::sstring>{});
+    EXPECT_EQ(cfg.enterprise_opt_int.sanctioned_value(), 0);
+    EXPECT_EQ(cfg.enterprise_enum.sanctioned_value(), tls_version::v1_1);
+    EXPECT_EQ(cfg.enterprise_sanctioned_int.sanctioned_value(), 2);
+}
 } // namespace config

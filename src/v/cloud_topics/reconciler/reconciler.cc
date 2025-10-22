@@ -112,10 +112,11 @@ ss::future<> reconciler::reconciliation_loop() {
      */
     constexpr std::chrono::seconds poll_frequency(10);
 
+    ss::lowres_clock::duration next_wait = poll_frequency;
     while (!_gate.is_closed()) {
         try {
             co_await _control_sem.wait(
-              poll_frequency, std::max(_control_sem.current(), size_t(1)));
+              next_wait, std::max(_control_sem.current(), size_t(1)));
         } catch (const ss::semaphore_timed_out& ex) {
             // Time to do some work.
             std::ignore = ex;
@@ -128,6 +129,7 @@ ss::future<> reconciler::reconciliation_loop() {
         if (config::shard_local_cfg()
               .cloud_topics_disable_reconciliation_loop()) {
             vlog(lg.debug, "Reconciliation loop disabled, skipping iteration");
+            next_wait = poll_frequency;
             continue;
         }
 
@@ -181,6 +183,7 @@ ss::future<> reconciler::reconciliation_loop() {
          *   except for shutdown
          */
         // clang-format on
+        auto round_start = ss::lowres_clock::now();
         try {
             co_await reconcile();
         } catch (...) {
@@ -192,6 +195,9 @@ ss::future<> reconciler::reconciliation_loop() {
               "Recoverable error during reconciliation: {}",
               std::current_exception());
         }
+        auto round_duration = ss::lowres_clock::now() - round_start;
+        next_wait = std::max(
+          poll_frequency - round_duration, ss::lowres_clock::duration(0));
     }
 }
 
@@ -474,9 +480,6 @@ reconciler::build_object(
       "Built L1 object from {} partitions ({} partitions were skipped)",
       metas.size(),
       sources.size() - metas.size());
-    if (!metas.empty()) {
-        _probe.add_bytes_reconciled(obj_info.size_bytes);
-    }
     co_return built_object_metadata{
       .object_info = std::move(obj_info),
       .commits = std::move(metas),

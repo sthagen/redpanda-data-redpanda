@@ -20,7 +20,7 @@ struct_type schemaless_struct_type() {
       nested_field::create(3, "offset", field_required::yes, long_type{}));
     system_fields.fields.emplace_back(
       nested_field::create(
-        4, "timestamp", field_required::yes, timestamp_type{}));
+        4, "timestamp", field_required::yes, timestamptz_type{}));
 
     struct_type headers_kv;
     headers_kv.fields.emplace_back(

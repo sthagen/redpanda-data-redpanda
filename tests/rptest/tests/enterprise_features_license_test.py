@@ -61,6 +61,9 @@ def to_enterprise_feature(feature):
 
 
 enterprise_features = set([to_enterprise_feature(f) for f in Feature])
+autoenable_features = set(
+    [Feature.partition_auto_balancing_continuous, Feature.core_balancing_continuous]
+)
 
 FEATURE_DEPENDENT_CONFIG = {
     Feature.audit_logging: "audit_enabled",
@@ -121,17 +124,11 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
         }
         ELS = EnterpriseLicenseStatus
 
-        compliant = license_valid or not enabled
-        violation = not compliant
-
         assert feature_statuses.get(feature) == enabled, (
             f"Expected {feature.name} {enabled=}"
         )
         assert (ELS(rsp.get("license_status")) == ELS.valid) is license_valid, (
             f"Expected {license_valid=} (got {rsp.get('license_status')})"
-        )
-        assert rsp.get("violation") == violation, (
-            f"Expected {violation=} got {rsp.get('violation')}"
         )
 
         return feature_statuses
@@ -156,9 +153,14 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
             Feature.audit_logging, enabled=False, license_valid=with_license
         )
 
-        assert not any(statuses[f] for f in enterprise_features), (
-            f"Unexpected status: {json.dumps(statuses)}"
-        )
+        expected_statuses = {
+            f: {"status": statuses[f], "expected": f in autoenable_features}
+            for f in enterprise_features
+        }
+
+        assert all(
+            [s["status"] == s["expected"] for _, s in expected_statuses.items()]
+        ), f"Unexpected feature status: {json.dumps(expected_statuses, indent=1)}"
 
     def try_enable_feature(self, feature):
         if feature == Feature.audit_logging:
@@ -283,17 +285,17 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
 
         has_license = not disable_trial or install_license
 
-        expect_rejected = not has_license
+        is_autoenable = feature in autoenable_features
 
-        if expect_rejected:
+        if has_license:
+            self.try_enable_feature(feature)
+        else:
             with expect_exception(
                 requests.exceptions.HTTPError,
                 lambda e: e.response.status_code == 403
                 or FEATURE_DEPENDENT_CONFIG[feature] in e.response.json().keys(),
             ):
                 self.try_enable_feature(feature)
-        else:
-            self.try_enable_feature(feature)
 
         self.logger.debug(f"Check that {feature.name} has the expected state")
 
@@ -301,16 +303,22 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
 
         statuses = self.check_feature(
             efeature,
-            enabled=not expect_rejected,
+            enabled=has_license or is_autoenable,
             license_valid=has_license,
         )
 
         self.logger.debug(
-            "Everything else should still be off regardless of license status"
+            "Everything else should be in the default state regardless of license status"
         )
 
-        assert not any([statuses[f] for f in enterprise_features if f != efeature]), (
-            f"Features unexpectedly enabled: {json.dumps(statuses, indent=1)}"
+        other_features = [f for f in enterprise_features if f != efeature]
+        other_statuses = {
+            f: {"status": statuses[f], "expected": f in autoenable_features}
+            for f in other_features
+        }
+
+        assert all([s["status"] == s["expected"] for _, s in other_statuses.items()]), (
+            f"Unexpected feature status: {json.dumps(other_statuses, indent=1)}"
         )
 
     @skip_fips_mode

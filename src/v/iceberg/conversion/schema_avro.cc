@@ -127,7 +127,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
         if (
           lt == avro::LogicalType::TIMESTAMP_MILLIS
           || lt == avro::LogicalType::TIMESTAMP_MICROS) {
-            return iceberg::timestamp_type{};
+            return iceberg::timestamptz_type{};
         }
         return iceberg::long_type{};
     }
@@ -221,9 +221,10 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
                 ret.fields.push_back(
                   iceberg::nested_field::create(
                     placeholder_field_id,
-                    // union struct fields name are represented as
-                    // <union_name>_<leaf_idx>
-                    fmt::format("union_opt_{}", i),
+                    // union struct branch names are represented as in Avro JSON
+                    // encoding. See spec for detail:
+                    // https://avro.apache.org/docs/1.12.0/specification/#json-encoding
+                    union_branch_label(leaf, field.value()),
                     // union struct fields are not required
                     iceberg::field_required::no,
                     std::move(field.value())));

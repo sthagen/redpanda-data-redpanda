@@ -273,4 +273,23 @@ TYPED_TEST(AsyncAlgo, async_for_each_move_correctness) {
     ASSERT_FALSE(other_func(-1));
 }
 
+TEST(AsyncForEach, async_for_each_range) {
+    std::vector<int> v(std::from_range, std::views::iota(0, 4));
+
+    // Check the version that takes two iterators
+    auto some = v | std::views::take(2);
+    async_for_each(some.begin(), some.end(), add_one{}).get();
+    EXPECT_EQ(v[0], 1);
+    EXPECT_EQ(v[1], 2);
+    EXPECT_EQ(v[2], 2);
+    EXPECT_EQ(v[3], 3);
+
+    // Check the version that takes a range
+    async_for_each(v | std::views::drop(2), add_one{}).get();
+    EXPECT_EQ(v[0], 1);
+    EXPECT_EQ(v[1], 2);
+    EXPECT_EQ(v[2], 3);
+    EXPECT_EQ(v[3], 4);
+}
+
 } // namespace ssx

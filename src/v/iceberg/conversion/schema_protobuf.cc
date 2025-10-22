@@ -157,7 +157,7 @@ field_outcome from_protobuf(
         // special case for handling google.protobuf.Timestamp
         if (
           msg_t->well_known_type() == pb::Descriptor::WELLKNOWNTYPE_TIMESTAMP) {
-            return success(fd, iceberg::timestamp_type{});
+            return success(fd, iceberg::timestamptz_type{});
         }
         // special case for handling google.protobuf.Struct, Value, and
         // ListValue - all serialize as JSON strings

@@ -189,7 +189,7 @@ TEST_CORO(SchemaProtobuf, TestMessageWithTimestamp) {
     ASSERT_FALSE_CORO(result.has_error());
     auto field = std::move(result.value());
     EXPECT_THAT(
-      field.fields, ElementsAre(IsField(1, "timestamp", timestamp_type{})));
+      field.fields, ElementsAre(IsField(1, "timestamp", timestamptz_type{})));
 }
 
 TEST_CORO(SchemaProtobuf, TestMessageWithStruct) {
@@ -589,7 +589,8 @@ TEST(values_protobuf, TestTimestamp) {
 
     ASSERT_THAT(
       struct_v->fields,
-      ElementsAre(OptionalIcebergPrimitive<timestamp_value>(1743540027001635)));
+      ElementsAre(
+        OptionalIcebergPrimitive<timestamptz_value>(1743540027001635)));
 }
 
 TEST(values_protobuf, TestStruct) {

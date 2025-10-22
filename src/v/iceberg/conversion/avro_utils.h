@@ -29,4 +29,23 @@ namespace iceberg {
  * optional".
  */
 std::optional<avro::NodePtr> maybe_flatten_union(const avro::NodePtr&);
+
+/**
+ * Take an Avro node and the corresponding Iceberg field type and produce a
+ * label based on the JSON encoding for unions laid out in the Avro spec.
+ *
+ * See https://avro.apache.org/docs/1.12.0/specification/#json-encoding
+ *
+ * Treatment of logical types is somewhat subtle. Since the mapping from logical
+ * types to Avro base types to iceberg field types is not 1:1, propagating
+ * logical type names into union branch struct fields can introduce ambiguity.
+ * Additionally, named types may collide w/ logical type names (i.e. there is no
+ * rule against it). To avoid dealing with collisions, we map branches w/
+ * logical type info to struct fields w/ the base type name.
+ *
+ * For example a {"type": "int", "logicalType": "time-millis"} maps to 'int'
+ * rather than 'time'.
+ */
+ss::sstring union_branch_label(
+  const avro::NodePtr& branch, const iceberg::field_type& branch_type);
 } // namespace iceberg

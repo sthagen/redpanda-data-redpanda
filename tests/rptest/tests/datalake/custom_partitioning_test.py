@@ -674,7 +674,7 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
             expected_partitioning = [
                 ("# Partition Information", "", ""),
                 ("# col_name", "data_type", "comment"),
-                ("timestamp_us", "timestamp_ntz", None),
+                ("timestamp_us", "timestamp", None),
             ]
 
             assert describe_partitioning == expected_partitioning, (

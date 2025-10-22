@@ -86,7 +86,7 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
     system_data->fields.emplace_back(iceberg::long_value(o));
     // NOTE: Kafka uses milliseconds, Iceberg uses microseconds.
     system_data->fields.emplace_back(
-      iceberg::timestamp_value(ts.value() * 1000));
+      iceberg::timestamptz_value(ts.value() * 1000));
 
     if (headers.empty()) {
         system_data->fields.emplace_back(std::nullopt);

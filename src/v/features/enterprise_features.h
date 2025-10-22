@@ -99,7 +99,7 @@ public:
     std::pair<T, bool> operator()(bool should_sanction) const {
         const auto& val = _binding();
         if (should_sanction && _is_sanctioned) [[unlikely]] {
-            return std::make_pair(_prop.default_value(), true);
+            return std::make_pair(_prop.sanctioned_value(), true);
         } else {
             return std::make_pair(val, false);
         }

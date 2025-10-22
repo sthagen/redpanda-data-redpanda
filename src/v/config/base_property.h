@@ -117,6 +117,7 @@ public:
     virtual void set_value(std::any) = 0;
     virtual void reset() = 0;
     virtual bool is_default() const = 0;
+    virtual bool is_set() const = 0;
     virtual bool is_hidden() const = 0;
 
     /**

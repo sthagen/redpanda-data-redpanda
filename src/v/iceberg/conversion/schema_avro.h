@@ -26,8 +26,9 @@ namespace iceberg {
  *  - do not support recursive types
  *
  *  - avro unions are 'flattened' as a structure with optional fields out of
- *    which only one or none are present (i case ther is a field with null type)
- *    - excepting unions of the form ["null", <some_type>] or [<some_type>,
+ *    which only one or none is present (in case there is a field with null
+ *    type)
+ *    - except unions of the form ["null", <some_type>] or [<some_type>,
  *      "null"] which are treated as a bare, optional field of <some_type>.
  *
  *  - all fields are required by default (avro always sets a default in binary

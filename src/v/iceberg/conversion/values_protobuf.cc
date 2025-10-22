@@ -241,7 +241,7 @@ convert_timestamp(std::unique_ptr<parsed::message> message) {
     if (it != message->fields.end()) {
         ts += absl::Nanoseconds(std::get<int32_t>(std::move(it->second)));
     }
-    co_return value_outcome{iceberg::timestamp_value{absl::ToUnixMicros(ts)}};
+    co_return value_outcome{iceberg::timestamptz_value{absl::ToUnixMicros(ts)}};
 }
 
 // Forward declaration for recursive calls

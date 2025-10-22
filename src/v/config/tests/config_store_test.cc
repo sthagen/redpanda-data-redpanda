@@ -233,6 +233,24 @@ SEASTAR_THREAD_TEST_CASE(update_property_value) {
     BOOST_TEST(cfg.required_string() == "new_string_value");
 };
 
+SEASTAR_THREAD_TEST_CASE(track_set_state) {
+    auto cfg = test_config();
+
+    BOOST_TEST(cfg.optional_int() == 100);
+    BOOST_TEST(cfg.optional_int.is_default() == true);
+    BOOST_TEST(cfg.optional_int.is_set() == false);
+
+    // set to default value
+    cfg.get("required_string").set_value(ss::sstring{});
+    BOOST_TEST(cfg.required_string.is_default() == true);
+    BOOST_TEST(cfg.required_string.is_set() == true);
+
+    // set to non-default value
+    cfg.get("an_int64_t").set_value(int64_t{100});
+    BOOST_TEST(cfg.an_int64_t.is_default() == false);
+    BOOST_TEST(cfg.an_int64_t.is_set() == true);
+};
+
 SEASTAR_THREAD_TEST_CASE(validate_valid_configuration) {
     auto cfg = test_config();
     auto errors = cfg.read_yaml(valid_configuration());

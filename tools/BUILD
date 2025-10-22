@@ -47,6 +47,8 @@ py_binary(
         "-e $(rootpath //src/v/redpanda:redpanda)",
         "-o $(rootpath :minio)",
         "--rpk $(rootpath //src/go/rpk/cmd/rpk)",
+        "--prometheus $(rootpath @prometheus//:prometheus)",
+        "--grafana $(rootpath @grafana//:grafana)",
         "--lsan_suppression_file $(rootpath //:lsan_suppressions)",
         "--ubsan_suppression_file $(rootpath //:ubsan_suppressions)",
     ],
@@ -56,6 +58,8 @@ py_binary(
         "//:ubsan_suppressions",
         "//src/go/rpk/cmd/rpk",
         "//src/v/redpanda",
+        "@grafana",
+        "@prometheus",
     ],
     visibility = ["//visibility:public"],
     deps = [

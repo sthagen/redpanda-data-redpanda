@@ -39,7 +39,9 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:datatypes",
+        "//src/v/ssx:sformat",
         "@avro",
+        "@seastar",
     ],
 )
 

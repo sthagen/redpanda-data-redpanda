@@ -125,7 +125,14 @@ class MetricsReporterTest(RedpandaTest):
             self.redpanda.logger.info(m)
 
         def assert_fields_are_the_same(metadata, field):
-            assert all(m[field] == metadata[0][field] for m in metadata)
+            def maybe_sort(value):
+                if not isinstance(value, list):
+                    return value
+                return sorted(value)
+
+            assert all(
+                maybe_sort(m[field]) == maybe_sort(metadata[0][field]) for m in metadata
+            )
 
         features = admin.get_features()
 

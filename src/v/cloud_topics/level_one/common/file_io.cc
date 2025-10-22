@@ -40,7 +40,12 @@ public:
           _path.native(),
           ss::open_flags::rw | ss::open_flags::truncate
             | ss::open_flags::create);
-        co_return co_await ss::make_file_output_stream(std::move(file));
+        co_return co_await ss::make_file_output_stream(
+          std::move(file),
+          ss::file_output_stream_options{
+            .buffer_size = 128_KiB,
+            .write_behind = 2,
+          });
     }
     ss::future<> remove() override { return ss::remove_file(_path.native()); }
     ss::future<ss::input_stream<char>> input_stream() override {

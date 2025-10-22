@@ -200,6 +200,9 @@ class RpkClusterTest(RedpandaTest):
         )
 
         expected_features = ["fips"] if in_fips_environment() else []
+        expected_features.extend(
+            ["core_balancing_continuous", "partition_auto_balancing_continuous"]
+        )
         expected_license = {
             "expires": "Jul 11 2122",
             "organization": "redpanda-testing",
@@ -217,6 +220,7 @@ class RpkClusterTest(RedpandaTest):
             self.redpanda.logger.debug(f"License response: {license}")
             if license is None or license == "{}":
                 return False
+
             return json.loads(license) == expected_license
 
         wait_until(

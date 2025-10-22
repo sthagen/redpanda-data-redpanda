@@ -144,7 +144,7 @@ class DatabricksTest(RedpandaTest):
                 Row(col_name="# col_name", data_type="data_type", comment="comment"),
                 Row(
                     col_name="redpanda.timestamp",
-                    data_type="timestamp_ntz",
+                    data_type="timestamp",
                     comment=None,
                 ),
             ]
@@ -187,7 +187,7 @@ class DatabricksTest(RedpandaTest):
                     ),
                     Row(
                         col_name="redpanda.timestamp",
-                        data_type="timestamp_ntz",
+                        data_type="timestamp",
                         comment=None,
                     ),
                 ],
@@ -215,7 +215,7 @@ class DatabricksTest(RedpandaTest):
                     ),
                     Row(
                         col_name="redpanda.timestamp",
-                        data_type="timestamp_ntz",
+                        data_type="timestamp",
                         comment=None,
                     ),
                 ],

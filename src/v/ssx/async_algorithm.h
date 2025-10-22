@@ -102,8 +102,11 @@ struct iter_size {
  * must increment an count in the loop and check both end iterator and counter
  * as the termination condition.
  */
-template<std::random_access_iterator I, typename Fn>
-iter_size<I> for_each_limit(const I begin, const I end, ssize_t limit, Fn f) {
+template<
+  std::random_access_iterator I,
+  std::sized_sentinel_for<I> S,
+  typename Fn>
+iter_size<I> for_each_limit(const I begin, const S end, ssize_t limit, Fn f) {
     auto chunk_size = std::min(limit, end - begin);
     I chunk_end = begin + chunk_size;
     for (I i = begin; i != chunk_end; ++i) {
@@ -112,8 +115,8 @@ iter_size<I> for_each_limit(const I begin, const I end, ssize_t limit, Fn f) {
     return {chunk_end, chunk_size};
 }
 
-template<std::forward_iterator I, typename Fn>
-iter_size<I> for_each_limit(const I begin, const I end, ssize_t limit, Fn f) {
+template<std::forward_iterator I, std::sentinel_for<I> S, typename Fn>
+iter_size<I> for_each_limit(const I begin, const S end, ssize_t limit, Fn f) {
     ssize_t count = 0;
     auto i = begin;
     while (i != end && count < limit) {
@@ -128,9 +131,10 @@ template<
   typename Traits,
   typename Counter,
   typename Fn,
-  std::forward_iterator Iterator>
+  std::forward_iterator Iterator,
+  std::sentinel_for<Iterator> EndIterator>
 ss::future<>
-async_for_each_coro(Counter counter, Iterator begin, Iterator end, Fn f) {
+async_for_each_coro(Counter counter, Iterator begin, EndIterator end, Fn f) {
     do {
         auto new_begin = for_each_limit(
           begin, end, remaining<Traits>(counter), f);
@@ -151,9 +155,10 @@ template<
   typename Traits = async_algo_traits,
   typename Counter,
   typename Fn,
-  std::forward_iterator Iterator>
+  std::forward_iterator Iterator,
+  std::sentinel_for<Iterator> EndIterator>
 ss::future<>
-async_for_each_fast(Counter counter, Iterator begin, Iterator end, Fn f) {
+async_for_each_fast(Counter counter, Iterator begin, EndIterator end, Fn f) {
     // This first part is an important optimization: if the input range is small
     // enough, we don't want to create a coroutine frame as that's costly, so
     // this function is not coroutine and we do the whole iteration here (as we
@@ -193,8 +198,9 @@ async_for_each_fast(Counter counter, Iterator begin, Iterator end, Fn f) {
 template<
   typename Traits = async_algo_traits,
   typename Fn,
-  std::forward_iterator Iterator>
-ss::future<> async_for_each(Iterator begin, Iterator end, Fn f) {
+  std::forward_iterator Iterator,
+  std::sentinel_for<Iterator> EndIterator>
+ss::future<> async_for_each(Iterator begin, EndIterator end, Fn f) {
     return async_for_each_fast<Traits>(
       detail::internal_counter{}, begin, end, std::move(f));
 }
@@ -209,24 +215,29 @@ ss::future<> async_for_each(Iterator begin, Iterator end, Fn f) {
  *
  * The function is taken by value.
  *
- * Until the returned future resolves, the container's begin and end iterators,
- * as they were when called, and the container itself must remain valid.
+ * Until the returned future resolves, the ranges begin and end iterators,
+ * as they were when called, and the range itself must remain valid.
  *
- * @param container universal reference to container
+ * @param range universal reference to range
  * @param f the function to call on each element
  * @return ss::future<> a future which resolves when all elements have been
  * processed
  */
-template<typename Traits = async_algo_traits, typename Fn, typename Container>
-requires requires(Container c, Fn fn) {
-    { ss::futurize_invoke(fn, *std::begin(c)) } -> std::same_as<ss::future<>>;
+template<
+  typename Traits = async_algo_traits,
+  typename Fn,
+  std::ranges::input_range Range>
+requires requires(Range c, Fn fn) {
+    {
+        ss::futurize_invoke(fn, *std::ranges::begin(c))
+    } -> std::same_as<ss::future<>>;
     std::end(c);
 }
-ss::future<> async_for_each(Container&& container, Fn f) {
+ss::future<> async_for_each(Range&& range, Fn f) {
     return async_for_each_fast<Traits>(
       detail::internal_counter{},
-      std::begin(container),
-      std::end(container),
+      std::ranges::begin(range),
+      std::ranges::end(range),
       std::move(f));
 }
 

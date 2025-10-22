@@ -92,13 +92,13 @@ TEST(AvroSchema, TestNonRecordSchema) {
     iceberg::struct_type union_st;
     union_st.fields.push_back(
       iceberg::nested_field::create(
-        0, "union_opt_0", iceberg::field_required::no, iceberg::int_type{}));
+        0, "int", iceberg::field_required::no, iceberg::int_type{}));
     union_st.fields.push_back(
       iceberg::nested_field::create(
-        0, "union_opt_1", iceberg::field_required::no, iceberg::long_type{}));
+        0, "long", iceberg::field_required::no, iceberg::long_type{}));
     union_st.fields.push_back(
       iceberg::nested_field::create(
-        0, "union_opt_2", iceberg::field_required::no, iceberg::float_type{}));
+        0, "float", iceberg::field_required::no, iceberg::float_type{}));
 
     tl_type_expectations.emplace_back("root", tl_union, std::move(union_st));
 
@@ -314,7 +314,7 @@ TEST(AvroSchema, TestRecordType) {
     union_struct.fields.push_back(
       iceberg::nested_field::create(
         0,
-        "union_opt_1",
+        "map",
         iceberg::field_required::no,
         iceberg::map_type::create(
           0,
@@ -324,7 +324,7 @@ TEST(AvroSchema, TestRecordType) {
           iceberg::int_type{})));
     union_struct.fields.push_back(
       iceberg::nested_field::create(
-        0, "union_opt_2", iceberg::field_required::no, iceberg::float_type{}));
+        0, "float", iceberg::field_required::no, iceberg::float_type{}));
 
     ASSERT_TRUE(
       field_matches(struct_t.fields[6], "myunion", std::move(union_struct)));
@@ -478,9 +478,9 @@ TEST(AvroSchema, TestLogicalTypes) {
     EXPECT_TRUE(field_matches(
       struct_t.fields[5], "long_time_micro", iceberg::time_type{}));
     EXPECT_TRUE(field_matches(
-      struct_t.fields[6], "long_ts_ms", iceberg::timestamp_type{}));
+      struct_t.fields[6], "long_ts_ms", iceberg::timestamptz_type{}));
     EXPECT_TRUE(field_matches(
-      struct_t.fields[7], "long_ts_micro", iceberg::timestamp_type{}));
+      struct_t.fields[7], "long_ts_micro", iceberg::timestamptz_type{}));
     // Duration logical type is not intrepreted in as a separate iceberg type
     EXPECT_TRUE(field_matches(
       struct_t.fields[8], "duration_fixed", iceberg::fixed_type{12}));
@@ -922,22 +922,22 @@ AssertionResult value_matches(
               });
         }
         if (datum.logicalType().type() == avro::LogicalType::TIMESTAMP_MILLIS) {
-            return primitive_equal<iceberg::timestamp_value>(
+            return primitive_equal<iceberg::timestamptz_value>(
               datum,
               value,
               [](
-                const iceberg::timestamp_value& current,
+                const iceberg::timestamptz_value& current,
                 const avro::GenericDatum& expected) {
                   ASSERT_VALUES_EQUAL(
                     current.val / 1000, expected.value<int64_t>());
               });
         }
         if (datum.logicalType().type() == avro::LogicalType::TIMESTAMP_MICROS) {
-            return primitive_equal<iceberg::timestamp_value>(
+            return primitive_equal<iceberg::timestamptz_value>(
               datum,
               value,
               [](
-                const iceberg::timestamp_value& current,
+                const iceberg::timestamptz_value& current,
                 const avro::GenericDatum& expected) {
                   ASSERT_VALUES_EQUAL(current.val, expected.value<int64_t>());
               });
@@ -1269,3 +1269,163 @@ INSTANTIATE_TEST_SUITE_P(
       .schema = R"J({"type": "long"})J",
       .expected = std::nullopt,
     }));
+
+struct branch_label_test_case {
+    std::string_view schema;
+    std::vector<std::string_view> labels;
+};
+
+struct BranchLabelTest : ::testing::TestWithParam<branch_label_test_case> {};
+
+namespace {
+MATCHER_P(AvroTypeIs, type, fmt::format("avro type is {}", type)) {
+    return arg != nullptr && arg->type() == type;
+}
+} // namespace
+
+TEST_P(BranchLabelTest, UnionBranchLabelsTest) {
+    auto [schema, expected] = GetParam();
+
+    auto root = load_json_schema(schema);
+    ASSERT_THAT(root, AvroTypeIs(avro::AVRO_UNION));
+    ASSERT_THAT(expected, SizeIs(root->leaves()));
+
+    auto s_type = iceberg::type_to_iceberg(root);
+    ASSERT_TRUE(s_type.has_value());
+    ASSERT_THAT(s_type.value().fields, SizeIs(1));
+
+    ASSERT_TRUE(
+      std::holds_alternative<iceberg::struct_type>(
+        s_type.value().fields[0]->type));
+
+    const auto& u_type = std::get<iceberg::struct_type>(
+      s_type.value().fields[0]->type);
+
+    ASSERT_EQ(u_type.fields.size(), root->leaves());
+
+    for (auto i : std::views::iota(0UL, root->leaves())) {
+        auto label = iceberg::union_branch_label(
+          root->leafAt(i), u_type.fields[i]->type);
+        ASSERT_THAT(label, Eq(expected[i]));
+    }
+}
+
+using btc = branch_label_test_case;
+INSTANTIATE_TEST_SUITE_P(
+  UnionBranchLabelsTest,
+  BranchLabelTest,
+  Values(
+    btc{
+      .schema = R"J([ "long", "int" ])J",
+      .labels = {"long", "int"},
+    },
+    btc{
+      .schema = R"J([ "long", {"type": "map", "values": "int" } ])J",
+      .labels = {"long", "map"},
+    },
+    btc{
+      .schema = R"J([ "long", {"type": "array", "items": "int" } ])J",
+      .labels = {"long", "array"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "record", "name": "Struct", "fields": [{"name": "a", "type": "int"}]}, "long" ])J",
+      .labels = {"Struct", "long"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "enum", "name": "Enum", "symbols": ["FOO", "BAR"]}, "long" ])J",
+      .labels = {"Enum", "long"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "fixed", "name": "Hash", "size": 16}, "long" ])J",
+      .labels = {"Hash", "long"},
+    },
+    btc{
+      .schema = R"J([ {"type": "string", "logicalType": "uuid"}, "long" ])J",
+      .labels = {"string", "long"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "bytes", "logicalType": "decimal", "precision": 10, "scale": 2}, "long" ])J",
+      .labels = {"bytes", "long"},
+    },
+    btc{
+      .schema = R"J([ {"type": "int", "logicalType": "date"}, "long" ])J",
+      .labels = {"int", "long"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "int", "logicalType": "time-millis"}, "long" ])J",
+      .labels = {"int", "long"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "long", "logicalType": "time-micros"}, "string" ])J",
+      .labels = {"long", "string"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "long", "logicalType": "timestamp-millis"}, "string" ])J",
+      .labels = {"long", "string"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "long", "logicalType": "timestamp-micros"}, "string" ])J",
+      .labels = {"long", "string"},
+    },
+    btc{
+      .schema
+      = R"J([ {"type": "fixed", "name": "FixedDecimal", "size": 16, "logicalType": "decimal", "precision": 10, "scale": 2}, "long" ])J",
+      .labels = {"FixedDecimal", "long"},
+    }));
+
+TEST(AvroSchema, TestSymbolicUnionBranch) {
+    std::string_view schema = R"J(
+{
+    "type": "record",
+    "name": "Root",
+    "fields": [
+        {
+            "name": "rec",
+            "type": {
+                "type": "record",
+                "name": "Record",
+                "fields": [ {"name": "f1", "type": "int"} ]
+            }
+        },
+        {
+            "name": "union",
+            "type": [ "Record", "long"]
+        }
+    ]
+})J";
+
+    auto root = load_json_schema(schema);
+    ASSERT_THAT(root, AvroTypeIs(avro::AVRO_RECORD));
+    ASSERT_EQ(root->leaves(), 2);
+    ASSERT_THAT(root->leafAt(1), AvroTypeIs(avro::AVRO_UNION));
+
+    auto type = iceberg::type_to_iceberg(root);
+    ASSERT_TRUE(type.has_value());
+    ASSERT_THAT(type.value().fields, SizeIs(2));
+
+    ASSERT_TRUE(
+      std::holds_alternative<iceberg::struct_type>(
+        type.value().fields[1]->type));
+
+    const auto& u_type = std::get<iceberg::struct_type>(
+      type.value().fields[1]->type);
+    ASSERT_THAT(u_type.fields, SizeIs(2));
+    const auto& u_node = root->leafAt(1);
+    ASSERT_EQ(u_node->leaves(), 2);
+
+    auto expected = std::array{"Record", "long"};
+    ASSERT_THAT(
+      iceberg::union_branch_label(u_node->leafAt(0), u_type.fields[0]->type),
+      Eq(expected.at(0)));
+    ASSERT_THAT(
+      iceberg::union_branch_label(u_node->leafAt(1), u_type.fields[1]->type),
+      Eq(expected.at(1)));
+}

@@ -69,11 +69,11 @@ struct primitive_visitor {
         if (node->logicalType().type() == avro::LogicalType::TIMESTAMP_MILLIS) {
             // times 1000 to convert from milliseconds to microseconds that
             // iceberg requires
-            return convert_primitive<int64_t, iceberg::timestamp_value>(
+            return convert_primitive<int64_t, iceberg::timestamptz_value>(
               v * 1000, avro::AVRO_LONG, node);
         }
         if (node->logicalType().type() == avro::LogicalType::TIMESTAMP_MICROS) {
-            return convert_primitive<int64_t, iceberg::timestamp_value>(
+            return convert_primitive<int64_t, iceberg::timestamptz_value>(
               v, avro::AVRO_LONG, node);
         }
         return convert_primitive<int64_t, iceberg::long_value>(
