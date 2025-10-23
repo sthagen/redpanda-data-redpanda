@@ -102,12 +102,16 @@ private:
         try {
             vlog(_task->logger().trace, "running task");
             co_await _task->run_impl();
-        } catch (const std::exception& e) {
-            vlog(_task->logger().error, "task failed: {}", e.what());
+        } catch (...) {
+            auto e = std::current_exception();
+            auto log_level = ssx::is_shutdown_exception(e)
+                               ? ss::log_level::debug
+                               : ss::log_level::error;
+            vlogl(
+              _task->logger(), log_level, "task encountered an error: {}", e);
             auto res = _task->change_state(
               model::task_state::faulted,
-              ssx::sformat(
-                "{} failed with error: {}", _task->name(), e.what()));
+              ssx::sformat("{} failed with error: {}", _task->name(), e));
             vassert(res.has_value(), "Failed to change state to faulted");
         }
     }

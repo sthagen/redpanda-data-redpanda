@@ -199,6 +199,34 @@ buffered_protocol::remake_learner_state(
       &consensus_client_protocol::remake_learner_state);
 }
 
+ss::future<result<get_compaction_mcco_reply>>
+buffered_protocol::get_compaction_mcco(
+  model::node_id target_node,
+  get_compaction_mcco_request req,
+  rpc::client_opts opts) {
+    return apply_with_gate(
+      _gate,
+      _base_protocol,
+      target_node,
+      std::move(req),
+      std::move(opts),
+      &consensus_client_protocol::get_compaction_mcco);
+}
+
+ss::future<result<distribute_compaction_mtro_reply>>
+buffered_protocol::distribute_compaction_mtro(
+  model::node_id target_node,
+  distribute_compaction_mtro_request req,
+  rpc::client_opts opts) {
+    return apply_with_gate(
+      _gate,
+      _base_protocol,
+      target_node,
+      std::move(req),
+      std::move(opts),
+      &consensus_client_protocol::distribute_compaction_mtro);
+}
+
 ss::future<bool> buffered_protocol::ensure_disconnect(model::node_id node_id) {
     return _base_protocol.ensure_disconnect(node_id);
 }

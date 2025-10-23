@@ -54,6 +54,7 @@
 #include "pandaproxy/schema_registry/configuration.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "raft/fwd.h"
+#include "redpanda/admin/kafka_connections_service.h"
 #include "redpanda/monitor_unsafe.h"
 #include "resource_mgmt/cpu_profiler.h"
 #include "resource_mgmt/cpu_scheduling.h"
@@ -342,6 +343,8 @@ private:
     std::unique_ptr<crash_tracker::service> _crash_tracker_service;
 
     std::unique_ptr<metrics::host_metrics_watcher> _host_metrics_watcher;
+
+    ss::sharded<admin::kafka_connections_service> _kafka_connections_service;
 
     ss::sharded<ss::abort_source> _as;
 };

@@ -7,19 +7,18 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from ducktape.cluster.cluster import ClusterNode
-from ducktape.services.service import Service
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.multi_cluster_services import SecondaryClusterArgs
-from rptest.services.redpanda import SecurityConfig, TLSProvider
-from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManager
-from rptest.tests.cluster_linking_test_base import ShadowLinkTestBase
+from rptest.services.redpanda import SecurityConfig
+from rptest.services.tls import Certificate, TLSCertManager
+from rptest.tests.cluster_linking_test_base import (
+    ClusterLinkingTLSProvider,
+    ShadowLinkTestBase,
+)
 from rptest.util import wait_until
-
-import socket
 
 
 class ClusterLinkingTopicSyncingTestBase(ShadowLinkTestBase):
@@ -395,22 +394,6 @@ class ClusterLinkingTopicSyncingWithScram(ClusterLinkingTopicSyncingTestBase):
                 ]
             }
         )
-
-
-class ClusterLinkingTLSProvider(TLSProvider):
-    def __init__(self, tls: TLSCertManager):
-        self.tls: TLSCertManager = tls
-
-    @property
-    def ca(self) -> CertificateAuthority:
-        return self.tls.ca
-
-    def create_broker_cert(self, service: Service, node: ClusterNode) -> Certificate:
-        assert node in service.nodes
-        return self.tls.create_cert(node.name)
-
-    def create_service_client_cert(self, service: Service, name: str) -> Certificate:
-        return self.tls.create_cert(socket.gethostname(), name=name, common_name=name)
 
 
 class ClusterLinkingTopicSyncingWithTlsFiles(ClusterLinkingTopicSyncingTestBase):

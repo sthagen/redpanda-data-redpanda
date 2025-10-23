@@ -11,10 +11,13 @@ from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 import time
+import socket
 from typing import Any
 
 import google.protobuf.duration_pb2
 import google.protobuf.field_mask_pb2
+from ducktape.cluster.cluster import ClusterNode
+from ducktape.services.service import Service
 from ducktape.utils.util import wait_until
 
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
@@ -39,9 +42,8 @@ from rptest.services.multi_cluster_services import (
     ServiceType,
     SecondaryClusterSpec,
 )
-from rptest.services.redpanda import (
-    LoggingConfig,
-)
+from rptest.services.redpanda import LoggingConfig, TLSProvider
+from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManager
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.node_operations import FailureInjectorBackgroundThread
 
@@ -78,6 +80,22 @@ DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
     "redpanda.leaders.preference",
     "redpanda.cloud_topic.enabled",
 ]
+
+
+class ClusterLinkingTLSProvider(TLSProvider):
+    def __init__(self, tls: TLSCertManager):
+        self.tls: TLSCertManager = tls
+
+    @property
+    def ca(self) -> CertificateAuthority:
+        return self.tls.ca
+
+    def create_broker_cert(self, service: Service, node: ClusterNode) -> Certificate:
+        assert node in service.nodes
+        return self.tls.create_cert(node.name)
+
+    def create_service_client_cert(self, service: Service, name: str) -> Certificate:
+        return self.tls.create_cert(socket.gethostname(), name=name, common_name=name)
 
 
 class ClusterLinkingProgressVerifier:

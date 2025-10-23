@@ -38,6 +38,7 @@
 #include "cluster/data_migration_backend.h"
 #include "cluster/data_migration_frontend.h"
 #include "cluster/data_migration_irpc_frontend.h"
+#include "cluster/data_migration_router.h"
 #include "cluster/data_migration_table.h"
 #include "cluster/data_migration_types.h"
 #include "cluster/data_migration_worker.h"
@@ -359,6 +360,15 @@ ss::future<> controller::start(
         }),
       std::ref(_as));
 
+    co_await _data_migration_router.start(
+      _raft0->self().id(),
+      ss::sharded_parameter([&data_migrations_group_proxy] {
+          return std::ref(*data_migrations_group_proxy.local());
+      }),
+      std::ref(_shard_table),
+      std::ref(_metadata_cache),
+      std::ref(_connections),
+      std::ref(_partition_leaders));
     co_await _data_migration_worker.start(
       _raft0->self().id(),
       ss::sharded_parameter(
@@ -852,6 +862,7 @@ ss::future<> controller::start(
       data_migrations::data_migrations_shard,
       std::ref(_data_migration_table.local()),
       std::ref(_data_migration_frontend.local()),
+      std::ref(_data_migration_router.local()),
       std::ref(_data_migration_worker),
       std::ref(_partition_leaders.local()),
       std::ref(_tp_frontend.local()),
@@ -942,6 +953,7 @@ ss::future<> controller::stop() {
     co_await _hm_backend.stop();
     co_await _health_manager.stop();
     co_await _members_backend.stop();
+    co_await _data_migration_router.stop();
     co_await _data_migration_worker.stop();
     co_await _data_migration_frontend.stop();
     co_await _topic_mount_handler.stop();

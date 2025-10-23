@@ -11,8 +11,6 @@
 
 #pragma once
 
-#include "features/fwd.h"
-#include "kafka/server/fwd.h"
 #include "proto/redpanda/core/admin/v2/broker.proto.h"
 #include "redpanda/admin/proxy/client.h"
 
@@ -25,27 +23,18 @@ class broker_service_impl : public proto::admin::broker_service {
 public:
     broker_service_impl(
       admin::proxy::client,
-      std::vector<std::unique_ptr<serde::pb::rpc::base_service>>* services,
-      ss::sharded<kafka::server>& kafka_server,
-      ss::sharded<features::feature_table>& _feature_table);
+      std::vector<std::unique_ptr<serde::pb::rpc::base_service>>* services);
 
     ss::future<proto::admin::get_broker_response> get_broker(
       serde::pb::rpc::context, proto::admin::get_broker_request) override;
     ss::future<proto::admin::list_brokers_response> list_brokers(
       serde::pb::rpc::context, proto::admin::list_brokers_request) override;
 
-    ss::future<proto::admin::list_kafka_connections_response>
-      list_kafka_connections(
-        serde::pb::rpc::context,
-        proto::admin::list_kafka_connections_request) override;
-
 private:
     proto::admin::broker self_broker() const;
 
     admin::proxy::client _proxy_client;
     std::vector<std::unique_ptr<serde::pb::rpc::base_service>>* _services;
-    ss::sharded<kafka::server>& _kafka_server;
-    ss::sharded<features::feature_table>& _feature_table;
 };
 
 } // namespace admin

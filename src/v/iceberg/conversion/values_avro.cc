@@ -59,8 +59,9 @@ struct primitive_visitor {
     }
     ret_t operator()(int64_t v) {
         if (node->type() == avro::AVRO_ENUM) {
-            return convert_primitive<int64_t, iceberg::long_value>(
-              v, avro::AVRO_ENUM, node);
+            iobuf buf = iobuf::from(node->nameAt(v));
+            return convert_primitive<iobuf, iceberg::string_value>(
+              std::move(buf), avro::AVRO_ENUM, node);
         }
         if (node->logicalType().type() == avro::LogicalType::TIME_MICROS) {
             return convert_primitive<int64_t, iceberg::time_value>(

@@ -193,12 +193,12 @@ AVRO_SCHEMA_TEST_CASES = {
         expected_trino=[
             ("number", "bigint", "", ""),
             ("timestamp_us", "timestamp(6) with time zone", "", ""),
-            ("suit", "bigint", "", ""),
+            ("suit", "varchar", "", ""),
         ],
         expected_spark=[
             ("number", "bigint", None),
             ("timestamp_us", "timestamp", None),
-            ("suit", "bigint", None),
+            ("suit", "string", None),
             ("", "", ""),
             ("# Partitioning", "", ""),
             ("Part 0", "hours(redpanda.timestamp)", ""),

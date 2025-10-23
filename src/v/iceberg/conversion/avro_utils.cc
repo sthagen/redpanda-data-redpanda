@@ -45,7 +45,7 @@ struct branch_label_primitive_type_visitor {
         return branch->name().simpleName();
     }
 
-    ss::sstring operator()(const iceberg::long_type&) {
+    ss::sstring operator()(const iceberg::string_type&) {
         if (branch->type() == avro::AVRO_ENUM) {
             return branch->name().simpleName();
         }

@@ -30,6 +30,8 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
 from rptest.clients.kafka_cli_tools import KafkaCliToolsError
 from rptest.clients.rpk import RpkTool, RPKACLInput, RpkException
 from rptest.clients.types import TopicSpec
+from rptest.clients.default import DefaultClient
+from rptest.services.cluster import TestContext
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import (
@@ -38,16 +40,19 @@ from rptest.services.kgo_verifier_services import (
 )
 from rptest.services.multi_cluster_services import (
     Cluster,
+    RedpandaCluster,
     MultiClusterServices,
     SecondaryClusterArgs,
     SecondaryClusterSpec,
     ServiceType,
 )
-from rptest.services.redpanda import SchemaRegistryConfig
+from rptest.services.redpanda import SchemaRegistryConfig, SecurityConfig
+from rptest.services.tls import TLSCertManager
 from rptest.tests.cluster_linking_test_base import (
     DEFAULT_SYNCED_TOPIC_PROPERTIES,
     DISALLOWED_SYNCED_TOPIC_PROPERTIES,
     REQUIRED_SYNCED_TOPIC_PROPERTIES,
+    ClusterLinkingTLSProvider,
     ShadowLinkPreAllocTestBase,
     ShadowLinkTestBase,
 )
@@ -181,6 +186,104 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                 return False
 
         return True
+
+    @cluster(num_nodes=6)
+    def test_create_default_link(self):
+        """
+        This test creates a Shadow Link with all default values and
+        verifies that the default values are what are in use
+        """
+        link_request = self.create_default_link_request(
+            link_name="test-link",
+            mirror_all_acls=False,
+            mirror_all_groups=False,
+            mirror_all_topics=False,
+        )
+        link_request.shadow_link.configurations.topic_metadata_sync_options.interval.CopyFrom(
+            google.protobuf.duration_pb2.Duration(seconds=0)
+        )
+        link_request.shadow_link.configurations.consumer_offset_sync_options.interval.CopyFrom(
+            google.protobuf.duration_pb2.Duration(seconds=0)
+        )
+        link_request.shadow_link.configurations.security_sync_options.interval.CopyFrom(
+            google.protobuf.duration_pb2.Duration(seconds=0)
+        )
+
+        shadow_link = self.create_link_with_request(req=link_request)
+
+        self.logger.info(f"Shadow link configurations: {shadow_link.configurations}")
+
+        client_options = shadow_link.configurations.client_options
+        assert client_options.metadata_max_age_ms == 0, (
+            f"Expected 0, got {client_options.metadata_max_age_ms}"
+        )
+        assert client_options.effective_metadata_max_age_ms == 10000, (
+            f"Expected 10000, got {client_options.effective_metadata_max_age_ms}"
+        )
+        assert client_options.connection_timeout_ms == 0, (
+            f"Expected 0, got {client_options.connection_timeout_ms}"
+        )
+        assert client_options.effective_connection_timeout_ms == 1000, (
+            f"Expected 1000, got {client_options.effective_connection_timeout_ms}"
+        )
+        assert client_options.retry_backoff_ms == 0, (
+            f"Expected 0, got {client_options.retry_backoff_ms}"
+        )
+        assert client_options.effective_retry_backoff_ms == 100, (
+            f"Expected 100, got {client_options.effective_retry_backoff_ms}"
+        )
+        assert client_options.fetch_wait_max_ms == 0, (
+            f"Expected 0, got {client_options.fetch_wait_max_ms}"
+        )
+        assert client_options.effective_fetch_wait_max_ms == 500, (
+            f"Expected 500, got {client_options.effective_fetch_wait_max_ms}"
+        )
+        assert client_options.fetch_min_bytes == 0, (
+            f"Expected 0, got {client_options.fetch_min_bytes}"
+        )
+        assert client_options.effective_fetch_min_bytes == (5 * 1024 * 1024), (
+            f"Expected {5 * 1024 * 1024}, got {client_options.effective_fetch_min_bytes}"
+        )
+        assert client_options.fetch_max_bytes == 0, (
+            f"Expected 0, got {client_options.fetch_max_bytes}"
+        )
+        assert client_options.effective_fetch_max_bytes == (20 * 1024 * 1024), (
+            f"Expected {20 * 1024 * 1024}, got {client_options.effective_fetch_max_bytes}"
+        )
+        assert client_options.fetch_partition_max_bytes == 0, (
+            f"Expected 0, got {client_options.fetch_partition_max_bytes}"
+        )
+        assert client_options.effective_fetch_partition_max_bytes == (
+            1 * 1024 * 1024
+        ), (
+            f"Expected {1 * 1024 * 1024}, got {client_options.effective_fetch_partition_max_bytes}"
+        )
+
+        topic_metadata_config = shadow_link.configurations.topic_metadata_sync_options
+        assert topic_metadata_config.interval == google.protobuf.duration_pb2.Duration(
+            seconds=0
+        ), f"Expected 0s, got {topic_metadata_config.interval}"
+        assert (
+            topic_metadata_config.effective_interval
+            == google.protobuf.duration_pb2.Duration(seconds=30)
+        ), f"Expected 30s, got {topic_metadata_config.effective_interval}"
+
+        cg_config = shadow_link.configurations.consumer_offset_sync_options
+        assert cg_config.interval == google.protobuf.duration_pb2.Duration(seconds=0), (
+            f"Expected 0s, got {cg_config.interval}"
+        )
+        assert cg_config.effective_interval == google.protobuf.duration_pb2.Duration(
+            seconds=30
+        ), f"Expected 30s, got {cg_config.effective_interval}"
+
+        security_config = shadow_link.configurations.security_sync_options
+        assert security_config.interval == google.protobuf.duration_pb2.Duration(
+            seconds=0
+        ), f"Expected 0s, got {security_config.interval}"
+        assert (
+            security_config.effective_interval
+            == google.protobuf.duration_pb2.Duration(seconds=30)
+        ), f"Expected 30s, got {security_config.effective_interval}"
 
     @cluster(num_nodes=6)
     def test_create_simple_link(self):
@@ -399,12 +502,20 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         shadow_link.configurations.client_options.fetch_partition_max_bytes = (
             500 * 1024 * 1024
         )
+        shadow_link.configurations.client_options.metadata_max_age_ms = 500
+        shadow_link.configurations.client_options.connection_timeout_ms = 100
+        shadow_link.configurations.client_options.retry_backoff_ms = 200
+        shadow_link.configurations.client_options.fetch_max_bytes = 100 * 1024 * 1024
         update_mask: google.protobuf.field_mask_pb2.FieldMask = google.protobuf.field_mask_pb2.FieldMask(
             paths=[
                 "configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters",
                 "configurations.client_options.fetch_partition_max_bytes",
                 "configurations.client_options.fetch_wait_max_ms",
                 "configurations.client_options.fetch_min_bytes",
+                "configurations.client_options.metadata_max_age_ms",
+                "configurations.client_options.connection_timeout_ms",
+                "configurations.client_options.retry_backoff_ms",
+                "configurations.client_options.fetch_max_bytes",
             ]
         )
 
@@ -419,10 +530,46 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             f"Expected updated link to be returned, {updated_link.configurations.topic_metadata_sync_options} != {shadow_link.configurations.topic_metadata_sync_options}"
         )
         assert (
-            updated_link.configurations.client_options
-            == shadow_link.configurations.client_options
+            updated_link.configurations.client_options.effective_fetch_wait_max_ms
+            == shadow_link.configurations.client_options.fetch_wait_max_ms
         ), (
-            f"Expected updated link to be returned, {updated_link.configurations.client_options} != {shadow_link.configurations.client_options}"
+            f"Expected fetch_wait_max_ms to be {shadow_link.configurations.client_options.fetch_wait_max_ms}, got {updated_link.configurations.client_options.effective_fetch_wait_max_ms}"
+        )
+        assert (
+            updated_link.configurations.client_options.effective_fetch_min_bytes
+            == shadow_link.configurations.client_options.fetch_min_bytes
+        ), (
+            f"Expected fetch_min_bytes to be {shadow_link.configurations.client_options.fetch_min_bytes}, got {updated_link.configurations.client_options.effective_fetch_min_bytes}"
+        )
+        assert (
+            updated_link.configurations.client_options.effective_fetch_partition_max_bytes
+            == shadow_link.configurations.client_options.fetch_partition_max_bytes
+        ), (
+            f"Expected fetch_partition_max_bytes to be {shadow_link.configurations.client_options.fetch_partition_max_bytes}, got {updated_link.configurations.client_options.effective_fetch_partition_max_bytes}"
+        )
+        assert (
+            updated_link.configurations.client_options.effective_metadata_max_age_ms
+            == shadow_link.configurations.client_options.metadata_max_age_ms
+        ), (
+            f"Expected metadata_max_age_ms to be {shadow_link.configurations.client_options.metadata_max_age_ms}, got {updated_link.configurations.client_options.effective_metadata_max_age_ms}"
+        )
+        assert (
+            updated_link.configurations.client_options.effective_connection_timeout_ms
+            == shadow_link.configurations.client_options.connection_timeout_ms
+        ), (
+            f"Expected connection_timeout_ms to be {shadow_link.configurations.client_options.connection_timeout_ms}, got {updated_link.configurations.client_options.effective_connection_timeout_ms}"
+        )
+        assert (
+            updated_link.configurations.client_options.effective_retry_backoff_ms
+            == shadow_link.configurations.client_options.retry_backoff_ms
+        ), (
+            f"Expected retry_backoff_ms to be {shadow_link.configurations.client_options.retry_backoff_ms}, got {updated_link.configurations.client_options.effective_retry_backoff_ms}"
+        )
+        assert (
+            updated_link.configurations.client_options.effective_fetch_max_bytes
+            == shadow_link.configurations.client_options.fetch_max_bytes
+        ), (
+            f"Expected fetch_max_bytes to be {shadow_link.configurations.client_options.fetch_max_bytes}, got {updated_link.configurations.client_options.effective_fetch_max_bytes}"
         )
 
         def _all_but_one_topic_are_present_in_target_cluster():
@@ -489,41 +636,6 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         ), (
             f"Expected topic filters to not be updated, got {updated_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters}"
         )
-
-    @cluster(num_nodes=6)
-    def test_invalid_updates(self):
-        shadow_link: shadow_link_pb2.ShadowLink = self.create_link(
-            "test-link", mirror_all_topics=False, mirror_all_groups=False
-        )
-
-        update_mask: google.protobuf.field_mask_pb2.FieldMask = (
-            google.protobuf.field_mask_pb2.FieldMask(
-                paths=["configurations.client_options.bootstrap_servers"]
-            )
-        )
-
-        with expect_exception(
-            ConnectError, lambda e: e.code == ConnectErrorCode.INVALID_ARGUMENT
-        ):
-            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
-
-        update_mask = google.protobuf.field_mask_pb2.FieldMask(
-            paths=["configurations.client_options.tls_settings"]
-        )
-
-        with expect_exception(
-            ConnectError, lambda e: e.code == ConnectErrorCode.INVALID_ARGUMENT
-        ):
-            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
-
-        update_mask = google.protobuf.field_mask_pb2.FieldMask(
-            paths=["configurations.client_options.tls_settings.tls_file_settings"]
-        )
-
-        with expect_exception(
-            ConnectError, lambda e: e.code == ConnectErrorCode.INVALID_ARGUMENT
-        ):
-            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
 
     @cluster(num_nodes=6)
     def test_delete_simple_link(self):
@@ -1732,6 +1844,103 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
 
         self._produce_to_topics(
             topics, self.target_cluster.service, expect_failures=False
+        )
+
+
+class ShadowLinkUpdateBrokersTests(ShadowLinkPreAllocTestBase):
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
+        self.test_context = test_context
+        self.security = SecurityConfig()
+        self.tls = TLSCertManager(self.logger)
+        self.security.tls_provider = ClusterLinkingTLSProvider(self.tls)
+        self.security.require_client_auth = False
+
+        super().__init__(
+            test_context=self.test_context, security=self.security, *args, **kwargs
+        )
+
+        self.other_source_cluster = RedpandaCluster.create(
+            self.test_context,
+            num_brokers=3,
+            security=self.security,
+        )
+
+    def setUp(self):
+        super().setUp()
+        self.other_source_cluster.start()
+
+    @property
+    def target_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.target_cluster.service, tls_cert=self.tls.create_cert("target-rpk")
+        )
+
+    @property
+    def other_source_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.other_source_cluster.service,
+            tls_cert=self.tls.create_cert("other-source-rpk"),
+        )
+
+    @cluster(num_nodes=9)
+    def test_update_brokers(self):
+        # Create a link pointing to the old source cluster
+        shadow_link = self.create_link("test-link")
+
+        # Update bootstrap_servers
+        del shadow_link.configurations.client_options.bootstrap_servers[:]
+        shadow_link.configurations.client_options.bootstrap_servers.extend(
+            self.other_source_cluster.service.brokers_list()
+        )
+
+        # Update tls settings
+        shadow_link.configurations.client_options.tls_settings.CopyFrom(
+            shadow_link_pb2.TLSSettings(
+                enabled=True,
+                tls_file_settings=shadow_link_pb2.TLSFileSettings(
+                    ca_path=self.redpanda.TLS_CA_CRT_FILE,
+                    key_path=self.redpanda.TLS_SERVER_KEY_FILE,
+                    cert_path=self.redpanda.TLS_SERVER_CRT_FILE,
+                ),
+            )
+        )
+
+        update_mask: google.protobuf.field_mask_pb2.FieldMask = (
+            google.protobuf.field_mask_pb2.FieldMask(
+                paths=["configurations.client_options"]
+            )
+        )
+
+        # Update the link to point to the new source cluster
+        updated_link = self.update_link(
+            shadow_link=shadow_link, update_mask=update_mask
+        )
+        assert (
+            updated_link.configurations.client_options
+            == shadow_link.configurations.client_options
+        ), (
+            f"Expected updated link to be returned:\n"
+            f"{updated_link.configurations.client_options}!=\n{shadow_link.configurations.client_options}"
+        )
+
+        old_source_topic = "old-source-topic"
+        new_source_topic = "new-source-topic"
+
+        self.source_cluster_rpk.create_topic(old_source_topic)
+        self.other_source_cluster_rpk.create_topic(new_source_topic)
+
+        def topic_exists_in_target(topic: str):
+            topics = self.target_cluster_rpk.list_topics()
+            return topic in topics
+
+        self.target_cluster.service.wait_until(
+            lambda: topic_exists_in_target(new_source_topic),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {new_source_topic} not found in target cluster",
+        )
+        assert not topic_exists_in_target(old_source_topic), (
+            f"Topic {old_source_topic} should not be visible to the target cluster"
         )
 
 

@@ -157,7 +157,7 @@ get_credentials_builder(credentials_configuration cfg) {
 
     co_return builder;
 }
-namespace {
+
 fmt::iterator format_cert(fmt::iterator it, const net::certificate& cert) {
     return ss::visit(
       cert,
@@ -182,7 +182,6 @@ fmt::iterator format_keystore(fmt::iterator it, const net::key_store& store) {
           return fmt::format_to(it, "{{pkcs12: {}}}", pkcs);
       });
 }
-} // namespace
 
 fmt::iterator key_cert_path::format_to(fmt::iterator it) const {
     return fmt::format_to(

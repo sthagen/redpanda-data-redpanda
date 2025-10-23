@@ -110,7 +110,8 @@ partition_change_notifier_impl::register_partition_notifications(
       = _partition_mgr.local().register_unmanage_notification(
         model::kafka_internal_namespace,
         [this, id](model::topic_partition_view tp) mutable {
-            model::ntp ntp{model::kafka_namespace, tp.topic, tp.partition};
+            model::ntp ntp{
+              model::kafka_internal_namespace, tp.topic, tp.partition};
             do_notify_call_back(
               notification_type::partition_replica_unassigned,
               id,

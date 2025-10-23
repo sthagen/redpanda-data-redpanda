@@ -306,7 +306,7 @@ TEST(AvroSchema, TestRecordType) {
         0, iceberg::field_required::yes, iceberg::double_type{})));
 
     ASSERT_TRUE(
-      field_matches(struct_t.fields[5], "myenum", iceberg::long_type{}));
+      field_matches(struct_t.fields[5], "myenum", iceberg::string_type{}));
 
     iceberg::struct_type union_struct;
     // starts from union_1 as the union_0 is null type which is not represented
@@ -1025,17 +1025,17 @@ AssertionResult value_matches(
         }
 
         auto& actual_primitive = std::get<iceberg::primitive_value>(value);
-        if (!std::holds_alternative<iceberg::long_value>(actual_primitive)) {
+        if (!std::holds_alternative<iceberg::string_value>(actual_primitive)) {
             return AssertionFailure() << fmt::format(
-                     "Expected value {} to be of type iceberg::long_value",
+                     "Expected value {} to be of type iceberg::string_value",
                      value);
         }
-        auto& value = std::get<iceberg::long_value>(actual_primitive);
-        if (value.val != static_cast<int64_t>(generic_enum.value())) {
+        auto& value = std::get<iceberg::string_value>(actual_primitive);
+        if (value.val != iobuf::from(generic_enum.symbol())) {
             return AssertionFailure() << fmt::format(
                      "Expected value {} to be equal to {}",
                      value,
-                     generic_enum.value());
+                     generic_enum.symbol());
         }
         return AssertionSuccess();
     }

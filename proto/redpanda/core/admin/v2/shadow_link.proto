@@ -253,30 +253,54 @@ message ShadowLinkClientOptions {
     // Max metadata age.
     // If 0 is provided, defaults to 10 seconds
     int32 metadata_max_age_ms = 6;
+    // The effective metadata max age in milliseconds
+    int32 effective_metadata_max_age_ms = 7
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Connection timeout.
     // If 0 is provided, defaults to 1 second
-    int32 connection_timeout_ms = 7;
+    int32 connection_timeout_ms = 8;
+    // The effective connection timeout in milliseconds
+    int32 effective_connection_timeout_ms = 9
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Retry base backoff.
     // If 0 is provided, defaults to 100ms
-    int32 retry_backoff_ms = 8;
+    int32 retry_backoff_ms = 10;
+    // The effective retry backoff in milliseconds
+    int32 effective_retry_backoff_ms = 11
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Fetch request timeout.
     // If 0 is provided, defaults to 500ms
-    int32 fetch_wait_max_ms = 9;
+    int32 fetch_wait_max_ms = 12;
+    // The effective fetch wait max in milliseconds
+    int32 effective_fetch_wait_max_ms = 13
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Fetch min bytes.
     // If 0 is provided, defaults to 5 MiB
-    int32 fetch_min_bytes = 10;
+    int32 fetch_min_bytes = 14;
+    // The effective fetch min bytes
+    int32 effective_fetch_min_bytes = 15
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Fetch max bytes.
     // If 0 is provided, defaults to 20 MiB
-    int32 fetch_max_bytes = 11;
+    int32 fetch_max_bytes = 16;
+    // The effective fetch max bytes
+    int32 effective_fetch_max_bytes = 17
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Fetch partition max bytes.
     // If 0 is provided, defaults to 1 MiB
-    int32 fetch_partition_max_bytes = 12;
+    int32 fetch_partition_max_bytes = 18;
+    // The effective fetch partition max bytes
+    int32 effective_fetch_partition_max_bytes = 19
+        [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 // Options for syncing topic metadata
 message TopicMetadataSyncOptions {
     // How often to sync metadata
     // If 0 provided, defaults to 30 seconds
     google.protobuf.Duration interval = 1;
+    // The effective interval for the task
+    google.protobuf.Duration effective_interval = 2
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // List of filters that indicate which topics should be automatically
     // created as shadow topics on the shadow cluster.  This only controls
     // automatic creation of shadow topics and does not effect the state of the
@@ -288,7 +312,7 @@ message TopicMetadataSyncOptions {
     // any topics that start with _redpanda or __redpanda.  If users wish to
     // shadow topics that start with _redpanda or __redpanda, they should
     // provide a literal filter for those topics.
-    repeated NameFilter auto_create_shadow_topic_filters = 2;
+    repeated NameFilter auto_create_shadow_topic_filters = 3;
     // List of topic properties that should be synced from the source topic.
     // The following properties will always be replicated
     // - Partition count
@@ -307,7 +331,7 @@ message TopicMetadataSyncOptions {
     //
     // This list is a list of properties in addition to the default properties
     // that will be synced.  See `exclude_default`.
-    repeated string synced_shadow_topic_properties = 3;
+    repeated string synced_shadow_topic_properties = 4;
     // If false, then the following topic properties will be synced by default:
     // - `compression.type`
     // - `retention.bytes`
@@ -319,7 +343,7 @@ message TopicMetadataSyncOptions {
     //
     // If this is true, then only the properties listed in
     // `synced_shadow_topic_properties` will be synced.
-    bool exclude_default = 4;
+    bool exclude_default = 5;
     // Start at the earliest offset in the partition.
     message EarliestOffset {}
     // Start at the latest offset in the partition.
@@ -330,14 +354,14 @@ message TopicMetadataSyncOptions {
     oneof start_offset {
         // Enables data replication from the earliest offset
         // on the source topic/partition.
-        EarliestOffset earliest = 5;
+        EarliestOffset earliest = 6;
         // Enables data replication from the latest offset
         // on the source topic/partition.
-        LatestOffset latest = 6;
+        LatestOffset latest = 7;
         // Enables data replication from the first offset on the
         // source topic/partition where the record's timestamp is
         // at or after the specified timestamp.
-        google.protobuf.Timestamp timestamp = 7;
+        google.protobuf.Timestamp timestamp = 8;
     }
 }
 // Options for syncing consumer offsets
@@ -345,20 +369,26 @@ message ConsumerOffsetSyncOptions {
     // Sync interval
     // If 0 provided, defaults to 30 seconds
     google.protobuf.Duration interval = 1;
+    // The effective interval for the task
+    google.protobuf.Duration effective_interval = 2
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Whether it's enabled
-    bool enabled = 2;
+    bool enabled = 3;
     // The filters
-    repeated NameFilter group_filters = 3;
+    repeated NameFilter group_filters = 4;
 }
 // Options for syncing security settings
 message SecuritySettingsSyncOptions {
     // Sync interval
     // If 0 provided, defaults to 30 seconds
     google.protobuf.Duration interval = 1;
+    // The effective interval for the task
+    google.protobuf.Duration effective_interval = 2
+        [(google.api.field_behavior) = OUTPUT_ONLY];
     // Whether or not it's enabled
-    bool enabled = 2;
+    bool enabled = 3;
     // ACL filters
-    repeated ACLFilter acl_filters = 5;
+    repeated ACLFilter acl_filters = 4;
 }
 // TLS settings
 message TLSSettings {

@@ -14,7 +14,7 @@ from ducktape.mark import matrix
 from rptest.clients.rpk import RpkException, RpkTool
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import LoggingConfig, SISettings
+from rptest.services.redpanda import LoggingConfig, SISettings, CLOUD_TOPICS_CONFIG_STR
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_fips_mode
@@ -68,7 +68,7 @@ class LicenseEnforcementTest(RedpandaTest):
             err_msg="The cluster hasn't stabilized",
         )
 
-        self.logger.info(f"Enabling an enterprise feature")
+        self.logger.info("Enabling an enterprise feature")
         self.redpanda.set_cluster_config({"partition_autobalancing_mode": "continuous"})
 
         self.logger.info(
@@ -142,7 +142,7 @@ class LicenseEnforcementTest(RedpandaTest):
             err_msg="The cluster hasn't stabilized",
         )
 
-        self.logger.info(f"Enabling an enterprise feature")
+        self.logger.info("Enabling an enterprise feature")
         self.redpanda.set_cluster_config({"partition_autobalancing_mode": "continuous"})
 
         self.logger.info(
@@ -236,7 +236,7 @@ class LicenseEnforcementTest(RedpandaTest):
         try:
             self.rpk.cluster_config_set("iceberg_enabled", "true")
             assert False, "Enabling iceberg must fail without the license"
-        except RpkException as e:
+        except RpkException:
             pass
 
 
@@ -314,7 +314,7 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
             assert False, (
                 "Should have failed to create topic with iceberg enabled set and cloud_storage_enabled set to True"
             )
-        except RpkException as e:
+        except RpkException:
             pass
 
     @cluster(num_nodes=3)
@@ -362,9 +362,9 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
         )
         # We shouldn't be able to set cloud_topics_enabled without a license.
         try:
-            self.rpk.cluster_config_set("cloud_topics_enabled", "true")
+            self.rpk.cluster_config_set(CLOUD_TOPICS_CONFIG_STR, "true")
             assert False, "Enabling cloud_topics_enabled must fail without the license"
-        except RpkException as e:
+        except RpkException:
             pass
 
     @cluster(num_nodes=1)
@@ -373,7 +373,7 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
         self.redpanda.set_si_settings(si_settings)
         super().setUp()
 
-        self.rpk.cluster_config_set("cloud_topics_enabled", "true")
+        self.rpk.cluster_config_set(CLOUD_TOPICS_CONFIG_STR, "true")
 
         self.redpanda.set_environment(
             {"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": True}
@@ -394,7 +394,7 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
             assert False, (
                 "Should have failed to create topic with redpanda.cloud_topic.enabled set"
             )
-        except RpkException as e:
+        except RpkException:
             pass
 
     @cluster(num_nodes=3)

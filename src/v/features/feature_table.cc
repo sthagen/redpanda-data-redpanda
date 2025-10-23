@@ -44,6 +44,8 @@ std::string_view to_string_view(feature f) {
         return "consumer_groups_migrations";
     case feature::shadow_linking:
         return "shadow_linking";
+    case feature::coordinated_compaction:
+        return "coordinated_compaction";
     case feature::cloud_retention:
         return "cloud_retention";
     case feature::node_isolation:

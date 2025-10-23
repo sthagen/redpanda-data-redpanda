@@ -204,6 +204,7 @@ func printClient(opts *adminv2.ShadowLinkClientOptions) {
 	tw.Print("fetch_wait_max_ms", opts.GetFetchWaitMaxMs())
 	tw.Print("fetch_min_bytes", opts.GetFetchMinBytes())
 	tw.Print("fetch_max_bytes", opts.GetFetchMaxBytes())
+	tw.Print("fetch_partition_max_bytes", opts.GetFetchPartitionMaxBytes())
 }
 
 func printTopicSync(opts *adminv2.TopicMetadataSyncOptions) {

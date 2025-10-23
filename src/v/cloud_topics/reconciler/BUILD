@@ -11,6 +11,7 @@ redpanda_cc_library(
         "reconciliation_consumer.h",
     ],
     deps = [
+        ":reconciler_probe",
         "//src/v/base",
         "//src/v/cloud_topics/level_one/common:object",
         "//src/v/model",

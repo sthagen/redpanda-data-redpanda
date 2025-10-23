@@ -41,7 +41,6 @@ from typing import (
     Protocol,
     Set,
     Tuple,
-    Type,
     cast,
 )
 
@@ -286,6 +285,8 @@ FAILURE_INJECTION_LOG_ALLOW_LIST = [
 OIDC_ALLOW_LIST = [
     re.compile("security - .* - Error updating"),
 ]
+
+CLOUD_TOPICS_CONFIG_STR = "unstable_beta_feature_cloud_topics_enabled"
 
 
 class RemoteClusterNode(Protocol):
@@ -2380,6 +2381,7 @@ class RedpandaService(Service, RedpandaServiceABC):
     PERSISTENT_ROOT = "/var/lib/redpanda"
     TRIM_LOGS_KEY = "trim_logs"
     DATA_DIR = os.path.join(PERSISTENT_ROOT, "data")
+    CRASH_REPORTS = os.path.join(DATA_DIR, "crash_reports")
     NODE_CONFIG_FILE = "/etc/redpanda/redpanda.yaml"
     RPK_CONFIG_FILE = "/root/.config/rpk/rpk.yaml"
     CLUSTER_BOOTSTRAP_CONFIG_FILE = "/etc/redpanda/.bootstrap.yaml"
@@ -2459,6 +2461,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         },
         "executable": {"path": EXECUTABLE_SAVE_PATH, "collect_default": False},
         "backtraces": {"path": BACKTRACE_CAPTURE, "collect_default": True},
+        "crash_reports": {"path": CRASH_REPORTS, "collect_default": True},
     }
 
     # Thread name of shards to be used with redpanda_tid()
@@ -2996,13 +2999,13 @@ class RedpandaService(Service, RedpandaServiceABC):
 
     def get_node_memory_mb(self):
         if self._resource_settings.memory_mb is not None:
-            self.logger.info(f"get_node_memory_mb: got from ResourceSettings")
+            self.logger.info("get_node_memory_mb: got from ResourceSettings")
             return self._resource_settings.memory_mb
         elif self._dedicated_nodes is False:
-            self.logger.info(f"get_node_memory_mb: using ResourceSettings default")
+            self.logger.info("get_node_memory_mb: using ResourceSettings default")
             return self._resource_settings.DEFAULT_MEMORY_MB
         else:
-            self.logger.info(f"get_node_memory_mb: fetching from node")
+            self.logger.info("get_node_memory_mb: fetching from node")
             # Assume nodes are symmetric, so we can just ask one
             # how much memory it has.
             node = self.nodes[0]
@@ -3015,13 +3018,13 @@ class RedpandaService(Service, RedpandaServiceABC):
 
     def get_node_cpu_count(self) -> int:
         if self._resource_settings.num_cpus is not None:
-            self.logger.info(f"get_node_cpu_count: got from ResourceSettings")
+            self.logger.info("get_node_cpu_count: got from ResourceSettings")
             return self._resource_settings.num_cpus
         elif self._dedicated_nodes is False:
-            self.logger.info(f"get_node_cpu_count: using ResourceSettings default")
+            self.logger.info("get_node_cpu_count: using ResourceSettings default")
             return self._resource_settings.DEFAULT_NUM_CPUS
         else:
-            self.logger.info(f"get_node_cpu_count: fetching from node")
+            self.logger.info("get_node_cpu_count: fetching from node")
 
             # Assume nodes are symmetric, so we can just ask one
             node = self.nodes[0]
@@ -3117,9 +3120,9 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         def setup_node_dns(node):
             tmpfile = f"/tmp/{node.name}_hosts"
-            node.account.copy_from(f"/etc/hosts", tmpfile)
+            node.account.copy_from("/etc/hosts", tmpfile)
             update_hosts_file(node.name, tmpfile)
-            node.account.copy_to(tmpfile, f"/etc/hosts")
+            node.account.copy_to(tmpfile, "/etc/hosts")
 
         # Edit /etc/hosts on Redpanda nodes
         self.for_nodes(self.nodes, setup_node_dns)
@@ -3635,7 +3638,7 @@ class RedpandaService(Service, RedpandaServiceABC):
                     retry_on_exc=True,
                 )
 
-        self.logger.debug(f"Node status prior to redpanda startup:")
+        self.logger.debug("Node status prior to redpanda startup:")
         self.start_service(node, start_rp)
         if not expect_fail:
             self._started.add(node)
@@ -3683,7 +3686,7 @@ class RedpandaService(Service, RedpandaServiceABC):
                 retry_on_exc=True,
             )
 
-        self.logger.debug(f"Node status prior to redpanda startup:")
+        self.logger.debug("Node status prior to redpanda startup:")
         self.start_service(node, start_rp)
         self._started.add(node)
 
@@ -4379,7 +4382,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
             self.logger.info(f"Decoding backtraces on {node.account.hostname}.")
             cmd = "/opt/scripts/seastar-addr2line"
-            cmd += f" -a /opt/llvm/llvm-addr2line"
+            cmd += " -a /opt/llvm/llvm-addr2line"
             cmd += f" -e {self.find_raw_binary('redpanda')}"
             cmd += f" -f {RedpandaService.STDOUT_STDERR_CAPTURE}"
             cmd += f" > {RedpandaService.BACKTRACE_CAPTURE} 2>&1"
@@ -4573,11 +4576,12 @@ class RedpandaService(Service, RedpandaServiceABC):
             pid, signal.SIGKILL if forced else signal.SIGTERM, allow_fail=False
         )
 
+        stop_timeout = timeout or 30
         try:
             wait_until(
                 lambda: self.redpanda_pid(node) is None,
-                timeout_sec=timeout or 30,
-                err_msg=f"Redpanda node {node.account.hostname} failed to stop in {timeout} seconds",
+                timeout_sec=stop_timeout,
+                err_msg=f"Redpanda node {node.account.hostname} failed to stop in {stop_timeout} seconds",
             )
         except TimeoutError:
             sleep_sec = 10
@@ -4659,7 +4663,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         if node.account.exists(RedpandaService.SYSTEM_TLS_CA_CRT_FILE):
             node.account.remove(RedpandaService.SYSTEM_TLS_CA_CRT_FILE)
-            node.account.ssh(f"update-ca-certificates")
+            node.account.ssh("update-ca-certificates")
 
         if node.account.exists(RedpandaService.TEMP_OSSL_CONFIG_FILE):
             node.account.remove(RedpandaService.TEMP_OSSL_CONFIG_FILE)
@@ -5666,7 +5670,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         )
 
         if not any_anomalies:
-            self.logger.info(f"No anomalies in object storage scrub")
+            self.logger.info("No anomalies in object storage scrub")
         elif not fatal_anomalies:
             self.logger.info(
                 f"Non-fatal anomalies in remote storage: {json.dumps(report, indent=2)}"
@@ -5703,7 +5707,7 @@ class RedpandaService(Service, RedpandaServiceABC):
                 f"Internal object storage scrub detected fatal anomalies: {results}"
             )
         else:
-            self.logger.info(f"No anomalies in internal object storage scrub")
+            self.logger.info("No anomalies in internal object storage scrub")
 
     def wait_for_manifest_uploads(self) -> set[Partition]:
         cloud_storage_partitions: set[Partition] = set()

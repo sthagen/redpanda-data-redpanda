@@ -78,6 +78,16 @@ void reconciler_probe::setup_metrics() {
 
         // Histograms.
         sm::make_histogram(
+          "l0_read_duration_seconds",
+          [this] { return _l0_read_duration.internal_histogram_logform(); },
+          sm::description("Duration reading from L0")),
+        sm::make_histogram(
+          "object_build_duration_seconds",
+          [this] {
+              return _object_build_duration.internal_histogram_logform();
+          },
+          sm::description("Duration building L1 objects")),
+        sm::make_histogram(
           "object_upload_duration_seconds",
           [this] {
               return _object_upload_duration.internal_histogram_logform();

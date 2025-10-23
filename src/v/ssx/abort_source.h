@@ -133,4 +133,15 @@ private:
     std::vector<ss::abort_source::subscription> _subs;
 };
 
+/// \brief Subscribes to an abort source. Unlike \ref
+/// ss::abort_source::subscribe this function will invoke the callback
+/// immediately if the abort source is already aborted.
+template<typename Func>
+auto subscribe_or_trigger(ss::abort_source& as, Func&& func) {
+    auto subscription = as.subscribe(std::forward<Func>(func));
+    if (!subscription) {
+        subscription->on_abort(as.abort_requested_exception_ptr());
+    }
+    return subscription;
+}
 } // namespace ssx

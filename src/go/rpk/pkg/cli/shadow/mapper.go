@@ -40,14 +40,15 @@ func mapClientOptions(opts *ShadowLinkClientOptions) *adminv2.ShadowLinkClientOp
 	}
 
 	pbOpts := &adminv2.ShadowLinkClientOptions{
-		BootstrapServers:    opts.BootstrapServers,
-		SourceClusterId:     opts.SourceClusterID,
-		MetadataMaxAgeMs:    opts.MetadataMaxAgeMs,
-		ConnectionTimeoutMs: opts.ConnectionTimeoutMs,
-		RetryBackoffMs:      opts.RetryBackoffMs,
-		FetchWaitMaxMs:      opts.FetchWaitMaxMs,
-		FetchMinBytes:       opts.FetchMinBytes,
-		FetchMaxBytes:       opts.FetchMaxBytes,
+		BootstrapServers:       opts.BootstrapServers,
+		SourceClusterId:        opts.SourceClusterID,
+		MetadataMaxAgeMs:       opts.MetadataMaxAgeMs,
+		ConnectionTimeoutMs:    opts.ConnectionTimeoutMs,
+		RetryBackoffMs:         opts.RetryBackoffMs,
+		FetchWaitMaxMs:         opts.FetchWaitMaxMs,
+		FetchMinBytes:          opts.FetchMinBytes,
+		FetchMaxBytes:          opts.FetchMaxBytes,
+		FetchPartitionMaxBytes: opts.FetchPartitionMaxBytes,
 		// client_id is output-only in the protobuf, so we don't set it.
 	}
 
@@ -72,6 +73,7 @@ func mapTLSSettings(tls TLSSettings) *adminv2.TLSSettings {
 	switch t := tls.(type) {
 	case *TLSFileSettings:
 		pbTLS.Enabled = t.Enabled
+		pbTLS.DoNotSetSniHostname = t.DoNotSetSniHostname
 		pbTLS.TlsSettings = &adminv2.TLSSettings_TlsFileSettings{
 			TlsFileSettings: &adminv2.TLSFileSettings{
 				CaPath:   t.CAPath,
@@ -81,6 +83,7 @@ func mapTLSSettings(tls TLSSettings) *adminv2.TLSSettings {
 		}
 	case *TLSPEMSettings:
 		pbTLS.Enabled = t.Enabled
+		pbTLS.DoNotSetSniHostname = t.DoNotSetSniHostname
 		pbTLS.TlsSettings = &adminv2.TLSSettings_TlsPemSettings{
 			TlsPemSettings: &adminv2.TLSPEMSettings{
 				Ca:   t.CA,
@@ -363,14 +366,15 @@ func adminClientOptsToCfg(opts *adminv2.ShadowLinkClientOptions) *ShadowLinkClie
 	}
 
 	cfg := &ShadowLinkClientOptions{
-		BootstrapServers:    opts.GetBootstrapServers(),
-		SourceClusterID:     opts.GetSourceClusterId(),
-		MetadataMaxAgeMs:    opts.GetMetadataMaxAgeMs(),
-		ConnectionTimeoutMs: opts.GetConnectionTimeoutMs(),
-		RetryBackoffMs:      opts.GetRetryBackoffMs(),
-		FetchWaitMaxMs:      opts.GetFetchWaitMaxMs(),
-		FetchMinBytes:       opts.GetFetchMinBytes(),
-		FetchMaxBytes:       opts.GetFetchMaxBytes(),
+		BootstrapServers:       opts.GetBootstrapServers(),
+		SourceClusterID:        opts.GetSourceClusterId(),
+		MetadataMaxAgeMs:       opts.GetMetadataMaxAgeMs(),
+		ConnectionTimeoutMs:    opts.GetConnectionTimeoutMs(),
+		RetryBackoffMs:         opts.GetRetryBackoffMs(),
+		FetchWaitMaxMs:         opts.GetFetchWaitMaxMs(),
+		FetchMinBytes:          opts.GetFetchMinBytes(),
+		FetchMaxBytes:          opts.GetFetchMaxBytes(),
+		FetchPartitionMaxBytes: opts.GetFetchPartitionMaxBytes(),
 	}
 
 	if opts.GetTlsSettings() != nil {
@@ -395,20 +399,22 @@ func adminTLSToCfg(tls *adminv2.TLSSettings) TLSSettings {
 			return nil
 		}
 		return &TLSFileSettings{
-			Enabled:  tls.GetEnabled(),
-			CAPath:   t.TlsFileSettings.GetCaPath(),
-			KeyPath:  t.TlsFileSettings.GetKeyPath(),
-			CertPath: t.TlsFileSettings.GetCertPath(),
+			Enabled:             tls.GetEnabled(),
+			DoNotSetSniHostname: tls.GetDoNotSetSniHostname(),
+			CAPath:              t.TlsFileSettings.GetCaPath(),
+			KeyPath:             t.TlsFileSettings.GetKeyPath(),
+			CertPath:            t.TlsFileSettings.GetCertPath(),
 		}
 	case *adminv2.TLSSettings_TlsPemSettings:
 		if t.TlsPemSettings == nil {
 			return nil
 		}
 		return &TLSPEMSettings{
-			Enabled: tls.GetEnabled(),
-			CA:      t.TlsPemSettings.GetCa(),
-			Key:     t.TlsPemSettings.GetKey(),
-			Cert:    t.TlsPemSettings.GetCert(),
+			Enabled:             tls.GetEnabled(),
+			DoNotSetSniHostname: tls.GetDoNotSetSniHostname(),
+			CA:                  t.TlsPemSettings.GetCa(),
+			Key:                 t.TlsPemSettings.GetKey(),
+			Cert:                t.TlsPemSettings.GetCert(),
 		}
 	}
 

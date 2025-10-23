@@ -490,6 +490,27 @@ redpanda_cc_gtest(
         "//src/v/random:generators",
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "coordinated_compaction_test",
+    timeout = "short",
+    srcs = [
+        "coordinated_compaction_test.cc",
+    ],
+    deps = [
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/raft/tests:raft_fixture",
+        "//src/v/raft/tests:raft_fixture_retry_policy",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/test_utils:gtest",
+        "@fmt",
         "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",

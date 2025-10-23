@@ -13,6 +13,7 @@
         "rptest/clients/admin/google/api/field_info_pb2.py",
         "rptest/clients/admin/google/api/resource_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2.py",
+        "rptest/clients/admin/proto/redpanda/core/admin/v2/cluster_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/datalake_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/kafka_connections_pb2.py",
@@ -245,6 +246,7 @@
         "rptest/transactions/verifiers/consumer_offsets_verifier.py",
         "rptest/trim_results.py",
         "rptest/utils/bookend_collection.py",
+        "rptest/utils/data_migrations.py",
         "rptest/utils/empty_test.py",
         "rptest/utils/full_disk.py",
         "rptest/utils/functional.py",
@@ -284,6 +286,7 @@
     "off": [
         "rptest/chaos_tests/single_fault_test.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2_connect.py",
+        "rptest/clients/admin/proto/redpanda/core/admin/v2/cluster_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/datalake_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/shadow_link_pb2_connect.py",
@@ -483,7 +486,6 @@
         "rptest/transactions/verifiers/stream_verifier.py",
         "rptest/util.py",
         "rptest/utils/cluster_topology.py",
-        "rptest/utils/data_migrations.py",
         "rptest/utils/si_utils.py"
     ],
     "skip": [

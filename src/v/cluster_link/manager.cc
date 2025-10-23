@@ -464,7 +464,7 @@ manager::handle_on_link_change(model::id_t id, ::model::revision_id revision) {
     const auto& link_metadata = link_opt->get();
     auto it = _links.find(id);
     if (it != _links.end()) {
-        // Link already exists, update its configur
+        // Link already exists, update its configuration
         vlog(
           cllog.debug,
           "Updating cluster link id={} with new config: {}",

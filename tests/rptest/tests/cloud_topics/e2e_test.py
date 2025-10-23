@@ -6,7 +6,6 @@
 # As of the Change Date specified in that file, in accordance with
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
-import time
 
 from ducktape.utils.util import wait_until
 
@@ -21,6 +20,7 @@ from rptest.services.kgo_verifier_services import (
 from rptest.services.redpanda import (
     SISettings,
     make_redpanda_service,
+    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.end_to_end import EndToEndTest
 from rptest.util import Scale
@@ -47,10 +47,10 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         self.test_context = test_context
         self.topic = self.s3_topic_name
 
-        conf = dict(
-            cloud_topics_enabled=True,
-            enable_cluster_metadata_upload_loop=False,
-        )
+        conf = {
+            CLOUD_TOPICS_CONFIG_STR: True,
+            "enable_cluster_metadata_upload_loop": False,
+        }
 
         if extra_rp_conf:
             for k, v in conf.items():

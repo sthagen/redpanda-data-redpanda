@@ -430,7 +430,7 @@ func (f *netTunersFactory) NewInterruptConfigFileTuner(interfaces []string, mode
 				return false, err
 			}
 
-			if currentConfig != targetConfig {
+			if currentConfig.Cpusets == nil || *currentConfig.Cpusets != *targetConfig.Cpusets {
 				zap.L().Sugar().Debugf("Current config %+v is different than target %+v", currentConfig, targetConfig)
 				return false, nil
 			}

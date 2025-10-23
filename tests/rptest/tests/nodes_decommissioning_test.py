@@ -31,6 +31,7 @@ from rptest.services.redpanda import (
     RESTART_LOG_ALLOW_LIST,
     RedpandaService,
     SISettings,
+    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.tests.prealloc_nodes import PreallocNodesTest
@@ -376,7 +377,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         self.redpanda.enable_development_feature_support()
         self.redpanda.set_cluster_config(
             values={
-                "cloud_topics_enabled": True,
+                CLOUD_TOPICS_CONFIG_STR: True,
                 "cloud_topics_disable_reconciliation_loop": True,
             }
         )
@@ -1104,7 +1105,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         self.redpanda.set_cluster_config({"controller_snapshot_max_age_sec": 20000})
 
         spec = TopicSpec(
-            name=f"migration-test-workload", partition_count=32, replication_factor=3
+            name="migration-test-workload", partition_count=32, replication_factor=3
         )
 
         self.client().create_topic(spec)
@@ -1298,7 +1299,7 @@ class NodeDecommissionFailureReportingTest(RedpandaTest):
                 check_all_nodes,
                 timeout_sec=60,
                 backoff_sec=1,
-                err_msg=f"Timed out waiting for all nodes to report allocation failures",
+                err_msg="Timed out waiting for all nodes to report allocation failures",
             )
 
         wait_for_allocation_failures(failed_partitions=partitions)

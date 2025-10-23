@@ -7,6 +7,7 @@ redpanda_cc_gtest(
         "converter_test.cc",
     ],
     deps = [
+        "//src/v/cluster_link/model",
         "//src/v/redpanda/admin/services/shadow_link:converter",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",

@@ -107,6 +107,8 @@ public:
     char* get_current() { return _buf.get_write() + _used_bytes; }
     char* get_write() { return _buf.get_write(); }
 
+    explicit operator std::string_view() const { return {get(), size()}; }
+
 private:
     friend class io_fragment_list;
 
@@ -235,7 +237,14 @@ public:
         return _head == nullptr;
     }
 
+    bool is_single_fragment() const { return !empty() && _head == _tail; }
+
     io_fragment& front() {
+        check_consistency();
+        return *_head;
+    }
+
+    const io_fragment& front() const {
         check_consistency();
         return *_head;
     }

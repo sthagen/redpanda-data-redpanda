@@ -304,17 +304,6 @@ public:
       compaction::compaction_config cfg,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
-    // Returns the timestamp of the earliest removable data in the log above
-    // the offset o. "Removable" refers to data that, through the
-    // `copy_data_segment_reducer::filter()` process during compaction, can be
-    // removed due to reasons other than de-duplication. Concretely, "removable"
-    // data can be either a tombstone record in a segment with a
-    // clean_compact_timestamp set, or a transactional batch in a segment with
-    // self_compact_timestamp set. Returns std::nullopt if neither of the above
-    // are found.
-    std::optional<model::timestamp>
-      earliest_removable_timestamp(model::offset) const final;
-
     std::optional<model::offset> max_removed_offset() const final;
 
     struct file_offset_t {

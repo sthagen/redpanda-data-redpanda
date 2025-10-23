@@ -42,6 +42,11 @@ ss::future<> brokers::erase(model::node_id node_id) {
     co_await do_erase(node_id);
 }
 
+ss::future<> brokers::clear() {
+    auto u = co_await _state_mutex.get_units();
+    co_await do_clear();
+}
+
 ss::future<> brokers::do_erase(model::node_id node_id) {
     if (auto b_it = _brokers.find(node_id); b_it != _brokers.end()) {
         auto broker = b_it->second;
@@ -55,6 +60,24 @@ ss::future<> brokers::do_erase(model::node_id node_id) {
         return broker->stop().finally([broker]() {});
     }
     return ss::now();
+}
+
+ss::future<> brokers::do_clear() {
+    const auto to_string = std::views::transform([](const auto& broker) {
+        return ss::format(
+          "{} - {}:{}",
+          broker->id(),
+          broker->get_address().host(),
+          broker->get_address().port());
+    });
+    vlog(
+      _logger->debug,
+      "Clear brokers: {}",
+      fmt::join(_brokers | std::views::values | to_string, ","));
+    for (auto& b : _brokers | std::views::values) {
+        co_await b->stop();
+    }
+    _brokers.clear();
 }
 
 ss::future<> brokers::apply(

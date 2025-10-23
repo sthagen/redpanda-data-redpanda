@@ -284,6 +284,19 @@ connection_configuration::from_config_store(const configuration& cfg) {
     return ret;
 }
 
+fmt::iterator connection_configuration::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{initial_brokers: {}, broker_tls: {}, sasl_cfg: {}, client_id: {}, "
+      "max_metadata_age: {}, connection_timeout: {}}}",
+      initial_brokers,
+      broker_tls,
+      sasl_cfg,
+      client_id,
+      max_metadata_age,
+      connection_timeout);
+}
+
 client_configuration
 client_configuration::from_config_store(const configuration& cfg) {
     return client_configuration{
@@ -372,20 +385,20 @@ tls_configuration::build_credentials() const {
       });
 }
 
-auto format_as(const sasl_configuration& cfg) {
-    return fmt::format(
-      "sasl_configuration{{mechanism: {}, username: {}, password: <redacted>}}",
-      cfg.mechanism,
-      cfg.username);
+fmt::iterator tls_configuration::format_to(fmt::iterator it) const {
+    fmt::format_to(it, "{{truststore: ");
+    net::format_cert(it, *truststore);
+    fmt::format_to(it, ", k_store: ");
+    net::format_keystore(it, *k_store);
+    return fmt::format_to(
+      it, ", provide_sni_hostname: {}}}", provide_sni_hostname);
 }
 
-} // namespace kafka::client
-auto fmt::formatter<kafka::client::sasl_configuration>::format(
-  const kafka::client::sasl_configuration& sasl_cfg,
-  fmt::format_context& ctx) const -> decltype(ctx.out()) {
+fmt::iterator sasl_configuration::format_to(fmt::iterator it) const {
     return fmt::format_to(
-      ctx.out(),
+      it,
       "{{mechanism: {}, username: {}, password: <redacted>}}",
-      sasl_cfg.mechanism,
-      sasl_cfg.username);
+      mechanism,
+      username);
 }
+} // namespace kafka::client

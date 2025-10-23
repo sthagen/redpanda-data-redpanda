@@ -263,6 +263,38 @@ public:
           });
     }
 
+    [[gnu::always_inline]] ss::future<get_compaction_mcco_reply>
+    get_compaction_mcco(
+      get_compaction_mcco_request r, rpc::streaming_context&) final {
+        return _probe.get_compaction_mcco().then(
+          [this, r = std::move(r)]() mutable {
+              return dispatch_request(
+                std::move(r),
+                &service::make_failed_get_compaction_mcco_reply,
+                [](get_compaction_mcco_request&& r, consensus_ptr c) {
+                    return ssx::now(
+                      c->get_compaction_coordinator().do_get_compaction_mcco(
+                        std::move(r)));
+                });
+          });
+    }
+
+    [[gnu::always_inline]] ss::future<distribute_compaction_mtro_reply>
+    distribute_compaction_mtro(
+      distribute_compaction_mtro_request r, rpc::streaming_context&) final {
+        return _probe.distribute_compaction_mtro().then(
+          [this, r = std::move(r)]() mutable {
+              return dispatch_request(
+                std::move(r),
+                &service::make_failed_distribute_compaction_mtro_reply,
+                [](distribute_compaction_mtro_request&& r, consensus_ptr c) {
+                    return ssx::now(
+                      c->get_compaction_coordinator()
+                        .do_distribute_compaction_mtro(std::move(r)));
+                });
+          });
+    }
+
 private:
     using consensus_ptr = seastar::lw_shared_ptr<consensus>;
 
@@ -324,6 +356,18 @@ private:
     make_failed_remake_learner_state_reply() {
         return ss::make_ready_future<remake_learner_state_reply>(
           remake_learner_state_reply{});
+    }
+
+    static ss::future<get_compaction_mcco_reply>
+    make_failed_get_compaction_mcco_reply() {
+        return ss::make_ready_future<get_compaction_mcco_reply>(
+          get_compaction_mcco_reply{});
+    }
+
+    static ss::future<distribute_compaction_mtro_reply>
+    make_failed_distribute_compaction_mtro_reply() {
+        return ss::make_ready_future<distribute_compaction_mtro_reply>(
+          distribute_compaction_mtro_reply{});
     }
 
     template<typename Req, typename ErrorFactory, typename Func>

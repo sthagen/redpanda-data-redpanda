@@ -97,6 +97,8 @@ SEASTAR_THREAD_TEST_CASE(test_cmp_str_view) {
     BOOST_CHECK_EQUAL(true, multiple_frags > "cat");
     BOOST_CHECK_EQUAL(
       std::strong_ordering::equal, (multiple_frags.share(0, 3) <=> "cat"));
+    BOOST_CHECK_LT(iobuf::from(""), iobuf::from("cat"));
+    BOOST_CHECK_GT(iobuf::from("cat"), iobuf::from(""));
 }
 
 SEASTAR_THREAD_TEST_CASE(test_appended_data_is_retained) {

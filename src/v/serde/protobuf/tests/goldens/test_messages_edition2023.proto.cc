@@ -5016,6 +5016,9 @@ void test_all_types_edition2023::apply_field_path_from(std::span<const ss::sstri
     }},
     {"oneof_nested_message", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_nested_message()) {
+        if (!self->has_oneof_nested_message()) {
+          self->set_oneof_nested_message({});
+        }
         self->get_oneof_nested_message().apply_field_path_from(path, &update->get_oneof_nested_message());
       } else {
         self->set_oneof_nested_message({});

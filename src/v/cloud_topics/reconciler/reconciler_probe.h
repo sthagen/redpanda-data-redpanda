@@ -55,6 +55,13 @@ public:
         _sources_per_object.record(count);
     }
 
+    std::unique_ptr<hist_t::measurement> measure_l0_read_duration() {
+        return _l0_read_duration.auto_measure();
+    }
+    std::unique_ptr<hist_t::measurement> measure_object_build_duration() {
+        return _object_build_duration.auto_measure();
+    }
+
     std::unique_ptr<hist_t::measurement> measure_object_upload_duration() {
         return _object_upload_duration.auto_measure();
     }
@@ -93,6 +100,8 @@ private:
     uint64_t _offset_corrections{0};
 
     // Histograms.
+    hist_t _l0_read_duration;
+    hist_t _object_build_duration;
     hist_t _object_upload_duration;
     hist_t _metastore_add_objects_duration;
     hist_t _object_size_bytes;

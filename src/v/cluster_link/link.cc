@@ -14,6 +14,7 @@
 #include "cluster_link/logger.h"
 #include "cluster_link/manager.h"
 #include "cluster_link/model/types.h"
+#include "cluster_link/utils.h"
 #include "model/fundamental.h"
 #include "ssx/future-util.h"
 
@@ -47,24 +48,6 @@ ss::future<cl_result<void>> stop_task(task* t) {
     co_return res;
 }
 
-bool operator==(
-  const std::optional<kafka::client::sasl_configuration>& kc_config,
-  const std::optional<model::connection_config::authn_variant>& model_config) {
-    if (!kc_config.has_value() && !model_config.has_value()) {
-        return true;
-    }
-
-    if (kc_config.has_value() && model_config.has_value()) {
-        return ss::visit(
-          *model_config, [&kc_config](const model::scram_credentials& sc) {
-              return sc.mechanism == kc_config->mechanism
-                     && sc.username == kc_config->username
-                     && sc.password == kc_config->password;
-          });
-    }
-
-    return false;
-}
 } // namespace
 
 using kafka::data::rpc::partition_leader_cache;
@@ -187,7 +170,7 @@ void link::update_config(
       config,
       revision);
     _config = std::move(config);
-    maybe_update_sasl_configuration(_config.connection.authn_config);
+    maybe_update_connection_configuration();
 
     for (auto& [_, t] : _tasks) {
         vlog(cllog.trace, "Updating config for task {}", t->name());
@@ -500,30 +483,18 @@ ss::future<cl_result<void>> link::do_register_task(std::unique_ptr<task> t) {
     co_return res;
 }
 
-void link::maybe_update_sasl_configuration(
-  const std::optional<model::connection_config::authn_variant>& authn_config) {
-    const auto& current_sasl_cfg
-      = _cluster_connection->get_sasl_configuration();
-
-    const auto transform_func =
-      [](const model::connection_config::authn_variant& v) {
-          return ss::visit(v, [](const model::scram_credentials& creds) {
-              return kafka::client::sasl_configuration{
-                .mechanism = creds.mechanism,
-                .username = creds.username,
-                .password = creds.password,
-              };
-          });
-      };
-
-    if (authn_config != current_sasl_cfg) {
-        vlog(
-          cllog.info,
-          "Updating SASL configuration link {}: {}",
-          _config.name,
-          authn_config);
-        _cluster_connection->set_sasl_configuration(
-          authn_config.transform(transform_func));
+void link::maybe_update_connection_configuration() {
+    auto kafka_cfg = metadata_to_kafka_config(_config);
+    if (kafka_cfg == _cluster_connection->configuration()) {
+        return;
     }
+
+    vlog(
+      cllog.info,
+      "Updating connection configuration for link {}: {}",
+      _config.name,
+      kafka_cfg);
+    _cluster_connection->update_configuration(std::move(kafka_cfg));
 }
+
 } // namespace cluster_link

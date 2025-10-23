@@ -49,12 +49,11 @@ size_t move_bench() {
     return inner_iters * 2;
 }
 
-template<size_t Size, typename cmp_fn>
+template<size_t Size, typename cmp_fn, bool same>
 size_t cmp_bench() {
     iobuf a = make_iobuf(Size);
-    iobuf a_shared = a.share();
     iobuf a_copy = a.copy();
-    iobuf b = make_iobuf(Size, /*reverse=*/true);
+    iobuf b = make_iobuf(Size, !same);
     iobuf b_copy;
     for (const auto& frag : b) {
         for (char c : std::string_view(frag.get(), frag.size())) {
@@ -63,14 +62,11 @@ size_t cmp_bench() {
     }
     perf_tests::start_measuring_time();
     for (auto i = inner_iters; i--;) {
-        perf_tests::do_not_optimize(cmp_fn{}(a, a_shared));
-        perf_tests::do_not_optimize(cmp_fn{}(a, a_copy));
         perf_tests::do_not_optimize(cmp_fn{}(a, b));
         perf_tests::do_not_optimize(cmp_fn{}(a_copy, b_copy));
-        perf_tests::do_not_optimize(cmp_fn{}(b_copy, b));
     }
     perf_tests::stop_measuring_time();
-    return inner_iters * 5;
+    return inner_iters * 2;
 }
 
 // This microbench mocks common pattern in Redpanda where smaller iobufs will be
@@ -98,21 +94,55 @@ size_t append_bench() {
 }
 } // namespace
 
+// clang-format off
+PERF_TEST(iobuf, cmp_bench_0000) { return cmp_bench<   0, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0001) { return cmp_bench<   1, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0002) { return cmp_bench<   2, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0003) { return cmp_bench<   3, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0004) { return cmp_bench<   4, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0016) { return cmp_bench<  16, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0064) { return cmp_bench<  64, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0128) { return cmp_bench< 128, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0256) { return cmp_bench< 256, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0512) { return cmp_bench< 512, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_1024) { return cmp_bench<1024, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_2048) { return cmp_bench<2048, std::less<>, false>(); }
+PERF_TEST(iobuf, cmp_bench_0000_same) { return cmp_bench<   0, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0001_same) { return cmp_bench<   1, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0002_same) { return cmp_bench<   2, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0003_same) { return cmp_bench<   3, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0004_same) { return cmp_bench<   4, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0016_same) { return cmp_bench<  16, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0064_same) { return cmp_bench<  64, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0128_same) { return cmp_bench< 128, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0256_same) { return cmp_bench< 256, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_0512_same) { return cmp_bench< 512, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_1024_same) { return cmp_bench<1024, std::less<>, true>(); }
+PERF_TEST(iobuf, cmp_bench_2048_same) { return cmp_bench<2048, std::less<>, true>(); }
+// clang-format on
+
 PERF_TEST(iobuf, move_bench_small) { return move_bench<71>(); }
 PERF_TEST(iobuf, move_bench_medium) { return move_bench<300_KiB>(); }
 PERF_TEST(iobuf, move_bench_large) { return move_bench<965_KiB>(); }
 
-PERF_TEST(iobuf, eq_bench_small) { return cmp_bench<71, std::equal_to<>>(); }
+PERF_TEST(iobuf, eq_bench_small) {
+    return cmp_bench<71, std::equal_to<>, false>();
+}
+PERF_TEST(iobuf, eq_bench_small_same) {
+    return cmp_bench<71, std::equal_to<>, true>();
+}
 PERF_TEST(iobuf, eq_bench_medium) {
-    return cmp_bench<300_KiB, std::equal_to<>>();
+    return cmp_bench<300_KiB, std::equal_to<>, false>();
+}
+PERF_TEST(iobuf, eq_bench_medium_same) {
+    return cmp_bench<300_KiB, std::equal_to<>, true>();
 }
 PERF_TEST(iobuf, eq_bench_large) {
-    return cmp_bench<965_KiB, std::equal_to<>>();
+    return cmp_bench<965_KiB, std::equal_to<>, false>();
 }
-
-PERF_TEST(iobuf, cmp_bench_small) { return cmp_bench<71, std::less<>>(); }
-PERF_TEST(iobuf, cmp_bench_medium) { return cmp_bench<300_KiB, std::less<>>(); }
-PERF_TEST(iobuf, cmp_bench_large) { return cmp_bench<965_KiB, std::less<>>(); }
+PERF_TEST(iobuf, eq_bench_large_same) {
+    return cmp_bench<965_KiB, std::equal_to<>, true>();
+}
 
 PERF_TEST(iobuf, append_bench_small) { return append_bench<1'000, 4>(); }
 PERF_TEST(iobuf, append_bench_medium) { return append_bench<1'000, 40_KiB>(); }

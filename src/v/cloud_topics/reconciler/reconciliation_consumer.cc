@@ -10,53 +10,45 @@
 
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
 
-#include "model/timestamp.h"
-
 #include <seastar/core/coroutine.hh>
 
 namespace cloud_topics::reconciler {
 
-reconciliation_consumer::reconciliation_consumer(
-  l1::object_builder* builder, model::topic_id_partition tidp)
-  : _builder(builder)
-  , _tidp(tidp)
-  , _metadata{
-      .base_offset = kafka::offset::min(),
-      .last_offset = kafka::offset::min(),
-      .last_timestamp = model::timestamp::min(),
-      .batch_count = 0} {}
-
-ss::future<ss::stop_iteration>
-reconciliation_consumer::operator()(model::record_batch batch) {
-    if (_metadata.base_offset == kafka::offset::min()) {
-        _metadata.base_offset = model::offset_cast(batch.base_offset());
-        co_await _builder->start_partition(_tidp);
+ss::future<std::optional<consumer_metadata>> build_from_reader(
+  model::topic_id_partition tidp,
+  model::record_batch_reader reader,
+  l1::object_builder* builder,
+  reconciler_probe* probe) {
+    auto gen = std::move(reader).slice_generator(model::no_timeout);
+    auto build_duration = probe->measure_object_build_duration();
+    co_await builder->start_partition(tidp);
+    build_duration->stop();
+    auto read_duration = probe->measure_l0_read_duration();
+    consumer_metadata metadata;
+    while (auto batches = co_await gen()) {
+        read_duration->stop();
+        build_duration->start();
+        for (auto& batch : *batches) {
+            if (metadata.base_offset == kafka::offset::min()) {
+                metadata.base_offset = model::offset_cast(batch.base_offset());
+            }
+            metadata.last_timestamp = std::max(
+              batch.header().max_timestamp, metadata.last_timestamp);
+            metadata.last_offset = model::offset_cast(batch.last_offset());
+            if (!metadata.terms.contains(batch.term())) {
+                metadata.terms.insert(
+                  std::make_pair(
+                    batch.term(), model::offset_cast(batch.base_offset())));
+            }
+            ++metadata.batch_count;
+            co_await builder->add_batch(std::move(batch));
+        }
+        build_duration->stop();
+        read_duration->start();
     }
-
-    // NOTE: Only data batches here. It's safe to use timestamps without
-    //       checking the batch type.
-    _metadata.last_timestamp = std::max(
-      batch.header().max_timestamp, _metadata.last_timestamp);
-    _metadata.last_offset = model::offset_cast(batch.last_offset());
-
-    if (!_metadata.terms.contains(batch.term())) {
-        _metadata.terms.insert(
-          std::make_pair(
-            batch.term(), model::offset_cast(batch.base_offset())));
-    }
-
-    ++_metadata.batch_count;
-
-    co_await _builder->add_batch(std::move(batch));
-
-    co_return ss::stop_iteration::no;
-}
-
-std::optional<consumer_metadata> reconciliation_consumer::end_of_stream() {
-    if (_metadata.base_offset != kafka::offset::min()) {
-        return _metadata;
-    }
-    return std::nullopt;
+    co_return metadata.batch_count == 0
+      ? std::nullopt
+      : std::make_optional(std::move(metadata));
 }
 
 } // namespace cloud_topics::reconciler

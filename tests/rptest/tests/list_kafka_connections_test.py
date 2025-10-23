@@ -12,7 +12,7 @@ from typing import Any
 from ducktape.tests.test import TestContext
 
 from rptest.clients.admin.v2 import Admin as AdminV2
-from rptest.clients.admin.v2 import broker_pb, kafka_connections_pb
+from rptest.clients.admin.v2 import cluster_pb, kafka_connections_pb
 from rptest.clients.rpk import RpkTool
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
@@ -60,7 +60,7 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
 
         self.super_rpk.create_topic(self.test_topic)
 
-    @cluster(num_nodes=2)
+    @cluster(num_nodes=4)
     def test_list_kafka_connections(self):
         """
         Tests the AdminV2 list_connections endpoint by verifying active Kafka connections are correctly reported
@@ -73,13 +73,12 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
             self.redpanda,
             auth=(self.superuser.username, self.superuser.password),
         )
-        node_id = self.redpanda.node_id(self.redpanda.nodes[0])
-        req = broker_pb.ListKafkaConnectionsRequest(
-            node_id=node_id, page_size=10, order_by="source.port desc"
+        req = cluster_pb.ListKafkaConnectionsRequest(
+            page_size=10, order_by="source.port desc"
         )
 
         def valid_response() -> bool:
-            resp = admin_v2.broker().list_kafka_connections(req)
+            resp = admin_v2.cluster().list_kafka_connections(req)
 
             self.logger.info(
                 f"ListKafkaConnectionsResponse: total_size={resp.total_size}, connections={len(resp.connections)}"
@@ -98,7 +97,6 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
                 conn
                 for conn in resp.connections
                 if conn.group_id == self.test_group
-                and conn.node_id == node_id
                 and conn.state == kafka_connections_pb.KAFKA_CONNECTION_STATE_OPEN
                 and conn.open_time.ToDatetime() > datetime(year=2025, month=1, day=1)
                 and len(conn.source.ip_address) > 0
@@ -125,7 +123,7 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
 
         wait_until(
             valid_response,
-            timeout_sec=15,
+            timeout_sec=30,
             retry_on_exc=True,
             err_msg="Did not observe a valid ListKafkaConnectionsResponse",
         )
@@ -133,9 +131,8 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
         self.logger.info(
             "Test the filtering integration by filtering for an unknown UUID, expect an empty response"
         )
-        filtered_resp = admin_v2.broker().list_kafka_connections(
-            broker_pb.ListKafkaConnectionsRequest(
-                node_id=-1,
+        filtered_resp = admin_v2.cluster().list_kafka_connections(
+            cluster_pb.ListKafkaConnectionsRequest(
                 filter='uid = "ba26cadd-90f6-4999-b2c9-a89b5f033507"',
             )
         )
@@ -148,9 +145,8 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
         self.logger.info(
             "Test that closed connections can also be included in the response"
         )
-        closed_conns_resp = admin_v2.broker().list_kafka_connections(
-            broker_pb.ListKafkaConnectionsRequest(
-                node_id=-1,
+        closed_conns_resp = admin_v2.cluster().list_kafka_connections(
+            cluster_pb.ListKafkaConnectionsRequest(
                 filter="state = KAFKA_CONNECTION_STATE_CLOSED",
             )
         )
@@ -178,8 +174,8 @@ class AdminV2ListKafkaConnectionsLicenseTest(RedpandaTest):
     @cluster(num_nodes=1)
     def test_without_license(self):
         admin = AdminV2(self.redpanda)
-        resp = admin.broker().call_list_kafka_connections(
-            broker_pb.ListKafkaConnectionsRequest(node_id=-1)
+        resp = admin.cluster().call_list_kafka_connections(
+            cluster_pb.ListKafkaConnectionsRequest()
         )
         err = resp.error()
         assert err is not None, f"expected error response without license, got {err}"

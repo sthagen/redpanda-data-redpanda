@@ -83,33 +83,34 @@ func (f *netCheckersFactory) NewNicRxTxQueueCountChecker(
 		Warning,
 		true,
 		func() (interface{}, error) {
-			if !f.rnc.Tuners.GetAllowRxTxQueueTuner() {
-				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as it's disabled by configuration")
-				return true, nil
-			}
+			return isSet(nic, func(currentNic network.Nic) (bool, error) {
+				if !f.rnc.Tuners.GetAllowRxTxQueueTuner() {
+					zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as it's disabled by configuration")
+					return true, nil
+				}
 
-			supportsIrqLowering, err := nic.SupportsRxTxQueueLowering()
-			if err != nil {
-				return false, err
-			}
-			if !supportsIrqLowering {
-				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as using an unknown driver")
-				return true, nil
-			}
+				supportsIrqLowering, err := currentNic.SupportsRxTxQueueLowering()
+				if err != nil {
+					return false, err
+				}
+				if !supportsIrqLowering {
+					zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as using an unknown driver")
+					return true, nil
+				}
 
-			currentChannels, targetChannels, err := network.GetCurrentAndTargetChannels(nic, mode, cpuMask, f.cpuMasks, f.rnc, f.ethtool)
-			if err != nil {
-				return false, err
-			}
+				currentChannels, targetChannels, err := network.GetCurrentAndTargetChannels(currentNic, mode, cpuMask, f.cpuMasks, f.rnc, f.ethtool)
+				if err != nil {
+					return false, err
+				}
 
-			rxCheck := currentChannels.RxCount == targetChannels.RxCount
-			txCheck := currentChannels.TxCount == targetChannels.TxCount
-			combinedCheck := currentChannels.CombinedCount == targetChannels.CombinedCount
+				rxCheck := currentChannels.RxCount == targetChannels.RxCount
+				txCheck := currentChannels.TxCount == targetChannels.TxCount
+				combinedCheck := currentChannels.CombinedCount == targetChannels.CombinedCount
 
-			// We need all to be true because for the not in use one the check will always be true (0 == 0)
-			return rxCheck && txCheck && combinedCheck, nil
-		},
-	)
+				// We need all to be true because for the not in use one the check will always be true (0 == 0)
+				return rxCheck && txCheck && combinedCheck, nil
+			})
+		})
 }
 
 func (f *netCheckersFactory) NewNicRxTxQueueCountCheckers(

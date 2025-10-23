@@ -10,9 +10,12 @@
  */
 #pragma once
 #include "cloud_storage/fwd.h"
+#include "cloud_storage/topic_manifest.h"
 #include "cloud_storage/topic_mount_handler.h"
 #include "cluster/data_migration_group_proxy.h"
+#include "cluster/data_migration_router.h"
 #include "cluster/data_migration_table.h"
+#include "cluster/errc.h"
 #include "cluster/shard_table.h"
 #include "cluster/types.h"
 #include "container/chunked_hash_map.h"
@@ -39,6 +42,7 @@ public:
     backend(
       migrations_table& table,
       frontend& frontend,
+      router& router,
       ss::sharded<worker>& worker,
       partition_leaders_table& leaders_table,
       topics_frontend& topics_frontend,
@@ -54,12 +58,25 @@ public:
     ss::future<> start();
     ss::future<> stop();
 
+    ss::future<result<entities_status, errc>>
+    get_entities_status(id migration_id);
+
+    ss::future<errc>
+    set_entities_status(id migration_id, entities_status status);
+
 private:
     struct work_scope {
         std::optional<state> sought_state;
         bool data_partition_work_needed = false;
         bool co_partition_work_needed = false;
         bool topic_work_needed = false;
+        // true if the work requires entity state to be updated before
+        // proceeding to the next step
+        bool needs_entity_state_update = false;
+
+        // true if the work requires waiting for all partition work to finish
+        // before proceeding to the next step
+        bool wait_for_partition_work_to_finish = false;
 
         bool any_partition_work_needed() const {
             return data_partition_work_needed || co_partition_work_needed;
@@ -78,6 +95,9 @@ private:
           outstanding_partitions; // for partition scoped ops
         bool topic_scoped_work_needed;
         bool topic_scoped_work_done;
+        bool all_partitions_ready() const {
+            return outstanding_partitions.empty();
+        }
         void clear();
     };
     using topic_map_t = chunked_hash_map<
@@ -89,9 +109,11 @@ private:
       = chunked_hash_map<model::partition_id, chunked_vector<consumer_group>>;
     struct migration_reconciliation_state {
         explicit migration_reconciliation_state(work_scope scope)
-          : scope(scope) {}
+          : scope(scope)
+          , entities_ready(!scope.needs_entity_state_update) {}
         work_scope scope;
         topic_map_t outstanding_topics;
+        bool entities_ready;
         // may not stay unfilled between scheduling points
         std::optional<partition_consumer_group_map_t> partition_group_map;
     };
@@ -125,6 +147,7 @@ private:
         ss::abort_source _as;
         retry_chain_node _rcn;
         ss::shared_promise<errc> _promise;
+        std::optional<cloud_storage::topic_manifest> _cached_topic_manifest;
 
     public:
         topic_scoped_work_state();
@@ -137,6 +160,20 @@ private:
         retry_chain_node& rcn();
         void set_value(errc ec);
         ss::future<errc> future();
+
+        void cache_topic_manifest(cloud_storage::topic_manifest m) {
+            _cached_topic_manifest = std::move(m);
+        }
+
+        const std::optional<cloud_storage::topic_manifest>&
+        cached_topic_manifest() const {
+            return _cached_topic_manifest;
+        }
+
+        std::optional<cloud_storage::topic_manifest>&&
+        release_cached_topic_manifest() && {
+            return std::move(_cached_topic_manifest);
+        }
     };
     using tsws_lwptr_t = ss::lw_shared_ptr<topic_scoped_work_state>;
 
@@ -162,7 +199,10 @@ private:
     void spawn_advances();
 
     /* topic work */
-    ss::future<> schedule_topic_work(model::topic_namespace nt);
+    void schedule_topic_work_if_partitions_ready(
+      const model::topic_namespace& nt,
+      const migration_reconciliation_state& mrstate);
+    void schedule_topic_work(model::topic_namespace nt);
     ss::future<topic_work_result>
     // also resulting future cannot throw when co_awaited
     do_topic_work(model::topic_namespace nt, topic_work tw) noexcept;
@@ -178,17 +218,42 @@ private:
       tsws_lwptr_t tsws);
     ss::future<> abort_all_topic_work();
     /* topic work helpers */
+    ss::future<
+      result<std::reference_wrapper<const cloud_storage::topic_manifest>, errc>>
+    maybe_download_topic_manifest(
+      const model::topic_namespace& nt,
+      const std::optional<model::topic_namespace>& original_nt,
+      const std::optional<cloud_storage_location>& storage_location,
+      tsws_lwptr_t tsws);
+
     ss::future<errc> create_topic(
       const model::topic_namespace& local_nt,
       const std::optional<model::topic_namespace>& original_nt,
-      const std::optional<cloud_storage_location>& storage_location,
+      const cloud_storage::topic_manifest& manifest,
       retry_chain_node& rcn);
+
     ss::future<errc> prepare_mount_topic(
-      const model::topic_namespace& nt, retry_chain_node& rcn);
+      const model::topic_namespace& nt,
+      const cloud_storage::topic_manifest& manifest,
+      retry_chain_node& rcn);
+
     ss::future<errc> confirm_mount_topic(
-      const model::topic_namespace& nt, retry_chain_node& rcn);
+      const model::topic_namespace& nt,
+      const cloud_storage::topic_manifest& manifest,
+      retry_chain_node& rcn);
     ss::future<errc>
     delete_topic(const model::topic_namespace& nt, retry_chain_node& rcn);
+
+    ss::future<errc> unmount_not_existing_topic(
+      const model::topic_namespace& nt,
+      const cloud_storage::topic_manifest& manifest,
+      retry_chain_node& rcn);
+
+    ss::future<errc> do_unmount_not_existing_topic(
+      const model::topic_namespace& nt,
+      const cloud_storage::topic_manifest& manifest,
+      retry_chain_node& rcn);
+
     ss::future<errc>
     unmount_topic(const model::topic_namespace& nt, retry_chain_node& rcn);
     ss::future<errc>
@@ -225,6 +290,8 @@ private:
       const topic_reconciliation_state& tstate);
     void erase_tstate_if_done(
       migration_reconciliation_state& mrstate, topic_map_t::iterator it);
+    partition_consumer_group_map_t
+    build_migration_group_map(const migration_metadata& metadata) const;
 
     // call only with _mutex lock grabbed
     ss::future<> reconcile_migration(
@@ -362,6 +429,7 @@ private:
     migrations_table& _table;
     frontend& _frontend;
     ss::sharded<worker>& _worker;
+    router& _router;
     partition_leaders_table& _leaders_table;
     topics_frontend& _topics_frontend;
     topic_table& _topic_table;

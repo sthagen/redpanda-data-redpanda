@@ -4580,56 +4580,6 @@ disk_log_impl::earliest_dirty_segment_ts() const {
     return *std::ranges::min_element(dirty_segments_ts);
 }
 
-std::optional<model::timestamp>
-disk_log_impl::earliest_removable_timestamp(model::offset o) const {
-    if (!config().is_locally_compacted()) {
-        return std::nullopt;
-    }
-
-    // If there is no value for `delete_retention_ms`, don't bother scanning
-    // over the list of _segs.
-    if (!config().delete_retention_ms().has_value()) {
-        return std::nullopt;
-    }
-
-    model::timestamp earliest_removable_ts = model::timestamp::max();
-
-    auto it = _segs.lower_bound(o);
-    if (it == _segs.end()) {
-        return std::nullopt;
-    }
-
-    for (; it != _segs.end(); ++it) {
-        auto& seg = *it;
-        auto can_remove_tombstones
-          = config().tombstone_retention_ms().has_value()
-            && seg->has_clean_compact_timestamp()
-            && seg->index().may_have_tombstone_records();
-
-        auto can_remove_tx_batches = config().tx_retention_ms().has_value()
-                                     && seg->has_self_compact_timestamp()
-                                     && seg->index().has_transaction_batches();
-
-        if (can_remove_tombstones) {
-            earliest_removable_ts = std::min(
-              earliest_removable_ts,
-              seg->index().clean_compact_timestamp().value());
-        }
-
-        if (can_remove_tx_batches) {
-            earliest_removable_ts = std::min(
-              earliest_removable_ts,
-              seg->index().self_compact_timestamp().value());
-        }
-    }
-
-    if (earliest_removable_ts == model::timestamp::max()) {
-        return std::nullopt;
-    }
-
-    return earliest_removable_ts;
-}
-
 std::optional<model::offset> disk_log_impl::max_removed_offset() const {
     return internal::read_max_removed_offset(_kvstore, config().ntp());
 }

@@ -254,8 +254,11 @@ catalog_schema_manager::ensure_table_schema(
             if (merge_res.has_error()) {
                 vlog(
                   datalake_log.warn,
-                  "Failed to merge record schema with table schema {}: {}",
+                  "Failed to merge record schema with table schema {} (writer: "
+                  "{}, current: {}): {}",
                   table_id,
+                  writer_struct_type,
+                  current_schema->schema_struct,
                   merge_res.error());
                 co_return errc::not_supported;
             }

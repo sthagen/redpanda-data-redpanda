@@ -39,20 +39,26 @@ ss::future<> link_replication_manager::stop() {
     vlog(cllog.trace, "Stopping link replication manager");
     // to avoid further submissions to the queue.
     _as.request_abort();
-    auto f = _gate.close();
-    co_await _queue.shutdown();
-    co_await std::move(f);
-    // stop any pending replicators
+    auto gate_f = _gate.close();
+    // no new replicators can be added / removed past this point.
+    chunked_vector<ss::future<>> stop_futures;
+    stop_futures.reserve(_replicators.size());
     for (auto& [_, replicator] : _replicators) {
-        co_await replicator->stop();
+        stop_futures.push_back(replicator->stop());
     }
+    co_await _queue.shutdown();
+    co_await ss::when_all_succeed(stop_futures.begin(), stop_futures.end());
     _replicators.clear();
+    co_await std::move(gate_f);
     co_await _source_factory->stop();
     vlog(cllog.trace, "Link replication manager stopped");
 }
 
 ss::future<> link_replication_manager::do_start_replicator(
   model::ntp ntp, model::term_id term) {
+    if (_as.abort_requested()) {
+        co_return;
+    }
     auto holder = _gate.hold();
     vlog(cllog.debug, "Starting replicator for {}", ntp);
     auto it = _replicators.find(ntp);
@@ -94,6 +100,9 @@ void link_replication_manager::start_replicator(
 
 ss::future<> link_replication_manager::do_stop_replicator(
   model::ntp ntp, std::optional<model::term_id> term) {
+    if (_as.abort_requested()) {
+        co_return;
+    }
     auto holder = _gate.hold();
     vlog(cllog.debug, "Stopping replicator for {}", ntp);
     auto it = _replicators.find(ntp);

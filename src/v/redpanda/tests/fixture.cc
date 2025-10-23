@@ -28,6 +28,7 @@
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
 #include "config/broker_authn_endpoint.h"
+#include "config/configuration.h"
 #include "config/mock_property.h"
 #include "config/node_config.h"
 #include "config/types.h"
@@ -443,7 +444,8 @@ void redpanda_thread_fixture::configure(
         config.get("iceberg_enabled").set_value(iceberg_enabled);
 
         if (cloud_topics_enabled) {
-            config.get("cloud_topics_enabled").set_value(true);
+            config.get(config::shard_local_cfg().cloud_topics_enabled.name())
+              .set_value(true);
         }
 
         config.get("enable_shadow_linking")

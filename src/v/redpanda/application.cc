@@ -138,9 +138,11 @@
 #include "raft/coordinated_recovery_throttle.h"
 #include "raft/group_manager.h"
 #include "raft/service.h"
+#include "redpanda/admin/kafka_connections_service.h"
 #include "redpanda/admin/proxy/client.h"
 #include "redpanda/admin/proxy/service.h"
 #include "redpanda/admin/server.h"
+#include "redpanda/admin/services/cluster.h"
 #include "redpanda/admin/services/datalake/datalake.h"
 #include "redpanda/admin/services/internal/debug.h"
 #include "redpanda/admin/services/shadow_link/shadow_link.h"
@@ -1151,7 +1153,8 @@ void application::configure_admin_server(model::node_id node_id) {
       std::ref(_tx_manager_migrator),
       std::ref(_kafka_server.ref()),
       std::ref(tx_gateway_frontend),
-      std::ref(_debug_bundle_service))
+      std::ref(_debug_bundle_service),
+      std::ref(_kafka_connections_service))
       .get();
     _admin
       .invoke_on_all([this, node_id](admin_server& s) {
@@ -1170,6 +1173,11 @@ void application::configure_admin_server(model::node_id node_id) {
           s.add_service(
             std::make_unique<admin::datalake_service_impl>(
               create_client(), &_datalake_coordinator_fe));
+          s.add_service(
+            std::make_unique<admin::cluster_service_impl>(
+              create_client(),
+              std::ref(_kafka_connections_service),
+              controller->get_feature_table()));
       })
       .get();
 }
@@ -1566,6 +1574,9 @@ void application::wire_up_runtime_services(
     construct_service(_debug_bundle_service, &storage.local().kvs()).get();
 
     construct_single_service(_host_metrics_watcher, std::ref(_log));
+
+    construct_service(_kafka_connections_service, std::ref(_kafka_server.ref()))
+      .get();
 
     configure_admin_server(node_id);
 }
@@ -3397,7 +3408,8 @@ void application::start_runtime_services(
               sched_groups.cluster_sg(),
               smp_service_groups.cluster_smp_sg(),
               std::ref(controller->get_data_migration_frontend()),
-              std::ref(controller->get_data_migration_irpc_frontend())));
+              std::ref(controller->get_data_migration_irpc_frontend()),
+              std::ref(controller->get_data_migration_router())));
           if (datalake_enabled()) {
               runtime_services.push_back(
                 std::make_unique<datalake::coordinator::rpc::service>(

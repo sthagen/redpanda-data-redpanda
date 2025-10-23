@@ -54,7 +54,9 @@ enum class msg_type {
     install_snapshot,
     timeout_now,
     transfer_leadership,
-    remake_learner_state
+    remake_learner_state,
+    get_compaction_mcco,
+    distribute_compaction_mtro
 };
 
 struct msg {
@@ -113,7 +115,9 @@ using reply_variant = std::variant<
   install_snapshot_reply,
   timeout_now_reply,
   transfer_leadership_reply,
-  remake_learner_state_reply>;
+  remake_learner_state_reply,
+  get_compaction_mcco_reply,
+  distribute_compaction_mtro_reply>;
 
 using reply_interceptor_t = ss::noncopyable_function<ss::future<reply_variant>(
   reply_variant, model::node_id)>;
@@ -151,6 +155,15 @@ public:
 
     ss::future<result<remake_learner_state_reply>> remake_learner_state(
       model::node_id, remake_learner_state_request, rpc::client_opts) final;
+
+    ss::future<result<get_compaction_mcco_reply>> get_compaction_mcco(
+      model::node_id, get_compaction_mcco_request, rpc::client_opts) final;
+
+    ss::future<result<distribute_compaction_mtro_reply>>
+      distribute_compaction_mtro(
+        model::node_id,
+        distribute_compaction_mtro_request,
+        rpc::client_opts) final;
 
     ss::future<bool> ensure_disconnect(model::node_id) final {
         co_return true;

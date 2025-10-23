@@ -28,6 +28,7 @@ using proto::admin::acl_permission_type;
 using proto::admin::acl_resource;
 using proto::admin::acl_resource_filter;
 using proto::admin::authentication_configuration;
+using proto::admin::consumer_offset_sync_options;
 using proto::admin::create_shadow_link_request;
 using proto::admin::name_filter;
 using proto::admin::scram_config;
@@ -626,14 +627,26 @@ create_shadow_link_client_options(const cluster_link::model::metadata& md) {
 
     options.set_metadata_max_age_ms(
       md.connection.metadata_max_age_ms.value_or(0));
+    options.set_effective_metadata_max_age_ms(
+      md.connection.get_metadata_max_age_ms());
     options.set_connection_timeout_ms(
       md.connection.connection_timeout_ms.value_or(0));
+    options.set_effective_connection_timeout_ms(
+      md.connection.get_connection_timeout_ms());
     options.set_retry_backoff_ms(md.connection.retry_backoff_ms.value_or(0));
+    options.set_effective_retry_backoff_ms(
+      md.connection.get_retry_backoff_ms());
     options.set_fetch_wait_max_ms(md.connection.fetch_wait_max_ms.value_or(0));
+    options.set_effective_fetch_wait_max_ms(
+      md.connection.get_fetch_wait_max_ms());
     options.set_fetch_min_bytes(md.connection.fetch_min_bytes.value_or(0));
+    options.set_effective_fetch_min_bytes(md.connection.get_fetch_min_bytes());
     options.set_fetch_max_bytes(md.connection.fetch_max_bytes.value_or(0));
+    options.set_effective_fetch_max_bytes(md.connection.get_fetch_max_bytes());
     options.set_fetch_partition_max_bytes(
       md.connection.fetch_partition_max_bytes.value_or(0));
+    options.set_effective_fetch_partition_max_bytes(
+      md.connection.get_fetch_partition_max_bytes());
 
     return options;
 }
@@ -816,6 +829,8 @@ security_settings_sync_options create_security_settings_sync_options(
     options.set_interval(
       absl::FromChrono(
         config.task_interval.value_or(ss::lowres_clock::duration::zero())));
+    options.set_effective_interval(
+      absl::FromChrono(config.get_task_interval()));
     options.set_acl_filters(to_acl_filters(config.acl_filters));
 
     return options;
@@ -847,6 +862,7 @@ topic_metadata_sync_options create_topic_metadata_sync_options(
     options.set_interval(
       absl::FromChrono(
         cfg.task_interval.value_or(ss::lowres_clock::duration::zero())));
+    options.set_effective_interval(absl::FromChrono(cfg.get_task_interval()));
     options.set_auto_create_shadow_topic_filters(
       to_name_filters(cfg.topic_name_filters));
 
@@ -865,6 +881,18 @@ topic_metadata_sync_options create_topic_metadata_sync_options(
     return options;
 }
 
+consumer_offset_sync_options create_consumer_offset_sync_options(
+  const cluster_link::model::consumer_groups_mirroring_config& cfg) {
+    consumer_offset_sync_options options;
+    options.set_interval(
+      absl::FromChrono(
+        cfg.task_interval.value_or(ss::lowres_clock::duration::zero())));
+    options.set_effective_interval(absl::FromChrono(cfg.get_task_interval()));
+    options.set_group_filters(to_name_filters(cfg.filters));
+
+    return options;
+}
+
 shadow_link_configurations
 create_shadow_link_configuration(const cluster_link::model::metadata& md) {
     shadow_link_configurations configurations;
@@ -873,6 +901,9 @@ create_shadow_link_configuration(const cluster_link::model::metadata& md) {
     configurations.set_topic_metadata_sync_options(
       create_topic_metadata_sync_options(
         md.configuration.topic_metadata_mirroring_cfg));
+    configurations.set_consumer_offset_sync_options(
+      create_consumer_offset_sync_options(
+        md.configuration.consumer_groups_mirroring_cfg));
     configurations.set_security_sync_options(
       create_security_settings_sync_options(
         md.configuration.security_settings_sync_cfg));

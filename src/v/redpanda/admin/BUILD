@@ -201,6 +201,30 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "kafka_connections_service",
+    srcs = [
+        "kafka_connections_service.cc",
+    ],
+    hdrs = [
+        "kafka_connections_service.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":aip_filter",
+        ":aip_ordering",
+        "//proto/redpanda/core/admin/v2:cluster_redpanda_proto",
+        "//proto/redpanda/core/admin/v2:kafka_connections_redpanda_proto",
+        "//src/v/base",
+        "//src/v/container:priority_queue",
+        "//src/v/kafka/server",
+        "//src/v/redpanda/admin/proxy:client",
+        "//src/v/serde/protobuf:rpc",
+        "//src/v/ssx:async_algorithm",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "admin",
     srcs = [
         "cluster_recovery.cc",
@@ -258,6 +282,7 @@ redpanda_cc_library(
         ":debug_bundle",
         ":features",
         ":hbadger",
+        ":kafka_connections_service",
         ":migration",
         ":partition",
         ":raft",

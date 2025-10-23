@@ -1,0 +1,105 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.v2;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "proto/redpanda/core/pbgen/rpc.proto";
+import "proto/redpanda/core/admin/v2/kafka_connections.proto";
+
+option (redpanda.core.pbgen.cpp_namespace) = "proto::admin";
+
+// The ClusterService gives information about the cluster.
+service ClusterService {
+    // ListKafkaConnections returns information about the cluster's Kafka
+    // connections, collected and ordered across all brokers.
+    rpc ListKafkaConnections(ListKafkaConnectionsRequest)
+        returns (ListKafkaConnectionsResponse) {
+        option (redpanda.core.pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+}
+
+// ListKafkaConnectionsRequest return information about the broker's Kafka
+// connections.
+message ListKafkaConnectionsRequest {
+    // The maximum number of connections to return. If unspecified or 0, a
+    // default value may be applied. Note that paging is currently not fully
+    // supported, and this field only acts as a limit for the first page of data
+    // returned. Subsequent pages of data cannot be requested.
+    int32 page_size = 1;
+
+    // Filter expression to apply to the connection list.
+    // Uses a subset of AIP-160 filter syntax supporting:
+    // - Field comparisons (`=`, `!=`, `<`, `>`, `<=`, `>=`)
+    // - Logical AND chaining: condition1 AND condition2
+    // - Nested field access: parent.child = value
+    // - Escape sequences: field = "string with \"quotes\""
+    // - Enum types
+    // - RFC3339 timestamps and ISO-like duration
+    //
+    // Limitations (not supported):
+    // - Logical OR chaining
+    // - Parentheses `(` `)` for grouping
+    // - Map and repeated types
+    // - HAS (:) operator
+    // - Negation (-, NOT)
+    // - Bare literal matching
+    //
+    // Example filters:
+    // - `state = KAFKA_CONNECTION_STATE_OPEN`
+    // - `idle_duration > 30s AND total_request_statistics.request_count > 100`
+    // - `authentication_info.user_principal = "my-producer"`
+    // - `recent_request_statistics.produce_bytes > 1000 AND
+    // client_software_name = "kgo"`
+    // - `open_time >= 2025-09-01T10:22:54Z`
+    //
+    // Reference: https://google.aip.dev/160
+    string filter = 2;
+
+    // Field-based ordering specification following AIP-132 syntax.
+    // Supports multiple fields with `asc`/`desc` direction indicators.
+    // Examples:
+    // - `idle_duration desc` - longest idle connections first
+    // - `open_time desc, total_request_statistics.request_count desc` - newest
+    // connections first, then most active
+    // - `recent_request_statistics.produce_bytes desc` - connections with
+    // highest current produce throughput first
+    //
+    // Reference: https://google.aip.dev/132#ordering
+    string order_by = 3;
+}
+
+// ListKafkaConnectionsResponse is the response from the ListKafkaConnections
+// RPC.
+message ListKafkaConnectionsResponse {
+    // The list of connections matching the request.
+    // Note that in addition to open connections, some recently-closed
+    // connections may also be included here. If you don't want to include
+    // closed connections, set the filter in the request to `state =
+    // KAFKA_CONNECTION_STATE_OPEN`.
+    repeated KafkaConnection connections = 1;
+
+    // Total number of connections matching the request.
+    // This may be greater than `len(connections)` if some connections were
+    // omitted from the response due to the specified (or default) `page_size`.
+    // Example:
+    //   request.page_size = 10
+    //   response.connections = [<10 items>]
+    //   response.total_size = 13
+    uint64 total_size = 2;
+}

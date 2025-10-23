@@ -20,6 +20,7 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/testing/thread_test_case.hh>
+#include <seastar/util/defer.hh>
 
 #include <boost/test/unit_test.hpp>
 
@@ -32,6 +33,11 @@ static constexpr auto clean_timer_period = 10s;
 
 namespace pandaproxy {
 using cache_item = std::pair<client_ptr, client_lock_ptr>;
+
+struct stop_client {
+    client_ptr client;
+    void operator()() { client->stop().get(); }
+};
 
 struct test_client_cache : public kafka_client_cache {
     explicit test_client_cache(size_t max_size)
@@ -52,6 +58,15 @@ struct test_client_cache : public kafka_client_cache {
 
     ~test_client_cache() { stop().get(); }
 
+    std::pair<client_ptr, ss::deferred_action<stop_client>>
+    make_client_with_guard(
+      credential_t user, config::rest_authn_method authn_method) {
+        auto client = kafka_client_cache::make_client(
+          std::move(user), std::move(authn_method));
+        auto guard = ss::defer(stop_client{client});
+        return std::make_pair(std::move(client), std::move(guard));
+    }
+
     cache_item
     get_client(credential_t user, config::rest_authn_method authn_method) {
         return fetch_or_insert(user, authn_method);
@@ -69,7 +84,7 @@ SEASTAR_THREAD_TEST_CASE(cache_make_client_scram_sha_256) {
     {
         // Creating a client with no authn methods results in a kafka
         // client without a principal
-        pp::client_ptr client = client_cache.make_client(
+        auto [client, guard] = client_cache.make_client_with_guard(
           user, config::rest_authn_method::none);
         BOOST_TEST(!client->get_credentials().has_value());
     }
@@ -77,7 +92,7 @@ SEASTAR_THREAD_TEST_CASE(cache_make_client_scram_sha_256) {
     {
         // Creating a client with http_basic authn type results
         // in a kafka client with a principal
-        pp::client_ptr client = client_cache.make_client(
+        auto [client, guard] = client_cache.make_client_with_guard(
           user, config::rest_authn_method::http_basic);
         BOOST_TEST(
           client->get_credentials()->mechanism == ss::sstring{"SCRAM-SHA-256"});
@@ -94,7 +109,7 @@ SEASTAR_THREAD_TEST_CASE(cache_make_client_scram_sha_512) {
     {
         // Creating a client with no authn methods results in a kafka
         // client without a principal
-        pp::client_ptr client = client_cache.make_client(
+        auto [client, guard] = client_cache.make_client_with_guard(
           user, config::rest_authn_method::none);
         BOOST_TEST(!client->get_credentials().has_value());
     }
@@ -102,7 +117,7 @@ SEASTAR_THREAD_TEST_CASE(cache_make_client_scram_sha_512) {
     {
         // Creating a client with http_basic authn type results
         // in a kafka client with a principal
-        pp::client_ptr client = client_cache.make_client(
+        auto [client, guard] = client_cache.make_client_with_guard(
           user, config::rest_authn_method::http_basic);
         BOOST_TEST(
           client->get_credentials()->mechanism == ss::sstring{"SCRAM-SHA-512"});

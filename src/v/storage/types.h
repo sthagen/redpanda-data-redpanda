@@ -147,6 +147,8 @@ public:
 
     model::offset max_removable_local_log_offset();
     std::optional<kafka::offset> lowest_pinned_data_offset() const;
+    model::offset max_tombstone_remove_offset() const;
+    void set_max_tombstone_remove_offset(model::offset);
 
     ss::future<chunked_vector<model::tx_range>>
     aborted_tx_ranges(model::offset to, model::offset from) {
@@ -183,6 +185,7 @@ public:
 private:
     ss::shared_ptr<snapshotable_stm> _tx_stm;
     std::vector<ss::shared_ptr<snapshotable_stm>> _stms;
+    model::offset _max_tombstone_remove_offset{};
 };
 
 /// returns base_offset's from batches. Not max_offsets

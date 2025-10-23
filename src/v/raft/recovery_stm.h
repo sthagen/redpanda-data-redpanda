@@ -12,6 +12,7 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "raft/follower_stats.h"
 #include "raft/fwd.h"
 #include "raft/recovery_memory_quota.h"
 #include "raft/types.h"

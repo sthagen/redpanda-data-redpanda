@@ -62,7 +62,7 @@ class RedpandaConfig:
     rack: Optional[str] = None
     cloud_storage_enabled: bool = False
     iceberg_enabled: bool = False
-    cloud_topics_enabled: bool = False
+    unstable_beta_feature_cloud_topics_enabled: bool = False
     enable_developmental_unrecoverable_data_corrupting_features: int = int(time.time())
 
 
@@ -693,7 +693,7 @@ async def main():
     if "ASAN_OPTIONS" not in env:
         env["ASAN_OPTIONS"] = "disable_coredump=0:abort_on_error=1"
     if "UBSAN_OPTIONS" not in env:
-        env["UBSAN_OPTIONS"] = f"halt_on_error=1:abort_on_error=1:report_error_type=1"
+        env["UBSAN_OPTIONS"] = "halt_on_error=1:abort_on_error=1:report_error_type=1"
         if args.ubsan_suppression_file:
             env["UBSAN_OPTIONS"] += f":suppressions={args.ubsan_suppression_file}"
     if args.lsan_suppression_file and "LSAN_OPTIONS" not in env:

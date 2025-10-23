@@ -58,6 +58,9 @@ type ShadowLinkClientOptions struct {
 	// Fetch max bytes
 	// If 0 is provided, defaults to 1MiB
 	FetchMaxBytes int32 `json:"fetch_max_bytes,omitempty" yaml:"fetch_max_bytes,omitempty"`
+	// Fetch partition max bytes.
+	// If 0 is provided, defaults to 1 MiB
+	FetchPartitionMaxBytes int32 `json:"fetch_partition_max_bytes,omitempty" yaml:"fetch_partition_max_bytes,omitempty"`
 }
 
 const (
@@ -74,6 +77,8 @@ type TLSSettings interface {
 type TLSFileSettings struct {
 	// Whether or not TLS is enabled
 	Enabled bool `json:"enabled" yaml:"enabled"`
+	// If true, the SNI hostname will not be provided when TLS is used
+	DoNotSetSniHostname bool `json:"do_not_set_sni_hostname,omitempty" yaml:"do_not_set_sni_hostname,omitempty"`
 	// Path to the CA
 	CAPath string `json:"ca_path,omitempty" yaml:"ca_path,omitempty"`
 	// Key and Cert are optional but if one is provided, then both must be
@@ -90,6 +95,8 @@ func (*TLSFileSettings) tlsSettingType() string {
 type TLSPEMSettings struct {
 	// Whether or not TLS is enabled
 	Enabled bool `json:"enabled" yaml:"enabled"`
+	// If true, the SNI hostname will not be provided when TLS is used
+	DoNotSetSniHostname bool `json:"do_not_set_sni_hostname,omitempty" yaml:"do_not_set_sni_hostname,omitempty"`
 	// The CA
 	CA string `json:"ca,omitempty" yaml:"ca,omitempty"`
 	// Key and Cert are optional but if one is provided, then both must be
@@ -385,6 +392,7 @@ func (s *ShadowLinkClientOptions) UnmarshalYAML(unmarshal func(interface{}) erro
 		FetchWaitMaxMs              int32               `yaml:"fetch_wait_max_ms"`
 		FetchMinBytes               int32               `yaml:"fetch_min_bytes"`
 		FetchMaxBytes               int32               `yaml:"fetch_max_bytes"`
+		FetchPartitionMaxBytes      int32               `yaml:"fetch_partition_max_bytes"`
 	}{}
 
 	if err := unmarshal(aux); err != nil {
@@ -400,6 +408,7 @@ func (s *ShadowLinkClientOptions) UnmarshalYAML(unmarshal func(interface{}) erro
 	s.FetchWaitMaxMs = aux.FetchWaitMaxMs
 	s.FetchMinBytes = aux.FetchMinBytes
 	s.FetchMaxBytes = aux.FetchMaxBytes
+	s.FetchPartitionMaxBytes = aux.FetchPartitionMaxBytes
 
 	// Extract the interface values from the wrappers
 	if aux.TLSSettings != nil {
@@ -466,6 +475,7 @@ func (s *ShadowLinkClientOptions) UnmarshalJSON(data []byte) error {
 		FetchWaitMaxMs              int32               `json:"fetch_wait_max_ms"`
 		FetchMinBytes               int32               `json:"fetch_min_bytes"`
 		FetchMaxBytes               int32               `json:"fetch_max_bytes"`
+		FetchPartitionMaxBytes      int32               `json:"fetch_partition_max_bytes"`
 	}{}
 
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -481,6 +491,7 @@ func (s *ShadowLinkClientOptions) UnmarshalJSON(data []byte) error {
 	s.FetchWaitMaxMs = aux.FetchWaitMaxMs
 	s.FetchMinBytes = aux.FetchMinBytes
 	s.FetchMaxBytes = aux.FetchMaxBytes
+	s.FetchPartitionMaxBytes = aux.FetchPartitionMaxBytes
 
 	// Extract the interface values from the wrappers
 	if aux.TLSSettings != nil {

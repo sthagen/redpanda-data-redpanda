@@ -687,6 +687,7 @@ func TestShadowLinkConfigChanges(t *testing.T) {
 		regexp.MustCompile(`^security_sync_options\.acl_filters\.access_filter\.operation$`),
 		// A one-of type in protobuf, represented as an interface{} in Go.
 		regexp.MustCompile(`client_options.tls_settings.enabled$`),
+		regexp.MustCompile(`client_options.tls_settings.do_not_set_sni_hostname$`),
 	}
 
 	var walk func(v reflect.Type, parentName string, m map[string]string)

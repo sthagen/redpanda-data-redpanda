@@ -266,7 +266,7 @@ ss::future<> topic_reconciler::maybe_create_mirror_topic(
         _default_topic_replication()));
 
     if (res != cluster::errc::success) {
-        vlog(cllog.error, "Failed to create mirror topic {}: {}", topic, res);
+        vlog(cllog.warn, "Failed to create mirror topic {}: {}", topic, res);
     } else {
         vlog(cllog.debug, "Successfully created mirror topic {}", topic);
     }

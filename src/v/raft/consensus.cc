@@ -127,10 +127,21 @@ consensus::consensus(
   , _remake_notification(std::move(remake_cb))
   , _leader_notification(std::move(leader_cb))
   , _fstats(_self)
+  , _ctxlog(group, _log->config().ntp())
+  , _features(ft)
+  , _compaction_coordinator(
+      _features,
+      _fstats,
+      _log,
+      _self,
+      _ctxlog,
+      _group,
+      _client_protocol,
+      _as,
+      _bg)
   , _batcher(this, config::shard_local_cfg().raft_replicate_batch_window_size())
   , _event_manager(this)
   , _probe(std::make_unique<probe>())
-  , _ctxlog(group, _log->config().ntp())
   , _replicate_append_timeout(
       config::shard_local_cfg().replicate_append_timeout_ms())
   , _recovery_append_timeout(
@@ -141,7 +152,6 @@ consensus::consensus(
   , _recovery_throttle(recovery_throttle)
   , _recovery_mem_quota(recovery_mem_quota)
   , _recovery_scheduler(recovery_scheduler)
-  , _features(ft)
   , _snapshot_mgr(
       std::filesystem::path(_log->config().work_directory()),
       storage::simple_snapshot_manager::default_snapshot_filename)
@@ -3270,6 +3280,7 @@ void consensus::maybe_update_follower_commit_idx(
 void consensus::update_follower_stats(const group_configuration& cfg) {
     vlog(_ctxlog.trace, "Updating follower stats with config {}", cfg);
     _fstats.update_with_configuration(cfg);
+    _compaction_coordinator.on_group_configuration_change();
 }
 
 void consensus::trigger_leadership_notification() {
@@ -3291,6 +3302,7 @@ void consensus::trigger_leadership_notification() {
         // can make progress.
         _follower_recovery_state->yield();
     }
+    _compaction_coordinator.on_leadership_change(_leader_id);
 }
 
 std::ostream& operator<<(std::ostream& o, const consensus& c) {
@@ -4249,6 +4261,7 @@ void consensus::notify_config_update() {
     if (_deferred_flusher.armed()) {
         _deferred_flusher.rearm(ss::lowres_clock::now() + flush_ms());
     }
+    _compaction_coordinator.on_ntp_config_change();
 }
 
 size_t consensus::bytes_to_deliver_to_learners() const {

@@ -26,6 +26,7 @@
 #include "pandaproxy/rest/fwd.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "redpanda/admin/debug_bundle.h"
+#include "redpanda/admin/kafka_connections_service.h"
 #include "resource_mgmt/cpu_profiler.h"
 #include "resource_mgmt/memory_sampling.h"
 #include "rpc/connection_cache.h"
@@ -95,7 +96,8 @@ public:
       std::unique_ptr<cluster::tx_manager_migrator>&,
       ss::sharded<kafka::server>&,
       ss::sharded<cluster::tx_gateway_frontend>&,
-      ss::sharded<debug_bundle::service>&);
+      ss::sharded<debug_bundle::service>&,
+      ss::sharded<admin::kafka_connections_service>&);
 
     // Add a ConnectRPC service to the admin server.
     void add_service(std::unique_ptr<serde::pb::rpc::base_service>);
@@ -701,6 +703,10 @@ private:
       execute_migration_action(std::unique_ptr<ss::http::request>);
     ss::future<ss::json::json_return_type>
       delete_migration(std::unique_ptr<ss::http::request>);
+    ss::future<std::unique_ptr<ss::http::reply>> get_migrated_entities_status(
+      std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>);
+    ss::future<std::unique_ptr<ss::http::reply>> set_migrated_entities_status(
+      std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>);
 
     // Topic routes
     ss::future<std::unique_ptr<ss::http::reply>> list_mountable_topics(
@@ -796,6 +802,8 @@ private:
     ss::sharded<debug_bundle::file_handler> _debug_bundle_file_handler;
 
     std::vector<std::unique_ptr<serde::pb::rpc::base_service>> _services;
+
+    ss::sharded<admin::kafka_connections_service>& _kafka_connections_service;
 
     // Value before the temporary override
     std::chrono::milliseconds _default_blocked_reactor_notify;

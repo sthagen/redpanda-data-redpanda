@@ -148,7 +148,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
           std::move(struct_result.value()));
     }
     case avro::AVRO_ENUM:
-        return iceberg::long_type{};
+        return iceberg::string_type{};
     case avro::AVRO_ARRAY: {
         if (node->leaves() != 1) {
             return conversion_exception(

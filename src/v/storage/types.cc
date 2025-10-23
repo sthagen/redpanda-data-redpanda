@@ -47,6 +47,14 @@ std::optional<kafka::offset> stm_manager::lowest_pinned_data_offset() const {
     return result;
 }
 
+model::offset stm_manager::max_tombstone_remove_offset() const {
+    return _max_tombstone_remove_offset;
+}
+
+void stm_manager::set_max_tombstone_remove_offset(model::offset o) {
+    _max_tombstone_remove_offset = o;
+}
+
 fmt::iterator local_log_reader_config::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it,

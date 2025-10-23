@@ -595,30 +595,51 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
     TLS_SETTINGS_FIELD_NUMBER: builtins.int
     AUTHENTICATION_CONFIGURATION_FIELD_NUMBER: builtins.int
     METADATA_MAX_AGE_MS_FIELD_NUMBER: builtins.int
+    EFFECTIVE_METADATA_MAX_AGE_MS_FIELD_NUMBER: builtins.int
     CONNECTION_TIMEOUT_MS_FIELD_NUMBER: builtins.int
+    EFFECTIVE_CONNECTION_TIMEOUT_MS_FIELD_NUMBER: builtins.int
     RETRY_BACKOFF_MS_FIELD_NUMBER: builtins.int
+    EFFECTIVE_RETRY_BACKOFF_MS_FIELD_NUMBER: builtins.int
     FETCH_WAIT_MAX_MS_FIELD_NUMBER: builtins.int
+    EFFECTIVE_FETCH_WAIT_MAX_MS_FIELD_NUMBER: builtins.int
     FETCH_MIN_BYTES_FIELD_NUMBER: builtins.int
+    EFFECTIVE_FETCH_MIN_BYTES_FIELD_NUMBER: builtins.int
     FETCH_MAX_BYTES_FIELD_NUMBER: builtins.int
+    EFFECTIVE_FETCH_MAX_BYTES_FIELD_NUMBER: builtins.int
     FETCH_PARTITION_MAX_BYTES_FIELD_NUMBER: builtins.int
+    EFFECTIVE_FETCH_PARTITION_MAX_BYTES_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     'The Client ID for the Kafka RPC requests setn by this cluster to the\n    source cluster\n    '
     source_cluster_id: builtins.str
     'If provided, this is the expected ID of the source cluster.  If it does\n    not match then the connection will be rejected.  If provided, this value\n    must match the `ClusterId` field returned in the Kafka Metadata response\n    message\n    '
     metadata_max_age_ms: builtins.int
     'Max metadata age.\n    If 0 is provided, defaults to 10 seconds\n    '
+    effective_metadata_max_age_ms: builtins.int
+    'The effective metadata max age in milliseconds'
     connection_timeout_ms: builtins.int
     'Connection timeout.\n    If 0 is provided, defaults to 1 second\n    '
+    effective_connection_timeout_ms: builtins.int
+    'The effective connection timeout in milliseconds'
     retry_backoff_ms: builtins.int
     'Retry base backoff.\n    If 0 is provided, defaults to 100ms\n    '
+    effective_retry_backoff_ms: builtins.int
+    'The effective retry backoff in milliseconds'
     fetch_wait_max_ms: builtins.int
     'Fetch request timeout.\n    If 0 is provided, defaults to 500ms\n    '
+    effective_fetch_wait_max_ms: builtins.int
+    'The effective fetch wait max in milliseconds'
     fetch_min_bytes: builtins.int
     'Fetch min bytes.\n    If 0 is provided, defaults to 5 MiB\n    '
+    effective_fetch_min_bytes: builtins.int
+    'The effective fetch min bytes'
     fetch_max_bytes: builtins.int
     'Fetch max bytes.\n    If 0 is provided, defaults to 20 MiB\n    '
+    effective_fetch_max_bytes: builtins.int
+    'The effective fetch max bytes'
     fetch_partition_max_bytes: builtins.int
     'Fetch partition max bytes.\n    If 0 is provided, defaults to 1 MiB\n    '
+    effective_fetch_partition_max_bytes: builtins.int
+    'The effective fetch partition max bytes'
 
     @property
     def bootstrap_servers(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
@@ -632,13 +653,13 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
     def authentication_configuration(self) -> global___AuthenticationConfiguration:
         """Authentication settings"""
 
-    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=..., fetch_partition_max_bytes: builtins.int=...) -> None:
+    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., effective_metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., effective_connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., effective_retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., effective_fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., effective_fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=..., effective_fetch_max_bytes: builtins.int=..., fetch_partition_max_bytes: builtins.int=..., effective_fetch_partition_max_bytes: builtins.int=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'tls_settings', b'tls_settings']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'bootstrap_servers', b'bootstrap_servers', 'client_id', b'client_id', 'connection_timeout_ms', b'connection_timeout_ms', 'fetch_max_bytes', b'fetch_max_bytes', 'fetch_min_bytes', b'fetch_min_bytes', 'fetch_partition_max_bytes', b'fetch_partition_max_bytes', 'fetch_wait_max_ms', b'fetch_wait_max_ms', 'metadata_max_age_ms', b'metadata_max_age_ms', 'retry_backoff_ms', b'retry_backoff_ms', 'source_cluster_id', b'source_cluster_id', 'tls_settings', b'tls_settings']) -> None:
+    def ClearField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'bootstrap_servers', b'bootstrap_servers', 'client_id', b'client_id', 'connection_timeout_ms', b'connection_timeout_ms', 'effective_connection_timeout_ms', b'effective_connection_timeout_ms', 'effective_fetch_max_bytes', b'effective_fetch_max_bytes', 'effective_fetch_min_bytes', b'effective_fetch_min_bytes', 'effective_fetch_partition_max_bytes', b'effective_fetch_partition_max_bytes', 'effective_fetch_wait_max_ms', b'effective_fetch_wait_max_ms', 'effective_metadata_max_age_ms', b'effective_metadata_max_age_ms', 'effective_retry_backoff_ms', b'effective_retry_backoff_ms', 'fetch_max_bytes', b'fetch_max_bytes', 'fetch_min_bytes', b'fetch_min_bytes', 'fetch_partition_max_bytes', b'fetch_partition_max_bytes', 'fetch_wait_max_ms', b'fetch_wait_max_ms', 'metadata_max_age_ms', b'metadata_max_age_ms', 'retry_backoff_ms', b'retry_backoff_ms', 'source_cluster_id', b'source_cluster_id', 'tls_settings', b'tls_settings']) -> None:
         ...
 
     @typing.overload
@@ -657,7 +678,7 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
 
     @typing.final
     class EarliestOffset(google.protobuf.message.Message):
-        """Start at the earliest offset in the partition"""
+        """Start at the earliest offset in the partition."""
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(self) -> None:
@@ -665,12 +686,13 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
 
     @typing.final
     class LatestOffset(google.protobuf.message.Message):
-        """Start at the latest offset in the partition"""
+        """Start at the latest offset in the partition."""
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         def __init__(self) -> None:
             ...
     INTERVAL_FIELD_NUMBER: builtins.int
+    EFFECTIVE_INTERVAL_FIELD_NUMBER: builtins.int
     AUTO_CREATE_SHADOW_TOPIC_FILTERS_FIELD_NUMBER: builtins.int
     SYNCED_SHADOW_TOPIC_PROPERTIES_FIELD_NUMBER: builtins.int
     EXCLUDE_DEFAULT_FIELD_NUMBER: builtins.int
@@ -685,6 +707,10 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
         """How often to sync metadata
         If 0 provided, defaults to 30 seconds
         """
+
+    @property
+    def effective_interval(self) -> google.protobuf.duration_pb2.Duration:
+        """The effective interval for the task"""
 
     @property
     def auto_create_shadow_topic_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NameFilter]:
@@ -725,23 +751,30 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
 
     @property
     def earliest(self) -> global___TopicMetadataSyncOptions.EarliestOffset:
-        ...
+        """Enables data replication from the earliest offset
+        on the source topic/partition.
+        """
 
     @property
     def latest(self) -> global___TopicMetadataSyncOptions.LatestOffset:
-        ...
+        """Enables data replication from the latest offset
+        on the source topic/partition.
+        """
 
     @property
     def timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        """Enables data replication from the first offset on the
+        source topic/partition where the record's timestamp is
+        at or after the specified timestamp.
+        """
+
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=..., earliest: global___TopicMetadataSyncOptions.EarliestOffset | None=..., latest: global___TopicMetadataSyncOptions.LatestOffset | None=..., timestamp: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
         ...
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=..., earliest: global___TopicMetadataSyncOptions.EarliestOffset | None=..., latest: global___TopicMetadataSyncOptions.LatestOffset | None=..., timestamp: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
+    def HasField(self, field_name: typing.Literal['earliest', b'earliest', 'effective_interval', b'effective_interval', 'interval', b'interval', 'latest', b'latest', 'start_offset', b'start_offset', 'timestamp', b'timestamp']) -> builtins.bool:
         ...
 
-    def HasField(self, field_name: typing.Literal['earliest', b'earliest', 'interval', b'interval', 'latest', b'latest', 'start_offset', b'start_offset', 'timestamp', b'timestamp']) -> builtins.bool:
-        ...
-
-    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'earliest', b'earliest', 'exclude_default', b'exclude_default', 'interval', b'interval', 'latest', b'latest', 'start_offset', b'start_offset', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties', 'timestamp', b'timestamp']) -> None:
+    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'earliest', b'earliest', 'effective_interval', b'effective_interval', 'exclude_default', b'exclude_default', 'interval', b'interval', 'latest', b'latest', 'start_offset', b'start_offset', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties', 'timestamp', b'timestamp']) -> None:
         ...
 
     def WhichOneof(self, oneof_group: typing.Literal['start_offset', b'start_offset']) -> typing.Literal['earliest', 'latest', 'timestamp'] | None:
@@ -753,6 +786,7 @@ class ConsumerOffsetSyncOptions(google.protobuf.message.Message):
     """Options for syncing consumer offsets"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     INTERVAL_FIELD_NUMBER: builtins.int
+    EFFECTIVE_INTERVAL_FIELD_NUMBER: builtins.int
     ENABLED_FIELD_NUMBER: builtins.int
     GROUP_FILTERS_FIELD_NUMBER: builtins.int
     enabled: builtins.bool
@@ -765,16 +799,20 @@ class ConsumerOffsetSyncOptions(google.protobuf.message.Message):
         """
 
     @property
+    def effective_interval(self) -> google.protobuf.duration_pb2.Duration:
+        """The effective interval for the task"""
+
+    @property
     def group_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NameFilter]:
         """The filters"""
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., group_filters: collections.abc.Iterable[global___NameFilter] | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., group_filters: collections.abc.Iterable[global___NameFilter] | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['interval', b'interval']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'interval', b'interval']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['enabled', b'enabled', 'group_filters', b'group_filters', 'interval', b'interval']) -> None:
+    def ClearField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'enabled', b'enabled', 'group_filters', b'group_filters', 'interval', b'interval']) -> None:
         ...
 global___ConsumerOffsetSyncOptions = ConsumerOffsetSyncOptions
 
@@ -783,6 +821,7 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
     """Options for syncing security settings"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     INTERVAL_FIELD_NUMBER: builtins.int
+    EFFECTIVE_INTERVAL_FIELD_NUMBER: builtins.int
     ENABLED_FIELD_NUMBER: builtins.int
     ACL_FILTERS_FIELD_NUMBER: builtins.int
     enabled: builtins.bool
@@ -795,16 +834,20 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
         """
 
     @property
+    def effective_interval(self) -> google.protobuf.duration_pb2.Duration:
+        """The effective interval for the task"""
+
+    @property
     def acl_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ACLFilter]:
         """ACL filters"""
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., acl_filters: collections.abc.Iterable[global___ACLFilter] | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., acl_filters: collections.abc.Iterable[global___ACLFilter] | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['interval', b'interval']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'interval', b'interval']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['acl_filters', b'acl_filters', 'enabled', b'enabled', 'interval', b'interval']) -> None:
+    def ClearField(self, field_name: typing.Literal['acl_filters', b'acl_filters', 'effective_interval', b'effective_interval', 'enabled', b'enabled', 'interval', b'interval']) -> None:
         ...
 global___SecuritySettingsSyncOptions = SecuritySettingsSyncOptions
 

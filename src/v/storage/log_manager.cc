@@ -429,11 +429,8 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         }
         model::offset max_compactible_offset
           = current_log.handle->stm_manager()->max_removable_local_log_offset();
-        // TODO: for now max_tombstone_remove_offset is set to
-        // max_removable_local_log_offset, change when coordinated compaction is
-        // implemented
         model::offset max_tombstone_remove_offset
-          = current_log.handle->stm_manager()->max_removable_local_log_offset();
+          = current_log.handle->stm_manager()->max_tombstone_remove_offset();
         if (
           max_unpinned_offset
           && *max_unpinned_offset < max_compactible_offset) {

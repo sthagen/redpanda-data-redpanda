@@ -50,6 +50,16 @@
             "name": "remake_learner_state",
             "input_type": "remake_learner_state_request",
             "output_type": "remake_learner_state_reply"
+        },
+        {
+            "name": "get_compaction_mcco",
+            "input_type": "get_compaction_mcco_request",
+            "output_type": "get_compaction_mcco_reply"
+        },
+        {
+            "name": "distribute_compaction_mtro",
+            "input_type": "distribute_compaction_mtro_request",
+            "output_type": "distribute_compaction_mtro_reply"
         }
     ]
 }

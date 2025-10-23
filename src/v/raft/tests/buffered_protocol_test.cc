@@ -10,6 +10,7 @@
  */
 
 #include "raft/buffered_protocol.h"
+#include "raft/types.h"
 #include "random/generators.h"
 #include "test_utils/test.h"
 
@@ -68,6 +69,20 @@ public:
       model::node_id, remake_learner_state_request, rpc::client_opts) final {
         return ss::make_ready_future<result<raft::remake_learner_state_reply>>(
           raft::remake_learner_state_reply{});
+    }
+    ss::future<result<get_compaction_mcco_reply>> get_compaction_mcco(
+      model::node_id, get_compaction_mcco_request, rpc::client_opts) final {
+        return ss::make_ready_future<result<raft::get_compaction_mcco_reply>>(
+          raft::get_compaction_mcco_reply{});
+    }
+    ss::future<result<distribute_compaction_mtro_reply>>
+    distribute_compaction_mtro(
+      model::node_id,
+      distribute_compaction_mtro_request,
+      rpc::client_opts) final {
+        return ss::make_ready_future<
+          result<raft::distribute_compaction_mtro_reply>>(
+          raft::distribute_compaction_mtro_reply{});
     }
 };
 

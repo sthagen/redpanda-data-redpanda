@@ -151,3 +151,28 @@ SEASTAR_THREAD_TEST_CASE(ssx_composite_abort_source_source_destroyed) {
     cas_opt->as().request_abort();
     BOOST_TEST(cas_opt->as().abort_requested());
 }
+
+SEASTAR_THREAD_TEST_CASE(ssx_subscribe_or_trigger_test) {
+    auto test_for_incrementor = [](auto incrementor_creator_member_func) {
+        { // subscribe before abort
+            fixture f;
+            auto callback = (f.*incrementor_creator_member_func)();
+            auto sub = ssx::subscribe_or_trigger(f.as, callback);
+            BOOST_REQUIRE_EQUAL(f.count, 0);
+            f.as.request_abort();
+            BOOST_REQUIRE_EQUAL(f.count, 1);
+        }
+        { // abort before subscribe
+            fixture f;
+            auto callback = (f.*incrementor_creator_member_func)();
+            f.as.request_abort();
+            BOOST_REQUIRE_EQUAL(f.count, 0);
+            auto sub = ssx::subscribe_or_trigger(f.as, callback);
+            BOOST_REQUIRE_EQUAL(f.count, 1);
+        }
+    };
+    test_for_incrementor(&fixture::make_incrementor);
+    test_for_incrementor(&fixture::make_async_incrementor);
+    test_for_incrementor(&fixture::make_naive_incrementor);
+    test_for_incrementor(&fixture::make_async_naive_incrementor);
+}

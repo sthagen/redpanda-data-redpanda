@@ -43,6 +43,7 @@ partition_replicator::partition_replicator(
 ss::future<> partition_replicator::start() {
     co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(_log.trace, "Starting replicator");
+    auto holder = _gate.hold();
     co_await _sink->start();
     auto last_replicated = _sink->last_replicated_offset();
     kafka::offset start_offset{};

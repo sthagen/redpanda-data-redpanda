@@ -20,6 +20,7 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "raft/append_entries_buffer.h"
+#include "raft/compaction_coordinator.h"
 #include "raft/configuration_manager.h"
 #include "raft/consensus_client_protocol.h"
 #include "raft/consensus_utils.h"
@@ -515,6 +516,10 @@ public:
 
     const follower_stats& get_follower_stats() const { return _fstats; }
 
+    compaction_coordinator& get_compaction_coordinator() {
+        return _compaction_coordinator;
+    }
+
     model::offset get_flushed_offset() const { return _flushed_offset; }
 
     bool stopped() const { return _bg.is_closed(); }
@@ -881,17 +886,25 @@ private:
     /// used for votes only. heartbeats are done by heartbeat_manager
     timer_type _vote_timeout;
 
-    /// used for keepint tally on followers
+    /// used for keeping tally on followers
     follower_stats _fstats;
+
+    /// used to wait for background ops before shutting down
+    ss::gate _bg;
+
+    ss::abort_source _as;
+    mutable ctx_log _ctxlog;
+    features::feature_table& _features;
+
+    /// used to coordinate compaction and tombstone removals taking all replica
+    /// logs into account
+    compaction_coordinator _compaction_coordinator;
 
     replicate_batcher _batcher;
     size_t _pending_flush_bytes{0};
     clock_type::time_point _last_flush_time;
     /// Ensures that we do not schedule multiple redudant flushes.
     bool _in_flight_flush = false;
-
-    /// used to wait for background ops before shutting down
-    ss::gate _bg;
 
     /**
      * Locks listed in the order of nestedness, election being the outermost
@@ -912,20 +925,17 @@ private:
     /// used for notifying when commits happened to log
     event_manager _event_manager;
     std::unique_ptr<probe> _probe;
-    mutable ctx_log _ctxlog;
     ssx::condition_variable _commit_index_updated;
 
     std::chrono::milliseconds _replicate_append_timeout;
     std::chrono::milliseconds _recovery_append_timeout;
     size_t _heartbeat_disconnect_failures;
     metrics::internal_metric_groups _metrics;
-    ss::abort_source _as;
     storage::api& _storage;
     std::optional<std::reference_wrapper<coordinated_recovery_throttle>>
       _recovery_throttle;
     recovery_memory_quota& _recovery_mem_quota;
     recovery_scheduler& _recovery_scheduler;
-    features::feature_table& _features;
     storage::simple_snapshot_manager _snapshot_mgr;
     uint64_t _snapshot_size{0};
     std::optional<storage::file_snapshot_writer> _snapshot_writer;

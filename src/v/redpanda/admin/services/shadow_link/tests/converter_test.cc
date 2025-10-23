@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "cluster_link/model/types.h"
 #include "redpanda/admin/services/shadow_link/converter.h"
 
 #include <gtest/gtest.h>
@@ -538,11 +539,62 @@ TEST(converter_test, metadata_to_shadow_link) {
     ASSERT_FALSE(client_options.get_bootstrap_servers().empty());
     EXPECT_EQ(client_options.get_bootstrap_servers()[0], "localhost:9092");
     EXPECT_EQ(client_options.get_metadata_max_age_ms(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_metadata_max_age_ms(),
+      cluster_link::model::connection_config::metadata_max_age_ms_default);
     EXPECT_EQ(client_options.get_connection_timeout_ms(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_connection_timeout_ms(),
+      cluster_link::model::connection_config::connection_timeout_ms_default);
     EXPECT_EQ(client_options.get_retry_backoff_ms(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_retry_backoff_ms(),
+      cluster_link::model::connection_config::retry_backoff_ms_default);
     EXPECT_EQ(client_options.get_fetch_wait_max_ms(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_fetch_wait_max_ms(),
+      cluster_link::model::connection_config::fetch_wait_max_ms_default);
     EXPECT_EQ(client_options.get_fetch_min_bytes(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_fetch_min_bytes(),
+      cluster_link::model::connection_config::fetch_min_bytes_default);
     EXPECT_EQ(client_options.get_fetch_max_bytes(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_fetch_max_bytes(),
+      cluster_link::model::connection_config::fetch_max_bytes_default);
+    EXPECT_EQ(client_options.get_fetch_partition_max_bytes(), 0);
+    EXPECT_EQ(
+      client_options.get_effective_fetch_partition_max_bytes(),
+      cluster_link::model::connection_config::
+        default_fetch_partition_max_bytes);
+
+    const auto& topic_metadata_sync_options
+      = sl.get_configurations().get_topic_metadata_sync_options();
+    EXPECT_EQ(topic_metadata_sync_options.get_interval(), absl::Seconds(0));
+    EXPECT_EQ(
+      topic_metadata_sync_options.get_effective_interval(),
+      absl::FromChrono(
+        cluster_link::model::topic_metadata_mirroring_config::
+          task_interval_default));
+
+    const auto& security_settings
+      = sl.get_configurations().get_security_sync_options();
+
+    EXPECT_EQ(security_settings.get_interval(), absl::Seconds(0));
+    EXPECT_EQ(
+      security_settings.get_effective_interval(),
+      absl::FromChrono(
+        cluster_link::model::security_settings_sync_config::
+          task_interval_default));
+
+    const auto& cg_settings
+      = sl.get_configurations().get_consumer_offset_sync_options();
+    EXPECT_EQ(cg_settings.get_interval(), absl::Seconds(0));
+    EXPECT_EQ(
+      cg_settings.get_effective_interval(),
+      absl::FromChrono(
+        cluster_link::model::consumer_groups_mirroring_config::
+          default_task_interval));
 }
 
 TEST(converter_test, metadata_to_shadow_link_authn_scram_256) {

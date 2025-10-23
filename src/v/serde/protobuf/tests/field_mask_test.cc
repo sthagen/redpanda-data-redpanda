@@ -315,4 +315,46 @@ INSTANTIATE_TEST_SUITE_P(
       .expected = R"(
         {"recursiveMessage":null}
       )",
+    },
+    merge_test_case{
+      .name = "OneofMatch",
+      .input = R"({"oneofUint32": 1})",
+      .update = R"({"oneofUint32": 3})",
+      .mask = R"({"mask": "oneofUint32"})",
+      .expected = R"({"oneofUint32": 3})",
+    },
+    merge_test_case{
+      .name = "OneofMismatch",
+      .input = R"({"oneofUint32": 1})",
+      .update = R"({"oneofBool": true})",
+      .mask = R"({"mask": "oneofBool"})",
+      .expected = R"({"oneofBool": true})",
+    },
+    merge_test_case{
+      .name = "OneofMismatchFromMessage",
+      .input = R"({"oneofNestedMessage": {"a":4}})",
+      .update = R"({"oneofBool": true})",
+      .mask = R"({"mask": "oneofBool"})",
+      .expected = R"({"oneofBool": true})",
+    },
+    merge_test_case{
+      .name = "OneofMismatchToMessage",
+      .input = R"({"oneofBool": true})",
+      .update = R"({"oneofNestedMessage": {"a":5}})",
+      .mask = R"({"mask": "oneofNestedMessage"})",
+      .expected = R"({"oneofNestedMessage": {"a":5}})",
+    },
+    merge_test_case{
+      .name = "OneofMismatchToMessageField",
+      .input = R"({"oneofBool": true})",
+      .update = R"({"oneofNestedMessage": {"a":5}})",
+      .mask = R"({"mask": "oneofNestedMessage.a"})",
+      .expected = R"({"oneofNestedMessage": {"a":5}})",
+    },
+    merge_test_case{
+      .name = "OneofMismatchUnset",
+      .input = R"({"oneofUint32": 1})",
+      .update = R"({"oneofBool": true})",
+      .mask = R"({"mask": "oneofUint32"})",
+      .expected = R"({"oneofUint32": 0})",
     }));

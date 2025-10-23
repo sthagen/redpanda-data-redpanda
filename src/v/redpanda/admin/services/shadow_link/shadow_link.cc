@@ -79,24 +79,6 @@ T handle_error(std::expected<T, cluster_link::errc> result) {
     // Handle error should throw
     __builtin_unreachable();
 }
-
-const std::vector<serde::pb::field_mask::path> disallowed_paths_in_update = {
-  {"configurations", "client_options", "bootstrap_servers"},
-  {"configurations", "client_options", "tls_settings"}};
-
-bool is_path_disallowed(
-  const serde::pb::field_mask::path_view& path,
-  const std::vector<serde::pb::field_mask::path>& disallowed_paths) {
-    for (const auto& disallowed : disallowed_paths) {
-        if (
-          path.size() >= disallowed.size()
-          && std::ranges::equal(
-            disallowed, path | std::views::take(disallowed.size()))) {
-            return true;
-        }
-    }
-    return false;
-}
 } // namespace
 
 shadow_link_service_impl::shadow_link_service_impl(
@@ -244,15 +226,6 @@ shadow_link_service_impl::update_shadow_link(
 
     auto current_link = handle_error(
       _service->local().get_cluster_link(link_name));
-
-    if (std::ranges::any_of(req.get_update_mask().paths, [](const auto& path) {
-            return is_path_disallowed(path, disallowed_paths_in_update);
-        })) {
-        throw serde::pb::rpc::invalid_argument_exception(
-          ssx::sformat(
-            "Attempted to update disallowed fields in shadow link {}",
-            link_name));
-    }
 
     auto update_cmd = create_update_cluster_link_config_cmd(
       std::move(req), std::move(current_link));

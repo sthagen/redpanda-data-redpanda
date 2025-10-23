@@ -50,7 +50,9 @@ you must delete and recreate it.
 			}))
 			out.MaybeDie(err, "unable to get Redpanda Shadow Link information: %v", err)
 
-			originalCfg := shadowLinkToConfig(link.Msg.GetShadowLink())
+			shadowLink := link.Msg.GetShadowLink()
+			originalCfg := shadowLinkToConfig(shadowLink)
+			addRedactedPasswordString(originalCfg, shadowLink)
 
 			// Open editor to modify the configuration.
 			updatedCfg, err := rpkos.EditTmpYAMLFile(fs, originalCfg)
@@ -75,4 +77,16 @@ you must delete and recreate it.
 		},
 	}
 	return cmd
+}
+
+// if the password is set, replace it with a redacted value so user can provide
+// a change easily instead of writing the full password field.
+func addRedactedPasswordString(cfg *ShadowLinkConfig, link *adminv2.ShadowLink) {
+	isPassSet := link.GetConfigurations().GetClientOptions().GetAuthenticationConfiguration().GetScramConfiguration().GetPasswordSet()
+	if !isPassSet {
+		return
+	}
+	if auth, ok := cfg.ClientOptions.AuthenticationConfiguration.(*ScramConfig); ok && auth != nil {
+		auth.Password = "<redacted>"
+	}
 }

@@ -43,6 +43,7 @@ from rptest.services.redpanda import (
     SISettings,
     SchemaRegistryConfig,
     get_cloud_storage_type,
+    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.tests.datalake.utils import supported_storage_types
@@ -285,7 +286,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         if with_cloud_topics:
             self.redpanda.set_cluster_config(
                 values={
-                    "cloud_topics_enabled": True,
+                    CLOUD_TOPICS_CONFIG_STR: True,
                 }
             )
             self.redpanda.restart_nodes(

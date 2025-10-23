@@ -100,7 +100,7 @@ func printShadowLinkStatus(link *adminv2.ShadowLink, opts slStatusOptions) {
 	})
 
 	sections.Add(secTopics, func() {
-		printTopicStatus(status.GetShadowTopicStatuses())
+		printTopicStatus(status.GetShadowTopics(), status.GetSyncedShadowTopicProperties())
 	})
 }
 
@@ -116,15 +116,25 @@ func printTaskStatus(tasks []*adminv2.ShadowLinkTaskStatus) {
 	}
 }
 
-func printTopicStatus(topics []*adminv2.ShadowTopicStatus) {
-	if len(topics) == 0 {
-		fmt.Println("No topic status available.")
+func printTopicStatus(st []*adminv2.ShadowTopic, sp []string) {
+	if len(st) == 0 {
+		fmt.Println("No topics are being shadowed.")
 		return
 	}
-	for _, topic := range topics {
-		fmt.Printf("Name: %s ID: %v, State: %s\n", topic.GetName(), topic.GetTopicId(), strings.TrimPrefix(topic.GetState().String(), "SHADOW_TOPIC_STATE_"))
-		printPartitionTable(topic.GetPartitionInformation())
+	for _, topic := range st {
+		var topicID string
+		if topic.GetTopicId() != "" {
+			topicID = fmt.Sprintf(", ID: %v", topic.GetTopicId())
+		}
+		fmt.Printf("Name: %s%s, State: %s\n", topic.GetName(), topicID, strings.TrimPrefix(topic.GetStatus().GetState().String(), "SHADOW_TOPIC_STATE_"))
+		printPartitionTable(topic.GetStatus().GetPartitionInformation())
 		fmt.Println()
+	}
+	if len(sp) > 0 {
+		fmt.Println("Synced Shadow Topic Properties:")
+		for _, prop := range sp {
+			fmt.Printf("  - %s\n", prop)
+		}
 	}
 }
 

@@ -130,21 +130,6 @@ replicate_stages::replicate_stages(raft::errc ec)
   , replicate_finished(
       ss::make_ready_future<result<replicate_result>>(make_error_code(ec))) {};
 
-void follower_index_metadata::reset() {
-    last_dirty_log_index = model::offset{};
-    last_flushed_log_index = model::offset{};
-    expected_log_end_offset = model::offset{};
-    match_index = model::offset{};
-    next_index = model::offset{};
-    heartbeats_failed = 0;
-    last_sent_seq = follower_req_seq{0};
-    last_received_seq = follower_req_seq{0};
-    last_successful_received_seq = follower_req_seq{0};
-    inflight_append_request_count = 0;
-    last_sent_protocol_meta.reset();
-    follower_state_change.broadcast();
-}
-
 std::ostream& operator<<(std::ostream& o, const vnode& id) {
     fmt::print(o, "{{id: {}, revision: {}}}", id.id(), id.revision());
     return o;
@@ -180,27 +165,6 @@ std::ostream& operator<<(std::ostream& o, const vote_request& r) {
       r.prev_log_index,
       r.prev_log_term,
       r.leadership_transfer);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const follower_index_metadata& i) {
-    fmt::print(
-      o,
-      "{{node_id: {}, last_flushed_log_index: {}, last_dirty_log_index: {}, "
-      "match_index: {}, next_index: {}, expected_log_end_offset: {}, "
-      "heartbeats_failed: {}, last_sent_seq: {}, last_received_seq: {}, "
-      "last_successful_received_seq: {}, is_learner: {}, is_recovering: {}}}",
-      i.node_id,
-      i.last_flushed_log_index,
-      i.last_dirty_log_index,
-      i.match_index,
-      i.next_index,
-      i.expected_log_end_offset,
-      i.heartbeats_failed,
-      i.last_sent_seq,
-      i.last_received_seq,
-      i.last_successful_received_seq,
-      i.is_learner,
-      i.is_recovering);
     return o;
 }
 std::ostream& operator<<(std::ostream& o, const follower_metrics& i) {

@@ -180,4 +180,41 @@ rpc_client_protocol::remake_learner_state(
       .then(&rpc::get_ctx_data<remake_learner_state_reply>);
 }
 
+ss::future<result<get_compaction_mcco_reply>>
+rpc_client_protocol::get_compaction_mcco(
+  model::node_id n, get_compaction_mcco_request r, rpc::client_opts opts) {
+    auto timeout = opts.timeout;
+    return _connection_cache.local()
+      .with_node_client<raftgen_client_protocol>(
+        _self,
+        ss::this_shard_id(),
+        n,
+        timeout,
+        [r = std::move(r),
+         opts = std::move(opts)](raftgen_client_protocol client) mutable {
+            return client.get_compaction_mcco(std::move(r), std::move(opts));
+        })
+      .then(&rpc::get_ctx_data<get_compaction_mcco_reply>);
+}
+
+ss::future<result<distribute_compaction_mtro_reply>>
+rpc_client_protocol::distribute_compaction_mtro(
+  model::node_id n,
+  distribute_compaction_mtro_request r,
+  rpc::client_opts opts) {
+    auto timeout = opts.timeout;
+    return _connection_cache.local()
+      .with_node_client<raftgen_client_protocol>(
+        _self,
+        ss::this_shard_id(),
+        n,
+        timeout,
+        [r = std::move(r),
+         opts = std::move(opts)](raftgen_client_protocol client) mutable {
+            return client.distribute_compaction_mtro(
+              std::move(r), std::move(opts));
+        })
+      .then(&rpc::get_ctx_data<distribute_compaction_mtro_reply>);
+}
+
 } // namespace raft

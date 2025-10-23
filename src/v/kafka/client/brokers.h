@@ -58,6 +58,9 @@ public:
     /// \brief Remove a broker.
     ss::future<> erase(model::node_id id);
 
+    /// \brief Remove all brokers.
+    ss::future<> clear();
+
     /**
      * Applies the metadata response to the brokers. This method will throw if
      * any of the brokers can not be connected to.
@@ -92,6 +95,7 @@ public:
 
 private:
     ss::future<> do_erase(model::node_id id);
+    ss::future<> do_clear();
     /// \brief Brokers map a model::node_id to a client.
     brokers_t _brokers;
     /// \brief Next broker to select with round-robin

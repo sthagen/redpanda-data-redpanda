@@ -56,6 +56,17 @@ public:
       remake_learner_state_request r,
       rpc::client_opts opts) final;
 
+    ss::future<result<get_compaction_mcco_reply>> get_compaction_mcco(
+      model::node_id,
+      get_compaction_mcco_request r,
+      rpc::client_opts opts) final;
+
+    ss::future<result<distribute_compaction_mtro_reply>>
+    distribute_compaction_mtro(
+      model::node_id,
+      distribute_compaction_mtro_request r,
+      rpc::client_opts opts) final;
+
 private:
     model::node_id _self;
     ss::sharded<rpc::connection_cache>& _connection_cache;

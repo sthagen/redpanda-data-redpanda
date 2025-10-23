@@ -13,7 +13,11 @@ from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import SISettings, get_cloud_storage_type
+from rptest.services.redpanda import (
+    SISettings,
+    get_cloud_storage_type,
+    CLOUD_TOPICS_CONFIG_STR,
+)
 from rptest.tests.redpanda_test import RedpandaTest
 
 
@@ -33,7 +37,7 @@ class CloudTopicsTest(RedpandaTest):
         """
         self.redpanda.set_cluster_config(
             values={
-                "cloud_topics_enabled": True,
+                CLOUD_TOPICS_CONFIG_STR: True,
             }
         )
         self.redpanda.restart_nodes(self.redpanda.nodes)

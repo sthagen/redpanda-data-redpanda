@@ -18,6 +18,7 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/smp.hh>
 
+#include <algorithm>
 #include <compare>
 #include <cstddef>
 #include <iostream>
@@ -106,8 +107,19 @@ bool iobuf::operator==(const iobuf& o) const {
     if (_size != o._size) {
         return false;
     }
-    // We know these have the same amount of bytes in them, but they might be
-    // chunked differently.
+    if (!_frags.empty() && !o._frags.empty()) {
+        std::string_view lhs{_frags.front()};
+        std::string_view rhs{o._frags.front()};
+        constexpr static size_t max_byte_for_byte_cmp = 4;
+        auto n = std::min({lhs.size(), rhs.size(), max_byte_for_byte_cmp});
+        for (size_t i = 0; i < n; ++i) {
+            if (lhs[i] != rhs[i]) {
+                return false;
+            }
+        }
+    }
+    // We know these have the same amount of bytes in them, but they might
+    // be chunked differently.
     auto o_it = o.cbegin();
     auto other_next_view = [&o, &o_it] -> std::string_view {
         while (o_it != o.cend() && o_it->is_empty()) {
@@ -143,6 +155,22 @@ bool iobuf::operator<(const iobuf& o) const {
 }
 
 std::strong_ordering iobuf::operator<=>(const iobuf& o) const {
+    // Always check the first few bytes using byte for byte comparison,
+    // this allows the case of relatively randomized data to be done quickly
+    // but we still preserve the chunked checks that are faster if there is
+    // a matching prefix.
+    if (!_frags.empty() && !o._frags.empty()) {
+        std::string_view lhs{_frags.front()};
+        std::string_view rhs{o._frags.front()};
+        constexpr static size_t max_byte_for_byte_cmp = 4;
+        auto n = std::min({lhs.size(), rhs.size(), max_byte_for_byte_cmp});
+        for (size_t i = 0; i < n; ++i) {
+            auto cmp = lhs[i] <=> rhs[i];
+            if (cmp != std::strong_ordering::equal) {
+                return cmp;
+            }
+        }
+    }
     auto o_it = o.cbegin();
     auto other_next_view = [&o, &o_it] -> std::string_view {
         while (o_it != o.cend() && o_it->is_empty()) {
@@ -151,25 +179,27 @@ std::strong_ordering iobuf::operator<=>(const iobuf& o) const {
         if (o_it == o.cend()) {
             return {};
         }
-        std::string_view s{o_it->get(), o_it->size()};
+        std::string_view s{*o_it};
         ++o_it;
         return s;
     };
     std::string_view rhs = other_next_view();
-    for (const auto& frag : *this) {
-        std::string_view lhs{frag.get(), frag.size()};
-        while (!lhs.empty()) {
-            auto n = std::min(lhs.size(), rhs.size());
-            auto cmp = lhs.substr(0, n) <=> rhs.substr(0, n);
-            if (cmp != std::strong_ordering::equal) {
-                return cmp;
-            }
-            lhs.remove_prefix(n);
-            rhs.remove_prefix(n);
-            if (rhs.empty()) {
-                rhs = other_next_view();
-                if (o_it == o.cend()) {
-                    break;
+    if (!rhs.empty()) { // This prevents UB by using memcmp with nullptr
+        for (const auto& frag : *this) {
+            std::string_view lhs{frag};
+            while (!lhs.empty()) {
+                auto n = std::min(lhs.size(), rhs.size());
+                auto cmp = std::memcmp(lhs.data(), rhs.data(), n) <=> 0;
+                if (cmp != std::strong_ordering::equal) {
+                    return cmp;
+                }
+                lhs.remove_prefix(n);
+                rhs.remove_prefix(n);
+                if (rhs.empty()) {
+                    rhs = other_next_view();
+                    if (o_it == o.cend()) {
+                        break;
+                    }
                 }
             }
         }
@@ -186,8 +216,9 @@ bool iobuf::operator==(std::string_view o) const {
     auto in = iobuf::iterator_consumer(cbegin(), cend());
     std::ignore = in.consume(
       size_bytes(), [&are_equal, &o, &n](const char* src, size_t fg_sz) {
-          /// Both strings are equiv in total size, so its safe to assume the
-          /// next chunk to compare is the remaining to cmp or the fragment size
+          /// Both strings are equiv in total size, so its safe to assume
+          /// the next chunk to compare is the remaining to cmp or the
+          /// fragment size
           const auto size = std::min((o.size() - n), fg_sz);
           std::string_view a_view(src, size);
           std::string_view b_view(o.data() + n, size);

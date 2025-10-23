@@ -307,7 +307,8 @@ admin_server::admin_server(
   std::unique_ptr<cluster::tx_manager_migrator>& tx_manager_migrator,
   ss::sharded<kafka::server>& kafka_server,
   ss::sharded<cluster::tx_gateway_frontend>& tx_gateway_frontend,
-  ss::sharded<debug_bundle::service>& debug_bundle_service)
+  ss::sharded<debug_bundle::service>& debug_bundle_service,
+  ss::sharded<admin::kafka_connections_service>& kafka_connections_service)
   : _log_level_timer([this] { log_level_timer_handler(); })
   , _server("admin")
   , _cfg(std::move(cfg))
@@ -339,6 +340,7 @@ admin_server::admin_server(
   , _kafka_server(kafka_server)
   , _tx_gateway_frontend(tx_gateway_frontend)
   , _debug_bundle_service(debug_bundle_service)
+  , _kafka_connections_service(kafka_connections_service)
   , _default_blocked_reactor_notify(
       ss::engine().get_blocked_reactor_notify_ms()) {
     _server.set_content_streaming(true);
@@ -524,10 +526,7 @@ ss::future<> admin_server::start() {
       });
     add_service(
       std::make_unique<admin::broker_service_impl>(
-        std::move(client),
-        &_services,
-        _kafka_server,
-        _controller->get_feature_table()));
+        std::move(client), &_services));
 
     co_await _debug_bundle_file_handler.start();
 

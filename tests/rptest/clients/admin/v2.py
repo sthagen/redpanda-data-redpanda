@@ -8,15 +8,17 @@ from ducktape.cluster.cluster import ClusterNode
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     broker_pb2,
     broker_pb2_connect,
+    cluster_pb2,
+    cluster_pb2_connect,
     kafka_connections_pb2,
     shadow_link_pb2,
     shadow_link_pb2_connect,
 )
 from rptest.clients.admin.proto.redpanda.core.admin.v2.internal import (
-    debug_pb2,
-    debug_pb2_connect,
     datalake_pb2,
     datalake_pb2_connect,
+    debug_pb2,
+    debug_pb2_connect,
 )
 
 
@@ -26,6 +28,7 @@ class RedpandaServiceProto(Protocol):
 
 # Re-export some protobufs for convenience
 broker_pb = broker_pb2
+cluster_pb = cluster_pb2
 datalake_pb = datalake_pb2
 shadow_link_pb = shadow_link_pb2
 debug_pb = debug_pb2
@@ -93,6 +96,9 @@ class Admin:
 
     def broker(self) -> broker_pb2_connect.BrokerServiceClient:
         return self._make_service(broker_pb2_connect.BrokerServiceClient)
+
+    def cluster(self) -> cluster_pb2_connect.ClusterServiceClient:
+        return self._make_service(cluster_pb2_connect.ClusterServiceClient)
 
     def datalake(self) -> datalake_pb2_connect.DatalakeServiceClient:
         return self._make_service(datalake_pb2_connect.DatalakeServiceClient)

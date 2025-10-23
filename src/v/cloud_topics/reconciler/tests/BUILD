@@ -24,6 +24,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/bytes:iostream",
         "//src/v/cloud_topics/level_one/common:object",
+        "//src/v/cloud_topics/reconciler:reconciler_probe",
         "//src/v/cloud_topics/reconciler:reconciliation_consumer",
         "//src/v/model",
         "//src/v/storage:record_batch_builder",

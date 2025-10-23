@@ -142,6 +142,12 @@ class ClusterLinkingWorkloadWorker:
                 replicas=self.spec.replication_factor,
                 config=self.spec.topic_properties,
             )
+            wait_until(
+                lambda: self.spec.topic in self.target_rpk.list_topics(),
+                timeout_sec=progress_timeout,
+                backoff_sec=5,
+                err_msg=f"Topic {self.spec.topic} did not appear on target cluster within {progress_timeout} seconds",
+            )
             self.verifier.start()
             success, error = self.verifier.wait_and_verify(
                 progress_timeout=progress_timeout

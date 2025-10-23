@@ -15,6 +15,7 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     SchemaRegistryConfig,
     SecurityConfig,
+    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import expect_exception
@@ -78,7 +79,7 @@ FEATURE_DEPENDENT_CONFIG = {
     Feature.gssapi_override: "sasl_mechanisms_overrides",
     Feature.oidc_override: "sasl_mechanisms_overrides",
     Feature.shadow_linking: "enable_shadow_linking",
-    Feature.cloud_topics: "cloud_topics_enabled",
+    Feature.cloud_topics: CLOUD_TOPICS_CONFIG_STR,
 }
 
 SKIP_FEATURES = [
@@ -255,7 +256,7 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
         elif feature == Feature.shadow_linking:
             self.redpanda.set_cluster_config({"enable_shadow_linking": "true"})
         elif feature == Feature.cloud_topics:
-            self.redpanda.set_cluster_config({"cloud_topics_enabled": "true"})
+            self.redpanda.set_cluster_config({CLOUD_TOPICS_CONFIG_STR: "true"})
         else:
             assert False, f"Unexpected feature={feature}"
 

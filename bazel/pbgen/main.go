@@ -982,6 +982,13 @@ func (g *implGenerator) generateMessageFieldMaskApplyHelper(msg protoreflect.Mes
 					w.Println("}")
 					w.Println("self_field->apply_field_path_from(path, update_field);")
 				} else if msg := field.Message(); msg != nil && !isWellKnownType(msg) {
+					if field.ContainingOneof() != nil {
+						w.Printf("if (!self->has_%s()) {\n", field.Name())
+						w.Indent()
+						w.Printf("self->set_%s({});\n", field.Name())
+						w.Dedent()
+						w.Println("}")
+					}
 					w.Printf("self->get_%s().apply_field_path_from(path, &update->get_%s());\n", field.Name(), field.Name())
 				} else {
 					w.Printf("self->set_%s(std::move(update->get_%s()));\n", field.Name(), field.Name())
@@ -992,6 +999,7 @@ func (g *implGenerator) generateMessageFieldMaskApplyHelper(msg protoreflect.Mes
 				w.Indent()
 				w.Printf("if (update->has_%s()) {\n", field.Name())
 				w.Indent()
+
 				printApplyFn()
 				w.Dedent()
 				w.Println("} else {")

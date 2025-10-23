@@ -4478,7 +4478,7 @@ configuration::configuration()
   , cloud_topics_enabled(
       *this,
       true,
-      "cloud_topics_enabled",
+      "unstable_beta_feature_cloud_topics_enabled",
       "Enable cloud topics.",
       meta{.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
