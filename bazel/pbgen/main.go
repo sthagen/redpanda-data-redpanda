@@ -774,18 +774,21 @@ func (g *implGenerator) generateMessagePathToNumbersHelper(msg protoreflect.Mess
 	for i := range msg.Fields().Len() {
 		f := msg.Fields().Get(i)
 		msg := f.Message()
+		var lambda string
 		if f.Cardinality() == protoreflect.Repeated || msg == nil || isWellKnownType(msg) {
-			lambda := fmt.Sprintf("[](auto path, auto* out) { out->push_back(%d); return path.empty(); }", f.Number())
-			pairs = append(pairs, fmt.Sprintf("{%q, %s},", f.Name(), lambda))
-			continue
+			lambda = fmt.Sprintf("[](auto path, auto* out) { out->push_back(%d); return path.empty(); }", f.Number())
+		} else {
+			lambda = strings.Join([]string{
+				"[](auto path, auto* out) {",
+				fmt.Sprintf("out->push_back(%d);", f.Number()),
+				fmt.Sprintf("return %s::convert_field_path_to_numbers(path, out);", g.cppTypeName(msg)),
+				"}",
+			}, " ")
 		}
-		lambda := strings.Join([]string{
-			"[](auto path, auto* out) {",
-			fmt.Sprintf("out->push_back(%d);", f.Number()),
-			fmt.Sprintf("return %s::convert_field_path_to_numbers(path, out);", g.cppTypeName(msg)),
-			"}",
-		}, " ")
 		pairs = append(pairs, fmt.Sprintf("{%q, %s},", f.Name(), lambda))
+		if string(f.Name()) != f.JSONName() {
+			pairs = append(pairs, fmt.Sprintf("{%q, %s},", f.JSONName(), lambda))
+		}
 	}
 	// Sort the pairs for binary search.
 	slices.Sort(pairs)

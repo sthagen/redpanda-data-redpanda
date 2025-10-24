@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "proto/redpanda/core/admin/v2/internal/debug.proto.h"
+#include "proto/redpanda/core/admin/internal/v1/debug.proto.h"
 #include "redpanda/admin/proxy/client.h"
 
 #include <seastar/core/distributed.hh>

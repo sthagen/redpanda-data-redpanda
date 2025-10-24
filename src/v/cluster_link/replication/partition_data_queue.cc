@@ -84,8 +84,7 @@ bool partition_data_queue::enqueue(
     return _sem.available_units() > 0;
 }
 
-ss::future<partition_data_queue::fetch_data>
-partition_data_queue::fetch(ss::abort_source& as) {
+ss::future<fetch_data> partition_data_queue::fetch(ss::abort_source& as) {
     auto holder = _gate.hold();
     if (_waiter) {
         throw std::runtime_error("Only one fetch can be in progress at a time");

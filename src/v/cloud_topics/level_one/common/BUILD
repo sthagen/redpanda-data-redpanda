@@ -100,6 +100,7 @@ redpanda_cc_library(
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics:logger",
+        "//src/v/config",
         "//src/v/model",
         "@seastar",
     ],

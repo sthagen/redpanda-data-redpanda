@@ -157,6 +157,7 @@ private:
     struct commit_info {
         ss::shared_ptr<source> source;
         consumer_metadata metadata;
+        kafka::offset start_offset;
     };
 
     /*
@@ -219,7 +220,10 @@ private:
      * metadata if any batches were consumed, nullopt otherwise.
      */
     ss::future<std::expected<std::optional<consumer_metadata>, reconcile_error>>
-    add_source_to_object(builder_context& ctx, ss::shared_ptr<source> src);
+    add_source_to_object(
+      builder_context& ctx,
+      ss::shared_ptr<source> src,
+      kafka::offset start_offset);
 
     /*
      * Upload an object to cloud storage with the specified id.

@@ -1337,7 +1337,7 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
         )
 
     def _extract_samples(
-        self, metrics: Generator[Metric, Any, None], sample_pattern: str, node: Any
+        self, metrics: list[Metric], sample_pattern: str, node: Any
     ) -> list[MetricSample]:
         """Extract metrics samples given a sample pattern. Embed the node in which it came from."""
         found_sample = None
@@ -1364,7 +1364,7 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
     @abstractmethod
     def metrics(
         self, node, metrics_endpoint: MetricsEndpoint = MetricsEndpoint.METRICS
-    ) -> Generator[Metric, Any, None]:
+    ) -> list[Metric]:
         """Implement this method to parse the prometheus text format metric from a given node."""
         pass
 
@@ -1439,8 +1439,8 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
         sample_values_per_pattern = {pattern: [] for pattern in sample_patterns}
 
         for n in ns:
+            metrics = self.metrics(n, metrics_endpoint)
             for pattern in sample_patterns:
-                metrics = self.metrics(n, metrics_endpoint)
                 sample_values_per_pattern[pattern] += self._extract_samples(
                     metrics, pattern, n
                 )
@@ -2023,7 +2023,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
             text = self.kubectl.exec(
                 f"curl -f -s -S {p}://localhost:9644/metrics", node.name
             )
-        return text_string_to_metric_families(text)
+        return list(text_string_to_metric_families(text))
 
     def metrics_sample(
         self,
@@ -4165,7 +4165,7 @@ class RedpandaService(Service, RedpandaServiceABC):
     ):
         """Parse the prometheus text format metric from a given node."""
         text = self.raw_metrics(node, metrics_endpoint)
-        return text_string_to_metric_families(text)
+        return list(text_string_to_metric_families(text))
 
     def cloud_storage_diagnostics(self):
         """
@@ -4512,41 +4512,32 @@ class RedpandaService(Service, RedpandaServiceABC):
         if node not in self._started:
             return
 
-        def _metrics_sum(name: str) -> int:
-            samples = self.metrics_sample(name, [node])
-            if samples is None:
-                return 0
-            return int(sum(s.value for s in samples.samples))
+        metrics = {
+            "vectorized_io_queue_total_read_bytes_total": "disk_bytes_read",
+            "vectorized_io_queue_total_write_bytes_total": "disk_bytes_written",
+            "vectorized_storage_log_batches_read": "batches_read",
+            "vectorized_storage_log_batches_written": "batches_written",
+            "vectorized_internal_rpc_sent_bytes": "internal_rpc_bytes_sent",
+            "vectorized_internal_rpc_received_bytes": "internal_rpc_bytes_recv",
+            "vectorized_cloud_client_total_uploads": "cloud_storage_puts",
+            "vectorized_cloud_client_total_downloads": "cloud_storage_gets",
+        }
 
         try:
-            self._usage_stats.disk_bytes_read += _metrics_sum(
-                "vectorized_io_queue_total_read_bytes_total"
+            metric_samples = self.metrics_samples(
+                list(metrics.keys()),
+                [node],
             )
 
-            self._usage_stats.disk_bytes_written += _metrics_sum(
-                "vectorized_io_queue_total_write_bytes_total"
-            )
-            self._usage_stats.batches_read += _metrics_sum(
-                "vectorized_storage_log_batches_read"
-            )
-
-            self._usage_stats.batches_written += _metrics_sum(
-                "vectorized_storage_log_batches_written"
-            )
-            self._usage_stats.internal_rpc_bytes_sent += _metrics_sum(
-                "vectorized_internal_rpc_sent_bytes"
-            )
-            self._usage_stats.internal_rpc_bytes_recv += _metrics_sum(
-                "vectorized_internal_rpc_received_bytes"
-            )
-            self._usage_stats.cloud_storage_puts += _metrics_sum(
-                "vectorized_cloud_client_total_uploads"
-            )
-            self._usage_stats.cloud_storage_gets += _metrics_sum(
-                "vectorized_cloud_client_total_downloads"
-            )
+            for key, ms in metric_samples.items():
+                current = getattr(self._usage_stats, metrics[key])
+                setattr(
+                    self._usage_stats,
+                    metrics[key],
+                    current + int(sum(s.value for s in ms.samples)),
+                )
         except Exception as e:
-            self.logger.warning(f"Cannot check metrics - {e}")
+            self.logger.warning(f"Cannot check metrics on shutdown - {e}")
 
     def stop_node(
         self,
@@ -5002,7 +4993,7 @@ class RedpandaService(Service, RedpandaServiceABC):
                 RedpandaService.CLUSTER_BOOTSTRAP_CONFIG_FILE, conf_yaml
             )
 
-    def get_node_by_id(self, node_id):
+    def get_node_by_id(self, node_id: int) -> ClusterNode | None:
         """
         Returns a node that has requested id or None if node is not found
         """
@@ -5012,7 +5003,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         return None
 
-    def registered(self, node):
+    def registered(self, node: ClusterNode):
         """
         Check if a newly added node is fully registered with the cluster, such
         that a kafka metadata request to any node in the cluster will include it.

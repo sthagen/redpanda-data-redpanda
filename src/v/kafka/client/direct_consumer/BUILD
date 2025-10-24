@@ -5,17 +5,20 @@ redpanda_cc_library(
     srcs = [
         "data_queue.cc",
         "direct_consumer.cc",
+        "direct_consumer_probe.cc",
         "fetcher.cc",
     ],
     hdrs = [
         "api_types.h",
         "data_queue.h",
         "direct_consumer.h",
+        "direct_consumer_probe.h",
         "fetcher.h",
     ],
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/container:intrusive",
@@ -29,6 +32,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:list_offset",
         "//src/v/kafka/protocol:metadata",
         "//src/v/kafka/protocol/schemata:fetch_response",
+        "//src/v/metrics",
         "//src/v/model",
         "//src/v/ssx:async_algorithm",
         "//src/v/ssx:future_util",

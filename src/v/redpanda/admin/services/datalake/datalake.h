@@ -12,7 +12,7 @@
 #pragma once
 
 #include "datalake/coordinator/frontend.h"
-#include "proto/redpanda/core/admin/v2/internal/datalake.proto.h"
+#include "proto/redpanda/core/admin/internal/datalake/v1/datalake.proto.h"
 #include "redpanda/admin/proxy/client.h"
 
 namespace admin {

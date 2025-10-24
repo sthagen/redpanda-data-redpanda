@@ -63,7 +63,7 @@ func Test_nic_IsBondIface(t *testing.T) {
 	procFile := &procFileMock{}
 	deviceInfo := &deviceInfoMock{}
 	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
-	afero.WriteFile(fs, "/sys/class/net/bond_masters", []byte(fmt.Sprintln("test0")), 0o644)
+	afero.WriteFile(fs, "/sys/class/net/test0/lower_ens5", []byte{}, 0o644)
 	// when
 	bond := nic.IsBondIface()
 	// then
@@ -76,8 +76,9 @@ func Test_nic_Slaves_ReturnAllSlavesOfAnInterface(t *testing.T) {
 	procFile := &procFileMock{}
 	deviceInfo := &deviceInfoMock{}
 	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
-	afero.WriteFile(fs, "/sys/class/net/bond_masters", []byte(fmt.Sprintln("test0")), 0o644)
-	afero.WriteFile(fs, "/sys/class/net/test0/bond/slaves", []byte("sl0\nsl1\nsl2"), 0o644)
+	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl0", []byte{}, 0o644)
+	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl1", []byte{}, 0o644)
+	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl2", []byte{}, 0o644)
 	// when
 	slaves, err := nic.Slaves()
 	// then
@@ -94,6 +95,7 @@ func Test_nic_Slaves_ReturnEmptyForNotBondInterface(t *testing.T) {
 	procFile := &procFileMock{}
 	deviceInfo := &deviceInfoMock{}
 	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
+	fs.MkdirAll("/sys/class/net/test0/device", 0o755)
 	// when
 	slaves, err := nic.Slaves()
 	// then
@@ -326,6 +328,36 @@ func Test_nic_GetIRQs(t *testing.T) {
 					Num:        169,
 					ProcLine:   "169:          0          0 PCI-MSIX-0000:00:08.0  31-edge      gve-ntfy-blk1@pci:0000:00:08.0",
 					QueueIndex: 0,
+				},
+			},
+		},
+		{
+			name:       "mlx5_core",
+			driverName: "mlx5_core",
+			irqProcFile: &procFileMock{
+				getIRQProcFileLinesMap: func() (map[int]string, error) {
+					return map[int]string{
+						33: "33:       1465        806  Hyper-V PCIe MSI 2701534461952-edge      mlx5_async0@pci:4ea0:00:02.0",
+						34: "34:        154       9690  Hyper-V PCIe MSI 2701534461953-edge      mlx5_comp0@pci:4ea0:00:02.0",
+						35: "35:          0         43  Hyper-V PCIe MSI 2701534461954-edge      mlx5_comp1@pci:4ea0:00:02.0",
+					}, nil
+				},
+			},
+			irqDeviceInfo: &deviceInfoMock{
+				getIRQs: func(string, string) ([]int, error) {
+					return []int{33, 34, 35}, nil
+				},
+			},
+			want: []IrqInfoRes{
+				{
+					Num:        34,
+					ProcLine:   "34:        154       9690  Hyper-V PCIe MSI 2701534461953-edge      mlx5_comp0@pci:4ea0:00:02.0",
+					QueueIndex: 0,
+				},
+				{
+					Num:        35,
+					ProcLine:   "35:          0         43  Hyper-V PCIe MSI 2701534461954-edge      mlx5_comp1@pci:4ea0:00:02.0",
+					QueueIndex: 1,
 				},
 			},
 		},
@@ -620,6 +652,26 @@ func Test_gvnicIrqToQueueIdx(t *testing.T) {
 			Num:       26,
 			ProcLine:  "26:        134          0   ITS-MSI   0 Edge      eth%d-mgmnt",
 			indexFunc: func(irq IrqInfo) int { return gvnicIrqToQueueIdx(irq, 4) },
+		}
+		require.Equal(t, math.MaxInt64, irq.QueueIndex())
+	}
+}
+
+func Test_azureHyperVIrqToQueueIdx(t *testing.T) {
+	{
+		irq := IrqInfo{
+			Num:       34,
+			ProcLine:  "34:        154       9690  Hyper-V PCIe MSI 2701534461953-edge      mlx5_comp0@pci:4ea0:00:02.0",
+			indexFunc: azureHyperVIrqToQueueIdx,
+		}
+		require.Equal(t, 0, irq.QueueIndex())
+	}
+
+	{
+		irq := IrqInfo{
+			Num:       33,
+			ProcLine:  "33:       1465        806  Hyper-V PCIe MSI 2701534461952-edge      mlx5_async0@pci:4ea0:00:02.0",
+			indexFunc: azureHyperVIrqToQueueIdx,
 		}
 		require.Equal(t, math.MaxInt64, irq.QueueIndex())
 	}

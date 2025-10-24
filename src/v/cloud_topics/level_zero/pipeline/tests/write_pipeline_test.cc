@@ -31,6 +31,8 @@
 
 using namespace std::chrono_literals;
 
+static cloud_topics::cluster_epoch min_epoch{3840};
+
 namespace cloud_topics::l0 {
 struct write_pipeline_accessor {
     // Returns true if the write request is in the `_pending` collection
@@ -66,7 +68,8 @@ TEST_CORO(write_pipeline_test, single_write_request) {
     auto stage = pipeline.register_write_pipeline_stage();
 
     const auto timeout = ss::manual_clock::now() + 1s;
-    auto fut = pipeline.write_and_debounce(model::controller_ntp, {}, timeout);
+    auto fut = pipeline.write_and_debounce(
+      model::controller_ntp, min_epoch, {}, timeout);
 
     // Make sure the write request is in the _pending list
     co_await sleep_until(
@@ -95,7 +98,7 @@ TEST_CORO(batcher_test, expired_write_request) {
     static constexpr auto timeout = 1s;
     auto deadline = ss::manual_clock::now() + 1s;
     auto expect_fail_fut = pipeline.write_and_debounce(
-      model::controller_ntp, {}, deadline);
+      model::controller_ntp, min_epoch, {}, deadline);
 
     // Expire first request
     co_await sleep_until(
@@ -104,7 +107,7 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     deadline = ss::manual_clock::now() + 1s;
     auto expect_pass_fut = pipeline.write_and_debounce(
-      model::controller_ntp, {}, deadline);
+      model::controller_ntp, min_epoch, {}, deadline);
 
     // Make sure that both write requests are pending
     co_await sleep_until(

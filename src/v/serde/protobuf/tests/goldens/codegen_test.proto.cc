@@ -1369,14 +1369,23 @@ bool well_known_protos::convert_field_path_to_numbers(std::span<std::string_view
     return true;
   }
   constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, bool(*)(decltype(field_path), decltype(out))>>({
+    {"durationMap", [](auto path, auto* out) { out->push_back(3); return path.empty(); }},
     {"duration_map", [](auto path, auto* out) { out->push_back(3); return path.empty(); }},
+    {"fieldMaskMap", [](auto path, auto* out) { out->push_back(6); return path.empty(); }},
     {"field_mask_map", [](auto path, auto* out) { out->push_back(6); return path.empty(); }},
+    {"repeatedDuration", [](auto path, auto* out) { out->push_back(2); return path.empty(); }},
+    {"repeatedFieldMask", [](auto path, auto* out) { out->push_back(5); return path.empty(); }},
+    {"repeatedTimestamp", [](auto path, auto* out) { out->push_back(8); return path.empty(); }},
     {"repeated_duration", [](auto path, auto* out) { out->push_back(2); return path.empty(); }},
     {"repeated_field_mask", [](auto path, auto* out) { out->push_back(5); return path.empty(); }},
     {"repeated_timestamp", [](auto path, auto* out) { out->push_back(8); return path.empty(); }},
+    {"singleDuration", [](auto path, auto* out) { out->push_back(1); return path.empty(); }},
+    {"singleFieldMask", [](auto path, auto* out) { out->push_back(4); return path.empty(); }},
+    {"singleTimestamp", [](auto path, auto* out) { out->push_back(7); return path.empty(); }},
     {"single_duration", [](auto path, auto* out) { out->push_back(1); return path.empty(); }},
     {"single_field_mask", [](auto path, auto* out) { out->push_back(4); return path.empty(); }},
     {"single_timestamp", [](auto path, auto* out) { out->push_back(7); return path.empty(); }},
+    {"timestampMap", [](auto path, auto* out) { out->push_back(9); return path.empty(); }},
     {"timestamp_map", [](auto path, auto* out) { out->push_back(9); return path.empty(); }},
   });
   auto fields = std::ranges::equal_range(key_to_field_number, field_path.front(), std::less<>(), [](const auto& pair) { return pair.first; });

@@ -20,7 +20,7 @@ import "proto/redpanda/core/pbgen/options.proto";
 import "proto/redpanda/core/pbgen/rpc.proto";
 import "proto/redpanda/core/admin/v2/kafka_connections.proto";
 
-option (redpanda.core.pbgen.cpp_namespace) = "proto::admin";
+option (pbgen.cpp_namespace) = "proto::admin";
 
 // The ClusterService gives information about the cluster.
 service ClusterService {
@@ -28,7 +28,7 @@ service ClusterService {
     // connections, collected and ordered across all brokers.
     rpc ListKafkaConnections(ListKafkaConnectionsRequest)
         returns (ListKafkaConnectionsResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }

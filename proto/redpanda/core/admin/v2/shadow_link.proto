@@ -18,7 +18,8 @@ package redpanda.core.admin.v2;
 
 import "proto/redpanda/core/pbgen/options.proto";
 import "proto/redpanda/core/pbgen/rpc.proto";
-import "proto/redpanda/core/common/acl.proto";
+import "proto/redpanda/core/common/v1/acl.proto";
+import "proto/redpanda/core/common/v1/tls.proto";
 import "google/api/field_behavior.proto";
 import "google/api/field_info.proto";
 import "google/api/resource.proto";
@@ -26,41 +27,41 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/field_mask.proto";
 
-option (redpanda.core.pbgen.cpp_namespace) = "proto::admin";
+option (pbgen.cpp_namespace) = "proto::admin";
 
 service ShadowLinkService {
     rpc CreateShadowLink(CreateShadowLinkRequest)
         returns (CreateShadowLinkResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
     rpc DeleteShadowLink(DeleteShadowLinkRequest)
         returns (DeleteShadowLinkResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
     rpc GetShadowLink(GetShadowLinkRequest) returns (GetShadowLinkResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
     rpc ListShadowLinks(ListShadowLinksRequest)
         returns (ListShadowLinksResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
     rpc UpdateShadowLink(UpdateShadowLinkRequest)
         returns (UpdateShadowLinkResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
     // Fails over a shadow link or a single shadow topic
     rpc FailOver(FailOverRequest) returns (FailOverResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
@@ -70,7 +71,7 @@ service ShadowLinkService {
     // Shadow Topic 'shadows' a topic on a source cluster, mirroring the data
     // and properties of that topic.
     rpc GetShadowTopic(GetShadowTopicRequest) returns (GetShadowTopicResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
@@ -78,7 +79,7 @@ service ShadowLinkService {
     // their status
     rpc ListShadowTopics(ListShadowTopicsRequest)
         returns (ListShadowTopicsResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
@@ -232,6 +233,8 @@ message ShadowLinkConfigurations {
     ConsumerOffsetSyncOptions consumer_offset_sync_options = 3;
     // Security settings sync options
     SecuritySettingsSyncOptions security_sync_options = 4;
+    // Schema Registry sync options
+    SchemaRegistrySyncOptions schema_registry_sync_options = 5;
 }
 // Options for the client link
 message ShadowLinkClientOptions {
@@ -247,7 +250,7 @@ message ShadowLinkClientOptions {
     // message
     string source_cluster_id = 3;
     // TLS settings
-    optional TLSSettings tls_settings = 4;
+    optional common.v1.TLSSettings tls_settings = 4;
     // Authentication settings
     optional AuthenticationConfiguration authentication_configuration = 5;
     // Max metadata age.
@@ -305,8 +308,8 @@ message TopicMetadataSyncOptions {
     // created as shadow topics on the shadow cluster.  This only controls
     // automatic creation of shadow topics and does not effect the state of the
     // mirror topic once it is created.
-    // Literal filters for __consumer_offsets and _redpanda.audit_log will be
-    // rejected as well as prefix filters to match topics prefixed with
+    // Literal filters for __consumer_offsets, _redpanda.audit_log and _schemas
+    // will be rejected as well as prefix filters to match topics prefixed with
     // _redpanda or __redpanda.
     // Wildcard `*` is permitted only for literal filters and will _not_ match
     // any topics that start with _redpanda or __redpanda.  If users wish to
@@ -364,6 +367,27 @@ message TopicMetadataSyncOptions {
         google.protobuf.Timestamp timestamp = 8;
     }
 }
+// Options for how the Schema Registry is synced.
+message SchemaRegistrySyncOptions {
+    // Shadow the entire source cluster's Schema Registry byte-for-byte.
+    // If set, the Shadow Link will attempt to add the `_schemas`
+    // topic to the list of Shadow Topics as long as:
+    // 1. The `_schemas` topic exists on the source cluster
+    // 2. The `_schemas` topic does not exist on the shadow cluster, or it is
+    // empty.
+    // If either of the above conditions are _not_ met, then the `_schemas`
+    // topic will _not_ be shadowed by this cluster. Unsetting this flag will
+    // _not_ remove the `_schemas` topic from shadowing if it has already been
+    // added.  Once made a shadow topic, the
+    // `_schemas` topic will be replicated byte-for-byte.  To stop shadowing the
+    // `_schemas` topic, unset this field, then either fail-over the topic or
+    // delete it.
+    message ShadowSchemaRegistryTopic {}
+    // Schema Registry shadowing mode.
+    oneof schema_registry_shadowing_mode {
+        ShadowSchemaRegistryTopic shadow_schema_registry_topic = 1;
+    }
+}
 // Options for syncing consumer offsets
 message ConsumerOffsetSyncOptions {
     // Sync interval
@@ -390,20 +414,6 @@ message SecuritySettingsSyncOptions {
     // ACL filters
     repeated ACLFilter acl_filters = 4;
 }
-// TLS settings
-message TLSSettings {
-    // Whether or not TLS is enabled
-    bool enabled = 3;
-    // May provide TLS as a set of files or PEM values
-    oneof tls_settings {
-        // Certificates and keys are provided as files
-        TLSFileSettings tls_file_settings = 1;
-        // Certificates and keys are provided in PEM format
-        TLSPEMSettings tls_pem_settings = 2;
-    }
-    // If true, the SNI hostname will not be provided when TLS is used
-    bool do_not_set_sni_hostname = 4;
-}
 // Authentication config.  Currently only supporting SASL/SCRAM,
 // however made as a oneof for expansion
 message AuthenticationConfiguration {
@@ -411,28 +421,6 @@ message AuthenticationConfiguration {
         // SASL/SCRAM configuration
         ScramConfig scram_configuration = 1;
     }
-}
-// TLS file settings
-message TLSFileSettings {
-    // Path to the CA
-    string ca_path = 1;
-    // Key and Cert are optional but if one is provided, then both must be
-    // Path to the key
-    string key_path = 2;
-    // Path to the cert
-    string cert_path = 3;
-}
-// Used when providing the TLS information in PEM format
-message TLSPEMSettings {
-    // The CA
-    string ca = 1;
-    // Key and Cert are optional but if one is provided, then both must be
-    // The key
-    string key = 2 [(google.api.field_behavior) = INPUT_ONLY];
-    // The SHA-256 of the key, in base64 format
-    string key_fingerprint = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
-    // The cert
-    string cert = 4;
 }
 // SCRAM settings
 message ScramConfig {
@@ -470,9 +458,9 @@ message ACLFilter {
 // A filter to match ACLs for resources
 message ACLResourceFilter {
     // The ACL resource type to match
-    common.ACLResource resource_type = 1;
+    common.v1.ACLResource resource_type = 1;
     // The pattern to apply to name
-    common.ACLPattern pattern_type = 2;
+    common.v1.ACLPattern pattern_type = 2;
     // Name, if not given will default to match all items in `resource_type`.
     // Note that asterisk `*` is literal and matches resource ACLs
     // that are named `*`
@@ -484,9 +472,9 @@ message ACLAccessFilter {
     // all principals with the specified `operation` and `permission_type`
     string principal = 1;
     // The ACL operation to match
-    common.ACLOperation operation = 2;
+    common.v1.ACLOperation operation = 2;
     // The permission type
-    common.ACLPermissionType permission_type = 3;
+    common.v1.ACLPermissionType permission_type = 3;
     // The host to match.  If not set, will default to match all hosts
     // with the specified `operation` and `permission_type`. Note that
     // the asterisk `*` is literal and matches hosts that are set to `*`

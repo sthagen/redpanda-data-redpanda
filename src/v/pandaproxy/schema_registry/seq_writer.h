@@ -13,6 +13,7 @@
 #include "kafka/client/client.h"
 #include "pandaproxy/logger.h"
 #include "pandaproxy/schema_registry/error.h"
+#include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/exceptions.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
@@ -21,6 +22,19 @@
 #include "utils/retry.h"
 
 namespace pandaproxy::schema_registry {
+
+class sequence_state_checker {
+public:
+    sequence_state_checker() = default;
+    virtual ~sequence_state_checker() = default;
+    sequence_state_checker(const sequence_state_checker&) = delete;
+    sequence_state_checker& operator=(const sequence_state_checker&) = delete;
+    sequence_state_checker(sequence_state_checker&&) = delete;
+    sequence_state_checker& operator=(sequence_state_checker&&) = delete;
+
+    using writes_disabled_t = ss::bool_class<struct writes_disabled_tag>;
+    virtual writes_disabled_t writes_disabled() const = 0;
+};
 
 using namespace std::chrono_literals;
 
@@ -35,11 +49,13 @@ public:
       model::node_id node_id,
       ss::smp_service_group smp_group,
       ss::sharded<kafka::client::client>& client,
-      sharded_store& store)
+      sharded_store& store,
+      std::unique_ptr<sequence_state_checker> state_checker)
       : _smp_opts(ss::smp_submit_to_options{smp_group})
       , _client(client)
       , _store(store)
-      , _node_id(node_id) {}
+      , _node_id(node_id)
+      , _state_checker(std::move(state_checker)) {}
 
     ss::future<> read_sync();
 
@@ -111,6 +127,9 @@ private:
     /// multiple writing nodes.
     template<typename F>
     auto sequenced_write(F f) {
+        if (_state_checker->writes_disabled()) [[unlikely]] {
+            throw as_exception(writes_disabled());
+        }
         auto base_backoff = _jitter.next_duration();
         auto remote = [base_backoff, f](seq_writer& seq) {
             if (auto waiters = seq._write_sem.waiters(); waiters != 0) {
@@ -181,6 +200,8 @@ private:
 
     /// Block until this offset is available, fetching if necessary
     ss::future<> wait_for(model::offset offset);
+
+    std::unique_ptr<sequence_state_checker> _state_checker;
 
     // Global (Shard 0) State
     // ======================

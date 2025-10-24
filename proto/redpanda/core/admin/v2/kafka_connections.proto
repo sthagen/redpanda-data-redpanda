@@ -21,7 +21,7 @@ import "proto/redpanda/core/pbgen/options.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
-option (redpanda.core.pbgen.cpp_namespace) = "proto::admin";
+option (pbgen.cpp_namespace) = "proto::admin";
 
 /* Resources */
 // Kafka connection details for a broker

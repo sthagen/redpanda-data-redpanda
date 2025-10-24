@@ -25,6 +25,7 @@
 #include "serde/rw/envelope.h"
 #include "serde/rw/map.h"
 #include "serde/rw/named_type.h"
+#include "serde/rw/optional.h"
 #include "serde/rw/variant.h"
 #include "serde/rw/vector.h"
 #include "utils/absl_sstring_hash.h"
@@ -501,6 +502,41 @@ struct topic_metadata_mirroring_config
     operator<<(std::ostream& os, const topic_metadata_mirroring_config& cfg);
 };
 
+struct schema_registry_sync_config
+  : serde::envelope<
+      schema_registry_sync_config,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    struct shadow_entire_schema_registry
+      : serde::envelope<
+          shadow_entire_schema_registry,
+          serde::version<0>,
+          serde::compat_version<0>> {
+        friend bool operator==(
+          const shadow_entire_schema_registry&,
+          const shadow_entire_schema_registry&)
+          = default;
+
+        auto serde_fields() { return std::tie(); }
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    using shadow_schema_registry_mode_t
+      = serde::variant<shadow_entire_schema_registry>;
+
+    std::optional<shadow_schema_registry_mode_t>
+      sync_schema_registry_topic_mode;
+
+    auto serde_fields() { return std::tie(sync_schema_registry_topic_mode); }
+
+    friend bool operator==(
+      const schema_registry_sync_config&, const schema_registry_sync_config&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+};
+
 struct consumer_groups_mirroring_config
   : serde::envelope<
       consumer_groups_mirroring_config,
@@ -729,7 +765,10 @@ struct link_configuration
     topic_metadata_mirroring_config topic_metadata_mirroring_cfg;
     /// Configuration for the consumer groups mirroring task
     consumer_groups_mirroring_config consumer_groups_mirroring_cfg;
+    /// Configuration for syncing security settings
     security_settings_sync_config security_settings_sync_cfg;
+    /// Configuration for syncing schema registry
+    schema_registry_sync_config schema_registry_sync_cfg;
 
     friend bool operator==(const link_configuration&, const link_configuration&)
       = default;
@@ -738,7 +777,8 @@ struct link_configuration
         return std::tie(
           topic_metadata_mirroring_cfg,
           consumer_groups_mirroring_cfg,
-          security_settings_sync_cfg);
+          security_settings_sync_cfg,
+          schema_registry_sync_cfg);
     }
 
     link_configuration copy() const;

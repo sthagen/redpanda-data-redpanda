@@ -52,8 +52,10 @@ public:
     ss::sstring pipeline_name() const { return "write_pipeline"; }
 
     /// Add write request to the pipeline
+    /// The revision id is the topic creation revision id for the ntp.
     ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
+      cluster_epoch min_epoch,
       chunked_vector<model::record_batch> batches,
       Clock::time_point timeout);
 

@@ -509,6 +509,10 @@ public:
         return _fake_proxy->is_current_shard_leader(ntp);
     }
 
+    std::optional<model::term_id> get_term(const model::ntp&) const override {
+        return std::nullopt;
+    }
+
 private:
     fake_partition_manager_proxy* _fake_proxy;
 };

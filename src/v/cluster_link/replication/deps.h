@@ -9,12 +9,12 @@
  */
 #pragma once
 
+#include "cluster_link/replication/types.h"
 #include "container/chunked_vector.h"
+#include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
-#include "model/record.h"
 #include "model/timeout_clock.h"
 #include "raft/replicate.h"
-#include "ssx/semaphore.h"
 
 namespace cluster_link::replication {
 
@@ -49,6 +49,13 @@ public:
 
     // Returns the HWM of the partition
     virtual kafka::offset high_watermark() const = 0;
+
+    // Performs a prefix truncation on the sink partition
+    virtual ss::future<kafka::error_code> prefix_truncate(
+      kafka::offset truncation_offset, ss::lowres_clock::time_point deadline)
+      = 0;
+
+    virtual kafka::offset start_offset() = 0;
 };
 
 class data_sink_factory {
@@ -81,15 +88,10 @@ public:
      */
     virtual ss::future<> reset(kafka::offset) = 0;
 
-    struct data {
-        chunked_vector<::model::record_batch> batches;
-        ssx::semaphore_units units;
-    };
-
     /**
      * Fetches some data, if any.
      */
-    virtual ss::future<data> fetch_next(ss::abort_source&) = 0;
+    virtual ss::future<fetch_data> fetch_next(ss::abort_source&) = 0;
 
     /// \brief Returns the source partitions offsets (HWM and LSO)
     virtual std::optional<source_partition_offsets_report> get_offsets() = 0;

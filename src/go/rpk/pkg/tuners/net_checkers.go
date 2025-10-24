@@ -211,7 +211,7 @@ func (f *netCheckersFactory) NewNicRpsSetChecker(
 				if err != nil {
 					return false, err
 				}
-				rfsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks, f.rnc)
+				rfsMask, err := network.GetRpsCPUMask(currentNic, mode, cpuMask, f.cpuMasks, f.rnc)
 				if err != nil {
 					return false, err
 				}
@@ -253,7 +253,7 @@ func (f *netCheckersFactory) NewNicRfsChecker(nic network.Nic, mode irq.Mode, cp
 				if err != nil {
 					return false, err
 				}
-				queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks, f.rnc)
+				queueLimit, err := network.OneRPSQueueLimit(limits, currentNic, mode, cpuMask, f.cpuMasks, f.rnc)
 				if err != nil {
 					return false, err
 				}
@@ -399,10 +399,7 @@ func (f *netCheckersFactory) NewSynBacklogChecker() Checker {
 func isSet(
 	nic network.Nic, hwCheckFunction func(network.Nic) (bool, error),
 ) (bool, error) {
-	if nic.IsHwInterface() {
-		zap.L().Sugar().Debugf("'%s' is HW interface", nic.Name())
-		return hwCheckFunction(nic)
-	}
+	// Some HW interfaces might still be bond interfaces like hv_netvsc
 	if nic.IsBondIface() {
 		zap.L().Sugar().Debugf("'%s' is bond interface", nic.Name())
 		slaves, err := nic.Slaves()
@@ -418,6 +415,12 @@ func isSet(
 				return false, nil
 			}
 		}
+
+		return true, nil
+	}
+	if nic.IsHwInterface() {
+		zap.L().Sugar().Debugf("'%s' is HW interface", nic.Name())
+		return hwCheckFunction(nic)
 	}
 	return true, nil
 }

@@ -107,7 +107,10 @@ public:
     /// \param req The metadata request to send
     ss::future<metadata_response> fetch_metadata(metadata_request req);
 
-    ss::future<create_topics_response> create_topic(kafka::creatable_topic req);
+    using validate_only_t = ss::bool_class<struct validate_only_tag>;
+    ss::future<create_topics_response> create_topic(
+      kafka::creatable_topic req,
+      validate_only_t validate_only = validate_only_t::no);
 
     ss::future<produce_response::partition> produce_record_batch(
       model::topic_partition tp, model::record_batch&& batch);

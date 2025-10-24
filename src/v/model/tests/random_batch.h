@@ -34,6 +34,7 @@ struct record_batch_spec {
     int16_t producer_epoch{-1};
     int32_t base_sequence{-1};
     bool is_transactional{false};
+    bool is_control{false};
     std::optional<std::vector<size_t>> record_sizes;
     std::optional<model::timestamp> timestamp;
     bool all_records_have_same_timestamp{false};

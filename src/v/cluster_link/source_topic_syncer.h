@@ -64,9 +64,10 @@ private:
     using candidate_update_map = chunked_hash_map<
       ::model::topic,
       std::pair<topic_metadata, model::mirror_topic_metadata>>;
+    using sr_is_empty_t = ss::bool_class<struct sr_is_empty_tag>;
     // Builds a list of topics that are candidates for creation
-    candidate_create_map
-    find_candidate_topics_for_creation(kafka::client::cluster& cluster);
+    candidate_create_map find_candidate_topics_for_creation(
+      kafka::client::cluster& cluster, sr_is_empty_t sr_is_empty);
     // Builds a list of topics that are candidates for update
     candidate_update_map
     find_candidate_topics_for_update(kafka::client::cluster& cluster);
@@ -89,9 +90,11 @@ private:
       kafka::api_version describe_configs_version,
       const chunked_vector<::model::topic>& topics,
       const model::topic_metadata_mirroring_config::properties_set& configs);
+    ss::future<sr_is_empty_t> check_if_schema_registry_is_empty();
 
 private:
     model::topic_metadata_mirroring_config _config;
+    model::schema_registry_sync_config _sr_config;
 };
 
 /**

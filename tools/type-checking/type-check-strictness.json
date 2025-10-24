@@ -9,18 +9,6 @@
     "standard": [
         "rptest/archival/abs_client.py",
         "rptest/archival/s3_client.py",
-        "rptest/clients/admin/google/api/field_behavior_pb2.py",
-        "rptest/clients/admin/google/api/field_info_pb2.py",
-        "rptest/clients/admin/google/api/resource_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/cluster_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/datalake_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/kafka_connections_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/shadow_link_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/common/acl_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/pbgen/options_pb2.py",
-        "rptest/clients/admin/proto/redpanda/core/pbgen/rpc_pb2.py",
         "rptest/clients/admin/v2.py",
         "rptest/clients/consumer_offsets_recovery.py",
         "rptest/clients/default.py",
@@ -258,7 +246,8 @@
         "rptest/utils/rpk_config.py",
         "rptest/utils/scale_parameters.py",
         "rptest/utils/schema_registry_utils.py",
-        "rptest/utils/unit_test.py"
+        "rptest/utils/unit_test.py",
+        "rptest/clients/admin/**/*_pb2.py"
     ],
     "basic": [
         "rptest/remote_scripts/topic_operations.py",
@@ -285,11 +274,6 @@
     ],
     "off": [
         "rptest/chaos_tests/single_fault_test.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2_connect.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/cluster_pb2_connect.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/datalake_pb2_connect.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2_connect.py",
-        "rptest/clients/admin/proto/redpanda/core/admin/v2/shadow_link_pb2_connect.py",
         "rptest/clients/ping_pong.py",
         "rptest/clients/rpk.py",
         "rptest/clients/rpk_remote.py",
@@ -394,7 +378,6 @@
         "rptest/tests/datalake/schema_scale_test.py",
         "rptest/tests/datalake/schemas/data_type_generator.py",
         "rptest/tests/datalake/schemas/data_types.py",
-        "rptest/tests/datalake/schemas/linear_pb2.py",
         "rptest/tests/datalake/schemas/schema_generator.py",
         "rptest/tests/debug_bundle_test.py",
         "rptest/tests/delete_records_test.py",
@@ -486,7 +469,9 @@
         "rptest/transactions/verifiers/stream_verifier.py",
         "rptest/util.py",
         "rptest/utils/cluster_topology.py",
-        "rptest/utils/si_utils.py"
+        "rptest/utils/si_utils.py",
+        "rptest/tests/datalake/schemas/linear_pb2.py",
+        "**/*_pb2_connect.py"
     ],
     "skip": [
         "rptest/e2e_tests/workloads/flink_consume_basic.py",

@@ -558,6 +558,7 @@ class ShadowLinkConfigurations(google.protobuf.message.Message):
     TOPIC_METADATA_SYNC_OPTIONS_FIELD_NUMBER: builtins.int
     CONSUMER_OFFSET_SYNC_OPTIONS_FIELD_NUMBER: builtins.int
     SECURITY_SYNC_OPTIONS_FIELD_NUMBER: builtins.int
+    SCHEMA_REGISTRY_SYNC_OPTIONS_FIELD_NUMBER: builtins.int
 
     @property
     def client_options(self) -> global___ShadowLinkClientOptions:
@@ -575,13 +576,17 @@ class ShadowLinkConfigurations(google.protobuf.message.Message):
     def security_sync_options(self) -> global___SecuritySettingsSyncOptions:
         """Security settings sync options"""
 
-    def __init__(self, *, client_options: global___ShadowLinkClientOptions | None=..., topic_metadata_sync_options: global___TopicMetadataSyncOptions | None=..., consumer_offset_sync_options: global___ConsumerOffsetSyncOptions | None=..., security_sync_options: global___SecuritySettingsSyncOptions | None=...) -> None:
+    @property
+    def schema_registry_sync_options(self) -> global___SchemaRegistrySyncOptions:
+        """Schema Registry sync options"""
+
+    def __init__(self, *, client_options: global___ShadowLinkClientOptions | None=..., topic_metadata_sync_options: global___TopicMetadataSyncOptions | None=..., consumer_offset_sync_options: global___ConsumerOffsetSyncOptions | None=..., security_sync_options: global___SecuritySettingsSyncOptions | None=..., schema_registry_sync_options: global___SchemaRegistrySyncOptions | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['client_options', b'client_options', 'consumer_offset_sync_options', b'consumer_offset_sync_options', 'security_sync_options', b'security_sync_options', 'topic_metadata_sync_options', b'topic_metadata_sync_options']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['client_options', b'client_options', 'consumer_offset_sync_options', b'consumer_offset_sync_options', 'schema_registry_sync_options', b'schema_registry_sync_options', 'security_sync_options', b'security_sync_options', 'topic_metadata_sync_options', b'topic_metadata_sync_options']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['client_options', b'client_options', 'consumer_offset_sync_options', b'consumer_offset_sync_options', 'security_sync_options', b'security_sync_options', 'topic_metadata_sync_options', b'topic_metadata_sync_options']) -> None:
+    def ClearField(self, field_name: typing.Literal['client_options', b'client_options', 'consumer_offset_sync_options', b'consumer_offset_sync_options', 'schema_registry_sync_options', b'schema_registry_sync_options', 'security_sync_options', b'security_sync_options', 'topic_metadata_sync_options', b'topic_metadata_sync_options']) -> None:
         ...
 global___ShadowLinkConfigurations = ShadowLinkConfigurations
 
@@ -646,14 +651,14 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
         """The bootstrap servers to use"""
 
     @property
-    def tls_settings(self) -> global___TLSSettings:
+    def tls_settings(self) -> proto.redpanda.core.common.v1.tls_pb2.TLSSettings:
         """TLS settings"""
 
     @property
     def authentication_configuration(self) -> global___AuthenticationConfiguration:
         """Authentication settings"""
 
-    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., effective_metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., effective_connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., effective_retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., effective_fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., effective_fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=..., effective_fetch_max_bytes: builtins.int=..., fetch_partition_max_bytes: builtins.int=..., effective_fetch_partition_max_bytes: builtins.int=...) -> None:
+    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: proto.redpanda.core.common.v1.tls_pb2.TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., effective_metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., effective_connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., effective_retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., effective_fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., effective_fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=..., effective_fetch_max_bytes: builtins.int=..., fetch_partition_max_bytes: builtins.int=..., effective_fetch_partition_max_bytes: builtins.int=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'tls_settings', b'tls_settings']) -> builtins.bool:
@@ -718,8 +723,8 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
         created as shadow topics on the shadow cluster.  This only controls
         automatic creation of shadow topics and does not effect the state of the
         mirror topic once it is created.
-        Literal filters for __consumer_offsets and _redpanda.audit_log will be
-        rejected as well as prefix filters to match topics prefixed with
+        Literal filters for __consumer_offsets, _redpanda.audit_log and _schemas
+        will be rejected as well as prefix filters to match topics prefixed with
         _redpanda or __redpanda.
         Wildcard `*` is permitted only for literal filters and will _not_ match
         any topics that start with _redpanda or __redpanda.  If users wish to
@@ -780,6 +785,50 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
     def WhichOneof(self, oneof_group: typing.Literal['start_offset', b'start_offset']) -> typing.Literal['earliest', 'latest', 'timestamp'] | None:
         ...
 global___TopicMetadataSyncOptions = TopicMetadataSyncOptions
+
+@typing.final
+class SchemaRegistrySyncOptions(google.protobuf.message.Message):
+    """Options for how the Schema Registry is synced."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    @typing.final
+    class ShadowSchemaRegistryTopic(google.protobuf.message.Message):
+        """Shadow the entire source cluster's Schema Registry byte-for-byte.
+        If set, the Shadow Link will attempt to add the `_schemas`
+        topic to the list of Shadow Topics as long as:
+        1. The `_schemas` topic exists on the source cluster
+        2. The `_schemas` topic does not exist on the shadow cluster, or it is
+        empty.
+        If either of the above conditions are _not_ met, then the `_schemas`
+        topic will _not_ be shadowed by this cluster. Unsetting this flag will
+        _not_ remove the `_schemas` topic from shadowing if it has already been
+        added.  Once made a shadow topic, the
+        `_schemas` topic will be replicated byte-for-byte.  To stop shadowing the
+        `_schemas` topic, unset this field, then either fail-over the topic or
+        delete it.
+        """
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(self) -> None:
+            ...
+    SHADOW_SCHEMA_REGISTRY_TOPIC_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_schema_registry_topic(self) -> global___SchemaRegistrySyncOptions.ShadowSchemaRegistryTopic:
+        ...
+
+    def __init__(self, *, shadow_schema_registry_topic: global___SchemaRegistrySyncOptions.ShadowSchemaRegistryTopic | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['schema_registry_shadowing_mode', b'schema_registry_shadowing_mode', 'shadow_schema_registry_topic', b'shadow_schema_registry_topic']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['schema_registry_shadowing_mode', b'schema_registry_shadowing_mode', 'shadow_schema_registry_topic', b'shadow_schema_registry_topic']) -> None:
+        ...
+
+    def WhichOneof(self, oneof_group: typing.Literal['schema_registry_shadowing_mode', b'schema_registry_shadowing_mode']) -> typing.Literal['shadow_schema_registry_topic'] | None:
+        ...
+global___SchemaRegistrySyncOptions = SchemaRegistrySyncOptions
 
 @typing.final
 class ConsumerOffsetSyncOptions(google.protobuf.message.Message):
@@ -852,40 +901,6 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
 global___SecuritySettingsSyncOptions = SecuritySettingsSyncOptions
 
 @typing.final
-class TLSSettings(google.protobuf.message.Message):
-    """TLS settings"""
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    ENABLED_FIELD_NUMBER: builtins.int
-    TLS_FILE_SETTINGS_FIELD_NUMBER: builtins.int
-    TLS_PEM_SETTINGS_FIELD_NUMBER: builtins.int
-    DO_NOT_SET_SNI_HOSTNAME_FIELD_NUMBER: builtins.int
-    enabled: builtins.bool
-    'Whether or not TLS is enabled'
-    do_not_set_sni_hostname: builtins.bool
-    'If true, the SNI hostname will not be provided when TLS is used'
-
-    @property
-    def tls_file_settings(self) -> global___TLSFileSettings:
-        """Certificates and keys are provided as files"""
-
-    @property
-    def tls_pem_settings(self) -> global___TLSPEMSettings:
-        """Certificates and keys are provided in PEM format"""
-
-    def __init__(self, *, enabled: builtins.bool=..., tls_file_settings: global___TLSFileSettings | None=..., tls_pem_settings: global___TLSPEMSettings | None=..., do_not_set_sni_hostname: builtins.bool=...) -> None:
-        ...
-
-    def HasField(self, field_name: typing.Literal['tls_file_settings', b'tls_file_settings', 'tls_pem_settings', b'tls_pem_settings', 'tls_settings', b'tls_settings']) -> builtins.bool:
-        ...
-
-    def ClearField(self, field_name: typing.Literal['do_not_set_sni_hostname', b'do_not_set_sni_hostname', 'enabled', b'enabled', 'tls_file_settings', b'tls_file_settings', 'tls_pem_settings', b'tls_pem_settings', 'tls_settings', b'tls_settings']) -> None:
-        ...
-
-    def WhichOneof(self, oneof_group: typing.Literal['tls_settings', b'tls_settings']) -> typing.Literal['tls_file_settings', 'tls_pem_settings'] | None:
-        ...
-global___TLSSettings = TLSSettings
-
-@typing.final
 class AuthenticationConfiguration(google.protobuf.message.Message):
     """Authentication config.  Currently only supporting SASL/SCRAM,
     however made as a oneof for expansion
@@ -909,51 +924,6 @@ class AuthenticationConfiguration(google.protobuf.message.Message):
     def WhichOneof(self, oneof_group: typing.Literal['authentication', b'authentication']) -> typing.Literal['scram_configuration'] | None:
         ...
 global___AuthenticationConfiguration = AuthenticationConfiguration
-
-@typing.final
-class TLSFileSettings(google.protobuf.message.Message):
-    """TLS file settings"""
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    CA_PATH_FIELD_NUMBER: builtins.int
-    KEY_PATH_FIELD_NUMBER: builtins.int
-    CERT_PATH_FIELD_NUMBER: builtins.int
-    ca_path: builtins.str
-    'Path to the CA'
-    key_path: builtins.str
-    'Key and Cert are optional but if one is provided, then both must be\n    Path to the key\n    '
-    cert_path: builtins.str
-    'Path to the cert'
-
-    def __init__(self, *, ca_path: builtins.str=..., key_path: builtins.str=..., cert_path: builtins.str=...) -> None:
-        ...
-
-    def ClearField(self, field_name: typing.Literal['ca_path', b'ca_path', 'cert_path', b'cert_path', 'key_path', b'key_path']) -> None:
-        ...
-global___TLSFileSettings = TLSFileSettings
-
-@typing.final
-class TLSPEMSettings(google.protobuf.message.Message):
-    """Used when providing the TLS information in PEM format"""
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    CA_FIELD_NUMBER: builtins.int
-    KEY_FIELD_NUMBER: builtins.int
-    KEY_FINGERPRINT_FIELD_NUMBER: builtins.int
-    CERT_FIELD_NUMBER: builtins.int
-    ca: builtins.str
-    'The CA'
-    key: builtins.str
-    'Key and Cert are optional but if one is provided, then both must be\n    The key\n    '
-    key_fingerprint: builtins.str
-    'The SHA-256 of the key, in base64 format'
-    cert: builtins.str
-    'The cert'
-
-    def __init__(self, *, ca: builtins.str=..., key: builtins.str=..., key_fingerprint: builtins.str=..., cert: builtins.str=...) -> None:
-        ...
-
-    def ClearField(self, field_name: typing.Literal['ca', b'ca', 'cert', b'cert', 'key', b'key', 'key_fingerprint', b'key_fingerprint']) -> None:
-        ...
-global___TLSPEMSettings = TLSPEMSettings
 
 @typing.final
 class ScramConfig(google.protobuf.message.Message):
@@ -1042,14 +1012,14 @@ class ACLResourceFilter(google.protobuf.message.Message):
     RESOURCE_TYPE_FIELD_NUMBER: builtins.int
     PATTERN_TYPE_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
-    resource_type: proto.redpanda.core.common.acl_pb2.ACLResource.ValueType
+    resource_type: proto.redpanda.core.common.v1.acl_pb2.ACLResource.ValueType
     'The ACL resource type to match'
-    pattern_type: proto.redpanda.core.common.acl_pb2.ACLPattern.ValueType
+    pattern_type: proto.redpanda.core.common.v1.acl_pb2.ACLPattern.ValueType
     'The pattern to apply to name'
     name: builtins.str
     'Name, if not given will default to match all items in `resource_type`.\n    Note that asterisk `*` is literal and matches resource ACLs\n    that are named `*`\n    '
 
-    def __init__(self, *, resource_type: proto.redpanda.core.common.acl_pb2.ACLResource.ValueType=..., pattern_type: proto.redpanda.core.common.acl_pb2.ACLPattern.ValueType=..., name: builtins.str=...) -> None:
+    def __init__(self, *, resource_type: proto.redpanda.core.common.v1.acl_pb2.ACLResource.ValueType=..., pattern_type: proto.redpanda.core.common.v1.acl_pb2.ACLPattern.ValueType=..., name: builtins.str=...) -> None:
         ...
 
     def ClearField(self, field_name: typing.Literal['name', b'name', 'pattern_type', b'pattern_type', 'resource_type', b'resource_type']) -> None:
@@ -1066,14 +1036,14 @@ class ACLAccessFilter(google.protobuf.message.Message):
     HOST_FIELD_NUMBER: builtins.int
     principal: builtins.str
     'The name of the principal, if not set will default to match\n    all principals with the specified `operation` and `permission_type`\n    '
-    operation: proto.redpanda.core.common.acl_pb2.ACLOperation.ValueType
+    operation: proto.redpanda.core.common.v1.acl_pb2.ACLOperation.ValueType
     'The ACL operation to match'
-    permission_type: proto.redpanda.core.common.acl_pb2.ACLPermissionType.ValueType
+    permission_type: proto.redpanda.core.common.v1.acl_pb2.ACLPermissionType.ValueType
     'The permission type'
     host: builtins.str
     'The host to match.  If not set, will default to match all hosts\n    with the specified `operation` and `permission_type`. Note that\n    the asterisk `*` is literal and matches hosts that are set to `*`\n    '
 
-    def __init__(self, *, principal: builtins.str=..., operation: proto.redpanda.core.common.acl_pb2.ACLOperation.ValueType=..., permission_type: proto.redpanda.core.common.acl_pb2.ACLPermissionType.ValueType=..., host: builtins.str=...) -> None:
+    def __init__(self, *, principal: builtins.str=..., operation: proto.redpanda.core.common.v1.acl_pb2.ACLOperation.ValueType=..., permission_type: proto.redpanda.core.common.v1.acl_pb2.ACLPermissionType.ValueType=..., host: builtins.str=...) -> None:
         ...
 
     def ClearField(self, field_name: typing.Literal['host', b'host', 'operation', b'operation', 'permission_type', b'permission_type', 'principal', b'principal']) -> None:

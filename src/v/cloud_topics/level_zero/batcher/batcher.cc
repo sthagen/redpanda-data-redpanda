@@ -179,17 +179,26 @@ ss::future<std::expected<std::monostate, errc>> batcher<Clock>::run_once(
             co_return std::unexpected(errc::failed_to_get_epoch);
         }
 
-        aggregator<Clock> aggregator{object_id::create(epoch_fut.get())};
+        aggregator<Clock> aggregator;
         while (!list.requests.empty()) {
             auto& wr = list.requests.back();
             wr._hook.unlink();
             aggregator.add(wr);
         }
+
+        /*
+         * L0 object is named using an epoch calculated as:
+         *
+         *    min_epoch = max(p.min_epoch() for all p in L0)
+         *    epoch = max(partition_epoch, cached_cluster_epoch)
+         */
+        auto object_epoch = std::max(aggregator.min_epoch(), epoch_fut.get());
+
         // TODO: skip waiting if list.completed is not true
-        auto payload = aggregator.prepare();
-        auto size_bytes = payload.size_bytes();
+        auto object = aggregator.prepare(object_id::create(object_epoch));
+        auto size_bytes = object.payload.size_bytes();
         auto result = co_await upload_object(
-          aggregator.get_object_id(), std::move(payload));
+          object.id, std::move(object.payload));
         if (!result) {
             // TODO: fix the error
             // NOTE: it should be possible to translate the

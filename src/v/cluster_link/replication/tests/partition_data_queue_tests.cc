@@ -10,6 +10,7 @@
  */
 
 #include "cluster_link/replication/partition_data_queue.h"
+#include "cluster_link/replication/types.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/test.h"
 
@@ -54,21 +55,19 @@ TEST_F_CORO(PartitionDataQueueTest, testWaiterBehavior) {
     auto fetch_future = _queue->fetch(as);
     ASSERT_FALSE_CORO(fetch_future.available());
     co_await enqueue_some_data();
-    co_await std::move(fetch_future)
-      .then([this](partition_data_queue::fetch_data data) {
-          ASSERT_FALSE(data.batches.empty());
-          ASSERT_TRUE(_queue->empty());
-      });
+    co_await std::move(fetch_future).then([this](fetch_data data) {
+        ASSERT_FALSE(data.batches.empty());
+        ASSERT_TRUE(_queue->empty());
+    });
 
     // enqueue before waiter
     co_await enqueue_some_data();
     ASSERT_FALSE_CORO(_queue->empty());
     fetch_future = _queue->fetch(as);
-    co_await std::move(fetch_future)
-      .then([this](partition_data_queue::fetch_data data) {
-          ASSERT_FALSE(data.batches.empty());
-          ASSERT_TRUE(_queue->empty());
-      });
+    co_await std::move(fetch_future).then([this](fetch_data data) {
+        ASSERT_FALSE(data.batches.empty());
+        ASSERT_TRUE(_queue->empty());
+    });
     // double waiter should throw
     fetch_future = _queue->fetch(as);
     EXPECT_THROW(co_await _queue->fetch(as), std::runtime_error);

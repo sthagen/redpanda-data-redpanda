@@ -25,7 +25,8 @@ class Node;
 
 namespace cluster {
 class controller;
-}
+class metadata_cache;
+} // namespace cluster
 
 namespace schema {
 class registry;
@@ -41,6 +42,7 @@ public:
       size_t max_memory,
       kafka::client::configuration& client_cfg,
       configuration& cfg,
+      ss::sharded<cluster::metadata_cache>* metadata_cache,
       std::unique_ptr<cluster::controller>&,
       ss::sharded<security::audit::audit_log_manager>&) noexcept;
     ~api() noexcept;
@@ -62,6 +64,7 @@ private:
     size_t _max_memory;
     kafka::client::configuration& _client_cfg;
     configuration& _cfg;
+    ss::sharded<cluster::metadata_cache>* _metadata_cache;
     std::unique_ptr<cluster::controller>& _controller;
 
     ss::sharded<kafka::client::client> _client;

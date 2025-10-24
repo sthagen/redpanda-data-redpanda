@@ -40,6 +40,7 @@ public:
     /// Write data batches and get back placeholder batches
     virtual ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
+      cluster_epoch min_epoch,
       chunked_vector<model::record_batch> batches,
       model::timeout_clock::time_point deadline)
       = 0;

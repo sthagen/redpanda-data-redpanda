@@ -19,10 +19,6 @@
 namespace cloud_topics::l0 {
 
 template<class Clock>
-aggregator<Clock>::aggregator(object_id id)
-  : _id(id) {}
-
-template<class Clock>
 aggregator<Clock>::~aggregator() {
     ack_error(errc::timeout);
     if (!_staging.empty()) {
@@ -73,9 +69,9 @@ void make_ctp_placeholders(
 
 template<class Clock>
 chunked_vector<std::unique_ptr<extents_for_req<Clock>>>
-aggregator<Clock>::get_extents() {
+aggregator<Clock>::get_extents(object_id id) {
     prepared_extents<Clock> ctx{
-      .id = _id,
+      .id = id,
     };
     for (auto& [key, list] : _staging) {
         for (auto& req : list) {
@@ -101,17 +97,12 @@ iobuf aggregator<Clock>::get_stream() {
 }
 
 template<class Clock>
-object_id aggregator<Clock>::get_object_id() const noexcept {
-    return _id;
-}
-
-template<class Clock>
-iobuf aggregator<Clock>::prepare() {
+aggregator<Clock>::L0_object aggregator<Clock>::prepare(object_id id) {
     // Move data from staging to aggregated
-    _aggregated = get_extents();
+    _aggregated = get_extents(id);
     _staging.clear();
     // Produce input stream
-    return get_stream();
+    return {id, get_stream()};
 }
 
 template<class Clock>
@@ -158,6 +149,7 @@ void aggregator<Clock>::add(l0::write_request<Clock>& req) {
     req._hook.unlink();
     it->second.push_back(req);
     _size_bytes += req.size_bytes();
+    _min_epoch = std::max(_min_epoch, req.min_epoch);
 }
 
 template<class Clock>

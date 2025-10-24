@@ -6,7 +6,7 @@ redpanda_cc_library(
     hdrs = ["datalake.h"],
     visibility = ["//src/v/redpanda:__subpackages__"],
     deps = [
-        "//proto/redpanda/core/admin/v2/internal:datalake_redpanda_proto",
+        "//proto/redpanda/core/admin/internal/datalake/v1:datalake_redpanda_proto",
         "//src/v/container:chunked_hash_map",
         "//src/v/datalake/coordinator:frontend",
         "//src/v/datalake/coordinator:model",

@@ -25,6 +25,7 @@ redpanda_cc_library(
         "//src/v/serde:enum",
         "//src/v/serde:map",
         "//src/v/serde:named_type",
+        "//src/v/serde:optional",
         "//src/v/serde:variant",
         "//src/v/serde:vector",
         "//src/v/utils:absl_sstring_hash",

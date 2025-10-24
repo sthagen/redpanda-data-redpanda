@@ -43,6 +43,7 @@ public:
       ss::future<result<chunked_vector<extent_meta>>>,
       write_and_debounce,
       (model::ntp,
+       cluster_epoch,
        chunked_vector<model::record_batch>,
        model::timeout_clock::time_point),
       (override));
@@ -123,7 +124,7 @@ TEST_F(frontend_fixture, test_replicate_epoch) {
     cloud_topics::frontend frontend(std::move(partition), _data_plane.get());
 
     EXPECT_CALL(*_data_plane, cache_put(_, _)).Times(2);
-    EXPECT_CALL(*_data_plane, write_and_debounce(_, _, _))
+    EXPECT_CALL(*_data_plane, write_and_debounce(_, _, _, _))
       .WillOnce(Return(make_extent_fut(model::offset(0), cluster_epoch(0))))
       .WillOnce(Return(make_extent_fut(model::offset(1), cluster_epoch(1))))
       .WillOnce(Return(make_extent_fut(model::offset(2), cluster_epoch(0))));

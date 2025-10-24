@@ -42,6 +42,11 @@ enum class errc : int {
     topic_metadata_stale,
     license_required,
     service_not_ready,
+    link_unsupported_api_version,
+    link_cluster_unreachable,
+    link_broker_unreachable,
+    link_broker_verification_failed,
+    link_verification_unknown_error,
 };
 
 std::error_code make_error_code(errc) noexcept;

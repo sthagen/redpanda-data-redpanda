@@ -172,6 +172,7 @@ topic_metadata_mirroring_config topic_metadata_mirroring_config::copy() const {
     copy.topic_properties_to_mirror = topic_properties_to_mirror;
     copy.exclude_default = exclude_default;
     copy.starting_offset = starting_offset;
+
     return copy;
 }
 
@@ -202,6 +203,7 @@ link_configuration link_configuration::copy() const {
     copy.topic_metadata_mirroring_cfg = topic_metadata_mirroring_cfg.copy();
     copy.consumer_groups_mirroring_cfg = consumer_groups_mirroring_cfg.copy();
     copy.security_settings_sync_cfg = security_settings_sync_cfg.copy();
+    copy.schema_registry_sync_cfg = schema_registry_sync_cfg;
     return copy;
 }
 
@@ -276,6 +278,23 @@ auto format_as(acl_permission_type p) { return to_string_view(p); }
 fmt::iterator delete_shadow_link_cmd::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it, "{{ link_name: {}, force: {} }}", link_name, force);
+}
+
+fmt::iterator
+schema_registry_sync_config::shadow_entire_schema_registry::format_to(
+  fmt::iterator it) const {
+    return fmt::format_to(it, "{{ shadow_entire_schema_registry }}");
+}
+
+fmt::iterator schema_registry_sync_config::format_to(fmt::iterator it) const {
+    if (sync_schema_registry_topic_mode.has_value()) {
+        return ss::visit(
+          *sync_schema_registry_topic_mode, [&it](const auto& mode) {
+              return fmt::format_to(
+                it, "{{ sync_schema_registry_topic_mode: {} }}", mode);
+          });
+    }
+    return fmt::format_to(it, "{{ sync_schema_registry_topic_mode: none }}");
 }
 } // namespace cluster_link::model
 
@@ -697,10 +716,11 @@ auto fmt::formatter<cluster_link::model::link_configuration>::format(
     return fmt::format_to(
       ctx.out(),
       "{{topic_metadata_mirroring_cfg: {}, consumer_groups_mirroring_cfg: {}, "
-      "security_settings_sync_cfg: {}}}",
+      "security_settings_sync_cfg: {}, schema_registry_sync_cfg: {}}}",
       cfg.topic_metadata_mirroring_cfg,
       cfg.consumer_groups_mirroring_cfg,
-      cfg.security_settings_sync_cfg);
+      cfg.security_settings_sync_cfg,
+      cfg.schema_registry_sync_cfg);
 }
 
 auto fmt::

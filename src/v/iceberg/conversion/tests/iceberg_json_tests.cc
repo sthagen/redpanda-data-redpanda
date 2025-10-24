@@ -258,6 +258,10 @@ constexpr std::string_view nested_schema_2 = R"({
                             "string",
                             "null"
                         ]
+                    },
+                    "key3": {
+                        "type": "string",
+                        "format": "email"
                     }
                 }
             },
@@ -403,6 +407,12 @@ TEST(JsonSchema, Nested2) {
                 "key2",
                 iceberg::field_required::no,
                 iceberg::timestamptz_type{}));
+            key6_struct.fields.push_back(
+              iceberg::nested_field::create(
+                0,
+                "key3",
+                iceberg::field_required::no,
+                iceberg::string_type{}));
 
             EXPECT_TRUE(field_matches(
               item_type,

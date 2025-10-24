@@ -63,9 +63,10 @@ public:
         chunked_vector<model::record_batch> log;
         size_t size = 0;
         for (const auto& batch : _source_log) {
-            if (
-              model::offset_cast(batch.base_offset())
-              < last_reconciled_offset()) {
+            if (model::offset_cast(batch.base_offset()) < cfg.start_offset) {
+                continue;
+            }
+            if (batch.header().attrs.is_control()) {
                 continue;
             }
             size += batch.size_bytes();

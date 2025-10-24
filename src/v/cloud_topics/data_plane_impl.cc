@@ -103,10 +103,11 @@ public:
 
     ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
+      cluster_epoch min_epoch,
       chunked_vector<model::record_batch> r,
       model::timeout_clock::time_point timeout) override {
         return _write_pipeline.local().write_and_debounce(
-          std::move(ntp), std::move(r), timeout);
+          std::move(ntp), min_epoch, std::move(r), timeout);
     }
 
     ss::future<result<chunked_vector<model::record_batch>>> materialize(

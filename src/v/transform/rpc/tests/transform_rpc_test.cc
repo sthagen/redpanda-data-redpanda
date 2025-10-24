@@ -344,6 +344,10 @@ public:
         co_return cluster::errc::success;
     }
 
+    std::optional<model::term_id> get_term(const model::ntp&) const override {
+        return std::nullopt;
+    }
+
 private:
     fake_offset_tracker* _offset_tracker = nullptr;
     fake_partition_manager_proxy* _fake_proxy;

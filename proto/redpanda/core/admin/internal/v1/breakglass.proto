@@ -1,0 +1,62 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.internal.v1;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "proto/redpanda/core/pbgen/rpc.proto";
+
+option (redpanda.core.pbgen.cpp_namespace) = "proto::admin::internal";
+
+// BreakglassService contains expert (internal) only apis to be used in
+// extraordinary circumstances.
+//
+service BreakglassService {
+    // Forcibly recovers a cluster when the majority of nodes are lost.
+    // This operation is dangerous by design and will likely result in data
+    // loss.
+    // 1. Removes dead nodes from the controller group until a new leader
+    //    can be chosen.
+    // 2. Force reconfigures all partitions off of dead nodes.
+    // 3. Decommission & remove the dead nodes from the cluster.
+    //
+    // Requirements:
+    // 1. All surviving brokers must be booted into recovery mode.
+    // 2. There must be no reigning controller leader.
+    // 3. This RPC must be invoked on all surviving brokers.
+    //
+    // A given broker may only accept one controller forced reconfiguration
+    // at a time, subsequent invocations will fail.
+    //
+    // A controller forced reconfiguration may be cancelled and retried
+    // by rebooting all brokers.
+    //
+    rpc ControllerForcedReconfiguration(ControllerForcedReconfigurationRequest)
+        returns (ControllerForcedReconfigurationResponse) {
+        option (redpanda.core.pbgen.rpc) = {
+            authz: SUPERUSER,
+        };
+    }
+}
+
+message ControllerForcedReconfigurationRequest {
+    // node ids of lost brokers to be forcibly removed.
+    repeated int32 dead_node_ids = 1;
+    // the number of surviving nodes remaining.
+    uint32 surviving_node_count = 2;
+}
+
+message ControllerForcedReconfigurationResponse {}

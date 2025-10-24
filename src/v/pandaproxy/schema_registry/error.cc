@@ -90,6 +90,8 @@ struct error_category final : std::error_category {
             return "Invalid ACL";
         case error_code::internal_server_error:
             return "Internal server error";
+        case error_code::writes_disabled:
+            return "Writes to Schema Registry are disabled";
         }
         return "(unrecognized error)";
     }
@@ -152,6 +154,8 @@ struct error_category final : std::error_category {
             return reply_error_code::bad_request; // 400
         case error_code::internal_server_error:
             return reply_error_code::internal_server_error; // 500
+        case error_code::writes_disabled:
+            return reply_error_code::precondition_failed; // 412
         }
         return {};
     }

@@ -30,6 +30,8 @@
 
 inline ss::logger test_log("balancer_gtest");
 
+static cloud_topics::cluster_epoch min_epoch{3840};
+
 using namespace std::chrono_literals;
 
 namespace cloud_topics {
@@ -198,7 +200,10 @@ static ss::future<size_t> write_until_threshold(
 
         num_requests_sent++;
         wd.push_back(fix.pipeline.local().write_and_debounce(
-          test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s));
+          test_ntp0,
+          min_epoch,
+          std::move(batches),
+          ss::lowres_clock::now() + 10s));
 
         vlog(
           test_log.info,
@@ -257,7 +262,7 @@ TEST_F_CORO(write_request_balancer_fixture, time_based_fallback_test) {
     }
 
     auto placeholders = co_await pipeline.local().write_and_debounce(
-      test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
+      test_ntp0, min_epoch, std::move(batches), ss::lowres_clock::now() + 10s);
 
     // Check that number of upload requests matches expectation.
     // The current shard should receive the write request.
@@ -292,13 +297,16 @@ TEST_F_CORO(write_request_balancer_fixture, test_core_affinity) {
         }
         vlog(test_log.info, "Calling write_and_debounce on shard 1");
         return pipeline.local().write_and_debounce(
-          test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
+          test_ntp0,
+          min_epoch,
+          std::move(batches),
+          ss::lowres_clock::now() + 10s);
     });
 
     auto batches = make_random_batches(num_batches_lo, batch_size);
     vlog(test_log.info, "Calling write_and_debounce on shard 0");
     auto s0_placeholders = co_await pipeline.local().write_and_debounce(
-      test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
+      test_ntp0, min_epoch, std::move(batches), ss::lowres_clock::now() + 10s);
 
     auto s1_placeholders = co_await std::move(fut);
 
@@ -349,7 +357,7 @@ TEST_F_CORO(write_request_balancer_fixture, test_data_threshold_with_failover) {
         batches.push_back(std::move(b));
     }
     auto placeholders = co_await pipeline.local().write_and_debounce(
-      test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
+      test_ntp0, min_epoch, std::move(batches), ss::lowres_clock::now() + 10s);
 
     // Produce on shard 1
     auto expected_num_requests1 = co_await ss::smp::submit_to(
@@ -406,7 +414,10 @@ TEST_F_CORO(
               vlog(test_log.info, "Calling write_and_debounce");
               // The failure is injected based on ntp
               return pipeline.write_and_debounce(
-                ntp, std::move(batches), ss::lowres_clock::now() + 10s);
+                ntp,
+                min_epoch,
+                std::move(batches),
+                ss::lowres_clock::now() + 10s);
           });
     };
 

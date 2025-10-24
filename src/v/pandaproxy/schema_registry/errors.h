@@ -219,6 +219,11 @@ inline error_info overwrite_schema_with_id_not_permitted(schema_id id) {
       fmt::format("Overwrite new schema with id {} is not permitted.", id())};
 }
 
+inline error_info writes_disabled() {
+    return error_info{
+      error_code::writes_disabled, "Writes to Schema Registry are disabled"};
+}
+
 inline bool failed_subject_schema_lookup(std::error_code ec) {
     return ec == error_code::subject_not_found
            || ec == error_code::subject_version_not_found;

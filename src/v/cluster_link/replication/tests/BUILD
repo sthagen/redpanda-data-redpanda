@@ -8,10 +8,14 @@ redpanda_test_cc_library(
     hdrs = [
         "deps_test_impl.h",
     ],
+    implementation_deps = [
+        "//src/v/kafka/protocol",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster_link/replication:deps",
         "//src/v/cluster_link/replication:link_replication_mgr",
+        "//src/v/cluster_link/replication:types",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
         "@seastar",
@@ -28,6 +32,9 @@ redpanda_cc_gtest(
         ":deps_test_impl",
         "//src/v/base",
         "//src/v/cluster_link/replication:partition_replicator",
+        "//src/v/cluster_link/replication:types",
+        "//src/v/kafka/protocol",
+        "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
         "//src/v/ssx:future_util",
@@ -47,6 +54,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/base",
         "//src/v/cluster_link/replication:link_replication_mgr",
+        "//src/v/cluster_link/replication:types",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",
@@ -64,6 +72,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/base",
         "//src/v/cluster_link/replication:partition_data_queue",
+        "//src/v/cluster_link/replication:types",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",

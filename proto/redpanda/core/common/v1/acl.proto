@@ -14,11 +14,11 @@
 
 syntax = "proto3";
 
-package redpanda.core.common;
+package redpanda.core.common.v1;
 
 import "proto/redpanda/core/pbgen/options.proto";
 
-option (redpanda.core.pbgen.cpp_namespace) = "proto::admin";
+option (pbgen.cpp_namespace) = "proto::common";
 
 /// The ACL resource types
 enum ACLResource {

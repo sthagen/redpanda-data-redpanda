@@ -19,6 +19,7 @@
 #include "cluster_link/model/filter_utils.h"
 #include "cluster_link/model/types.h"
 #include "config/configuration.h"
+#include "model/namespace.h"
 #include "model/validation.h"
 #include "rpc/connection_cache.h"
 #include "ssx/when_all.h"
@@ -295,6 +296,37 @@ ss::future<chunked_vector<topic_result>> frontend::delete_mirror_topics(
       fut_r.begin(), fut_r.end()};
     return ssx::when_all_succeed<chunked_vector<topic_result>>(
       std::move(futures));
+}
+
+bool frontend::schema_registry_shadowing_active() const {
+    if (!cluster_link_active()) {
+        // If not shadow links are active then quick exit
+        return false;
+    }
+
+    auto link_ids = get_all_link_ids();
+    return std::ranges::any_of(link_ids, [this](id_t link_id) -> bool {
+        const auto md = find_link_by_id(link_id);
+        if (!md.has_value()) {
+            return false;
+        }
+        // If mirror_schema_registry_topic option is set, then shadowing for
+        // SR is active
+        const auto& sr_cfg = md->get().configuration.schema_registry_sync_cfg;
+        if (
+          sr_cfg.sync_schema_registry_topic_mode.has_value()
+          && std::holds_alternative<
+            ::cluster_link::model::schema_registry_sync_config::
+              shadow_entire_schema_registry>(
+            sr_cfg.sync_schema_registry_topic_mode.value())) {
+            return true;
+        }
+
+        // If the schema registry topic is in the mirror_topics list, then
+        // disable writes
+        return md->get().state.mirror_topics.contains(
+          ::model::schema_registry_internal_tp.topic);
+    });
 }
 
 ss::future<errc> frontend::do_mutation(
@@ -1007,7 +1039,8 @@ errc frontend::validator::validate_metadata_mirroring_config(
           // topic
           if (
             p.pattern == ::model::kafka_consumer_offsets_topic()
-            || p.pattern == ::model::kafka_audit_logging_topic()) {
+            || p.pattern == ::model::kafka_audit_logging_topic()
+            || p.pattern == ::model::schema_registry_internal_tp.topic()) {
               vlog(
                 cluster::clusterlog.info,
                 "Filter pattern filtering on invalid topic name: {}",

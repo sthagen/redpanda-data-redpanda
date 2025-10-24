@@ -68,6 +68,16 @@ struct error_category final : public std::error_category {
             return "license required for operation";
         case errc::service_not_ready:
             return "shadow linking service is not ready";
+        case errc::link_unsupported_api_version:
+            return "unsupported API version on remote cluster";
+        case cluster_link::errc::link_cluster_unreachable:
+            return "unable to reach link cluster, no broker is reachable.";
+        case errc::link_broker_unreachable:
+            return "unable to reach link broker";
+        case errc::link_broker_verification_failed:
+            return "link broker verification failed";
+        case errc::link_verification_unknown_error:
+            return "link verification unknown error";
         }
 
         return "(unknown error code)";

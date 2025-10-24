@@ -329,6 +329,10 @@ public:
           shard_id, ktp, std::move(fn), require_leader);
     }
 
+    std::optional<::model::term_id> get_term(const ::model::ntp&) const final {
+        return std::nullopt;
+    }
+
 private:
     fake_partition_manager_proxy* _impl;
 };
@@ -399,6 +403,10 @@ private:
 class fake_topic_metadata_cache
   : public kafka::data::rpc::topic_metadata_cache {
 public:
+    struct partition_offsets {
+        ::model::offset log_start_offset{0};
+        ::model::offset high_watermark{0};
+    };
     std::optional<cluster::topic_configuration>
     find_topic_cfg(::model::topic_namespace_view tp_ns) const final {
         auto it = _topic_cfgs.find(::model::topic_namespace(tp_ns));
@@ -410,7 +418,17 @@ public:
 
     void set_topic_config(cluster::topic_configuration cfg) {
         auto tp_ns = cfg.tp_ns;
+        auto part_count = cfg.partition_count;
         _topic_cfgs.insert_or_assign(tp_ns, std::move(cfg));
+        for (auto i = 0; i < part_count; ++i) {
+            auto it = _partition_offsets.find(
+              ::model::ntp(tp_ns.ns, tp_ns.tp, ::model::partition_id(i)));
+            if (it == _partition_offsets.end()) {
+                _partition_offsets.emplace(
+                  ::model::ntp(tp_ns.ns, tp_ns.tp, ::model::partition_id(i)),
+                  partition_offsets{});
+            }
+        }
     }
 
     void update_topic_config(const cluster::topic_properties_update& update) {
@@ -456,13 +474,41 @@ public:
             throw std::runtime_error(ss::format("unknown topic: {}", tp_ns));
         }
         it->second.partition_count = count;
+
+        for (auto i = 0; i < count; i++) {
+            auto ntp = ::model::ntp(
+              tp_ns.ns, tp_ns.tp, ::model::partition_id(i));
+            auto it = _partition_offsets.find(ntp);
+            if (it == _partition_offsets.end()) {
+                _partition_offsets.emplace(ntp, partition_offsets{});
+            }
+        }
     }
 
     uint32_t get_default_batch_max_bytes() const final { return 1_MiB; };
 
+    std::optional<partition_offsets>
+    get_partition_offsets(const ::model::ntp& ntp) const {
+        auto it = _partition_offsets.find(ntp);
+        if (it == _partition_offsets.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    void
+    set_partition_offsets(const ::model::ntp& ntp, partition_offsets offsets) {
+        auto it = _partition_offsets.find(ntp);
+        if (it == _partition_offsets.end()) {
+            throw std::runtime_error("unknown ntp");
+        }
+        it->second = std::move(offsets);
+    }
+
 private:
     absl::flat_hash_map<::model::topic_namespace, cluster::topic_configuration>
       _topic_cfgs;
+    chunked_hash_map<::model::ntp, partition_offsets> _partition_offsets;
 };
 
 struct test_consumer_group_router : public consumer_groups_router {
@@ -491,6 +537,21 @@ struct test_partition_metadata_provider : public partition_metadata_provider {
       get_partition_high_watermark(::model::topic_partition_view) final;
 
     chunked_hash_map<::model::topic_partition, kafka::offset> hwms;
+};
+
+struct test_kafka_rpc_client_service : public kafka_rpc_client_service {
+    explicit test_kafka_rpc_client_service(fake_topic_metadata_cache* ftmc)
+      : _ftmc(ftmc) {}
+    ss::future<result<kafka::data::rpc::partition_offsets_map, cluster::errc>>
+      get_partition_offsets(
+        chunked_vector<kafka::data::rpc::topic_partitions>) final;
+
+    std::optional<cluster::errc> inserted_get_partition_offsets_error;
+    std::optional<kafka::data::rpc::partition_offsets_map>
+      inserted_get_partition_offsets_response;
+
+private:
+    fake_topic_metadata_cache* _ftmc{nullptr};
 };
 
 class fake_security_service : public security_service {
@@ -563,11 +624,15 @@ public:
 
     ss::future<> upsert_link(model::metadata metadata);
 
+    ss::future<> update_link(model::id_t id, model::metadata metadata);
+
     std::optional<std::reference_wrapper<const model::metadata>>
     find_link_by_id(model::id_t id);
 
     std::optional<std::reference_wrapper<const model::metadata>>
     find_link_by_name(const model::name_t& name);
+
+    std::optional<model::id_t> find_link_id_by_name(const model::name_t& name);
 
     link_factory* get_link_factory() { return _lf; }
 
@@ -599,6 +664,18 @@ public:
 
     fake_security_service& security_service() { return *_fss; }
 
+    test_kafka_rpc_client_service& kafka_rpc_client_service() {
+        return *_tkrcs;
+    }
+
+    void set_partition_hwm(::model::topic_partition_view tp, kafka::offset hwm);
+
+    fake_topic_metadata_cache& topic_metadata_cache() { return *_tmc; }
+
+    kafka::data::rpc::test::fake_topic_creator& topic_creator() {
+        return *_ftpc;
+    }
+
 private:
     void setup_cluster_mock();
 
@@ -617,6 +694,7 @@ private:
     link_factory* _lf{nullptr};
     test_consumer_group_router* _consumer_group_router{nullptr};
     test_partition_metadata_provider* _partition_metadata_provider{nullptr};
+    test_kafka_rpc_client_service* _tkrcs{nullptr};
     ss::sharded<manager> _manager;
     config::mock_property<int16_t> _default_topic_replication{1};
 

@@ -144,7 +144,9 @@
 #include "redpanda/admin/server.h"
 #include "redpanda/admin/services/cluster.h"
 #include "redpanda/admin/services/datalake/datalake.h"
+#include "redpanda/admin/services/internal/breakglass.h"
 #include "redpanda/admin/services/internal/debug.h"
+#include "redpanda/admin/services/internal/metastore.h"
 #include "redpanda/admin/services/shadow_link/shadow_link.h"
 #include "resource_mgmt/memory_groups.h"
 #include "resource_mgmt/memory_sampling.h"
@@ -1178,6 +1180,15 @@ void application::configure_admin_server(model::node_id node_id) {
               create_client(),
               std::ref(_kafka_connections_service),
               controller->get_feature_table()));
+          s.add_service(
+            std::make_unique<admin::internal::breakglass_service_impl>(
+              controller.get()));
+          if (cloud_topics_app) {
+              s.add_service(
+                std::make_unique<admin::metastore_service_impl>(
+                  cloud_topics_app->get_sharded_replicated_metastore(),
+                  &controller->get_topics_state()));
+          }
       })
       .get();
 }
@@ -1343,6 +1354,7 @@ void application::wire_up_runtime_services(
           memory_groups().kafka_total_memory(),
           *_schema_reg_client_config,
           *_schema_reg_config,
+          &metadata_cache,
           std::reference_wrapper(controller),
           std::ref(audit_mgr));
     }
@@ -1555,6 +1567,7 @@ void application::wire_up_runtime_services(
       &snc_quota_mgr,
       &controller->get_health_monitor(),
       &controller->get_security_frontend(),
+      &_kafka_data_rpc_client,
       smp_service_groups.cluster_link_smp_sg(),
       sched_groups.cluster_linking_sg())
       .get();
@@ -1992,41 +2005,39 @@ void application::wire_up_redpanda_services(
     construct_service(quota_mgr, std::ref(controller->get_quota_store())).get();
     construct_service(snc_quota_mgr, std::ref(snc_node_quota)).get();
 
-    if (kafka_data_rpc_enabled()) {
-        // TODO(oren): separate service group for kafka data
-        construct_service(
-          _kafka_data_rpc_service,
-          ss::sharded_parameter([this] {
-              return kafka::data::rpc::topic_metadata_cache::make_default(
-                &metadata_cache);
-          }),
-          ss::sharded_parameter([this] {
-              return kafka::data::rpc::partition_manager::make_default(
-                &shard_table,
-                &partition_manager,
-                smp_service_groups.transform_smp_sg());
-          }))
-          .get();
+    // TODO(oren): separate service group for kafka data
+    construct_service(
+      _kafka_data_rpc_service,
+      ss::sharded_parameter([this] {
+          return kafka::data::rpc::topic_metadata_cache::make_default(
+            &metadata_cache);
+      }),
+      ss::sharded_parameter([this] {
+          return kafka::data::rpc::partition_manager::make_default(
+            &shard_table,
+            &partition_manager,
+            smp_service_groups.transform_smp_sg());
+      }))
+      .get();
 
-        construct_service(
-          _kafka_data_rpc_client,
-          node_id,
-          ss::sharded_parameter([this] {
-              return kafka::data::rpc::partition_leader_cache::make_default(
-                &controller->get_partition_leaders());
-          }),
-          ss::sharded_parameter([this] {
-              return kafka::data::rpc::topic_creator::make_default(
-                controller.get());
-          }),
-          ss::sharded_parameter([this] {
-              return kafka::data::rpc::topic_metadata_cache::make_default(
-                &metadata_cache);
-          }),
-          &_connection_cache,
-          &_kafka_data_rpc_service)
-          .get();
-    }
+    construct_service(
+      _kafka_data_rpc_client,
+      node_id,
+      ss::sharded_parameter([this] {
+          return kafka::data::rpc::partition_leader_cache::make_default(
+            &controller->get_partition_leaders());
+      }),
+      ss::sharded_parameter([this] {
+          return kafka::data::rpc::topic_creator::make_default(
+            controller.get());
+      }),
+      ss::sharded_parameter([this] {
+          return kafka::data::rpc::topic_metadata_cache::make_default(
+            &metadata_cache);
+      }),
+      &_connection_cache,
+      &_kafka_data_rpc_service)
+      .get();
 
     syschecks::systemd_message("Creating auditing subsystem").get();
     if (!_audit_log_client_config.has_value()) {
@@ -2591,11 +2602,6 @@ application::make_datalake_usage_aggregator() {
     }
     return ss::make_shared<datalake::disabled_datalake_usage_api_impl>(
       controller.get());
-}
-
-bool application::kafka_data_rpc_enabled() {
-    return wasm_data_transforms_enabled()
-           || config::shard_local_cfg().audit_use_rpc();
 }
 
 ss::future<>
@@ -3369,13 +3375,11 @@ void application::start_runtime_services(
               smp_service_groups.cluster_smp_sg(),
               std::ref(controller->get_ephemeral_credential_frontend())));
 
-          if (kafka_data_rpc_enabled()) {
-              runtime_services.push_back(
-                std::make_unique<kafka::data::rpc::network_service>(
-                  sched_groups.transforms_sg(),
-                  smp_service_groups.transform_smp_sg(),
-                  &_kafka_data_rpc_service));
-          }
+          runtime_services.push_back(
+            std::make_unique<kafka::data::rpc::network_service>(
+              sched_groups.transforms_sg(),
+              smp_service_groups.transform_smp_sg(),
+              &_kafka_data_rpc_service));
 
           if (wasm_data_transforms_enabled()) {
               runtime_services.push_back(

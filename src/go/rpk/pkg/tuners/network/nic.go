@@ -105,34 +105,34 @@ func (n *nic) Name() string {
 	return n.name
 }
 
-func (n *nic) IsBondIface() bool {
-	zap.L().Sugar().Debugf("Checking if '%s' is bond interface", n.name)
-	if exists, _ := afero.Exists(n.fs, "/sys/class/net/bond_masters"); !exists {
-		return false
-	}
-	lines, _ := utils.ReadFileLines(n.fs, "/sys/class/net/bond_masters")
-	for _, line := range lines {
-		if strings.Contains(line, n.name) {
-			zap.L().Sugar().Debugf("'%s' is bond interface", n.name)
-			return true
+// We use the existence of lower_* files in /sys/class/net/<nic>/ to determine
+// if the NIC is a bond or something bond-like like VLAN interfaces or hyper-v
+// NICs.
+func getLowerNames(fs afero.Fs, nicName string) []string {
+	nicDir := fmt.Sprintf("/sys/class/net/%s", nicName)
+	files := utils.ListFilesInPath(fs, nicDir)
+
+	lowers := []string{}
+	for _, file := range files {
+		if after, ok := strings.CutPrefix(file, "lower_"); ok {
+			lowers = append(lowers, after)
 		}
 	}
-	return false
+	return lowers
+}
+
+func (n *nic) IsBondIface() bool {
+	zap.L().Sugar().Debugf("Checking if '%s' is bond interface", n.name)
+	lowers := getLowerNames(n.fs, n.name)
+	return len(lowers) > 0
 }
 
 func (n *nic) Slaves() ([]Nic, error) {
 	slaves := []Nic{}
+
 	if n.IsBondIface() {
-		var slaveNames []string
 		zap.L().Sugar().Debugf("Reading slaves of '%s'", n.name)
-		lines, err := utils.ReadFileLines(n.fs,
-			fmt.Sprintf("/sys/class/net/%s/bond/slaves", n.name))
-		if err != nil {
-			return nil, err
-		}
-		for _, line := range lines {
-			slaveNames = append(slaveNames, strings.Split(line, " ")...)
-		}
+		slaveNames := getLowerNames(n.fs, n.name)
 
 		for _, name := range slaveNames {
 			slaves = append(slaves, NewNic(n.fs, n.irqProcFile, n.irqDeviceInfo, n.ethtool, name))
@@ -158,6 +158,7 @@ var supportedDrivers = []driverSupport{
 	{"gve", func(numIRQs int) func(IrqInfo) int {
 		return func(irq IrqInfo) int { return gvnicIrqToQueueIdx(irq, numIRQs) }
 	}},
+	{"mlx5_core", func(_ int) func(IrqInfo) int { return azureHyperVIrqToQueueIdx }},
 }
 
 func getQueueIndexFunc(driverName string, numIRQs int) func(IrqInfo) int {
@@ -203,7 +204,7 @@ func (n *nic) GetIRQs() ([]IrqInfo, error) {
 		return nil, err
 	}
 
-	fastPathIRQsPattern := regexp.MustCompile(`-TxRx-|-fp-|virtio\d+-(input|output)|ntfy-block|gve-ntfy-blk|-Tx-Rx-|mlx\d+-\d+@`)
+	fastPathIRQsPattern := regexp.MustCompile(`-TxRx-|-fp-|virtio\d+-(input|output)|ntfy-block|gve-ntfy-blk|mlx5_comp\d+|-Tx-Rx-|mlx\d+-\d+@`)
 	var fastPathIRQNums []int
 	for _, irq := range IRQNums {
 		if fastPathIRQsPattern.MatchString(procFileLines[irq]) {
@@ -276,6 +277,17 @@ func gvnicIrqToQueueIdx(irq IrqInfo, numIRQs int) int {
 		// https://github.com/torvalds/linux/blob/v6.17/drivers/net/ethernet/google/gve/gve.h#L1082-L1094
 		// TX is the lower half, RX the upper half of the IRQs
 		return idx % (numIRQs / 2)
+	}
+	return MaxInt
+}
+
+func azureHyperVIrqToQueueIdx(irq IrqInfo) int {
+	// Below will only pattern match on Azure but that's fine
+	hyperVPattern := regexp.MustCompile(`mlx5_comp(\d+)@`)
+	match := hyperVPattern.FindStringSubmatch(irq.ProcLine)
+	if len(match) == 2 {
+		idx, _ := strconv.Atoi(match[1])
+		return idx
 	}
 	return MaxInt
 }

@@ -8,7 +8,6 @@ proto_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//proto/redpanda/core/common:common_proto",
         "//proto/redpanda/core/pbgen:options_proto",
         "@googleapis//google/api:field_info_proto",
         "@protobuf//:duration_proto",
@@ -73,7 +72,8 @@ proto_library(
     srcs = ["shadow_link.proto"],
     visibility = ["//visibility:public"],
     deps = [
-        "//proto/redpanda/core/common:common_proto",
+        "//proto/redpanda/core/common/v1:acl_proto",
+        "//proto/redpanda/core/common/v1:tls_proto",
         "//proto/redpanda/core/pbgen:options_proto",
         "//proto/redpanda/core/pbgen:rpc_proto",
         "@googleapis//google/api:field_behavior_proto",
@@ -90,7 +90,8 @@ redpanda_proto_library(
     protos = [":shadow_link_proto"],
     visibility = ["//visibility:public"],
     deps = [
-        "//proto/redpanda/core/common:common_redpanda_proto",
+        "//proto/redpanda/core/common/v1:acl_redpanda_proto",
+        "//proto/redpanda/core/common/v1:tls_redpanda_proto",
         "//src/v/serde/protobuf:field_mask",
         "@abseil-cpp//absl/time:time",
     ],

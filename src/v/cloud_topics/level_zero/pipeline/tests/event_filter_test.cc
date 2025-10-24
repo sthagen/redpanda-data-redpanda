@@ -29,6 +29,8 @@
 using namespace cloud_topics;
 using namespace std::chrono_literals;
 
+static cloud_topics::cluster_epoch min_epoch{3840};
+
 namespace cloud_topics::l0 {
 struct write_pipeline_accessor {
     // Returns true if the write request is in the `_pending` collection
@@ -101,6 +103,7 @@ TEST_CORO(EventFilterTest, filter_triggered_once) {
     auto sub = pipeline.subscribe(flt);
     auto write = pipeline.write_and_debounce(
       model::controller_ntp,
+      min_epoch,
       chunked_vector<model::record_batch>(
         std::from_range, std::move(batches) | std::views::as_rvalue),
       ss::lowres_clock::now() + 1s);
@@ -133,6 +136,7 @@ TEST_CORO(EventFilterTest, filter_has_memory) {
     auto stage = pipeline.register_write_pipeline_stage();
     auto write = pipeline.write_and_debounce(
       model::controller_ntp,
+      min_epoch,
       chunked_vector<model::record_batch>(
         std::from_range, std::move(batches) | std::views::as_rvalue),
       ss::lowres_clock::now() + 1s);
@@ -213,12 +217,14 @@ TEST_CORO(EventFilterTest, filter_min_write_bytes) {
     EXPECT_FALSE(sub.available());
     auto write1 = pipeline.write_and_debounce(
       model::controller_ntp,
+      min_epoch,
       chunked_vector<model::record_batch>::single(batch1.copy()),
       ss::lowres_clock::now() + 1s);
     co_await tests::drain_task_queue();
     EXPECT_FALSE(sub.available());
     auto write2 = pipeline.write_and_debounce(
       model::controller_ntp,
+      min_epoch,
       chunked_vector<model::record_batch>::single(batch2.copy()),
       ss::lowres_clock::now() + 1s);
     co_await tests::drain_task_queue();

@@ -1,0 +1,61 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.common.v1;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "google/api/field_behavior.proto";
+
+option (pbgen.cpp_namespace) = "proto::common";
+
+// TLS settings
+message TLSSettings {
+    // Whether or not TLS is enabled
+    bool enabled = 3;
+    // May provide TLS as a set of files or PEM values
+    oneof tls_settings {
+        // Certificates and keys are provided as files
+        TLSFileSettings tls_file_settings = 1;
+        // Certificates and keys are provided in PEM format
+        TLSPEMSettings tls_pem_settings = 2;
+    }
+    // If true, the SNI hostname will not be provided when TLS is used
+    bool do_not_set_sni_hostname = 4;
+}
+
+// TLS file settings
+message TLSFileSettings {
+    // Path to the CA
+    string ca_path = 1;
+    // Key and Cert are optional but if one is provided, then both must be
+    // Path to the key
+    string key_path = 2;
+    // Path to the cert
+    string cert_path = 3;
+}
+
+// Used when providing the TLS information in PEM format
+message TLSPEMSettings {
+    // The CA
+    string ca = 1;
+    // Key and Cert are optional but if one is provided, then both must be
+    // The key
+    string key = 2 [(google.api.field_behavior) = INPUT_ONLY];
+    // The SHA-256 of the key, in base64 format
+    string key_fingerprint = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // The cert
+    string cert = 4;
+}

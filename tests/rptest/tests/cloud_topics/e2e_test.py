@@ -8,9 +8,11 @@
 # by the Apache License, Version 2.0
 
 from ducktape.utils.util import wait_until
+from collections.abc import Iterable
 
 from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.clients.rpk import RpkTool
+from rptest.clients.admin.v2 import Admin, metastore_pb, ntp_pb
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import (
@@ -78,6 +80,7 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         )
         self.kafka_tools = KafkaCliTools(self.redpanda)
         self.rpk = RpkTool(self.redpanda)
+        self.admin = Admin(self.redpanda)
 
     def setUp(self):
         assert self.redpanda
@@ -91,6 +94,52 @@ class EndToEndCloudTopicsBase(EndToEndTest):
                     "redpanda.cloud_topic.enabled": "true",
                 },
             )
+
+    def wait_until_reconciled(self, topic: str, partition: int, transactions: bool):
+        def get_offsets():
+            hwm: int | None = None
+            for p in self.rpk.describe_topic(topic):
+                if p.id == partition:
+                    hwm = p.high_watermark
+                    break
+            metastore = self.admin.metastore()
+            req = metastore_pb.GetOffsetsRequest(
+                partition=ntp_pb.TopicPartition(topic=topic, partition=partition)
+            )
+            return metastore.get_offsets(req=req).offsets.next_offset, hwm
+
+        def is_reconciled() -> bool:
+            next_offset, hwm = get_offsets()
+            if transactions:
+                # This is a little hacky, but if we produced using transactions,
+                # we won't reconcile the last offset because it's an commit or
+                # abort transactional control batch.
+                return next_offset == ((hwm or 0) - 1)
+            return next_offset == hwm
+
+        def message() -> str:
+            try:
+                next_offset, hwm = get_offsets()
+                return f"failed to reconcile all data: topic={topic}, partition={partition}, high_watermark={hwm}, next_offset={next_offset}"
+            except Exception:
+                return f"failed to reconcile all data: topic={topic}, partition={partition}, unable to fetch offsets"
+
+        wait_until(
+            condition=is_reconciled,
+            timeout_sec=60,
+            backoff_sec=5,
+            err_msg=message,
+            retry_on_exc=True,
+        )
+
+    def wait_until_all_reconciled(
+        self, topics: Iterable[TopicSpec] | None = None, transactions: bool = False
+    ):
+        for topic in topics or self.topics:
+            for partition in range(topic.partition_count):
+                self.wait_until_reconciled(
+                    topic=topic.name, partition=partition, transactions=transactions
+                )
 
 
 class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
@@ -112,6 +161,8 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
 
         self.start_consumer()
         self.run_validation()
+
+        self.wait_until_all_reconciled()
 
     @cluster(num_nodes=5)
     def test_delete_records(self):
@@ -135,6 +186,7 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
         self.run_consumer_validation(
             expected_missing_records=35 * self.topics[0].partition_count
         )
+        self.wait_until_all_reconciled()
 
 
 class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
@@ -204,3 +256,4 @@ class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
         assert cstatus.validator.valid_reads == committed_messages
         assert cstatus.validator.invalid_reads == 0
         assert cstatus.validator.out_of_scope_invalid_reads == 0
+        self.wait_until_all_reconciled(self.topics, transactions=True)

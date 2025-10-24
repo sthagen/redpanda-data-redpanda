@@ -93,6 +93,18 @@ TEST_F(ReconcilerTest, SingleSource) {
     EXPECT_THAT(metastore_next_offset(src), Optional(kafka::offset{40}));
 }
 
+TEST_F(ReconcilerTest, SingleSourceWithControlBatches) {
+    auto src = add_source();
+    src->add_batch({.count = 1, .is_control = true});
+    src->add_batch({.count = 8});
+    src->add_batch({.count = 1, .is_control = true});
+    src->add_batch({.count = 10});
+    src->add_batch({.count = 10});
+    reconcile();
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{29});
+    EXPECT_THAT(metastore_next_offset(src), Optional(kafka::offset{30}));
+}
+
 TEST_F(ReconcilerTest, MultipleSources) {
     auto src1 = add_source();
     auto src2 = add_source();

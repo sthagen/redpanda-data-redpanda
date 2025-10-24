@@ -2,6 +2,7 @@ azure:
   included:
     - tests
     - transactions
+    - tuner_integration_tests/net_tuner_test.py::AzureNetTunerTest
 
   excluded:
     - tests/librdkafka_test.py # normally disabled

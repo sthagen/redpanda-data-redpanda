@@ -26,7 +26,7 @@ if typing.TYPE_CHECKING:
         from wsgiref.types import WSGIApplication
     else:
         from _typeshed.wsgi import WSGIApplication
-from ....... import proto
+from ........ import proto
 
 class DatalakeServiceClient:
 
@@ -34,12 +34,12 @@ class DatalakeServiceClient:
         self.base_url = base_url
         self._connect_client = ConnectClient(http_client, protocol)
 
-    def call_get_coordinator_state(self, req: proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse]:
+    def call_get_coordinator_state(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse]:
         """Low-level method to call GetCoordinatorState, granting access to errors and metadata"""
-        url = self.base_url + '/redpanda.core.admin.v2.DatalakeService/GetCoordinatorState'
-        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse, extra_headers, timeout_seconds)
+        url = self.base_url + '/redpanda.core.admin.internal.datalake.v1.DatalakeService/GetCoordinatorState'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse, extra_headers, timeout_seconds)
 
-    def get_coordinator_state(self, req: proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse:
+    def get_coordinator_state(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse:
         response = self.call_get_coordinator_state(req, extra_headers, timeout_seconds)
         err = response.error()
         if err is not None:
@@ -55,12 +55,12 @@ class AsyncDatalakeServiceClient:
         self.base_url = base_url
         self._connect_client = AsyncConnectClient(http_client, protocol)
 
-    async def call_get_coordinator_state(self, req: proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse]:
+    async def call_get_coordinator_state(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse]:
         """Low-level method to call GetCoordinatorState, granting access to errors and metadata"""
-        url = self.base_url + '/redpanda.core.admin.v2.DatalakeService/GetCoordinatorState'
-        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse, extra_headers, timeout_seconds)
+        url = self.base_url + '/redpanda.core.admin.internal.datalake.v1.DatalakeService/GetCoordinatorState'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse, extra_headers, timeout_seconds)
 
-    async def get_coordinator_state(self, req: proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse:
+    async def get_coordinator_state(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse:
         response = await self.call_get_coordinator_state(req, extra_headers, timeout_seconds)
         err = response.error()
         if err is not None:
@@ -73,11 +73,11 @@ class AsyncDatalakeServiceClient:
 @typing.runtime_checkable
 class DatalakeServiceProtocol(typing.Protocol):
 
-    def get_coordinator_state(self, req: ClientRequest[proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateResponse]:
+    def get_coordinator_state(self, req: ClientRequest[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest]) -> ServerResponse[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse]:
         ...
-DATALAKE_SERVICE_PATH_PREFIX = '/redpanda.core.admin.v2.DatalakeService'
+DATALAKE_SERVICE_PATH_PREFIX = '/redpanda.core.admin.internal.datalake.v1.DatalakeService'
 
 def wsgi_datalake_service(implementation: DatalakeServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
-    app.register_unary_rpc('/redpanda.core.admin.v2.DatalakeService/GetCoordinatorState', implementation.get_coordinator_state, proto.redpanda.core.admin.v2.internal.datalake_pb2.GetCoordinatorStateRequest)
+    app.register_unary_rpc('/redpanda.core.admin.internal.datalake.v1.DatalakeService/GetCoordinatorState', implementation.get_coordinator_state, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest)
     return app

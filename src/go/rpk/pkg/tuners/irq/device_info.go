@@ -49,9 +49,9 @@ func (e EmptyMSIRQError) Error() string {
 }
 
 func (deviceInfo *deviceInfo) GetIRQs(
-	irqConfigDir string, xenDeviceName string,
+	irqConfigDir string, deviceName string,
 ) ([]int, error) {
-	zap.L().Sugar().Debugf("Reading IRQs of '%s', with deviceInfo name pattern '%s'", irqConfigDir, xenDeviceName)
+	zap.L().Sugar().Debugf("Reading IRQs of '%s', with deviceInfo name pattern '%s'", irqConfigDir, deviceName)
 	msiIRQsDirName := path.Join(irqConfigDir, "msi_irqs")
 	var irqs []int
 	if exists, _ := afero.Exists(deviceInfo.fs, msiIRQsDirName); exists {
@@ -92,6 +92,7 @@ func (deviceInfo *deviceInfo) GetIRQs(
 				return nil, err
 			}
 			modAlias := lines[0]
+			zap.L().Sugar().Debugf("Found modalias with name %s", modAlias)
 			irqProcFileLines, err := deviceInfo.procFile.GetIRQProcFileLinesMap()
 			if err != nil {
 				return nil, err
@@ -105,11 +106,11 @@ func (deviceInfo *deviceInfo) GetIRQs(
 							deviceInfo.getIRQsForLinesMatching(name, irqProcFileLines)...)
 					}
 				}
+			} else if strings.Contains(modAlias, "xen:") {
+				zap.L().Sugar().Debugf("Reading '%s' device IRQs from /proc/interrupts", irqConfigDir)
+				irqs = deviceInfo.getIRQsForLinesMatching(deviceName, irqProcFileLines)
 			} else {
-				if strings.Contains(modAlias, "xen:") {
-					zap.L().Sugar().Debugf("Reading '%s' device IRQs from /proc/interrupts", irqConfigDir)
-					irqs = deviceInfo.getIRQsForLinesMatching(xenDeviceName, irqProcFileLines)
-				}
+				zap.L().Sugar().Debugf("No modalias support for %s", modAlias)
 			}
 		}
 	}

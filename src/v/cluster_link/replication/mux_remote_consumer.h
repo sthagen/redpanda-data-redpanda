@@ -12,6 +12,7 @@
 
 #include "base/format_to.h"
 #include "cluster_link/replication/partition_data_queue.h"
+#include "cluster_link/replication/types.h"
 #include "container/chunked_hash_map.h"
 #include "kafka/client/direct_consumer/api_types.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
@@ -59,7 +60,10 @@ public:
     mux_remote_consumer(
       kafka::client::cluster& cluster,
       kafka::snc_quota_manager& snc_quota_mgr,
-      configuration consumer_configuration);
+      configuration consumer_configuration,
+      std::optional<kafka::client::direct_consumer_probe::configuration>
+        probe_cfg
+      = std::nullopt);
 
     ss::future<> start();
     ss::future<> stop() noexcept;
@@ -81,7 +85,7 @@ public:
      * are add() and reset() (atleast once). add() adds the partition to the
      * consumer and reset() sets the initial offset for fetching.
      */
-    ss::future<std::expected<partition_data_queue::fetch_data, errc>>
+    ss::future<std::expected<fetch_data, errc>>
     fetch(const ::model::topic_partition&, ss::abort_source&);
     /**
      * Update the configuration of the consumer.

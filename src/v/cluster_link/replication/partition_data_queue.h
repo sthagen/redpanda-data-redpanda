@@ -10,9 +10,8 @@
 
 #pragma once
 
+#include "cluster_link/replication/types.h"
 #include "container/chunked_vector.h"
-#include "model/record.h"
-#include "ssx/semaphore.h"
 
 #include <seastar/core/gate.hh>
 
@@ -35,10 +34,6 @@ namespace cluster_link::replication {
 class partition_data_queue {
 public:
     explicit partition_data_queue(size_t max_buffered_bytes);
-    struct fetch_data {
-        chunked_vector<::model::record_batch> batches;
-        ssx::semaphore_units units;
-    };
     ss::future<> stop() noexcept;
     // note: enqueue never fails, it will oversubscribe memory but the return
     // value is a hint to the caller to not enqueue more until the queue is

@@ -17,6 +17,7 @@
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/common/object_utils.h"
 #include "cloud_topics/logger.h"
+#include "config/configuration.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
@@ -40,18 +41,28 @@ public:
           _path.native(),
           ss::open_flags::rw | ss::open_flags::truncate
             | ss::open_flags::create);
+        ss::file_output_stream_options options{};
+        // The read buffer size also makes sense as the write buffer here
+        // (default 128KiB).
+        options.buffer_size
+          = config::shard_local_cfg().storage_read_buffer_size();
+        // Defaults to 1, which is reasonable for write-behind as well.
+        options.write_behind
+          = config::shard_local_cfg().storage_read_readahead_count();
         co_return co_await ss::make_file_output_stream(
-          std::move(file),
-          ss::file_output_stream_options{
-            .buffer_size = 128_KiB,
-            .write_behind = 2,
-          });
+          std::move(file), std::move(options));
     }
     ss::future<> remove() override { return ss::remove_file(_path.native()); }
     ss::future<ss::input_stream<char>> input_stream() override {
         auto file = co_await ss::open_file_dma(
           _path.native(), ss::open_flags::ro);
-        co_return ss::make_file_input_stream(std::move(file));
+        ss::file_input_stream_options options{};
+        options.buffer_size
+          = config::shard_local_cfg().storage_read_buffer_size();
+        options.read_ahead
+          = config::shard_local_cfg().storage_read_readahead_count();
+        co_return ss::make_file_input_stream(
+          std::move(file), std::move(options));
     }
 
 private:

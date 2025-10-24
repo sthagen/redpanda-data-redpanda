@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "cluster_link/model/types.h"
 #include "cluster_link/source_topic_syncer.h"
 #include "cluster_link/tests/deps.h"
 #include "test_utils/async.h"
@@ -198,6 +199,115 @@ TEST_F_CORO(source_topic_syncer_test, select_all_with_exclude) {
     auto mirror_topic_it = mirror_topics.find(::model::topic("excluded-topic"));
     EXPECT_EQ(mirror_topic_it, mirror_topics.end())
       << "Excluded topic should not be mirrored";
+}
+
+TEST_F_CORO(source_topic_syncer_test, schema_registry_test) {
+    co_await fixture()->upsert_link(get_default_metadata(true));
+
+    fixture()->get_cluster_mock().add_topic(
+      ::model::schema_registry_internal_tp.topic,
+      1,
+      3,
+      kafka::topic_authorized_operations(0x508));
+
+    // sleep for 2 seconds to allow source topic syncer to run and then verify
+    // that the topic was not added to the mirror topic state
+    co_await ss::sleep(2s);
+
+    auto link_metadata = fixture()->find_link_by_name(
+      model::name_t("test_link"));
+    auto& mirror_topics = link_metadata->get().state.mirror_topics;
+    auto mirror_topic_it = mirror_topics.find(
+      ::model::schema_registry_internal_tp.topic);
+    ASSERT_EQ_CORO(mirror_topic_it, mirror_topics.end())
+      << "Should not have been able to find "
+      << ::model::schema_registry_internal_tp.topic;
+
+    // Now enable schema registry topic mirroring and ensure that it shows up
+    auto update = link_metadata->get().copy();
+    update.configuration.schema_registry_sync_cfg
+      .sync_schema_registry_topic_mode
+      = model::schema_registry_sync_config::shadow_entire_schema_registry{};
+    auto link_id = fixture()->find_link_id_by_name(model::name_t("test_link"));
+    ASSERT_TRUE_CORO(link_id.has_value());
+    co_await fixture()->update_link(*link_id, std::move(update));
+
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        auto& mirror_topics = link_metadata->get().state.mirror_topics;
+        auto mirror_topic_it = mirror_topics.find(
+          ::model::schema_registry_internal_tp.topic);
+        return mirror_topic_it != mirror_topics.end();
+    });
+}
+
+TEST_F_CORO(source_topic_syncer_test, schema_registry_exists_but_empty) {
+    fixture()->get_cluster_mock().add_topic(
+      ::model::schema_registry_internal_tp.topic,
+      1,
+      3,
+      kafka::topic_authorized_operations(0x508));
+
+    ASSERT_EQ_CORO(
+      co_await fixture()->topic_creator().create_topic(
+        {::model::kafka_namespace, ::model::schema_registry_internal_tp.topic},
+        1,
+        {},
+        3),
+      cluster::errc::success);
+
+    auto md = get_default_metadata();
+    md.configuration.schema_registry_sync_cfg.sync_schema_registry_topic_mode
+      = model::schema_registry_sync_config::shadow_entire_schema_registry{};
+    co_await fixture()->upsert_link(std::move(md));
+
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        auto& mirror_topics = link_metadata->get().state.mirror_topics;
+        auto mirror_topic_it = mirror_topics.find(
+          ::model::schema_registry_internal_tp.topic);
+        return mirror_topic_it != mirror_topics.end();
+    });
+}
+
+TEST_F_CORO(source_topic_syncer_test, schema_registry_exists_not_empty) {
+    fixture()->get_cluster_mock().add_topic(
+      ::model::schema_registry_internal_tp.topic,
+      1,
+      3,
+      kafka::topic_authorized_operations(0x508));
+
+    ASSERT_EQ_CORO(
+      co_await fixture()->topic_creator().create_topic(
+        {::model::kafka_namespace, ::model::schema_registry_internal_tp.topic},
+        1,
+        {},
+        3),
+      cluster::errc::success);
+
+    fixture()->set_partition_hwm(
+      ::model::schema_registry_internal_tp, kafka::offset(10));
+
+    auto md = get_default_metadata();
+    md.configuration.schema_registry_sync_cfg.sync_schema_registry_topic_mode
+      = model::schema_registry_sync_config::shadow_entire_schema_registry{};
+    co_await fixture()->upsert_link(std::move(md));
+
+    // source topic syncer test runs every second, let it run a couple of times
+    // and then verify that the schema registry topic was not added to the
+    // mirror topic list
+    co_await ss::sleep(3s);
+
+    auto link_metadata = fixture()->find_link_by_name(
+      model::name_t("test_link"));
+    auto& mirror_topics = link_metadata->get().state.mirror_topics;
+    auto mirror_topic_it = mirror_topics.find(
+      ::model::schema_registry_internal_tp.topic);
+    ASSERT_EQ_CORO(mirror_topic_it, mirror_topics.end())
+      << "Should not have been able to find "
+      << ::model::schema_registry_internal_tp.topic;
 }
 
 TEST_F_CORO(source_topic_syncer_test, invalid_authorization) {

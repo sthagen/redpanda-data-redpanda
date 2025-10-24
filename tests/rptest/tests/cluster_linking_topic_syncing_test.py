@@ -8,17 +8,30 @@
 # by the Apache License, Version 2.0
 
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
+from rptest.clients.admin.proto.redpanda.core.common.v1 import tls_pb2
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.multi_cluster_services import SecondaryClusterArgs
-from rptest.services.redpanda import SecurityConfig
-from rptest.services.tls import Certificate, TLSCertManager
+from rptest.services.redpanda import (
+    LoggingConfig,
+    SchemaRegistryConfig,
+    SecurityConfig,
+    TLSProvider,
+)
+from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManager
 from rptest.tests.cluster_linking_test_base import (
     ClusterLinkingTLSProvider,
     ShadowLinkTestBase,
 )
-from rptest.util import wait_until
+from rptest.tests.schema_registry_test import SchemaRegistryRedpandaClient
+from rptest.util import expect_exception, wait_until
+
+import ducktape.errors
+import google.protobuf.field_mask_pb2
+import json
+import re
+import socket
 
 
 class ClusterLinkingTopicSyncingTestBase(ShadowLinkTestBase):
@@ -432,9 +445,9 @@ class ClusterLinkingTopicSyncingWithTlsFiles(ClusterLinkingTopicSyncingTestBase)
         self.logger.debug("Adding TLS files to link")
 
         shadow_link.configurations.client_options.tls_settings.CopyFrom(
-            shadow_link_pb2.TLSSettings(
+            tls_pb2.TLSSettings(
                 enabled=True,
-                tls_file_settings=shadow_link_pb2.TLSFileSettings(
+                tls_file_settings=tls_pb2.TLSFileSettings(
                     ca_path=self.redpanda.TLS_CA_CRT_FILE,
                     key_path=self.redpanda.TLS_SERVER_KEY_FILE,
                     cert_path=self.redpanda.TLS_SERVER_CRT_FILE,
@@ -507,9 +520,9 @@ class ClusterLinkingTopicSyncingWithTlsValues(ClusterLinkingTopicSyncingTestBase
         self.logger.debug(f"key: {key_content}")
 
         shadow_link.configurations.client_options.tls_settings.CopyFrom(
-            shadow_link_pb2.TLSSettings(
+            tls_pb2.TLSSettings(
                 enabled=True,
-                tls_pem_settings=shadow_link_pb2.TLSPEMSettings(
+                tls_pem_settings=tls_pb2.TLSPEMSettings(
                     ca=ca_content, key=key_content, cert=cert_content
                 ),
             )
@@ -525,4 +538,231 @@ class ClusterLinkingTopicSyncingWithTlsValues(ClusterLinkingTopicSyncingTestBase
     def get_target_cluster_rpk(self) -> RpkTool:
         return RpkTool(
             self.target_cluster.service, tls_cert=self.tls.create_cert("target-rpk")
+        )
+
+
+class ClusterLinkingSchemaRegistry(ShadowLinkTestBase):
+    """
+    These tests verify the behavior of syncing schema registry
+    """
+
+    simple_proto_def = """
+syntax = "proto3";
+
+message Simple {
+  string id = 1;
+}"""
+
+    simple_a_proto_def = """
+syntax = "proto3";
+
+message AType {
+  float f = 1;
+}"""
+
+    def __init__(self, test_context, *args, **kwargs):
+        super().__init__(
+            test_context=test_context,
+            schema_registry_config=SchemaRegistryConfig(),
+            secondary_cluster_args=SecondaryClusterArgs(
+                schema_registry_config=SchemaRegistryConfig()
+            ),
+            log_config=LoggingConfig(
+                "info",
+                logger_levels={
+                    "cluster_link": "trace",
+                    "kafka/client": "trace",
+                    "kafka": "trace",
+                    "schemaregistry": "trace",
+                    "schemaregistry/requests": "trace",
+                    "shadow_link_service": "trace",
+                },
+            ),
+        )
+
+    def source_sr_client(self) -> SchemaRegistryRedpandaClient:
+        return SchemaRegistryRedpandaClient(self.source_cluster_service)
+
+    def target_sr_client(self) -> SchemaRegistryRedpandaClient:
+        return SchemaRegistryRedpandaClient(self.target_cluster_service)
+
+    def post_schema_to_subject(
+        self, sr_client: SchemaRegistryRedpandaClient, subject: str, schema: str
+    ) -> int:
+        result_raw = sr_client.post_subjects_subject_versions(
+            subject=subject,
+            data=json.dumps({"schema": schema, "schemaType": "PROTOBUF"}),
+        )
+        self.logger.debug(f"post_schema_to_subject result: {result_raw}")
+        assert result_raw.status_code == 200, (
+            f"Failed to post schema to subject {subject}: {result_raw.text}"
+        )
+        result = result_raw.json()
+        assert "id" in result, f"No 'id' in response: {result}"
+        return result["id"]
+
+    def get_subjects(self, sr_client: SchemaRegistryRedpandaClient) -> list[str]:
+        result_raw = sr_client.get_subjects()
+        self.logger.debug(f"get_subjects result: {result_raw}")
+        assert result_raw.status_code == 200, (
+            f"Failed to get subjects: {result_raw.text}"
+        )
+        result = result_raw.json()
+        assert isinstance(result, list), f"Expected list but got {result}"
+        return result
+
+    @cluster(num_nodes=6)
+    def test_schema_registry_basic(self):
+        """
+        This test will verify that the _schemas topic is not created
+        until the link has been updated to enable mirroring schema linking
+        and then will verify that schemas are replicated from the source to
+        the shadow cluster
+        """
+        topics = [t for t in self.target_cluster_rpk.list_topics()]
+        assert "_schemas" not in topics, (
+            f"_schemas found in target cluster before link creation: {topics}"
+        )
+
+        # Populate source cluster schema registry
+        source_sr_client = self.source_sr_client()
+
+        first_id = self.post_schema_to_subject(
+            source_sr_client, "first", self.simple_proto_def
+        )
+        self.logger.debug(f"First id: {first_id}")
+
+        second_id = self.post_schema_to_subject(
+            source_sr_client, "second", self.simple_a_proto_def
+        )
+        self.logger.debug(f"Second id: {second_id}")
+
+        self.logger.info("Creating shadow link")
+        created_link = self.create_link("test-link")
+
+        self.logger.info(
+            "Waiting 5 seconds and then verifying that _schemas topic is not on target cluster"
+        )
+
+        def schemas_in_target() -> bool:
+            topics = [t for t in self.target_cluster_rpk.list_topics()]
+            self.logger.debug(f"Topics in target cluster: {topics}")
+            return "_schemas" in topics
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(schemas_in_target, timeout_sec=5, backoff_sec=1)
+
+        self.logger.info(
+            "Verify that the schemas topic gets created when we attempt to access the target schema registry"
+        )
+        target_sr_client = self.target_sr_client()
+        subjects = self.get_subjects(target_sr_client)
+        assert len(subjects) == 0, f"Expected no subjects but got {subjects}"
+        assert schemas_in_target(), "_schemas topic not found in target cluster"
+
+        self.logger.info("Enabling schema registry mirroring on the link")
+        created_link.configurations.schema_registry_sync_options.shadow_schema_registry_topic.CopyFrom(
+            shadow_link_pb2.SchemaRegistrySyncOptions.ShadowSchemaRegistryTopic()
+        )
+        update_mask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=["configurations.schema_registry_sync_options"]
+        )
+        updated_link = self.update_link(created_link, update_mask)
+        assert updated_link.configurations.schema_registry_sync_options.shadow_schema_registry_topic, (
+            "shadow_entire_schema_registry not set after update"
+        )
+
+        def subjects_match():
+            source_subjects = self.get_subjects(source_sr_client)
+            target_subjects = self.get_subjects(target_sr_client)
+            self.logger.debug(
+                f"source_subjects: {source_subjects}, target_subjects: {target_subjects}"
+            )
+            return set(source_subjects) == set(target_subjects)
+
+        wait_until(
+            subjects_match,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Subjects do not match",
+        )
+
+        # Verify we can query the shadow topic
+        self.get_shadow_topic(
+            shadow_link_name="test-link", shadow_topic_name="_schemas"
+        )
+
+    @cluster(
+        num_nodes=6,
+        log_allow_list=[
+            re.compile(".*Schema registry failed to initialize.*"),
+            re.compile(
+                ".*Shadow Linking actively mirroring schema registry topic.  Topic will not be created.*"
+            ),
+        ],
+    )
+    def test_schema_registry_no_create(self):
+        """
+        This test will verify that the _schemas topic is not created when shadowing is enabled
+        but no schemas topic is created on the source
+        """
+        create_link = self.create_default_link_request("test-link")
+        create_link.shadow_link.configurations.schema_registry_sync_options.shadow_schema_registry_topic.CopyFrom(
+            shadow_link_pb2.SchemaRegistrySyncOptions.ShadowSchemaRegistryTopic()
+        )
+
+        self.create_link_with_request(req=create_link)
+
+        def schemas_in_target() -> bool:
+            topics = [t for t in self.target_cluster_rpk.list_topics()]
+            self.logger.debug(f"Topics in target cluster: {topics}")
+            return "_schemas" in topics
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(schemas_in_target, timeout_sec=5, backoff_sec=1)
+
+        self.logger.info("Verify that the schemas topic is not created on the source")
+        result = self.target_sr_client().get_subjects()
+        assert result.status_code == 500, f"Expected 500 but got {result.status_code}"
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(schemas_in_target, timeout_sec=5, backoff_sec=1)
+
+        # Now create the topic and wait for subjects to show up
+
+        # Populate source cluster schema registry
+        source_sr_client = self.source_sr_client()
+
+        first_id = self.post_schema_to_subject(
+            source_sr_client, "first", self.simple_proto_def
+        )
+        self.logger.debug(f"First id: {first_id}")
+
+        second_id = self.post_schema_to_subject(
+            source_sr_client, "second", self.simple_a_proto_def
+        )
+        self.logger.debug(f"Second id: {second_id}")
+
+        wait_until(
+            schemas_in_target,
+            timeout_sec=5,
+            backoff_sec=1,
+            err_msg="_schemas topic not created on target cluster",
+        )
+
+        target_sr_client = self.target_sr_client()
+
+        def subjects_match():
+            source_subjects = self.get_subjects(source_sr_client)
+            target_subjects = self.get_subjects(target_sr_client)
+            self.logger.debug(
+                f"source_subjects: {source_subjects}, target_subjects: {target_subjects}"
+            )
+            return set(source_subjects) == set(target_subjects)
+
+        wait_until(
+            subjects_match,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Subjects do not match",
         )

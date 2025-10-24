@@ -138,6 +138,11 @@ public:
     ss::future<chunked_vector<topic_result>> delete_mirror_topics(
       chunked_vector<model::topic>, model::timeout_clock::time_point);
 
+    /**
+     * @brief Returns true if schema registry topic is being shadowed
+     */
+    bool schema_registry_shadowing_active() const;
+
 private:
     ss::future<errc>
       do_mutation(cluster_link_cmd, model::timeout_clock::time_point);

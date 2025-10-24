@@ -11,6 +11,7 @@
 #include "cluster_link/replication/partition_replicator.h"
 
 #include "cluster_link/logger.h"
+#include "cluster_link/replication/replication_probe.h"
 #include "ssx/future-util.h"
 
 #include <seastar/coroutine/switch_to.hh>
@@ -28,7 +29,9 @@ partition_replicator::partition_replicator(
   link_configuration_provider& config_provider,
   std::unique_ptr<data_source> source,
   std::unique_ptr<data_sink> sink,
-  ss::scheduling_group scheduling_group)
+  ss::scheduling_group scheduling_group,
+  std::optional<replication_probe::configuration> cfg,
+  link_data_probe_ptr ldp)
   : _ntp(ntp)
   , _term(term)
   , _config_provider(config_provider)
@@ -38,7 +41,13 @@ partition_replicator::partition_replicator(
   , _scheduling_group(scheduling_group)
   , _backoff_policy(
       make_exponential_backoff_policy<ss::lowres_clock>(
-        base_backoff, max_backoff)) {}
+        base_backoff, max_backoff))
+  , _probe{}
+  , _link_data_probe{std::move(ldp)} {
+    if (cfg.has_value()) {
+        _probe.emplace(std::move(cfg.value()), ntp, *this);
+    }
+}
 
 ss::future<> partition_replicator::start() {
     co_await ss::coroutine::switch_to(_scheduling_group);
@@ -131,7 +140,14 @@ ss::future<> partition_replicator::replicate_and_wait(
   replicate_ctx ctx, ss::gate& gate, ss::abort_source& as) {
     static constexpr auto large_timeout
       = std::chrono::duration_cast<model::timeout_clock::duration>(5min);
-    auto stages = _sink->replicate(std::move(ctx.batches), large_timeout, as);
+
+    auto probe_update = fetch_counters::from_fetch_data(ctx.fdata);
+    if (_link_data_probe) {
+        _link_data_probe->add_fetched(probe_update);
+    }
+
+    auto stages = _sink->replicate(
+      std::move(ctx.fdata.batches), large_timeout, as);
     auto enqueue_f = co_await ss::coroutine::as_future(
       std::move(stages.request_enqueued));
     std::exception_ptr eptr = nullptr;
@@ -167,12 +183,17 @@ ss::future<> partition_replicator::replicate_and_wait(
        begin = ctx.begin,
        end = ctx.end,
        inflight = std::move(ctx.inflight_units),
-       data = std::move(ctx.data_units),
-       &as]() mutable {
+       data = std::move(ctx.fdata.units),
+       &as,
+       probe_update]() mutable {
           return handle_replication_result(std::move(f), begin, end)
-            .then([&as](bool success) {
+            .then([this, &as, probe_update](bool success) {
                 if (!success) {
                     as.request_abort();
+                    return;
+                }
+                if (_link_data_probe) {
+                    _link_data_probe->add_written(probe_update);
                 }
             })
             .finally(
@@ -199,6 +220,29 @@ partition_replicator::get_partition_offsets_report() const {
     };
 }
 
+void partition_replicator::set_data_probe(link_data_probe_ptr ldp) {
+    _link_data_probe = std::move(ldp);
+}
+
+void partition_replicator::unset_data_probe() { _link_data_probe = nullptr; }
+
+kafka::offset partition_replicator::get_partition_lag() const {
+    constexpr kafka::offset invalid{-1};
+
+    auto source_info = _source->get_offsets();
+    if (!source_info.has_value()) {
+        return invalid;
+    }
+
+    auto lso = source_info->source_lso;
+    if (lso == kafka::offset{-1}) {
+        return invalid;
+    }
+
+    auto hwm = _sink->high_watermark();
+    return lso - hwm;
+}
+
 ss::future<> partition_replicator::fetch_and_replicate() {
     _gate.check();
     // abort source for this iteration of fetch_and_replicate
@@ -209,15 +253,18 @@ ss::future<> partition_replicator::fetch_and_replicate() {
         while (!_gate.is_closed() && !as.abort_requested()) {
             auto inflight_units = co_await ss::get_units(_max_requests, 1, as);
             auto data = co_await _source->fetch_next(as);
+            maybe_synchronize_start_offset();
             if (data.batches.empty()) {
                 continue;
             }
             co_await replicate_and_wait(
-              {.begin = data.batches.front().base_offset(),
-               .end = data.batches.back().last_offset(),
-               .batches = std::move(data.batches),
-               .inflight_units = std::move(inflight_units),
-               .data_units = std::move(data.units)},
+              {
+                .begin = data.batches.front().base_offset(),
+                .end = data.batches.back().last_offset(),
+                .fdata
+                = {.batches = std::move(data.batches), .units = std::move(data.units)},
+                .inflight_units = std::move(inflight_units),
+              },
               gate,
               as);
         }
@@ -243,6 +290,82 @@ ss::future<> partition_replicator::fetch_and_replicate() {
         co_await ss::sleep_abortable(sleep_for, _as);
         _backoff_policy.next_backoff();
     }
+}
+
+void partition_replicator::maybe_synchronize_start_offset() {
+    auto shadow_partition_hwm = _sink->high_watermark();
+    auto shadow_partition_start_offset = _sink->start_offset();
+    auto source_offsets = _source->get_offsets();
+
+    if (_in_progress_truncate_offset.has_value()) {
+        vlog(
+          _log.trace,
+          "Truncation already in progress to offset {}",
+          _in_progress_truncate_offset.value());
+        return;
+    }
+
+    if (!source_offsets.has_value()) {
+        vlog(_log.debug, "Source partition not reporting offsets");
+        return;
+    }
+
+    auto source_start_offset = source_offsets->source_start_offset;
+
+    if (source_start_offset <= shadow_partition_start_offset) {
+        vlog(
+          _log.trace,
+          "Source and shadow partition start offsets are in sync: source: {}, "
+          "shadow: {}",
+          source_start_offset,
+          shadow_partition_start_offset);
+        return;
+    }
+
+    if (source_start_offset > shadow_partition_hwm) {
+        vlog(
+          _log.trace,
+          "Source start offset {} greater than shadow HWM {}, cannot truncate",
+          source_start_offset,
+          shadow_partition_hwm);
+        return;
+    }
+
+    _in_progress_truncate_offset = source_start_offset;
+
+    vlog(
+      _log.debug,
+      "Truncating shadow partition from {} -> {}",
+      shadow_partition_start_offset,
+      source_start_offset);
+
+    ssx::spawn_with_gate(_gate, [this, source_start_offset] {
+        return prefix_truncate(source_start_offset);
+    });
+}
+
+ss::future<> partition_replicator::prefix_truncate(kafka::offset o) {
+    static constexpr auto prefix_truncate_timeout = 5s;
+    auto prefix_f = co_await ss::coroutine::as_future(_sink->prefix_truncate(
+      o, ss::lowres_clock::now() + prefix_truncate_timeout));
+    _in_progress_truncate_offset = std::nullopt;
+    if (prefix_f.failed()) {
+        auto ex = prefix_f.get_exception();
+        auto level = ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                                    : ss::log_level::warn;
+        vlogl(_log, level, "Exception during prefix truncation: {}", ex);
+        co_return;
+    }
+    auto ec = prefix_f.get();
+    // It is possible for another truncation to be queued up if it's higher than
+    // the offset we just truncated to.  Only reset if the in progress offset is
+    // less than or equal to this offset
+
+    if (ec != kafka::error_code::none) {
+        vlog(_log.warn, "Failed to truncate source partition to {}: {}", o, ec);
+        co_return;
+    }
+    vlog(_log.debug, "Successfully truncated shadow partition to {}", o);
 }
 
 } // namespace cluster_link::replication

@@ -19,7 +19,7 @@ package redpanda.core.admin.v2.internal;
 import "proto/redpanda/core/pbgen/options.proto";
 import "proto/redpanda/core/pbgen/rpc.proto";
 
-option (redpanda.core.pbgen.cpp_namespace) = "proto::admin";
+option (pbgen.cpp_namespace) = "proto::admin";
 
 message StartStressFiberRequest {
     int32 min_spins_per_scheduling_point = 1;
@@ -55,19 +55,19 @@ service DebugService {
     // This is used to test the RPC framework itself.
     rpc ThrowStructuredException(ThrowStructuredExceptionRequest)
         returns (ThrowStructuredExceptionResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER,
         };
     }
     rpc StartStressFiber(StartStressFiberRequest)
         returns (StartStressFiberResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER,
         };
     }
     rpc StopStressFiber(StopStressFiberRequest)
         returns (StopStressFiberResponse) {
-        option (redpanda.core.pbgen.rpc) = {
+        option (pbgen.rpc) = {
             authz: SUPERUSER,
         };
     }

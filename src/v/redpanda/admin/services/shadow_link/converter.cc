@@ -16,21 +16,20 @@
 #include <algorithm>
 #include <optional>
 #include <stdexcept>
+#include <variant>
 
 using namespace std::chrono_literals;
 
 namespace admin {
 using proto::admin::acl_access_filter;
 using proto::admin::acl_filter;
-using proto::admin::acl_operation;
-using proto::admin::acl_pattern;
-using proto::admin::acl_permission_type;
-using proto::admin::acl_resource;
 using proto::admin::acl_resource_filter;
 using proto::admin::authentication_configuration;
 using proto::admin::consumer_offset_sync_options;
 using proto::admin::create_shadow_link_request;
 using proto::admin::name_filter;
+using proto::admin::schema_registry_sync_options;
+using proto::admin::schema_registry_sync_options_shadow_schema_registry_topic;
 using proto::admin::scram_config;
 using proto::admin::scram_mechanism;
 using proto::admin::security_settings_sync_options;
@@ -40,14 +39,18 @@ using proto::admin::shadow_link_configurations;
 using proto::admin::shadow_link_status;
 using proto::admin::shadow_topic;
 using proto::admin::shadow_topic_status;
-using proto::admin::tls_file_settings;
-using proto::admin::tls_settings;
-using proto::admin::tlspem_settings;
 using proto::admin::topic_metadata_sync_options;
 using proto::admin::topic_metadata_sync_options_earliest_offset;
 using proto::admin::topic_metadata_sync_options_latest_offset;
 using proto::admin::topic_partition_information;
 using proto::admin::update_shadow_link_request;
+using proto::common::acl_operation;
+using proto::common::acl_pattern;
+using proto::common::acl_permission_type;
+using proto::common::acl_resource;
+using proto::common::tls_file_settings;
+using proto::common::tls_settings;
+using proto::common::tlspem_settings;
 namespace {
 
 constexpr auto to_filter_pattern_type(proto::admin::pattern_type p) {
@@ -152,6 +155,24 @@ create_topic_metadata_mirroring_config(
     return config;
 }
 
+cluster_link::model::schema_registry_sync_config
+create_schema_registry_sync_config(
+  const schema_registry_sync_options& options) {
+    cluster_link::model::schema_registry_sync_config config;
+
+    options.visit_schema_registry_shadowing_mode(
+      [&config](
+        const schema_registry_sync_options_shadow_schema_registry_topic&) {
+          config.sync_schema_registry_topic_mode = cluster_link::model::
+            schema_registry_sync_config::shadow_entire_schema_registry{};
+      },
+      [&config](std::monostate) {
+          config.sync_schema_registry_topic_mode = std::nullopt;
+      });
+
+    return config;
+}
+
 cluster_link::model::consumer_groups_mirroring_config
 create_consumer_groups_mirroring_config(
   const proto::admin::consumer_offset_sync_options& options) {
@@ -169,38 +190,38 @@ create_consumer_groups_mirroring_config(
 
 cluster_link::model::acl_resource to_acl_resource(acl_resource r) {
     switch (r) {
-    case proto::admin::acl_resource::unspecified:
+    case proto::common::acl_resource::unspecified:
         throw std::invalid_argument("acl_resource is unspecified");
-    case proto::admin::acl_resource::any:
+    case proto::common::acl_resource::any:
         return cluster_link::model::acl_resource::any;
-    case proto::admin::acl_resource::cluster:
+    case proto::common::acl_resource::cluster:
         return cluster_link::model::acl_resource::cluster;
-    case proto::admin::acl_resource::group:
+    case proto::common::acl_resource::group:
         return cluster_link::model::acl_resource::group;
-    case proto::admin::acl_resource::topic:
+    case proto::common::acl_resource::topic:
         return cluster_link::model::acl_resource::topic;
-    case proto::admin::acl_resource::txn_id:
+    case proto::common::acl_resource::txn_id:
         return cluster_link::model::acl_resource::txn_id;
-    case proto::admin::acl_resource::sr_subject:
+    case proto::common::acl_resource::sr_subject:
         return cluster_link::model::acl_resource::schema_registry_subject;
-    case proto::admin::acl_resource::sr_registry:
+    case proto::common::acl_resource::sr_registry:
         return cluster_link::model::acl_resource::schema_registry_global;
-    case proto::admin::acl_resource::sr_any:
+    case proto::common::acl_resource::sr_any:
         return cluster_link::model::acl_resource::schema_registry_any;
     }
 }
 
 cluster_link::model::acl_pattern to_acl_pattern(acl_pattern p) {
     switch (p) {
-    case proto::admin::acl_pattern::unspecified:
+    case proto::common::acl_pattern::unspecified:
         throw std::invalid_argument("acl_pattern is unspecified");
-    case proto::admin::acl_pattern::any:
+    case proto::common::acl_pattern::any:
         return cluster_link::model::acl_pattern::any;
-    case proto::admin::acl_pattern::literal:
+    case proto::common::acl_pattern::literal:
         return cluster_link::model::acl_pattern::literal;
-    case proto::admin::acl_pattern::prefixed:
+    case proto::common::acl_pattern::prefixed:
         return cluster_link::model::acl_pattern::prefixed;
-    case proto::admin::acl_pattern::match:
+    case proto::common::acl_pattern::match:
         return cluster_link::model::acl_pattern::match;
     }
 }
@@ -223,29 +244,29 @@ to_resource_filter(const acl_resource_filter& proto_resource_filter) {
 
 cluster_link::model::acl_operation to_acl_operation(acl_operation op) {
     switch (op) {
-    case proto::admin::acl_operation::unspecified:
+    case proto::common::acl_operation::unspecified:
         throw std::invalid_argument("acl_operation is unspecified");
-    case proto::admin::acl_operation::any:
+    case proto::common::acl_operation::any:
         return cluster_link::model::acl_operation::any;
-    case proto::admin::acl_operation::read:
+    case proto::common::acl_operation::read:
         return cluster_link::model::acl_operation::read;
-    case proto::admin::acl_operation::write:
+    case proto::common::acl_operation::write:
         return cluster_link::model::acl_operation::write;
-    case proto::admin::acl_operation::create:
+    case proto::common::acl_operation::create:
         return cluster_link::model::acl_operation::create;
-    case proto::admin::acl_operation::remove:
+    case proto::common::acl_operation::remove:
         return cluster_link::model::acl_operation::remove;
-    case proto::admin::acl_operation::alter:
+    case proto::common::acl_operation::alter:
         return cluster_link::model::acl_operation::alter;
-    case proto::admin::acl_operation::describe:
+    case proto::common::acl_operation::describe:
         return cluster_link::model::acl_operation::describe;
-    case proto::admin::acl_operation::cluster_action:
+    case proto::common::acl_operation::cluster_action:
         return cluster_link::model::acl_operation::cluster_action;
-    case proto::admin::acl_operation::describe_configs:
+    case proto::common::acl_operation::describe_configs:
         return cluster_link::model::acl_operation::describe_configs;
-    case proto::admin::acl_operation::alter_configs:
+    case proto::common::acl_operation::alter_configs:
         return cluster_link::model::acl_operation::alter_configs;
-    case proto::admin::acl_operation::idempotent_write:
+    case proto::common::acl_operation::idempotent_write:
         return cluster_link::model::acl_operation::idempotent_write;
     }
 }
@@ -253,13 +274,13 @@ cluster_link::model::acl_operation to_acl_operation(acl_operation op) {
 cluster_link::model::acl_permission_type
 to_acl_permission_type(acl_permission_type t) {
     switch (t) {
-    case proto::admin::acl_permission_type::unspecified:
+    case proto::common::acl_permission_type::unspecified:
         throw std::invalid_argument("acl_permission_type unspecified");
-    case proto::admin::acl_permission_type::any:
+    case proto::common::acl_permission_type::any:
         return cluster_link::model::acl_permission_type::any;
-    case proto::admin::acl_permission_type::allow:
+    case proto::common::acl_permission_type::allow:
         return cluster_link::model::acl_permission_type::allow;
-    case proto::admin::acl_permission_type::deny:
+    case proto::common::acl_permission_type::deny:
         return cluster_link::model::acl_permission_type::deny;
     }
 }
@@ -330,6 +351,9 @@ create_link_configuration(const shadow_link& sl) {
     config.consumer_groups_mirroring_cfg
       = create_consumer_groups_mirroring_config(
         sl.get_configurations().get_consumer_offset_sync_options());
+
+    config.schema_registry_sync_cfg = create_schema_registry_sync_config(
+      sl.get_configurations().get_schema_registry_sync_options());
 
     return config;
 }
@@ -893,6 +917,23 @@ consumer_offset_sync_options create_consumer_offset_sync_options(
     return options;
 }
 
+schema_registry_sync_options create_schema_registry_sync_options(
+  const cluster_link::model::schema_registry_sync_config& cfg) {
+    schema_registry_sync_options options;
+    if (cfg.sync_schema_registry_topic_mode.has_value()) {
+        ss::visit(
+          *cfg.sync_schema_registry_topic_mode,
+          [&options](
+            const cluster_link::model::schema_registry_sync_config::
+              shadow_entire_schema_registry&) {
+              options.set_shadow_schema_registry_topic(
+                schema_registry_sync_options_shadow_schema_registry_topic{});
+          });
+    }
+
+    return options;
+}
+
 shadow_link_configurations
 create_shadow_link_configuration(const cluster_link::model::metadata& md) {
     shadow_link_configurations configurations;
@@ -907,6 +948,9 @@ create_shadow_link_configuration(const cluster_link::model::metadata& md) {
     configurations.set_security_sync_options(
       create_security_settings_sync_options(
         md.configuration.security_settings_sync_cfg));
+    configurations.set_schema_registry_sync_options(
+      create_schema_registry_sync_options(
+        md.configuration.schema_registry_sync_cfg));
 
     return configurations;
 }

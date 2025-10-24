@@ -74,7 +74,7 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
             auth=(self.superuser.username, self.superuser.password),
         )
         req = cluster_pb.ListKafkaConnectionsRequest(
-            page_size=10, order_by="source.port desc"
+            page_size=1000, order_by="source.port desc"
         )
 
         def valid_response() -> bool:
@@ -155,6 +155,77 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
         conn = closed_conns_resp.connections[0]
         assert conn.state == kafka_connections_pb.KAFKA_CONNECTION_STATE_CLOSED
         assert conn.close_time.ToDatetime() > datetime(year=2025, month=1, day=1)
+
+    @cluster(num_nodes=4)
+    def test_list_kafka_connections_page_size(self):
+        self.logger.debug("Start a consumer to open some kafka connections")
+        self.consumer.start()
+
+        admin_v2 = AdminV2(
+            self.redpanda,
+            auth=(self.superuser.username, self.superuser.password),
+        )
+
+        for order_by in ["", "source.port asc"]:
+            self.logger.info(f"Testing with order_by='{order_by}'")
+
+            def validate():
+                self.logger.debug(
+                    f"Sending request with page_size=3 and order_by='{order_by}'"
+                )
+                first_req = cluster_pb.ListKafkaConnectionsRequest(
+                    page_size=3, order_by=order_by
+                )
+
+                first_resp = admin_v2.cluster().list_kafka_connections(first_req)
+                self.logger.debug(f"First response: {first_resp}")
+                assert len(first_resp.connections) == 3
+
+                self.logger.debug(
+                    f"Sending request with page_size=1000 and order_by='{order_by}'"
+                )
+                second_req = cluster_pb.ListKafkaConnectionsRequest(
+                    page_size=1000, order_by=order_by
+                )
+                second_resp = admin_v2.cluster().list_kafka_connections(second_req)
+                self.logger.debug(f"Second response: {second_resp}")
+                assert len(second_resp.connections) > 3
+
+                def is_ascending_order(
+                    resp: cluster_pb.ListKafkaConnectionsResponse,
+                ) -> bool:
+                    for i in range(len(resp.connections) - 1):
+                        if (
+                            resp.connections[i].source.port
+                            > resp.connections[i + 1].source.port
+                        ):
+                            return False
+                    return True
+
+                # Validate consistency between limited and full responses
+                assert first_resp.total_size == second_resp.total_size
+
+                if order_by:
+                    assert is_ascending_order(first_resp)
+                    assert is_ascending_order(second_resp)
+
+                    for i in range(len(first_resp.connections)):
+                        assert (
+                            first_resp.connections[i].source.port
+                            == second_resp.connections[i].source.port
+                        )
+
+                return True
+
+            # Retry to avoid flakiness due to connection changes between the two requests
+            wait_until(
+                validate,
+                timeout_sec=30,
+                retry_on_exc=True,
+                err_msg="Pagination validation failed",
+            )
+
+        self.consumer.stop()
 
 
 class AdminV2ListKafkaConnectionsLicenseTest(RedpandaTest):

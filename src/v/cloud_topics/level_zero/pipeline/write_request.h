@@ -33,6 +33,8 @@ struct write_request : ss::weakly_referencable<write_request<Clock>> {
     using timestamp_t = Clock::time_point;
     /// Target NTP
     model::ntp ntp;
+    /// The minimum L0 GC epoch for this NTP
+    cluster_epoch min_epoch;
     /// Serialized record batches
     serialized_chunk data_chunk;
     /// Timestamp of the data ingestion
@@ -60,6 +62,7 @@ struct write_request : ss::weakly_referencable<write_request<Clock>> {
     /// The object can't be copied to another shard directly.
     write_request(
       model::ntp ntp,
+      cluster_epoch min_epoch,
       serialized_chunk chunk,
       timestamp_t timeout,
       pipeline_stage stage = unassigned_pipeline_stage);

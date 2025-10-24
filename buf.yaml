@@ -9,7 +9,7 @@ modules:
     includes:
       - proto
     excludes:
-      - proto/redpanda/core/admin/v2/internal
+      - proto/redpanda/core/admin/internal
       - proto/redpanda/core/testing
       - proto/redpanda/datalake
 deps:

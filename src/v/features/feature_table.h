@@ -45,6 +45,7 @@ enum class feature : std::uint64_t {
     topic_locations_in_outbound_migrations = 1ULL << 2U,
     schema_registry_authz = 1ULL << 3U,
     topic_ids_api = 1ULL << 4U,
+    controller_forced_reconfiguration = 1ULL << 5U,
     consumer_groups_migrations = 1ULL << 7U,
     shadow_linking = 1ULL << 8U,
     coordinated_compaction = 1ULL << 10U,
@@ -491,6 +492,12 @@ inline constexpr std::array feature_schema{
     release_version::v25_3_1,
     "topic_ids_api",
     feature::topic_ids_api,
+    feature_spec::available_policy::always,
+    feature_spec::prepare_policy::always},
+  feature_spec{
+    release_version::v25_3_1,
+    "controller_forced_reconfiguration",
+    feature::controller_forced_reconfiguration,
     feature_spec::available_policy::always,
     feature_spec::prepare_policy::always},
   feature_spec{

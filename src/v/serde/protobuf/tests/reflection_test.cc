@@ -18,10 +18,37 @@ using namespace serde::pb;
 using testing::ElementsAre;
 using testing::Optional;
 
+namespace {
+std::string snake_to_camel(std::string_view snake) {
+    std::string result;
+    bool capitalize = false;
+
+    for (char c : snake) {
+        if (c == '_') {
+            capitalize = true;
+        } else {
+            result += capitalize ? static_cast<char>(std::toupper(c)) : c;
+            capitalize = false;
+        }
+    }
+    return result;
+}
+} // namespace
+
 TEST(ProtoReflection, CanConvertFieldPathToFieldNumbers) {
     auto as_numbers = [](std::vector<std::string_view> path) {
         protobuf_test_messages::editions::test_all_types_edition2023 proto;
-        return proto.convert_field_path_to_numbers(path);
+        auto res = proto.convert_field_path_to_numbers(path);
+
+        // Also test with camelCase names
+        auto path_camel = path | std::views::transform(snake_to_camel)
+                          | std::ranges::to<std::vector<std::string>>();
+        auto path_camel_view
+          = path_camel | std::ranges::to<std::vector<std::string_view>>();
+        auto camel_res = proto.convert_field_path_to_numbers(path_camel_view);
+        EXPECT_EQ(res, camel_res);
+
+        return res;
     };
     EXPECT_THAT(as_numbers({"optional_int32"}), Optional(ElementsAre(1)));
     EXPECT_EQ(as_numbers({"optional_foo"}), std::nullopt);

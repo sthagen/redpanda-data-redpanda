@@ -79,7 +79,7 @@ ss::future<iobuf> client::send(
                           [req = std::move(req)](
                             proxy_client_protocol client) mutable {
                               return client.proxy_rpc(
-                                std::move(req), rpc::client_opts(1s));
+                                std::move(req), rpc::client_opts(rpc_timeout));
                           });
         if (!result) {
             vlog(

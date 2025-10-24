@@ -271,6 +271,11 @@ reader_to_chunked_vector(kafka::batch_reader reader) {
       model::make_record_batch_reader<kafka::batch_reader>(std::move(reader)),
       model::no_timeout);
 }
+
+void increment_fetch_errors(direct_consumer_probe& probe) {
+    ++probe.n_fetch_errors;
+}
+
 } // namespace
 
 bool fetcher::maybe_update_fetch_offset(
@@ -430,6 +435,7 @@ fetcher::process_fetch_response(
   const topic_partition_map<epoch_set>& epochs,
   const chunked_vector<partitions_to_process>& partitions) {
     if (resp.data.error_code != kafka::error_code::none) {
+        _parent->with_probe(increment_fetch_errors);
         co_return resp.data.error_code;
     }
 
@@ -496,6 +502,7 @@ fetcher::process_fetch_response(
               = maybe_epoch_set.value().subscription_epoch;
 
             if (part_response.error_code != kafka::error_code::none) {
+                _parent->with_probe(increment_fetch_errors);
                 if (
                   part_response.error_code
                   == kafka::error_code::offset_out_of_range) {
@@ -747,6 +754,7 @@ ss::future<kafka::error_code> fetcher::maybe_initialise_fetch_offsets(
     for (auto& response_topic : list_offsets_response.value()) {
         for (auto& response_partition : response_topic.offsets) {
             if (response_partition.error_code != kafka::error_code::none) {
+                _parent->with_probe(increment_fetch_errors);
                 if (is_retriable_error(response_partition.error_code)) {
                     vlog(
                       logger().debug,

@@ -44,6 +44,7 @@ enum class error_code {
     format_not_supported,
     acl_invalid,
     internal_server_error,
+    writes_disabled,
 };
 
 std::error_code make_error_code(error_code);

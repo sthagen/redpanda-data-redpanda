@@ -304,18 +304,27 @@ ss::future<metadata_response> client::fetch_metadata(metadata_request req) {
       });
 }
 
-ss::future<create_topics_response>
-client::create_topic(kafka::creatable_topic req) {
-    return gated_retry_with_mitigation([this, req{std::move(req)}]() {
-        auto controller = _cluster->get_controller_id().value_or(
-          unknown_node_id);
-        chunked_vector<kafka::creatable_topic> cv;
-        cv.push_back(std::move(req));
-        return _cluster->dispatch_to(controller, kafka::create_topics_request{
-                .data = {
-                  .topics = std::move(cv),
+ss::future<create_topics_response> client::create_topic(
+  kafka::creatable_topic req, validate_only_t validate_only) {
+    return gated_retry_with_mitigation(
+      [this, req{std::move(req)}, validate_only]() {
+          auto controller = _cluster->get_controller_id().value_or(
+            unknown_node_id);
+          chunked_vector<kafka::creatable_topic> cv;
+          cv.push_back(std::move(req));
+          return _cluster->dispatch_to(
+            controller,
+            kafka::create_topics_request{
+              .data = {
+                .topics = std::move(cv),
+                .validate_only = bool(validate_only),
                 }}, api_version_for(create_topics_api::key))
-          .then([controller](auto res) {
+          .then([controller, validate_only](auto res) {
+              // If only validating, then immediately return the response
+              if (validate_only) {
+                return ss::make_ready_future<create_topics_response>(
+                    std::move(res));
+              }
               auto ec = res.data.topics[0].error_code;
               switch (ec) {
               case error_code::not_controller:
@@ -334,7 +343,7 @@ client::create_topic(kafka::creatable_topic req) {
                     std::move(res));
               }
           });
-    });
+      });
 }
 
 namespace {

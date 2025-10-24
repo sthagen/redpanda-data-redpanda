@@ -23,6 +23,9 @@
 #include "utils/notification_list.h"
 
 namespace cluster_link {
+
+class link_probe;
+
 /**
  * @brief The link class represents a link between two clusters
  */
@@ -42,7 +45,7 @@ public:
     link(link&&) = delete;
     link& operator=(const link&) = delete;
     link& operator=(link&&) = delete;
-    virtual ~link() = default;
+    virtual ~link() noexcept;
 
     virtual ss::future<> start();
     virtual ss::future<> stop() noexcept;
@@ -113,6 +116,8 @@ public:
 
     partition_metadata_provider& get_partition_metadata_provider();
 
+    kafka_rpc_client_service& get_kafka_rpc_client_service();
+
     std::optional<
       chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
     get_mirror_topics_for_link() const;
@@ -128,6 +133,7 @@ private:
     ss::future<> run_task_reconciler();
     ss::future<cl_result<void>> do_register_task(std::unique_ptr<task>);
     void maybe_update_connection_configuration();
+    void handle_new_topics_to_replicate(chunked_vector<::model::topic>);
 
 private:
     ::model::node_id _self;
@@ -143,6 +149,7 @@ private:
     ss::lowres_clock::duration _task_reconciler_interval;
     mutex _task_reconciler_mutex{"cluster_link::link::task_reconciler"};
     ss::timer<ss::lowres_clock> _task_reconciler;
+    std::unique_ptr<link_probe> _probe;
     ss::gate _gate;
     ss::abort_source _as;
 };

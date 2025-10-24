@@ -13,6 +13,7 @@
 
 #include "cluster_link/deps.h"
 #include "cluster_link/logger.h"
+#include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/deps.h"
 #include "model/namespace.h"
 
@@ -89,6 +90,7 @@ manager::manager(
   std::unique_ptr<cluster_factory> cluster_factory,
   std::unique_ptr<consumer_groups_router> group_router,
   std::unique_ptr<partition_metadata_provider> partition_metadata_provider,
+  std::unique_ptr<kafka_rpc_client_service> kafka_rpc_client_service,
   ss::lowres_clock::duration task_reconciler_interval,
   config::binding<int16_t> default_topic_replication,
   ss::scheduling_group scheduling_group)
@@ -103,6 +105,7 @@ manager::manager(
   , _cluster_factory(std::move(cluster_factory))
   , _group_router(std::move(group_router))
   , _partition_metadata_provider(std::move(partition_metadata_provider))
+  , _kafka_rpc_client_service(std::move(kafka_rpc_client_service))
   , _queue(
       scheduling_group,
       [](const std::exception_ptr& ex) {
@@ -154,6 +157,192 @@ ss::future<> manager::stop() {
     vlog(cllog.info, "Cluster link manager stopped");
 }
 
+ss::future<err_info> manager::broker_preflight_check(
+  ::model::node_id node_id, kafka::client::cluster& cluster) {
+    static constexpr auto min_version_with_topic_id_support
+      = kafka::api_version(10);
+    static constexpr std::array<
+      std::tuple<kafka::api_key, kafka::api_version, kafka::api_version>,
+      7>
+      apis_to_check{
+        {{kafka::offset_fetch_api::key,
+          kafka::offset_fetch_api::min_valid,
+          // clamped as needed by group_mirroring_task
+          kafka::api_version(7)},
+         {kafka::list_groups_api::key,
+          kafka::list_groups_api::min_valid,
+          kafka::list_groups_api::max_valid},
+         {kafka::find_coordinator_api::key,
+          kafka::find_coordinator_api::min_valid,
+          kafka::find_coordinator_api::max_valid},
+         {kafka::describe_acls_api::key,
+          kafka::describe_acls_api::min_valid,
+          kafka::describe_acls_api::max_valid},
+         {kafka::list_offsets_api::key,
+          kafka::list_offsets_api::min_valid,
+          kafka::list_offsets_api::max_valid},
+         {kafka::describe_configs_api::key,
+          kafka::describe_configs_api::min_valid,
+          kafka::describe_configs_api::max_valid},
+         {kafka::metadata_api::key,
+          min_version_with_topic_id_support,
+          kafka::metadata_api::max_valid}}};
+    vlog(cllog.trace, "Performing preflight check on broker {}", node_id);
+    try {
+        chunked_vector<ss::sstring> unsupported_api_errors;
+        unsupported_api_errors.reserve(apis_to_check.size());
+        for (const auto& [api_key, min_version, max_version] : apis_to_check) {
+            auto versions = co_await cluster.supported_api_versions(
+              node_id, api_key);
+            if (!versions) {
+                vlog(
+                  cllog.warn,
+                  "Broker {} does not support required API {}",
+                  node_id,
+                  api_key);
+                unsupported_api_errors.push_back(
+                  fmt::format("{}: unsupported", api_key));
+                continue;
+            }
+            // Check if the broker's supported version range overlaps with the
+            // required range
+            if (versions->max < min_version || versions->min > max_version) {
+                vlog(
+                  cllog.warn,
+                  "Broker {} does not support required version range for "
+                  "API {}: supported [{}, {}], required [{}, {}]",
+                  node_id,
+                  api_key,
+                  versions->min,
+                  versions->max,
+                  min_version,
+                  max_version);
+                unsupported_api_errors.push_back(
+                  fmt::format(
+                    "{}: supported [{}, {}], required [{}, {}]",
+                    api_key,
+                    versions->min,
+                    versions->max,
+                    min_version,
+                    max_version));
+            }
+        }
+        if (!unsupported_api_errors.empty()) {
+            co_return err_info(
+              errc::link_unsupported_api_version,
+              fmt::format(
+                "Broker {} does not support required APIs: [{}]",
+                node_id,
+                fmt::join(unsupported_api_errors, ", ")));
+        }
+    } catch (const kafka::client::broker_error& e) {
+        vlog(
+          cllog.warn,
+          "Broker {} preflight check failed - {}",
+          node_id,
+          e.what());
+        co_return err_info(
+          errc::link_broker_unreachable,
+          fmt::format(
+            "Broker {} preflight check failed - {}", node_id, e.what()));
+    } catch (...) {
+        vlog(
+          cllog.warn,
+          "Broker {} preflight check failed - {}",
+          node_id,
+          std::current_exception());
+        co_return err_info(
+          errc::link_broker_verification_failed,
+          fmt::format(
+            "Broker {} preflight check failed - {}",
+            node_id,
+            std::current_exception()));
+    }
+    vlog(
+      cllog.trace,
+      "Performed preflight check on broker {} successfully",
+      node_id);
+    co_return err_info{errc::success};
+}
+
+ss::future<err_info> manager::link_preflight_checks(const model::metadata& md) {
+    auto cluster = _cluster_factory->create_cluster(md);
+    err_info return_error{errc::success};
+    auto stop_and_ignore = [&cluster, &md]() {
+        return cluster->stop().handle_exception([&md](std::exception_ptr ex) {
+            vlog(
+              cllog.warn,
+              "[Ignoring] Error stopping cluster after preflight check for "
+              "link '{}' - {}",
+              md.name,
+              ex);
+        });
+    };
+    try {
+        co_await cluster->start();
+        co_await cluster->request_metadata_update();
+        if (!cluster->is_connected()) {
+            vlog(
+              cllog.warn,
+              "Cluster link '{}' preflight check failed - unable to connect to "
+              "cluster",
+              md.name);
+            co_await stop_and_ignore();
+            co_return err_info(
+              errc::link_cluster_unreachable,
+              fmt::format(
+                "Cluster link '{}' preflight check failed - unable to connect "
+                "to cluster",
+                md.name));
+        }
+        // there is at least one broker.
+        const auto& brokers = cluster->get_brokers();
+        auto reported_brokers = brokers.get_broker_ids();
+        auto num_reported_brokers = reported_brokers.size();
+        chunked_vector<ss::sstring> broker_errors;
+        broker_errors.reserve(brokers.size());
+        co_await ss::max_concurrent_for_each(
+          std::move(reported_brokers),
+          10,
+          [this, &cluster, &broker_errors](::model::node_id id) mutable {
+              return broker_preflight_check(id, *cluster)
+                .then([&broker_errors](err_info err) mutable {
+                    // Handle any incompatible API versions or unexpected
+                    // errors.
+                    if (err.code() != errc::success) {
+                        broker_errors.push_back(std::move(err.message()));
+                    }
+                });
+          });
+        // Here it is possible that we may be missing some brokers
+        // (if they are dead), we just deal with whatever responses
+        // we have.
+        // We consider it a failure if none of the brokers succeeded
+        // in the preflight check. This is a loose check but should be
+        // sufficient to catch misconfigurations.
+        if (broker_errors.size() == num_reported_brokers) {
+            return_error = err_info(
+              errc::link_broker_verification_failed,
+              fmt::format("[{}]", fmt::join(broker_errors, ", ")));
+        }
+    } catch (const std::exception& e) {
+        vlog(
+          cllog.warn,
+          "Cluster link '{}' preflight check failed - {}",
+          md.name,
+          e.what());
+        return_error = {
+          errc::link_cluster_unreachable,
+          fmt::format(
+            "Cluster link '{}' unreachable, preflight check "
+            "failed - {}",
+            md.name,
+            e.what())};
+    }
+    co_await stop_and_ignore();
+    co_return return_error;
+}
+
 ss::future<cl_result<model::metadata>>
 manager::upsert_cluster_link(model::metadata md) {
     static constexpr auto wait_for_link_creation_timeout = 30s;
@@ -161,6 +350,11 @@ manager::upsert_cluster_link(model::metadata md) {
     auto name = md.name;
     vlog(cllog.info, "Attempting to create cluster link named '{}'", md.name);
     vlog(cllog.trace, "Cluster link metadata: {}", md);
+    auto preflight_err = co_await link_preflight_checks(md);
+    if (preflight_err.code() != errc::success) {
+        co_return preflight_err;
+    }
+
     const auto needs_consumer_offsets_topic
       = md.configuration.consumer_groups_mirroring_cfg.is_enabled;
     auto ec = co_await _registry->upsert_link(
@@ -799,5 +993,9 @@ consumer_groups_router& manager::get_group_router() noexcept {
 partition_metadata_provider&
 manager::get_partition_metadata_provider() noexcept {
     return *_partition_metadata_provider;
+}
+
+kafka_rpc_client_service& manager::get_kafka_rpc_client_service() noexcept {
+    return *_kafka_rpc_client_service;
 }
 } // namespace cluster_link

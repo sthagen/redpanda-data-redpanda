@@ -157,6 +157,12 @@ public:
     virtual bool is_current_shard_leader(const model::ntp&) const = 0;
 
     /**
+     * Lookup term of a particular ntp
+     */
+    virtual std::optional<model::term_id> get_term(const model::ktp& ktp) const;
+    virtual std::optional<model::term_id> get_term(const model::ntp&) const = 0;
+
+    /**
      * Invoke a function on the ntp's leader shard.
      *
      * Will return cluster::errc::not_leader if the shard_id is incorrect for
@@ -240,6 +246,9 @@ public:
     std::optional<ss::shard_id> shard_owner(const model::ntp& ntp);
 
     bool is_current_shard_leader(const model::ntp& ntp);
+
+    std::optional<model::term_id> get_term(const model::ktp& ntp);
+    std::optional<model::term_id> get_term(const model::ntp& ntp);
 
 private:
     ss::sharded<cluster::shard_table>* _table;

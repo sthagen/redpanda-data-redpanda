@@ -109,8 +109,7 @@ public:
 
         cloud_topic_log_reader_config cfg(
           /*start_offset=*/std::max(
-            effective_start.value(),
-            kafka::next_offset(last_reconciled_offset())),
+            effective_start.value(), input_cfg.start_offset),
           /*max_offset=*/kafka::prev_offset(maybe_lso.value()),
           /*min_bytes=*/1,
           /*max_bytes=*/input_cfg.max_bytes,

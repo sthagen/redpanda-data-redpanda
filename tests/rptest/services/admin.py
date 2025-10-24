@@ -552,10 +552,10 @@ class Admin:
 
     def _get_stable_configuration(
         self,
-        hosts,
-        topic,
-        partition=0,
-        namespace="kafka",
+        hosts: list[str],
+        topic: str,
+        partition: int = 0,
+        namespace: str = "kafka",
         replication: Optional[int] = None,
     ) -> Optional[PartitionDetails]:
         """
@@ -681,15 +681,15 @@ class Admin:
 
     def await_stable_leader(
         self,
-        topic,
-        partition=0,
-        namespace="kafka",
-        replication=None,
-        timeout_s=10,
-        backoff_s=1,
+        topic: str,
+        partition: int = 0,
+        namespace: str = "kafka",
+        replication: int | None = None,
+        timeout_s: int = 10,
+        backoff_s: int = 1,
         hosts: Optional[list[str]] = None,
         check: Callable[[int], bool] = lambda node_id: True,
-    ):
+    ) -> int:
         """
         Method waits for timeout_s until the configuration is stable and check
         predicate returns true when invoked on the configuration's leader.
@@ -1656,7 +1656,13 @@ class Admin:
             "GET", f"cloud_storage/manifest/{topic}/{partition}"
         ).json()
 
-    def get_partition_state(self, namespace, topic, partition, node=None):
+    def get_partition_state(
+        self,
+        namespace: str,
+        topic: str,
+        partition: int,
+        node: Optional[ClusterNode] = None,
+    ):
         path = f"debug/partition/{namespace}/{topic}/{partition}"
         return self._request("GET", path, node=node).json()
 

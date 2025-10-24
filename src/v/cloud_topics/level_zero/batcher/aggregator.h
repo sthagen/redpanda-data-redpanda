@@ -36,7 +36,7 @@ struct extents_for_req {
 template<class Clock>
 class aggregator {
 public:
-    explicit aggregator(object_id id);
+    aggregator() = default;
     aggregator(const aggregator&) = delete;
     aggregator(aggregator&&) = delete;
     aggregator& operator=(const aggregator&) = delete;
@@ -55,10 +55,17 @@ public:
     /// Estimate L0 object size
     size_t size_bytes() const noexcept;
 
-    /// Prepare upload byte stream
-    iobuf prepare();
+    /// Return the maximum min_epoch from all write requests that have been
+    /// added to the aggregator. This should be invoked after all of the
+    /// requests have been added.
+    cluster_epoch min_epoch() { return _min_epoch; }
 
-    object_id get_object_id() const noexcept;
+    /// Prepare upload byte stream
+    struct L0_object {
+        object_id id;
+        iobuf payload;
+    };
+    L0_object prepare(object_id);
 
     void ack();
     void ack_error(errc);
@@ -66,14 +73,15 @@ public:
 private:
     /// Generate placeholders.
     /// This method should be invoked before 'get_result'
-    chunked_vector<std::unique_ptr<extents_for_req<Clock>>> get_extents();
+    chunked_vector<std::unique_ptr<extents_for_req<Clock>>>
+      get_extents(object_id);
 
     /// Produce L0 object payload.
     /// The method messes up the state so it can only
     /// be called once.
     iobuf get_stream();
 
-    object_id _id;
+    cluster_epoch _min_epoch;
 
     /// Source data for the aggregator
     absl::btree_map<model::ntp, l0::write_request_list<Clock>> _staging;

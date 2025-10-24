@@ -33,6 +33,7 @@
 #include "raft/errc.h"
 #include "raft/replicate.h"
 #include "storage/log_reader.h"
+#include "storage/offset_translator_state.h"
 #include "storage/record_batch_builder.h"
 #include "storage/types.h"
 
@@ -249,10 +250,31 @@ ss::future<storage::translating_reader> frontend::make_reader(
       cfg.start_offset,
       lro);
 
-    auto impl = level_one ? make_l1_reader(cfg) : make_l0_reader(cfg);
-
+    if (level_one) {
+        // For L1, we return a `null` translator because control batches
+        // are removed. This translator is passed back to
+        // `aborted_transactions`, and we use that to offset translate to get
+        // log ranges with aborted transactions. Since the offset range in L1
+        // maybe truncated away in the local log this will cause translation
+        // errors. By returning `null` and checking for it in
+        // `aborted_transactions` we ensure that we just assume there are no
+        // aborted transaction ranges for data from this reader.
+        //
+        // Tiered storage seems to return a noop translator here, which feels a
+        // bit sketchy and it's not clear if that can ever cause us to return
+        // incorrect aborted txn ranges from the local log if we're not doing
+        // translation.
+        //
+        // In reality we should probably clean up this interface because this
+        // relies on behavior of many layers up the stack, and we feel like
+        // we're hacking around. Maybe the `translating_reader` should take
+        // responsibility for returning aborted transactions directly instead of
+        // this roundabout way of doing it.
+        co_return storage::translating_reader{
+          model::record_batch_reader(make_l1_reader(cfg))};
+    }
     co_return storage::translating_reader{
-      model::record_batch_reader(std::move(impl)),
+      model::record_batch_reader(make_l0_reader(cfg)),
       _partition->get_offset_translator_state()};
 }
 
@@ -260,6 +282,11 @@ ss::future<std::vector<cluster::tx::tx_range>> frontend::aborted_transactions(
   kafka::offset base,
   kafka::offset last,
   ss::lw_shared_ptr<const storage::offset_translator_state> ot_state) {
+    if (!ot_state) {
+        // This means we are reading from L1, and we don't have any aborted
+        // transactions, as they are already filtered out.
+        co_return std::vector<cluster::tx::tx_range>{};
+    }
     auto base_rp = ot_state->to_log_offset(kafka::offset_cast(base));
     auto last_rp = ot_state->to_log_offset(kafka::offset_cast(last));
     cloud_storage::offset_range offsets = {
@@ -521,13 +548,30 @@ ss::future<> bg_upload_and_replicate(
         op->replicate_finished.set_value(raft::errc::timeout);
     });
 
+    /*
+     * L0 GC relies on a minimum epoch associated with each NTP for calculating
+     * the name of an L0 object. The minimum is based on the topic revision, but
+     * from the perspective of cloud topics this is largely an implementation
+     * detail. So here we go ahead and translate into a cluster_epoch type for
+     * the rest of its journey.
+     */
+    auto min_epoch = cluster_epoch(partition->get_topic_revision_id());
+    vassert(
+      min_epoch() > 0L,
+      "Unexpected invalid min epoch {} for {}",
+      min_epoch,
+      op->ntp);
+
     chunked_vector<model::record_batch> rb_copy;
     if (cache_enabled) {
         rb_copy = clone_batches(op->batches);
     }
     auto timeout = op->timeout == 0ms ? L0_upload_default_timeout : op->timeout;
     auto res = co_await api->write_and_debounce(
-      op->ntp, std::move(op->batches), model::timeout_clock::now() + timeout);
+      op->ntp,
+      min_epoch,
+      std::move(op->batches),
+      model::timeout_clock::now() + timeout);
 
     if (res.has_error()) {
         vlog(
@@ -653,9 +697,24 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
         rb_copy = clone_batches(batches);
     }
 
+    /*
+     * L0 GC relies on a minimum epoch associated with each NTP for calculating
+     * the name of an L0 object. The minimum is based on the topic revision, but
+     * from the perspective of cloud topics this is largely an implementation
+     * detail. So here we go ahead and translate into a cluster_epoch type for
+     * the rest of its journey.
+     */
+    auto min_epoch = cluster_epoch(_partition->get_topic_revision_id());
+    vassert(
+      min_epoch() > 0L,
+      "Unexpected invalid min epoch {} for {}",
+      min_epoch,
+      ntp());
+
     // Dataplane.
     auto res = co_await _data_plane->write_and_debounce(
       ntp(),
+      min_epoch,
       std::move(batches),
       model::timeout_clock::now()
         + opts.timeout.value_or(L0_replicate_default_timeout));

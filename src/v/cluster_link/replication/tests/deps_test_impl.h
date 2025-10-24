@@ -11,7 +11,7 @@
 #pragma once
 
 #include "cluster_link/replication/deps.h"
-#include "cluster_link/replication/link_replication_mgr.h"
+#include "cluster_link/replication/types.h"
 
 #include <seastar/core/gate.hh>
 
@@ -34,9 +34,14 @@ public:
       ss::abort_source& as) override;
     void notify_replicator_failure(::model::term_id) override;
     kafka::offset high_watermark() const final;
+    ss::future<kafka::error_code> prefix_truncate(
+      kafka::offset truncation_offset,
+      ss::lowres_clock::time_point deadline) final;
+    kafka::offset start_offset() final;
 
 private:
     size_t _records_consumed;
+    kafka::offset _start_offset{0};
     kafka::offset _last_offset{};
     ss::gate _gate;
 };
@@ -46,7 +51,7 @@ public:
     ss::future<> start(kafka::offset) noexcept override;
     ss::future<> stop() noexcept override;
     ss::future<> reset(kafka::offset) override;
-    ss::future<data_source::data> fetch_next(ss::abort_source&) override;
+    ss::future<fetch_data> fetch_next(ss::abort_source&) override;
     std::optional<source_partition_offsets_report> get_offsets() final;
 
 private:

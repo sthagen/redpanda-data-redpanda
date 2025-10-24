@@ -222,4 +222,8 @@ ss::sharded<reconciler::reconciler>* app::get_reconciler() {
 
 ss::sharded<state_accessors>* app::get_state() { return &state; }
 
+ss::sharded<l1::replicated_metastore>* app::get_sharded_replicated_metastore() {
+    return &replicated_metastore;
+}
+
 } // namespace cloud_topics

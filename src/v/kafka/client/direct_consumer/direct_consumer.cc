@@ -20,12 +20,20 @@
 
 namespace kafka::client {
 
-direct_consumer::direct_consumer(cluster& cluster, configuration cfg)
+direct_consumer::direct_consumer(
+  cluster& cluster,
+  configuration cfg,
+  std::optional<direct_consumer_probe::configuration> probe_cfg)
   : _cluster(&cluster)
   , _config(cfg)
   , _fetched_data_queue(
       std::make_unique<data_queue>(
-        cfg.max_buffered_bytes, cfg.max_buffered_elements)) {}
+        cfg.max_buffered_bytes, cfg.max_buffered_elements))
+  , _probe{} {
+    if (probe_cfg.has_value()) {
+        _probe.emplace(std::move(probe_cfg.value()));
+    }
+}
 
 ss::future<fetches>
 direct_consumer::fetch_next(std::chrono::milliseconds timeout) {

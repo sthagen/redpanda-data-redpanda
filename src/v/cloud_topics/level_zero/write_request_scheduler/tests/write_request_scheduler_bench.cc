@@ -32,6 +32,8 @@
 
 using namespace std::chrono_literals;
 
+static cloud_topics::cluster_epoch min_epoch{3840};
+
 namespace cloud_topics {
 namespace l0 {
 struct write_request_balancer_accessor {
@@ -164,6 +166,7 @@ PERF_TEST_C(write_request_scheduler_bench, data_threshold) {
     perf_tests::do_not_optimize(
       co_await pipeline.local().write_and_debounce(
         model::controller_ntp,
+        min_epoch,
         std::move(batches),
         ss::lowres_clock::now() + std::chrono::milliseconds(10)));
     perf_tests::stop_measuring_time();
@@ -199,6 +202,7 @@ PERF_TEST_C(write_request_scheduler_bench, time_fallback) {
           return p
             .write_and_debounce(
               model::controller_ntp,
+              min_epoch,
               std::move(batches),
               ss::lowres_clock::now() + std::chrono::milliseconds(10))
             .discard_result();

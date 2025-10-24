@@ -145,6 +145,9 @@ model::record_batch make_random_batch(record_batch_spec spec) {
     if (spec.is_transactional) {
         header.attrs.set_transactional_type();
     }
+    if (spec.is_control) {
+        header.attrs.set_control_type();
+    }
 
     if (spec.enable_idempotence) {
         header.base_sequence = spec.base_sequence;

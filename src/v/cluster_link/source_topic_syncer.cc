@@ -188,6 +188,25 @@ std::optional<ss::sstring> is_valid_topic(
     }
     return std::nullopt;
 }
+
+bool shadowing_entire_sr(const model::schema_registry_sync_config& cfg) {
+    return cfg.sync_schema_registry_topic_mode.has_value()
+           && std::holds_alternative<
+             ::cluster_link::model::schema_registry_sync_config::
+               shadow_entire_schema_registry>(
+             *cfg.sync_schema_registry_topic_mode);
+}
+
+bool select_topic(
+  ::model::topic_view topic,
+  const model::topic_metadata_mirroring_config& cfg,
+  const model::schema_registry_sync_config& sr_cfg) {
+    if (topic == ::model::schema_registry_internal_tp.topic) [[unlikely]] {
+        return shadowing_entire_sr(sr_cfg);
+    }
+
+    return ::cluster_link::model::select_topic(topic, cfg.topic_name_filters);
+}
 } // namespace
 
 source_topic_syncer::source_topic_syncer(
@@ -196,10 +215,12 @@ source_topic_syncer::source_topic_syncer(
       link,
       config.configuration.topic_metadata_mirroring_cfg.get_task_interval(),
       source_topic_syncer::task_name)
-  , _config(config.configuration.topic_metadata_mirroring_cfg.copy()) {}
+  , _config(config.configuration.topic_metadata_mirroring_cfg.copy())
+  , _sr_config(config.configuration.schema_registry_sync_cfg) {}
 
 void source_topic_syncer::update_config(const model::metadata& config) {
     _config = config.configuration.topic_metadata_mirroring_cfg.copy();
+    _sr_config = config.configuration.schema_registry_sync_cfg;
     set_run_interval(
       config.configuration.topic_metadata_mirroring_cfg.get_task_interval());
 }
@@ -274,11 +295,22 @@ ss::future<> source_topic_syncer::run_impl() {
         co_return;
     }
 
+    // If we are going to shadow the schema registry topic, we need to ensure
+    // that it's either empty or it does not exist.  Check for its HWM.  This is
+    // not 100% guaranteed as it may be possible for a record to get written
+    // after the check in HWM, however the SR is disabled from writing when
+    // shadowing is active so the likelihood is small.
+    sr_is_empty_t sr_is_empty{false};
+    if (shadowing_entire_sr(_sr_config)) {
+        sr_is_empty = co_await check_if_schema_registry_is_empty();
+    }
+
     // Now grab two lists of topics:
     // * Topics that are candidates for creation - topics that do not currently
     //   exist but are selected by the auto topic create filters
     // * Topics that are candidates for updates - existing mirror topics
-    auto candidates_for_creation = find_candidate_topics_for_creation(cluster);
+    auto candidates_for_creation = find_candidate_topics_for_creation(
+      cluster, sr_is_empty);
     auto candidates_for_update = find_candidate_topics_for_update(cluster);
 
     if (candidates_for_creation.empty() && candidates_for_update.empty()) {
@@ -613,7 +645,7 @@ source_topic_syncer::find_candidate_topics_for_update(
 
 source_topic_syncer::candidate_create_map
 source_topic_syncer::find_candidate_topics_for_creation(
-  kafka::client::cluster& cluster) {
+  kafka::client::cluster& cluster, sr_is_empty_t sr_is_empty) {
     auto& topic_cache = cluster.get_topics();
     auto topics = topic_cache.topics();
 
@@ -632,6 +664,14 @@ source_topic_syncer::find_candidate_topics_for_creation(
             continue;
         }
 
+        if (!select_topic(topic, _config, _sr_config)) {
+            vlog(
+              logger().trace,
+              "Topic {} does not match inclusion filters",
+              topic);
+            continue;
+        }
+
         auto metadata_value = validate_topic_cache_entry(
           logger(), topic_cache, topic);
         if (!metadata_value.has_value()) {
@@ -644,37 +684,6 @@ source_topic_syncer::find_candidate_topics_for_creation(
 
         auto [partition_count, rf, authorized_operations, topic_id]
           = metadata_value.value();
-
-        if (get_link()
-              ->topic_metadata_cache()
-              .find_topic_cfg({::model::kafka_namespace, topic})
-              .has_value()) {
-            vlog(logger().trace, "Topic {} already exists", topic);
-            continue;
-        }
-
-        if (get_link()->config().state.mirror_topics.contains(topic)) {
-            vlog(logger().trace, "Topic {} is already being mirrored", topic);
-            continue;
-        }
-
-        vlog(
-          logger().trace,
-          "Checking topic {} against filters {}",
-          topic,
-          fmt::join(
-            _config.topic_name_filters.begin(),
-            _config.topic_name_filters.end(),
-            ","));
-
-        if (!::cluster_link::model::select_topic(
-              topic, _config.topic_name_filters)) {
-            vlog(
-              logger().trace,
-              "Topic {} does not match inclusion filters",
-              topic);
-            continue;
-        }
 
         if (
           authorized_operations == kafka::topic_authorized_operations_not_set) {
@@ -692,6 +701,41 @@ source_topic_syncer::find_candidate_topics_for_creation(
               required_permissions,
               authorized_operations);
             continue;
+        }
+
+        if (get_link()->config().state.mirror_topics.contains(topic)) {
+            vlog(logger().trace, "Topic {} is already being mirrored", topic);
+            continue;
+        }
+
+        if (get_link()
+              ->topic_metadata_cache()
+              .find_topic_cfg({::model::kafka_namespace, topic})
+              .has_value()) {
+            if (topic == ::model::schema_registry_internal_tp.topic) {
+                // It is possible that the _schemas topic already exists.  The
+                // Schema Registry service will create the topic if it doesn't
+                // exist upon the first API request the service handles.  If the
+                // topic is empty, then we will go ahead and make it a candidate
+                // for 'topic creation' for shadowing.  This means we will add
+                // that topic to the list of shadow topics.  If the topic
+                // doesn't exist, then the topic_reconciler will create it.
+                if (!sr_is_empty) {
+                    vlog(
+                      logger().info,
+                      "Unable to shadow topic '{}' since it is not empty. To "
+                      "shadow this topic, then please delete it first",
+                      ::model::schema_registry_internal_tp.topic);
+                    continue;
+                }
+                vlog(
+                  logger().trace,
+                  "Topic {} is empty and will be mirrored",
+                  ::model::schema_registry_internal_tp.topic);
+            } else {
+                vlog(logger().trace, "Topic {} already exists", topic);
+                continue;
+            }
         }
 
         vlog(logger().debug, "Topic {} is candidate for mirroring", topic);
@@ -739,6 +783,51 @@ source_topic_syncer::describe_topics(
 
     co_return co_await cluster.dispatch_to(
       controller_id, std::move(request), describe_configs_version);
+}
+
+ss::future<source_topic_syncer::sr_is_empty_t>
+source_topic_syncer::check_if_schema_registry_is_empty() {
+    chunked_vector<::model::partition_id> partitions{
+      ::model::schema_registry_internal_tp.partition};
+    kafka::data::rpc::topic_partitions sr_hwm_req{
+      .topic = ::model::schema_registry_internal_tp.topic,
+      .partitions = std::move(partitions),
+    };
+    chunked_vector<kafka::data::rpc::topic_partitions> req;
+    req.emplace_back(std::move(sr_hwm_req));
+    auto sr_hwm_res = co_await get_link()
+                        ->get_kafka_rpc_client_service()
+                        .get_partition_offsets(std::move(req));
+    if (!sr_hwm_res.has_value()) {
+        vlog(
+          logger().warn,
+          "Failed to get HWM for schema registry topic: {}",
+          sr_hwm_res.assume_error());
+        co_return sr_is_empty_t::no;
+    }
+    auto sr_hwm = std::move(sr_hwm_res).assume_value();
+    auto it = sr_hwm.find(::model::schema_registry_internal_tp.topic);
+    if (it == sr_hwm.end()) {
+        // Topic does not exist, so it's empty
+        co_return sr_is_empty_t::yes;
+    }
+    auto pit = it->second.find(::model::schema_registry_internal_tp.partition);
+    if (pit == it->second.end()) {
+        // The partition not existing would be an error condition, so assume
+        // it is not empty
+        co_return sr_is_empty_t::no;
+    }
+    if (pit->second.err != cluster::errc::success) {
+        vlog(
+          logger().warn,
+          "Failed to get HWM for schema registry topic partition: {}",
+          pit->second.err);
+        co_return sr_is_empty_t::no;
+    }
+
+    co_return pit->second.offsets.high_watermark == kafka::offset(0)
+      ? sr_is_empty_t::yes
+      : sr_is_empty_t::no;
 }
 
 std::string_view

@@ -47,6 +47,8 @@
 
 inline ss::logger test_log("aggregated_uploader_gtest");
 
+static cloud_topics::cluster_epoch min_epoch{3840};
+
 struct reader_with_content {
     chunked_vector<bytes> keys;
     chunked_vector<bytes> records;
@@ -158,7 +160,7 @@ TEST_CORO(batcher_test, single_write_request) {
     const auto timeout = 1s;
     auto deadline = ss::manual_clock::now() + timeout;
     auto fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), deadline);
+      model::controller_ntp, min_epoch, std::move(reader), deadline);
     // Make sure the write request is in the _pending list
     co_await sleep_until(
       10ms, [&] { return pipeline_accessor.write_requests_pending(1); });
@@ -228,11 +230,11 @@ TEST_CORO(batcher_test, many_write_requests) {
     std::vector<ss::future<result<chunked_vector<cloud_topics::extent_meta>>>>
       futures;
     futures.push_back(pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader1), deadline));
+      model::controller_ntp, min_epoch, std::move(reader1), deadline));
     futures.push_back(pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader2), deadline));
+      model::controller_ntp, min_epoch, std::move(reader2), deadline));
     futures.push_back(pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader3), deadline));
+      model::controller_ntp, min_epoch, std::move(reader3), deadline));
 
     // Make sure that all write requests are in the _pending list
     co_await sleep_until(
@@ -308,7 +310,7 @@ TEST_CORO(batcher_test, expired_write_request) {
     const auto timeout = 1s;
     auto deadline = ss::manual_clock::now() + timeout;
     auto expect_fail_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(timedout_batches), deadline);
+      model::controller_ntp, min_epoch, std::move(timedout_batches), deadline);
 
     // Let time pass to invalidate the first enqueued write request
     co_await sleep_until(
@@ -317,7 +319,7 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     deadline = ss::manual_clock::now() + timeout;
     auto expect_pass_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(included_batches), deadline);
+      model::controller_ntp, min_epoch, std::move(included_batches), deadline);
 
     // Make sure that both write requests are pending
     co_await sleep_until(

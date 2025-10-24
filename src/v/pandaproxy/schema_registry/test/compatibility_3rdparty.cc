@@ -13,6 +13,7 @@
 #include "pandaproxy/schema_registry/exceptions.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/storage.h"
+#include "pandaproxy/schema_registry/test/utils.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/schema_registry/util.h"
 
@@ -96,7 +97,9 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
         model::node_id{0},
         ss::default_smp_service_group(),
         std::reference_wrapper(dummy_kafka_client),
-        std::reference_wrapper(s))
+        std::reference_wrapper(s),
+        ss::sharded_parameter(
+          [] { return std::make_unique<sequence_state_checker_test>(); }))
       .get();
     auto stop_seq = ss::defer([&seq]() { seq.stop().get(); });
 

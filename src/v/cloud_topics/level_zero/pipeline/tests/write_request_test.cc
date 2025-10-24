@@ -17,9 +17,12 @@
 
 #include <chrono>
 
+static cloud_topics::cluster_epoch min_epoch{3840};
+
 TEST(WriteRequestTest, Expiration) {
     cloud_topics::l0::write_request<ss::manual_clock> req(
       model::kvstore_ntp(ss::shard_id(0)),
+      min_epoch,
       {},
       ss::manual_clock::now() + std::chrono::milliseconds(100));
     ASSERT_FALSE(req.has_expired());

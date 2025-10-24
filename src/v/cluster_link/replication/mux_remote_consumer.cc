@@ -12,6 +12,7 @@
 
 #include "cluster_link/logger.h"
 #include "config/configuration.h"
+#include "kafka/client/direct_consumer/direct_consumer.h"
 #include "ssx/future-util.h"
 
 namespace cluster_link::replication {
@@ -19,11 +20,14 @@ namespace cluster_link::replication {
 mux_remote_consumer::mux_remote_consumer(
   kafka::client::cluster& cluster,
   kafka::snc_quota_manager& snc_quota_mgr,
-  mux_remote_consumer::configuration consumer_configuration)
+  mux_remote_consumer::configuration consumer_configuration,
+  std::optional<kafka::client::direct_consumer_probe::configuration> probe_cfg)
   : _client_id(std::move(consumer_configuration.client_id))
   , _consumer(
       std::make_unique<kafka::client::direct_consumer>(
-        cluster, consumer_configuration.direct_consumer_configuration))
+        cluster,
+        consumer_configuration.direct_consumer_configuration,
+        std::move(probe_cfg)))
   , _snc_quota_mgr(snc_quota_mgr)
   , _partition_max_buffered(consumer_configuration.partition_max_buffered)
   , _fetch_max_wait(consumer_configuration.fetch_max_wait)
@@ -113,8 +117,7 @@ mux_remote_consumer::result mux_remote_consumer::reset(
     return {};
 }
 
-ss::future<
-  std::expected<partition_data_queue::fetch_data, mux_remote_consumer::errc>>
+ss::future<std::expected<fetch_data, mux_remote_consumer::errc>>
 mux_remote_consumer::fetch(
   const model::topic_partition& tp, ss::abort_source& as) {
     auto holder = _gate.hold();

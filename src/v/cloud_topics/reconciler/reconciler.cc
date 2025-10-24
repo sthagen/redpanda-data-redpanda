@@ -33,6 +33,7 @@
 #include <chrono>
 #include <exception>
 #include <expected>
+#include <iterator>
 
 using namespace std::chrono_literals;
 
@@ -456,7 +457,9 @@ reconciler::build_object(
             co_return std::unexpected(
               reconcile_error("abort requested while building object"));
         }
-        auto read_result = co_await add_source_to_object(ctx, src);
+        auto start_offset = kafka::next_offset(src->last_reconciled_offset());
+        auto read_result = co_await add_source_to_object(
+          ctx, src, start_offset);
         if (!read_result.has_value()) {
             // Log an error, we don't want a single stuck partition to
             // prevent all partitions from being reconciled.
@@ -468,7 +471,7 @@ reconciler::build_object(
         if (meta.has_value()) {
             _probe.increment_partitions_reconciled();
             _probe.add_batches_reconciled(meta->batch_count);
-            metas.emplace_back(src, std::move(meta).value());
+            metas.emplace_back(src, std::move(meta).value(), start_offset);
         }
     }
     metas.shrink_to_fit();
@@ -500,7 +503,9 @@ reconciler::put_object(const l1::object_id& oid, builder_context& ctx) {
 
 ss::future<std::expected<std::optional<consumer_metadata>, reconcile_error>>
 reconciler::add_source_to_object(
-  builder_context& ctx, ss::shared_ptr<source> src) {
+  builder_context& ctx,
+  ss::shared_ptr<source> src,
+  kafka::offset start_offset) {
     vlog(
       lg.debug,
       "Processing partition {} with LRO {}",
@@ -511,6 +516,7 @@ reconciler::add_source_to_object(
     try {
         auto reader = co_await src->make_reader(
           source::reader_config{
+            .start_offset = start_offset,
             .max_bytes = ctx.size_budget,
             .as = &_as,
           });
@@ -534,10 +540,12 @@ reconciler::add_source_to_object(
 
     vlog(
       lg.debug,
-      "Adding partition {} to L1 object with offsets {}~{}",
+      "Adding partition {} to L1 object with offsets {}~{} starting at offset "
+      "{}",
       src->topic_id_partition(),
       metadata->base_offset,
-      metadata->last_offset);
+      metadata->last_offset,
+      start_offset);
 
     co_return metadata.value();
 }
@@ -550,17 +558,23 @@ std::expected<void, reconcile_error> reconciler::add_object_metadata(
     // Remember that there are two kinds of partitions here: the
     // partition of the cloud topic and the partition of the L1 object.
     // There may be multiple partitions in the L1 object for a cloud
-    // topic partition.
+    // topic partition, but right now we only add one per reconciler run.
     for (const auto& commit : obj_meta.commits) {
         auto [first, last] = obj_meta.object_info.index.partitions.equal_range(
           commit.source->topic_id_partition());
+        vassert(
+          std::distance(first, last) == 1,
+          "expected a single partition in the object");
         for (auto it = first; it != last; ++it) {
             const auto& obj_partition = it->second;
             auto add_result = meta_builder->add(
               oid,
               l1::metastore::object_metadata::ntp_metadata{
                 .tidp = commit.source->topic_id_partition(),
-                .base_offset = obj_partition.first_offset,
+                // Use the start offset, this may differ from the base offset in
+                // the metadata info in topics with transactions, as control
+                // batch offsets are skipped.
+                .base_offset = commit.start_offset,
                 .last_offset = obj_partition.last_offset,
                 .max_timestamp = obj_partition.max_timestamp,
                 .pos = obj_partition.file_position,
@@ -603,7 +617,18 @@ ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
         for (const auto& commit : obj_meta.commits) {
             auto tidp = commit.source->topic_id_partition();
             chunked_vector<l1::metastore::term_offset> term_offsets;
-            for (const auto& [term, first_offset] : commit.metadata.terms) {
+            auto it = commit.metadata.terms.begin();
+            auto end = commit.metadata.terms.end();
+            vassert(
+              it != end, "missing terms for ntp: {}", commit.source->ntp());
+            // We have to override the start term to be the start offset, this
+            // may differ from the first observed offset when transaction
+            // control batches are skipped but still need to be accounted for in
+            // the offset space.
+            term_offsets.emplace_back(it->first, commit.start_offset);
+            ++it;
+            for (const auto& [term, first_offset] :
+                 std::ranges::subrange(it, end)) {
                 term_offsets.emplace_back(term, first_offset);
             }
             terms[tidp] = std::move(term_offsets);

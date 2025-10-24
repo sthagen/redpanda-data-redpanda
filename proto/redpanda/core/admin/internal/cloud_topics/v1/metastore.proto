@@ -1,0 +1,79 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.internal.cloud_topics.v1;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "proto/redpanda/core/pbgen/rpc.proto";
+import "proto/redpanda/core/common/v1/ntp.proto";
+
+option (pbgen.cpp_namespace) = "proto::admin::metastore";
+
+// Admin endpoints to interact with the L1 metastore for Cloud Topics.
+//
+// The metastore contains metadata about cloud topic partitions and the L1
+// objects in which they store their data. It is designed to be a simple state
+// store, performing atomic updates to state and answering simple queries for
+// callers. The metastore itself isn't meant to perform complex partition
+// storage management tasks (e.g. garbage collection or compaction), but rather
+// it exposes primitives to enable robustly performing such tasks.
+//
+// At a high level, the metastore contains the following metadata:
+// - a fixed set of information about each Kafka partition (e.g. start offset,
+//   next offset),
+// - the set of extents (pointers into L1 objects) associated with each Kafka
+//   partition, with enough metadata to find an L1 object by offset or
+//   timestamp,
+// - the set of L1 objects and some information about them to enable efficient
+//   object downloads (e.g. footer location).
+//
+// While callers should generally avoid sending invalid requests to the
+// metastore (e.g. creating gaps in offset space), it is up to the metastore
+// implementation to ensure such requests are rejected and don't have harmful
+// side effects. As such, callers can think of this interface as thread safe.
+service MetastoreService {
+    // Get the start and next offsets for a set of topic partitions in the Kafka
+    // namespace. If the metastore contains no data for this NTP then a not
+    // found error will be thrown.
+    rpc GetOffsets(GetOffsetsRequest) returns (GetOffsetsResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+}
+
+// GetOffsetsRequest is the request for looking up the offsets in the metastore
+// for a topic partition.
+message GetOffsetsRequest {
+    // The topic partition to lookup the offstes for.
+    common.v1.TopicPartition partition = 1;
+}
+
+// GetOffsetsResponse is the response for looking up the offsets in the
+// metastore.
+message GetOffsetsResponse {
+    // The offsets for this ntp in the metastore.
+    Offsets offsets = 2;
+}
+
+// The range of offsets stored in the metastore.
+message Offsets {
+    // The first offset available in the metastore.
+    int64 start_offset = 1;
+    // The next offset expected to be written to the metastore. It is
+    // the exclusive upper bound of what is stored in the metastore.
+    int64 next_offset = 2;
+}

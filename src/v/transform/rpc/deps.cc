@@ -56,6 +56,10 @@ public:
         return _proxy->is_current_shard_leader(ntp);
     }
 
+    std::optional<model::term_id> get_term(const model::ntp& ntp) const final {
+        return _proxy->get_term(ntp);
+    }
+
     ss::future<result<model::offset, cluster::errc>> invoke_on_shard(
       ss::shard_id shard,
       const model::ktp& ktp,

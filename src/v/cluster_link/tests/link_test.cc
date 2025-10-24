@@ -169,13 +169,15 @@ public:
     static constexpr auto task_reconciler_interval = 1s;
     virtual ss::future<> SetUpAsync() override {
         co_await link_test_base::SetUpAsync();
+        auto tmc = std::make_unique<fake_topic_metadata_cache>();
+        _tmc = tmc.get();
         _manager = std::make_unique<manager>(
           ::model::node_id(0),
           std::make_unique<fake_partition_leader_cache>(
             _partition_leader_cache_impl.get()),
           std::make_unique<fake_partition_manager>(
             _partition_manager_proxy.get()),
-          std::make_unique<fake_topic_metadata_cache>(),
+          std::move(tmc),
           std::make_unique<fake_topic_creator>(
             [](const cluster::topic_configuration&) {},
             [](const cluster::topic_properties_update&) {},
@@ -190,12 +192,14 @@ public:
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           std::make_unique<test_consumer_group_router>(),
           std::make_unique<test_partition_metadata_provider>(),
+          std::make_unique<test_kafka_rpc_client_service>(_tmc),
           task_reconciler_interval,
           _default_topic_replication.bind(),
           ss::default_scheduling_group());
     }
 
     virtual ss::future<> TearDownAsync() override {
+        _tmc = nullptr;
         _manager.reset(nullptr);
         co_await link_test_base::TearDownAsync();
     }
@@ -212,6 +216,7 @@ public:
 
 protected:
     absl::flat_hash_map<uuid_t, test_link*> _links;
+    fake_topic_metadata_cache* _tmc{nullptr};
 };
 
 class link_test_manager_started : public link_test {
@@ -409,13 +414,15 @@ public:
         co_await link_test_base::SetUpAsync();
         auto elf = std::make_unique<evil_link_factory>();
         _elf = elf.get();
+        auto tmc = std::make_unique<fake_topic_metadata_cache>();
+        _tmc = tmc.get();
         _manager = std::make_unique<manager>(
           ::model::node_id(0),
           std::make_unique<fake_partition_leader_cache>(
             _partition_leader_cache_impl.get()),
           std::make_unique<fake_partition_manager>(
             _partition_manager_proxy.get()),
-          std::make_unique<fake_topic_metadata_cache>(),
+          std::move(tmc),
           std::make_unique<fake_topic_creator>(
             [](const cluster::topic_configuration&) {},
             [](const cluster::topic_properties_update&) {},
@@ -430,6 +437,7 @@ public:
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           std::make_unique<test_consumer_group_router>(),
           std::make_unique<test_partition_metadata_provider>(),
+          std::make_unique<test_kafka_rpc_client_service>(_tmc),
           task_reconciler_interval,
           _default_topic_replication.bind(),
           ss::default_scheduling_group());
@@ -438,6 +446,7 @@ public:
 
     ss::future<> TearDownAsync() override {
         co_await _manager->stop();
+        _tmc = nullptr;
         _elf = nullptr;
         _manager.reset(nullptr);
 
@@ -446,6 +455,7 @@ public:
 
 protected:
     evil_link_factory* _elf;
+    fake_topic_metadata_cache* _tmc{nullptr};
 };
 
 TEST_F_CORO(evil_link_test, test_evil_link_start_stop) {

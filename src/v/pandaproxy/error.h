@@ -54,6 +54,7 @@ enum class reply_error_code : uint16_t {
     conflict = 409,
     gone = 410,
     length_required = 411,
+    precondition_failed = 412,
     payload_too_large = 413,
     uri_too_long = 414,
     unsupported_media_type = 415,

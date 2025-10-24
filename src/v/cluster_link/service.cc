@@ -18,15 +18,18 @@
 #include "cluster/partition_manager.h"
 #include "cluster_link/group_mirroring_task.h"
 #include "cluster_link/link.h"
+#include "cluster_link/link_probe.h"
 #include "cluster_link/logger.h"
 #include "cluster_link/manager.h"
 #include "cluster_link/model/types.h"
 #include "cluster_link/replication/deps.h"
 #include "cluster_link/replication/mux_remote_consumer.h"
+#include "cluster_link/replication/types.h"
 #include "cluster_link/security_migrator.h"
 #include "cluster_link/shadow_linking_rpc_service.h"
 #include "cluster_link/source_topic_syncer.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
+#include "kafka/data/partition_proxy.h"
 #include "kafka/server/group_router.h"
 #include "kafka/server/snc_quota_manager.h"
 #include "kafka/server/write_at_offset_stm.h"
@@ -287,8 +290,7 @@ public:
         return ss::now();
     }
 
-    ss::future<replication::data_source::data>
-    fetch_next(ss::abort_source& as) final {
+    ss::future<replication::fetch_data> fetch_next(ss::abort_source& as) final {
         auto holder = _gate.hold();
         auto result = co_await _consumer.fetch(_tp, as);
         if (!result.has_value()) [[unlikely]] {
@@ -305,7 +307,7 @@ public:
                 err));
         }
         auto [batches, units] = std::move(*result);
-        co_return data_source::data{
+        co_return replication::fetch_data{
           .batches = std::move(batches), .units = std::move(units)};
     }
 
@@ -490,6 +492,20 @@ public:
         _gate.check();
         return ::model::offset_cast(
           _partition->log()->from_log_offset(_partition->high_watermark()));
+    }
+
+    ss::future<kafka::error_code> prefix_truncate(
+      kafka::offset truncation_offset,
+      ss::lowres_clock::time_point deadline) final {
+        auto h = _gate.hold();
+        co_return co_await kafka::make_partition_proxy(_partition)
+          .prefix_truncate(kafka::offset_cast(truncation_offset), deadline);
+    }
+
+    kafka::offset start_offset() final {
+        _gate.check();
+        return ::model::offset_cast(
+          kafka::make_partition_proxy(_partition).start_offset());
     }
 
 private:
@@ -749,6 +765,9 @@ public:
       std::unique_ptr<kafka::client::cluster> cluster_connection) override {
         auto client_id = config.connection.client_id;
         auto cluster = cluster_connection.get();
+        kafka::client::direct_consumer_probe::configuration probe_cfg{
+          .group_name = link_probe::shadow_link_group,
+          .labels = {link_probe::shadow_link_name(config.name)}};
         return std::make_unique<link>(
           self,
           link_id,
@@ -764,7 +783,8 @@ public:
             std::make_unique<replication::mux_remote_consumer>(
               *cluster_connection,
               _snc_quota_mgr->local(),
-              make_remote_consumer_configuration(config.connection))),
+              make_remote_consumer_configuration(config.connection),
+              std::move(probe_cfg))),
           std::make_unique<local_partition_data_sink_factory>(
             *_partition_manager));
     }
@@ -857,6 +877,7 @@ service::service(
   ss::sharded<kafka::snc_quota_manager>* snc_quota_mgr,
   ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
   ss::sharded<cluster::security_frontend>* security_fe,
+  ss::sharded<kafka::data::rpc::client>* kafka_data_rpc_client,
   ss::smp_service_group smp_group,
   ss::scheduling_group scheduling_group)
   : _self(self)
@@ -873,6 +894,7 @@ service::service(
   , _snc_quota_mgr(snc_quota_mgr)
   , _hm_frontend(hm_frontend)
   , _security_fe(security_fe)
+  , _kafka_data_rpc_client(kafka_data_rpc_client)
   , _smp_group(smp_group)
   , _scheduling_group(scheduling_group)
   , _queue(_scheduling_group, [](const std::exception_ptr& ex) {
@@ -1057,6 +1079,7 @@ ss::future<> service::maybe_start_manager() {
       std::make_unique<kafka_consumer_groups_router>(_group_router),
       std::make_unique<health_monitor_based_partition_metadata_provider>(
         _hm_frontend),
+      kafka_rpc_client_service::make_default(_kafka_data_rpc_client),
       30s, // Temporary until we have a proper configuration for this
       config::shard_local_cfg().default_topic_replication.bind(),
       _scheduling_group);

@@ -178,6 +178,17 @@ redpanda_cc_btest(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "utils",
+    hdrs = [
+        "utils.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/pandaproxy/schema_registry:core",
+    ],
+)
+
 redpanda_cc_btest(
     name = "consume_to_store",
     timeout = "short",
@@ -186,6 +197,7 @@ redpanda_cc_btest(
     ],
     cpu = 1,
     deps = [
+        ":utils",
         "//src/v/model",
         "//src/v/pandaproxy/schema_registry:core",
         "//src/v/test_utils:seastar_boost",
@@ -220,6 +232,7 @@ redpanda_cc_btest(
     ],
     cpu = 1,
     deps = [
+        ":utils",
         "//src/v/model",
         "//src/v/pandaproxy/schema_registry:core",
         "//src/v/test_utils:seastar_boost",

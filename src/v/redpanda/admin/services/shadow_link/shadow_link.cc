@@ -44,6 +44,11 @@ void handle_error(cluster_link::errc err, ss::sstring info) {
     case cluster_link::errc::cluster_link_disabled:
     case cluster_link::errc::link_has_active_shadow_topics:
     case cluster_link::errc::license_required:
+    case cluster_link::errc::link_unsupported_api_version:
+    case cluster_link::errc::link_cluster_unreachable:
+    case cluster_link::errc::link_broker_unreachable:
+    case cluster_link::errc::link_broker_verification_failed:
+    case cluster_link::errc::link_verification_unknown_error:
         throw serde::pb::rpc::failed_precondition_exception(std::move(info));
     case cluster_link::errc::link_id_not_found:
         throw serde::pb::rpc::not_found_exception(std::move(info));

@@ -81,6 +81,8 @@ struct reply_error_category final : std::error_category {
             return "HTTP 410 Gone";
         case reply_error_code::length_required:
             return "HTTP 411 Length Required";
+        case reply_error_code::precondition_failed:
+            return "HTTP 412 Precondition Failed";
         case reply_error_code::payload_too_large:
             return "HTTP 413 Payload Too Large";
         case reply_error_code::uri_too_long:

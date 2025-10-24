@@ -10,6 +10,7 @@
 #pragma once
 
 #include "cluster_link/replication/deps.h"
+#include "cluster_link/replication/replication_probe.h"
 #include "cluster_link/replication/types.h"
 #include "ssx/semaphore.h"
 #include "utils/prefix_logger.h"
@@ -61,7 +62,9 @@ public:
       link_configuration_provider& config_provider,
       std::unique_ptr<data_source> source,
       std::unique_ptr<data_sink> sink,
-      ss::scheduling_group sg = ss::default_scheduling_group());
+      ss::scheduling_group sg = ss::default_scheduling_group(),
+      std::optional<replication_probe::configuration> cfg = std::nullopt,
+      link_data_probe_ptr ldp = nullptr);
     ss::future<> start();
     ss::future<> stop();
 
@@ -71,13 +74,19 @@ public:
 
     partition_offsets_report get_partition_offsets_report() const;
 
+    void maybe_synchronize_start_offset();
+
+    void set_data_probe(link_data_probe_ptr);
+    void unset_data_probe();
+
+    kafka::offset get_partition_lag() const;
+
 private:
     struct replicate_ctx {
         ::model::offset begin;
         ::model::offset end;
-        chunked_vector<::model::record_batch> batches;
+        fetch_data fdata;
         ssx::semaphore_units inflight_units;
-        ssx::semaphore_units data_units;
     };
     ss::future<> fetch_and_replicate();
     ss::future<>
@@ -87,6 +96,9 @@ private:
       ss::future<result<raft::replicate_result>>,
       ::model::offset begin,
       ::model::offset end) noexcept;
+    ss::future<> prefix_truncate(kafka::offset);
+
+private:
     ::model::ntp _ntp;
     ::model::term_id _term;
     link_configuration_provider& _config_provider;
@@ -101,6 +113,9 @@ private:
     ssx::semaphore _max_requests{
       max_in_flight_requests, "partition_replicator"};
     backoff_policy _backoff_policy;
+    std::optional<kafka::offset> _in_progress_truncate_offset{std::nullopt};
+    std::optional<replication_probe> _probe;
+    link_data_probe_ptr _link_data_probe;
 };
 
 } // namespace cluster_link::replication

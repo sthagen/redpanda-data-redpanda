@@ -868,6 +868,21 @@ TEST_F_CORO(
         m1.configuration.topic_metadata_mirroring_cfg.topic_name_filters = {{
           .pattern_type = ::cluster_link::model::filter_pattern_type::literal,
           .filter = ::cluster_link::model::filter_type::include,
+          .pattern = "_schemas",
+        }};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m1)),
+          cluster::cluster_link::errc::topic_filter_invalid);
+    }
+    {
+        auto m1 = create_base_metadata();
+        m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
+          = ::cluster_link::model::topic_metadata_mirroring_config::
+            properties_set{"segment.ms"};
+        m1.configuration.topic_metadata_mirroring_cfg.topic_name_filters = {{
+          .pattern_type = ::cluster_link::model::filter_pattern_type::literal,
+          .filter = ::cluster_link::model::filter_type::include,
           .pattern = "_redpanda.audit_log",
         }};
 

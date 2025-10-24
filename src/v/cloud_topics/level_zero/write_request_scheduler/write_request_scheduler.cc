@@ -336,6 +336,7 @@ write_request_scheduler::proxy_write_request(
     _probe.register_receive_xshard(req->size_bytes());
     write_request<> proxy(
       req->ntp,
+      req->min_epoch,
       shallow_copy(req->data_chunk),
       req->expiration_time,
       _stage.id());

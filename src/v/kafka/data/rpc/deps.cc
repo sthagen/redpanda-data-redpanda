@@ -88,6 +88,10 @@ public:
         return _proxy->is_current_shard_leader(ntp);
     }
 
+    std::optional<model::term_id> get_term(const model::ntp& ntp) const final {
+        return _proxy->get_term(ntp);
+    }
+
     ss::future<result<model::offset, cluster::errc>> invoke_on_shard(
       ss::shard_id shard,
       const model::ktp& ktp,
@@ -255,6 +259,11 @@ bool partition_manager::is_current_shard_leader(const model::ktp& ktp) const {
     return is_current_shard_leader(ktp.to_ntp());
 };
 
+std::optional<model::term_id>
+partition_manager::get_term(const model::ktp& ktp) const {
+    return get_term(ktp.to_ntp());
+}
+
 bool partition_manager_proxy::is_current_shard_leader(const model::ntp& ntp) {
     auto shard = shard_owner(ntp);
     if (shard != ss::this_shard_id()) {
@@ -264,6 +273,24 @@ bool partition_manager_proxy::is_current_shard_leader(const model::ntp& ntp) {
 
     auto p = _manager->local().get(ntp);
     return p && p->is_leader();
+}
+
+std::optional<model::term_id>
+partition_manager_proxy::get_term(const model::ktp& ktp) {
+    return get_term(ktp.to_ntp());
+}
+
+std::optional<model::term_id>
+partition_manager_proxy::get_term(const model::ntp& ntp) {
+    auto shard = shard_owner(ntp);
+    if (shard != ss::this_shard_id()) {
+        return std::nullopt;
+    }
+    auto p = _manager->local().get(ntp);
+    if (!p) {
+        return std::nullopt;
+    }
+    return p->term();
 }
 
 std::unique_ptr<topic_creator>

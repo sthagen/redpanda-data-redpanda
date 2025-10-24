@@ -67,6 +67,7 @@ template<class Clock>
 ss::future<result<chunked_vector<extent_meta>>>
 write_pipeline<Clock>::write_and_debounce(
   model::ntp ntp,
+  cluster_epoch min_epoch,
   chunked_vector<model::record_batch> batches,
   Clock::time_point timeout) {
     auto h = this->hold_gate();
@@ -98,7 +99,7 @@ write_pipeline<Clock>::write_and_debounce(
     auto d = ss::defer([this, sz] { _current_size -= sz; });
     auto stage = this->first_stage();
     l0::write_request<Clock> request(
-      std::move(ntp), std::move(data_chunk), timeout, stage);
+      std::move(ntp), min_epoch, std::move(data_chunk), timeout, stage);
     vlog(
       cd_log.trace,
       "write_pipeline.write_and_debounce, created write_request(size={}, "

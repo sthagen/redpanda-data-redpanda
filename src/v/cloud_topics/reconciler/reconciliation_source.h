@@ -64,6 +64,8 @@ public:
     set_last_reconciled_offset(kafka::offset, ss::abort_source&) = 0;
 
     struct reader_config {
+        // The offset to start reading at.
+        kafka::offset start_offset;
         // The soft limit for number of bytes to read.
         size_t max_bytes;
         // The abort source for when to stop the reader. The abort source must

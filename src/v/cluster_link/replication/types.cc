@@ -10,6 +10,10 @@
 
 #include "cluster_link/replication/types.h"
 
+#include <algorithm>
+#include <functional>
+#include <ranges>
+
 namespace cluster_link::replication {
 fmt::iterator partition_offsets_report::format_to(fmt::iterator it) const {
     return fmt::format_to(
@@ -21,5 +25,15 @@ fmt::iterator partition_offsets_report::format_to(fmt::iterator it) const {
       std::chrono::duration_cast<std::chrono::milliseconds>(
         update_time.time_since_epoch()),
       shadow_hwm);
+}
+
+fetch_counters fetch_counters::from_fetch_data(const fetch_data& data) {
+    fetch_counters ret;
+    ret.n_bytes = data.units.count();
+    ret.n_records = std::ranges::fold_left(
+      data.batches | std::views::transform(&model::record_batch::record_count),
+      int64_t{},
+      std::plus<int64_t>{});
+    return ret;
 }
 } // namespace cluster_link::replication

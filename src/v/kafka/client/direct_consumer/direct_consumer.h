@@ -13,6 +13,7 @@
 #include "container/chunked_hash_map.h"
 #include "kafka/client/cluster.h"
 #include "kafka/client/direct_consumer/api_types.h"
+#include "kafka/client/direct_consumer/direct_consumer_probe.h"
 #include "model/fundamental.h"
 
 namespace kafka {
@@ -67,7 +68,11 @@ public:
         friend std::ostream& operator<<(std::ostream&, const configuration&);
     };
 
-    direct_consumer(cluster& cluster, configuration cfg);
+    direct_consumer(
+      cluster& cluster,
+      configuration cfg,
+      std::optional<direct_consumer_probe::configuration> probe_cfg
+      = std::nullopt);
 
     ~direct_consumer();
     /**
@@ -127,6 +132,19 @@ public:
     std::optional<source_partition_offsets>
     get_source_offsets(model::topic_partition_view tp) const;
 
+    /**
+     *  Executes a functor on the probe, if available.
+     */
+    template<typename Fn>
+    requires std::invocable<Fn, direct_consumer_probe&>
+    void with_probe(Fn fn) {
+        if (!_probe) {
+            return;
+        }
+
+        fn(_probe.value());
+    }
+
 private:
     struct subscription {
         subscription(
@@ -184,6 +202,8 @@ private:
      * Stale fetches need to be dropped.
      */
     subscription_epoch epoch{0};
+
+    std::optional<direct_consumer_probe> _probe;
 
     cluster::callback_id _metadata_callback_id;
     bool _started = false;
