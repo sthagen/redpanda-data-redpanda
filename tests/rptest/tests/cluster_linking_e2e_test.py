@@ -2532,11 +2532,11 @@ class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):
         req = self.create_default_link_request("test-link")
 
         if starting_offset == self.earliest_offset:
-            req.shadow_link.configurations.topic_metadata_sync_options.earliest.CopyFrom(
+            req.shadow_link.configurations.topic_metadata_sync_options.start_at_earliest.CopyFrom(
                 shadow_link_pb2.TopicMetadataSyncOptions.EarliestOffset()
             )
         elif starting_offset == self.latest_offset:
-            req.shadow_link.configurations.topic_metadata_sync_options.latest.CopyFrom(
+            req.shadow_link.configurations.topic_metadata_sync_options.start_at_latest.CopyFrom(
                 shadow_link_pb2.TopicMetadataSyncOptions.LatestOffset()
             )
         elif starting_offset == self.timequery_offset:
@@ -2551,7 +2551,7 @@ class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):
                     * 1000
                 )
             )
-            req.shadow_link.configurations.topic_metadata_sync_options.timestamp.CopyFrom(
+            req.shadow_link.configurations.topic_metadata_sync_options.start_at_timestamp.CopyFrom(
                 timestamp_pb
             )
         else:

@@ -11,11 +11,13 @@
 #include "base/vlog.h"
 #include "cluster/feature_manager.h"
 #include "cluster/feature_update_action.h"
+#include "cluster/tests/tx_compaction_utils.h"
 #include "container/chunked_vector.h"
 #include "features/feature_state.h"
 #include "features/feature_table.h"
 #include "gtest/gtest.h"
 #include "kafka/server/tests/produce_consume_utils.h"
+#include "model/batch_compression.h"
 #include "model/namespace.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
@@ -240,15 +242,15 @@ public:
 
     ss::future<bool> do_sliding_window_compact(
       model::offset max_collect_offset,
-      std::optional<std::chrono::milliseconds> tombstone_ret_ms = std::nullopt,
+      std::optional<std::chrono::milliseconds> delete_ret_ms = std::nullopt,
       std::optional<size_t> max_keys = std::nullopt) {
         // Compact, allowing the map to grow as large as we need.
         ss::abort_source never_abort;
         compaction::compaction_config cfg(
           max_collect_offset,
           max_collect_offset,
-          tombstone_ret_ms,
-          std::nullopt,
+          delete_ret_ms,
+          delete_ret_ms,
           never_abort,
           std::nullopt,
           max_keys,
@@ -1470,16 +1472,10 @@ TEST_P(
     }
 
     if (wait_for_retention_ms) {
-        auto max_removed_pre_restart = log->max_removed_offset();
-        ASSERT_GT(max_removed_pre_restart, model::offset{0});
-
         restart(should_wipe::no);
         wait_for_leader(ntp).get();
         partition = app.partition_manager.local().get(ntp).get();
         log = partition->log().get();
-
-        auto max_removed_post_restart = log->max_removed_offset();
-        ASSERT_EQ(max_removed_pre_restart, max_removed_post_restart);
     }
 }
 
@@ -2327,5 +2323,153 @@ TEST_F(CompactionFixtureTest, SuperfluousPlaceholderRemoval) {
         // merged segment, and no compaction placeholder batches should exist in
         // the log.
         ASSERT_EQ(num_placeholder_batches, 0);
+    }
+}
+
+TEST_F(CompactionFixtureTest, AbortTransactions) {
+    using cluster::tx_executor;
+    tx_executor exec;
+    auto term = partition->raft()->term();
+    auto shared_log = partition->log();
+    auto make_ctx = [&, this](int64_t id, model::term_id term) {
+        model::producer_identity pid{id, 0};
+        return tx_executor::tx_op_ctx{
+          exec.data_gen(), partition->rm_stm(), shared_log, pid, term};
+    };
+
+    // Produce transactional records.
+    tx_executor::sorted_tx_ops_t ops;
+
+    int weight = 1;
+    const int num_records = 10;
+    ops.emplace(
+      ss::make_shared(tx_executor::begin_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(
+        tx_executor::data_op(make_ctx(1, term), weight++, num_records)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::abort_op(make_ctx(1, term), weight++)));
+
+    exec.execute(std::move(ops)).get();
+    log->flush().get();
+    log->force_roll().get();
+
+    // Two tx_exec rolls, one force_roll, one active segment
+    ASSERT_EQ(log->segment_count(), 4);
+
+    // Sliding window compact twice with a sleep in between to ensure removal of
+    // control batches.
+    bool did_compact = do_sliding_window_compact(
+                         model::offset::max(), std::chrono::milliseconds{1})
+                         .get();
+    ASSERT_TRUE(did_compact);
+    ss::sleep(100ms).get();
+    do_sliding_window_compact(
+      model::offset::max(), std::chrono::milliseconds{1})
+      .get();
+
+    exec.validate(shared_log).get();
+    auto cfg = storage::local_log_reader_config(
+      model::offset{0}, model::offset::max());
+    {
+        auto reader = log->make_reader(cfg).get();
+        auto batches = model::consume_reader_to_memory(
+                         std::move(reader), model::no_timeout)
+                         .get();
+        size_t num_data_records = 0;
+        size_t num_control_batches = 0;
+        for (const auto& batch : batches) {
+            num_control_batches += (batch.header().type
+                                    == model::record_batch_type::tx_fence)
+                                   || batch.header().attrs.is_control();
+            num_data_records += (batch.header().type
+                                 == model::record_batch_type::raft_data)
+                                  ? batch.record_count()
+                                  : 0;
+        }
+        // Expect all control batches to have been removed.
+        ASSERT_EQ(num_control_batches, 0);
+
+        // Expect no data batches from aborted transaction.
+        ASSERT_EQ(num_data_records, 0);
+    }
+}
+
+TEST_F(CompactionFixtureTest, CommitTransactions) {
+    using cluster::tx_executor;
+    tx_executor exec;
+    auto term = partition->raft()->term();
+    auto shared_log = partition->log();
+    auto make_ctx = [&, this](int64_t id, model::term_id term) {
+        model::producer_identity pid{id, 0};
+        return tx_executor::tx_op_ctx{
+          exec.data_gen(), partition->rm_stm(), shared_log, pid, term};
+    };
+
+    // Produce transactional records.
+    tx_executor::sorted_tx_ops_t ops;
+
+    int weight = 1;
+    const int num_records = 5;
+    ops.emplace(
+      ss::make_shared(tx_executor::begin_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(
+        tx_executor::data_op(make_ctx(1, term), weight++, num_records)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::commit_op(make_ctx(1, term), weight++)));
+
+    exec.execute(std::move(ops)).get();
+    log->flush().get();
+    log->force_roll().get();
+
+    // Two tx_exec rolls, one force_roll, one active segment
+    ASSERT_EQ(log->segment_count(), 4);
+
+    // Sliding window compact twice with a sleep in between to ensure removal of
+    // control batches.
+    bool did_compact = do_sliding_window_compact(
+                         model::offset::max(), std::chrono::milliseconds{1})
+                         .get();
+    ASSERT_TRUE(did_compact);
+    ss::sleep(100ms).get();
+    do_sliding_window_compact(
+      model::offset::max(), std::chrono::milliseconds{1})
+      .get();
+
+    exec.validate(shared_log).get();
+    auto cfg = storage::local_log_reader_config(
+      model::offset{0}, model::offset::max());
+    {
+        auto reader = log->make_reader(cfg).get();
+        auto batches = model::consume_reader_to_memory(
+                         std::move(reader), model::no_timeout)
+                         .get();
+        size_t num_data_records = 0;
+        size_t num_control_batches = 0;
+        for (const auto& batch : batches) {
+            num_control_batches += (batch.header().type
+                                    == model::record_batch_type::tx_fence)
+                                   || batch.header().attrs.is_control();
+            num_data_records += (batch.header().type
+                                 == model::record_batch_type::raft_data)
+                                  ? batch.record_count()
+                                  : 0;
+        }
+        // Expect all control batches to have been removed.
+        ASSERT_EQ(num_control_batches, 0);
+
+        // Expect 1 record from committed transaction because
+        // `linear_int_kv_batch_generator` uses increasing indexes per batch as
+        // keys, not per record.
+        ASSERT_EQ(num_data_records, 1);
     }
 }

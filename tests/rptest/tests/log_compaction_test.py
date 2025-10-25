@@ -8,10 +8,12 @@
 # by the Apache License, Version 2.0
 import threading
 import time
+from dataclasses import dataclass
 
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 
+from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
@@ -538,7 +540,7 @@ class LogCompactionSchedulingTest(LogCompactionTestBase, PreallocNodesTest):
             no_dirty_bytes,
             timeout_sec=120,
             backoff_sec=1,
-            err_msg=f"Did not see dirty_segment_bytes == 0 and closed_segment_bytes > 0 across all brokers.",
+            err_msg="Did not see dirty_segment_bytes == 0 and closed_segment_bytes > 0 across all brokers.",
         )
 
         # Perform validation with KgoVerifierSeqConsumer
@@ -619,7 +621,7 @@ class LogCompactionEnableSlidingWindow(RedpandaTest):
                 seen_compacted_segments,
                 timeout_sec=60,
                 backoff_sec=1,
-                err_msg=f"Did not see any compacted segments.",
+                err_msg="Did not see any compacted segments.",
             )
 
             producer.free()
@@ -628,3 +630,153 @@ class LogCompactionEnableSlidingWindow(RedpandaTest):
             self._rpk_client.cluster_config_set(
                 "log_compaction_use_sliding_window", next_sliding_window_config
             )
+
+
+class LogCompactionTxRemovalTest(LogCompactionTestBase, PreallocNodesTest):
+    def __init__(self, test_context):
+        self.test_context = test_context
+        # Run with small segments and a very frequent compaction interval.
+        self.extra_rp_conf = {
+            "log_compaction_interval_ms": 1000,
+            "log_segment_size": 2 * 1024**2,  # 2 MiB
+            "compacted_log_segment_size": 1024**2,  # 1 MiB
+        }
+
+        super().__init__(
+            test_context=test_context,
+            num_brokers=1,
+            node_prealloc_count=1,
+            extra_rp_conf=self.extra_rp_conf,
+        )
+
+        self._rpk_client = RpkTool(self.redpanda)
+
+    def produce(self, test_case):
+        producer = KgoVerifierProducer(
+            context=self.test_context,
+            redpanda=self.redpanda,
+            topic=self.topic_spec.name,
+            use_transactions=True,
+            msg_size=test_case.msg_size,
+            msg_count=test_case.msg_count,
+            transaction_abort_rate=test_case.abort_rate,
+            msgs_per_transaction=test_case.msgs_per_transaction,
+            custom_node=self.preallocated_nodes,
+        )
+
+        producer.start()
+        producer.wait(timeout_sec=180)
+        producer.stop()
+
+    def check_tx_batches(self):
+        viewer = OfflineLogViewer(self.redpanda)
+        assert len(self.redpanda.nodes) == 1
+        node = self.redpanda.nodes[0]
+        num_control_batches = 0
+        num_fence_batches = 0
+        records_and_batches = viewer.read_kafka_records(node, self.topic_spec.name)
+        for record_or_batch in records_and_batches:
+            if "expanded_attrs" not in record_or_batch:
+                continue
+            if record_or_batch["expanded_attrs"]["control_batch"]:
+                num_control_batches += 1
+            if record_or_batch["type_name"] == "tx_fence":
+                num_fence_batches += 1
+
+        assert num_control_batches == 0, (
+            f"expected 0 control batches (abort/commit batches), saw {num_control_batches}"
+        )
+        assert num_fence_batches == 0, (
+            f"expected 0 tx_fence batches, saw {num_fence_batches}"
+        )
+
+    @cluster(num_nodes=2)
+    def test_tx_control_batch_removal(self):
+        @dataclass
+        class TestCase:
+            name: str
+            msg_size: int
+            msg_count: int
+            abort_rate: float
+            msgs_per_transaction: int
+
+        test_cases = [
+            TestCase(
+                name="Mixed aborts and commits",
+                msg_size=1024,
+                msg_count=10000,
+                msgs_per_transaction=10,
+                abort_rate=0.5,
+            ),
+            TestCase(
+                name="All aborts",
+                msg_size=1024,
+                msg_count=10000,
+                msgs_per_transaction=10,
+                abort_rate=1.0,
+            ),
+            TestCase(
+                name="All commits",
+                msg_size=1024,
+                msg_count=10000,
+                msgs_per_transaction=10,
+                abort_rate=0.0,
+            ),
+            TestCase(
+                name="Multi-segment spanning transactions",
+                msg_size=10240,
+                msg_count=1000,
+                msgs_per_transaction=100,
+                abort_rate=0.5,
+            ),
+        ]
+
+        failed_test_cases = []
+        for test_case in test_cases:
+            try:
+                self.do_test_tx_control_batch_removal(test_case)
+            except Exception as e:
+                self.logger.info(
+                    f"Test case {test_case.name} failed with exception {e}"
+                )
+
+                failed_test_cases.append(e)
+        assert len(failed_test_cases) == 0, (
+            f"Expected 0 failed test cases, got {len(failed_test_cases)}"
+        )
+
+    def do_test_tx_control_batch_removal(self, test_case):
+        self.topic_setup(
+            cleanup_policy=TopicSpec.CLEANUP_COMPACT,
+            replication_factor=1,
+            key_set_cardinality=100,
+            partition_count=1,
+        )
+
+        self.logger.info(
+            f"Running test case {test_case.name} with topic {self.topic_spec.name}"
+        )
+
+        self.produce(test_case)
+
+        # Restart the redpanda broker to roll segments
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+
+        self.prev_sliding_window_rounds = -1
+
+        def compaction_has_completed():
+            new_sliding_window_rounds = self.get_complete_sliding_window_rounds()
+
+            res = self.prev_sliding_window_rounds == new_sliding_window_rounds
+            self.prev_sliding_window_rounds = new_sliding_window_rounds
+            return res
+
+        wait_until(
+            compaction_has_completed,
+            timeout_sec=120,
+            backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
+            err_msg="Compaction did not stabilize.",
+        )
+
+        # Check that no tx batches are seen after compaction settles
+        self.check_tx_batches()

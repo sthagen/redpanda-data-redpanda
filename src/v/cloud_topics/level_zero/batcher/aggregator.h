@@ -55,10 +55,12 @@ public:
     /// Estimate L0 object size
     size_t size_bytes() const noexcept;
 
-    /// Return the maximum min_epoch from all write requests that have been
-    /// added to the aggregator. This should be invoked after all of the
+    /// Return the maximum topic start epoch from all write requests that have
+    /// been added to the aggregator. This should be invoked after all of the
     /// requests have been added.
-    cluster_epoch min_epoch() { return _min_epoch; }
+    cluster_epoch highest_topic_start_epoch() {
+        return _highest_topic_start_epoch;
+    }
 
     /// Prepare upload byte stream
     struct L0_object {
@@ -81,7 +83,7 @@ private:
     /// be called once.
     iobuf get_stream();
 
-    cluster_epoch _min_epoch;
+    cluster_epoch _highest_topic_start_epoch;
 
     /// Source data for the aggregator
     absl::btree_map<model::ntp, l0::write_request_list<Clock>> _staging;

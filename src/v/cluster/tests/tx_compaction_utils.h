@@ -11,6 +11,7 @@
 
 #include "cluster/logger.h"
 #include "cluster/rm_stm.h"
+#include "model/record.h"
 #include "storage/segment.h"
 #include "storage/tests/batch_generators.h"
 #include "storage/types.h"
@@ -129,8 +130,7 @@ public:
         }
     }
 
-    ss::future<>
-    validate(ss::shared_ptr<storage::log> log, int expected_fences) {
+    ss::future<> validate(ss::shared_ptr<storage::log> log) {
         auto lstats = log->offsets();
         auto cfg = storage::local_log_reader_config(
           lstats.start_offset, lstats.committed_offset);
@@ -157,7 +157,9 @@ public:
                 fence_batch_count++;
             }
         }
-        RPTEST_REQUIRE_EQ_CORO(fence_batch_count, expected_fences);
+
+        // Fence batches should be removed.
+        RPTEST_REQUIRE_CORO(fence_batch_count == 0);
     }
 
     void run_random_workload(
@@ -255,8 +257,7 @@ public:
 
         // 1. There are no aborted keys (tracked in _aborted_xxx)
         // 2. There are no tx control markers
-        // 3. Only tx control data batches allowed is fence type.
-        validate(log, s._num_txes).get();
+        validate(log).get();
     }
 
     auto& data_gen() { return _data_gen; }

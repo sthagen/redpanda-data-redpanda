@@ -23,7 +23,6 @@ import (
 
 func newSelectCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var profileName string
-	var serverlessPrivate, serverlessPublic bool
 
 	cmd := &cobra.Command{
 		Use:     "select [NAME]",
@@ -52,19 +51,7 @@ the default cloud-dedicated profile, you can use the --profile flag.
 				name = args[0]
 			}
 
-			// Validate mutual exclusivity of serverless networking flags
-			if serverlessPrivate && serverlessPublic {
-				out.Die("--serverless-private and --serverless-public are mutually exclusive")
-			}
-
-			var serverlessNetworking string
-			if serverlessPrivate {
-				serverlessNetworking = "private"
-			} else if serverlessPublic {
-				serverlessNetworking = "public"
-			}
-
-			err = profile.CreateFlow(cmd.Context(), fs, cfg, yAct, yAuthVir, "", "", name, false, nil, profileName, "", serverlessNetworking)
+			err = profile.CreateFlow(cmd.Context(), fs, cfg, yAct, yAuthVir, "", "", name, false, nil, profileName, "")
 			if ee := (*profile.ProfileExistsError)(nil); errors.As(err, &ee) {
 				fmt.Printf(`Unable to automatically create profile %q due to a name conflict with
 an existing self-hosted profile, please rename that profile or use the
@@ -84,8 +71,5 @@ Or:
 	}
 
 	cmd.Flags().StringVar(&profileName, "profile", "", fmt.Sprintf("Name of a profile to create or update (avoids updating %q)", profile.RpkCloudProfileName))
-	cmd.Flags().BoolVar(&serverlessPrivate, "serverless-private", false, "Use private networking for serverless clusters (if cluster supports it)")
-	cmd.Flags().BoolVar(&serverlessPublic, "serverless-public", false, "Use public networking for serverless clusters (if cluster supports it)")
-	cmd.MarkFlagsMutuallyExclusive("serverless-private", "serverless-public")
 	return cmd
 }

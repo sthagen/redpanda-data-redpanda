@@ -147,8 +147,6 @@ public:
     virtual std::optional<model::timestamp>
     earliest_dirty_segment_ts() const final;
 
-    virtual std::optional<model::offset> max_removed_offset() const final;
-
     virtual model::offset cleanly_compacted_prefix_offset() const final;
 
     bool needs_compaction() const final;

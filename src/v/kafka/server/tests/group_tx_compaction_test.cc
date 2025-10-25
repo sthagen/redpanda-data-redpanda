@@ -10,6 +10,7 @@
 #include "kafka/server/group_manager.h"
 #include "kafka/server/group_tx_tracker_stm.h"
 #include "kafka/server/rm_group_frontend.h"
+#include "model/record_batch_types.h"
 #include "model/tests/randoms.h"
 #include "redpanda/tests/fixture.h"
 #include "storage/types.h"
@@ -353,7 +354,7 @@ ss::future<> run_workload(
                   log->stm_manager()->max_removable_local_log_offset(),
                   log->stm_manager()->max_removable_local_log_offset(),
                   std::nullopt,
-                  std::nullopt,
+                  std::chrono::milliseconds{0},
                   std::chrono::milliseconds{0},
                   dummy_as,
                 })
@@ -379,15 +380,25 @@ ss::future<> run_workload(
     });
 
     struct batch_validator {
-        bool validate_batch_type(model::record_batch_type batch_type) {
-            return batch_type == model::record_batch_type::group_fence_tx
-                   || batch_type == model::record_batch_type::group_prepare_tx
-                   || batch_type == model::record_batch_type::group_commit_tx
-                   || batch_type == model::record_batch_type::group_abort_tx;
-        }
-        void validate_batch(const model::record_batch& b) {
+        bool do_validate_batch(const model::record_batch& b) {
             auto batch_type = b.header().type;
-            ASSERT_FALSE(validate_batch_type(batch_type)) << fmt::format(
+            if (
+              batch_type == model::record_batch_type::group_fence_tx
+              || batch_type == model::record_batch_type::group_prepare_tx
+              || batch_type == model::record_batch_type::group_commit_tx
+              || batch_type == model::record_batch_type::group_abort_tx
+              || batch_type == model::record_batch_type::tx_fence) {
+                return true;
+            }
+            if (b.header().attrs.is_control()) {
+                return true;
+            }
+
+            return false;
+        }
+
+        void validate_batch(const model::record_batch& b) {
+            ASSERT_FALSE(do_validate_batch(b)) << fmt::format(
               "Unexpected batch encountered after compaction {}", b.header());
         }
         ss::future<ss::stop_iteration> operator()(model::record_batch& b) {

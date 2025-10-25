@@ -189,10 +189,11 @@ ss::future<std::expected<std::monostate, errc>> batcher<Clock>::run_once(
         /*
          * L0 object is named using an epoch calculated as:
          *
-         *    min_epoch = max(p.min_epoch() for all p in L0)
-         *    epoch = max(partition_epoch, cached_cluster_epoch)
+         *    start_epoch = max(p.highest_topic_start_epoch() for all p in L0)
+         *    epoch = max(start_epoch, cached_cluster_epoch)
          */
-        auto object_epoch = std::max(aggregator.min_epoch(), epoch_fut.get());
+        auto object_epoch = std::max(
+          aggregator.highest_topic_start_epoch(), epoch_fut.get());
 
         // TODO: skip waiting if list.completed is not true
         auto object = aggregator.prepare(object_id::create(object_epoch));

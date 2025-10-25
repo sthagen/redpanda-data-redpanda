@@ -742,6 +742,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/config",
         "//src/v/kafka/server",
+        "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/raft",
         "//src/v/redpanda/tests:fixture",

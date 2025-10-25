@@ -74,6 +74,8 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":key_offset_map",
+        "//src/v/config",
+        "//src/v/features",
         "//src/v/model",
         "@seastar",
     ],

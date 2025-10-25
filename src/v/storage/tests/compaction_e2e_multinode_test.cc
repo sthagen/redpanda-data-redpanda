@@ -241,5 +241,5 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
       std::chrono::milliseconds{0},
       as);
     new_log->housekeeping(conf2).get();
-    exec.validate(new_log, 2).get();
+    exec.validate(new_log).get();
 }

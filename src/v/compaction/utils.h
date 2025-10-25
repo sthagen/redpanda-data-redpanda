@@ -10,15 +10,25 @@
 #pragma once
 
 #include "compaction/key_offset_map.h"
+#include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
 
+#include <seastar/core/sharded.hh>
+
 namespace compaction {
 
-bool is_compactible_control_batch(
-  const model::ntp& ntp, const model::record_batch_type batch_type);
+// Returns `true` if the provided `record_batch_type` is a control batch that is
+// immediately removable during compaction. This means we do not need to
+// consider either deduplication (compactible) or `delete.retention.ms` (a form
+// of filtering) to decide if these batches can be removed. They can be
+// indiscriminately removed when they are seen.
+bool is_removable_control_batch(
+  const model::ntp& ntp,
+  const model::record_batch_type batch_type,
+  ss::sharded<features::feature_table>& feature_table);
 
 // Returns `true` or `false` indicating whether the batch type of the header
 // passed contains records that may be removed by compaction- whether that is by
@@ -38,7 +48,7 @@ bool is_filterable(model::record_batch_type t);
 // whether records from a batch should be indexed in a .compaction_index file,
 // and whether only the latest record for a given key should be kept in
 // `should_keep()`.
-bool is_compactible(const model::ntp& ntp, const model::record_batch_header& h);
+bool is_compactible(const model::record_batch_header& h);
 
 // Creates a placeholder batch type with the same header properties (type, base
 // offset, timestamps, etc) as the provided `record_batch_header`.

@@ -10,6 +10,8 @@
 #include "compaction/utils.h"
 
 #include "compaction/key_offset_map.h"
+#include "config/configuration.h"
+#include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record_batch_types.h"
@@ -18,17 +20,24 @@
 
 namespace compaction {
 
-bool is_compactible_control_batch(
-  const model::ntp& ntp, const model::record_batch_type batch_type) {
+bool is_removable_control_batch(
+  const model::ntp& ntp,
+  const model::record_batch_type batch_type,
+  ss::sharded<features::feature_table>& feature_table) {
     // Control batches in consumer offsets are special compared to
     // the ones in data partitions can be safely compacted away.
-    //
-    // tx_fence batches  in consumer offsets are special and should be
-    // compacted. They were used historically to mark the begin of a transaction
-    // but later switched to group_fence_tx.
-    return unlikely(
-             batch_type == model::record_batch_type::tx_fence
-             && model::is_consumer_offsets_topic(ntp))
+    // Fence batches can also be immediately removed when seen in the
+    // `__consumer_offsets` topic or safely removed from a user topic. However,
+    // removal in a user topic is gated by
+    // `log_compaction_disable_tx_batch_removal()`.
+    auto is_co_topic = model::is_consumer_offsets_topic(ntp);
+    auto remove_user_tx_fence_enabled
+      = !config::shard_local_cfg().log_compaction_disable_tx_batch_removal()
+        && feature_table.local().is_active(
+          features::feature::coordinated_compaction);
+    auto tx_fence_removable = batch_type == model::record_batch_type::tx_fence
+                              && (is_co_topic || remove_user_tx_fence_enabled);
+    return tx_fence_removable
            || batch_type == model::record_batch_type::group_fence_tx
            || batch_type == model::record_batch_type::group_prepare_tx
            || batch_type == model::record_batch_type::group_abort_tx
@@ -44,9 +53,9 @@ bool is_filterable(model::record_batch_type t) {
     return n == 0;
 }
 
-bool is_compactible(
-  const model::ntp& ntp, const model::record_batch_header& h) {
-    if (h.attrs.is_control() && !is_compactible_control_batch(ntp, h.type)) {
+bool is_compactible(const model::record_batch_header& h) {
+    // Control batches are filterable but not compactible.
+    if (h.attrs.is_control()) {
         return false;
     }
     return is_filterable(h.type);

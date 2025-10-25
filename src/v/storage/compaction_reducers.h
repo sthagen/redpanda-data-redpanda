@@ -17,6 +17,7 @@
 #include "compaction/fwd.h"
 #include "compaction/types.h"
 #include "container/chunked_vector.h"
+#include "features/feature_table.h"
 #include "hashing/xx.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
@@ -140,6 +141,7 @@ public:
       model::offset index_base_offset,
       model::offset segment_last_offset,
       bool compaction_placeholder_enabled,
+      bool unset_transaction_bit_enabled,
       compacted_index_writer* cidx = nullptr,
       bool inject_failure = false,
       ss::abort_source* as = nullptr)
@@ -147,6 +149,7 @@ public:
       , _should_keep_fn(std::move(f))
       , _segment_last_offset(segment_last_offset)
       , _compaction_placeholder_enabled(compaction_placeholder_enabled)
+      , _unset_transaction_bit_enabled(unset_transaction_bit_enabled)
       , _appender(a)
       , _compacted_idx(cidx)
       , _idx(index_state::make_empty_index(index_base_offset, apply_offset))
@@ -181,6 +184,11 @@ private:
     // Whether feature::compaction_placeholder batch is enabled or not- expected
     // to be queried from feature table.
     bool _compaction_placeholder_enabled;
+
+    // Whether feature::coordinated_compaction is enabled or not to allow for
+    // the unsetting of the transactional bit in raft data batches- expected to
+    // be queried from feature table.
+    bool _unset_transaction_bit_enabled;
 
     segment_appender* _appender;
 
@@ -243,12 +251,14 @@ public:
       model::ntp ntp,
       ss::lw_shared_ptr<storage::stm_manager> stm_mgr,
       chunked_vector<model::tx_range>&& txs,
-      compacted_index_writer* w) noexcept
+      compacted_index_writer* w,
+      ss::sharded<features::feature_table>& feature_table) noexcept
       : _ntp(std::move(ntp))
       , _delegate(index_rebuilder_reducer(w))
       , _aborted_txs(model::tx_range_cmp(), std::move(txs))
       , _stm_mgr(stm_mgr)
-      , _transactional_stm_type(stm_mgr->transactional_stm_type()) {
+      , _transactional_stm_type(stm_mgr->transactional_stm_type())
+      , _feature_table(feature_table) {
         _stats.num_aborted_txes = _aborted_txs.size();
     }
     ss::future<ss::stop_iteration> operator()(model::record_batch&&);
@@ -298,6 +308,8 @@ private:
     stats _stats;
     // Set if a transactional stm is attached to this partition.
     std::optional<storage::stm_type> _transactional_stm_type;
+
+    ss::sharded<features::feature_table>& _feature_table;
 };
 
 // Builds up a key_offset_map for a segment, starting from the offset

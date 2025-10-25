@@ -47,7 +47,8 @@ ss::future<model::offset> build_offset_map(
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
   storage::storage_resources&,
   storage::probe&,
-  compaction::key_offset_map&);
+  compaction::key_offset_map&,
+  ss::sharded<features::feature_table>&);
 
 // Rewrites 'seg' according to the parameters in 'cfg' to 'appender' and
 // 'cmp_idx_writer', deduplicating with latest offsets per key from 'map'.
@@ -60,7 +61,6 @@ ss::future<index_state> deduplicate_segment(
   storage::probe& probe,
   offset_delta_time should_offset_delta_times,
   ss::sharded<features::feature_table>&,
-  kvstore&,
   bool inject_reader_failure = false);
 
 // Creates a reader for the segment starting from the last_indexed_offset

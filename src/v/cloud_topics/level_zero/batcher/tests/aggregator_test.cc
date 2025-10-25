@@ -199,12 +199,12 @@ TEST(AggregatorTest, MinEpoch) {
     std::vector<
       std::unique_ptr<cloud_topics::l0::write_request<ss::manual_clock>>>
       requests;
-    auto make_request = [&](int min_epoch) {
+    auto make_request = [&](int epoch) {
         auto chunk = get_random_serialized_chunk(10, 10);
         requests.push_back(
           std::make_unique<cloud_topics::l0::write_request<ss::manual_clock>>(
             model::controller_ntp,
-            cloud_topics::cluster_epoch(min_epoch),
+            cloud_topics::cluster_epoch(epoch),
             std::move(chunk),
             timeout));
     };
@@ -218,5 +218,5 @@ TEST(AggregatorTest, MinEpoch) {
         aggregator.add(*req);
     }
 
-    ASSERT_EQ(aggregator.min_epoch()(), 10);
+    ASSERT_EQ(aggregator.highest_topic_start_epoch()(), 10);
 }

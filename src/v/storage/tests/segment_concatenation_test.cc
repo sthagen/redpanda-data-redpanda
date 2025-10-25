@@ -123,7 +123,6 @@ void concatenate_segments_from_log(
   storage::disk_log_impl& log,
   int expected_segments_to_compact,
   ss::sharded<features::feature_table>& feature_table,
-  storage::kvstore& kvs,
   bool maybe_compress) {
     compaction::compaction_config cfg(
       model::offset::max(),
@@ -183,8 +182,7 @@ void concatenate_segments_from_log(
           log.readers(),
           log.resources(),
           feature_table,
-          fake_segment_rewrite_lock,
-          kvs)
+          fake_segment_rewrite_lock)
           .get();
 
     EXPECT_EQ(target->file_size(), expected_target_file_size);
@@ -227,11 +225,7 @@ TEST_P(MakeConcatenatedSegmentFixture, ConcatenateSegments) {
     }
 
     concatenate_segments_from_log(
-      disk_log,
-      num_segments,
-      b.feature_table(),
-      b.storage().kvs(),
-      maybe_compress);
+      disk_log, num_segments, b.feature_table(), maybe_compress);
 }
 
 INSTANTIATE_TEST_SUITE_P(

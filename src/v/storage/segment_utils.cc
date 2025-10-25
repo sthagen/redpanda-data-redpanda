@@ -370,8 +370,7 @@ ss::future<storage::index_state> do_copy_segment_data(
   ss::rwlock::holder rw_lock_holder,
   storage_resources& resources,
   offset_delta_time apply_offset,
-  ss::sharded<features::feature_table>& feature_table,
-  kvstore& kvs) {
+  ss::sharded<features::feature_table>& feature_table) {
     // preserve base_offset, broker_timestamp, and clean_compact_timestamp from
     // the segment's index
     auto old_base_offset = seg->index().base_offset();
@@ -413,11 +412,14 @@ ss::future<storage::index_state> do_copy_segment_data(
     auto segment_last_offset = seg->offsets().get_committed_offset();
     auto compaction_placeholder_enabled = feature_table.local().is_active(
       features::feature::compaction_placeholder_batch);
+    auto unset_transactional_bit_enabled = feature_table.local().is_active(
+      features::feature::coordinated_compaction);
     const bool past_tombstone_delete_horizon
       = internal::is_past_tombstone_delete_horizon(seg, cfg);
     bool may_have_tombstone_records = false;
-    bool has_transaction_batches = false;
-    model::offset max_removed_offset = model::offset::min();
+    const bool past_tx_delete_horizon
+      = internal::is_past_transaction_batch_delete_horizon(seg, cfg);
+    bool may_have_transaction_batches = false;
 
     auto offset_in_compacted_list =
       [compacted_offsets = std::move(compacted_offsets)](
@@ -436,8 +438,8 @@ ss::future<storage::index_state> do_copy_segment_data(
                           past_tombstone_delete_horizon,
                           &may_have_tombstone_records,
                           &pb,
-                          &has_transaction_batches,
-                          &max_removed_offset](
+                          past_tx_delete_horizon,
+                          &may_have_transaction_batches](
                            const model::record_batch& b,
                            const model::record& r,
                            bool is_last_record_in_batch) {
@@ -452,8 +454,8 @@ ss::future<storage::index_state> do_copy_segment_data(
           segment_last_offset,
           past_tombstone_delete_horizon,
           may_have_tombstone_records,
-          has_transaction_batches,
-          max_removed_offset);
+          past_tx_delete_horizon,
+          may_have_transaction_batches);
     };
 
     auto copy_reducer = copy_data_segment_reducer(
@@ -465,6 +467,7 @@ ss::future<storage::index_state> do_copy_segment_data(
       old_base_offset,
       segment_last_offset,
       compaction_placeholder_enabled,
+      unset_transactional_bit_enabled,
       /*cidx=*/nullptr,
       /*inject_failure=*/false,
       cfg.asrc);
@@ -506,19 +509,13 @@ ss::future<storage::index_state> do_copy_segment_data(
     // Set may_have_tombstone_records
     new_index.may_have_tombstone_records = may_have_tombstone_records;
 
-    // Set has_transaction_batches
-    new_index.has_transaction_batches = has_transaction_batches;
+    // Set may_have_transaction_batches
+    new_index.may_have_transaction_batches = may_have_transaction_batches;
 
     if (
       seg->index().may_have_tombstone_records()
       && !may_have_tombstone_records) {
         pb.add_segment_marked_tombstone_free();
-    }
-
-    auto curr_max_removed_offset = read_max_removed_offset(kvs, ntp).value_or(
-      model::offset::min());
-    if (max_removed_offset > curr_max_removed_offset) {
-        co_await write_max_removed_offset(kvs, ntp, max_removed_offset);
     }
 
     co_return std::move(new_index);
@@ -591,8 +588,7 @@ ss::future<compaction_result> do_self_compact_segment(
   storage_resources& resources,
   offset_delta_time apply_offset,
   ss::rwlock::holder read_holder,
-  ss::sharded<features::feature_table>& feature_table,
-  kvstore& kvs) {
+  ss::sharded<features::feature_table>& feature_table) {
     auto size_before = s->size_bytes();
 
     if (cfg.asrc) {
@@ -625,8 +621,7 @@ ss::future<compaction_result> do_self_compact_segment(
       std::move(read_holder),
       resources,
       apply_offset,
-      feature_table,
-      kvs);
+      feature_table);
     vlog(
       gclog.trace, "finished copying segment data for {}", s->reader().path());
 
@@ -669,11 +664,12 @@ ss::future<> build_compaction_index(
   chunked_vector<model::tx_range> aborted_txs,
   const segment_full_path& p,
   compaction::compaction_config cfg,
-  storage_resources& resources) {
+  storage_resources& resources,
+  ss::sharded<features::feature_table>& feature_table) {
     auto w = storage::make_file_backed_compacted_index(
       p, false, resources, cfg.sanitizer_config);
     auto reducer = tx_reducer(
-      p.get_ntp(), stm_manager, std::move(aborted_txs), w.get());
+      p.get_ntp(), stm_manager, std::move(aborted_txs), w.get(), feature_table);
     auto index_builder = co_await ss::coroutine::as_future<tx_reducer::stats>(
       std::move(rdr)
         .consume(std::move(reducer), model::no_timeout)
@@ -711,7 +707,8 @@ ss::future<> rebuild_compaction_index(
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
   compaction::compaction_config cfg,
   storage::probe& pb,
-  storage_resources& resources) {
+  storage_resources& resources,
+  ss::sharded<features::feature_table>& feature_table) {
     segment_full_path idx_path = s->path().to_compacted_index();
     vlog(gclog.info, "Rebuilding index file... ({})", idx_path);
     pb.corrupted_compaction_index();
@@ -728,7 +725,8 @@ ss::future<> rebuild_compaction_index(
       std::move(aborted_txs),
       idx_path,
       cfg,
-      resources);
+      resources,
+      feature_table);
     vlog(
       gclog.info, "rebuilt index: {}, attempting compaction again", idx_path);
 }
@@ -739,7 +737,8 @@ ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
   const compaction::compaction_config& cfg,
   ss::rwlock::holder& read_holder,
   storage_resources& resources,
-  storage::probe& pb) {
+  storage::probe& pb,
+  ss::sharded<features::feature_table>& feature_table) {
     segment_full_path idx_path = s->path().to_compacted_index();
 
     compacted_index::recovery_state state;
@@ -772,7 +771,8 @@ ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
               scoped_file_tracker{cfg.files_to_cleanup, {idx_path}});
         }
 
-        co_await rebuild_compaction_index(s, stm_manager, cfg, pb, resources);
+        co_await rebuild_compaction_index(
+          s, stm_manager, cfg, pb, resources, feature_table);
 
         // Take the lock again before proceeding.
         read_holder = co_await s->read_lock();
@@ -794,7 +794,6 @@ ss::future<compaction_result> self_compact_segment(
   storage::readers_cache& readers_cache,
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table,
-  kvstore& kvs,
   bool force_compaction) {
     if (s->has_appender()) {
         throw std::runtime_error(
@@ -803,8 +802,11 @@ ss::future<compaction_result> self_compact_segment(
     }
 
     const bool may_remove_tombstones = may_have_removable_tombstones(s, cfg);
+    const bool will_remove_transaction_batches
+      = has_removable_transaction_batches(s, cfg);
 
-    auto should_force_compaction = force_compaction || may_remove_tombstones;
+    auto should_force_compaction = force_compaction || may_remove_tombstones
+                                   || will_remove_transaction_batches;
 
     // force_compaction will not invalidate max_removable_local_log_offset.
     auto segment_needs_compaction
@@ -817,7 +819,7 @@ ss::future<compaction_result> self_compact_segment(
     auto read_holder = co_await s->read_lock();
     compacted_index::recovery_state state
       = co_await maybe_rebuild_compaction_index(
-        s, stm_manager, cfg, read_holder, resources, pb);
+        s, stm_manager, cfg, read_holder, resources, pb, feature_table);
 
     const bool segment_already_compacted
       = (state == compacted_index::recovery_state::already_compacted);
@@ -845,8 +847,7 @@ ss::future<compaction_result> self_compact_segment(
       resources,
       apply_offset,
       std::move(read_holder),
-      feature_table,
-      kvs);
+      feature_table);
 
     if (res.did_compact()) {
         pb.add_compaction_removed_bytes(
@@ -1002,9 +1003,9 @@ make_concatenated_segment(
 
     // If any of the segments contain a transactional batch, then the new index
     // should reflect that.
-    auto new_has_transaction_batches = std::ranges::any_of(
+    auto new_may_have_transaction_batches = std::ranges::any_of(
       segments,
-      [](const auto& s) { return s->index().has_transaction_batches(); });
+      [](const auto& s) { return s->index().may_have_transaction_batches(); });
 
     segment_index index(
       index_path,
@@ -1016,7 +1017,7 @@ make_concatenated_segment(
       new_clean_compact_timestamp,
       new_may_have_tombstone_records,
       new_self_compact_timestamp,
-      new_has_transaction_batches);
+      new_may_have_transaction_batches);
 
     co_return std::make_tuple(
       ss::make_lw_shared<segment>(
@@ -1191,8 +1192,7 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
   storage::readers_cache& readers_cache,
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table,
-  mutex& segment_rewrite_lock,
-  kvstore& kvs) {
+  mutex& segment_rewrite_lock) {
     vassert(
       segment_rewrite_lock.is_held(), "Segment rewrite lock should be held.");
 
@@ -1234,7 +1234,6 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
       readers_cache,
       resources,
       feature_table,
-      kvs,
       true);
     vlog(gclog.info, "Final compacted segment {}", replacement);
 
@@ -1350,13 +1349,6 @@ bytes clean_segment_key(model::ntp ntp) {
     return iobuf_to_bytes(buf);
 }
 
-bytes max_removed_offset_key(model::ntp ntp) {
-    iobuf buf;
-    reflection::serialize(
-      buf, kvstore_key_type::max_removed_offset, std::move(ntp));
-    return iobuf_to_bytes(buf);
-}
-
 offset_delta_time should_apply_delta_time_offset(
   ss::sharded<features::feature_table>& feature_table) {
     return offset_delta_time{
@@ -1416,7 +1408,15 @@ ss::future<bool> mark_segment_as_finished_self_compaction(
 
 bool is_past_transaction_batch_delete_horizon(
   ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
-    if (seg->has_self_compact_timestamp() && cfg.tx_retention_ms.has_value()) {
+    if (config::shard_local_cfg().log_compaction_disable_tx_batch_removal()) {
+        // Safety hatch for disabling control batch removal
+        return false;
+    }
+
+    if (
+      seg->has_self_compact_timestamp() && cfg.tx_retention_ms.has_value()
+      && seg->offsets().get_stable_offset()
+           <= cfg.max_tombstone_remove_offset) {
         const auto now = model::to_time_point(model::timestamp::now());
         return (now
                 - model::to_time_point(
@@ -1429,28 +1429,8 @@ bool is_past_transaction_batch_delete_horizon(
 
 bool has_removable_transaction_batches(
   ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
-    return seg->index().has_transaction_batches()
+    return seg->index().may_have_transaction_batches()
            && is_past_transaction_batch_delete_horizon(seg, cfg);
-}
-
-std::optional<model::offset>
-read_max_removed_offset(kvstore& kvs, const model::ntp& ntp) {
-    auto value = kvs.get(
-      kvstore::key_space::storage, internal::max_removed_offset_key(ntp));
-    if (value) {
-        auto offset = reflection::adl<model::offset>{}.from(std::move(*value));
-        return offset;
-    }
-    return std::nullopt;
-}
-
-ss::future<>
-write_max_removed_offset(kvstore& kvs, const model::ntp& ntp, model::offset o) {
-    vlog(gclog.debug, "{}: Updated max_removed_offset as {}", ntp, o);
-    co_await kvs.put(
-      kvstore::key_space::storage,
-      internal::max_removed_offset_key(ntp),
-      reflection::to_iobuf(o));
 }
 
 } // namespace storage::internal

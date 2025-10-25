@@ -380,6 +380,17 @@ public:
 
     void set_transactional_type() { _attributes |= transactional_mask; }
 
+    // We remove the transactional type for raft data batches during compaction.
+    // This is part of the first pass of transactional control batch removal in
+    // compaction, in which the `tx_fence` batch is removed, and all the
+    // `raft_data` batches associated with the transaction have their
+    // transactional bit unset. This is done so that after the `commit`
+    // batch is removed in the second pass over the data, there is no
+    // possibility of an unrelated `abort` batch having an effect on the
+    // committed `raft_data` (e.g turning committed data into aborted data when
+    // the log is read sequentially).
+    void remove_transactional_type() { _attributes &= ~transactional_mask; }
+
     bool operator==(const record_batch_attributes& other) const {
         return _attributes == other._attributes;
     }

@@ -357,14 +357,14 @@ message TopicMetadataSyncOptions {
     oneof start_offset {
         // Enables data replication from the earliest offset
         // on the source topic/partition.
-        EarliestOffset earliest = 6;
+        EarliestOffset start_at_earliest = 6;
         // Enables data replication from the latest offset
         // on the source topic/partition.
-        LatestOffset latest = 7;
+        LatestOffset start_at_latest = 7;
         // Enables data replication from the first offset on the
         // source topic/partition where the record's timestamp is
         // at or after the specified timestamp.
-        google.protobuf.Timestamp timestamp = 8;
+        google.protobuf.Timestamp start_at_timestamp = 8;
     }
 }
 // Options for how the Schema Registry is synced.

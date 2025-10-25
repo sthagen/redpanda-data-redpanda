@@ -202,6 +202,13 @@ void probe::setup_metrics(const model::ntp& ntp) {
             "due to the delete.retention.ms setting."),
           labels),
         sm::make_counter(
+          "control_batches_removed",
+          [this] { return _control_batches_removed; },
+          sm::description(
+            "Number of transactional control batches removed by "
+            "compaction due to the delete.retention.ms setting."),
+          labels),
+        sm::make_counter(
           "cleanly_compacted_segment",
           [this] { return _segment_cleanly_compacted; },
           sm::description(

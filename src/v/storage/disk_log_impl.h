@@ -304,8 +304,6 @@ public:
       compaction::compaction_config cfg,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
-    std::optional<model::offset> max_removed_offset() const final;
-
     struct file_offset_t {
         size_t position{};
         model::timestamp base_timestamp{model::timestamp::missing()};

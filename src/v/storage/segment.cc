@@ -506,7 +506,7 @@ ss::future<> segment::compaction_index_batch(const model::record_batch& b) {
         co_return;
     }
     // do not index not compactible batches
-    if (!compaction::is_compactible(path().get_ntp(), b.header())) {
+    if (!compaction::is_compactible(b.header())) {
         co_return;
     }
 
@@ -647,13 +647,6 @@ ss::future<append_result> segment::do_append(const model::record_batch& b) {
 
 ss::future<append_result> segment::append(const model::record_batch& b) {
     if (b.contains_transactional_data()) {
-        if (!_idx.has_transaction_batches()) {
-            vlog(
-              gclog.trace,
-              "Marking index for segment {} as has transaction batches",
-              filename());
-            _idx.set_has_transaction_batches(true);
-        }
         if (has_compaction_index()) {
             // With transactional batches, we do not know ahead of time whether
             // the batch will be committed or aborted. We may not have this

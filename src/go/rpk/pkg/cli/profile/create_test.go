@@ -219,7 +219,6 @@ func TestCreateFromProfile(t *testing.T) {
 				[]string{},
 				"new",
 				"new profile",
-				"",
 			)
 
 			require.NoError(t, err, "error in CreateFlow")

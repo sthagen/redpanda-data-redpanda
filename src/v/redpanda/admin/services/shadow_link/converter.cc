@@ -867,16 +867,18 @@ void starting_offset_to_proto(
     }
 
     if (*ts == cluster_link::model::earliest_offset_ts) {
-        options.set_earliest(topic_metadata_sync_options_earliest_offset{});
+        options.set_start_at_earliest(
+          topic_metadata_sync_options_earliest_offset{});
         return;
     }
 
     if (*ts == cluster_link::model::latest_offset_ts) {
-        options.set_latest(topic_metadata_sync_options_latest_offset{});
+        options.set_start_at_latest(
+          topic_metadata_sync_options_latest_offset{});
         return;
     }
 
-    options.set_timestamp(absl::FromUnixMillis(ts.value()()));
+    options.set_start_at_timestamp(absl::FromUnixMillis(ts.value()()));
 }
 
 topic_metadata_sync_options create_topic_metadata_sync_options(

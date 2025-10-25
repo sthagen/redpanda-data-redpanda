@@ -139,7 +139,7 @@ struct index_state
     static constexpr auto may_have_tombstone_records_version = 9;
     // Added in the same version.
     static constexpr auto self_compact_timestamp_version = 10;
-    static constexpr auto has_transaction_batches_version = 10;
+    static constexpr auto may_have_transaction_batches_version = 10;
 
     static index_state
     make_empty_index(model::offset base_offset, offset_delta_time with_offset);
@@ -230,11 +230,10 @@ struct index_state
     // delete horizon is set by `self_compact_timestamp + delete.retention.ms`.
     std::optional<model::timestamp> self_compact_timestamp{std::nullopt};
 
-    // has_transaction_batches is `false` by default, but set in
-    // segment::append() when transactional batches are added. It remains `true`
-    // until compaction deduplication/segment data copying is performed and all
-    // transaction batches are removed.
-    bool has_transaction_batches{false};
+    // may_have_transaction_batches is `true` by default. It remains `true`
+    // until compaction deduplication/segment data copying is performed and and
+    // it is proven that the segment does not contain any transactional batches.
+    bool may_have_transaction_batches{true};
 
     size_t size() const;
 

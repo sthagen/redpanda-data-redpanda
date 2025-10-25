@@ -2769,7 +2769,8 @@ TEST_F(storage_test_fixture, test_compacting_batches_of_different_types) {
     write_batch(log, "key_1", 1, model::record_batch_type::raft_data, false);
     write_batch(log, "key_1", 1, model::record_batch_type::raft_data, true);
     write_batch(log, "key_1", 10, model::record_batch_type::tm_update, false);
-    write_batch(log, "key_1", 100, model::record_batch_type::tx_fence, false);
+    write_batch(
+      log, "key_1", 100, model::record_batch_type::archival_metadata, false);
 
     write_batch(log, "key_1", 2, model::record_batch_type::raft_data, false);
     write_batch(log, "key_1", 3, model::record_batch_type::raft_data, false);

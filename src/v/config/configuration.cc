@@ -1137,6 +1137,14 @@ configuration::configuration()
       "compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt)
+  , log_compaction_disable_tx_batch_removal(
+      *this,
+      "log_compaction_disable_tx_batch_removal",
+      "Disable removal of transactional control batches. This should only be "
+      "toggled to `true` in extreme cases of proven instability due to issues "
+      "with transactional control batch removal.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , retention_bytes(
       *this,
       "retention_bytes",

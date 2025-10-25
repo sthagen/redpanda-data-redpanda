@@ -149,7 +149,8 @@ void aggregator<Clock>::add(l0::write_request<Clock>& req) {
     req._hook.unlink();
     it->second.push_back(req);
     _size_bytes += req.size_bytes();
-    _min_epoch = std::max(_min_epoch, req.min_epoch);
+    _highest_topic_start_epoch = std::max(
+      _highest_topic_start_epoch, req.topic_start_epoch);
 }
 
 template<class Clock>

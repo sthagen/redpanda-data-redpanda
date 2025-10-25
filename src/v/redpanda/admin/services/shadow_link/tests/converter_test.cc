@@ -1217,7 +1217,7 @@ TEST(converter_test, test_convert_timestamp) {
         req.get_shadow_link()
           .get_configurations()
           .get_topic_metadata_sync_options()
-          .set_earliest({});
+          .set_start_at_earliest({});
 
         auto md = admin::convert_create_to_metadata(std::move(req));
         EXPECT_EQ(
@@ -1231,7 +1231,7 @@ TEST(converter_test, test_convert_timestamp) {
         req.get_shadow_link()
           .get_configurations()
           .get_topic_metadata_sync_options()
-          .set_latest({});
+          .set_start_at_latest({});
 
         auto md = admin::convert_create_to_metadata(std::move(req));
         EXPECT_EQ(
@@ -1247,7 +1247,7 @@ TEST(converter_test, test_convert_timestamp) {
         req.get_shadow_link()
           .get_configurations()
           .get_topic_metadata_sync_options()
-          .set_timestamp(absl::Time{now});
+          .set_start_at_timestamp(absl::Time{now});
 
         auto md = admin::convert_create_to_metadata(std::move(req));
         EXPECT_EQ(
@@ -1288,7 +1288,7 @@ TEST(converter_test, timestamp_to_string) {
 
         EXPECT_TRUE(sl.get_configurations()
                       .get_topic_metadata_sync_options()
-                      .has_earliest())
+                      .has_start_at_earliest())
           << "Expected earliest starting offset";
     }
     {
@@ -1299,7 +1299,7 @@ TEST(converter_test, timestamp_to_string) {
 
         EXPECT_TRUE(sl.get_configurations()
                       .get_topic_metadata_sync_options()
-                      .has_latest())
+                      .has_start_at_latest())
           << "Expected latest starting offset";
     }
     {
@@ -1310,12 +1310,12 @@ TEST(converter_test, timestamp_to_string) {
 
         ASSERT_TRUE(sl.get_configurations()
                       .get_topic_metadata_sync_options()
-                      .has_timestamp())
+                      .has_start_at_timestamp())
           << "Expected timestamp starting offset";
 
         auto ts = sl.get_configurations()
                     .get_topic_metadata_sync_options()
-                    .get_timestamp();
+                    .get_start_at_timestamp();
         EXPECT_EQ(absl::FromUnixMillis(1759193250080), ts);
     }
 }

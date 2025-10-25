@@ -109,10 +109,14 @@ struct stats {
     // Number of batches that were ignored because they are not
     // of a compactible type.
     size_t non_compactible_batches{0};
+    // Number of transactional control batches that were removed.
+    // This is only relevant for local storage compaction.
+    size_t control_batches_discarded{0};
 
     // Returns whether any data was removed by this reducer.
     bool has_removed_data() const {
-        return batches_discarded > 0 || records_discarded > 0;
+        return batches_discarded > 0 || records_discarded > 0
+               || control_batches_discarded > 0;
     }
 
     friend std::ostream& operator<<(std::ostream& os, const stats& s);
