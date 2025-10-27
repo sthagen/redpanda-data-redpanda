@@ -40,8 +40,6 @@ void replication_probe::setup_metrics(configuration config, ::model::ntp ntp) {
     };
     std::ranges::copy(config.labels, std::back_inserter(labels));
 
-    std::vector<sm::label> total_counters_agg = {topic_label, partition_label};
-
     _public_metrics.add_group(
       config.group_name,
       {

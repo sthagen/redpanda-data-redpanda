@@ -229,6 +229,7 @@ std::unique_ptr<replication::data_source> make_default_data_source(
   const ::model::topic_partition& tp,
   replication::mux_remote_consumer& consumer);
 
-std::unique_ptr<replication::data_sink>
-make_default_data_sink(ss::lw_shared_ptr<cluster::partition> partition);
+std::unique_ptr<replication::data_sink> make_default_data_sink(
+  ss::lw_shared_ptr<cluster::partition> partition,
+  const cluster::metadata_cache&);
 } // namespace cluster_link

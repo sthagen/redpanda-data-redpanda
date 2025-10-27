@@ -200,6 +200,7 @@ redpanda_cc_library(
         ":security_migrator",
         ":source_topic_syncer",
         "//src/v/cluster_link/model",
+        "//src/v/config",
         "//src/v/kafka/data:partition_proxy",
         "//src/v/ssx:future_util",
     ],

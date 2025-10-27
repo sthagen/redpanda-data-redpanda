@@ -74,10 +74,10 @@ ss::future<> brokers::do_clear() {
       _logger->debug,
       "Clear brokers: {}",
       fmt::join(_brokers | std::views::values | to_string, ","));
-    for (auto& b : _brokers | std::views::values) {
+    auto brokers = std::exchange(_brokers, brokers_t{});
+    for (auto& b : brokers | std::views::values) {
         co_await b->stop();
     }
-    _brokers.clear();
 }
 
 ss::future<> brokers::apply(

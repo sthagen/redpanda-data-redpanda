@@ -64,6 +64,7 @@ from rptest.tests.cluster_linking_test_base import (
     ShadowLinkTestBase,
 )
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
+from rptest.tests.full_disk_test import FDT_LOG_ALLOW_LIST
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import (
     bg_thread_cm,
@@ -72,9 +73,16 @@ from rptest.util import (
     wait_until,
     wait_until_result,
 )
+from rptest.utils.full_disk import FullDiskHelper
 from typing import Any, Callable, Optional
 from time import sleep
 import google.protobuf.duration_pb2
+
+FDT_CL_REPLICATION_REJECTION = [
+    re.compile(
+        ".*Error in fetch_and_replicate.*no disk space; free bytes less than configurable threshold\\)"
+    )
+]
 
 
 class MultiClusterTestBase(RedpandaTest):
@@ -808,7 +816,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                     {"enable_shadow_linking": state}
                 )
 
-        toggle_thread = threading.Thread(target=toggle_shadow_linking, args=(200,))
+        toggle_thread = threading.Thread(target=toggle_shadow_linking, args=(100,))
 
         toggle_thread.start()
         topics: list[TopicSpec] = []
@@ -819,14 +827,14 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             self.source_default_client().create_topic(topic)
             topics.append(topic)
 
+        toggle_thread.join()
+
         self.target_cluster.service.wait_until(
             lambda: self._topics_are_present_in_target_cluster(topics),
             timeout_sec=60,
             backoff_sec=1,
-            err_msg="Failed to find first-topic in target cluster",
+            err_msg="Failed to find all topics in target cluster",
         )
-
-        toggle_thread.join()
 
     @cluster(num_nodes=6)
     def test_shadow_link_sanctioning(self):
@@ -1200,6 +1208,74 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION,
         ):
             self.create_link("link-to-incompatible-cluster")
+
+    @cluster(
+        num_nodes=6,
+        log_allow_list=FDT_LOG_ALLOW_LIST + FDT_CL_REPLICATION_REJECTION,
+    )
+    def test_produce_guards(self):
+        test_link = "test-link"
+        self.create_link(test_link)
+
+        topic = TopicSpec(name="test-topic", partition_count=3, replication_factor=1)
+        self.source_default_client().create_topic(topic)
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        source_rpk = RpkTool(self.source_cluster.service)
+        target_rpk = RpkTool(self.target_cluster.service)
+
+        def verify_n_replications(n_expected_logs: int) -> bool:
+            desc = list(target_rpk.describe_topic(topic.name))
+            n_logs: int = 0
+            for partition in desc:
+                n_logs += partition.high_watermark
+            return n_logs == n_expected_logs
+
+        source_rpk.produce(topic.name, "key", "message1")
+
+        wait_until(
+            lambda: verify_n_replications(1),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg=f"Failed to replicate shadow topic",
+        )
+
+        target_redpanda = self.target_cluster_service
+        target_full_disk = FullDiskHelper(self.logger, target_redpanda)
+        target_full_disk.trigger_low_space()
+        wait_until(
+            lambda: target_redpanda.search_log_all("ok -> degraded"),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg=f"Failed to change to degraded state",
+        )
+
+        source_rpk.produce(topic.name, "key", "message2")
+        wait_until(
+            lambda: target_redpanda.search_log_any(
+                "Replication rejected on {kafka/test-topic/1}. no disk space;"
+            ),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg=f"Sink replication should have been rejected",
+        )
+
+        assert verify_n_replications(1), (
+            "Sink replication was not rejected under degraded disk conditions"
+        )
+        target_full_disk.clear_low_space()
+
+        wait_until(
+            lambda: verify_n_replications(2),
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg=f"Failed to replicate shadow topic",
+        )
 
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):

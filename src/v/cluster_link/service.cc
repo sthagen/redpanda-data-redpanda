@@ -15,6 +15,7 @@
 #include "cluster/controller.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/members_table.h"
+#include "cluster/metadata_cache.h"
 #include "cluster/partition_manager.h"
 #include "cluster_link/group_mirroring_task.h"
 #include "cluster_link/link.h"
@@ -28,6 +29,7 @@
 #include "cluster_link/security_migrator.h"
 #include "cluster_link/shadow_linking_rpc_service.h"
 #include "cluster_link/source_topic_syncer.h"
+#include "config/node_config.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/server/group_router.h"
@@ -377,8 +379,10 @@ class local_partition_sink : public replication::data_sink {
 public:
     static constexpr auto sync_timeout = 10s;
     explicit local_partition_sink(
-      ss::lw_shared_ptr<cluster::partition> partition)
+      ss::lw_shared_ptr<cluster::partition> partition,
+      const cluster::metadata_cache& md_cache)
       : _partition(std::move(partition))
+      , _metadata_cache{md_cache}
       , _stm(_partition->raft()
                ->stm_manager()
                ->get<kafka::write_at_offset_stm>()) {
@@ -427,6 +431,19 @@ public:
           !batches.empty(),
           "Cannot replicate empty batch vector {}",
           _partition->ntp());
+
+        if (_metadata_cache.should_reject_writes()) [[unlikely]] {
+            throw std::runtime_error{fmt::format(
+              "Replication rejected on {}. no disk space; free bytes less than "
+              "configurable threshold",
+              _partition->ntp())};
+        }
+        if (config::node().recovery_mode_enabled()) [[unlikely]] {
+            throw std::runtime_error{fmt::format(
+              "Replication rejected on {}. Redpanda is in recovery mode",
+              _partition->ntp())};
+        }
+
         chunked_vector<kafka::offset> expected_offsets;
         expected_offsets.reserve(batches.size());
         for (const auto& batch : batches) {
@@ -511,6 +528,7 @@ public:
 private:
     ss::gate _gate;
     ss::lw_shared_ptr<cluster::partition> _partition;
+    const cluster::metadata_cache& _metadata_cache;
     ss::shared_ptr<kafka::write_at_offset_stm> _stm;
     // set in start();
     std::optional<kafka::offset> _last_replicated_offset;
@@ -520,8 +538,10 @@ class local_partition_data_sink_factory
   : public replication::data_sink_factory {
 public:
     explicit local_partition_data_sink_factory(
-      ss::sharded<cluster::partition_manager>& pm)
-      : _partition_manager(pm) {}
+      ss::sharded<cluster::partition_manager>& pm,
+      ss::sharded<cluster::metadata_cache>& md_cache)
+      : _partition_manager(pm)
+      , _metadata_cache{md_cache} {}
 
     std::unique_ptr<replication::data_sink>
     make_sink(const ::model::ntp& ntp) final {
@@ -530,11 +550,13 @@ public:
             throw std::runtime_error(
               fmt::format("Partition not found: {} on this shard", ntp));
         }
-        return make_default_data_sink(std::move(partition));
+        return make_default_data_sink(
+          std::move(partition), _metadata_cache.local());
     }
 
 private:
     ss::sharded<cluster::partition_manager>& _partition_manager;
+    ss::sharded<cluster::metadata_cache>& _metadata_cache;
 };
 
 std::unique_ptr<replication::data_source> make_default_data_source(
@@ -543,9 +565,11 @@ std::unique_ptr<replication::data_source> make_default_data_source(
     return std::make_unique<remote_partition_source>(tp, consumer);
 }
 
-std::unique_ptr<replication::data_sink>
-make_default_data_sink(ss::lw_shared_ptr<cluster::partition> partition) {
-    return std::make_unique<local_partition_sink>(std::move(partition));
+std::unique_ptr<replication::data_sink> make_default_data_sink(
+  ss::lw_shared_ptr<cluster::partition> partition,
+  const cluster::metadata_cache& md_cache) {
+    return std::make_unique<local_partition_sink>(
+      std::move(partition), md_cache);
 }
 
 class default_link_config_provider
@@ -751,10 +775,12 @@ class default_link_factory : public link_factory {
 public:
     explicit default_link_factory(
       ss::sharded<cluster::partition_manager>* partition_manager,
-      ss::sharded<kafka::snc_quota_manager>* snc_quota_mgr)
+      ss::sharded<kafka::snc_quota_manager>* snc_quota_mgr,
+      ss::sharded<cluster::metadata_cache>* md_cache)
       : link_factory()
       , _partition_manager(partition_manager)
-      , _snc_quota_mgr(snc_quota_mgr) {}
+      , _snc_quota_mgr(snc_quota_mgr)
+      , _metadata_cache(md_cache) {}
 
     static constexpr auto link_reconciler_period = 5min;
     std::unique_ptr<link> create_link(
@@ -786,12 +812,13 @@ public:
               make_remote_consumer_configuration(config.connection),
               std::move(probe_cfg))),
           std::make_unique<local_partition_data_sink_factory>(
-            *_partition_manager));
+            *_partition_manager, *_metadata_cache));
     }
 
 private:
     ss::sharded<cluster::partition_manager>* _partition_manager;
     ss::sharded<kafka::snc_quota_manager>* _snc_quota_mgr;
+    ss::sharded<cluster::metadata_cache>* _metadata_cache;
 };
 
 class kafka_consumer_groups_router : public consumer_groups_router {
@@ -1074,7 +1101,7 @@ ss::future<> service::maybe_start_manager() {
       security_service::make_default(_security_fe),
       std::make_unique<link_registry_adapter>(&_plf->local(), this),
       std::make_unique<default_link_factory>(
-        _partition_manager, _snc_quota_mgr),
+        _partition_manager, _snc_quota_mgr, _metadata_cache),
       std::make_unique<cluster_factory>(),
       std::make_unique<kafka_consumer_groups_router>(_group_router),
       std::make_unique<health_monitor_based_partition_metadata_provider>(
