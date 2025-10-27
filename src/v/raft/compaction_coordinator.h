@@ -36,6 +36,16 @@ using namespace std::chrono_literals;
  *
  * MCCO and MTRO are not inclusive, i.e. denote first non-cleanly-compacted and
  * first non-tombstone-removable offsets respectively.
+ *
+ * MCCO of a replica log is defined as an offset where all data below it are
+ * cleanly compacted. MCCO may be above the log's dirty offset if the data
+ * replica receives in future is guaranteed to be cleanly compacted up to this
+ * offset.
+ *
+ * MTRO is defined as an offset where all data below it are cleanly compacted on
+ * all replicas. This makes MTRO never go back, as once data has been cleanly
+ * compacted on all replicas there's no uncompacted data for the same offset
+ * range.
  */
 
 class compaction_coordinator {

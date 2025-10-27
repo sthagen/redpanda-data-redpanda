@@ -316,8 +316,8 @@ ss::future<result<RespT>> in_memory_test_protocol::dispatch(
     auto& node_channel = *it->second;
 
     if (!node_channel.is_valid()) {
-        co_await node_channel.stop();
-        _channels.erase(id);
+        auto extracted_channel = _channels.extract(it);
+        co_await extracted_channel.mapped()->stop();
         co_return errc::group_not_exists;
     }
 
