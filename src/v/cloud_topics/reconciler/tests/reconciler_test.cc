@@ -165,12 +165,14 @@ TEST_F(ReconcilerTest, ObjectSizeLimit) {
 
     // Total size = 50 * 3 * 512KiB = 75MiB, which is greater than the 64MiB
     // max object size.
+    // Disable compression to ensure predictable sizes.
     constexpr auto batch_count = 50;
     constexpr auto record_count = 3;
     constexpr auto record_size = 512_KiB;
     for (size_t i = 0; i < batch_count; ++i) {
         src->add_batch(
-          {.count = record_count,
+          {.allow_compression = false,
+           .count = record_count,
            .record_sizes = std::vector<size_t>(record_count, record_size)});
     }
 
@@ -187,6 +189,55 @@ TEST_F(ReconcilerTest, ObjectSizeLimit) {
     EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{last_offset});
     EXPECT_THAT(
       metastore_next_offset(src), Optional(kafka::offset{last_offset + 1}));
+}
+
+TEST_F(ReconcilerTest, ObjectSizeLimitMultipleSources) {
+    auto src1 = add_source();
+    auto src2 = add_source();
+
+    // 50MiB in source 1.
+    // Disable compression to ensure predictable sizes.
+    constexpr auto batch_count_1 = 50;
+    constexpr auto record_count = 1;
+    constexpr auto record_size = 1_MiB;
+    for (size_t i = 0; i < batch_count_1; ++i) {
+        src1->add_batch(
+          {.allow_compression = false,
+           .count = record_count,
+           .record_sizes = std::vector<size_t>(record_count, record_size)});
+    }
+
+    // 25MiB in source 2, total 75MiB > 64MiB object limit.
+    constexpr auto batch_count_2 = 25;
+    for (size_t i = 0; i < batch_count_2; ++i) {
+        src2->add_batch(
+          {.allow_compression = false,
+           .count = record_count,
+           .record_sizes = std::vector<size_t>(record_count, record_size)});
+    }
+
+    // First reconciliation round should process some data but not all.
+    reconcile();
+
+    constexpr auto last_offset_1 = batch_count_1 * record_count - 1;
+    constexpr auto last_offset_2 = batch_count_2 * record_count - 1;
+
+    auto lro1_round1 = src1->last_reconciled_offset();
+    auto lro2_round1 = src2->last_reconciled_offset();
+
+    // At least one source should not be fully processed.
+    EXPECT_TRUE(
+      lro1_round1 < kafka::offset{last_offset_1}
+      || lro2_round1 < kafka::offset{last_offset_2});
+
+    // Second reconciliation round should process all remaining data.
+    reconcile();
+    EXPECT_EQ(src1->last_reconciled_offset(), kafka::offset{last_offset_1});
+    EXPECT_EQ(src2->last_reconciled_offset(), kafka::offset{last_offset_2});
+    EXPECT_THAT(
+      metastore_next_offset(src1), Optional(kafka::offset{last_offset_1 + 1}));
+    EXPECT_THAT(
+      metastore_next_offset(src2), Optional(kafka::offset{last_offset_2 + 1}));
 }
 
 TEST_F(ReconcilerTest, SourceReadFailure) {

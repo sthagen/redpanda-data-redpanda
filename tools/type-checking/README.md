@@ -45,35 +45,54 @@ Python dependencies for type checking (primarily pyright).
 
 ### Local Development
 
-Locally you should be able to run the .py script directly if you have run [local_venv.sh](../../tests/local_venv.sh). Alternately, in any of the commands below you can replace `type-check.py` with `type-check.sh` to use docker to run the checker, which does not require any local setup.
+#### Using task
+
+There is a type-check `task` which is a very thin wrapper around the scripts: this is probably the most convenient way to call it as it works
+anywhere in the repository. Call it with arguments for the script after `--`, like so:
+
+```
+task rp:type-check -- --help
+```
+
+#### Using type-check.sh
+
+You can also call the script as `tools/type-checking/type-check.sh --help`. This is essentially the same as the `task` invocation above. This runs the underlying python script inside a docker container, so it should "just work".
+
+#### Using type-check.py
+
+Locally you should also able to run the .py script directly, like `tools/type-checking/type-check.py --help`  if you have run [local_venv.sh](../../tests/local_venv.sh).
+
+### Examples
+
+These examples all the `task` invocation method but work with any of the methods above.
 
 ```bash
 # Run type checking on all files
-tools/type-checking/type-check.py check
+task rp:type-check -- check
 
 # Check for files ready to be promoted to stricter levels
-tools/type-checking/type-check.py promotion-check
+task rp:type-check -- promotion-check
 
 # Find low-hanging fruit - files with fewest errors at each target level
-tools/type-checking/type-check.py fruit
+task rp:type-check -- fruit
 
 # Show top 25 fruit candidates
-tools/type-checking/type-check.py fruit --top 25
+task rp:type-check -- fruit --top 25
 
 # Show detailed error information with verbose output
-tools/type-checking/type-check.py fruit --verbose 2
+task rp:type-check -- fruit --verbose 2
 
 # Automatically promote eligible files
-tools/type-checking/type-check.py promotion-check --update
+task rp:type-check -- promotion-check --update
 
 # Run CI checks (both check and promotion-check)
-tools/type-checking/type-check.py ci
+task rp:type-check -- ci
 
 # Check specific files
-tools/type-checking/type-check.py check --input-files "rptest/tests/my_test.py"
+task rp:type-check -- check --input-files "rptest/tests/my_test.py"
 
 # Force all files to be checked at a specific level
-tools/type-checking/type-check.py check --force-level strict
+task rp:type-check -- check --force-level strict
 ```
 
 ## Strictness Level Management
@@ -99,13 +118,13 @@ The `fruit` command helps identify files that are closest to being promotable to
 
 ```bash
 # Show top 10 files with fewest errors per target level
-tools/type-checking/type-check.py fruit
+task rp:type-check -- fruit
 
 # Show top 20 files with fewest errors per target level
-tools/type-checking/type-check.py fruit --top 20
+task rp:type-check -- fruit --top 20
 
 # Show detailed error information with verbose output
-tools/type-checking/type-check.py fruit --verbose 2
+task rp:type-check -- fruit --verbose 2
 ```
 
 This is useful for:
@@ -121,7 +140,7 @@ You may be here because CI failed with a "promotion check" error. This means tha
 
 ```bash
 # Automatically update the configuration
-tools/type-checking/type-check.py promotion-check --update
+task rp:type-check -- promotion-check --update
 
 # Commit the updated type-check-strictness.json
 git add tools/type-checking/type-check-strictness.json

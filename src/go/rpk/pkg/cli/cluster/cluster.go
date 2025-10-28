@@ -11,6 +11,7 @@ package cluster
 
 import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/connections"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/license"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/maintenance"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/partitions"
@@ -49,6 +50,7 @@ func NewCommand(fs afero.Fs, p *pkgconfig.Params) *cobra.Command {
 		storage.NewCommand(fs, p),
 		txn.NewCommand(fs, p),
 		quotas.NewCommand(fs, p),
+		connections.NewCommand(fs, p),
 		offsets,
 	)
 

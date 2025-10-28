@@ -16,7 +16,7 @@ import (
 	"time"
 
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
-	"buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common"
+	corecommonv1 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -198,13 +198,13 @@ func printClient(opts *adminv2.ShadowLinkClientOptions) {
 	tw.Print(strings.Repeat("-", 21), "")
 
 	// Print client config table
-	tw.Print("metadata_max_age_ms", opts.GetMetadataMaxAgeMs())
-	tw.Print("connection_timeout_ms", opts.GetConnectionTimeoutMs())
-	tw.Print("retry_backoff_ms", opts.GetRetryBackoffMs())
-	tw.Print("fetch_wait_max_ms", opts.GetFetchWaitMaxMs())
-	tw.Print("fetch_min_bytes", opts.GetFetchMinBytes())
-	tw.Print("fetch_max_bytes", opts.GetFetchMaxBytes())
-	tw.Print("fetch_partition_max_bytes", opts.GetFetchPartitionMaxBytes())
+	tw.Print("metadata_max_age_ms", opts.GetEffectiveMetadataMaxAgeMs())
+	tw.Print("connection_timeout_ms", opts.GetEffectiveConnectionTimeoutMs())
+	tw.Print("retry_backoff_ms", opts.GetEffectiveRetryBackoffMs())
+	tw.Print("fetch_wait_max_ms", opts.GetEffectiveFetchWaitMaxMs())
+	tw.Print("fetch_min_bytes", opts.GetEffectiveFetchMinBytes())
+	tw.Print("fetch_max_bytes", opts.GetEffectiveFetchMaxBytes())
+	tw.Print("fetch_partition_max_bytes", opts.GetEffectiveFetchPartitionMaxBytes())
 }
 
 func printTopicSync(opts *adminv2.TopicMetadataSyncOptions) {
@@ -215,8 +215,20 @@ func printTopicSync(opts *adminv2.TopicMetadataSyncOptions) {
 		return
 	}
 
-	tw.Print("INTERVAL", opts.GetInterval().AsDuration().String())
-
+	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
+	if opts.HasStartOffset() {
+		var startOffset string
+		if opts.GetStartAtEarliest() != nil {
+			startOffset = "EARLIEST"
+		}
+		if opts.GetStartAtLatest() != nil {
+			startOffset = "LATEST"
+		}
+		if opts.GetStartAtTimestamp() != nil {
+			startOffset = opts.GetStartAtTimestamp().AsTime().String()
+		}
+		tw.Print("START OFFSET", startOffset)
+	}
 	if len(opts.GetAutoCreateShadowTopicFilters()) > 0 {
 		tw.Print("FILTERS:", "")
 		for _, filter := range opts.GetAutoCreateShadowTopicFilters() {
@@ -241,10 +253,7 @@ func printConsumerOffsetSync(opts *adminv2.ConsumerOffsetSyncOptions) {
 	}
 
 	tw.Print("ENABLED", opts.GetEnabled())
-	if !opts.GetEnabled() {
-		return
-	}
-	tw.Print("INTERVAL", opts.GetInterval().AsDuration().String())
+	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
 
 	if len(opts.GetGroupFilters()) > 0 {
 		tw.Print("GROUP FILTERS:", "")
@@ -263,20 +272,18 @@ func printSecuritySync(opts *adminv2.SecuritySettingsSyncOptions) {
 	}
 
 	tw.Print("ENABLED", opts.GetEnabled())
-	if !opts.GetEnabled() {
-		return
-	}
-	tw.Print("INTERVAL", opts.GetInterval().AsDuration().String())
+	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
 
 	if len(opts.GetAclFilters()) > 0 {
 		tw.Print("ACL FILTERS:")
 		tw.Flush()
-		aclTw := out.NewTable("RESOURCE", "PATTERN", "NAME", "OPERATION", "PERMISSION")
+		aclTw := out.NewTable("", "RESOURCE", "PATTERN", "NAME", "OPERATION", "PERMISSION")
 		defer aclTw.Flush()
 		for _, filter := range opts.GetAclFilters() {
 			resource := filter.GetResourceFilter()
 			access := filter.GetAccessFilter()
 			aclTw.Print(
+				"",
 				formatACLResource(resource.GetResourceType()),
 				formatACLPattern(resource.GetPatternType()),
 				resource.GetName(),
@@ -320,18 +327,18 @@ func formatPatternType(pt adminv2.PatternType) string {
 	}
 }
 
-func formatACLResource(r common.ACLResource) string {
+func formatACLResource(r corecommonv1.ACLResource) string {
 	return strings.ToUpper(strings.TrimPrefix(r.String(), "ACL_RESOURCE_"))
 }
 
-func formatACLPattern(p common.ACLPattern) string {
+func formatACLPattern(p corecommonv1.ACLPattern) string {
 	return strings.ToUpper(strings.TrimPrefix(p.String(), "ACL_PATTERN_"))
 }
 
-func formatACLOperation(o common.ACLOperation) string {
+func formatACLOperation(o corecommonv1.ACLOperation) string {
 	return strings.ToUpper(strings.TrimPrefix(o.String(), "ACL_OPERATION_"))
 }
 
-func formatACLPermissionType(p common.ACLPermissionType) string {
+func formatACLPermissionType(p corecommonv1.ACLPermissionType) string {
 	return strings.ToUpper(strings.TrimPrefix(p.String(), "ACL_PERMISSION_TYPE_"))
 }

@@ -14,6 +14,7 @@ package network
 import (
 	"fmt"
 	"math"
+	"sort"
 	"testing"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
@@ -62,8 +63,9 @@ func Test_nic_IsBondIface(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	procFile := &procFileMock{}
 	deviceInfo := &deviceInfoMock{}
-	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
 	afero.WriteFile(fs, "/sys/class/net/test0/lower_ens5", []byte{}, 0o644)
+	fs.MkdirAll("/sys/class/net/ens5/device", 0o755)
+	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
 	// when
 	bond := nic.IsBondIface()
 	// then
@@ -75,14 +77,16 @@ func Test_nic_Slaves_ReturnAllSlavesOfAnInterface(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	procFile := &procFileMock{}
 	deviceInfo := &deviceInfoMock{}
-	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
 	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl0", []byte{}, 0o644)
 	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl1", []byte{}, 0o644)
 	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl2", []byte{}, 0o644)
+	fs.MkdirAll("/sys/class/net/sl0/device", 0o755)
+	fs.MkdirAll("/sys/class/net/sl1/device", 0o755)
+	fs.MkdirAll("/sys/class/net/sl2/device", 0o755)
+	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
 	// when
-	slaves, err := nic.Slaves()
+	slaves := nic.Slaves()
 	// then
-	require.NoError(t, err)
 	require.Len(t, slaves, 3)
 	require.Equal(t, slaves[0].Name(), "sl0")
 	require.Equal(t, slaves[1].Name(), "sl1")
@@ -94,13 +98,34 @@ func Test_nic_Slaves_ReturnEmptyForNotBondInterface(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	procFile := &procFileMock{}
 	deviceInfo := &deviceInfoMock{}
-	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
 	fs.MkdirAll("/sys/class/net/test0/device", 0o755)
+	nic := NewNic(fs, procFile, deviceInfo, &ethtoolMock{}, "test0")
 	// when
-	slaves, err := nic.Slaves()
+	slaves := nic.Slaves()
 	// then
-	require.NoError(t, err)
 	require.Empty(t, slaves)
+}
+
+func Test_mapInterfaces(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	procFile := &procFileMock{}
+	deviceInfo := &deviceInfoMock{}
+
+	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl0", []byte{}, 0o644)
+	afero.WriteFile(fs, "/sys/class/net/test0/lower_sl1", []byte{}, 0o644)
+	fs.MkdirAll("/sys/class/net/sl0/device", 0o755)
+	fs.MkdirAll("/sys/class/net/sl1/device", 0o755)
+
+	// One child is passed explicitly, shouldn't exist twice in the output
+	interfaces := []string{"test0", "sl1"}
+	nics := MapInterfaces(interfaces, fs, procFile, deviceInfo, &ethtoolMock{})
+	sort.Slice(nics, func(i, j int) bool {
+		return nics[i].Name() < nics[j].Name()
+	})
+
+	require.Equal(t, 2, len(nics))
+	require.Equal(t, "sl0", nics[0].Name())
+	require.Equal(t, "sl1", nics[1].Name())
 }
 
 type IrqInfoRes struct {

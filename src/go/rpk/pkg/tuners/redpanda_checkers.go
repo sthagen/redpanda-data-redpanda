@@ -29,6 +29,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/hwloc"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/network"
 	"github.com/spf13/afero"
 )
 
@@ -234,6 +235,16 @@ func RedpandaCheckers(
 	}
 	netCheckersFactory := NewNetCheckersFactory(
 		fs, y.Rpk, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks)
+	nics := network.MapInterfaces(interfaces, fs, irqProcFile, irqDeviceInfo, ethtool)
+	effectiveConfig := network.EffectiveNicConfig{}
+	if len(nics) > 0 {
+		// just use the first nic for now.
+		// TODO: Unify net checkers below to match how the tuner actually works
+		effectiveConfig, err = network.GetEffectiveNicConfig(nics[0], irq.Default, "all", cpuMasks, y.Rpk)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get effective NIC config for checker setup: %w", err)
+		}
+	}
 	checkers := map[CheckerID][]Checker{
 		ConfigFileChecker:             {NewConfigChecker(y)},
 		IoConfigFileChecker:           {NewIOConfigFileExistanceChecker(fs, ioConfigFile)},
@@ -252,12 +263,12 @@ func RedpandaCheckers(
 		SynBacklogChecker:             {netCheckersFactory.NewSynBacklogChecker()},
 		ListenBacklogChecker:          {netCheckersFactory.NewListenBacklogChecker()},
 		RfsTableEntriesChecker:        {netCheckersFactory.NewRfsTableSizeChecker()},
-		NicRxTxQueueCountChecker:      netCheckersFactory.NewNicRxTxQueueCountCheckers(interfaces, irq.Default, "all"),
-		NicIRQBalanceChecker:          {netCheckersFactory.NewNicIRQBalanceChecker(interfaces)},
-		NicIRQsAffinitChecker:         netCheckersFactory.NewNicIRQAffinityCheckers(interfaces, irq.Default, "all"),
-		NicRpsChecker:                 netCheckersFactory.NewNicRpsSetCheckers(interfaces, irq.Default, "all"),
-		NicRfsChecker:                 netCheckersFactory.NewNicRfsCheckers(interfaces, irq.Default, "all"),
-		NicXpsChecker:                 netCheckersFactory.NewNicXpsCheckers(interfaces),
+		NicRxTxQueueCountChecker:      netCheckersFactory.NewNicRxTxQueueCountCheckers(nics, effectiveConfig),
+		NicIRQBalanceChecker:          {netCheckersFactory.NewNicIRQBalanceChecker(nics)},
+		NicIRQsAffinitChecker:         netCheckersFactory.NewNicIRQAffinityCheckers(nics, effectiveConfig),
+		NicRpsChecker:                 netCheckersFactory.NewNicRpsSetCheckers(nics, effectiveConfig),
+		NicRfsChecker:                 netCheckersFactory.NewNicRfsCheckers(nics, effectiveConfig),
+		NicXpsChecker:                 netCheckersFactory.NewNicXpsCheckers(nics),
 		MaxAIOEvents:                  {NewMaxAIOEventsChecker(fs)},
 		ClockSource:                   {NewClockSourceChecker(fs)},
 		Swappiness:                    {NewSwappinessChecker(fs)},

@@ -11,8 +11,9 @@ package shadow
 
 import (
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
-	"buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common"
+	corecommonv1 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func shadowLinkConfigToProto(slCfg *ShadowLinkConfig) *adminv2.ShadowLink {
@@ -30,6 +31,7 @@ func shadowLinkConfigToProto(slCfg *ShadowLinkConfig) *adminv2.ShadowLink {
 		TopicMetadataSyncOptions:  mapTopicMetadataSyncOptions(slCfg.TopicMetadataSyncOptions),
 		ConsumerOffsetSyncOptions: mapConsumerOffsetSyncOptions(slCfg.ConsumerOffsetSyncOptions),
 		SecuritySyncOptions:       mapSecuritySyncOptions(slCfg.SecuritySyncOptions),
+		SchemaRegistrySyncOptions: mapSchemaRegistrySyncOptions(slCfg.SchemaRegistrySyncOptions),
 	}
 	return shadowLink
 }
@@ -63,29 +65,29 @@ func mapClientOptions(opts *ShadowLinkClientOptions) *adminv2.ShadowLinkClientOp
 	return pbOpts
 }
 
-func mapTLSSettings(tls TLSSettings) *adminv2.TLSSettings {
+func mapTLSSettings(tls *TLSSettings) *corecommonv1.TLSSettings {
 	if tls == nil {
 		return nil
 	}
 
-	pbTLS := &adminv2.TLSSettings{}
-
-	switch t := tls.(type) {
-	case *TLSFileSettings:
-		pbTLS.Enabled = t.Enabled
-		pbTLS.DoNotSetSniHostname = t.DoNotSetSniHostname
-		pbTLS.TlsSettings = &adminv2.TLSSettings_TlsFileSettings{
-			TlsFileSettings: &adminv2.TLSFileSettings{
+	pbTLS := &corecommonv1.TLSSettings{
+		Enabled:             tls.Enabled,
+		DoNotSetSniHostname: tls.DoNotSetSniHostname,
+	}
+	switch {
+	case tls.TLSFileSettings != nil:
+		t := tls.TLSFileSettings
+		pbTLS.TlsSettings = &corecommonv1.TLSSettings_TlsFileSettings{
+			TlsFileSettings: &corecommonv1.TLSFileSettings{
 				CaPath:   t.CAPath,
 				KeyPath:  t.KeyPath,
 				CertPath: t.CertPath,
 			},
 		}
-	case *TLSPEMSettings:
-		pbTLS.Enabled = t.Enabled
-		pbTLS.DoNotSetSniHostname = t.DoNotSetSniHostname
-		pbTLS.TlsSettings = &adminv2.TLSSettings_TlsPemSettings{
-			TlsPemSettings: &adminv2.TLSPEMSettings{
+	case tls.TLSPEMSettings != nil:
+		t := tls.TLSPEMSettings
+		pbTLS.TlsSettings = &corecommonv1.TLSSettings_TlsPemSettings{
+			TlsPemSettings: &corecommonv1.TLSPEMSettings{
 				Ca:   t.CA,
 				Key:  t.Key,
 				Cert: t.Cert,
@@ -97,14 +99,14 @@ func mapTLSSettings(tls TLSSettings) *adminv2.TLSSettings {
 	return pbTLS
 }
 
-func mapAuthenticationConfiguration(auth AuthenticationConfiguration) *adminv2.AuthenticationConfiguration {
+func mapAuthenticationConfiguration(auth *AuthenticationConfiguration) *adminv2.AuthenticationConfiguration {
 	if auth == nil {
 		return nil
 	}
 
 	pbAuth := &adminv2.AuthenticationConfiguration{}
 
-	if a, ok := auth.(*ScramConfig); ok {
+	if a := auth.ScramConfiguration; a != nil {
 		pbAuth.Authentication = &adminv2.AuthenticationConfiguration_ScramConfiguration{
 			ScramConfiguration: &adminv2.ScramConfig{
 				Username:       a.Username,
@@ -147,6 +149,21 @@ func mapTopicMetadataSyncOptions(opts *TopicMetadataSyncOptions) *adminv2.TopicM
 		pbOpts.AutoCreateShadowTopicFilters = append(pbOpts.AutoCreateShadowTopicFilters, mapNameFilter(filter))
 	}
 
+	// Handle start_offset oneof - only one can be set
+	if opts.StartAtEarliest != nil {
+		pbOpts.StartOffset = &adminv2.TopicMetadataSyncOptions_StartAtEarliest{
+			StartAtEarliest: &adminv2.TopicMetadataSyncOptions_EarliestOffset{},
+		}
+	} else if opts.StartAtLatest != nil {
+		pbOpts.StartOffset = &adminv2.TopicMetadataSyncOptions_StartAtLatest{
+			StartAtLatest: &adminv2.TopicMetadataSyncOptions_LatestOffset{},
+		}
+	} else if opts.StartAtTimestamp != nil {
+		pbOpts.StartOffset = &adminv2.TopicMetadataSyncOptions_StartAtTimestamp{
+			StartAtTimestamp: timestamppb.New(*opts.StartAtTimestamp),
+		}
+	}
+
 	return pbOpts
 }
 
@@ -185,6 +202,25 @@ func mapSecuritySyncOptions(opts *SecuritySettingsSyncOptions) *adminv2.Security
 
 	for _, filter := range opts.ACLFilters {
 		pbOpts.AclFilters = append(pbOpts.AclFilters, mapACLFilter(filter))
+	}
+
+	return pbOpts
+}
+
+func mapSchemaRegistrySyncOptions(opts *SchemaRegistrySyncOptions) *adminv2.SchemaRegistrySyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	pbOpts := &adminv2.SchemaRegistrySyncOptions{}
+
+	// Handle schema_registry_shadowing_mode oneof
+	// If the struct has the ShadowSchemaRegistryTopic field populated,
+	// we set the oneof
+	if opts.ShadowSchemaRegistryTopic != nil {
+		pbOpts.SchemaRegistryShadowingMode = &adminv2.SchemaRegistrySyncOptions_ShadowSchemaRegistryTopic_{
+			ShadowSchemaRegistryTopic: &adminv2.SchemaRegistrySyncOptions_ShadowSchemaRegistryTopic{},
+		}
 	}
 
 	return pbOpts
@@ -260,83 +296,83 @@ func mapFilterType(ft FilterType) adminv2.FilterType {
 	}
 }
 
-func mapACLResource(resource ACLResource) common.ACLResource {
+func mapACLResource(resource ACLResource) corecommonv1.ACLResource {
 	switch resource {
 	case ACLResourceAny:
-		return common.ACLResource_ACL_RESOURCE_ANY
+		return corecommonv1.ACLResource_ACL_RESOURCE_ANY
 	case ACLResourceCluster:
-		return common.ACLResource_ACL_RESOURCE_CLUSTER
+		return corecommonv1.ACLResource_ACL_RESOURCE_CLUSTER
 	case ACLResourceGroup:
-		return common.ACLResource_ACL_RESOURCE_GROUP
+		return corecommonv1.ACLResource_ACL_RESOURCE_GROUP
 	case ACLResourceTopic:
-		return common.ACLResource_ACL_RESOURCE_TOPIC
+		return corecommonv1.ACLResource_ACL_RESOURCE_TOPIC
 	case ACLResourceTXNID:
-		return common.ACLResource_ACL_RESOURCE_TXN_ID
+		return corecommonv1.ACLResource_ACL_RESOURCE_TXN_ID
 	case ACLResourceSRSubject:
-		return common.ACLResource_ACL_RESOURCE_SR_SUBJECT
+		return corecommonv1.ACLResource_ACL_RESOURCE_SR_SUBJECT
 	case ACLResourceSRRegistry:
-		return common.ACLResource_ACL_RESOURCE_SR_REGISTRY
+		return corecommonv1.ACLResource_ACL_RESOURCE_SR_REGISTRY
 	case ACLResourceSRAny:
-		return common.ACLResource_ACL_RESOURCE_SR_ANY
+		return corecommonv1.ACLResource_ACL_RESOURCE_SR_ANY
 	default:
-		return common.ACLResource_ACL_RESOURCE_UNSPECIFIED
+		return corecommonv1.ACLResource_ACL_RESOURCE_UNSPECIFIED
 	}
 }
 
-func mapACLPattern(pattern ACLPattern) common.ACLPattern {
+func mapACLPattern(pattern ACLPattern) corecommonv1.ACLPattern {
 	switch pattern {
 	case ACLPatternAny:
-		return common.ACLPattern_ACL_PATTERN_ANY
+		return corecommonv1.ACLPattern_ACL_PATTERN_ANY
 	case ACLPatternLiteral:
-		return common.ACLPattern_ACL_PATTERN_LITERAL
+		return corecommonv1.ACLPattern_ACL_PATTERN_LITERAL
 	case ACLPatternPrefixed:
-		return common.ACLPattern_ACL_PATTERN_PREFIXED
+		return corecommonv1.ACLPattern_ACL_PATTERN_PREFIXED
 	case ACLPatternMatch:
-		return common.ACLPattern_ACL_PATTERN_MATCH
+		return corecommonv1.ACLPattern_ACL_PATTERN_MATCH
 	default:
-		return common.ACLPattern_ACL_PATTERN_UNSPECIFIED
+		return corecommonv1.ACLPattern_ACL_PATTERN_UNSPECIFIED
 	}
 }
 
-func mapACLOperation(operation ACLOperation) common.ACLOperation {
+func mapACLOperation(operation ACLOperation) corecommonv1.ACLOperation {
 	switch operation {
 	case ACLOperationAny:
-		return common.ACLOperation_ACL_OPERATION_ANY
+		return corecommonv1.ACLOperation_ACL_OPERATION_ANY
 	case ACLOperationRead:
-		return common.ACLOperation_ACL_OPERATION_READ
+		return corecommonv1.ACLOperation_ACL_OPERATION_READ
 	case ACLOperationWrite:
-		return common.ACLOperation_ACL_OPERATION_WRITE
+		return corecommonv1.ACLOperation_ACL_OPERATION_WRITE
 	case ACLOperationCreate:
-		return common.ACLOperation_ACL_OPERATION_CREATE
+		return corecommonv1.ACLOperation_ACL_OPERATION_CREATE
 	case ACLOperationRemove:
-		return common.ACLOperation_ACL_OPERATION_REMOVE
+		return corecommonv1.ACLOperation_ACL_OPERATION_REMOVE
 	case ACLOperationAlter:
-		return common.ACLOperation_ACL_OPERATION_ALTER
+		return corecommonv1.ACLOperation_ACL_OPERATION_ALTER
 	case ACLOperationDescribe:
-		return common.ACLOperation_ACL_OPERATION_DESCRIBE
+		return corecommonv1.ACLOperation_ACL_OPERATION_DESCRIBE
 	case ACLOperationClusterAction:
-		return common.ACLOperation_ACL_OPERATION_CLUSTER_ACTION
+		return corecommonv1.ACLOperation_ACL_OPERATION_CLUSTER_ACTION
 	case ACLOperationDescribeConfigs:
-		return common.ACLOperation_ACL_OPERATION_DESCRIBE_CONFIGS
+		return corecommonv1.ACLOperation_ACL_OPERATION_DESCRIBE_CONFIGS
 	case ACLOperationAlterConfigs:
-		return common.ACLOperation_ACL_OPERATION_ALTER_CONFIGS
+		return corecommonv1.ACLOperation_ACL_OPERATION_ALTER_CONFIGS
 	case ACLOperationIdempotentWrite:
-		return common.ACLOperation_ACL_OPERATION_IDEMPOTENT_WRITE
+		return corecommonv1.ACLOperation_ACL_OPERATION_IDEMPOTENT_WRITE
 	default:
-		return common.ACLOperation_ACL_OPERATION_UNSPECIFIED
+		return corecommonv1.ACLOperation_ACL_OPERATION_UNSPECIFIED
 	}
 }
 
-func mapACLPermissionType(permType ACLPermissionType) common.ACLPermissionType {
+func mapACLPermissionType(permType ACLPermissionType) corecommonv1.ACLPermissionType {
 	switch permType {
 	case ACLPermissionTypeAny:
-		return common.ACLPermissionType_ACL_PERMISSION_TYPE_ANY
+		return corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ANY
 	case ACLPermissionTypeAllow:
-		return common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW
+		return corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW
 	case ACLPermissionTypeDeny:
-		return common.ACLPermissionType_ACL_PERMISSION_TYPE_DENY
+		return corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_DENY
 	default:
-		return common.ACLPermissionType_ACL_PERMISSION_TYPE_UNSPECIFIED
+		return corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_UNSPECIFIED
 	}
 }
 
@@ -355,6 +391,7 @@ func shadowLinkToConfig(sl *adminv2.ShadowLink) *ShadowLinkConfig {
 		cfg.TopicMetadataSyncOptions = adminTopicMetadataSyncToCfg(sl.GetConfigurations().GetTopicMetadataSyncOptions())
 		cfg.ConsumerOffsetSyncOptions = adminConsumerOffsetSyncToCfg(sl.GetConfigurations().GetConsumerOffsetSyncOptions())
 		cfg.SecuritySyncOptions = adminSecuritySyncToCfg(sl.GetConfigurations().GetSecuritySyncOptions())
+		cfg.SchemaRegistrySyncOptions = adminSchemaRegistrySyncToCfg(sl.GetConfigurations().GetSchemaRegistrySyncOptions())
 	}
 
 	return cfg
@@ -388,40 +425,40 @@ func adminClientOptsToCfg(opts *adminv2.ShadowLinkClientOptions) *ShadowLinkClie
 	return cfg
 }
 
-func adminTLSToCfg(tls *adminv2.TLSSettings) TLSSettings {
+func adminTLSToCfg(tls *corecommonv1.TLSSettings) *TLSSettings {
 	if tls == nil {
 		return nil
 	}
+	tlsSettings := &TLSSettings{
+		Enabled:             tls.GetEnabled(),
+		DoNotSetSniHostname: tls.GetDoNotSetSniHostname(),
+	}
 
 	switch t := tls.GetTlsSettings().(type) {
-	case *adminv2.TLSSettings_TlsFileSettings:
+	case *corecommonv1.TLSSettings_TlsFileSettings:
 		if t.TlsFileSettings == nil {
-			return nil
+			return tlsSettings
 		}
-		return &TLSFileSettings{
-			Enabled:             tls.GetEnabled(),
-			DoNotSetSniHostname: tls.GetDoNotSetSniHostname(),
-			CAPath:              t.TlsFileSettings.GetCaPath(),
-			KeyPath:             t.TlsFileSettings.GetKeyPath(),
-			CertPath:            t.TlsFileSettings.GetCertPath(),
+		tlsSettings.TLSFileSettings = &TLSFileSettings{
+			CAPath:   t.TlsFileSettings.GetCaPath(),
+			KeyPath:  t.TlsFileSettings.GetKeyPath(),
+			CertPath: t.TlsFileSettings.GetCertPath(),
 		}
-	case *adminv2.TLSSettings_TlsPemSettings:
+	case *corecommonv1.TLSSettings_TlsPemSettings:
 		if t.TlsPemSettings == nil {
-			return nil
+			return tlsSettings
 		}
-		return &TLSPEMSettings{
-			Enabled:             tls.GetEnabled(),
-			DoNotSetSniHostname: tls.GetDoNotSetSniHostname(),
-			CA:                  t.TlsPemSettings.GetCa(),
-			Key:                 t.TlsPemSettings.GetKey(),
-			Cert:                t.TlsPemSettings.GetCert(),
+		tlsSettings.TLSPEMSettings = &TLSPEMSettings{
+			CA:   t.TlsPemSettings.GetCa(),
+			Key:  t.TlsPemSettings.GetKey(),
+			Cert: t.TlsPemSettings.GetCert(),
 		}
 	}
 
-	return nil
+	return tlsSettings
 }
 
-func adminAuthToCfg(auth *adminv2.AuthenticationConfiguration) AuthenticationConfiguration {
+func adminAuthToCfg(auth *adminv2.AuthenticationConfiguration) *AuthenticationConfiguration {
 	if auth == nil {
 		return nil
 	}
@@ -430,10 +467,12 @@ func adminAuthToCfg(auth *adminv2.AuthenticationConfiguration) AuthenticationCon
 		if a.ScramConfiguration == nil {
 			return nil
 		}
-		return &ScramConfig{
-			Username:       a.ScramConfiguration.GetUsername(),
-			Password:       a.ScramConfiguration.GetPassword(),
-			ScramMechanism: adminScramMechanismToCfg(a.ScramConfiguration.GetScramMechanism()),
+		return &AuthenticationConfiguration{
+			ScramConfiguration: &ScramConfiguration{
+				Username:       a.ScramConfiguration.GetUsername(),
+				Password:       a.ScramConfiguration.GetPassword(),
+				ScramMechanism: adminScramMechanismToCfg(a.ScramConfiguration.GetScramMechanism()),
+			},
 		}
 	}
 
@@ -467,6 +506,19 @@ func adminTopicMetadataSyncToCfg(opts *adminv2.TopicMetadataSyncOptions) *TopicM
 
 	for _, filter := range opts.GetAutoCreateShadowTopicFilters() {
 		cfg.AutoCreateShadowTopicFilters = append(cfg.AutoCreateShadowTopicFilters, adminMapFilterToCfg(filter))
+	}
+
+	// Handle start_offset oneof
+	switch startOffset := opts.GetStartOffset().(type) {
+	case *adminv2.TopicMetadataSyncOptions_StartAtEarliest:
+		cfg.StartAtEarliest = &StartAtEarliest{}
+	case *adminv2.TopicMetadataSyncOptions_StartAtLatest:
+		cfg.StartAtLatest = &StartAtLatest{}
+	case *adminv2.TopicMetadataSyncOptions_StartAtTimestamp:
+		if startOffset.StartAtTimestamp != nil {
+			t := startOffset.StartAtTimestamp.AsTime()
+			cfg.StartAtTimestamp = &t
+		}
 	}
 
 	return cfg
@@ -507,6 +559,21 @@ func adminSecuritySyncToCfg(opts *adminv2.SecuritySettingsSyncOptions) *Security
 
 	for _, filter := range opts.GetAclFilters() {
 		cfg.ACLFilters = append(cfg.ACLFilters, adminACLFilterToCfg(filter))
+	}
+
+	return cfg
+}
+
+func adminSchemaRegistrySyncToCfg(opts *adminv2.SchemaRegistrySyncOptions) *SchemaRegistrySyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	cfg := &SchemaRegistrySyncOptions{}
+
+	// Handle schema_registry_shadowing_mode oneof
+	if _, ok := opts.GetSchemaRegistryShadowingMode().(*adminv2.SchemaRegistrySyncOptions_ShadowSchemaRegistryTopic_); ok {
+		cfg.ShadowSchemaRegistryTopic = &ShadowSchemaRegistryTopic{}
 	}
 
 	return cfg
@@ -582,80 +649,80 @@ func adminFilterTypeToCfg(ft adminv2.FilterType) FilterType {
 	}
 }
 
-func adminACLResourceToCfg(resource common.ACLResource) ACLResource {
+func adminACLResourceToCfg(resource corecommonv1.ACLResource) ACLResource {
 	switch resource {
-	case common.ACLResource_ACL_RESOURCE_ANY:
+	case corecommonv1.ACLResource_ACL_RESOURCE_ANY:
 		return ACLResourceAny
-	case common.ACLResource_ACL_RESOURCE_CLUSTER:
+	case corecommonv1.ACLResource_ACL_RESOURCE_CLUSTER:
 		return ACLResourceCluster
-	case common.ACLResource_ACL_RESOURCE_GROUP:
+	case corecommonv1.ACLResource_ACL_RESOURCE_GROUP:
 		return ACLResourceGroup
-	case common.ACLResource_ACL_RESOURCE_TOPIC:
+	case corecommonv1.ACLResource_ACL_RESOURCE_TOPIC:
 		return ACLResourceTopic
-	case common.ACLResource_ACL_RESOURCE_TXN_ID:
+	case corecommonv1.ACLResource_ACL_RESOURCE_TXN_ID:
 		return ACLResourceTXNID
-	case common.ACLResource_ACL_RESOURCE_SR_SUBJECT:
+	case corecommonv1.ACLResource_ACL_RESOURCE_SR_SUBJECT:
 		return ACLResourceSRSubject
-	case common.ACLResource_ACL_RESOURCE_SR_REGISTRY:
+	case corecommonv1.ACLResource_ACL_RESOURCE_SR_REGISTRY:
 		return ACLResourceSRRegistry
-	case common.ACLResource_ACL_RESOURCE_SR_ANY:
+	case corecommonv1.ACLResource_ACL_RESOURCE_SR_ANY:
 		return ACLResourceSRAny
 	default:
 		return ""
 	}
 }
 
-func adminACLPatternToCfg(pattern common.ACLPattern) ACLPattern {
+func adminACLPatternToCfg(pattern corecommonv1.ACLPattern) ACLPattern {
 	switch pattern {
-	case common.ACLPattern_ACL_PATTERN_ANY:
+	case corecommonv1.ACLPattern_ACL_PATTERN_ANY:
 		return ACLPatternAny
-	case common.ACLPattern_ACL_PATTERN_LITERAL:
+	case corecommonv1.ACLPattern_ACL_PATTERN_LITERAL:
 		return ACLPatternLiteral
-	case common.ACLPattern_ACL_PATTERN_PREFIXED:
+	case corecommonv1.ACLPattern_ACL_PATTERN_PREFIXED:
 		return ACLPatternPrefixed
-	case common.ACLPattern_ACL_PATTERN_MATCH:
+	case corecommonv1.ACLPattern_ACL_PATTERN_MATCH:
 		return ACLPatternMatch
 	default:
 		return ""
 	}
 }
 
-func adminACLOperationToCfg(operation common.ACLOperation) ACLOperation {
+func adminACLOperationToCfg(operation corecommonv1.ACLOperation) ACLOperation {
 	switch operation {
-	case common.ACLOperation_ACL_OPERATION_ANY:
+	case corecommonv1.ACLOperation_ACL_OPERATION_ANY:
 		return ACLOperationAny
-	case common.ACLOperation_ACL_OPERATION_READ:
+	case corecommonv1.ACLOperation_ACL_OPERATION_READ:
 		return ACLOperationRead
-	case common.ACLOperation_ACL_OPERATION_WRITE:
+	case corecommonv1.ACLOperation_ACL_OPERATION_WRITE:
 		return ACLOperationWrite
-	case common.ACLOperation_ACL_OPERATION_CREATE:
+	case corecommonv1.ACLOperation_ACL_OPERATION_CREATE:
 		return ACLOperationCreate
-	case common.ACLOperation_ACL_OPERATION_REMOVE:
+	case corecommonv1.ACLOperation_ACL_OPERATION_REMOVE:
 		return ACLOperationRemove
-	case common.ACLOperation_ACL_OPERATION_ALTER:
+	case corecommonv1.ACLOperation_ACL_OPERATION_ALTER:
 		return ACLOperationAlter
-	case common.ACLOperation_ACL_OPERATION_DESCRIBE:
+	case corecommonv1.ACLOperation_ACL_OPERATION_DESCRIBE:
 		return ACLOperationDescribe
-	case common.ACLOperation_ACL_OPERATION_CLUSTER_ACTION:
+	case corecommonv1.ACLOperation_ACL_OPERATION_CLUSTER_ACTION:
 		return ACLOperationClusterAction
-	case common.ACLOperation_ACL_OPERATION_DESCRIBE_CONFIGS:
+	case corecommonv1.ACLOperation_ACL_OPERATION_DESCRIBE_CONFIGS:
 		return ACLOperationDescribeConfigs
-	case common.ACLOperation_ACL_OPERATION_ALTER_CONFIGS:
+	case corecommonv1.ACLOperation_ACL_OPERATION_ALTER_CONFIGS:
 		return ACLOperationAlterConfigs
-	case common.ACLOperation_ACL_OPERATION_IDEMPOTENT_WRITE:
+	case corecommonv1.ACLOperation_ACL_OPERATION_IDEMPOTENT_WRITE:
 		return ACLOperationIdempotentWrite
 	default:
 		return ""
 	}
 }
 
-func adminPermissionTypeToCfg(permType common.ACLPermissionType) ACLPermissionType {
+func adminPermissionTypeToCfg(permType corecommonv1.ACLPermissionType) ACLPermissionType {
 	switch permType {
-	case common.ACLPermissionType_ACL_PERMISSION_TYPE_ANY:
+	case corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ANY:
 		return ACLPermissionTypeAny
-	case common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW:
+	case corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW:
 		return ACLPermissionTypeAllow
-	case common.ACLPermissionType_ACL_PERMISSION_TYPE_DENY:
+	case corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_DENY:
 		return ACLPermissionTypeDeny
 	default:
 		return ""

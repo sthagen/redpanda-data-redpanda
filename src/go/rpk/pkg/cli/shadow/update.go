@@ -58,6 +58,9 @@ you must delete and recreate it.
 			updatedCfg, err := rpkos.EditTmpYAMLFile(fs, originalCfg)
 			out.MaybeDie(err, "unable to edit Shadow Link configuration: %v", err)
 
+			err = validateParsedShadowLinkConfig(updatedCfg)
+			out.MaybeDie(err, "invalid Shadow Link configuration: %v", err)
+
 			if updatedCfg.Name != originalCfg.Name {
 				out.Die("Shadow Link name cannot be changed; if you need to rename, please delete and recreate the shadow link")
 			}
@@ -86,7 +89,7 @@ func addRedactedPasswordString(cfg *ShadowLinkConfig, link *adminv2.ShadowLink) 
 	if !isPassSet {
 		return
 	}
-	if auth, ok := cfg.ClientOptions.AuthenticationConfiguration.(*ScramConfig); ok && auth != nil {
-		auth.Password = "<redacted>"
+	if auth := cfg.ClientOptions.AuthenticationConfiguration; auth != nil && auth.ScramConfiguration != nil {
+		auth.ScramConfiguration.Password = "<redacted>"
 	}
 }

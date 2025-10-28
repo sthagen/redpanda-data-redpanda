@@ -77,16 +77,20 @@ func generateSampleConfig() *ShadowLinkConfig {
 		ClientOptions: &ShadowLinkClientOptions{
 			BootstrapServers: []string{"localhost:9092", "localhost:19092"},
 			SourceClusterID:  "optional-source-cluster-id",
-			TLSSettings: &TLSFileSettings{
-				Enabled:  true,
-				CAPath:   "/path/to/ca.crt",
-				KeyPath:  "/path/to/optional/client.key",
-				CertPath: "/path/to/optional/client.crt",
+			TLSSettings: &TLSSettings{
+				Enabled: true,
+				TLSFileSettings: &TLSFileSettings{
+					CAPath:   "/path/to/ca.crt",
+					KeyPath:  "/path/to/optional/client.key",
+					CertPath: "/path/to/optional/client.crt",
+				},
 			},
-			AuthenticationConfiguration: &ScramConfig{
-				Username:       "username",
-				Password:       "password",
-				ScramMechanism: ScramMechanismScramSha256,
+			AuthenticationConfiguration: &AuthenticationConfiguration{
+				ScramConfiguration: &ScramConfiguration{
+					Username:       "username",
+					Password:       "password",
+					ScramMechanism: ScramMechanismScramSha256,
+				},
 			},
 			MetadataMaxAgeMs:       10000,
 			ConnectionTimeoutMs:    1000,
@@ -112,6 +116,7 @@ func generateSampleConfig() *ShadowLinkConfig {
 				},
 			},
 			SyncedShadowTopicProperties: []string{"retention.ms", "segment.ms"},
+			StartAtEarliest:             &StartAtEarliest{},
 		},
 		ConsumerOffsetSyncOptions: &ConsumerOffsetSyncOptions{
 			Interval: 30 * time.Second,
@@ -142,6 +147,9 @@ func generateSampleConfig() *ShadowLinkConfig {
 					},
 				},
 			},
+		},
+		SchemaRegistrySyncOptions: &SchemaRegistrySyncOptions{
+			ShadowSchemaRegistryTopic: &ShadowSchemaRegistryTopic{},
 		},
 	}
 }

@@ -147,8 +147,6 @@ void link_replication_manager::start_replicator(
               stop_it->second);
             return;
         }
-        vlog(cllog.debug, "Removing pending stop action for {}", ntp);
-        _pending_stops.erase(stop_it);
     }
 
     // Now check if there are any pending starts.  If there are, replace the

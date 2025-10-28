@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//src/go/rpk/pkg/adminapi",
         "//src/go/rpk/pkg/cli/cluster/config",
+        "//src/go/rpk/pkg/cli/cluster/connections",
         "//src/go/rpk/pkg/cli/cluster/license",
         "//src/go/rpk/pkg/cli/cluster/maintenance",
         "//src/go/rpk/pkg/cli/cluster/partitions",

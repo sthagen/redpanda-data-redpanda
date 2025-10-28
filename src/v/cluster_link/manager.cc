@@ -655,7 +655,9 @@ manager::handle_on_link_change(model::id_t id, ::model::revision_id revision) {
         co_return;
     }
 
-    const auto& link_metadata = link_opt->get();
+    // Make a copy of metadata to avoid holding a reference to
+    // the source copy across scheduling points.
+    auto link_metadata = link_opt->get().copy();
     auto it = _links.find(id);
     if (it != _links.end()) {
         // Link already exists, update its configuration

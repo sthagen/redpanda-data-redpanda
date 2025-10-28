@@ -18,6 +18,8 @@ SCRIPT_ROOT = Path(__file__).parent
 
 SCRIPT_RELPATH = "/".join(Path(__file__).parts[-2:])
 
+TASK_INVOCATION = "task rp:type-check -- "
+
 
 class Level(Enum):
     SKIP = "skip"
@@ -127,6 +129,9 @@ class TypeCheck:
             env["FORCE_COLOR"] = "0"
         if self._args.color == "always":
             env["FORCE_COLOR"] = "1"
+
+        # disable complaints about not being on the bleeding edge pyright version
+        env["PYRIGHT_PYTHON_IGNORE_WARNINGS"] = "1"
 
         # Set up environment to use the .venv virtual environment
         if self._args.no_venv:
@@ -302,11 +307,12 @@ class TypeCheck:
             print("No files can be promoted to stricter levels.")
 
         # Update strictness file if requested and there are promotable files
-        if self._args.update and promotable_files:
+        if self._args.update:
             self._update_strictness_file(promotable_files)
             return True
         else:
-            return not promotable_files
+            is_sorted = self._check_strictness_file_sorted()
+            return is_sorted and not promotable_files
 
     def fruit(self):
         """Show files with fewest errors at each target level (low-hanging fruit for type checking improvements)."""
@@ -463,7 +469,7 @@ class TypeCheck:
         else:
             print(f"{self._red('✗ check failed')}")
             print(f"{self.info} run this command locally to reproduce:")
-            print(f"{SCRIPT_RELPATH} check")
+            print(f"{TASK_INVOCATION} check")
 
         print()
         print(self._blue("== Running promotion-check =="))
@@ -472,7 +478,7 @@ class TypeCheck:
         else:
             print(f"{self._red('✗ promotion-check failed')}")
             print(f"{self.info} run this command locally to fix:")
-            print(f"{SCRIPT_RELPATH} promotion-check --update")
+            print(f"{TASK_INVOCATION} promotion-check --update")
 
         if promotion_check_passed and check_passed:
             print(self._green("✓ All CI checks passed"))
@@ -480,6 +486,41 @@ class TypeCheck:
         else:
             print(self._red("✗ Some checks failed, see above for errors"))
             return False
+
+    def _check_strictness_file_sorted(self) -> bool:
+        """Check that each section of the strictness file is sorted.
+
+        Returns True if all sections are sorted, False otherwise.
+        """
+        with open(self.strictness_config_path, "r") as f:
+            config: dict[str, list[str]] = json.load(f)
+
+        all_sorted = True
+        for level_str, patterns in config.items():
+            if level_str == "comment":
+                continue
+
+            # Check if this section is sorted
+            sorted_patterns = sorted(patterns)
+            if patterns != sorted_patterns:
+                all_sorted = False
+                print(
+                    f"{self.error} Section '{level_str}' is not sorted in {self.strictness_config_path}:"
+                )
+
+                # Show which entries are out of order
+                for actual, expected in zip(patterns, sorted_patterns):
+                    if actual != expected:
+                        print(f"First mismatch at: '{actual}', expected '{expected}'")
+                        break
+
+        if all_sorted:
+            print(f"All sections in {self.strictness_config_path} are properly sorted")
+
+        return all_sorted
+
+    def check_sorted(self):
+        self._check_strictness_file_sorted()
 
     def _update_strictness_file(
         self, promotable_files: list[tuple[Path, Level, Level]]
@@ -665,18 +706,14 @@ class TypeCheck:
             raise
 
 
-CMDS = [
-    "check",
-    "promotion-check",
-    "fruit",
-    "ci",
-]
+CMDS = ["check", "promotion-check", "fruit", "ci", "check-sorted"]
 
 COMMAND_DOC = """Commands:\nmissing-check: Find files and directories which are not included in the pyrightconfig.json
 check: Run the type checker on the input set and print any errors to stdout
 promotion-check: Check if files can be promoted to stricter levels than their current assignment
 fruit: Show files with fewest errors at each target level (low-hanging fruit for type checking improvements)
-ci: Run both promotion-check and check commands, failing if either fails"""
+ci: Run both promotion-check and check commands, failing if either fails
+check-sorted: Just check that the strictness file is sorted properly"""
 
 
 def main():

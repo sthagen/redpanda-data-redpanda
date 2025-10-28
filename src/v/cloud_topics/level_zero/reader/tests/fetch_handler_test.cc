@@ -81,3 +81,41 @@ TEST_F_CORO(materialized_extent_fixture, l0_fetch_handler_test) {
     co_await l0_fetch_handler.stop();
     vlog(test_log.debug, "Stopped fetch handler");
 }
+
+TEST_F_CORO(materialized_extent_fixture, l0_fetch_handler_timeout) {
+    const int num_batches = 1;
+    co_await add_random_batches(num_batches);
+    std::queue<injected_failure> failures;
+    failures.push({.cloud_get = injected_cloud_get_failure::return_timeout});
+    produce_placeholders(false, 1, failures);
+
+    auto ntp = model::controller_ntp;
+
+    auto underlying = convert_placeholders(make_underlying());
+
+    cloud_topics::l0::read_pipeline<> pipeline;
+
+    cloud_topics::l0::fetch_handler l0_fetch_handler(
+      pipeline.register_read_pipeline_stage(),
+      cloud_storage_clients::bucket_name("foo"),
+      &remote,
+      &cache);
+
+    vlog(test_log.debug, "Starting L0 fetch handler");
+
+    co_await l0_fetch_handler.start();
+
+    vlog(test_log.debug, "Make reader");
+    auto reader = co_await pipeline.make_reader(
+      ntp,
+      {.output_size_estimate = 1_MiB, .meta = std::move(underlying)},
+      ss::lowres_clock::now() + 1s);
+
+    ASSERT_FALSE_CORO(reader.has_value());
+    ASSERT_TRUE_CORO(reader.error() == cloud_topics::errc::timeout);
+
+    vlog(test_log.debug, "Stopping pipeline");
+    co_await pipeline.stop();
+    co_await l0_fetch_handler.stop();
+    vlog(test_log.debug, "Stopped fetch handler");
+}

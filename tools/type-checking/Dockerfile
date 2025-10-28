@@ -53,11 +53,4 @@ RUN --mount=from=build,source=/usr/local/lib/,target=/build-lib \
         /build-lib/python3.1*/dist-packages/ /usr/local/lib/python3.1*/dist-packages/
 
 
-COPY tools/type-checking/type-check* /type-checking/
-
-ENTRYPOINT [ "/type-checking/type-check.py" ]
-
-
-
-
 

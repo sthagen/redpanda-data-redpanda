@@ -38,9 +38,4 @@ jobs:
           push: false
           load: true
       - name: Run type checking
-        run: |
-          cd tests
-          docker run --rm \
-            -v "$(pwd):/tests" \
-            redpanda-data/python-type-check \
-            ci --color=always --no-venv --tests-root /tests
+        run: tools/type-checking/type-check.sh ci --color=always

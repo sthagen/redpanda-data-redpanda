@@ -20,13 +20,16 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
 	et "github.com/safchain/ethtool"
+	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
 
 type EffectiveNicConfig struct {
-	Mode                irq.Mode
-	ComputationsCPUMask string
-	IRQCPUMask          string
+	Mode                    irq.Mode
+	ComputationsCPUMask     string
+	ComputationsCPUMaskSize int
+	IRQCPUMask              string
+	IRQCPUMaskSize          int
 }
 
 func GetEffectiveNicConfig(
@@ -47,11 +50,21 @@ func GetEffectiveNicConfig(
 	if err != nil {
 		return EffectiveNicConfig{}, err
 	}
+	irqPUs, err := cpuMasks.GetNumberOfPUs(effectiveConfig.IRQCPUMask)
+	if err != nil {
+		return EffectiveNicConfig{}, err
+	}
+	effectiveConfig.IRQCPUMaskSize = int(irqPUs)
 
 	effectiveConfig.ComputationsCPUMask, err = cpuMasks.CPUMaskForComputations(effectiveConfig.Mode, effectiveCPUMask, rnc)
 	if err != nil {
 		return EffectiveNicConfig{}, err
 	}
+	computationPUs, err := cpuMasks.GetNumberOfPUs(effectiveConfig.ComputationsCPUMask)
+	if err != nil {
+		return EffectiveNicConfig{}, err
+	}
+	effectiveConfig.ComputationsCPUMaskSize = int(computationPUs)
 
 	return effectiveConfig, nil
 }
@@ -157,49 +170,26 @@ func canDefaultToDedicatedMode(numOfPUs int, cpuMask string, cpuMasks irq.CPUMas
 func GetDefaultMode(
 	nic Nic, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
 ) (irq.Mode, error) {
-	if nic.IsHwInterface() {
-		numOfPUs, err := cpuMasks.GetNumberOfPUs(cpuMask)
-		if err != nil {
-			return "", err
-		}
-
-		canDoDedicated, err := canDefaultToDedicatedMode(int(numOfPUs), cpuMask, cpuMasks, rnc)
-		if err != nil {
-			return "", err
-		}
-		var mode irq.Mode
-		if numOfPUs >= uint(rnc.Tuners.GetCoresPerDedicatedInterruptCore()) && rnc.Tuners.GetAllowDedicatedInterruptMode() && canDoDedicated {
-			mode = irq.Dedicated
-		} else {
-			mode = irq.Mq
-		}
-
-		zap.L().Sugar().Debugf("Using '%s' mode for '%s': '%d' PUs",
-			mode, nic.Name(), numOfPUs)
-
-		return mode, nil
+	numOfPUs, err := cpuMasks.GetNumberOfPUs(cpuMask)
+	if err != nil {
+		return "", err
 	}
 
-	if nic.IsBondIface() {
-		defaultMode := irq.Mq
-		slaves, err := nic.Slaves()
-		if err != nil {
-			return "", err
-		}
-		for _, slave := range slaves {
-			slaveDefaultMode, err := GetDefaultMode(slave, cpuMask, cpuMasks, rnc)
-			if err != nil {
-				return "", err
-			}
-			if slaveDefaultMode == irq.Sq {
-				defaultMode = irq.Sq
-			} else if slaveDefaultMode == irq.SqSplit && defaultMode == irq.Mq {
-				defaultMode = irq.SqSplit
-			}
-		}
-		return defaultMode, nil
+	canDoDedicated, err := canDefaultToDedicatedMode(int(numOfPUs), cpuMask, cpuMasks, rnc)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("virtual device %s is not supported", nic.Name())
+	var mode irq.Mode
+	if numOfPUs >= uint(rnc.Tuners.GetCoresPerDedicatedInterruptCore()) && rnc.Tuners.GetAllowDedicatedInterruptMode() && canDoDedicated {
+		mode = irq.Dedicated
+	} else {
+		mode = irq.Mq
+	}
+
+	zap.L().Sugar().Debugf("Using '%s' mode for '%s': '%d' PUs",
+		mode, nic.Name(), numOfPUs)
+
+	return mode, nil
 }
 
 func checkDedicatedCompatibleConfig(cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) error {
@@ -247,68 +237,34 @@ func getEffectiveMode(mode irq.Mode, nic Nic, effectiveCPUMask string, cpuMasks 
 }
 
 func GetRpsCPUMask(
-	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
+	nic Nic, effectiveConfig EffectiveNicConfig, rnc config.RpkNodeConfig,
 ) (string, error) {
 	if !rnc.Tuners.GetAllowRpsRfsTuner() {
 		return "0x0", nil
-	}
-
-	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
-	if err != nil {
-		return "", err
-	}
-
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
-	if err != nil {
-		return "", err
 	}
 
 	queueCount, err := nic.GetRxQueueCount()
 	if err != nil {
 		return "", err
 	}
-	puCount, err := cpuMasks.GetNumberOfPUs(effectiveCPUMask)
-	if err != nil {
-		return "", err
-	}
 
 	// In MQ mode, with at least one hardware RX queue per core just disable RPS as it adds no benefit.
-	if queueCount >= int(puCount) && effectiveMode == irq.Mq {
+	if queueCount >= effectiveConfig.ComputationsCPUMaskSize && effectiveConfig.Mode == irq.Mq {
 		return "0x0", nil
 	}
 
-	computationsCPUMask, err := cpuMasks.CPUMaskForComputations(
-		effectiveMode, effectiveCPUMask, rnc)
-	if err != nil {
-		return "", err
-	}
-	return computationsCPUMask, nil
+	return effectiveConfig.ComputationsCPUMask, nil
 }
 
 func GetHwInterfaceIRQsDistribution(
-	nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig,
+	nic Nic, effectiveConfig EffectiveNicConfig, cpuMasks irq.CPUMasks,
 ) (map[int]string, error) {
-	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
-	if err != nil {
-		return nil, err
-	}
-
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
-	if err != nil {
-		return nil, err
-	}
-
 	maxRxQueues, err := nic.GetMaxRxQueueCount()
 	if err != nil {
 		return nil, err
 	}
 
 	allIRQs, err := nic.GetIRQs()
-	if err != nil {
-		return nil, err
-	}
-
-	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, effectiveCPUMask, rnc)
 	if err != nil {
 		return nil, err
 	}
@@ -386,10 +342,10 @@ func GetHwInterfaceIRQsDistribution(
 	// There is an exception to the above where if we are on a driver that has broken
 	// "RSS queue" behaviour (it announces more queues than actually support RSS).
 
-	if (effectiveMode == irq.Mq || !supportsIrqLowering) && maxRxQueues >= len(allIRQs) {
+	if (effectiveConfig.Mode == irq.Mq || !supportsIrqLowering) && maxRxQueues >= len(allIRQs) {
 		zap.L().Sugar().Debugf("Calculating distribution '%s' IRQs (not limiting by RX queues)", nic.Name())
 		IRQsDistribution, err := cpuMasks.GetIRQsDistributionMasks(
-			IrqInfosToIDs(allIRQs), irqCPUMask)
+			IrqInfosToIDs(allIRQs), effectiveConfig.IRQCPUMask)
 		if err != nil {
 			return nil, err
 		}
@@ -406,13 +362,13 @@ func GetHwInterfaceIRQsDistribution(
 
 	zap.L().Sugar().Debugf("Distributing '%s' IRQs handling Rx/Tx queues", nic.Name())
 	IRQsDistribution, err := cpuMasks.GetIRQsDistributionMasks(
-		IrqInfosToIDs(allIRQs[0:irqCutOffIndex]), irqCPUMask)
+		IrqInfosToIDs(allIRQs[0:irqCutOffIndex]), effectiveConfig.IRQCPUMask)
 	if err != nil {
 		return nil, err
 	}
-	zap.L().Sugar().Debugf("Distributing rest of '%s' IRQs\n", nic.Name())
+	zap.L().Sugar().Debugf("Distributing rest of '%s' IRQs", nic.Name())
 	restIRQsDistribution, err := cpuMasks.GetIRQsDistributionMasks(
-		IrqInfosToIDs(allIRQs[irqCutOffIndex:]), irqCPUMask)
+		IrqInfosToIDs(allIRQs[irqCutOffIndex:]), effectiveConfig.IRQCPUMask)
 	if err != nil {
 		return nil, err
 	}
@@ -438,41 +394,18 @@ func getIrqCutOffIndex(allIRQs []IrqInfo, rxQueues int) int {
 // Returns the current ethtool channel config and the target (possibly lowered) channel config as required by the RX channel tuner.
 func GetCurrentAndTargetChannels(
 	nic Nic,
-	mode irq.Mode,
-	cpuMask string,
-	cpuMasks irq.CPUMasks,
-	rnc config.RpkNodeConfig,
+	effectiveConfig EffectiveNicConfig,
 	ethtool ethtool.EthtoolWrapper,
 ) (currentChannels et.Channels, targetChannels et.Channels, err error) {
-	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
-	if err != nil {
-		return et.Channels{}, et.Channels{}, err
-	}
-
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
-	if err != nil {
-		return et.Channels{}, et.Channels{}, err
-	}
-
-	irqMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, effectiveCPUMask, rnc)
-	if err != nil {
-		return et.Channels{}, et.Channels{}, err
-	}
-
-	puCount, err := cpuMasks.GetNumberOfPUs(irqMask)
-	if err != nil {
-		return et.Channels{}, et.Channels{}, err
-	}
-
 	currentChannels, err = ethtool.GetChannels(nic.Name())
 	if err != nil {
 		return et.Channels{}, et.Channels{}, err
 	}
 
 	targetChannels = currentChannels
-	targetChannels.RxCount = min(currentChannels.MaxRx, uint32(puCount))
-	targetChannels.TxCount = min(currentChannels.MaxTx, uint32(puCount))
-	targetChannels.CombinedCount = min(currentChannels.MaxCombined, uint32(puCount))
+	targetChannels.RxCount = min(currentChannels.MaxRx, uint32(effectiveConfig.IRQCPUMaskSize))
+	targetChannels.TxCount = min(currentChannels.MaxTx, uint32(effectiveConfig.IRQCPUMaskSize))
+	targetChannels.CombinedCount = min(currentChannels.MaxCombined, uint32(effectiveConfig.IRQCPUMaskSize))
 
 	zap.L().Sugar().Debugf("Got current channels for '%s': %+v, target channels: %+v", nic.Name(), currentChannels, targetChannels)
 
@@ -481,56 +414,64 @@ func GetCurrentAndTargetChannels(
 
 func CollectIRQs(nic Nic) ([]int, error) {
 	var IRQs []int
-	if nic.IsHwInterface() {
-		nicIRQs, err := nic.GetIRQs()
-		if err != nil {
-			return nil, err
-		}
-		IRQs = append(IRQs, IrqInfosToIDs(nicIRQs)...)
+	nicIRQs, err := nic.GetIRQs()
+	if err != nil {
+		return nil, err
 	}
-	if nic.IsBondIface() {
-		slaves, err := nic.Slaves()
-		if err != nil {
-			return nil, err
-		}
-		for _, slave := range slaves {
-			slaveIRQs, err := CollectIRQs(slave)
-			if err != nil {
-				return nil, err
-			}
-			IRQs = append(IRQs, slaveIRQs...)
-		}
-	}
+	IRQs = append(IRQs, IrqInfosToIDs(nicIRQs)...)
 	return IRQs, nil
 }
 
-func OneRPSQueueLimit(limits []string, nic Nic, mode irq.Mode, cpuMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) (int, error) {
-	effectiveCPUMask, err := cpuMasks.BaseCPUMask(cpuMask)
-	if err != nil {
-		return 0, err
-	}
-
-	effectiveMode, err := getEffectiveMode(mode, nic, effectiveCPUMask, cpuMasks, rnc)
-	if err != nil {
-		return 0, err
-	}
-
+func OneRPSQueueLimit(limits []string, nic Nic, effectiveConfig EffectiveNicConfig, rnc config.RpkNodeConfig) (int, error) {
 	queueCount, err := nic.GetRxQueueCount()
 	if err != nil {
 		return 0, err
 	}
 
-	puCount, err := cpuMasks.GetNumberOfPUs(effectiveCPUMask)
-	if err != nil {
-		return 0, err
-	}
-
 	// In MQ mode, with at least one hardware RX queue per core just disable RFS as it adds no benefit.
-	if queueCount >= int(puCount) && effectiveMode == irq.Mq {
+	if queueCount >= effectiveConfig.ComputationsCPUMaskSize && effectiveConfig.Mode == irq.Mq {
 		return 0, nil
 	}
 	if !rnc.Tuners.GetAllowRpsRfsTuner() {
 		return 0, nil
 	}
 	return RfsTableSize / len(limits), nil
+}
+
+func checkNic(nic Nic, nicMap map[string]Nic) {
+	if _, exists := nicMap[nic.Name()]; exists {
+		return
+	}
+	if !nic.IsHwInterface() && !nic.IsBondIface() {
+		zap.L().Sugar().Debugf("Skipping tuning of '%s' virtual interface", nic.Name())
+		return
+	}
+
+	// unroll bond slaves here such that we don't have to deal with later everywhere
+	if nic.IsBondIface() {
+		for _, slave := range nic.Slaves() {
+			checkNic(slave, nicMap)
+		}
+	} else {
+		nicMap[nic.Name()] = nic
+	}
+}
+
+func MapInterfaces(interfaces []string, fs afero.Fs,
+	irqProcFile irq.ProcFile,
+	irqDeviceInfo irq.DeviceInfo,
+	ethtool ethtool.EthtoolWrapper,
+) []Nic {
+	nics := make(map[string]Nic)
+
+	for _, iface := range interfaces {
+		nic := NewNic(fs, irqProcFile, irqDeviceInfo, ethtool, iface)
+		checkNic(nic, nics)
+	}
+
+	var nicsList []Nic
+	for _, nic := range nics {
+		nicsList = append(nicsList, nic)
+	}
+	return nicsList
 }

@@ -182,4 +182,37 @@ TEST_F_CORO(LinkReplicationMgrFixture, TestFuzzStartStop) {
     co_await ss::when_all_succeed(std::move(add_f), std::move(remove_f));
 }
 
+TEST_F_CORO(LinkReplicationMgrFixture, TestStartStopBackToBack) {
+    model::term_id term{0};
+    // set to term if replicator is started
+    std::optional<model::term_id> started_term{};
+    model::ntp ntp{"kafka", "partition", model::partition_id{0}};
+
+    auto maybe_start_replicator = [this, &started_term, &ntp, &term]() {
+        if (!started_term) {
+            started_term = term++;
+            _mgr->start_replicator(ntp, started_term.value());
+        }
+        return tests::random_bool() ? ss::now() : ss::sleep(sleep_for());
+    };
+
+    auto maybe_stop_replicator = [this, &started_term, &ntp]() {
+        if (started_term) {
+            _mgr->stop_replicator(
+              ntp, std::exchange(started_term, std::nullopt));
+        }
+        return tests::random_bool() ? ss::now() : ss::sleep(sleep_for());
+    };
+
+    auto end_time = ss::lowres_clock::now() + 10s;
+    auto start_f = ss::do_until(
+      [&] { return end_time < ss::lowres_clock::now(); },
+      [&]() { return maybe_start_replicator(); });
+    auto stop_f = ss::do_until(
+      [&] { return end_time < ss::lowres_clock::now(); },
+      [&]() { return maybe_stop_replicator(); });
+
+    co_await ss::when_all_succeed(std::move(start_f), std::move(stop_f));
+};
+
 } // namespace cluster_link::replication

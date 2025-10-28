@@ -14,7 +14,7 @@ import (
 	"time"
 
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
-	"buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common"
+	corecommonv1 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -90,21 +90,23 @@ func TestMapClientOptions(t *testing.T) {
 			name: "with file-based TLS",
 			opts: &ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TLSSettings: &TLSFileSettings{
+				TLSSettings: &TLSSettings{
 					Enabled:             true,
 					DoNotSetSniHostname: true,
-					CAPath:              "/ca.crt",
-					KeyPath:             "/key.pem",
-					CertPath:            "/cert.pem",
+					TLSFileSettings: &TLSFileSettings{
+						CAPath:   "/ca.crt",
+						KeyPath:  "/key.pem",
+						CertPath: "/cert.pem",
+					},
 				},
 			},
 			want: &adminv2.ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TlsSettings: &adminv2.TLSSettings{
+				TlsSettings: &corecommonv1.TLSSettings{
 					Enabled:             true,
 					DoNotSetSniHostname: true,
-					TlsSettings: &adminv2.TLSSettings_TlsFileSettings{
-						TlsFileSettings: &adminv2.TLSFileSettings{
+					TlsSettings: &corecommonv1.TLSSettings_TlsFileSettings{
+						TlsFileSettings: &corecommonv1.TLSFileSettings{
 							CaPath:   "/ca.crt",
 							KeyPath:  "/key.pem",
 							CertPath: "/cert.pem",
@@ -117,21 +119,23 @@ func TestMapClientOptions(t *testing.T) {
 			name: "with PEM-based TLS",
 			opts: &ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TLSSettings: &TLSPEMSettings{
+				TLSSettings: &TLSSettings{
 					Enabled:             true,
 					DoNotSetSniHostname: true,
-					CA:                  "ca-content",
-					Key:                 "key-content",
-					Cert:                "cert-content",
+					TLSPEMSettings: &TLSPEMSettings{
+						CA:   "ca-content",
+						Key:  "key-content",
+						Cert: "cert-content",
+					},
 				},
 			},
 			want: &adminv2.ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TlsSettings: &adminv2.TLSSettings{
+				TlsSettings: &corecommonv1.TLSSettings{
 					Enabled:             true,
 					DoNotSetSniHostname: true,
-					TlsSettings: &adminv2.TLSSettings_TlsPemSettings{
-						TlsPemSettings: &adminv2.TLSPEMSettings{
+					TlsSettings: &corecommonv1.TLSSettings_TlsPemSettings{
+						TlsPemSettings: &corecommonv1.TLSPEMSettings{
 							Ca:   "ca-content",
 							Key:  "key-content",
 							Cert: "cert-content",
@@ -144,10 +148,12 @@ func TestMapClientOptions(t *testing.T) {
 			name: "with SCRAM authentication",
 			opts: &ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				AuthenticationConfiguration: &ScramConfig{
-					Username:       "user",
-					Password:       "pass",
-					ScramMechanism: ScramMechanismScramSha512,
+				AuthenticationConfiguration: &AuthenticationConfiguration{
+					ScramConfiguration: &ScramConfiguration{
+						Username:       "user",
+						Password:       "pass",
+						ScramMechanism: ScramMechanismScramSha512,
+					},
 				},
 			},
 			want: &adminv2.ShadowLinkClientOptions{
@@ -176,8 +182,8 @@ func TestMapClientOptions(t *testing.T) {
 func TestMapTLSSettings(t *testing.T) {
 	tests := []struct {
 		name string
-		tls  TLSSettings
-		want *adminv2.TLSSettings
+		tls  *TLSSettings
+		want *corecommonv1.TLSSettings
 	}{
 		{
 			name: "nil TLS returns nil",
@@ -186,16 +192,18 @@ func TestMapTLSSettings(t *testing.T) {
 		},
 		{
 			name: "file-based TLS settings",
-			tls: &TLSFileSettings{
-				Enabled:  true,
-				CAPath:   "/path/to/ca",
-				KeyPath:  "/path/to/key",
-				CertPath: "/path/to/cert",
-			},
-			want: &adminv2.TLSSettings{
+			tls: &TLSSettings{
 				Enabled: true,
-				TlsSettings: &adminv2.TLSSettings_TlsFileSettings{
-					TlsFileSettings: &adminv2.TLSFileSettings{
+				TLSFileSettings: &TLSFileSettings{
+					CAPath:   "/path/to/ca",
+					KeyPath:  "/path/to/key",
+					CertPath: "/path/to/cert",
+				},
+			},
+			want: &corecommonv1.TLSSettings{
+				Enabled: true,
+				TlsSettings: &corecommonv1.TLSSettings_TlsFileSettings{
+					TlsFileSettings: &corecommonv1.TLSFileSettings{
 						CaPath:   "/path/to/ca",
 						KeyPath:  "/path/to/key",
 						CertPath: "/path/to/cert",
@@ -205,16 +213,18 @@ func TestMapTLSSettings(t *testing.T) {
 		},
 		{
 			name: "PEM-based TLS settings",
-			tls: &TLSPEMSettings{
+			tls: &TLSSettings{
 				Enabled: false,
-				CA:      "ca-pem",
-				Key:     "key-pem",
-				Cert:    "cert-pem",
+				TLSPEMSettings: &TLSPEMSettings{
+					CA:   "ca-pem",
+					Key:  "key-pem",
+					Cert: "cert-pem",
+				},
 			},
-			want: &adminv2.TLSSettings{
+			want: &corecommonv1.TLSSettings{
 				Enabled: false,
-				TlsSettings: &adminv2.TLSSettings_TlsPemSettings{
-					TlsPemSettings: &adminv2.TLSPEMSettings{
+				TlsSettings: &corecommonv1.TLSSettings_TlsPemSettings{
+					TlsPemSettings: &corecommonv1.TLSPEMSettings{
 						Ca:   "ca-pem",
 						Key:  "key-pem",
 						Cert: "cert-pem",
@@ -235,7 +245,7 @@ func TestMapTLSSettings(t *testing.T) {
 func TestMapAuthenticationConfiguration(t *testing.T) {
 	tests := []struct {
 		name string
-		auth AuthenticationConfiguration
+		auth *AuthenticationConfiguration
 		want *adminv2.AuthenticationConfiguration
 	}{
 		{
@@ -245,10 +255,12 @@ func TestMapAuthenticationConfiguration(t *testing.T) {
 		},
 		{
 			name: "SCRAM-SHA-256 configuration",
-			auth: &ScramConfig{
-				Username:       "alice",
-				Password:       "secret",
-				ScramMechanism: ScramMechanismScramSha256,
+			auth: &AuthenticationConfiguration{
+				ScramConfiguration: &ScramConfiguration{
+					Username:       "alice",
+					Password:       "secret",
+					ScramMechanism: ScramMechanismScramSha256,
+				},
 			},
 			want: &adminv2.AuthenticationConfiguration{
 				Authentication: &adminv2.AuthenticationConfiguration_ScramConfiguration{
@@ -262,10 +274,12 @@ func TestMapAuthenticationConfiguration(t *testing.T) {
 		},
 		{
 			name: "SCRAM-SHA-512 configuration",
-			auth: &ScramConfig{
-				Username:       "bob",
-				Password:       "password",
-				ScramMechanism: ScramMechanismScramSha512,
+			auth: &AuthenticationConfiguration{
+				ScramConfiguration: &ScramConfiguration{
+					Username:       "bob",
+					Password:       "password",
+					ScramMechanism: ScramMechanismScramSha512,
+				},
 			},
 			want: &adminv2.AuthenticationConfiguration{
 				Authentication: &adminv2.AuthenticationConfiguration_ScramConfiguration{
@@ -432,14 +446,14 @@ func TestMapSecuritySyncOptions(t *testing.T) {
 				AclFilters: []*adminv2.ACLFilter{
 					{
 						ResourceFilter: &adminv2.ACLResourceFilter{
-							ResourceType: common.ACLResource_ACL_RESOURCE_TOPIC,
-							PatternType:  common.ACLPattern_ACL_PATTERN_LITERAL,
+							ResourceType: corecommonv1.ACLResource_ACL_RESOURCE_TOPIC,
+							PatternType:  corecommonv1.ACLPattern_ACL_PATTERN_LITERAL,
 							Name:         "sensitive-topic",
 						},
 						AccessFilter: &adminv2.ACLAccessFilter{
 							Principal:      "User:admin",
-							Operation:      common.ACLOperation_ACL_OPERATION_WRITE,
-							PermissionType: common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
+							Operation:      corecommonv1.ACLOperation_ACL_OPERATION_WRITE,
+							PermissionType: corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
 							Host:           "192.168.1.1",
 						},
 					},
@@ -531,14 +545,14 @@ func TestMapACLFilter(t *testing.T) {
 			},
 			want: &adminv2.ACLFilter{
 				ResourceFilter: &adminv2.ACLResourceFilter{
-					ResourceType: common.ACLResource_ACL_RESOURCE_GROUP,
-					PatternType:  common.ACLPattern_ACL_PATTERN_PREFIXED,
+					ResourceType: corecommonv1.ACLResource_ACL_RESOURCE_GROUP,
+					PatternType:  corecommonv1.ACLPattern_ACL_PATTERN_PREFIXED,
 					Name:         "consumer-",
 				},
 				AccessFilter: &adminv2.ACLAccessFilter{
 					Principal:      "User:consumer",
-					Operation:      common.ACLOperation_ACL_OPERATION_READ,
-					PermissionType: common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
+					Operation:      corecommonv1.ACLOperation_ACL_OPERATION_READ,
+					PermissionType: corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
 					Host:           "*",
 				},
 			},
@@ -626,10 +640,10 @@ func TestAdminClientOptsToCfg(t *testing.T) {
 			name: "with file-based TLS",
 			opts: &adminv2.ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TlsSettings: &adminv2.TLSSettings{
+				TlsSettings: &corecommonv1.TLSSettings{
 					Enabled: true,
-					TlsSettings: &adminv2.TLSSettings_TlsFileSettings{
-						TlsFileSettings: &adminv2.TLSFileSettings{
+					TlsSettings: &corecommonv1.TLSSettings_TlsFileSettings{
+						TlsFileSettings: &corecommonv1.TLSFileSettings{
 							CaPath:   "/ca.crt",
 							KeyPath:  "/key.pem",
 							CertPath: "/cert.pem",
@@ -639,11 +653,13 @@ func TestAdminClientOptsToCfg(t *testing.T) {
 			},
 			want: &ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TLSSettings: &TLSFileSettings{
-					Enabled:  true,
-					CAPath:   "/ca.crt",
-					KeyPath:  "/key.pem",
-					CertPath: "/cert.pem",
+				TLSSettings: &TLSSettings{
+					Enabled: true,
+					TLSFileSettings: &TLSFileSettings{
+						CAPath:   "/ca.crt",
+						KeyPath:  "/key.pem",
+						CertPath: "/cert.pem",
+					},
 				},
 			},
 		},
@@ -651,10 +667,10 @@ func TestAdminClientOptsToCfg(t *testing.T) {
 			name: "with PEM-based TLS",
 			opts: &adminv2.ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TlsSettings: &adminv2.TLSSettings{
+				TlsSettings: &corecommonv1.TLSSettings{
 					Enabled: true,
-					TlsSettings: &adminv2.TLSSettings_TlsPemSettings{
-						TlsPemSettings: &adminv2.TLSPEMSettings{
+					TlsSettings: &corecommonv1.TLSSettings_TlsPemSettings{
+						TlsPemSettings: &corecommonv1.TLSPEMSettings{
 							Ca:   "ca-content",
 							Key:  "key-content",
 							Cert: "cert-content",
@@ -664,11 +680,13 @@ func TestAdminClientOptsToCfg(t *testing.T) {
 			},
 			want: &ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				TLSSettings: &TLSPEMSettings{
+				TLSSettings: &TLSSettings{
 					Enabled: true,
-					CA:      "ca-content",
-					Key:     "key-content",
-					Cert:    "cert-content",
+					TLSPEMSettings: &TLSPEMSettings{
+						CA:   "ca-content",
+						Key:  "key-content",
+						Cert: "cert-content",
+					},
 				},
 			},
 		},
@@ -688,10 +706,12 @@ func TestAdminClientOptsToCfg(t *testing.T) {
 			},
 			want: &ShadowLinkClientOptions{
 				BootstrapServers: []string{"localhost:9092"},
-				AuthenticationConfiguration: &ScramConfig{
-					Username:       "user",
-					Password:       "pass",
-					ScramMechanism: ScramMechanismScramSha512,
+				AuthenticationConfiguration: &AuthenticationConfiguration{
+					ScramConfiguration: &ScramConfiguration{
+						Username:       "user",
+						Password:       "pass",
+						ScramMechanism: ScramMechanismScramSha512,
+					},
 				},
 			},
 		},
@@ -708,8 +728,8 @@ func TestAdminClientOptsToCfg(t *testing.T) {
 func TestAdminTLSToCfg(t *testing.T) {
 	tests := []struct {
 		name string
-		tls  *adminv2.TLSSettings
-		want TLSSettings
+		tls  *corecommonv1.TLSSettings
+		want *TLSSettings
 	}{
 		{
 			name: "nil TLS returns nil",
@@ -718,61 +738,45 @@ func TestAdminTLSToCfg(t *testing.T) {
 		},
 		{
 			name: "file-based TLS settings",
-			tls: &adminv2.TLSSettings{
+			tls: &corecommonv1.TLSSettings{
 				Enabled: true,
-				TlsSettings: &adminv2.TLSSettings_TlsFileSettings{
-					TlsFileSettings: &adminv2.TLSFileSettings{
+				TlsSettings: &corecommonv1.TLSSettings_TlsFileSettings{
+					TlsFileSettings: &corecommonv1.TLSFileSettings{
 						CaPath:   "/path/to/ca",
 						KeyPath:  "/path/to/key",
 						CertPath: "/path/to/cert",
 					},
 				},
 			},
-			want: &TLSFileSettings{
-				Enabled:  true,
-				CAPath:   "/path/to/ca",
-				KeyPath:  "/path/to/key",
-				CertPath: "/path/to/cert",
+			want: &TLSSettings{
+				Enabled: true,
+				TLSFileSettings: &TLSFileSettings{
+					CAPath:   "/path/to/ca",
+					KeyPath:  "/path/to/key",
+					CertPath: "/path/to/cert",
+				},
 			},
 		},
 		{
 			name: "PEM-based TLS settings",
-			tls: &adminv2.TLSSettings{
+			tls: &corecommonv1.TLSSettings{
 				Enabled: false,
-				TlsSettings: &adminv2.TLSSettings_TlsPemSettings{
-					TlsPemSettings: &adminv2.TLSPEMSettings{
+				TlsSettings: &corecommonv1.TLSSettings_TlsPemSettings{
+					TlsPemSettings: &corecommonv1.TLSPEMSettings{
 						Ca:   "ca-pem",
 						Key:  "key-pem",
 						Cert: "cert-pem",
 					},
 				},
 			},
-			want: &TLSPEMSettings{
+			want: &TLSSettings{
 				Enabled: false,
-				CA:      "ca-pem",
-				Key:     "key-pem",
-				Cert:    "cert-pem",
-			},
-		},
-		{
-			name: "nil file settings returns nil",
-			tls: &adminv2.TLSSettings{
-				Enabled: true,
-				TlsSettings: &adminv2.TLSSettings_TlsFileSettings{
-					TlsFileSettings: nil,
+				TLSPEMSettings: &TLSPEMSettings{
+					CA:   "ca-pem",
+					Key:  "key-pem",
+					Cert: "cert-pem",
 				},
 			},
-			want: nil,
-		},
-		{
-			name: "nil PEM settings returns nil",
-			tls: &adminv2.TLSSettings{
-				Enabled: true,
-				TlsSettings: &adminv2.TLSSettings_TlsPemSettings{
-					TlsPemSettings: nil,
-				},
-			},
-			want: nil,
 		},
 	}
 
@@ -788,7 +792,7 @@ func TestAdminAuthToCfg(t *testing.T) {
 	tests := []struct {
 		name string
 		auth *adminv2.AuthenticationConfiguration
-		want AuthenticationConfiguration
+		want *AuthenticationConfiguration
 	}{
 		{
 			name: "nil auth returns nil",
@@ -806,10 +810,12 @@ func TestAdminAuthToCfg(t *testing.T) {
 					},
 				},
 			},
-			want: &ScramConfig{
-				Username:       "alice",
-				Password:       "secret",
-				ScramMechanism: ScramMechanismScramSha256,
+			want: &AuthenticationConfiguration{
+				ScramConfiguration: &ScramConfiguration{
+					Username:       "alice",
+					Password:       "secret",
+					ScramMechanism: ScramMechanismScramSha256,
+				},
 			},
 		},
 		{
@@ -823,10 +829,12 @@ func TestAdminAuthToCfg(t *testing.T) {
 					},
 				},
 			},
-			want: &ScramConfig{
-				Username:       "bob",
-				Password:       "password",
-				ScramMechanism: ScramMechanismScramSha512,
+			want: &AuthenticationConfiguration{
+				ScramConfiguration: &ScramConfiguration{
+					Username:       "bob",
+					Password:       "password",
+					ScramMechanism: ScramMechanismScramSha512,
+				},
 			},
 		},
 		{
@@ -978,14 +986,14 @@ func TestAdminSecuritySyncToCfg(t *testing.T) {
 				AclFilters: []*adminv2.ACLFilter{
 					{
 						ResourceFilter: &adminv2.ACLResourceFilter{
-							ResourceType: common.ACLResource_ACL_RESOURCE_TOPIC,
-							PatternType:  common.ACLPattern_ACL_PATTERN_LITERAL,
+							ResourceType: corecommonv1.ACLResource_ACL_RESOURCE_TOPIC,
+							PatternType:  corecommonv1.ACLPattern_ACL_PATTERN_LITERAL,
 							Name:         "sensitive-topic",
 						},
 						AccessFilter: &adminv2.ACLAccessFilter{
 							Principal:      "User:admin",
-							Operation:      common.ACLOperation_ACL_OPERATION_WRITE,
-							PermissionType: common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
+							Operation:      corecommonv1.ACLOperation_ACL_OPERATION_WRITE,
+							PermissionType: corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
 							Host:           "192.168.1.1",
 						},
 					},
@@ -1083,14 +1091,14 @@ func TestAdminACLFilterToCfg(t *testing.T) {
 			name: "complete ACL filter",
 			filter: &adminv2.ACLFilter{
 				ResourceFilter: &adminv2.ACLResourceFilter{
-					ResourceType: common.ACLResource_ACL_RESOURCE_GROUP,
-					PatternType:  common.ACLPattern_ACL_PATTERN_PREFIXED,
+					ResourceType: corecommonv1.ACLResource_ACL_RESOURCE_GROUP,
+					PatternType:  corecommonv1.ACLPattern_ACL_PATTERN_PREFIXED,
 					Name:         "consumer-",
 				},
 				AccessFilter: &adminv2.ACLAccessFilter{
 					Principal:      "User:consumer",
-					Operation:      common.ACLOperation_ACL_OPERATION_READ,
-					PermissionType: common.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
+					Operation:      corecommonv1.ACLOperation_ACL_OPERATION_READ,
+					PermissionType: corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_ALLOW,
 					Host:           "*",
 				},
 			},
@@ -1134,18 +1142,25 @@ func TestRoundTrip(t *testing.T) {
 			FetchMinBytes:          2048,
 			FetchMaxBytes:          20971520,
 			FetchPartitionMaxBytes: 512,
-			TLSSettings: &TLSFileSettings{
+			TLSSettings: &TLSSettings{
 				Enabled:             true,
 				DoNotSetSniHostname: true,
-				CAPath:              "/etc/ssl/certs/ca-bundle.pem",
-				KeyPath:             "/etc/ssl/private/client-key.pem",
-				CertPath:            "/etc/ssl/certs/client-cert.pem",
+				TLSFileSettings: &TLSFileSettings{
+					CAPath:   "/etc/ssl/certs/ca-bundle.pem",
+					KeyPath:  "/etc/ssl/private/client-key.pem",
+					CertPath: "/etc/ssl/certs/client-cert.pem",
+				},
 			},
-			AuthenticationConfiguration: &ScramConfig{
-				Username:       "shadow-replication-user",
-				Password:       "super-secure-password-123",
-				ScramMechanism: ScramMechanismScramSha512,
+			AuthenticationConfiguration: &AuthenticationConfiguration{
+				ScramConfiguration: &ScramConfiguration{
+					Username:       "shadow-replication-user",
+					Password:       "super-secure-password-123",
+					ScramMechanism: ScramMechanismScramSha512,
+				},
 			},
+		},
+		SchemaRegistrySyncOptions: &SchemaRegistrySyncOptions{
+			ShadowSchemaRegistryTopic: &ShadowSchemaRegistryTopic{},
 		},
 		TopicMetadataSyncOptions: &TopicMetadataSyncOptions{
 			Interval: 45 * time.Second,
@@ -1178,7 +1193,8 @@ func TestRoundTrip(t *testing.T) {
 				"cleanup.policy",
 				"min.compaction.lag.ms",
 			},
-			ExcludeDefault: false,
+			ExcludeDefault:  false,
+			StartAtEarliest: &StartAtEarliest{},
 		},
 		ConsumerOffsetSyncOptions: &ConsumerOffsetSyncOptions{
 			Enabled:  true,
@@ -1274,21 +1290,21 @@ func TestAdminFilterTypeToCfg_UnknownValue(t *testing.T) {
 }
 
 func TestAdminACLResourceToCfg_UnknownValue(t *testing.T) {
-	result := adminACLResourceToCfg(common.ACLResource_ACL_RESOURCE_UNSPECIFIED)
+	result := adminACLResourceToCfg(corecommonv1.ACLResource_ACL_RESOURCE_UNSPECIFIED)
 	require.Equal(t, ACLResource(""), result, "unspecified ACL resource should return empty string")
 }
 
 func TestAdminACLPatternToCfg_UnknownValue(t *testing.T) {
-	result := adminACLPatternToCfg(common.ACLPattern_ACL_PATTERN_UNSPECIFIED)
+	result := adminACLPatternToCfg(corecommonv1.ACLPattern_ACL_PATTERN_UNSPECIFIED)
 	require.Equal(t, ACLPattern(""), result, "unspecified ACL pattern should return empty string")
 }
 
 func TestAdminACLOperationToCfg_UnknownValue(t *testing.T) {
-	result := adminACLOperationToCfg(common.ACLOperation_ACL_OPERATION_UNSPECIFIED)
+	result := adminACLOperationToCfg(corecommonv1.ACLOperation_ACL_OPERATION_UNSPECIFIED)
 	require.Equal(t, ACLOperation(""), result, "unspecified ACL operation should return empty string")
 }
 
 func TestAdminPermissionTypeToCfg_UnknownValue(t *testing.T) {
-	result := adminPermissionTypeToCfg(common.ACLPermissionType_ACL_PERMISSION_TYPE_UNSPECIFIED)
+	result := adminPermissionTypeToCfg(corecommonv1.ACLPermissionType_ACL_PERMISSION_TYPE_UNSPECIFIED)
 	require.Equal(t, ACLPermissionType(""), result, "unspecified permission type should return empty string")
 }

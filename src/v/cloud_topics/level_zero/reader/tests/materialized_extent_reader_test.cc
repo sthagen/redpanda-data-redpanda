@@ -9,6 +9,7 @@
  */
 
 #include "base/vlog.h"
+#include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
 #include "cloud_topics/level_zero/reader/tests/materialized_extent_fixture.h"
 #include "container/chunked_vector.h"
@@ -55,8 +56,8 @@ TEST_F_CORO(materialized_extent_fixture, full_scan_test) {
       cache,
       rtc,
       logger);
-    ASSERT_EQ_CORO(actual.size(), expected.size());
-    ASSERT_TRUE_CORO(actual == expected);
+    ASSERT_EQ_CORO(actual.value().size(), expected.size());
+    ASSERT_TRUE_CORO(actual.value() == expected);
 }
 
 // Same as 'full_scan_test' but the range can be arbitrary
@@ -105,10 +106,37 @@ ss::future<> test_aggregated_log_partial_scan(
       rtc,
       logger);
 
-    ASSERT_EQ_CORO(actual.size(), expected_view.size());
-    ASSERT_TRUE_CORO(actual == expected_view);
+    ASSERT_EQ_CORO(actual.value().size(), expected_view.size());
+    ASSERT_TRUE_CORO(actual.value() == expected_view);
 }
 
 TEST_F_CORO(materialized_extent_fixture, scan_range) {
     co_await test_aggregated_log_partial_scan(this, 10, 0, 0);
+}
+
+TEST_F_CORO(materialized_extent_fixture, timeout_test) {
+    // The test validates that the error is properly propagated
+    // from the materialize_placeholders function.
+    const int num_batches = 1;
+    co_await add_random_batches(num_batches);
+
+    std::queue<injected_failure> failures;
+    failures.push({.cloud_get = injected_cloud_get_failure::return_timeout});
+    produce_placeholders(false, 1, failures);
+
+    auto underlying = convert_placeholders(make_underlying());
+    ss::abort_source as;
+    retry_chain_node rtc(as, 1s, 100ms);
+    retry_chain_logger logger(test_log, rtc, "materialized_extent_reader_test");
+
+    auto actual = co_await cloud_topics::l0::materialize_placeholders(
+      cloud_storage_clients::bucket_name("test-bucket-name"),
+      std::move(underlying),
+      remote,
+      cache,
+      rtc,
+      logger);
+
+    ASSERT_TRUE_CORO(actual.has_error());
+    ASSERT_TRUE_CORO(actual.error() == cloud_topics::errc::timeout);
 }

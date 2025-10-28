@@ -143,10 +143,6 @@ ss::future<result<bool>> materialize(
     // 2. download object from S3
     auto cache_file_name = std::filesystem::path(
       object_path_factory::level_zero_path(ext->meta.id));
-    // TODO: replace this with proper object name
-    // currently this value is used as both cloud storage name
-    // and cache name. This shouldn't necessary be the case in the
-    // future.
 
     std::optional<cloud_io::cache_element_status> status = std::nullopt;
     basic_retry_chain_node<> is_cached_rtc(retry_strategy::backoff, rtc);

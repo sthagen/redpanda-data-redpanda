@@ -125,7 +125,24 @@ ss::future<> fetch_handler::process_single_request(l0::read_request<>* req) {
             co_return;
         }
 
-        auto data = std::move(extent.get());
+        auto res = extent.get();
+        if (res.has_error()) {
+            vlog(
+              req->rtc_logger.warn,
+              "Failed to materialize placeholders, error: {} ({})",
+              res.error(),
+              res.error().message());
+            std::error_code ec = res.error();
+            if (ec.category() == error_category()) {
+                req->set_value(static_cast<errc>(res.error().value()));
+            } else {
+                req->set_value(errc::unexpected_failure);
+            }
+            auto_dispose.cancel();
+            co_return;
+        }
+
+        auto data = std::move(res.value());
         if (data.empty()) {
             vlog(req->rtc_logger.debug, "Empty response");
         }

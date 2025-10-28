@@ -32,7 +32,8 @@ namespace cloud_topics::l0 {
 /// \param cache is a cloud storage cache instance
 /// \param rtc is a retry chain node to use
 /// \param rtc_logger is a logger that should track the progress
-ss::future<chunked_vector<model::record_batch>> materialize_placeholders(
+ss::future<result<chunked_vector<model::record_batch>>>
+materialize_placeholders(
   cloud_storage_clients::bucket_name bucket,
   chunked_vector<extent_meta> query,
   cloud_io::remote_api<ss::lowres_clock>& api,

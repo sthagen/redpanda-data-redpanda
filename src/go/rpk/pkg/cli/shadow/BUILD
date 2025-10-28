@@ -23,27 +23,33 @@ go_library(
         "//src/go/rpk/pkg/os",
         "//src/go/rpk/pkg/out",
         "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/admin/v2:admin",
-        "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/common",
+        "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/common/v1:common",
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_google_protobuf//types/known/durationpb",
+        "@org_golang_google_protobuf//types/known/timestamppb",
     ],
 )
 
 go_test(
     name = "shadow_test",
     srcs = [
+        "create_test.go",
         "mapper_test.go",
         "types_test.go",
     ],
     embed = [":shadow"],
     deps = [
         "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/admin/v2:admin",
-        "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/common",
+        "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/common/v1:common",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//types/descriptorpb",
         "@org_golang_google_protobuf//types/known/durationpb",
     ],
 )

@@ -63,7 +63,7 @@ func IrqInfosToIDs(irqs []IrqInfo) []int {
 type Nic interface {
 	IsHwInterface() bool
 	IsBondIface() bool
-	Slaves() ([]Nic, error)
+	Slaves() []Nic
 	GetIRQs() ([]IrqInfo, error)
 	GetMaxRxQueueCount() (int, error)
 	GetRxQueueCount() (int, error)
@@ -83,6 +83,7 @@ type nic struct {
 	irqDeviceInfo irq.DeviceInfo
 	ethtool       ethtool.EthtoolWrapper
 	name          string
+	slaves        []Nic
 }
 
 func NewNic(
@@ -98,6 +99,7 @@ func NewNic(
 		irqDeviceInfo: irqDeviceInfo,
 		irqProcFile:   irqProcFile,
 		ethtool:       ethtool,
+		slaves:        getslaves(fs, irqProcFile, irqDeviceInfo, ethtool, name),
 	}
 }
 
@@ -122,23 +124,28 @@ func getLowerNames(fs afero.Fs, nicName string) []string {
 }
 
 func (n *nic) IsBondIface() bool {
-	zap.L().Sugar().Debugf("Checking if '%s' is bond interface", n.name)
-	lowers := getLowerNames(n.fs, n.name)
-	return len(lowers) > 0
+	return len(n.slaves) > 0
 }
 
-func (n *nic) Slaves() ([]Nic, error) {
+func getslaves(fs afero.Fs, irqProcFile irq.ProcFile,
+	irqDeviceInfo irq.DeviceInfo,
+	ethtool ethtool.EthtoolWrapper,
+	name string,
+) []Nic {
 	slaves := []Nic{}
 
-	if n.IsBondIface() {
-		zap.L().Sugar().Debugf("Reading slaves of '%s'", n.name)
-		slaveNames := getLowerNames(n.fs, n.name)
+	zap.L().Sugar().Debugf("Reading slaves of '%s'", name)
+	slaveNames := getLowerNames(fs, name)
 
-		for _, name := range slaveNames {
-			slaves = append(slaves, NewNic(n.fs, n.irqProcFile, n.irqDeviceInfo, n.ethtool, name))
-		}
+	for _, name := range slaveNames {
+		slaves = append(slaves, NewNic(fs, irqProcFile, irqDeviceInfo, ethtool, name))
 	}
-	return slaves, nil
+
+	return slaves
+}
+
+func (n *nic) Slaves() []Nic {
+	return n.slaves
 }
 
 func (n *nic) IsHwInterface() bool {

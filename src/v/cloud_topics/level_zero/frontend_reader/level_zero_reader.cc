@@ -10,6 +10,7 @@
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 
 #include "cloud_topics/data_plane_api.h"
+#include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "cluster/partition.h"
@@ -343,6 +344,16 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
         auto mat_res = co_await _ct_api->materialize(
           _ctp->ntp(), materialize_bytes, std::move(to_materialize), deadline);
         if (mat_res.has_error()) {
+            if (mat_res.error() == errc::shutting_down) {
+                vlog(_log.debug, "Materialize aborted due to shutdown");
+                _current = state::end_of_stream_state;
+                throw ss::abort_requested_exception();
+            }
+            if (mat_res.error() == errc::timeout) {
+                vlog(_log.debug, "Materialize aborted due to timeout");
+                _current = state::end_of_stream_state;
+                co_return;
+            }
             throw std::runtime_error(
               fmt::format(
                 "Failed to materialize batches from the cloud storage: {}",

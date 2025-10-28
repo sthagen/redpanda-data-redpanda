@@ -33,9 +33,7 @@ read_request<Clock>::read_request(
   , rtc(
       expiration_time,
       std::chrono::milliseconds(100),
-      // NOTE: we're not retrying the downloads. The retries are happening when
-      // the cache element is 'in-progress'.
-      retry_strategy::polling,
+      retry_strategy::backoff,
       root_rtc)
   , rtc_logger(
       cd_log, rtc, ssx::sformat("ct:read_request[{}]", this->ntp.path())) {

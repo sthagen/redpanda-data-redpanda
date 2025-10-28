@@ -63,7 +63,8 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
 
 } // namespace
 
-ss::future<chunked_vector<model::record_batch>> materialize_placeholders(
+ss::future<result<chunked_vector<model::record_batch>>>
+materialize_placeholders(
   cloud_storage_clients::bucket_name bucket,
   chunked_vector<extent_meta> query,
   cloud_io::remote_api<ss::lowres_clock>& api,
@@ -77,7 +78,7 @@ ss::future<chunked_vector<model::record_batch>> materialize_placeholders(
           logger.warn,
           "Failed to materialize sorted run: {}",
           extents.error().message());
-        throw std::system_error(extents.error());
+        co_return extents.error();
     }
 
     chunked_vector<model::record_batch> results;

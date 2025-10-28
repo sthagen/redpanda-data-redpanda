@@ -13,7 +13,6 @@ import (
 	"fmt"
 
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
-
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -116,6 +115,24 @@ func validateParsedShadowLinkConfig(slCfg *ShadowLinkConfig) error {
 	}
 	if len(slCfg.ClientOptions.BootstrapServers) == 0 {
 		return fmt.Errorf("at least one bootstrap server is required")
+	}
+	if tls := slCfg.ClientOptions.TLSSettings; tls != nil && tls.TLSFileSettings != nil && tls.TLSPEMSettings != nil {
+		return fmt.Errorf("only one of TLS file settings or PEM settings can be provided")
+	}
+	if ts := slCfg.TopicMetadataSyncOptions; ts != nil {
+		var count int
+		if ts.StartAtLatest != nil {
+			count++
+		}
+		if ts.StartAtEarliest != nil {
+			count++
+		}
+		if ts.StartAtTimestamp != nil {
+			count++
+		}
+		if count > 1 {
+			return fmt.Errorf("only one of start_at_latest, start_at_earliest, or start_at_timestamp can be provided")
+		}
 	}
 	return nil
 }

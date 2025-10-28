@@ -9,6 +9,7 @@
     "standard": [
         "rptest/archival/abs_client.py",
         "rptest/archival/s3_client.py",
+        "rptest/clients/admin/**/*_pb2.py",
         "rptest/clients/admin/v2.py",
         "rptest/clients/consumer_offsets_recovery.py",
         "rptest/clients/default.py",
@@ -60,8 +61,8 @@
         "rptest/services/metrics_check.py",
         "rptest/services/mock_iam_roles_server.py",
         "rptest/services/nessie_catalog.py",
-        "rptest/services/openmessaging_benchmark_configs.py",
         "rptest/services/openmessaging_benchmark.py",
+        "rptest/services/openmessaging_benchmark_configs.py",
         "rptest/services/provider_clients/__init__.py",
         "rptest/services/provider_clients/azure_client.py",
         "rptest/services/provider_clients/client_utils.py",
@@ -80,8 +81,8 @@
         "rptest/tests/cloud_storage_cache_test.py",
         "rptest/tests/cloud_storage_chunk_read_path_test.py",
         "rptest/tests/cloud_storage_usage_test.py",
-        "rptest/tests/cloud_topics_test.py",
         "rptest/tests/cloud_topics/e2e_test.py",
+        "rptest/tests/cloud_topics_test.py",
         "rptest/tests/cluster_bootstrap_test.py",
         "rptest/tests/cluster_health_overview_test.py",
         "rptest/tests/cluster_linking_e2e_test.py",
@@ -116,8 +117,8 @@
         "rptest/tests/datalake/datalake_table_name_test.py",
         "rptest/tests/datalake/datalake_upgrade_test.py",
         "rptest/tests/datalake/datalake_usage_test.py",
-        "rptest/tests/datalake/datalake_verifier_test.py",
         "rptest/tests/datalake/datalake_verifier.py",
+        "rptest/tests/datalake/datalake_verifier_test.py",
         "rptest/tests/datalake/disk_usage_test.py",
         "rptest/tests/datalake/duckdb_test.py",
         "rptest/tests/datalake/iceberg_rest_catalog_smoke_test.py",
@@ -154,8 +155,8 @@
         "rptest/tests/list_kafka_connections_test.py",
         "rptest/tests/log_level_test.py",
         "rptest/tests/log_segment_ms_test.py",
-        "rptest/tests/maintenance_test.py",
         "rptest/tests/maintenance.py",
+        "rptest/tests/maintenance_test.py",
         "rptest/tests/memory_sampling_test.py",
         "rptest/tests/memory_stress_test.py",
         "rptest/tests/metrics_reporter_test.py",
@@ -246,8 +247,7 @@
         "rptest/utils/rpk_config.py",
         "rptest/utils/scale_parameters.py",
         "rptest/utils/schema_registry_utils.py",
-        "rptest/utils/unit_test.py",
-        "rptest/clients/admin/**/*_pb2.py"
+        "rptest/utils/unit_test.py"
     ],
     "basic": [
         "rptest/remote_scripts/topic_operations.py",
@@ -273,6 +273,7 @@
         "rptest/utils/rpenv.py"
     ],
     "off": [
+        "**/*_pb2_connect.py",
         "rptest/chaos_tests/single_fault_test.py",
         "rptest/clients/ping_pong.py",
         "rptest/clients/rpk.py",
@@ -378,6 +379,7 @@
         "rptest/tests/datalake/schema_scale_test.py",
         "rptest/tests/datalake/schemas/data_type_generator.py",
         "rptest/tests/datalake/schemas/data_types.py",
+        "rptest/tests/datalake/schemas/linear_pb2.py",
         "rptest/tests/datalake/schemas/schema_generator.py",
         "rptest/tests/debug_bundle_test.py",
         "rptest/tests/delete_records_test.py",
@@ -469,9 +471,7 @@
         "rptest/transactions/verifiers/stream_verifier.py",
         "rptest/util.py",
         "rptest/utils/cluster_topology.py",
-        "rptest/utils/si_utils.py",
-        "rptest/tests/datalake/schemas/linear_pb2.py",
-        "**/*_pb2_connect.py"
+        "rptest/utils/si_utils.py"
     ],
     "skip": [
         "rptest/e2e_tests/workloads/flink_consume_basic.py",

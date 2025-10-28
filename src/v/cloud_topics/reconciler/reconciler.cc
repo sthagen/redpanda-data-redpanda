@@ -460,6 +460,19 @@ reconciler::build_object(
         auto start_offset = kafka::next_offset(src->last_reconciled_offset());
         auto read_result = co_await add_source_to_object(
           ctx, src, start_offset);
+
+        // Enforce the size limit, but always allow one partition in.
+        auto current_size = ctx.builder->file_size();
+        if (!metas.empty() && current_size >= max_object_size) {
+            vlog(
+              lg.debug,
+              "Stopping object build: size {} >= max {}",
+              current_size,
+              max_object_size);
+            break;
+        }
+        ctx.size_budget = max_object_size - current_size;
+
         if (!read_result.has_value()) {
             // Log an error, we don't want a single stuck partition to
             // prevent all partitions from being reconciled.
