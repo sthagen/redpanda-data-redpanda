@@ -39,8 +39,8 @@ void set_units(ssx::semaphore& sem, size_t target_units) {
 class fetch_memory_units_test_fixture : public seastar_test {
 public:
     ss::future<> SetUpAsync() override {
-        co_await _kafka_sem.start(0, ss::sstring("kafka_sem"));
-        co_await _fetch_sem.start(0, ss::sstring("fetch_sem"));
+        co_await _kafka_sem.start(100_MiB, ss::sstring("kafka_sem"));
+        co_await _fetch_sem.start(50_MiB, ss::sstring("fetch_sem"));
         co_await _manager.start(
           ss::sharded_parameter(
             [this] { return std::reference_wrapper(_kafka_sem.local()); }),
@@ -115,7 +115,8 @@ TEST_F_CORO(fetch_memory_units_test_fixture, test_cross_shard_free) {
     };
     auto get_remote_units = [&](size_t n) {
         return sharded_manager().invoke_on(other_shard_id, [n](auto& mgr) {
-            return std::make_optional(mgr.allocate_memory_units(n, n, false));
+            return std::make_optional(
+              mgr.allocate_memory_units(model::ktp{}, n, n, n, false));
         });
     };
 
@@ -154,7 +155,7 @@ TEST_F_CORO(fetch_memory_units_test_fixture, test_adjust_units) {
     co_await set_kafka_units(10);
     co_await set_fetch_units(10);
 
-    auto units = mgr.allocate_memory_units(10, 10, false);
+    auto units = mgr.allocate_memory_units(model::ktp{}, 10, 10, 10, false);
     EXPECT_EQ(units.num_units(), 10);
     units.adjust_units(5);
     EXPECT_EQ(units.num_units(), 5);
@@ -173,7 +174,11 @@ TEST_F_CORO(fetch_memory_units_test_fixture, test_allocate_memory_units) {
     const auto test_case =
       [&mgr](size_t max_bytes, bool obligatory_batch_read) -> size_t {
         auto mu = mgr.allocate_memory_units(
-          max_bytes, batch_size, obligatory_batch_read);
+          model::ktp{},
+          max_bytes,
+          batch_size,
+          batch_size,
+          obligatory_batch_read);
         return mu.num_units();
     };
 

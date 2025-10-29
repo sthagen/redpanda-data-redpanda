@@ -48,6 +48,7 @@ var (
 	rateLimitBps       = flag.Int("rate-limit-bps", -1, "Bytes/second throttle (global, will be split equally between workers)")
 
 	useTransactions      = flag.Bool("use-transactions", false, "Producer: use a transactional producer")
+	transactionTimeout   = flag.Duration("transaction-timeout-ms", 2*time.Minute, "Value to use for `transaction.timeout.ms` when producing with transactions.")
 	transactionAbortRate = flag.Float64("transaction-abort-rate", 0.0, "The probability that any given transaction should abort")
 	msgsPerTransaction   = flag.Uint("msgs-per-transaction", 1, "The number of messages that should be in a given transaction")
 
@@ -151,7 +152,7 @@ func main() {
 		// the many changes that would be needed to be made to the verifier program if
 		// it was refactored.
 		wConfig := worker.NewWorkerConfig(
-			name, *brokers, *trace, topicsList[0], *linger, *maxBufferedRecords, *useTransactions, *compressionType, *compressiblePayload, *username, *password, *enableTls)
+			name, *brokers, *trace, topicsList[0], *linger, *maxBufferedRecords, *useTransactions, *transactionTimeout, *compressionType, *compressiblePayload, *username, *password, *enableTls)
 		config := repeater.NewRepeaterConfig(wConfig, topicsList, *group, *keys, *payloadSize, dataInFlightPerWorker, rateLimitPerWorker, *tombstoneProbability)
 		lv := repeater.NewWorker(config)
 		if *useTransactions {

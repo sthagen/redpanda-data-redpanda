@@ -66,6 +66,7 @@ var (
 	msgsPerProducerId   = flag.Int("msgs-per-producer-id", -1, "Number of messages produced before creating new Producer Client.  (used to generate many producer ids)")
 
 	useTransactions      = flag.Bool("use-transactions", false, "Use a transactional producer. Consumer with ReadComitted isolation level.")
+	transactionTimeout   = flag.Duration("transaction-timeout-ms", 2*time.Minute, "Value to use for `transaction.timeout.ms` when producing with transactions.")
 	transactionAbortRate = flag.Float64("transaction-abort-rate", 0.0, "The probability that any given transaction should abort")
 	msgsPerTransaction   = flag.Uint("msgs-per-transaction", 1, "The number of messages that should be in a given transaction")
 
@@ -94,6 +95,7 @@ func makeWorkerConfig() worker.WorkerConfig {
 		UseTls:                *enableTls,
 		Name:                  *name,
 		Transactions:          *useTransactions,
+		TransactionTimeout:    *transactionTimeout,
 		CompressionType:       *compressionType,
 		CompressiblePayload:   *compressiblePayload,
 		TolerateDataLoss:      *tolerateDataLoss,

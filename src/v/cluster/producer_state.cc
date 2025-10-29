@@ -349,8 +349,10 @@ void producer_state::reset_with_new_epoch(model::producer_epoch new_epoch) {
       "Invalid epoch bump to {} for producer {}",
       new_epoch,
       *this);
+    // We remove `tx_fence` batches during compaction. It is a valid operation
+    // to update the epoch when not currently in an open transaction.
     vassert(
-      !_transaction_state,
+      !_transaction_state || !_transaction_state->is_in_progress(),
       "Invalid epoch bump to {} for a non idempotent producer: {}",
       new_epoch,
       *this);

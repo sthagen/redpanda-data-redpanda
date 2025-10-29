@@ -30,7 +30,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: "."
+          context: "tests"
           file: tools/type-checking/Dockerfile
           tags: redpanda-data/python-type-check
           cache-from: type=gha
@@ -38,4 +38,4 @@ jobs:
           push: false
           load: true
       - name: Run type checking
-        run: tools/type-checking/type-check.sh ci --color=always
+        run: TC_SKIP_DOCKER_BUILD=1 tools/type-checking/type-check.sh ci --color=always

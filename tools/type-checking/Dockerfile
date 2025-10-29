@@ -22,7 +22,7 @@ FROM with-python AS build
 RUN apt-get update && \
     apt-get install --no-install-recommends -y python3-pip python3-dev git gcc && \
     rm -rf /var/lib/apt/lists/*
-COPY tests/setup.py /tmp/rptest-setup/
+COPY setup.py /tmp/rptest-setup/
 
 # install rptest and run pyright --version to prompt it to download its embedded nodejs
 RUN python3 -m pip install --no-cache-dir -e /tmp/rptest-setup
@@ -30,9 +30,11 @@ RUN python3 -m pip install --no-cache-dir -e /tmp/rptest-setup
 
 FROM with-python AS final
 
+# keep this in sync with tools/type-checking/requirements.txt
+ARG PYRIGHT_VERSION=pyright[nodejs]==1.1.406
+
 ###### install pyright
-COPY tools/type-checking/requirements.txt /tmp/pyright.txt
-RUN python3 -m pip install --no-cache-dir -r /tmp/pyright.txt
+RUN python3 -m pip install --no-cache-dir ${PYRIGHT_VERSION}
 
 # Copy-in *only* the parts of the python packages needed for type checking,
 # leaving the rest behind, which is a huge savings in final image size:

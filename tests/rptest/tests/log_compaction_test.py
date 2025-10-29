@@ -21,7 +21,9 @@ from rptest.services.kgo_verifier_services import (
     KgoVerifierProducer,
     KgoVerifierSeqConsumer,
 )
-from rptest.services.redpanda_installer import RedpandaVersionLine
+from rptest.services.redpanda_installer import (
+    RedpandaVersionLine,
+)
 from rptest.services.redpanda import MetricsEndpoint
 from rptest.tests.partition_movement import PartitionMovementMixin
 from rptest.tests.prealloc_nodes import PreallocNodesTest
@@ -228,6 +230,22 @@ class LogCompactionTestBase(PartitionMovementMixin):
             0.0
             if closed_segment_bytes == 0
             else float(dirty_segment_bytes) / float(closed_segment_bytes)
+        )
+
+    def wait_for_sliding_window_compaction(self):
+        self.prev_sliding_window_rounds = None
+
+        def compaction_has_completed():
+            new_sliding_window_rounds = self.get_complete_sliding_window_rounds()
+            res = self.prev_sliding_window_rounds == new_sliding_window_rounds
+            self.prev_sliding_window_rounds = new_sliding_window_rounds
+            return res
+
+        wait_until(
+            compaction_has_completed,
+            timeout_sec=120,
+            backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
+            err_msg="Compaction did not stabilize.",
         )
 
 
@@ -474,21 +492,7 @@ class LogCompactionSchedulingTest(LogCompactionTestBase, PreallocNodesTest):
         self.produce_and_consume()
 
         # At this point, the min.cleanable.dirty.ratio is 1.0
-        self.prev_sliding_window_rounds = -1
-
-        def compaction_has_completed():
-            new_sliding_window_rounds = self.get_complete_sliding_window_rounds()
-
-            res = self.prev_sliding_window_rounds == new_sliding_window_rounds
-            self.prev_sliding_window_rounds = new_sliding_window_rounds
-            return res
-
-        wait_until(
-            compaction_has_completed,
-            timeout_sec=120,
-            backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
-            err_msg="Compaction did not stabilize.",
-        )
+        self.wait_for_sliding_window_compaction()
 
         # We may race with a segment roll which won't be compacted (due to high min.cleanable.dirty.ratio),
         # so we cannot assert dirty_segment_bytes == 0 here.
@@ -523,12 +527,7 @@ class LogCompactionSchedulingTest(LogCompactionTestBase, PreallocNodesTest):
         # see the rolled segment compacted along with the rest of the log
         self.set_min_cleanable_dirty_ratio(0.0)
 
-        wait_until(
-            compaction_has_completed,
-            timeout_sec=120,
-            backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
-            err_msg="Compaction did not stabilize.",
-        )
+        self.wait_for_sliding_window_compaction()
 
         def no_dirty_bytes():
             return all(
@@ -680,6 +679,7 @@ class LogCompactionTxRemovalTestBase(LogCompactionTestBase, PreallocNodesTest):
             "log_segment_size": 2 * 1024**2,  # 2 MiB
             "compacted_log_segment_size": 1024**2,  # 1 MiB
         }
+        self.transaction_timeout_ms = 2000
 
         super().__init__(
             test_context=test_context,
@@ -695,12 +695,16 @@ class LogCompactionTxRemovalTestBase(LogCompactionTestBase, PreallocNodesTest):
             context=self.test_context,
             redpanda=self.redpanda,
             topic=self.topic_spec.name,
-            use_transactions=True,
             msg_size=test_case.msg_size,
             msg_count=test_case.msg_count,
+            use_transactions=True,
+            transaction_timeout_ms=self.transaction_timeout_ms,
             transaction_abort_rate=test_case.abort_rate,
             msgs_per_transaction=test_case.msgs_per_transaction,
             custom_node=self.preallocated_nodes,
+            tolerate_failed_produce=True,
+            tolerate_data_loss=True,
+            wait_for_acks=False,
         )
 
         producer.start()
@@ -712,21 +716,22 @@ class LogCompactionTxRemovalTestBase(LogCompactionTestBase, PreallocNodesTest):
         for node in self.redpanda.nodes:
             num_control_batches = 0
             num_fence_batches = 0
-            records_and_batches = viewer.read_kafka_records(node, self.topic_spec.name)
-            for record_or_batch in records_and_batches:
-                if "expanded_attrs" not in record_or_batch:
-                    continue
-                if record_or_batch["expanded_attrs"]["control_batch"]:
-                    num_control_batches += 1
-                if record_or_batch["type_name"] == "tx_fence":
-                    num_fence_batches += 1
+            partitions = viewer.read_kafka_records(node, self.topic_spec.name)
+            for partition in partitions:
+                for record_or_batch in partition:
+                    if "expanded_attrs" not in record_or_batch:
+                        continue
+                    if record_or_batch["expanded_attrs"]["control_batch"]:
+                        num_control_batches += 1
+                    if record_or_batch["type_name"] == "tx_fence":
+                        num_fence_batches += 1
 
-            assert num_control_batches == 0, (
-                f"expected 0 control batches (abort/commit batches), saw {num_control_batches} on node {node.name()}"
-            )
-            assert num_fence_batches == 0, (
-                f"expected 0 tx_fence batches, saw {num_fence_batches}  on node {node.name()}"
-            )
+                assert num_control_batches == 0, (
+                    f"expected 0 control batches (abort/commit batches), saw {num_control_batches} on node {node.name}"
+                )
+                assert num_fence_batches == 0, (
+                    f"expected 0 tx_fence batches, saw {num_fence_batches}  on node {node.name}"
+                )
 
     def do_test_tx_control_batch_removal(self, test_case_name, test_case):
         self.logger.info(
@@ -739,21 +744,10 @@ class LogCompactionTxRemovalTestBase(LogCompactionTestBase, PreallocNodesTest):
         # Restart the redpanda broker to roll segments
         self.redpanda.restart_nodes(self.redpanda.nodes)
 
-        self.prev_sliding_window_rounds = -1
+        # Sleep in order to allow any open transaction to be closed.
+        time.sleep(2 * self.transaction_timeout_ms / 1000)
 
-        def compaction_has_completed():
-            new_sliding_window_rounds = self.get_complete_sliding_window_rounds()
-
-            res = self.prev_sliding_window_rounds == new_sliding_window_rounds
-            self.prev_sliding_window_rounds = new_sliding_window_rounds
-            return res
-
-        wait_until(
-            compaction_has_completed,
-            timeout_sec=120,
-            backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
-            err_msg="Compaction did not stabilize.",
-        )
+        self.wait_for_sliding_window_compaction()
 
         self.stop_partition_movement()
 
@@ -794,8 +788,6 @@ class LogCompactionTxRemovalUpgradeTest(LogCompactionTxRemovalTestBase):
         self.initial_version: RedpandaVersionLine = (25, 1)
         # Version before tx removal was added to compaction.
         self.may_have_tx_batch_version: RedpandaVersionLine = (25, 2)
-        # Version in which tx batch removal was added to compaction.
-        self.tx_removal_version: RedpandaVersionLine = (25, 3)
 
     def setUp(self):
         self.redpanda._installer.install(self.redpanda.nodes, self.initial_version)
@@ -826,8 +818,11 @@ class LogCompactionTxRemovalUpgradeTest(LogCompactionTxRemovalTestBase):
         # Produce more transactional data.
         self.produce(test_case)
 
-        # Upgrade to `tx_removal` version.
-        self.upgrade_to_version(self.tx_removal_version)
+        # Upgrade to `HEAD`.
+        for version in self.redpanda._installer.upgrade_path_to_head(
+            self.may_have_tx_batch_version
+        ):
+            self.upgrade_to_version(version)
 
         # Perform rest of test
         self.do_test_tx_control_batch_removal(test_case_name, test_case)

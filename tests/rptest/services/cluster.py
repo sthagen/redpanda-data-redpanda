@@ -183,6 +183,7 @@ def cluster(
         if (
             self.redpanda._si_settings is not None
             and not self.redpanda.si_settings.skip_end_of_test_scrubbing
+            and not test_failed
         ):
             try:
                 self.redpanda.maybe_do_internal_scrub()

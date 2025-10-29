@@ -10,16 +10,16 @@ require (
 	buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.10-20251022210436-bbacedafcd60.1
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.10-20250904135917-9feeb2588236.1
 	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251025023032-d04cd59f0958.1
-	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.18.1-20250819145731-621dc775ffe4.1
-	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.7-20250819145731-621dc775ffe4.1
-	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.18.1-20250813192242-efcc93bcd794.1
-	buf.build/gen/go/redpandadata/gatekeeper/protocolbuffers/go v1.36.7-20250813192242-efcc93bcd794.1
-	cloud.google.com/go/compute/metadata v0.7.0
+	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.19.1-20251027225853-643acf04839f.2
+	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.10-20251027225853-643acf04839f.1
+	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.19.1-20251022210437-a5dd600d04b6.2
+	buf.build/gen/go/redpandadata/gatekeeper/protocolbuffers/go v1.36.10-20251022210437-a5dd600d04b6.1
+	cloud.google.com/go/compute/metadata v0.9.0
 	connectrpc.com/connect v1.19.1
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/aws/aws-sdk-go v1.55.6
-	github.com/beevik/ntp v1.4.3
+	github.com/beevik/ntp v1.5.0
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/cespare/xxhash v1.1.0
 	github.com/containerd/errdefs v1.0.0
@@ -29,12 +29,12 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/fatih/color v1.18.0
 	github.com/google/uuid v1.6.0
-	github.com/hamba/avro/v2 v2.29.0
+	github.com/hamba/avro/v2 v2.30.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/kr/text v0.2.0
 	github.com/lestrrat-go/jwx/v2 v2.1.6
-	github.com/linkedin/goavro/v2 v2.14.0
+	github.com/linkedin/goavro/v2 v2.14.1
 	github.com/lithammer/go-jump-consistent-hash v1.0.2
 	github.com/lorenzosaino/go-sysctl v0.3.1
 	github.com/mark3labs/mcp-go v0.37.0
@@ -54,22 +54,22 @@ require (
 	github.com/safchain/ethtool v0.6.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/schollz/progressbar/v3 v3.18.0
-	github.com/spf13/afero v1.14.0
-	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.7
-	github.com/stretchr/testify v1.10.0
+	github.com/spf13/afero v1.15.0
+	github.com/spf13/cobra v1.10.1
+	github.com/spf13/pflag v1.0.10
+	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/sjson v1.2.5
 	github.com/tklauser/go-sysconf v0.3.15
-	github.com/twmb/franz-go v1.20.1
+	github.com/twmb/franz-go v1.20.2
 	github.com/twmb/franz-go/pkg/kadm v1.17.1
-	github.com/twmb/franz-go/pkg/kfake v0.0.0-20251017113529-75b43b95a238
+	github.com/twmb/franz-go/pkg/kfake v0.0.0-20251024215757-aea970d4d0d2
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0
 	github.com/twmb/franz-go/pkg/sr v1.5.0
 	github.com/twmb/franz-go/plugin/kzap v1.1.2
 	github.com/twmb/tlscfg v1.2.1
 	github.com/twmb/types v1.1.6
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
 	golang.org/x/term v0.36.0
@@ -85,7 +85,7 @@ require (
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.10-20250912141014-52f32327d4b0.1 // indirect
-	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.10-20221127060915-a1ecdc58eccd.1 // indirect
+	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.10-20240617172850-a48fcebcf8f1.1 // indirect
 	buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.1-20251025023032-d04cd59f0958.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.1.0 // indirect
@@ -160,12 +160,12 @@ require (
 	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220613132600-b0d781184e0d // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
-	golang.org/x/mod v0.28.0 // indirect
-	golang.org/x/net v0.45.0 // indirect
-	golang.org/x/oauth2 v0.30.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/net v0.46.0 // indirect
+	golang.org/x/oauth2 v0.32.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	google.golang.org/genproto v0.0.0-20250409194420-de1ac958c67a // indirect
 	google.golang.org/grpc v1.73.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect

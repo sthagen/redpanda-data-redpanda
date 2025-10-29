@@ -91,13 +91,15 @@ class NetTunerTest(RedpandaTest):
     def parse_matching_interrupt_num_from_interrupt_file(
         interrupt_file: str, matcher: str
     ) -> list[int]:
-        ret: list[int] = []
         pattern = re.compile(matcher)
+        irqs: list[tuple[int, str]] = []
         for line in interrupt_file.split("\n"):
-            if pattern.search(line):
-                ret.append(int(line.split(":")[0]))
+            match = pattern.search(line)
+            if match:
+                id = int(line.split(":")[0])
+                irqs.append((id, match.group()))
 
-        return ret
+        return [id for id, _ in sorted(irqs, key=lambda x: x[1])]
 
     def _test_irq_balance(self):
         # test irqbalance
@@ -401,7 +403,7 @@ class GcpNetTunerTest(NetTunerTest):
         return interface.startswith("ens")
 
     def get_interrupt_match(self) -> str:
-        return "virtio1-(input|output)"
+        return "\\d+-edge\\s+virtio1-(input|output)"
 
     def _test_irq_balance(self):
         # no irq-balance on GCP ubu images

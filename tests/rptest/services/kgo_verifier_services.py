@@ -623,6 +623,7 @@ class KgoVerifierProducer(KgoVerifierService):
         fake_timestamp_ms=None,
         fake_timestamp_step_ms=None,
         use_transactions=False,
+        transaction_timeout_ms=None,
         transaction_abort_rate=None,
         msgs_per_transaction=None,
         rate_limit_bps=None,
@@ -637,6 +638,7 @@ class KgoVerifierProducer(KgoVerifierService):
         tombstone_probability=0.0,
         validate_latest_values=False,
         client_name=None,
+        wait_for_acks=True,
     ):
         super(KgoVerifierProducer, self).__init__(
             context,
@@ -656,6 +658,7 @@ class KgoVerifierProducer(KgoVerifierService):
         self._fake_timestamp_ms = fake_timestamp_ms
         self._fake_timestamp_step_ms = fake_timestamp_step_ms
         self._use_transactions = use_transactions
+        self._transaction_timeout_ms = transaction_timeout_ms
         self._transaction_abort_rate = transaction_abort_rate
         self._msgs_per_transaction = msgs_per_transaction
         self._rate_limit_bps = rate_limit_bps
@@ -667,6 +670,7 @@ class KgoVerifierProducer(KgoVerifierService):
         self._tombstone_probability = tombstone_probability
         self._validate_latest_values = validate_latest_values
         self._client_name = client_name
+        self._wait_for_acks = wait_for_acks
 
     @property
     def produce_status(self) -> ProduceStatus:
@@ -683,10 +687,19 @@ class KgoVerifierProducer(KgoVerifierService):
 
         what = f"{self.who_am_i()} wait: awaiting message count"
         self.logger.debug(what)
+
+        def is_finished():
+            has_error = self.status_thread.errored
+            msg_count = (
+                self.produce_status.acked
+                if self._wait_for_acks
+                else self.produce_status.sent
+            )
+            return has_error or msg_count >= self._msg_count
+
         try:
             self._redpanda.wait_until(
-                lambda: self.status_thread.errored
-                or self.produce_status.acked >= self._msg_count,
+                is_finished,
                 timeout_sec=timeout_sec if timeout_sec is not None else 30,
                 backoff_sec=self._status_thread.INTERVAL,
                 err_msg=what,
@@ -787,6 +800,9 @@ class KgoVerifierProducer(KgoVerifierService):
 
         if self._use_transactions:
             cmd = cmd + " --use-transactions"
+
+            if self._transaction_timeout_ms is not None:
+                cmd += f" --transaction-timeout-ms {self._transaction_timeout_ms}ms"
 
             if self._msgs_per_transaction is not None:
                 cmd = cmd + f" --msgs-per-transaction {self._msgs_per_transaction}"

@@ -12,6 +12,7 @@
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "container/chunked_hash_map.h"
+#include "model/ktp.h"
 #include "ssx/semaphore.h"
 
 #include <seastar/core/gate.hh>
@@ -65,7 +66,15 @@ public:
      * memory_fetch_sem.
      */
     fetch_memory_units allocate_memory_units(
-      size_t max_units, const size_t min_units, const bool require_min_units);
+      const model::ktp& ktp,
+      size_t max_bytes,
+      size_t max_batch_size,
+      const size_t avg_batch_size,
+      const bool require_max_batch_size);
+
+    /** Returns a fetch_memory_units object with zero units.
+     */
+    fetch_memory_units zero_units();
 
 private:
     friend fetch_memory_units;
@@ -104,6 +113,7 @@ private:
     ss::gate _gate;
     ssx::semaphore& _kafka_units;
     ssx::semaphore& _fetch_units;
+    size_t _max_fetch_units;
 
     ss::timer<> _release_units_timer;
     // Collected units are aggregated together by shard in order to ensure there

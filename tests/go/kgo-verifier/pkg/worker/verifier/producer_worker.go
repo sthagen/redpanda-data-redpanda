@@ -345,7 +345,6 @@ func (pw *ProducerWorker) produceInner(n int64) (int64, []BadOffset, error) {
 
 		opts = append(opts, []kgo.Opt{
 			kgo.TransactionalID(tid),
-			kgo.TransactionTimeout(2 * time.Minute),
 		}...)
 	}
 

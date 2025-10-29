@@ -186,6 +186,7 @@ type WorkerConfig struct {
 	SaslPass           string
 	UseTls             bool
 	Transactions       bool
+	TransactionTimeout time.Duration
 
 	// A kafka `compression.type`, or `mixed` to use a random one for each worker (requires
 	// that you have multiple workers to be meaningful)
@@ -269,6 +270,7 @@ func (wc *WorkerConfig) MakeKgoOpts() []kgo.Opt {
 			// By default kgo reads uncommited records and unstable offsets
 			kgo.RequireStableFetchOffsets(),
 			kgo.FetchIsolationLevel(kgo.ReadCommitted()),
+			kgo.TransactionTimeout(wc.TransactionTimeout),
 		}...)
 	}
 
@@ -297,7 +299,7 @@ func (wc *WorkerConfig) MakeKgoOpts() []kgo.Opt {
 	return opts
 }
 
-func NewWorkerConfig(name string, brokers string, trace bool, topic string, linger time.Duration, maxBufferedRecords uint, transactions bool,
+func NewWorkerConfig(name string, brokers string, trace bool, topic string, linger time.Duration, maxBufferedRecords uint, transactions bool, transactionTimeout time.Duration,
 	compressionType string, commpressiblePayload bool, username string, password string, useTls bool) WorkerConfig {
 	return WorkerConfig{
 		Name:                name,
@@ -310,6 +312,7 @@ func NewWorkerConfig(name string, brokers string, trace bool, topic string, ling
 		SaslPass:            password,
 		UseTls:              useTls,
 		Transactions:        transactions,
+		TransactionTimeout:  transactionTimeout,
 		CompressionType:     compressionType,
 		CompressiblePayload: commpressiblePayload,
 	}

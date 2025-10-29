@@ -7,9 +7,11 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from ducktape.cluster.cluster import ClusterNode
+from ducktape.services.service import Service
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
-from rptest.clients.admin.proto.redpanda.core.common.v1 import tls_pb2
-from rptest.clients.rpk import RpkTool
+from rptest.clients.admin.proto.redpanda.core.common.v1 import acl_pb2, tls_pb2
+from rptest.clients.rpk import RPKACLInput, RpkException, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.multi_cluster_services import SecondaryClusterArgs
@@ -26,6 +28,7 @@ from rptest.tests.cluster_linking_test_base import (
 )
 from rptest.tests.schema_registry_test import SchemaRegistryRedpandaClient
 from rptest.util import expect_exception, wait_until
+from typing import Any
 
 import ducktape.errors
 import google.protobuf.field_mask_pb2
@@ -541,6 +544,76 @@ class ClusterLinkingTopicSyncingWithTlsValues(ClusterLinkingTopicSyncingTestBase
         )
 
 
+class ClusterLinkingTopicSyncingWithMtls(ClusterLinkingTopicSyncingTestBase):
+    def __init__(self, test_context, *args, **kwargs):
+        self.test_context = test_context
+        self.security = SecurityConfig()
+        self.tls = TLSCertManager(self.logger)
+        self.security.tls_provider = ClusterLinkingTLSProvider(self.tls)
+        self.security.require_client_auth = True
+        self.security.endpoint_authn_method = "mtls_identity"
+        self.security.kafka_enable_authorization = True
+        self.extra_rp_conf = {}
+
+        self.extra_rp_conf["kafka_mtls_principal_mapping_rules"] = [
+            self.security.principal_mapping_rules
+        ]
+
+        self.current_superusers = ["admin", "source-rpk", "target-rpk"]
+
+        self.extra_rp_conf["superusers"] = self.current_superusers
+
+        super().__init__(
+            test_context=self.test_context,
+            secondary_cluster_args=SecondaryClusterArgs(
+                security=self.security, extra_rp_conf=self.extra_rp_conf
+            ),
+            security=self.security,
+            extra_rp_conf=self.extra_rp_conf,
+            *args,
+            **kwargs,
+        )
+
+    def add_credentials_to_link(
+        self, shadow_link: shadow_link_pb2.ShadowLink
+    ) -> shadow_link_pb2.ShadowLink:
+        self.logger.debug("Adding TLS files to link")
+
+        shadow_link.configurations.client_options.tls_settings.CopyFrom(
+            tls_pb2.TLSSettings(
+                enabled=True,
+                tls_file_settings=tls_pb2.TLSFileSettings(
+                    ca_path=self.redpanda.TLS_CA_CRT_FILE,
+                    key_path=self.redpanda.TLS_SERVER_KEY_FILE,
+                    cert_path=self.redpanda.TLS_SERVER_CRT_FILE,
+                ),
+            )
+        )
+
+        return shadow_link
+
+    def get_source_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.source_cluster.service,
+            tls_cert=self.tls.create_cert("source-rpk", common_name="source-rpk"),
+        )
+
+    def get_target_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.target_cluster.service,
+            tls_cert=self.tls.create_cert("target-rpk", common_name="target-rpk"),
+        )
+
+    def setUp(self):
+        super().setUp()
+        names = [n.name for n in self.redpanda.nodes]
+        self.logger.info(f"Cluster node names: {names}")
+        superusers = set(self.current_superusers + names)
+        self.get_source_cluster_rpk().cluster_config_set(
+            key="superusers", value=json.dumps(list(superusers))
+        )
+
+
 class ClusterLinkingSchemaRegistry(ShadowLinkTestBase):
     """
     These tests verify the behavior of syncing schema registry
@@ -765,4 +838,441 @@ message AType {
             timeout_sec=30,
             backoff_sec=1,
             err_msg="Subjects do not match",
+        )
+
+
+class ShadowLinkingValidateAclsBase(ShadowLinkTestBase):
+    """
+    Base test class that will verify that the Shadow Link properly syncs ACLs and that
+    it handles ACLs correctly
+    """
+
+    SHADOW_LINK_USER = "shadow-link-user"
+    SHADOW_LINK_PASSWORD = "shadow-link-password"
+
+    TEST_CLIENT_USER = "test-client-user"
+    TEST_CLIENT_PASSWORD = "test-client-password"
+
+    def __init__(self, test_context, *args, **kwargs):
+        self.default_topic_replication = 3
+        extra_rp_conf = {"default_topic_replications": self.default_topic_replication}
+
+        if "extra_rp_conf" in kwargs:
+            extra_rp_conf.update(kwargs["extra_rp_conf"])
+            kwargs.pop("extra_rp_conf")
+
+        super().__init__(
+            test_context,
+            extra_rp_conf=extra_rp_conf,
+            *args,
+            **kwargs,
+        )
+
+    def add_credentials_to_link(
+        self, shadow_link: shadow_link_pb2.ShadowLink
+    ) -> shadow_link_pb2.ShadowLink:
+        raise NotImplementedError("Must be implemented in subclass")
+
+    def create_default_link_request(
+        self, link_name: str, *args, **kwargs
+    ) -> shadow_link_pb2.CreateShadowLinkRequest:
+        req = super().create_default_link_request(link_name=link_name, *args, **kwargs)
+        req.shadow_link.CopyFrom(self.add_credentials_to_link(req.shadow_link))
+        return req
+
+    def create_link(
+        self, link_name: str, *args, **kwargs
+    ) -> shadow_link_pb2.ShadowLink:
+        req = self.create_default_link_request(link_name=link_name, *args, **kwargs)
+        return self.create_link_with_request(req=req)
+
+    def get_source_cluster_rpk(self) -> RpkTool:
+        raise NotImplementedError("Must be implemented in subclass")
+
+    def get_target_cluster_rpk(self) -> RpkTool:
+        raise NotImplementedError("Must be implemented in subclass")
+
+    def get_target_cluster_superuser_rpk(self) -> RpkTool:
+        raise NotImplementedError("Must be implemented in subclass")
+
+    @cluster(num_nodes=6)
+    def test_topics_with_proper_acls(self):
+        """
+        This test verifies that topics can be synced from the target
+        cluster to the source cluster when proper ACLs are in place.  The Shadow Link
+        principal must have READ, DESCRIBE, and DESCRIBE_CONFIG access to the topic.
+        Additionally this test will verify that ACLs are only applied on the target cluster
+        once the proper ACLs are assigned to the shadow link user
+        """
+        topic_name = "test-topic"
+
+        topic = TopicSpec(name=topic_name, partition_count=3, replication_factor=3)
+
+        self.get_source_cluster_rpk().create_topic(
+            topic=topic.name,
+            partitions=topic.partition_count,
+            replicas=topic.replication_factor,
+        )
+
+        source_rpk = self.get_source_cluster_rpk()
+        target_rpk = self.get_target_cluster_rpk()
+        target_superuser_rpk = self.get_target_cluster_superuser_rpk()
+
+        self.create_link("test-link", mirror_all_acls=False)
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.topic_exists_in_target(
+                    topic_name, rpk=target_superuser_rpk
+                ),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # The following adds ACLs for the shadow link user one at a time
+        describe_acl = RPKACLInput()
+        describe_acl.allow_principal = [f"User:{self.SHADOW_LINK_USER}"]
+        describe_acl.topic = [topic_name]
+        describe_acl.operation = ["DESCRIBE"]
+        source_rpk.acl_create(describe_acl)
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.topic_exists_in_target(
+                    topic_name, rpk=target_superuser_rpk
+                ),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # Now add read
+        read_acl = RPKACLInput()
+        read_acl.allow_principal = [f"User:{self.SHADOW_LINK_USER}"]
+        read_acl.topic = [topic_name]
+        read_acl.operation = ["READ"]
+        source_rpk.acl_create(read_acl)
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.topic_exists_in_target(
+                    topic_name, rpk=target_superuser_rpk
+                ),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # Now finally DESCRIBE_CONFIGS
+        describe_configs_acl = RPKACLInput()
+        describe_configs_acl.allow_principal = [f"User:{self.SHADOW_LINK_USER}"]
+        describe_configs_acl.topic = [topic_name]
+        describe_configs_acl.operation = ["DESCRIBE_CONFIGS"]
+        source_rpk.acl_create(describe_configs_acl)
+
+        wait_until(
+            lambda: self.topic_exists_in_target(topic_name, rpk=target_superuser_rpk),
+            timeout_sec=5,
+            backoff_sec=1,
+        )
+
+        # Now verify that the ACLs have not yet been brought over
+        acls: Any = target_superuser_rpk.acl_list(format="json")
+        assert len(acls["matches"]) == 0, (
+            f"Expected no ACLs but found: {acls['matches']}"
+        )
+
+        # And verify we cannot see that topic
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.topic_exists_in_target(topic_name, rpk=target_rpk),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # Update the ACL mirroring settings to mirror all ACLs for the shadow link user
+        update_link = self.get_link("test-link")
+
+        resource_filter = shadow_link_pb2.ACLResourceFilter(
+            resource_type=acl_pb2.ACL_RESOURCE_ANY, pattern_type=acl_pb2.ACL_PATTERN_ANY
+        )
+        access_filter = shadow_link_pb2.ACLAccessFilter(
+            principal=f"User:{self.TEST_CLIENT_USER}",
+            operation=acl_pb2.ACL_OPERATION_ANY,
+            permission_type=acl_pb2.ACL_PERMISSION_TYPE_ANY,
+        )
+        acl_filter = shadow_link_pb2.ACLFilter(
+            resource_filter=resource_filter, access_filter=access_filter
+        )
+        acl_filters: list[shadow_link_pb2.ACLFilter] = [acl_filter]
+
+        update_link.configurations.security_sync_options.acl_filters.extend(acl_filters)
+
+        update_mask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=["configurations.security_sync_options.acl_filters"]
+        )
+        self.update_link(update_link, update_mask)
+
+        def acls_present_in_target() -> bool:
+            acls: Any = target_superuser_rpk.acl_list(format="json")
+            matches: list[dict[str, str]] = acls["matches"]
+            self.logger.debug(f"Matches: {matches}")
+            if len(matches) != 1:
+                return False
+            return all(
+                acl["principal"] == f"User:{self.TEST_CLIENT_USER}"
+                and acl["operation"] == "ALL"
+                and acl["resource_type"] == "TOPIC"
+                and acl["resource_name"] == topic_name
+                for acl in matches
+            )
+
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: acls_present_in_target(),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # Update source cluster to give shadow link permission to view ACLs (DESCRIBE on CLUSTER)
+        source_rpk.acl_create_allow_cluster(
+            username=self.SHADOW_LINK_USER, op="describe"
+        )
+
+        # We still should not see any ACLs present as we're filtering for the TEST_CLIENT_USER
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: acls_present_in_target(),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # And verify we cannot see that topic
+        with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.topic_exists_in_target(topic_name, rpk=target_rpk),
+                timeout_sec=5,
+                backoff_sec=1,
+            )
+
+        # Now finally add the ACLs for the TEST_CLIENT_USER
+        full_acl = RPKACLInput()
+        full_acl.allow_principal = [f"User:{self.TEST_CLIENT_USER}"]
+        full_acl.topic = [topic_name]
+        full_acl.operation = ["ALL"]
+        source_rpk.acl_create(full_acl)
+
+        wait_until(
+            lambda: acls_present_in_target(),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="ACLs not present in target cluster",
+        )
+
+        wait_until(
+            lambda: self.topic_exists_in_target(topic_name, rpk=target_rpk),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Topic not visible to test client in target cluster",
+        )
+
+        # Verify we cannot write to the topic
+        with expect_exception(RpkException, lambda e: "POLICY_VIOLATION" in str(e)):
+            target_rpk.produce(topic_name, "key", "msg")
+
+        # Now fail over the topic
+        self.failover_link_topic(link_name="test-link", topic=topic_name)
+
+        # Now wait for the state to be failed over
+        def topic_failed_over() -> bool:
+            shadow_topic = self.get_shadow_topic("test-link", topic_name)
+            return (
+                shadow_topic.status.state
+                == shadow_link_pb2.SHADOW_TOPIC_STATE_FAILED_OVER
+            )
+
+        wait_until(
+            lambda: topic_failed_over,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Topic did not fail over",
+        )
+
+        # Propogation of the state change may take a few moments, so retry until success
+        wait_until(
+            lambda: target_rpk.produce(topic_name, "key", "msg") is not None,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Unable to produce to failed over topic",
+            retry_on_exc=True,
+        )
+
+
+class ShadowLinkingValidateAclsScram(ShadowLinkingValidateAclsBase):
+    """
+    Runs the base test with SCRAM authentication
+    """
+
+    def __init__(self, test_context, *args, **kwargs):
+        self.security = SecurityConfig()
+        self.security.enable_sasl = True
+        self.security.endpoint_authn_method = "sasl"
+        secondary_args: SecondaryClusterArgs = SecondaryClusterArgs(
+            security=self.security
+        )
+
+        self.cluster_link_user = self.SHADOW_LINK_USER
+        self.cluster_link_password = self.SHADOW_LINK_PASSWORD
+        self.cluster_link_mechanism = shadow_link_pb2.SCRAM_MECHANISM_SCRAM_SHA_256
+
+        super().__init__(
+            test_context=test_context,
+            secondary_cluster_args=secondary_args,
+            security=self.security,
+            *args,
+            **kwargs,
+        )
+
+    def add_credentials_to_link(
+        self, shadow_link: shadow_link_pb2.ShadowLink
+    ) -> shadow_link_pb2.ShadowLink:
+        shadow_link.configurations.client_options.authentication_configuration.scram_configuration.CopyFrom(
+            shadow_link_pb2.ScramConfig(
+                username=self.SHADOW_LINK_USER,
+                password=self.SHADOW_LINK_PASSWORD,
+                scram_mechanism=shadow_link_pb2.SCRAM_MECHANISM_SCRAM_SHA_256,
+            )
+        )
+
+        return shadow_link
+
+    def get_source_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.source_cluster.service,
+            username=self.redpanda.SUPERUSER_CREDENTIALS.username,
+            password=self.redpanda.SUPERUSER_CREDENTIALS.password,
+            sasl_mechanism=self.redpanda.SUPERUSER_CREDENTIALS.mechanism,
+        )
+
+    def get_target_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.target_cluster.service,
+            username=self.TEST_CLIENT_USER,
+            password=self.TEST_CLIENT_PASSWORD,
+            sasl_mechanism="SCRAM-SHA-256",
+        )
+
+    def get_target_cluster_superuser_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.target_cluster.service,
+            username=self.redpanda.SUPERUSER_CREDENTIALS.username,
+            password=self.redpanda.SUPERUSER_CREDENTIALS.password,
+            sasl_mechanism=self.redpanda.SUPERUSER_CREDENTIALS.mechanism,
+        )
+
+    def setUp(self):
+        super().setUp()
+        self.get_source_cluster_rpk().sasl_create_user(
+            self.SHADOW_LINK_USER, self.SHADOW_LINK_PASSWORD
+        )
+        self.get_target_cluster_superuser_rpk().sasl_create_user(
+            self.TEST_CLIENT_USER, self.TEST_CLIENT_PASSWORD
+        )
+
+
+class ShadowLinkTlsProvider(TLSProvider):
+    def __init__(self, tls: TLSCertManager, shadow_link_user: str):
+        self.tls: TLSCertManager = tls
+        self.shadow_link_user = shadow_link_user
+
+    @property
+    def ca(self) -> CertificateAuthority:
+        return self.tls.ca
+
+    def create_broker_cert(self, service: Service, node: ClusterNode) -> Certificate:
+        assert node in service.nodes
+        return self.tls.create_cert(node.name, common_name=self.shadow_link_user)
+
+    def create_service_client_cert(self, service: Service, name: str) -> Certificate:
+        return self.tls.create_cert(socket.gethostname(), name=name, common_name=name)
+
+
+class ShadowLinkingValidateAclsMTls(ShadowLinkingValidateAclsBase):
+    """
+    Runs the base test with mTLS authentication
+    """
+
+    def __init__(self, test_context, *args, **kwargs):
+        self.test_context = test_context
+        self.tls = TLSCertManager(self.logger)
+        self.source_security = SecurityConfig()
+        self.source_security.tls_provider = ClusterLinkingTLSProvider(self.tls)
+        self.source_security.require_client_auth = True
+        self.source_security.endpoint_authn_method = "mtls_identity"
+        self.source_security.kafka_enable_authorization = True
+
+        self.target_security = SecurityConfig()
+        self.target_security.tls_provider = ShadowLinkTlsProvider(
+            self.tls, shadow_link_user=self.SHADOW_LINK_USER
+        )
+        self.target_security.require_client_auth = True
+        self.target_security.endpoint_authn_method = "mtls_identity"
+        self.target_security.kafka_enable_authorization = True
+
+        self.extra_rp_conf = {}
+
+        self.extra_rp_conf["kafka_mtls_principal_mapping_rules"] = [
+            self.source_security.principal_mapping_rules
+        ]
+
+        secondary_args: SecondaryClusterArgs = SecondaryClusterArgs(
+            security=self.source_security, extra_rp_conf=self.extra_rp_conf
+        )
+
+        super().__init__(
+            test_context=test_context,
+            secondary_cluster_args=secondary_args,
+            security=self.target_security,
+            extra_rp_conf=self.extra_rp_conf,
+            *args,
+            **kwargs,
+        )
+
+    def add_credentials_to_link(
+        self, shadow_link: shadow_link_pb2.ShadowLink
+    ) -> shadow_link_pb2.ShadowLink:
+        shadow_link.configurations.client_options.tls_settings.CopyFrom(
+            tls_pb2.TLSSettings(
+                enabled=True,
+                tls_file_settings=tls_pb2.TLSFileSettings(
+                    ca_path=self.redpanda.TLS_CA_CRT_FILE,
+                    key_path=self.redpanda.TLS_SERVER_KEY_FILE,
+                    cert_path=self.redpanda.TLS_SERVER_CRT_FILE,
+                ),
+            )
+        )
+
+        return shadow_link
+
+    def get_source_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.source_cluster.service,
+            tls_cert=self.tls.create_cert(
+                "source-rpk", common_name=self.redpanda.SUPERUSER_CREDENTIALS.username
+            ),
+        )
+
+    def get_target_cluster_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.target_cluster.service,
+            tls_cert=self.tls.create_cert(
+                "target-rpk", common_name=self.TEST_CLIENT_USER
+            ),
+        )
+
+    def get_target_cluster_superuser_rpk(self) -> RpkTool:
+        return RpkTool(
+            self.target_cluster.service,
+            tls_cert=self.tls.create_cert(
+                "target-superuser-rpk",
+                common_name=self.redpanda.SUPERUSER_CREDENTIALS.username,
+            ),
         )

@@ -18,38 +18,44 @@ import confluent_kafka as ck
 from ducktape.errors import TimeoutError
 from ducktape.utils.util import wait_until
 
+from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, RedpandaService
-from rptest.services.redpanda_installer import RedpandaInstaller, wait_for_num_versions
+from rptest.services.redpanda import (
+    RESTART_LOG_ALLOW_LIST,
+    RedpandaService,
+    MetricsEndpoint,
+)
+from rptest.services.redpanda_installer import (
+    RedpandaInstaller,
+    RedpandaVersionLine,
+    RedpandaVersionTriple,
+    wait_for_num_versions,
+    ver_string,
+)
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_debug_mode
 
 
-class TxUpgradeTest(RedpandaTest):
+class TxUpgradeTestBase(RedpandaTest):
     """
     Basic test verifying if mapping between transaction coordinator and transaction_id is preserved across the upgrades
     """
 
-    def __init__(self, test_context):
-        super(TxUpgradeTest, self).__init__(test_context=test_context, num_brokers=3)
-        self.installer = self.redpanda._installer
+    def __init__(self, test_context, extra_rp_conf={}):
+        super(TxUpgradeTestBase, self).__init__(
+            test_context=test_context, num_brokers=3, extra_rp_conf=extra_rp_conf
+        )
         self.partition_count = 10
         self.msg_sent = 0
         self.producers_count = 100
+        self.transaction_timeout_ms = 10000
+        self.installer = self.redpanda._installer
 
     def setUp(self):
-        self.old_version = self.installer.highest_from_prior_feature_version(
-            RedpandaInstaller.HEAD
-        )
-
-        self.old_version_str = (
-            f"v{self.old_version[0]}.{self.old_version[1]}.{self.old_version[2]}"
-        )
-        self.installer.install(self.redpanda.nodes, self.old_version)
-        super(TxUpgradeTest, self).setUp()
+        super(TxUpgradeTestBase, self).setUp()
 
     def _tx_id(self, idx):
         return f"test-producer-{idx}"
@@ -64,6 +70,7 @@ class TxUpgradeTest(RedpandaTest):
                 {
                     "bootstrap.servers": self.redpanda.brokers(),
                     "transactional.id": self._tx_id(i),
+                    "transaction.timeout.ms": self.transaction_timeout_ms,
                 }
             )
             producer.init_transactions()
@@ -87,6 +94,24 @@ class TxUpgradeTest(RedpandaTest):
             mapping[self._tx_id(idx)] = f"{c['ntp']['topic']}/{c['ntp']['partition']}"
 
         return mapping
+
+
+class TxUpgradeTest(TxUpgradeTestBase):
+    """
+    Basic test verifying if mapping between transaction coordinator and transaction_id is preserved across the upgrades
+    """
+
+    def __init__(self, test_context):
+        super(TxUpgradeTest, self).__init__(test_context=test_context)
+
+    def setUp(self):
+        self.old_version = self.installer.highest_from_prior_feature_version(
+            RedpandaInstaller.HEAD
+        )
+
+        self.old_version_str = ver_string(self.old_version)
+        self.installer.install(self.redpanda.nodes, self.old_version)
+        super(TxUpgradeTest, self).setUp()
 
     @skip_debug_mode
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
@@ -122,6 +147,132 @@ class TxUpgradeTest(RedpandaTest):
         assert self._get_tx_id_mapping() == initial_mapping, (
             "Mapping changed after full upgrade"
         )
+
+
+class TxUpgradeCompactionTest(TxUpgradeTestBase):
+    """
+    Test validating interaction between compaction and transactions during rolling-restart upgrades (including mixed-version node cluster interaction)
+    """
+
+    def __init__(self, test_context):
+        self.extra_rp_conf = {
+            "log_compaction_interval_ms": 4000,
+            "log_segment_size": 2 * 1024**2,  # 2 MiB
+            "compacted_log_segment_size": 1024**2,  # 1 MiB
+        }
+
+        super(TxUpgradeCompactionTest, self).__init__(
+            test_context=test_context, extra_rp_conf=self.extra_rp_conf
+        )
+
+        self.transaction_timeout_ms = 2000
+
+    def setUp(self):
+        # Version before `may_have_transactional_batches` was added.
+        self.initial_version: RedpandaVersionTriple = self.installer.latest_for_line(
+            RedpandaVersionLine((25, 1))
+        )[0]
+        self.installer.install(self.redpanda.nodes, self.initial_version)
+        super(TxUpgradeCompactionTest, self).setUp()
+
+    def get_complete_sliding_window_rounds(self):
+        return self.redpanda.metric_sum(
+            metric_name="vectorized_storage_log_complete_sliding_window_rounds_total",
+            metrics_endpoint=MetricsEndpoint.METRICS,
+            topic=self.topic_spec.name,
+        )
+
+    def wait_for_sliding_window_compaction(self):
+        self.prev_sliding_window_rounds = None
+
+        def compaction_has_completed():
+            new_sliding_window_rounds = self.get_complete_sliding_window_rounds()
+            res = self.prev_sliding_window_rounds == new_sliding_window_rounds
+            self.prev_sliding_window_rounds = new_sliding_window_rounds
+            return res
+
+        wait_until(
+            compaction_has_completed,
+            timeout_sec=120,
+            backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
+            err_msg="Compaction did not stabilize.",
+        )
+
+    def check_tx_batches(self):
+        viewer = OfflineLogViewer(self.redpanda)
+        for node in self.redpanda.nodes:
+            num_control_batches = 0
+            num_fence_batches = 0
+            partitions = viewer.read_kafka_records(node, self.topic_spec.name)
+            for partition in partitions:
+                for record_or_batch in partition:
+                    if "expanded_attrs" not in record_or_batch:
+                        continue
+                    if record_or_batch["expanded_attrs"]["control_batch"]:
+                        num_control_batches += 1
+                    if record_or_batch["type_name"] == "tx_fence":
+                        num_fence_batches += 1
+
+            assert num_control_batches == 0, (
+                f"expected 0 control batches (abort/commit batches), saw {num_control_batches} on node {node.name}"
+            )
+            assert num_fence_batches == 0, (
+                f"expected 0 tx_fence batches, saw {num_fence_batches}  on node {node.name}"
+            )
+
+    @skip_debug_mode
+    @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def upgrade_with_compaction_test(self):
+        self.topic_spec = TopicSpec(
+            partition_count=self.partition_count,
+            delete_retention_ms=3000,
+            cleanup_policy=TopicSpec.CLEANUP_COMPACT,
+            min_cleanable_dirty_ratio=0.0,
+        )
+        self.client().create_topic(self.topic_spec)
+
+        prev_version_str = ver_string(self.initial_version)
+        unique_versions = wait_for_num_versions(self.redpanda, 1)
+        assert prev_version_str in unique_versions, unique_versions
+
+        for new_version in self.installer.upgrade_path_to_head(self.initial_version):
+            self._populate_tx_coordinator(topic=self.topic_spec.name)
+            initial_mapping = self._get_tx_id_mapping()
+            self.logger.info(f"Initial mapping {initial_mapping}")
+
+            first_node = self.redpanda.nodes[0]
+
+            self.installer.install(self.redpanda.nodes, new_version)
+
+            # Upgrade & restart one node to the new version.
+            self.redpanda.restart_nodes([first_node])
+            unique_versions = wait_for_num_versions(self.redpanda, 2)
+            assert prev_version_str in unique_versions, unique_versions
+            assert self._get_tx_id_mapping() == initial_mapping, (
+                "Mapping changed after upgrading one of the nodes"
+            )
+
+            # verify if txs are handled correctly with mixed versions
+            self._populate_tx_coordinator(topic=self.topic_spec.name)
+
+            # Only once we upgrade the rest of the nodes do we converge on the new
+            # version.
+            self.redpanda.restart_nodes(self.redpanda.nodes)
+            unique_versions = wait_for_num_versions(self.redpanda, 1)
+            assert prev_version_str not in unique_versions, unique_versions
+            assert self._get_tx_id_mapping() == initial_mapping, (
+                "Mapping changed after full upgrade"
+            )
+            prev_version_str = ver_string(new_version)
+
+        # One last round of producing
+        self._populate_tx_coordinator(topic=self.topic_spec.name)
+
+        # Restart the redpanda broker to roll segments
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+
+        self.wait_for_sliding_window_compaction()
+        self.check_tx_batches()
 
 
 class TxUpgradeRevertTest(RedpandaTest):
@@ -274,7 +425,7 @@ class TxUpgradeRevertTest(RedpandaTest):
                                 id, state, partitions, sequence=sequence
                             )
                         sequence += 1
-            except Exception as e:
+            except Exception:
                 self.failed = True
                 self.dump_debug_transaction_state()
                 self.redpanda.logger.error(

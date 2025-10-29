@@ -12,7 +12,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 import time
 import socket
-from typing import Any
+from typing import Any, Optional
 
 import google.protobuf.duration_pb2
 import google.protobuf.field_mask_pb2
@@ -92,7 +92,7 @@ class ClusterLinkingTLSProvider(TLSProvider):
 
     def create_broker_cert(self, service: Service, node: ClusterNode) -> Certificate:
         assert node in service.nodes
-        return self.tls.create_cert(node.name)
+        return self.tls.create_cert(node.name, common_name=node.name)
 
     def create_service_client_cert(self, service: Service, name: str) -> Certificate:
         return self.tls.create_cert(socket.gethostname(), name=name, common_name=name)
@@ -644,9 +644,13 @@ class ShadowLinkTestBase(PreallocNodesTest):
         return topic in topics
 
     def topic_exists_in_target(
-        self, topic: str, partition_count: int | None = None
+        self,
+        topic: str,
+        partition_count: int | None = None,
+        rpk: Optional[RpkTool] = None,
     ) -> bool:
-        topics = RpkTool(self.target_cluster.service).list_topics()
+        rpk = rpk or RpkTool(self.target_cluster.service)
+        topics = rpk.list_topics()
         topic_exists = topic in topics
 
         if partition_count is None:

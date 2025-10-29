@@ -62,12 +62,16 @@ class OfflineLogViewer:
     def build_store(self):
         return Store(self._config.path)
 
-    def stream_json(self, data: Any, wrap_with_gen: bool = True) -> None:
+    def stream_json(
+        self, data: Any, wrap_with_gen: bool = True, print_delimiter=False
+    ) -> None:
         iter_json = json.JSONEncoder(indent=2).iterencode(
             SerializableGenerator(data) if wrap_with_gen else data
         )
         for j in iter_json:
             sys.stdout.write(j)
+        if print_delimiter:
+            sys.stdout.write(",")
         sys.stdout.flush()
 
     def print_kv_store(self):
@@ -110,15 +114,22 @@ class OfflineLogViewer:
 
     def print_kafka(self, headers_only: bool = False):
         store = self.build_store()
+        output_ntps = []
         for ntp in store.ntps:
             if ntp.nspace in ["kafka", "kafka_internal"]:
                 if self._config.topic and ntp.topic != self._config.topic:
                     continue
                 if self._should_skip_partition(ntp.partition):
                     continue
-                logger.info(f"topic: {ntp.topic}, partition: {ntp.partition}")
-                log = KafkaLog(ntp, headers_only=headers_only)
-                self.stream_json(log)
+                output_ntps.append(ntp)
+        len_ntps = len(output_ntps)
+        sys.stdout.write("[")
+        for i, ntp in enumerate(output_ntps):
+            logger.info(f"topic: {ntp.topic}, partition: {ntp.partition}")
+            log = KafkaLog(ntp, headers_only=headers_only)
+            print_delimiter = i != len_ntps - 1
+            self.stream_json(log, print_delimiter=print_delimiter)
+        sys.stdout.write("]")
 
     def print_groups(self):
         store = self.build_store()

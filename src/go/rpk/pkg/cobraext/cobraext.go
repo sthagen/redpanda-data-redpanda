@@ -202,7 +202,7 @@ func StripFlags(args []string, fs *pflag.FlagSet, long []string, short []string)
 func LongFlagValue(args []string, fs *pflag.FlagSet, flag, shorthand string) string {
 	nop := new(nopValue)
 	dup := pflag.NewFlagSet("dup", pflag.ContinueOnError)
-	dup.ParseErrorsWhitelist = pflag.ParseErrorsWhitelist{UnknownFlags: true}
+	dup.ParseErrorsAllowlist = pflag.ParseErrorsAllowlist{UnknownFlags: true}
 
 	var f string
 	dup.StringVarP(&f, flag, shorthand, "", "")

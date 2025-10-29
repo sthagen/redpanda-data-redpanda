@@ -136,6 +136,7 @@ static ss::future<read_result> read_from_partition(
     std::vector<cluster::tx::tx_range> aborted_transactions;
     std::optional<std::chrono::milliseconds> delta_from_tip_ms;
     model::offset data_base_offset, data_last_offset;
+    size_t batch_count = 0;
 
     try {
         auto result = co_await rdr.reader.consume(
@@ -143,6 +144,7 @@ static ss::future<read_result> read_from_partition(
         data = std::make_unique<iobuf>(std::move(result.data));
         data_base_offset = result.base_offset;
         data_last_offset = result.last_offset;
+        batch_count = result.batch_count;
         part.probe().add_records_fetched(result.record_count);
         part.probe().add_bytes_fetched(data->size_bytes());
         if (!part.is_leader() && config.read_from_follower) {
@@ -198,6 +200,7 @@ static ss::future<read_result> read_from_partition(
       start_o,
       data_base_offset,
       data_last_offset,
+      batch_count,
       hw,
       lso,
       delta_from_tip_ms,
@@ -217,22 +220,20 @@ static ss::future<read_result> do_read_from_ntp(
   const bool obligatory_batch_read,
   fetch_memory_units_manager& units_mgr) {
     // control available memory
-    fetch_memory_units memory_units = [&] {
-        if (!ntp_config.cfg.skip_read) {
-            auto memory_units = units_mgr.allocate_memory_units(
-              ntp_config.cfg.max_bytes,
-              ntp_config.cfg.max_batch_size,
-              obligatory_batch_read);
-            if (!memory_units.has_units()) {
-                ntp_config.cfg.skip_read = true;
-            } else if (ntp_config.cfg.max_bytes > memory_units.num_units()) {
-                ntp_config.cfg.max_bytes = memory_units.num_units();
-            }
-            return memory_units;
-        } else {
-            return units_mgr.allocate_memory_units(0, 0, false);
+    auto memory_units = units_mgr.zero_units();
+    if (!ntp_config.cfg.skip_read) {
+        memory_units = units_mgr.allocate_memory_units(
+          ntp_config.ktp(),
+          ntp_config.cfg.max_bytes,
+          ntp_config.cfg.max_batch_size,
+          ntp_config.cfg.avg_batch_size,
+          obligatory_batch_read);
+        if (!memory_units.has_units()) {
+            ntp_config.cfg.skip_read = true;
+        } else if (ntp_config.cfg.max_bytes > memory_units.num_units()) {
+            ntp_config.cfg.max_bytes = memory_units.num_units();
         }
-    }();
+    }
 
     /*
      * lookup the ntp's partition
@@ -400,6 +401,7 @@ static void fill_fetch_responses(
           res.high_watermark,
           res.last_stable_offset,
           res.offset_count(),
+          res.batch_count,
           res.data_size_bytes());
         /**
          * Over response budget, we will just waste this read, it will cause
@@ -1319,6 +1321,10 @@ class simple_fetch_planner final : public fetch_planner::impl {
                   auto fetch_md = octx.rctx.get_fetch_metadata_cache().get(ktp);
                   auto max_bytes = std::min(
                     bytes_left_in_plan, size_t(fp.max_bytes));
+                  auto avg_batch_size
+                    = fetch_md && (fetch_md->avg_bytes_per_batch > 0)
+                        ? fetch_md->avg_bytes_per_batch
+                        : 1_MiB;
                   /**
                    * If the fetch offest is less than the hwm for the partition
                    * then we try to estimate the number of bytes that can be
@@ -1346,6 +1352,7 @@ class simple_fetch_planner final : public fetch_planner::impl {
                       .max_offset = model::model_limits<model::offset>::max(),
                       .max_bytes = max_bytes,
                       .max_batch_size = max_batch_size,
+                      .avg_batch_size = avg_batch_size,
                       .timeout = octx.deadline.value_or(model::no_timeout),
                       .current_leader_epoch = fp.current_leader_epoch,
                       .isolation_level = octx.request.data.isolation_level,
