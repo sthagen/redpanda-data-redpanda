@@ -1519,7 +1519,7 @@ class ManyTopicsTest(RedpandaTest):
             try:
                 self.redpanda.validate_controller_log()
                 return True
-            except:
+            except Exception:
                 return False
 
         # If the test exits right after this the controll log size  on disk

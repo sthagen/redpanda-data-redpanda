@@ -37,20 +37,20 @@ namespace storage {
  * 1. partial writes to the same physical head chunk are serialized to prevent
  * out-of-order writes clobbering previous writes. this is only relevant when
  * there are many flushes which dispatch the current head if it has any pending
- * bytes. there hasn't been any noticable performance degredation, but one
+ * bytes. there hasn't been any noticeable performance degredation, but one
  * option for avoiding this is to do more aligned appends or add a special
  * padding batch that is read and then fully ignored by the parser.
  *
  * 2. flush operations are completed asynchronously when writes complete. there
- * is not reason to do this so aggresively. we could potentially reduce the
+ * is not reason to do this so aggressively. we could potentially reduce the
  * amount of flushing by using a bytes or time heuristic. we'd increase the
  * latency of each flush, but we'd dispatch less physical flush operations.
  */
 
 [[gnu::cold]] static ss::future<>
-size_missmatch_error(const char* ctx, size_t expected, size_t got) {
+size_mismatch_error(const char* ctx, size_t expected, size_t got) {
     return ss::make_exception_future<>(fmt::format(
-      "{}. Size missmatch. Expected:{}, Got:{}", ctx, expected, got));
+      "{}. Size mismatch. Expected:{}, Got:{}", ctx, expected, got));
 }
 
 static constexpr auto head_sem_name = "s/appender-head";
@@ -102,10 +102,10 @@ segment_appender::segment_appender(segment_appender&& o) noexcept
   , _inflight(std::move(o._inflight))
   , _inflight_dispatched(std::exchange(o._inflight_dispatched, 0))
   , _dispatched_writes(std::exchange(o._dispatched_writes, 0))
-  , _merged_writes(std::exchange(o._merged_writes, 0))
-  , _callbacks(std::exchange(o._callbacks, nullptr))
+  , _committed_offset_clb(std::exchange(o._committed_offset_clb, {}))
   , _inactive_timer([this] { handle_inactive_timer(); })
-  , _chunk_size(o._chunk_size) {
+  , _chunk_size(o._chunk_size)
+  , _stats(std::exchange(o._stats, {})) {
     o._closed = true;
 }
 
@@ -134,7 +134,7 @@ ss::future<> segment_appender::append(const iobuf& io) {
 ss::future<> segment_appender::append(const char* buf, const size_t n) {
     // seastar is optimized for timers that never fire. here the timer is
     // cancelled because it firing may dispatch a background write, which as
-    // currently formulated, is not safe to interlave with append.
+    // currently formulated, is not safe to interleave with append.
     _inactive_timer.cancel();
     return do_append(buf, n).then([this] {
         if (_head && _head->bytes_pending()) {
@@ -145,6 +145,8 @@ ss::future<> segment_appender::append(const char* buf, const size_t n) {
 }
 
 ss::future<> segment_appender::do_append(const char* buf, size_t n) {
+    ++_stats.appends;
+    _stats.bytes_requested += n;
     while (true) {
         vassert(!_closed, "append() on closed segment: {}", *this);
 
@@ -258,6 +260,7 @@ ss::future<> segment_appender::hydrate_last_half_page() {
       .dma_read(sz, buff, read_align /*must be full _write_ alignment*/)
 #pragma clang diagnostic pop
       .then([this, bytes_to_read](size_t actual) {
+          ++_stats.last_page_hydrations;
           vassert(
             bytes_to_read <= actual && bytes_to_read == _head->flushed_pos(),
             "Could not hydrate partial page bytes: expected:{}, got:{}. "
@@ -278,7 +281,10 @@ ss::future<> segment_appender::hydrate_last_half_page() {
 
 ss::future<> segment_appender::do_truncation(size_t n) {
     return _out.truncate(n)
-      .then([this] { return _out.flush(); })
+      .then([this] {
+          ++_stats.truncates;
+          return _out.flush().then([this] { ++_stats.fsyncs; });
+      })
       .handle_exception([n, this](std::exception_ptr e) {
           vassert(
             false,
@@ -363,6 +369,7 @@ ss::future<> segment_appender::do_next_adaptive_fallocation() {
                    _committed_offset);
                  return _out.allocate(_fallocation_offset, step)
                    .then([this, step] {
+                       ++_stats.fallocations;
                        // ss::file::allocate does not adjust logical file size
                        // hence we need to do that explicitly with an extra
                        // truncate. This allows for more efficient writes.
@@ -423,8 +430,8 @@ ss::future<> segment_appender::maybe_advance_stable_offset(
 
     // if we advanced the committed offset, do the callbacks and
     // trigger any flush operations
-    if (_callbacks) {
-        _callbacks->committed_physical_offset(*committed);
+    if (_committed_offset_clb) {
+        _committed_offset_clb(*committed);
     }
     _stable_offset = *committed;
     return process_flush_ops(*committed);
@@ -468,6 +475,7 @@ ss::future<> segment_appender::process_flush_ops(size_t committed) {
         // multiple places.
         --_inflight_dispatched;
         _flushed_offset = committed;
+        ++_stats.fsyncs;
         /*
          * TODO: as an optimization, add a little house keeping to determine if
          * eligible flush operations showed up while flush() was completing.
@@ -512,7 +520,7 @@ void segment_appender::dispatch_background_head_write() {
          * clear out the head pointer synchronously here, then release it
          * back into the chunk cache after the write completes. Otherwise,
          * leave it in place so that new appends may accumulate. this
-         * optimization is meant to avoid redhydrating the chunk on append
+         * optimization is meant to avoid rehydrating the chunk on append
          * following a flush when the head has pending bytes and a write is
          * dispatched.
          */
@@ -530,7 +538,7 @@ void segment_appender::dispatch_background_head_write() {
         // Yay! The latest in-flight write is still queued (i.e., has not
         // been dispatched to the disk) so we just append this write
         // to that entry.
-        ++_merged_writes;
+        ++_stats.merged_writes;
         return;
     }
 
@@ -577,7 +585,8 @@ void segment_appender::dispatch_background_head_write() {
                     w->chunk->data() + w->chunk_begin,
                     dma_size)
 #pragma clang diagnostic pop
-                  .then([this, w](size_t got) {
+                  .then([this, w, dma_size](size_t got) {
+                      _stats.bytes_written += dma_size;
                       /*
                        * the continuation that captured full=true is the end
                        * of the dependency chain for this chunk. it can be
@@ -596,7 +605,7 @@ void segment_appender::dispatch_background_head_write() {
 
                       const auto expected = w->chunk_end - w->chunk_begin;
                       if (unlikely(expected != got)) {
-                          return size_missmatch_error(
+                          return size_mismatch_error(
                             "chunk::write", expected, got);
                       }
                       return maybe_advance_stable_offset(w);
@@ -611,13 +620,17 @@ void segment_appender::dispatch_background_head_write() {
 }
 
 ss::future<> segment_appender::flush() {
+    ++_stats.flushes;
     _inactive_timer.cancel();
 
     // dispatched write will drive flush completion
     if (_head && _head->bytes_pending()) {
         auto& w = _flush_ops.emplace_back(file_byte_offset());
+        // get future first, as the flush_op may be deleted/moved when
+        // dispatching background head write.
+        auto f = w.p.get_future();
         dispatch_background_head_write();
-        return w.p.get_future();
+        return f;
     }
 
     if (file_byte_offset() <= _flushed_offset) {
@@ -659,7 +672,7 @@ ss::future<> segment_appender::hard_flush() {
                    _flush_ops.empty(),
                    "Pending flushes after hard flush {}",
                    *this);
-                 return _out.flush();
+                 return _out.flush().then([this] { ++_stats.fsyncs; });
              })
       .handle_exception([this](std::exception_ptr e) {
           vunreachable("Could not flush: {} - {}", e, *this);
@@ -707,24 +720,44 @@ bool segment_appender::inflight_write::try_merge(
     return false;
 }
 
-std::ostream& operator<<(std::ostream& o, const segment_appender& a) {
-    return o << "{no_of_chunks:" << a._opts.number_of_chunks
-             << ", closed:" << a._closed
-             << ", fallocation_offset:" << a._fallocation_offset
-             << ", stable_offset:" << a._stable_offset
-             << ", flushed_offset:" << a._flushed_offset
-             << ", committed_offset:" << a._committed_offset
-             << ", inflight:" << a._inflight.size()
-             << ", dispatched:" << a._inflight_dispatched
-             << ", merged:" << a._merged_writes
-             << ", bytes_flush_pending:" << a._bytes_flush_pending << "}";
+fmt::iterator segment_appender::format_to(fmt::iterator iterator) const {
+    return fmt::format_to(
+      iterator,
+      "{{closed:{}, fallocation_offset:{}, stable_offset:{}, "
+      "flushed_offset:{}, committed_offset:{}, inflight: {}, "
+      "bytes_flush_pending:{}, stats: {}}}",
+      _closed,
+      _fallocation_offset,
+      _stable_offset,
+      _flushed_offset,
+      _committed_offset,
+      _inflight.size(),
+      _bytes_flush_pending,
+      _stats);
+}
+
+fmt::iterator segment_appender::stats::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{ merged_writes: {}, bytes_requested : {}, bytes_written : {}, appends "
+      ": {}, flushes: {}, fsyncs: {}, truncates: {}, fallocations: {}, "
+      "last_page_hydrations: {}}}",
+      merged_writes,
+      bytes_requested,
+      bytes_written,
+      appends,
+      flushes,
+      fsyncs,
+      truncates,
+      fallocations,
+      last_page_hydrations);
 }
 
 std::ostream&
 operator<<(std::ostream& s, const segment_appender::inflight_write& op) {
     fmt::print(
       s,
-      "{{state: {}, committed_offest: {}}}",
+      "{{state: {}, committed_offset: {}}}",
       (int)op.state,
       op.committed_offset);
     return s;

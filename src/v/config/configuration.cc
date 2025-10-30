@@ -4377,6 +4377,18 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       std::nullopt,
       &validate_iceberg_topic_name_dot_replacement)
+  , iceberg_dlq_table_suffix(
+      *this,
+      "iceberg_dlq_table_suffix",
+      "Suffix appended to the Iceberg table name for the dead-letter queue "
+      "(DLQ) table that stores invalid records when the invalid record action "
+      "is set to `dlq_table`. Should be chosen in a way that avoids name "
+      "collisions with other Iceberg tables. Important for catalogs which do "
+      "not support ~ (tilde) in table names. Should not be changed after any "
+      "DLQ tables have been created.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      "~dlq",
+      &validate_non_empty_string_opt)
   , enable_host_metrics(
       *this,
       "enable_host_metrics",

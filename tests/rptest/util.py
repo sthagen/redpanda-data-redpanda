@@ -526,7 +526,7 @@ def wait_for_recovery_throttle_rate(redpanda, new_rate: int):
                     current_rate >= min_expected_rate
                     and current_rate <= max_expected_rate
                 )
-            except:
+            except Exception:
                 redpanda.logger.debug(
                     f"Error getting throttle rate for {node}", exc_info=True
                 )

@@ -143,7 +143,9 @@ class LogStorageTargetSizeTest(RedpandaTest):
 
         # helper: bytes to MBs / human readable
         def hmb(bs):
-            convert = lambda b: round(b / (1024 * 1024), 1)
+            def convert(b):
+                return round(b / (1024 * 1024), 1)
+
             if isinstance(bs, int):
                 return convert(bs)
             return [convert(b) for b in bs]

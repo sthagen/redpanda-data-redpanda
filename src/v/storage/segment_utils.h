@@ -161,12 +161,10 @@ ss::future<ss::file> make_handle(
 
 ss::future<segment_appender_ptr> make_segment_appender(
   const segment_full_path& path,
-  size_t number_of_chunks,
   std::optional<uint64_t> segment_size,
   storage_resources& resources,
   std::optional<ntp_sanitizer_config> ntp_sanitizer_config);
 
-size_t number_of_chunks_from_config(const storage::ntp_config&);
 uint64_t segment_size_from_config(const storage::ntp_config&);
 
 /*

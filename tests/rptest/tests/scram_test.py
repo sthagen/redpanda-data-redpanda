@@ -912,7 +912,7 @@ class InvalidNewUserStrings(BaseScramTest):
             username=username,
             algorithm="SCRAM-SHA-256",
             expected_status_code=400,
-            err_msg=f"Parameter 'username' contained invalid control characters",
+            err_msg="Parameter 'username' contained invalid control characters",
         )
 
         # Two ordinals (corresponding to ',' and '=') are explicitly excluded from SASL usernames
@@ -936,7 +936,7 @@ class InvalidNewUserStrings(BaseScramTest):
             username="test",
             algorithm=algorithm,
             expected_status_code=400,
-            err_msg=f"Parameter 'algorithm' contained invalid control characters",
+            err_msg="Parameter 'algorithm' contained invalid control characters",
         )
 
     @cluster(num_nodes=3)

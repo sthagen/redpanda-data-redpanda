@@ -135,7 +135,7 @@ logger:
         """
 
         def _finished():
-            streams = self._request("GET", f"streams").json()
+            streams = self._request("GET", "streams").json()
             return name not in streams or streams[name]["active"] == False
 
         if should_finish == False:
@@ -165,7 +165,7 @@ logger:
         """
 
         def _all_streams_finished():
-            streams = self._request("GET", f"streams").json()
+            streams = self._request("GET", "streams").json()
             return all(s["active"] == False for id, s in streams.items())
 
         wait_until(

@@ -517,7 +517,7 @@ class AdminApiBasedRestore(FastCheck):
         def wait_for_topic():
             try:
                 return self._kafka_tools.describe_topic_config(self.topics[0].name)
-            except:
+            except Exception:
                 return None
 
         topic_config = wait_until_result(wait_for_topic, timeout_sec=60)
@@ -833,9 +833,12 @@ class TopicRecoveryTest(RedpandaTest):
         num_nodes = len(self.redpanda.nodes)
         queue = Queue(num_nodes)
         for node in self.redpanda.nodes:
-            checksummer = lambda: queue.put(
-                NodeChecksums(node, self._get_data_log_segment_checksums(node))
-            )
+
+            def checksummer():
+                queue.put(
+                    NodeChecksums(node, self._get_data_log_segment_checksums(node))
+                )
+
             Thread(target=checksummer, daemon=True).start()
             self.logger.debug(f"Started checksum thread for {node.account.hostname}..")
         for i in range(num_nodes):

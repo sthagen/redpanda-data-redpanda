@@ -486,7 +486,7 @@ class RedpandaOIDCTestMethods(RedpandaOIDCTestBase):
         consumer.subscribe([EXAMPLE_TOPIC])
         self.redpanda.logger.debug("consumer.subscribed")
         rec = consumer.poll(1.0)
-        assert rec == None
+        assert rec is None
 
         wait_until(has_group, timeout_sec=30, backoff_sec=1)
 

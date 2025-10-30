@@ -538,7 +538,7 @@ message Test3 {
         bytes_from_string = bytes(
             raw_bytes_string.encode().decode("unicode-escape"), "utf-8"
         )
-        assert bytes_from_string[0] == 0, f"expected encoding to contain magic byte (0)"
+        assert bytes_from_string[0] == 0, "expected encoding to contain magic byte (0)"
 
         # Now we decode the same message:
         out = self._rpk.consume(test_topic, offset="2:3", use_schema_registry="value")

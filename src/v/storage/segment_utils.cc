@@ -156,13 +156,11 @@ ss::future<ss::file> make_reader_handle(
 
 ss::future<segment_appender_ptr> make_segment_appender(
   const segment_full_path& path,
-  size_t number_of_chunks,
   std::optional<uint64_t> segment_size,
   storage_resources& resources,
   std::optional<ntp_sanitizer_config> ntp_sanitizer_config) {
     return internal::make_writer_handle(path, std::nullopt)
-      .then([number_of_chunks,
-             path,
+      .then([path,
              segment_size,
              &resources,
              ntp_sanitizer_config = std::move(ntp_sanitizer_config)](
@@ -185,9 +183,7 @@ ss::future<segment_appender_ptr> make_segment_appender(
               // exception during an OOM condition, since the appender allocates
               // 1MB of memory aligned buffers
               auto appender_ptr = std::make_unique<segment_appender>(
-                writer,
-                segment_appender::options(
-                  number_of_chunks, segment_size, resources));
+                writer, segment_appender::options(segment_size, resources));
 
               if (sanitized_writer) {
                   sanitized_writer->set_pointer_to_appender(appender_ptr.get());
@@ -203,20 +199,6 @@ ss::future<segment_appender_ptr> make_segment_appender(
               });
           }
       });
-}
-
-size_t number_of_chunks_from_config(const ntp_config& ntpc) {
-    auto def = segment_appender::write_behind_memory
-               / internal::chunks().chunk_size();
-
-    if (!ntpc.has_overrides()) {
-        return def;
-    }
-    auto& o = ntpc.get_overrides();
-    if (o.compaction_strategy) {
-        return def / 2;
-    }
-    return def;
 }
 
 ss::future<roaring::Roaring>
@@ -397,11 +379,7 @@ ss::future<storage::index_state> do_copy_segment_data(
 
     auto size_before = seg->size_bytes();
     auto appender = co_await make_segment_appender(
-      tmpname,
-      segment_appender::write_behind_memory / internal::chunks().chunk_size(),
-      size_before,
-      resources,
-      cfg.sanitizer_config);
+      tmpname, size_before, resources, cfg.sanitizer_config);
 
     vlog(
       gclog.trace,

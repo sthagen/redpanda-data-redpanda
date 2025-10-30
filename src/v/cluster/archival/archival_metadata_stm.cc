@@ -1725,7 +1725,8 @@ bool archival_metadata_stm_factory::is_applicable_for(
   const storage::ntp_config& ntp_cfg) const {
     return _cloud_storage_enabled && _cloud_storage_api.local_is_initialized()
            && ntp_cfg.ntp().tp.topic != model::kafka_consumer_offsets_topic
-           && ntp_cfg.ntp().ns == model::kafka_namespace;
+           && ntp_cfg.ntp().ns == model::kafka_namespace
+           && ntp_cfg.cloud_topic_enabled() == false;
 }
 
 void archival_metadata_stm_factory::create(

@@ -125,7 +125,7 @@ class PartitionStateAPItest(RedpandaTest):
 
         for s in controller_state:
             assert len(s["replicas"]) == 5
-            self.logger.debug(f"validating controller_state")
+            self.logger.debug("validating controller_state")
             leaders = list(
                 filter(lambda r: r["raft_state"]["is_elected_leader"], s["replicas"])
             )
@@ -227,8 +227,8 @@ class PartitionStateAPItest(RedpandaTest):
                 return self.redpanda._admin.get_offset_for_leader_epoch(
                     topic.name, 0, 1
                 )["current_leader_epoch"]
-            except:
-                self.logger.debug(f"Failed to get current leader epoch", exc_info=True)
+            except Exception:
+                self.logger.debug("Failed to get current leader epoch", exc_info=True)
                 return -1
 
         def do_validate_offset_for_leader_epoch(epoch: int, expected_offset: int):
@@ -242,7 +242,7 @@ class PartitionStateAPItest(RedpandaTest):
                         output["end_offset"] == expected_offset
                         and output["current_leader_epoch"] == epoch
                     )
-                except:
+                except Exception:
                     self.logger.debug(
                         f"Failed to get offset for leader epoch for node {node}",
                         exc_info=True,

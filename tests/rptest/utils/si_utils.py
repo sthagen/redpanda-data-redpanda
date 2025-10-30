@@ -571,7 +571,7 @@ def get_on_disk_size_per_ntp(chk):
             size = summary[1]
             tmp_size[ntp] += size
         for ntp, size in tmp_size.items():
-            if not ntp in size_bytes_per_ntp or size_bytes_per_ntp[ntp] < size:
+            if ntp not in size_bytes_per_ntp or size_bytes_per_ntp[ntp] < size:
                 size_bytes_per_ntp[ntp] = size
     return size_bytes_per_ntp
 
@@ -604,7 +604,7 @@ def get_expected_ntp_restored_size(
             tmp_partition_size[ntp] += size
             tmp_segments_sizes[ntp][segment.base_offset] = size
         for ntp, size in tmp_partition_size.items():
-            if not ntp in size_bytes_per_ntp or size_bytes_per_ntp[ntp] < size:
+            if ntp not in size_bytes_per_ntp or size_bytes_per_ntp[ntp] < size:
                 size_bytes_per_ntp[ntp] = size
                 segments_sizes_per_ntp[ntp] = tmp_segments_sizes[ntp]
         expected_restored_sizes = {}
@@ -1720,7 +1720,7 @@ class BucketView:
     def assert_segments_replaced(self, topic: str, partition: int):
         manifest_data = self.manifest_for_ntp(topic, partition)
         assert len(manifest_data.get("replaced", [])) > 0, (
-            f"No replaced segments after compacted segments uploaded"
+            "No replaced segments after compacted segments uploaded"
         )
 
     def assert_segments_deleted(self, topic: str, partition: int):

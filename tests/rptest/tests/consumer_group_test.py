@@ -538,7 +538,7 @@ class ConsumerGroupTest(RedpandaTest):
             try:
                 rpk_group = rpk.group_describe(group)
                 return rpk_group.members == 0 and rpk_group.state == "Dead"
-            except RpkException as e:
+            except RpkException:
                 # allow RPK to throw an exception as redpanda nodes were
                 # restarted and the request may require a retry
                 return False

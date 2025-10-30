@@ -167,7 +167,7 @@ class MetricsReporterTest(RedpandaTest):
         # the source of the value is sound, so assert on presence instead.
         assert "has_enterprise_features" in last
         assert "enterprise_features" in last
-        assert type(last["enterprise_features"]) == list
+        assert type(last["enterprise_features"]) is list
         assert "hostname" in last
         assert "domainname" in last
         assert "fqdns" in last

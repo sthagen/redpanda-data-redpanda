@@ -165,7 +165,7 @@ class WorkloadServiceBase(ABC, Service):
 
         try:
             self.stop_workload(nodes=[node])
-        except Exception as e:
+        except Exception:
             self.logger.warn(
                 f"{self.who_am_i()}: failed to stop workload on {node.name}"
             )
@@ -271,7 +271,7 @@ class WorkloadServiceBase(ABC, Service):
 
         try:
             stats = self.collect_stats()
-        except:
+        except Exception:
             self.logger.warn(
                 f"{self.who_am_i()}: failed to collect workload stats", exc_info=True
             )

@@ -129,7 +129,7 @@ class OcsfServer(Service):
             if node.account.alive(p):
                 return [p]
         except (RemoteCommandError, ValueError):
-            self.logger.warn(f"pid file not found for ocsf server")
+            self.logger.warn("pid file not found for ocsf server")
 
         return []
 

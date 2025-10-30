@@ -72,7 +72,7 @@ def check_execute_reassign_partitions(
 
     # Then a json structure
     current_assignment = json.loads(lines.pop().strip())
-    assert type(current_assignment) == type({}), "Expected JSON object"
+    assert type(current_assignment) is type({}), "Expected JSON object"
 
     # Then another exact string
     assert len(lines.pop()) == 0
@@ -387,7 +387,7 @@ class PartitionReassignmentsTest(RedpandaTest):
         all_node_idx_set = set(all_node_idx)
         for res in responses:
             assert res.topic in all_topic_names
-            assert type(res.partition) == int
+            assert type(res.partition) is int
             assert res.partition in all_partition_idx
             assert set(res.replicas).issubset(all_node_idx_set)
             assert set(res.adding_replicas).issubset(all_node_idx_set)
@@ -403,7 +403,7 @@ class PartitionReassignmentsTest(RedpandaTest):
 
             for res in responses:
                 assert res.topic in all_topic_names
-                assert type(res.partition) == int
+                assert type(res.partition) is int
                 assert res.partition in all_partition_idx
                 assert set(res.replicas).issubset(all_node_idx_set)
 

@@ -311,7 +311,7 @@ class BucketScrubSelfTest(RedpandaTest):
         )
 
         # Initially a bucket scrub should pass
-        self.logger.info(f"Running baseline scrub")
+        self.logger.info("Running baseline scrub")
         self.redpanda.stop_and_scrub_object_storage()
         self.redpanda.for_nodes(
             self.redpanda.nodes,
@@ -340,7 +340,7 @@ class BucketScrubSelfTest(RedpandaTest):
             validate=True,
         )
 
-        self.logger.info(f"Running scrub that should discover issue")
+        self.logger.info("Running scrub that should discover issue")
         with expect_exception(RuntimeError, lambda e: "fatal" in str(e)):
             self.redpanda.stop_and_scrub_object_storage()
 

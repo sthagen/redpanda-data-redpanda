@@ -112,7 +112,7 @@ class ClusterMetricsTest(RedpandaTest):
                 timeout_sec=5,
                 backoff_sec=1,
             )
-        except TimeoutError as e:
+        except TimeoutError:
             # Timing out is the desirable outcome here as it means
             # that the value remained constant.
             return
@@ -135,7 +135,7 @@ class ClusterMetricsTest(RedpandaTest):
                 timeout_sec=2,
                 backoff_sec=0.1,
             )
-        except TimeoutError as e:
+        except TimeoutError:
             return None
 
     def _assert_cluster_metrics(self, node: ClusterNode, expect_metrics: bool):

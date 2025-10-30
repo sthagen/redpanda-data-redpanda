@@ -92,7 +92,7 @@ class KafkaCliConsumer(BackgroundThreadService):
                     with self._lock:
                         self._message_cnt += 1
                         self._last_consumed = time.time()
-        except:
+        except Exception:
             if self._stopping.is_set():
                 # Expect a non-zero exit code when killing during teardown
                 pass
@@ -127,7 +127,7 @@ class KafkaCliConsumer(BackgroundThreadService):
 
         try:
             wait_until(lambda: self._done is None or self._done == True, timeout_sec=10)
-        except:
+        except Exception:
             self.logger.warn(
                 f"{self._instance_name} running on {node.name} failed to stop gracefully"
             )

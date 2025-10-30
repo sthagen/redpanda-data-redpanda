@@ -319,7 +319,7 @@ EOF
     def _configure_principal(
         self, krb5_conf_path: str, principal: str, dest: str, dest_node
     ):
-        if not "@" in principal:
+        if "@" not in principal:
             principal = f"{principal}@{self.realm}"
         self.logger.info(f"Adding principal {principal} to KDC")
         cmd = render_remote_kadmin_command(
@@ -432,7 +432,7 @@ class KrbClient(Service):
             f"rm -fr {self.redpanda.PERSISTENT_ROOT}/client.keytab /etc/krb5.keytab",
             allow_fail=True,
         )
-        node.account.ssh(f"rm -fr /tmp/*.krb5ccache", allow_fail=True)
+        node.account.ssh("rm -fr /tmp/*.krb5ccache", allow_fail=True)
 
     def add_primary(self, primary: str):
         self.logger.info(f"Adding primary {primary} to KrbClient {self.nodes[0].name}")
@@ -481,7 +481,7 @@ class KrbClient(Service):
         )
         try:
             res = self.nodes[0].account.ssh_output(
-                cmd=f"python3 /tmp/produce.py", allow_fail=False, combine_stderr=False
+                cmd="python3 /tmp/produce.py", allow_fail=False, combine_stderr=False
             )
             self.logger.debug(f"Produce request: {res}")
             return res
@@ -655,7 +655,7 @@ class ActiveDirectoryKdc:
         dest: str,
         dest_node,
     ):
-        if not "@" in principal:
+        if "@" not in principal:
             principal = f"{principal}@{self.realm}"
         src = rf"{user}.keytab.temp"
         cmd = f"ktpass -out {src} -mapuser {user} -princ {principal} -crypto ALL -pass * -ptype KRB5_NT_PRINCIPAL +DumpSalt"

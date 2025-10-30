@@ -45,7 +45,7 @@ class MetricsTest(Test):
         # We ignore those because:
         #  - seastar metrics so not affected by aggregate_metrics anyway
         #  - compaction io_queue class metrics can pop up after a delay so might make this flaky
-        return list(metric for metric in metrics if not "io_queue" in metric)
+        return list(metric for metric in metrics if "io_queue" not in metric)
 
     @cluster(num_nodes=3)
     @matrix(aggregate_metrics=[True, False])

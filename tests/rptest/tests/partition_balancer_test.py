@@ -207,7 +207,7 @@ class PartitionBalancerService(EndToEndTest):
             )
         else:
             node_id = None
-            self.logger.info(f"waiting for quiescent state")
+            self.logger.info("waiting for quiescent state")
 
         def predicate(status):
             return status["status"] == "ready" and (
@@ -279,7 +279,7 @@ class PartitionBalancerService(EndToEndTest):
             self.make_available(wait_for_previous_node)
             self.logger.info(f"making {node.account.hostname} unavailable")
 
-            if failure_types == None:
+            if failure_types is None:
                 failure_types = [
                     FailureSpec.FAILURE_KILL,
                     FailureSpec.FAILURE_TERMINATE,
@@ -338,7 +338,7 @@ class PartitionBalancerTest(PartitionBalancerService):
                 def node_removed():
                     try:
                         brokers = self.redpanda._admin.get_brokers()
-                    except:
+                    except Exception:
                         return False
                     return not any(b["node_id"] == old_node_id for b in brokers)
 
@@ -397,7 +397,7 @@ class PartitionBalancerTest(PartitionBalancerService):
                     # but just for the partition movement to start and then
                     # move to the next node.
 
-                    self.logger.info(f"waiting for partition balancer to kick in")
+                    self.logger.info("waiting for partition balancer to kick in")
 
                     node_id = self.redpanda.idx(node)
 

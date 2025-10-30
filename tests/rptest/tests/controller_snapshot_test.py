@@ -279,7 +279,7 @@ class ControllerSnapshotTest(RedpandaTest):
 
         check_and_save_node_ids(seed_nodes)
 
-        self.logger.info(f"seed nodes restarted successfully")
+        self.logger.info("seed nodes restarted successfully")
 
         self.redpanda.start(
             nodes=[joiner_node],

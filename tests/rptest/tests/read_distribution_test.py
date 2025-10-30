@@ -86,7 +86,7 @@ class ReadDistributionTest(RedpandaTest):
             try:
                 topic_read_dist[int(float(le))] = int(v - prev)
                 prev = v
-            except:
+            except Exception:
                 continue
 
         first_bucket_lower_bound = 4

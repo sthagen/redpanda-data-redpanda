@@ -79,7 +79,7 @@ class NessieCatalogSmokeTest(RedpandaTest):
                 )
                 cursor.fetchall()
 
-                cursor.execute(f"SELECT * from redpanda.test")
+                cursor.execute("SELECT * from redpanda.test")
                 row = cursor.fetchall()
                 assert len(row) == 1
                 assert row == [(2024, "John", 60, "Wick")]

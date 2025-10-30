@@ -161,7 +161,7 @@ class ShadowIndexingCompactedTopicTest(EndToEndTest):
             compacted_segments_uploaded,
             timeout_sec=180,
             backoff_sec=2,
-            err_msg=lambda: f"Compacted segments not uploaded",
+            err_msg=lambda: "Compacted segments not uploaded",
         )
 
         # check that the metric is increasing. the check needs to account for leadership changes (unlikely in this test),
@@ -330,7 +330,7 @@ class TSWithAlreadyCompactedTopic(EndToEndTest):
             compacted,
             timeout_sec=120,
             backoff_sec=2,
-            err_msg=f"Segments were not compacted well enough",
+            err_msg="Segments were not compacted well enough",
         )
 
         # enable TS for the topic

@@ -85,7 +85,7 @@ class VerifyConsumerOffsetsThruUpgrades(RedpandaTest):
             consumer_offsets_is_compactible,
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"Timed out waiting for consumer offsets partition to be compactible",
+            err_msg="Timed out waiting for consumer offsets partition to be compactible",
         )
 
     @cluster(num_nodes=3)

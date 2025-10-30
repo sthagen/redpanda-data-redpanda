@@ -111,7 +111,7 @@ class TxCoordinatorMigrationTest(RedpandaTest):
                 status = json.loads(admin.get_tx_manager_recovery_status(migrator).text)
                 self.logger.info(f"Migration status: {status}")
                 return status["required"] == False and status["in_progress"] == False
-            except Exception as e:
+            except Exception:
                 return False
 
         admin = Admin(self.redpanda, retries_amount=0)
@@ -258,7 +258,7 @@ class TxCoordinatorMigrationTest(RedpandaTest):
             used_partitions.add(p)
 
         assert len(new_mapping) == len(initial_mapping), (
-            f"All tx ids should be present after repartitioning"
+            "All tx ids should be present after repartitioning"
         )
 
         assert len(used_partitions) > self.initial_tx_manager_partitions

@@ -15,6 +15,7 @@
 #include "storage/node.h"
 #include "storage/types.h"
 
+#include <seastar/core/gate.hh>
 #include <seastar/core/sstring.hh>
 
 #include <sys/statvfs.h>

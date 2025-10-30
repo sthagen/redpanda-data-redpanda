@@ -9,7 +9,8 @@
  */
 #pragma once
 
-#include "cloud_storage_clients/client.h"
+#include "cloud_storage_clients/types.h"
+#include "model/fundamental.h"
 #include "utils/log_hist.h"
 #include "utils/retry_chain_node.h"
 

@@ -132,7 +132,7 @@ class AdminApiAuthTest(RedpandaTest):
 
         unauthed = AdminV2(self.redpanda)
         resp = unauthed.broker().call_list_brokers(broker_pb.ListBrokersRequest())
-        assert resp.error() != None, f"expected an error response, got {resp}"
+        assert resp.error() is not None, f"expected an error response, got {resp}"
         assert resp.error().code == ConnectErrorCode.PERMISSION_DENIED, (
             f"Expected unauthenticated admin v2 request to be denied, got: {resp.error()}"
         )
@@ -187,7 +187,7 @@ class AdminApiAuthTest(RedpandaTest):
                     metadata={"detail": "something"},
                 )
             )
-            assert resp.error() != None, "Expected an error in this RPC"
+            assert resp.error() is not None, "Expected an error in this RPC"
             err = resp.error()
             assert err.code == ConnectErrorCode.UNKNOWN, (
                 f"Expected UNKNOWN error code, got: {err}"

@@ -92,7 +92,7 @@ class ShardPlacementScaleTest(RedpandaTest):
             topology="ensemble",
         )
         self._benchmark.start()
-        self.logger.info(f"OMB started")
+        self.logger.info("OMB started")
 
     def omb_topics(self):
         rpk = RpkTool(self.redpanda)

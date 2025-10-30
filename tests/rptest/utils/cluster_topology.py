@@ -79,7 +79,7 @@ class NodeQdisc:
                 "22",
                 "0xffff",
                 "flowid",
-                f"1:1",
+                "1:1",
             ]
         )
 
@@ -102,7 +102,7 @@ class NodeQdisc:
                 "22",
                 "0xffff",
                 "flowid",
-                f"1:1",
+                "1:1",
             ]
         )
 
@@ -314,7 +314,7 @@ class ClusterTopology:
         return []
 
     def _ip_address(self, node):
-        res = node.account.ssh_output(f"hostname -i")
+        res = node.account.ssh_output("hostname -i")
         return res.strip().decode("utf-8")
 
     def add_connection_spec(self, spec: TopologyConnectionSpec):

@@ -43,11 +43,11 @@ class SyncProducer:
         )
         self.producer.flush(timeout_s)
         msg = self.last_msg
-        if msg == None:
+        if msg is None:
             raise KafkaException(KafkaError(KafkaError._MSG_TIMED_OUT))
-        if msg.error() != None:
+        if msg.error() is not None:
             raise KafkaException(msg.error())
-        assert msg.offset() != None
+        assert msg.offset() is not None
         return msg.offset()
 
 

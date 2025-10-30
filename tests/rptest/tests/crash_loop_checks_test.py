@@ -96,7 +96,7 @@ class CrashLoopChecksTest(RedpandaTest):
         Wait for the redpanda process to terminate (e.g. after sending a crash signal)
         """
         wait_until(
-            lambda: self.redpanda.redpanda_pid(broker) == None,
+            lambda: self.redpanda.redpanda_pid(broker) is None,
             timeout_sec=timeout,
             backoff_sec=0.2,
             err_msg=f"Redpanda processes did not terminate on {broker.name} in {timeout} sec",

@@ -342,19 +342,19 @@ sharded_store::get_schema_subject_versions(schema_id id) {
     co_return co_await _store.map_reduce0(map, subject_versions{}, reduce);
 }
 
-ss::future<std::vector<subject_version_entry>>
+ss::future<chunked_vector<subject_version_entry>>
 sharded_store::get_subject_versions(subject sub, include_deleted inc_del) {
     co_return co_await _store.invoke_on(
       shard_for(sub),
       _smp_opts,
-      [sub, inc_del](store& s) -> std::vector<subject_version_entry> {
+      [sub, inc_del](store& s) -> chunked_vector<subject_version_entry> {
           auto res = s.get_version_ids(sub, inc_del);
           if (
             res.has_error()
             && res.assume_error().code() == error_code::subject_not_found) {
               return {};
           }
-          return res.value();
+          return std::move(res.value());
       });
 }
 
@@ -424,7 +424,7 @@ ss::future<bool> sharded_store::has_subjects(include_deleted inc_del) {
     return _store.map_reduce0(map, false, std::logical_or<>{});
 }
 
-ss::future<std::vector<schema_version>>
+ss::future<chunked_vector<schema_version>>
 sharded_store::get_versions(subject sub, include_deleted inc_del) {
     auto sub_shard{shard_for(sub)};
     co_return co_await _store.invoke_on(
@@ -433,7 +433,8 @@ sharded_store::get_versions(subject sub, include_deleted inc_del) {
       });
 }
 
-ss::future<bool> sharded_store::is_referenced(subject sub, schema_version ver) {
+ss::future<bool>
+sharded_store::is_referenced(subject sub, std::optional<schema_version> ver) {
     // Find all the schema that reference this sub-ver
     auto references = co_await _store.map_reduce0(
       [sub{std::move(sub)}, ver](store& s) {
@@ -451,7 +452,7 @@ ss::future<bool> sharded_store::is_referenced(subject sub, schema_version ver) {
       std::logical_or<>{});
 }
 
-ss::future<std::vector<schema_id>> sharded_store::referenced_by(
+ss::future<chunked_vector<schema_id>> sharded_store::referenced_by(
   subject sub, std::optional<schema_version> opt_ver) {
     schema_version ver;
     // Ensure the subject exists
@@ -487,10 +488,10 @@ ss::future<std::vector<schema_id>> sharded_store::referenced_by(
       store::schema_id_set{},
       set_accumulator);
 
-    co_return std::vector<schema_id>{references.begin(), references.end()};
+    co_return chunked_vector<schema_id>{references.begin(), references.end()};
 }
 
-ss::future<std::vector<schema_version>> sharded_store::delete_subject(
+ss::future<chunked_vector<schema_version>> sharded_store::delete_subject(
   seq_marker marker, subject sub, permanent_delete permanent) {
     auto sub_shard{shard_for(sub)};
     co_return co_await _store.invoke_on(
@@ -516,7 +517,7 @@ sharded_store::is_subject_version_deleted(subject sub, schema_version ver) {
       });
 }
 
-ss::future<std::vector<seq_marker>>
+ss::future<chunked_vector<seq_marker>>
 sharded_store::get_subject_written_at(subject sub) {
     auto sub_shard{shard_for(sub)};
     co_return co_await _store.invoke_on(
@@ -525,7 +526,7 @@ sharded_store::get_subject_written_at(subject sub) {
       });
 }
 
-ss::future<std::vector<seq_marker>>
+ss::future<chunked_vector<seq_marker>>
 sharded_store::get_subject_config_written_at(subject sub) {
     auto sub_shard{shard_for(sub)};
     co_return co_await _store.invoke_on(
@@ -534,7 +535,7 @@ sharded_store::get_subject_config_written_at(subject sub) {
       });
 }
 
-ss::future<std::vector<seq_marker>>
+ss::future<chunked_vector<seq_marker>>
 sharded_store::get_subject_mode_written_at(subject sub) {
     auto sub_shard{shard_for(sub)};
     co_return co_await _store.invoke_on(
@@ -543,7 +544,7 @@ sharded_store::get_subject_mode_written_at(subject sub) {
       });
 }
 
-ss::future<std::vector<seq_marker>>
+ss::future<chunked_vector<seq_marker>>
 sharded_store::get_subject_version_written_at(subject sub, schema_version ver) {
     auto sub_shard{shard_for(sub)};
     co_return co_await _store.invoke_on(
@@ -826,7 +827,7 @@ ss::future<compatibility_result> sharded_store::do_is_compatible(
         auto old_valid = co_await make_valid_schema(
           std::move(old_schema.schema));
 
-        std::vector<ss::sstring> version_messages;
+        chunked_vector<ss::sstring> version_messages;
 
         if (
           compat == compatibility_level::backward

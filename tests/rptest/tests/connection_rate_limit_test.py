@@ -60,7 +60,7 @@ class ConnectionRateLimitTest(PreallocNodesTest):
     def stop_consumer(self, consumer):
         try:
             consumer.stop()
-        except:
+        except Exception:
             # Should ignore exception form kaf_consumer
             pass
         consumer.free()

@@ -260,7 +260,7 @@ class DeleteRecordsTest(RedpandaTest, PartitionMovementMixin):
         def check_bound_end_fails(offset):
             return check_bound_end(offset, value_on_read=False)
 
-        assert truncate_offset <= high_watermark, f"Test malformed"
+        assert truncate_offset <= high_watermark, "Test malformed"
 
         if truncate_offset == high_watermark:
             # Assert no data at all can be read
@@ -470,9 +470,9 @@ class DeleteRecordsTest(RedpandaTest, PartitionMovementMixin):
                 backoff_sec=5,
                 err_msg=f"Failed while waiting on all segments below lwm: {low_watermark} to be removed",
             )
-        except ducktape.errors.TimeoutError as e:
+        except ducktape.errors.TimeoutError:
             self.redpanda.logger.info(
-                f"Timed out waiting for segments, ensure no orphaned segments exist nodes that didn't crash"
+                "Timed out waiting for segments, ensure no orphaned segments exist nodes that didn't crash"
             )
             snapshot = self.redpanda.storage(all_nodes=True).segments_by_node(
                 "kafka", TEST_TOPIC_NAME, 0

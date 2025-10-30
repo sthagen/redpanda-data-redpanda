@@ -320,20 +320,7 @@ private:
 
     ss::future<size_t> remove_persistent_state(std::filesystem::path);
 
-    struct appender_callbacks : segment_appender::callbacks {
-        explicit appender_callbacks(segment* segment)
-          : _segment(segment) {}
-
-        void committed_physical_offset(size_t offset) final {
-            _segment->advance_stable_offset(offset);
-        }
-
-        segment* _segment;
-    };
-
     storage_resources& _resources;
-
-    appender_callbacks _appender_callbacks;
 
     void advance_stable_offset(size_t offset);
     /**

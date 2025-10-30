@@ -80,7 +80,7 @@ class IdempotentProducerRecoveryTest(RedpandaTest):
             do_wait,
             timeout_sec=20,
             backoff_sec=1,
-            err_msg=f"Not all producers were evicted in 20secs.",
+            err_msg="Not all producers were evicted in 20secs.",
             retry_on_exc=False,
         )
 

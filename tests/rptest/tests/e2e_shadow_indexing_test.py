@@ -1645,7 +1645,7 @@ class ShadowIndexingTrafficShapingTest(PreallocNodesTest):
             s3_service_dest = ":443"
             try:
                 s3_service_dest = socket.gethostbyname(s3_service_ep)
-            except:
+            except Exception:
                 pass
 
             self.rp_qdisc = NodeQdisc(

@@ -9,6 +9,7 @@
 
 import subprocess
 import time
+from typing import Any, Callable
 
 from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until
@@ -108,14 +109,22 @@ class InternalTopicProtectionTest(RedpandaTest):
 
             return partition[0].high_watermark
 
+        produce_fn: Callable[[str, str], Any] | None = None
+
         if client_type == "rpk":
-            produce_fn = lambda topic, msg: self.rpk.produce(
-                topic, "key", msg, timeout=30
-            )
+
+            def produce_fn_rpk(topic: str, msg: str):
+                return self.rpk.produce(topic, "key", msg, timeout=30)
+
+            produce_fn = produce_fn_rpk
             failure_exception_type = RpkException
 
         elif client_type == "kafka_tools":
-            produce_fn = lambda topic, msg: self.kafka_cat.produce_one(topic, msg)
+
+            def produce_fn_kt(topic: str, msg: str):
+                return self.kafka_cat.produce_one(topic, msg)
+
+            produce_fn = produce_fn_kt
             failure_exception_type = subprocess.CalledProcessError
 
         else:
@@ -180,7 +189,7 @@ class InternalTopicProtectionTest(RedpandaTest):
             assert False, "Call to delete topic must fail"
         except Exception:
             self.redpanda.logger.info(
-                f"we were expecting delete_topic to fail", exc_info=True
+                "we were expecting delete_topic to fail", exc_info=True
             )
             pass
 

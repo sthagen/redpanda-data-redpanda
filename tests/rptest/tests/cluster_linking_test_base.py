@@ -8,7 +8,6 @@
 # by the Apache License, Version 2.0
 
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 import time
 import socket

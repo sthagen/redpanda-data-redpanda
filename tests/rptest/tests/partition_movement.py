@@ -35,7 +35,10 @@ class PartitionMovementMixin:
         limitation in redpanda raft implementation.
         """
         replication_factor = len(assignments)
-        node_ids = lambda x: set([a["node_id"] for a in x])
+
+        def node_ids(x):
+            return set([a["node_id"] for a in x])
+
         orig_node_ids = node_ids(assignments)
 
         assert replication_factor >= 1

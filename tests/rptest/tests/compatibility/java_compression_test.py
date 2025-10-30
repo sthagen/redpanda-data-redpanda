@@ -84,7 +84,7 @@ class JavaCompressionTest(EndToEndTest):
             if cur_messages_amount >= num_messages:
                 return
             if time() > deadline:
-                assert False, f"Failed to consume messages"
+                assert False, "Failed to consume messages"
 
     def get_compacted_segments(self):
         num_compacted_segments = self.redpanda.metric_sum(
@@ -219,12 +219,12 @@ class JavaCompressionTest(EndToEndTest):
             try:
                 self.consume()
                 return True
-            except:
+            except Exception:
                 return False
 
         wait_until(
             consumer_succeeds,
             timeout_sec=360,
             backoff_sec=5,
-            err_msg=f"Timed out waiting for consuming to succeed.",
+            err_msg="Timed out waiting for consuming to succeed.",
         )

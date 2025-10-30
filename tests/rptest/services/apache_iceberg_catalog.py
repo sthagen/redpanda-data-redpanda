@@ -32,7 +32,7 @@ class IcebergRESTCatalog(CatalogService):
     logs = {"iceberg_rest_logs": {"path": LOG_FILE, "collect_default": True}}
 
     DB_CATALOG_IMPL = "org.apache.iceberg.jdbc.JdbcCatalog"
-    DB_CATALOG_JDBC_URI_PREFIX = f"jdbc:sqlite:file:"
+    DB_CATALOG_JDBC_URI_PREFIX = "jdbc:sqlite:file:"
     DB_CATALOG_DB_USER = "user"
     DB_CATALOG_DB_PASS = "password"
 
@@ -240,8 +240,8 @@ class IcebergRESTCatalog(CatalogService):
             try:
                 node.account.ssh_output(check_cmd)
                 return True
-            except Exception as e:
-                self.logger.debug(f"Exception querying catalog", exc_info=True)
+            except Exception:
+                self.logger.debug("Exception querying catalog", exc_info=True)
             return False
 
         wait_until(
@@ -258,7 +258,7 @@ class IcebergRESTCatalog(CatalogService):
 
         def _stopped():
             out = node.account.ssh_output("jcmd").decode("utf-8")
-            return not (IcebergRESTCatalog.JAR in out)
+            return IcebergRESTCatalog.JAR not in out
 
         wait_until(
             _stopped,

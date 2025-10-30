@@ -365,7 +365,7 @@ class GroupMetricsTest(RedpandaTest):
 
         # Wait until cluster starts producing metrics
         wait_until(
-            lambda: self.redpanda.metrics_sample("kafka_group_offset") != None,
+            lambda: self.redpanda.metrics_sample("kafka_group_offset") is not None,
             timeout_sec=30,
             backoff_sec=5,
         )

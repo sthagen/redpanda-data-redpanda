@@ -32,15 +32,15 @@ class GenericDataType:
 
     @staticmethod
     def name() -> str:
-        raise NotImplementedError(f"Not implemented in GenericDataType base class")
+        raise NotImplementedError("Not implemented in GenericDataType base class")
 
     @staticmethod
     def to_avro() -> str:
-        raise NotImplementedError(f"Not implemented in GenericDataType base class")
+        raise NotImplementedError("Not implemented in GenericDataType base class")
 
     @staticmethod
     def to_proto() -> str:
-        raise NotImplementedError(f"Not implemented in GenericDataType base class")
+        raise NotImplementedError("Not implemented in GenericDataType base class")
 
 
 class GenericRecord(GenericDataType):

@@ -209,14 +209,14 @@ class DebugBundleTestBase(RedpandaTest):
             kafka_file = [
                 entry for entry in zip_ref.namelist() if entry.endswith("kafka.json")
             ]
-            assert kafka_file, f"Expected to find kafka.json in the zip file"
+            assert kafka_file, "Expected to find kafka.json in the zip file"
             with zip_ref.open(kafka_file[0]) as f:
                 kafka_json = json.loads(f.read().decode("utf-8"))
                 self.logger.debug(f"kafka_json: {kafka_json}")
                 metadata_obj = [
                     entry for entry in kafka_json if entry["Name"] == "metadata"
                 ]
-                assert metadata_obj, f"Expected to find metadata object in kafka.json"
+                assert metadata_obj, "Expected to find metadata object in kafka.json"
                 if not expect_populated_topic_response:
                     assert metadata_obj[0]["Response"]["Topics"] is None, (
                         f"Expected to not find 'Topics' in kafka resonse: {metadata_obj[0]['Response']['Topics']}"
@@ -227,7 +227,7 @@ class DebugBundleTestBase(RedpandaTest):
                         f"Expected to find {topic_name} in metadata object {metadata_obj[0]['Response']['Topics']}"
                     )
                 else:
-                    assert not topic_name in metadata_obj[0]["Response"]["Topics"], (
+                    assert topic_name not in metadata_obj[0]["Response"]["Topics"], (
                         f"Expected not to find {topic_name} in metadata object {metadata_obj[0]['Response']['Topics']}"
                     )
 
@@ -324,7 +324,7 @@ class DebugBundleTest(DebugBundleTestBase):
             data_dir = self.admin.get_cluster_config(
                 node=node, key=self.debug_bundle_dir_config
             )[self.debug_bundle_dir_config]
-        except requests.HTTPError as e:
+        except requests.HTTPError:
             pass
 
         data_dir = (
@@ -574,12 +574,12 @@ class DebugBundleTest(DebugBundleTestBase):
 
         self._run_debug_bundle(job_id=job_id, node=node, config=params)
 
-        search_str = f"Starting RPK debug bundle:"
+        search_str = "Starting RPK debug bundle:"
         for k, v in env_variables.items():
             search_str += f" {k}={v}"
         search_str += f" {self.redpanda.find_path_to_rpk()} debug bundle"
         search_str += f" --output /var/lib/redpanda/data/debug-bundle/{str(job_id)}.zip"
-        search_str += f" --verbose"
+        search_str += " --verbose"
         search_str += (
             f" --controller-logs-size-limit {controller_logs_size_limit_bytes}B"
         )

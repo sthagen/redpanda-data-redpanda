@@ -68,4 +68,4 @@ class TxFeatureFlagTest(EndToEndTest):
 
         # make sure that all redpanda nodes are up and running
         for n in self.redpanda.nodes:
-            assert self.redpanda.redpanda_pid(n) != None
+            assert self.redpanda.redpanda_pid(n) is not None

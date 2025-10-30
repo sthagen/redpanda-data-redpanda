@@ -97,8 +97,8 @@ iceberg.{{ catalog_type }}-catalog.uri={{ catalog_uri }}
             # https://trino.io/docs/current/object-storage/metastores.html#nessie-catalog
             extra_connector_conf = self.dict_to_conf(
                 {
-                    f"iceberg.nessie-catalog.default-warehouse-dir": self.default_warehouse_dir,
-                    f"iceberg.nessie-catalog.client-api-version": NessieCatalog.NESSIE_API_VERSION,
+                    "iceberg.nessie-catalog.default-warehouse-dir": self.default_warehouse_dir,
+                    "iceberg.nessie-catalog.client-api-version": NessieCatalog.NESSIE_API_VERSION,
                 }
             )
 
@@ -138,13 +138,13 @@ iceberg.{{ catalog_type }}-catalog.uri={{ catalog_uri }}
                 active_worker_count = len(active_workers) if active_workers else 0
 
                 if active_worker_count < 1:
-                    self.logger.debug(f"Trino initialized but has no active workers")
+                    self.logger.debug("Trino initialized but has no active workers")
                     return False
 
                 return True
             except Exception:
                 self.logger.debug(
-                    f"Exception during Trino readiness check", exc_info=True
+                    "Exception during Trino readiness check", exc_info=True
                 )
             return False
 

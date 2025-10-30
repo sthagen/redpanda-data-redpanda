@@ -310,7 +310,7 @@ class CloudCluster:
             # Raise exception if client is not implemented yet
             if self.provider_cli is None and self.config.network != "public":
                 self._logger.error(
-                    f"Current provider does not yet support private networking"
+                    "Current provider does not yet support private networking"
                 )
                 raise RuntimeError(
                     "Private networking is not implemented "
@@ -627,7 +627,7 @@ class CloudCluster:
         token = b64.decode("utf-8")
         headers = {"Authorization": f"Basic {token}"}
         return self.rpcloud._http_get(
-            endpoint=f"/api/cloud/prometheus/public_metrics",
+            endpoint="/api/cloud/prometheus/public_metrics",
             base_url=base_url,
             override_headers=headers,
             text_response=True,
@@ -847,7 +847,7 @@ class CloudCluster:
             cluster = self._get_cluster(
                 self.current.cluster_id, is_serverless_cluster=is_serverless_cluster
             )
-        except Exception as e:
+        except Exception:
             return warn_and_return(
                 f"# Failed to get info for cluster with Id: '{self.current.cluster_id}'"
             )
@@ -862,7 +862,7 @@ class CloudCluster:
             return None
 
         # Check if panda-proxy is available
-        if not "url" in cluster["http_proxy"]:
+        if "url" not in cluster["http_proxy"]:
             return warn_and_return("Panda-Proxy listener is not available")
         else:
             _u = self.panda_proxy_url()
@@ -1692,7 +1692,7 @@ class CloudCluster:
             scopes = ["SCOPE_REDPANDA_CLUSTER"]
         response = self.public_api._http_post(
             base_url=dataplane_url,
-            endpoint=f"/v1/secrets",
+            endpoint="/v1/secrets",
             json={
                 "id": secret_id,
                 "scopes": scopes,

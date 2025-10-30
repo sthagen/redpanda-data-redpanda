@@ -257,7 +257,7 @@ def read_compaction_footer(file_path):
         )
         res["crc"] = unpacked_footer[3]
         res["version"] = unpacked_footer[4]
-    except:
+    except Exception:
         footer_v2 = footer[:]
         unpacked_footer = struct.unpack(FOOTER_V2, footer_v2)
         res["size"] = unpacked_footer[0]

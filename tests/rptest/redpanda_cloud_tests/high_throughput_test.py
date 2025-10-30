@@ -821,7 +821,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         self.logger.info(f"Running for {wait_time}s after injected failure removed")
         time.sleep(wait_time)
-        self.logger.info(f"Waiting for the cluster to return to a healthy state")
+        self.logger.info("Waiting for the cluster to return to a healthy state")
         wait_until(self.redpanda.cluster_healthy(), timeout_sec=600, backoff_sec=1)
 
     def stage_stop_wait_start(self, forced_stop: bool, downtime: int):
@@ -902,14 +902,14 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
     def stage_block_s3(self):
         self.logger.info(
-            f"Getting the first 100 segments into the cloud for specific topic"
+            "Getting the first 100 segments into the cloud for specific topic"
         )
         wait_until(
             lambda: nodes_report_cloud_segments(self.redpanda, 100, self.topic),
             timeout_sec=600,
             backoff_sec=5,
         )
-        self.logger.info(f"Blocking S3 traffic for all nodes")
+        self.logger.info("Blocking S3 traffic for all nodes")
         self.last_num_errors = 0
 
         with cloudv2_object_store_blocked(self.redpanda, self.logger):
@@ -925,7 +925,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         # make sure nothing is crashed
         wait_until(self.redpanda.cluster_healthy(), timeout_sec=60, backoff_sec=1)
-        self.logger.info(f"Waiting for S3 errors to cease")
+        self.logger.info("Waiting for S3 errors to cease")
         wait_until(
             lambda: self._cloud_storage_no_new_errors(self.redpanda, self.logger),
             timeout_sec=600,
@@ -1115,14 +1115,14 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         )
 
     def _disable_agent_services(self):
-        self.logger.debug(f"disabling agent services")
+        self.logger.debug("disabling agent services")
         # sudo systemctl disable --now redpanda-agent.service redpanda-agent-boot.service redpanda-agent-init.service
         self.redpanda.cloud_agent_ssh(
             ["sudo", "systemctl", "disable", "--now"] + self._agent_services
         )
 
     def _enable_agent_services(self):
-        self.logger.debug(f"enabling agent services")
+        self.logger.debug("enabling agent services")
         # sudo systemctl enable --now redpanda-agent.service redpanda-agent-boot.service redpanda-agent-init.service
         self.redpanda.cloud_agent_ssh(
             ["sudo", "systemctl", "enable", "--now"] + self._agent_services
@@ -1203,7 +1203,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         stage.
         """
 
-        self.logger.info(f"verify cluster > 3 nodes")
+        self.logger.info("verify cluster > 3 nodes")
         if self._num_brokers <= 3:
             self.logger.warning("need more than 3 nodes to run test")
             return
@@ -1447,7 +1447,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
             # Exhaust cloud cache with multiple consumers
             # reading at random offsets
-            self.logger.info(f"Starting thrashing consumers")
+            self.logger.info("Starting thrashing consumers")
             consumer = KgoVerifierRandomConsumer(
                 self.test_context,
                 self.redpanda,
@@ -1461,7 +1461,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
                 consumer.start(clean=False)
                 time.sleep(240)
             finally:
-                self.logger.info(f"Stopping thrashing consumers")
+                self.logger.info("Stopping thrashing consumers")
                 consumer.stop()
                 consumer.wait(timeout_sec=600)
 
@@ -1543,7 +1543,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         # them to consume ~10 messages before terminating them with
         # a SIGKILL.
 
-        self.logger.info(f"Starting stage_lots_of_failed_consumers")
+        self.logger.info("Starting stage_lots_of_failed_consumers")
         # Original value 10000
         consume_count = 5000
 
@@ -1658,7 +1658,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         # for a specific topic. Then it consumes from offsets known to not be in the
         # batch and verifies that these fetches occurred from disk and not the cache.
 
-        self.logger.info(f"Starting stage_consume_miss_cache")
+        self.logger.info("Starting stage_consume_miss_cache")
 
         # Get current offsets for topic. We'll use these for starting offsets
         # for consuming messages after we produce enough data to push them out
@@ -1745,7 +1745,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
             "vectorized_cluster_partition_under_replicated_replicas"
         )
         if sum(x.value for x in s.samples) == 0:
-            self.logger.info(f"No under-replicated replicas")
+            self.logger.info("No under-replicated replicas")
         else:
             self.logger.info(f"Under-replicated replicas: {s.samples}")
 
@@ -1850,7 +1850,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         # ensures that the S3 workload doesn't impact the performance of the
         # usual workload too greatly.
 
-        self.logger.info(f"Starting stage_tiered_storage_consuming")
+        self.logger.info("Starting stage_tiered_storage_consuming")
 
         segment_size = 128 * MiB  # 128 MiB
         consume_rate = 1 * GiB  # 1 GiB/s

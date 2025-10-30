@@ -47,7 +47,7 @@ def get_metrics_from_node(
         return wait_until_result(
             lambda: get_metrics_from_node_sync(patterns), timeout_sec=2, backoff_sec=0.1
         )
-    except TimeoutError as e:
+    except TimeoutError:
         return None
 
 

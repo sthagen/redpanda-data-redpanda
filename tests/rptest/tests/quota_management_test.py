@@ -612,5 +612,5 @@ Quota configs for client-id 'custom-producer' are producer_byte_rate=20480.0"""
             describe_shows_default,
             timeout_sec=30,
             retry_on_exc=True,
-            err_msg=f"Describe did not succeed in time",
+            err_msg="Describe did not succeed in time",
         )

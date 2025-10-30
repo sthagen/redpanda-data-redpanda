@@ -77,7 +77,9 @@ void topic_reconciler::trigger(model::id_t link_id) {
     ssx::spawn_with_gate(_gate, [this, link_id] {
         return execute(link_id).handle_exception(
           [](const std::exception_ptr& e) {
-              vlog(cllog.error, "Topic reconciler failed: {}", e);
+              auto level = ssx::is_shutdown_exception(e) ? ss::log_level::trace
+                                                         : ss::log_level::warn;
+              vlogl(cllog, level, "Topic reconciler failed: {}", e);
           });
     });
 }
@@ -171,7 +173,7 @@ ss::future<> topic_reconciler::maybe_update_existing_topic(
           ::model::timeout_clock::now() + update_timeout);
         if (res != ::cluster::cluster_link::errc::success) {
             vlog(
-              cllog.error,
+              cllog.warn,
               "Failed to mark mirror topic {} as failed: {}",
               topic,
               res);
@@ -199,7 +201,7 @@ ss::future<> topic_reconciler::maybe_update_existing_topic(
           ::model::timeout_clock::now() + update_timeout);
         if (res != cluster::errc::success) {
             vlog(
-              cllog.error,
+              cllog.warn,
               "Failed to set partition count on mirror topic {} to {}: {}",
               topic,
               mirror_topic_config.partition_count,
@@ -230,7 +232,7 @@ ss::future<> topic_reconciler::maybe_update_existing_topic(
     auto res = co_await _topic_creator->update_topic(
       std::move(update_cfg).value());
     if (res != cluster::errc::success) {
-        vlog(cllog.error, "Failed to update mirror topic {}: {}", topic, res);
+        vlog(cllog.warn, "Failed to update mirror topic {}: {}", topic, res);
     } else {
         vlog(
           cllog.trace,

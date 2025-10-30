@@ -83,7 +83,7 @@ class DataMigrationTestMixin(RedpandaTest):
             lambda: all(client.describe_topic(t).partitions == [] for t in topics),
             timeout_sec=90,
             backoff_sec=1,
-            err_msg=f"Failed waiting for partitions to disappear",
+            err_msg="Failed waiting for partitions to disappear",
         )
 
     def get_migration(self, id, node=None, redpanda: RedpandaService | None = None):

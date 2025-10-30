@@ -286,7 +286,7 @@ class CloudRetentionTest(PreallocNodesTest):
             for partition in range(0, num_partitions):
                 try:
                     manifest = s3_snapshot.manifest_for_ntp(self.topic_name, partition)
-                except:
+                except Exception:
                     self.logger.info(f"Partition {partition} has no uploaded manifest")
                     return False
 
@@ -389,7 +389,7 @@ class CloudRetentionTimelyGCTest(RedpandaTest):
         def check_cloud_log_size():
             s3_snapshot = BucketView(self.redpanda, topics=self.topics)
             if not s3_snapshot.is_ntp_in_manifest(self.topic, 0):
-                self.logger.debug(f"No manifest present yet")
+                self.logger.debug("No manifest present yet")
                 return
 
             if (
@@ -398,7 +398,7 @@ class CloudRetentionTimelyGCTest(RedpandaTest):
                 )
                 <= 0
             ):
-                self.logger.debug(f"Manifest not prefix-truncated yet")
+                self.logger.debug("Manifest not prefix-truncated yet")
                 return
 
             cloud_log_size = s3_snapshot.cloud_log_size_for_ntp(self.topic, 0).total(

@@ -31,7 +31,6 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
 from rptest.clients.kafka_cli_tools import KafkaCliToolsError
 from rptest.clients.rpk import RpkTool, RPKACLInput, RpkException
 from rptest.clients.types import TopicSpec
-from rptest.clients.default import DefaultClient
 from rptest.services.cluster import TestContext
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
@@ -63,12 +62,10 @@ from rptest.tests.cluster_linking_test_base import (
     ShadowLinkPreAllocTestBase,
     ShadowLinkTestBase,
 )
-from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
 from rptest.tests.full_disk_test import FDT_LOG_ALLOW_LIST
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import (
     bg_thread_cm,
-    contextmanager,
     expect_exception,
     wait_until,
     wait_until_result,
@@ -1256,7 +1253,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             lambda: verify_n_replications(1),
             timeout_sec=20,
             backoff_sec=1,
-            err_msg=f"Failed to replicate shadow topic",
+            err_msg="Failed to replicate shadow topic",
         )
 
         target_redpanda = self.target_cluster_service
@@ -1266,7 +1263,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             lambda: target_redpanda.search_log_all("ok -> degraded"),
             timeout_sec=20,
             backoff_sec=1,
-            err_msg=f"Failed to change to degraded state",
+            err_msg="Failed to change to degraded state",
         )
 
         source_rpk.produce(topic.name, "key", "message2")
@@ -1276,7 +1273,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             ),
             timeout_sec=20,
             backoff_sec=1,
-            err_msg=f"Sink replication should have been rejected",
+            err_msg="Sink replication should have been rejected",
         )
 
         assert verify_n_replications(1), (
@@ -1288,7 +1285,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             lambda: verify_n_replications(2),
             timeout_sec=20,
             backoff_sec=1,
-            err_msg=f"Failed to replicate shadow topic",
+            err_msg="Failed to replicate shadow topic",
         )
 
 

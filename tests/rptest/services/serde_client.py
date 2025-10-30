@@ -93,7 +93,7 @@ class SerdeClient(BackgroundThreadService):
             self._cmd_args += f" --compression-type {compression_type}"
 
         if self._serde_client_type == SerdeClientType.Golang:
-            self._cmd_args += f" --debug"
+            self._cmd_args += " --debug"
 
         if security_config is not None:
             security_string = json.dumps(security_config)

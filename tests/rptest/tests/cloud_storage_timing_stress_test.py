@@ -515,7 +515,7 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
                     f"Failed checks: {failure_count} ({failed}); Incomplete checks: {len(not_done)} ({incomplete})"
                 )
 
-            self.logger.info(f"All checks completed successfuly")
+            self.logger.info("All checks completed successfuly")
 
     @cluster(
         num_nodes=5,

@@ -85,7 +85,7 @@ class NodePoolMigrationTestBase(PreallocNodesTest):
 
     def _create_workload_topic(self, cleanup_policy):
         spec = TopicSpec(
-            name=f"migration-test-workload",
+            name="migration-test-workload",
             partition_count=8,
             replication_factor=3,
             cleanup_policy=cleanup_policy,
@@ -405,7 +405,7 @@ class NodePoolMigrationTest(NodePoolMigrationTestBase):
 
             return all([min_expected <= v <= max_expected for v in r_per_node.values()])
 
-        wait_until(_all_nodes_balanced, 60, 1, f"Partitions are not balanced correctly")
+        wait_until(_all_nodes_balanced, 60, 1, "Partitions are not balanced correctly")
 
         def _quiescent_state():
             pb_status = self.admin.get_partition_balancer_status(
@@ -424,7 +424,7 @@ class NodePoolMigrationTest(NodePoolMigrationTestBase):
             _quiescent_state,
             120,
             1,
-            f"Cluster reached quiescent state (no partition movement)",
+            "Cluster reached quiescent state (no partition movement)",
             retry_on_exc=True,
         )
 
@@ -511,7 +511,7 @@ class DisableTieredStorageTest(NodePoolMigrationTestBase):
         self.admin.patch_cluster_config(upsert=cfg)
 
         spec = TopicSpec(
-            name=f"migration-test",
+            name="migration-test",
             partition_count=1,
             replication_factor=1,
             cleanup_policy="compact",

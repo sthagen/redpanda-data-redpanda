@@ -275,7 +275,7 @@ class TransformVerifierService(Service):
         # Attempt a graceful stop
         try:
             self._execute_cmd(node, "stop")
-        except Exception as e:
+        except Exception:
             self.logger.warn("unable to request /stop {self.who_am_i()}: {e}")
 
         try:
@@ -286,7 +286,7 @@ class TransformVerifierService(Service):
             )
             self._pid = None
             return
-        except TimeoutError as e:
+        except TimeoutError:
             self.logger.warn("gracefully stopping {self.who_am_i()} failed: {e}")
 
         # Gracefully stop did not work, try a hard kill

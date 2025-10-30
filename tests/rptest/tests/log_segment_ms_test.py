@@ -156,7 +156,7 @@ class SegmentMsTest(RedpandaTest):
         producer.stop()
         stop_count = self._total_segments_count(topic)
         assert producer.num_acked == consumer.total_consumed(), (
-            f"failed to preserve the messages across segment rolling"
+            "failed to preserve the messages across segment rolling"
         )
 
         assert stop_count >= start_count
@@ -302,7 +302,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) > middle_count,
             timeout_sec=SERVER_HOUSEKEEPING_LOOP * 2,
-            err_msg=f"failed to roll a segment in a timely manner",
+            err_msg="failed to roll a segment in a timely manner",
         )
 
     @cluster(num_nodes=3)
@@ -341,7 +341,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) > start_count,
             timeout_sec=60,
-            err_msg=f"failed waiting for the segment to roll",
+            err_msg="failed waiting for the segment to roll",
         )
 
         self.client().alter_topic_config(
@@ -353,7 +353,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) <= 1,
             timeout_sec=60,
-            err_msg=f"failed waiting for retention policy",
+            err_msg="failed waiting for retention policy",
         )
 
         producer = VerifiableProducer(
@@ -367,7 +367,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) >= 2,
             timeout_sec=120,
-            err_msg=f"producer failed to produce enough messages to create 5 segments",
+            err_msg="producer failed to produce enough messages to create 5 segments",
         )
         producer.stop()
 
@@ -384,7 +384,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: consumer.total_consumed() >= 1000,
             timeout_sec=120,
-            err_msg=f"Failed to consume messages",
+            err_msg="Failed to consume messages",
         )
         consumer.stop()
 
@@ -425,7 +425,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) > start_count,
             timeout_sec=60,
-            err_msg=f"failed waiting for the segment to roll",
+            err_msg="failed waiting for the segment to roll",
         )
         group_id = "test-group"
 
@@ -447,7 +447,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) <= 1,
             timeout_sec=60,
-            err_msg=f"failed waiting for retention policy",
+            err_msg="failed waiting for retention policy",
         )
         consumer.stop()
 
@@ -462,7 +462,7 @@ class SegmentMsTest(RedpandaTest):
         wait_until(
             lambda: self._total_segments_count(topic) >= 2,
             timeout_sec=120,
-            err_msg=f"producer failed to produce enough messages to create 5 segments",
+            err_msg="producer failed to produce enough messages to create 5 segments",
         )
         producer.stop()
 

@@ -162,7 +162,7 @@ class IdempotencyStressTest(PreallocNodesTest):
                         f"Producer {i} should not start as it would exceed the total number of allowed producers"
                     )
                 producers.append(producer)
-            except:
+            except Exception:
                 pass
 
         for p in producers:

@@ -55,7 +55,7 @@ class PausableIdempotentProducer(Service):
 
     def start_node(self, node, timeout_sec=10):
         node.account.ssh(
-            f'bash /opt/remote/control/start.sh pausable_idempotent_producer "java -cp /opt/verifiers/verifiers.jar io.vectorized.idempotency.App"'
+            'bash /opt/remote/control/start.sh pausable_idempotent_producer "java -cp /opt/verifiers/verifiers.jar io.vectorized.idempotency.App"'
         )
         wait_until(
             lambda: self.is_alive(node),

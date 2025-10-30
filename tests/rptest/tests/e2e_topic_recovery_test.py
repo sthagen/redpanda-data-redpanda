@@ -101,7 +101,7 @@ class EndToEndTopicRecovery(RedpandaTest):
         """Stop all redpanda nodes"""
         for node in self.redpanda.nodes:
             self.logger.info(f"Node {node.account.hostname} will be stopped")
-            if not node is self._verifier_node:
+            if node is not self._verifier_node:
                 self.redpanda.stop_node(node)
         time.sleep(10)
 
@@ -109,7 +109,7 @@ class EndToEndTopicRecovery(RedpandaTest):
         """Start all redpanda nodes"""
         for node in self.redpanda.nodes:
             self.logger.info(f"Starting node {node.account.hostname}")
-            if not node is self._verifier_node:
+            if node is not self._verifier_node:
                 self.redpanda.start_node(node)
         time.sleep(10)
 
@@ -215,7 +215,7 @@ class EndToEndTopicRecovery(RedpandaTest):
             lambda: self._s3_has_all_data(num_messages),
             timeout_sec=600,
             backoff_sec=5,
-            err_msg=f"Not all data is uploaded to S3 bucket",
+            err_msg="Not all data is uploaded to S3 bucket",
         )
 
         # Wipe out the state on the nodes
@@ -307,7 +307,7 @@ class EndToEndTopicRecovery(RedpandaTest):
             lambda: self._s3_has_all_data(hwm),
             timeout_sec=600,
             backoff_sec=5,
-            err_msg=f"Not all data is uploaded to S3 bucket",
+            err_msg="Not all data is uploaded to S3 bucket",
         )
 
         # Keep services alive, so that log-capturing gets their logs at the end

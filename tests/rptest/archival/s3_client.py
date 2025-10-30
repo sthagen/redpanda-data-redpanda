@@ -287,7 +287,7 @@ class S3Client:
                                 Bucket=name,
                                 Delete={"Objects": [{"Key": k} for k in key_list]},
                             )
-                    except:
+                    except Exception:
                         self.logger.exception(
                             f"empty_bucket: delete request failed for keys {key_list[0]}..{key_list[-1]}"
                         )

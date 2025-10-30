@@ -337,6 +337,47 @@ class DatalakeDLQTest(RedpandaTest):
             verifier.start()
             verifier.wait()
 
+    @cluster(num_nodes=3)
+    @matrix(
+        cloud_storage_type=supported_storage_types(),
+        # Lightweight matrix as we only care about custom suffix behavior here.
+        query_engine=[QueryEngineType.DUCKDB_PY],
+        catalog_type=[filesystem_catalog_type()],
+    )
+    def test_dlq_table_for_invalid_records_custom_suffix(
+        self, cloud_storage_type, query_engine, catalog_type
+    ):
+        """
+        Test DLQ table with custom suffix configured via
+        `iceberg_dlq_table_suffix` Redpanda config.
+        """
+        dlq_table_suffix = "__panda_dlq"
+        num_records = 10
+
+        with DatalakeServices(
+            self.test_ctx,
+            redpanda=self.redpanda,
+            catalog_type=catalog_type,
+            include_query_engines=[query_engine],
+        ) as dl:
+            self.redpanda.set_cluster_config(
+                {"iceberg_dlq_table_suffix": dlq_table_suffix}
+            )
+
+            dl.create_iceberg_enabled_topic(
+                self.topic_name, iceberg_mode="value_schema_id_prefix"
+            )
+
+            dl.produce_to_topic(self.topic_name, 1, num_records)
+            dl.wait_for_translation(
+                self.topic_name,
+                num_records,
+                table_override=f"{self.topic_name}{dlq_table_suffix}",
+            )
+
+            # No other tables created.
+            assert dl.num_tables() == 1, "Expected only 1 table in catalog"
+
     @cluster(num_nodes=4)
     @matrix(
         cloud_storage_type=supported_storage_types(),

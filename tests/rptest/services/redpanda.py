@@ -33,7 +33,6 @@ from logging import Logger
 from typing import (
     Any,
     Callable,
-    Generator,
     List,
     Literal,
     Mapping,
@@ -317,7 +316,10 @@ class MetricsEndpoint(Enum):
     PUBLIC_METRICS = "public_metrics"
 
 
-CloudStorageTypeAndUrlStyle = Tuple[CloudStorageType, Literal["virtual_host", "path"]]
+# for this type value[0] is CloudStorageType and value[1] is url style
+# but it needs to be a list rather than a tuple because injected parameters
+# must be "json compatible" which means no tuples
+CloudStorageTypeAndUrlStyle = list[CloudStorageType | Literal["virtual_host", "path"]]
 
 
 def prepare_allow_list(allow_list: LogAllowList) -> CompiledLogAllowList:
@@ -409,7 +411,7 @@ def get_cloud_storage_type_and_url_style() -> List[CloudStorageTypeAndUrlStyle]:
     """
 
     def get_style(t: CloudStorageType) -> List[CloudStorageTypeAndUrlStyle]:
-        return [(t, us) for us in get_cloud_storage_url_style(t)]
+        return [[t, us] for us in get_cloud_storage_url_style(t)]
 
     return [
         tus
@@ -3408,7 +3410,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         cur_ver: RedpandaVersionTriple | None = None
         try:
             cur_ver = self.get_version_int_tuple(node)
-        except:  # noqa
+        except Exception:  # noqa
             pass
 
         cmd = (
@@ -3625,7 +3627,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
             if expect_fail:
                 wait_until(
-                    lambda: self.redpanda_pid(node) == None,
+                    lambda: self.redpanda_pid(node) is None,
                     timeout_sec=timeout,
                     backoff_sec=0.2,
                     err_msg=f"Redpanda processes did not terminate on {node.name} during startup as expected in {timeout} sec",
@@ -3979,7 +3981,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         The key must be equal to the current broker time expressed as unix epoch
         in seconds, and be within 1 hour.
         """
-        key = int(time.time()) if key == None else key
+        key = int(time.time()) if key is None else key
         self.set_cluster_config(
             dict(
                 enable_developmental_unrecoverable_data_corrupting_features=key,
@@ -4187,7 +4189,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         try:
             self._cloud_storage_diagnostics()
-        except:
+        except Exception:
             # We are running during test teardown, so do log the exception
             # instead of propagating: this was a best effort thing
             self.logger.exception("Failed to gather cloud storage diagnostics")

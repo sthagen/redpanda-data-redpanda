@@ -100,7 +100,7 @@ class LeadersRedirectTest(RedpandaTest):
 
         Also verifies that original exact matching still works.
         """
-        path = f"security/users/cc-baxter"
+        path = "security/users/cc-baxter"
 
         def make_new_address(node, port, sub=""):
             return dict(address=f"{sub}{node.name}", port=port)

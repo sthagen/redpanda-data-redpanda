@@ -216,7 +216,7 @@ class RBACTest(RBACTestBase):
                     filter=filter, principal=principal, principal_type=principal_type
                 ),
                 timeout_sec=10,
-                err_msg=f"Mismatch on filter result",
+                err_msg="Mismatch on filter result",
             )
 
         self.logger.debug(
@@ -352,7 +352,7 @@ class RBACTest(RBACTestBase):
             backoff_sec=1,
             retry_on_exc=True,
         )
-        assert res is not None, f"Failed to get members for newly created role"
+        assert res is not None, "Failed to get members for newly created role"
 
         assert res.status_code == 200, "Expected 200 (OK)"
         members = RoleMemberList.from_response(res)

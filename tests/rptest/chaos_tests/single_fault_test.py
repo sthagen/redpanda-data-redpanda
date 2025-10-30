@@ -168,11 +168,11 @@ class SingleFaultTestBase(RedpandaTest):
             self.logger.info(f"warming up for {timings.warmup_s}s")
             sleep(timings.warmup_s)
 
-        self.logger.info(f"start measuring")
+        self.logger.info("start measuring")
         for node in workload.nodes:
             workload.emit_event(node, "measure")
 
-        if fault == None:
+        if fault is None:
             if timings.no_fault_steady_s > 0:
                 self.logger.info(
                     f"wait for {timings.no_fault_steady_s} seconds "
@@ -339,7 +339,7 @@ class SingleTopicTest(SingleFaultTestBase):
                 target_id=random.choice(other_ids),
             )
 
-        self.logger.info(f"waiting for progress")
+        self.logger.info("waiting for progress")
 
         workload.wait_progress(timeout_sec=timings.wait_progress_timeout_s)
 
@@ -471,7 +471,7 @@ class TxSubscribeTest(SingleFaultTestBase):
             replica_ids=data_node_ids,
         )
 
-        self.logger.info(f"waiting for post-reconfigure progress")
+        self.logger.info("waiting for post-reconfigure progress")
         workload.wait_progress(timeout_sec=timings.wait_progress_timeout_s)
 
         self._transfer_leadership(
@@ -513,7 +513,7 @@ class TxSubscribeTest(SingleFaultTestBase):
                 target_id=data_node_ids[partition % len(data_node_ids)],
             )
 
-        self.logger.info(f"waiting for post-transfer progress")
+        self.logger.info("waiting for post-transfer progress")
         workload.wait_progress(timeout_sec=timings.wait_progress_timeout_s)
 
     @cluster(num_nodes=8)

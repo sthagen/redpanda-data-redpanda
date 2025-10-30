@@ -141,7 +141,7 @@ class IcebergUsageTest(RedpandaTest):
                 do_check,
                 timeout_sec=30,
                 backoff_sec=2,
-                err_msg=f"Timed out waiting for all usages to be empty",
+                err_msg="Timed out waiting for all usages to be empty",
             )
 
         def check_all_usages_atleast(

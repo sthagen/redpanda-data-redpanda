@@ -25,7 +25,6 @@ from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
-from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.data_migrations import DataMigrationTestMixin
 from rptest.utils.mode_checks import skip_debug_mode
 from rptest.utils.rpcn_utils import counter_stream_config

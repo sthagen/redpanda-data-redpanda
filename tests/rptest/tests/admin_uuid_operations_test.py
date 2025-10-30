@@ -307,7 +307,7 @@ class AdminUUIDOperationsTest(RedpandaTest):
         self.logger.debug(f"Decommission ghost node [{ghost_node_id}]...")
         self._decommission(ghost_node_id)
 
-        self.logger.debug(f"...and wait for the cluster to become healthy.")
+        self.logger.debug("...and wait for the cluster to become healthy.")
         self.wait_until_cluster_healthy(timeout_sec=30)
 
         self.logger.debug("Check that all this state sticks across a rolling restart")
@@ -545,7 +545,7 @@ class AdminUUIDOperationsTest(RedpandaTest):
             )
 
         self.logger.debug(
-            f"Restart w/ the same config and confirm that current UUID mismatch prevents changes from taking effect"
+            "Restart w/ the same config and confirm that current UUID mismatch prevents changes from taking effect"
         )
         if mode == TestMode.CFG_OVERRIDE:
             self._restart_node(

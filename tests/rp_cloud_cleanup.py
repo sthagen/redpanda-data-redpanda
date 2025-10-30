@@ -456,7 +456,7 @@ class CloudCleanup:
                 r = self.provider.get_vpc_by_id(vpc["VpcId"])
                 if r["State"] == "deleted":
                     break
-            except:
+            except Exception:
                 break
             time.sleep(10)
         elapsed = time.time() - start

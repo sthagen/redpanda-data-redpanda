@@ -101,7 +101,7 @@ class DatalakeBatchingTest(RedpandaTest):
                         else file_size < batch_file_size
                     )
                     return file_count >= min_file_count and file_size_checks_out
-                except:
+                except Exception:
                     return False
 
             wait_until(

@@ -208,7 +208,7 @@ class ConsumerOffsetsRecoveryTest(PreallocNodesTest):
     def run_workload_after_restore(self, groups, partition_count, topic):
         rpk = RpkTool(self.redpanda)
         group = next((k for k in groups.keys() if k.startswith("kgo-")), None)
-        assert group is not None, f"Missing kgo group in group description"
+        assert group is not None, "Missing kgo group in group description"
 
         tp_offsets = groups[group]
         for t, part, _ in tp_offsets:

@@ -415,12 +415,12 @@ class LargeMessagesTest(RedpandaTest):
             self.logger.info(f"Waiting for first message: {consumer}")
             still_running = consumer.await_first(
                 timeout_sec=120,
-                err_msg=f"client-swarm did not read any messages after 120s, check swarm logs",
+                err_msg="client-swarm did not read any messages after 120s, check swarm logs",
             )
 
             if not still_running:
                 # consumer finished, the others are probably finished too
-                self.logger.info(f"Consumer stopped, not waiting for any more")
+                self.logger.info("Consumer stopped, not waiting for any more")
                 break
 
         # Wait for all messages to be produced

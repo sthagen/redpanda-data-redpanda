@@ -80,7 +80,7 @@ class TxAdminTest(RedpandaTest):
             for partition in range(topic.partition_count):
                 txs_info = self.admin.get_transactions(topic.name, partition, "kafka")
                 assert "expired_transactions" not in txs_info
-                if expected_pids == None:
+                if expected_pids is None:
                     expected_pids = list(
                         map(self.extract_pid, txs_info["active_transactions"])
                     )

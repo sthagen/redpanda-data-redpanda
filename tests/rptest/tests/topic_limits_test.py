@@ -35,7 +35,7 @@ class TopicLimitsTest(RedpandaTest):
             for t in topics:
                 try:
                     self.client().create_topic(t)
-                except:
+                except Exception:
                     failed_attempts += 1
             return failed_attempts
 
@@ -86,7 +86,7 @@ class TopicLimitsTest(RedpandaTest):
                         f"auto_created_topic_{current_topic_id}", 1, 1024
                     )
                     current_topic_id += 1
-                except:
+                except Exception:
                     pass
 
         topic_limit = 5

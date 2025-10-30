@@ -55,7 +55,7 @@ def try_transaction(
 
 class TransactionsMixin:
     def find_coordinator(self, txid, node=None):
-        if node == None:
+        if node is None:
             node = random.choice(self.redpanda.started_nodes())
 
         def find_tx_coordinator():
@@ -88,7 +88,7 @@ class TransactionsMixin:
         def consume_records():
             records = consumer.consume(max_records, timeout_s)
 
-            if (records != None) and (len(records) != 0):
+            if (records is not None) and (len(records) != 0):
                 return True, records
             else:
                 return False, records

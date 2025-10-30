@@ -382,7 +382,7 @@ class TimeQueryTest(RedpandaTest, BaseTimeQuery):
                         ntp=NTP(ns="kafka", topic="tqtopic", partition=0)
                     )
                     return res is not None and len(res) > 0
-                except:
+                except Exception:
                     return False
 
             wait_until(
@@ -807,7 +807,7 @@ class TestReadReplicaTimeQuery(RedpandaTest):
                 "redpanda.remote.readreplica": self.si_settings.cloud_storage_bucket,
             }
             rpk_rr_cluster.create_topic(self.topic_name, config=conf)
-        except:
+        except Exception:
             self.logger.warn("Failed to create a read-replica topic")
             return False
         return True
@@ -857,12 +857,12 @@ class TestReadReplicaTimeQuery(RedpandaTest):
             try:
                 record = kcat_src.consume_one(self.topic_name, 0, offset_src)
                 self.logger.info(f"src cluster record at {offset_src}: {record}")
-            except:
+            except Exception:
                 pass
             try:
                 record = kcat_rr.consume_one(self.topic_name, 0, offset_rr)
                 self.logger.info(f"rr cluster record at {offset_rr}: {record}")
-            except:
+            except Exception:
                 pass
         assert matches, f"Expected offset {offset_src}, got {offset_rr}"
 

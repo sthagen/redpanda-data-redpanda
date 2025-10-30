@@ -96,7 +96,7 @@ class RaftRecoveryUpgradeTest(RedpandaTest):
         def wait_for_recovery_finished():
             _await_progress_in_all_partitions(rpk, topic)
             self._wait_for_underreplicated(self.redpanda.nodes, 0)
-            self.logger.info(f"recovery finished")
+            self.logger.info("recovery finished")
 
         producer = KgoVerifierProducer(
             self.test_context,

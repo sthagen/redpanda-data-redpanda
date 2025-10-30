@@ -87,7 +87,7 @@ class Admin:
         protocol: Literal["json"] | Literal["proto"] = "json",
     ) -> None:
         self._rp = redpanda
-        if auth != None:
+        if auth is not None:
             self._headers = urllib3.util.make_headers(basic_auth=f"{auth[0]}:{auth[1]}")
         else:
             self._headers = {}

@@ -74,7 +74,7 @@ class TxKafkaApiTest(RedpandaTest):
             for partition in range(topic.partition_count):
                 txs_info = self.kafka_cli.describe_producers(topic.name, partition)
 
-                if expected_producers == None:
+                if expected_producers is None:
                     expected_producers = set(map(self.extract_producer, txs_info))
                     assert len(txs_info) == 2
 

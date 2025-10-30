@@ -36,7 +36,7 @@ class RpkConnectTest(RedpandaTest):
             installed,
             timeout_sec=120,
             backoff_sec=2,
-            err_msg=f"could not find 'redpanda-connect' in plugin list after installing",
+            err_msg="could not find 'redpanda-connect' in plugin list after installing",
         )
 
     @cluster(num_nodes=1)

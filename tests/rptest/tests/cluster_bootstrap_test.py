@@ -10,7 +10,6 @@
 import concurrent.futures
 import threading
 
-import ducktape.errors
 from ducktape.mark import matrix
 from requests.exceptions import ConnectionError
 
@@ -161,7 +160,7 @@ class ClusterBootstrapFiveNodes(RedpandaTest):
                     topic = TopicSpec(partition_count=1, replication_factor=3)
                     rpk.create_topic(topic.name, partitions=1, replicas=3)
                     rpk.group_describe("test_group")
-                except:
+                except Exception:
                     pass
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:

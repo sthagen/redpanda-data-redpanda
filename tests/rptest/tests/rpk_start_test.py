@@ -250,7 +250,7 @@ class RpkRedpandaStartTest(RedpandaTest):
         )
 
         # This was the original issue:
-        assert not self.redpanda.search_log_any(f"\-\-abort-on-seastar-bad-alloc=true")
+        assert not self.redpanda.search_log_any("\-\-abort-on-seastar-bad-alloc=true")
 
     @cluster(num_nodes=3)
     def test_rpc_tls_start(self):

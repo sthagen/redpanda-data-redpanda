@@ -166,6 +166,7 @@ var supportedDrivers = []driverSupport{
 		return func(irq IrqInfo) int { return gvnicIrqToQueueIdx(irq, numIRQs) }
 	}},
 	{"mlx5_core", func(_ int) func(IrqInfo) int { return azureHyperVIrqToQueueIdx }},
+	{"mana", func(_ int) func(IrqInfo) int { return azureManaIrqToQueueIdx }},
 }
 
 func getQueueIndexFunc(driverName string, numIRQs int) func(IrqInfo) int {
@@ -211,7 +212,7 @@ func (n *nic) GetIRQs() ([]IrqInfo, error) {
 		return nil, err
 	}
 
-	fastPathIRQsPattern := regexp.MustCompile(`-TxRx-|-fp-|virtio\d+-(input|output)|ntfy-block|gve-ntfy-blk|mlx5_comp\d+|-Tx-Rx-|mlx\d+-\d+@`)
+	fastPathIRQsPattern := regexp.MustCompile(`-TxRx-|-fp-|virtio\d+-(input|output)|ntfy-block|gve-ntfy-blk|mlx5_comp\d+|mana_q|-Tx-Rx-|mlx\d+-\d+@`)
 	var fastPathIRQNums []int
 	for _, irq := range IRQNums {
 		if fastPathIRQsPattern.MatchString(procFileLines[irq]) {
@@ -292,6 +293,16 @@ func azureHyperVIrqToQueueIdx(irq IrqInfo) int {
 	// Below will only pattern match on Azure but that's fine
 	hyperVPattern := regexp.MustCompile(`mlx5_comp(\d+)@`)
 	match := hyperVPattern.FindStringSubmatch(irq.ProcLine)
+	if len(match) == 2 {
+		idx, _ := strconv.Atoi(match[1])
+		return idx
+	}
+	return MaxInt
+}
+
+func azureManaIrqToQueueIdx(irq IrqInfo) int {
+	manaPattern := regexp.MustCompile(`mana_q(\d+)@`)
+	match := manaPattern.FindStringSubmatch(irq.ProcLine)
 	if len(match) == 2 {
 		idx, _ := strconv.Atoi(match[1])
 		return idx

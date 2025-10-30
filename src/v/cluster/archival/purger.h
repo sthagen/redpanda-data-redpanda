@@ -17,6 +17,7 @@
 #include "cluster/types.h"
 
 #include <seastar/core/future.hh>
+#include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 
 namespace archival {

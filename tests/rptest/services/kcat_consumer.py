@@ -224,7 +224,7 @@ class KcatConsumer(BackgroundThreadService):
                 finally:
                     stderr_reader.join()
 
-        except:
+        except Exception:
             if self._stopping.is_set():
                 # Expect a non-zero exit code when killing during teardown
                 pass
@@ -272,7 +272,7 @@ class KcatConsumer(BackgroundThreadService):
                     partition = int(m.group("partition"))
                     if m.group("topic") != self._topic:
                         self._redpanda.logger.warning(
-                            "{}Topic reported by kcat ({}}) is different from the requested ({}). Line: {}".format(
+                            "{}Topic reported by kcat ({}) is different from the requested ({}). Line: {}".format(
                                 self._caption,
                                 m.group("topic"),
                                 self._topic,

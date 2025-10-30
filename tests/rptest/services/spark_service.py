@@ -140,8 +140,8 @@ class SparkService(Service, QueryEngineBase):
             try:
                 self.run_query_fetch_all("show databases")
                 return True
-            except Exception as e:
-                self.logger.debug(f"Exception querying spark server", exc_info=True)
+            except Exception:
+                self.logger.debug("Exception querying spark server", exc_info=True)
             return False
 
         wait_until(

@@ -61,13 +61,13 @@ class ProducerSwarm(ClientSwarmBase):
 
     def _additional_args(self) -> str:
         cmd = ""
-        cmd += f" producers "
+        cmd += " producers "
         cmd += f" --count {self._producers}"
         cmd += f" --messages {self._records_per_producer}"
         cmd += f" --timeout-ms {self._timeout_ms}"
 
         if self._compressible_payload:
-            cmd += f" --compressible-payload"
+            cmd += " --compressible-payload"
 
         if self._compression_type is not None:
             cmd += f" --compression-type={self._compression_type}"

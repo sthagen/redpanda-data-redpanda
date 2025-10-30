@@ -113,28 +113,30 @@ void consumer::start() {
     vlog(_logger->info, "Consumer: {}: start", *this);
     _heartbeat_timer.set_callback([me{shared_from_this()}]() {
         vlog(me->_logger->trace, "Consumer: {}: timer cb", *me);
-        (void)me->heartbeat()
-          .handle_exception_type([me](const exception_base& e) {
-              vlog(
-                me->_logger->info,
-                "Consumer: {}: heartbeat failed: {}",
-                *me,
-                e.error);
-          })
-          .handle_exception_type([me](const ss::gate_closed_exception& e) {
-              vlog(
-                me->_logger->trace,
-                "Consumer: {}: heartbeat failed: {}",
-                *me,
-                e);
-          })
-          .handle_exception([me](const std::exception_ptr& e) {
-              vlog(
-                me->_logger->error,
-                "Consumer: {}: heartbeat failed: {}",
-                *me,
-                e);
-          });
+        return ssx::spawn_with_gate(me->_gate, [me]() {
+            return me->heartbeat()
+              .handle_exception_type([me](const exception_base& e) {
+                  vlog(
+                    me->_logger->info,
+                    "Consumer: {}: heartbeat failed: {}",
+                    *me,
+                    e.error);
+              })
+              .handle_exception_type([me](const ss::gate_closed_exception& e) {
+                  vlog(
+                    me->_logger->trace,
+                    "Consumer: {}: heartbeat failed: {}",
+                    *me,
+                    e);
+              })
+              .handle_exception([me](const std::exception_ptr& e) {
+                  vlog(
+                    me->_logger->error,
+                    "Consumer: {}: heartbeat failed: {}",
+                    *me,
+                    e);
+              });
+        });
     });
     _heartbeat_timer.rearm_periodic(_config.heartbeat_interval);
 }

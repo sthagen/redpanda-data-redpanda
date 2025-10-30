@@ -112,7 +112,7 @@ class CompactedVerifier(Service):
 
     def start_node(self, node, timeout_sec=10):
         node.account.ssh(
-            f'bash /opt/remote/control/start.sh rw "java -cp /opt/verifiers/verifiers.jar io.vectorized.compaction.App"'
+            'bash /opt/remote/control/start.sh rw "java -cp /opt/verifiers/verifiers.jar io.vectorized.compaction.App"'
         )
         wait_until(
             lambda: self.is_alive(node),
@@ -258,7 +258,7 @@ class CompactedVerifier(Service):
                 raise
             except ConsistencyViolationException:
                 raise
-            except:
+            except Exception:
                 self._redpanda.logger.debug(
                     "Got error on fetching info, retrying?!", exc_info=True
                 )

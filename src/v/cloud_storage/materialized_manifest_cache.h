@@ -10,26 +10,18 @@
 
 #pragma once
 
-#include "cloud_storage/fwd.h"
-#include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/spillover_manifest.h"
-#include "cloud_storage/types.h"
 #include "container/intrusive_list_helpers.h"
-#include "model/metadata.h"
-#include "model/timestamp.h"
 #include "utils/retry_chain_node.h"
 
+#include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timed_out_error.hh>
 
-#include <algorithm>
-#include <chrono>
-#include <exception>
 #include <map>
-#include <variant>
 
 namespace cloud_storage {
 

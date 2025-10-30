@@ -60,7 +60,7 @@ class ShutdownTest(EndToEndTest):
                         )
                     ),
                 )
-            except:
+            except Exception:
                 return False
 
         self.redpanda.start()

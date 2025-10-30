@@ -321,7 +321,7 @@ class ShardPlacementTest(PreallocNodesTest):
         rpk.create_topic("quux", partitions=n_partitions, replicas=3)
 
         # check that shard counts are balanced
-        self.logger.info(f"added 2 nodes and a topic, checking shard map...")
+        self.logger.info("added 2 nodes and a topic, checking shard map...")
         map_after_join = self.wait_shard_map_stationary(joiner_nodes, admin)
         self.print_shard_stats(map_after_join)
         for joiner in joiner_nodes:

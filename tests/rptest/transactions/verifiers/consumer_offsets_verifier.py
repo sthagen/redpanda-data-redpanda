@@ -219,5 +219,5 @@ class ConsumerOffsetsVerifier:
             offsets_are_consistent,
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"Timed out waiting group offsets to be consistent.",
+            err_msg="Timed out waiting group offsets to be consistent.",
         )

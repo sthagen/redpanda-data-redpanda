@@ -216,6 +216,16 @@ class NetTunerTest(RedpandaTest):
             if line.startswith(f"NIC {self.interface_name}"):
                 assert line.endswith("true"), f"NIC check failed: {line}"
 
+    def _fix_ssh_connection(self):
+        # RX/TX queue lowering can "break" the ssh connection on GCP. The
+        # command will have succeeded anyway so such ignore and continue.
+        # Close the ssh client to force a reconnect otherwise the next
+        # command will timeout/fail again
+        self.node.account.ssh_client.close()
+        self.logger.debug(
+            "Tuner command timed out (likely due to GCP connection dropping), continuing"
+        )
+
     def _test_tune_net_mq(self, expected_interrupt_setup: ExpectedInterruptSetup):
         # Create a dummy file. This should be emptied by the tuner
         self.redpanda.nodes[0].account.ssh(f"echo 123 > {NET_TUNER_CONFIG_FILE_PATH}")
@@ -242,7 +252,12 @@ class NetTunerTest(RedpandaTest):
         if not rps_rfs:
             self.rpk.config_set("rpk.allow_rps_rfs_tuner", "false")
 
-        self.rpk.tune("net", ["--mode", "dedicated"] + additional_tune_args)
+        try:
+            self.rpk.tune(
+                "net", ["--mode", "dedicated"] + additional_tune_args, timeout=2
+            )
+        except TimeoutError:
+            self._fix_ssh_connection()
 
         self.start_rp(additional_args=additional_start_args)
 
@@ -259,9 +274,15 @@ class NetTunerTest(RedpandaTest):
 
         self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
 
-        # In this test also confirm that the net tuner config file mode is set correctly
-        # Tune with very restrictive umask
-        self.node.account.ssh("umask 077 && rpk redpanda tune net -v")
+        try:
+            # In this test also confirm that the net tuner config file mode is set correctly
+            # Tune with very restrictive umask
+            self.node.account.ssh_output(
+                "umask 077 && rpk redpanda tune net -v", timeout_sec=2
+            )
+        except TimeoutError:
+            self._fix_ssh_connection()
+
         # And then confirm the redpanda user can read it
         self.node.account.ssh(
             f"sudo -u redpanda bash -c 'test -r {NET_TUNER_CONFIG_FILE_PATH}'"

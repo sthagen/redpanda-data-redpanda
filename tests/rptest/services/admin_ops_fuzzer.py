@@ -709,7 +709,7 @@ class AdminOperationsFuzzer:
         def validate_result():
             try:
                 return op.validate(self.operation_ctx)
-            except Exception as e:
+            except Exception:
                 self.redpanda.logger.debug(
                     f"Error validating operation {op_type}", exc_info=True
                 )

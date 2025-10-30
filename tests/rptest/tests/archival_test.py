@@ -287,7 +287,7 @@ class ArchivalTest(RedpandaTest):
 
             # All objects must belong to the topic we created (make sure we aren't searching on the wrong topic)
             if bucket_content.ignored_objects > 0:
-                raise RuntimeError(f"Unexpected objects in bucket")
+                raise RuntimeError("Unexpected objects in bucket")
 
         # Firewall is unblocked, segment uploads should proceed
         def data_uploaded():
@@ -295,7 +295,7 @@ class ArchivalTest(RedpandaTest):
             has_segments = bucket_content.segment_objects > 0
 
             if not has_segments:
-                self.logger.info(f"No segments yet")
+                self.logger.info("No segments yet")
                 return False
 
             has_segments_in_manifest = any(
@@ -627,8 +627,8 @@ class ArchivalTest(RedpandaTest):
         self.admin.set_log_level(name="cluster", level="trace")
 
         # Verify assumptions
-        assert self.topics[0].cleanup_policy == None, (
-            f"The compaction setting is assumed to be `delete` by default"
+        assert self.topics[0].cleanup_policy is None, (
+            "The compaction setting is assumed to be `delete` by default"
         )
         assert not self._archiver_restart_msg_seen(), (
             "There should be no archival restart message initially"
@@ -655,8 +655,8 @@ class ArchivalTest(RedpandaTest):
         self.admin.set_log_level(name="cluster", level="trace")
 
         # Verify assumptions
-        assert self.topics[0].cleanup_policy == None, (
-            f"The compaction setting is assumed to be `delete` by default"
+        assert self.topics[0].cleanup_policy is None, (
+            "The compaction setting is assumed to be `delete` by default"
         )
         assert not self._archiver_restart_msg_seen(), (
             "There should be no archival restart message initially"
@@ -671,7 +671,7 @@ class ArchivalTest(RedpandaTest):
         )
         time.sleep(10)
         assert not self._archiver_restart_msg_seen(), (
-            f"Unexpected archival restart when compacted config not changed"
+            "Unexpected archival restart when compacted config not changed"
         )
 
         self.redpanda.logger.debug(

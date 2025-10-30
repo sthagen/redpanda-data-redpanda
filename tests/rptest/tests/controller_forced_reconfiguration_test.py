@@ -303,7 +303,7 @@ class ControllerForceReconfigurationTest(RedpandaTest):
             lambda: controller_available(),
             timeout_sec=recovery_timeout.timeout_s,
             backoff_sec=recovery_timeout.backoff_s,
-            err_msg=f"Controller never came back",
+            err_msg="Controller never came back",
         )
         self.redpanda.logger.debug("controller recovered")
 

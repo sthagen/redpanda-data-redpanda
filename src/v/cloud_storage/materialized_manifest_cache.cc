@@ -10,20 +10,10 @@
 
 #include "cloud_storage/materialized_manifest_cache.h"
 
-#include "cloud_io/cache_service.h"
 #include "cloud_storage/logger.h"
-#include "cloud_storage/partition_manifest.h"
-#include "cloud_storage/read_path_probes.h"
-#include "cloud_storage/remote.h"
 #include "cloud_storage/spillover_manifest.h"
-#include "cloud_storage/types.h"
-#include "cloud_storage_clients/types.h"
-#include "config/configuration.h"
 #include "model/fundamental.h"
-#include "model/timestamp.h"
-#include "ssx/future-util.h"
 #include "ssx/semaphore.h"
-#include "ssx/sformat.h"
 #include "utils/human.h"
 #include "utils/retry_chain_node.h"
 
@@ -40,13 +30,9 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/outcome/success_failure.hpp>
 #include <fmt/format.h>
+#include <utils/to_string.h>
 
 #include <exception>
-#include <functional>
-#include <iterator>
-#include <regex>
-#include <system_error>
-#include <variant>
 
 template<>
 struct fmt::formatter<cloud_storage::manifest_cache_key>

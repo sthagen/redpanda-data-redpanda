@@ -131,7 +131,7 @@ class DatalakeDelayedTranslationTest(RedpandaTest):
                 self.redpanda.all_up,
                 timeout_sec=60,
                 backoff_sec=1,
-                err_msg=f"Failed waiting for redpanda to become available",
+                err_msg="Failed waiting for redpanda to become available",
             )
 
             rpk = RpkTool(self.redpanda)

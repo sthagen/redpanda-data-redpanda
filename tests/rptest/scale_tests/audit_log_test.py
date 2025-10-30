@@ -226,7 +226,7 @@ class AuditLogTest(RedpandaTest):
             return {name: avg_metric(mss.samples) for name, mss in results.items()}
 
         except TimeoutError as _:
-            self.redpanda.logger.warn(f"Timed out getting audit metrics")
+            self.redpanda.logger.warn("Timed out getting audit metrics")
 
         return {}
 

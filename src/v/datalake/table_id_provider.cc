@@ -39,7 +39,10 @@ table_id_provider::dlq_table_id(const model::topic& t) {
     return {
       // TODO: namespace as a topic property? Keep it in the table metadata?
       .ns = {"redpanda"},
-      .table = fmt::format("{}~dlq", sanitize_topic_name(t)),
+      .table = fmt::format(
+        "{}{}",
+        sanitize_topic_name(t),
+        config::shard_local_cfg().iceberg_dlq_table_suffix()),
     };
 }
 

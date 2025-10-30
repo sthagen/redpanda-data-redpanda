@@ -14,7 +14,7 @@ from rptest.tests.partition_movement import PartitionMovementMixin
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 
 from rptest.util import wait_for_recovery_throttle_rate
-from rptest.utils.mode_checks import cleanup_on_early_exit, skip_debug_mode
+from rptest.utils.mode_checks import skip_debug_mode
 
 NO_RECOVERY = "no_recovery"
 RESTART_RECOVERY = "restart_recovery"
@@ -617,7 +617,7 @@ class PartitionMoveInterruption(PartitionMovementMixin, PreallocNodesTest):
             if should_cancel:
                 try:
                     admin.cancel_partition_move(topic, partition)
-                except:
+                except Exception:
                     pass
 
             self._throttle_recovery(10000000)

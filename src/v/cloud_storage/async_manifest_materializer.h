@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/outcome.h"
 #include "base/seastarx.h"
 #include "cloud_storage/materialized_manifest_cache.h"
 #include "cloud_storage/read_path_probes.h"

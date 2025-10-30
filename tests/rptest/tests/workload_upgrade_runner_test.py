@@ -128,7 +128,7 @@ class WorkloadAdapter(PWorkload):
             try:
                 # attempt at cleanup anyway
                 self.workload.end()
-            except:
+            except Exception:
                 pass
             return None
 
@@ -244,11 +244,13 @@ class RedpandaUpgradeTest(PreallocNodesTest):
             if not partial_update
             else "partial progress check done"
         )
-        progress_lambda = (
-            lambda w, v_param: w.on_cluster_upgraded(v_param)
-            if not partial_update
-            else w.on_partial_cluster_upgrade(v_param)
-        )
+
+        def progress_lambda(w, v_param):
+            return (
+                w.on_cluster_upgraded(v_param)
+                if not partial_update
+                else w.on_partial_cluster_upgrade(v_param)
+            )
 
         while len(to_check_list) > 0:
             start_time = time.time()

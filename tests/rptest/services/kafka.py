@@ -36,10 +36,17 @@ class KafkaServiceAdapter(RedpandaServiceForClients):
     def start(self, add_principals=""):
         return self._kafka_service.start(add_principals)
 
-    def wait_until(self, *args, **kwargs):
+    def wait_until(
+        self,
+        fn: Callable[[], Any],
+        timeout_sec: int,
+        backoff_sec: int,
+        err_msg: str | Callable[[], str] = "",
+        retry_on_exc: bool = False,
+    ) -> None:
         # RedpandaService does some helpful liveness checks to fail faster on crashes,
         # we don't need this when emulating the interface for Kafka.
-        return wait_until(*args, **kwargs)
+        return wait_until(fn, timeout_sec, backoff_sec, err_msg, retry_on_exc)
 
     def __getattribute__(self, name):
         try:

@@ -25,6 +25,7 @@
 #include "utils/named_type.h"
 
 #include <seastar/core/abort_source.hh>
+#include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/util/later.hh>
 

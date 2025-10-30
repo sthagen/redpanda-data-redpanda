@@ -319,5 +319,5 @@ class CertificateRevocationTest(RedpandaTest):
         )
         try:
             self.rpk.list_schemas()
-        except:
+        except Exception:
             pass

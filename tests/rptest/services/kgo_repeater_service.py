@@ -153,7 +153,7 @@ class KgoRepeaterService(Service):
             cmd += f" -rate-limit-bps={self.rate_limit_bps_per_node}"
 
         if self.use_transactions:
-            cmd += f" -use-transactions"
+            cmd += " -use-transactions"
 
             if self.transaction_abort_rate is not None:
                 cmd += f" -transaction-abort-rate={self.transaction_abort_rate}"
@@ -224,7 +224,7 @@ class KgoRepeaterService(Service):
                     r = requests.get(self._remote_url(node, "status"), timeout=10)
                     self.logger.debug(f"kgo-repeater status on node {node.name}:")
                     self.logger.debug(json.dumps(r.json(), indent=2))
-                except:
+                except Exception:
                     self.logger.exception(
                         f"Error getting pre-stop status on {node.name}"
                     )
@@ -331,7 +331,7 @@ class KgoRepeaterService(Service):
             self.redpanda.wait_until(
                 group_ready, timeout_sec=120, backoff_sec=10, err_msg=what
             )
-        except:
+        except Exception:
             # On failure, dump stacks on all workers in case there is an apparent client bug to investigate
             for node in self.nodes:
                 try:

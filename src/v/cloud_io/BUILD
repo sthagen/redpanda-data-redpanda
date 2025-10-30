@@ -70,6 +70,22 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "remote_api",
+    hdrs = [
+        "remote_api.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cloud_io:io_result",
+        "//src/v/cloud_io:transfer_details",
+        "//src/v/cloud_storage_clients",
+        "//src/v/utils:lazy_abort_source",
+        "//src/v/utils:stream_provider",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "remote",
     srcs = [
         "remote.cc",
@@ -78,11 +94,13 @@ redpanda_cc_library(
         "remote.h",
     ],
     implementation_deps = [
+        ":transfer_details",
         "//src/v/bytes:iostream",
         "//src/v/cloud_io:logger",
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",
         "//src/v/ssx:watchdog",
+        "//src/v/utils:retry_chain_node",
         "@boost//:beast",
         "@boost//:lexical_cast",
         "@boost//:range",
@@ -93,15 +111,13 @@ redpanda_cc_library(
         ":io_resources",
         ":io_result",
         ":provider",
-        ":transfer_details",
+        ":remote_api",
         "//src/v/base",
-        "//src/v/cloud_roles",
+        "//src/v/cloud_roles:types",
         "//src/v/cloud_storage_clients",
         "//src/v/config",
         "//src/v/model",
         "//src/v/utils:lazy_abort_source",
-        "//src/v/utils:retry_chain_node",
-        "//src/v/utils:stream_provider",
         "@seastar",
     ],
 )
@@ -117,6 +133,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_storage_clients",
+        "//src/v/model",
         "//src/v/utils:log_hist",
         "//src/v/utils:retry_chain_node",
         "@seastar",

@@ -76,7 +76,7 @@ class OffsetForLeaderEpochArchivalTest(RedpandaTest):
                     cfgs[TopicSpec.PROPERTY_RETENTION_LOCAL_TARGET_BYTES][0]
                 )
                 return retention == OffsetForLeaderEpochArchivalTest.local_retention
-            except:
+            except Exception:
                 return False
 
         wait_until(alter_and_verify, 15, 0.5)
@@ -217,7 +217,7 @@ class OffsetForLeaderEpochArchivalTest(RedpandaTest):
                     topic.name, "retention.local.target.bytes", 0x1000
                 )
                 return True
-            except:
+            except Exception:
                 return False
 
         wait_until(

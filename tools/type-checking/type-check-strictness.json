@@ -26,7 +26,6 @@
         "rptest/redpanda_cloud_tests/cloudv2_object_store_blocked.py",
         "rptest/redpanda_cloud_tests/config_profile_verify_test.py",
         "rptest/redpanda_cloud_tests/observe_test.py",
-        "rptest/redpanda_cloud_tests/omb_validation_test.py",
         "rptest/remote_scripts/aws_iam_role_mock.py",
         "rptest/remote_scripts/compute_storage.py",
         "rptest/remote_scripts/schema_registry_test_helper.py",

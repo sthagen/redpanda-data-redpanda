@@ -627,7 +627,7 @@ class EC2Client:
         def safe_clean(f, *args):
             try:
                 f(*args)
-            except Exception as e:
+            except Exception:
                 return False
 
         vpc_resource = self._ec2.Vpc(vpc_id)

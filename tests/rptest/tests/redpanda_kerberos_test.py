@@ -10,7 +10,6 @@
 import json
 import os
 import time
-from typing import Any
 
 from ducktape.cluster.remoteaccount import RemoteAccountSSHConfig, RemoteCommandError
 from ducktape.cluster.windows_remoteaccount import WindowsRemoteAccount
@@ -132,7 +131,7 @@ class RedpandaKerberosTest(RedpandaKerberosTestBase):
             sasl_mechanism=mechanism,
         )
 
-        client_user_principal = f"User:client"
+        client_user_principal = "User:client"
 
         # Create a topic that's visible to "client" iff acl = True
         super_rpk.create_topic("needs_acl")
@@ -296,7 +295,7 @@ class RedpandaKerberosRulesTesting(RedpandaKerberosTestBase):
             ),
             timeout_sec=5,
             backoff_sec=0.5,
-            err_msg=f"Did not receive expected set of topics",
+            err_msg="Did not receive expected set of topics",
         )
 
     def _have_expected_topics(self, req_principal, topics_set):
@@ -425,7 +424,7 @@ class RedpandaKerberosExternalActiveDirectoryTest(RedpandaKerberosTestBase):
     @env(ACTIVE_DIRECTORY_REALM=IsCIOrNotEmpty())
     @cluster(num_nodes=2)
     def test_metadata(self):
-        principal = f"client/localhost"
+        principal = "client/localhost"
         self.client.add_primary(primary=principal)
         metadata = self.client.metadata(principal)
         self.logger.info(f"metadata: {metadata}")
@@ -456,7 +455,7 @@ class GSSAPIReauthTest(RedpandaKerberosTestBase):
             sasl_mechanism=mechanism,
         )
 
-        client_user_principal = f"User:client"
+        client_user_principal = "User:client"
 
         # Create a topic that's visible to "client" iff acl = True
         super_rpk.create_topic(self.EXAMPLE_TOPIC)

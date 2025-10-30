@@ -216,7 +216,7 @@ class MultiClusterServices:
 
     def setUp(self):
         assert len(self.primary.service.started_nodes()) == 0, (
-            f"{str(c)}: MultiClusterServices expects to start itself"
+            "MultiClusterServices expects to start itself"
         )
 
         # TODO: extra configs?

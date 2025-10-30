@@ -847,7 +847,7 @@ class TopicDeleteCloudStorageTest(RedpandaTest):
         view = BucketView(self.redpanda)
         try:
             marker = view.get_lifecycle_marker(NT("kafka", topic_name))
-        except:
+        except Exception:
             # FIXME: very broad exception catching because cloud storage clients
             # may use diverse exceptions for missing objects
             pass
@@ -1060,7 +1060,7 @@ class TopicDeleteStressTest(RedpandaTest):
 
             try:
                 producer.stop()
-            except:
+            except Exception:
                 # Should ignore exception form rpk
                 pass
             producer.free()

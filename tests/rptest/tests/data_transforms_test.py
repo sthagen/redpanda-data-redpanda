@@ -173,7 +173,7 @@ class BaseDataTransformsTest(RedpandaTest):
             do_list,
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"unable to list committed offsets",
+            err_msg="unable to list committed offsets",
             retry_on_exc=True,
         )
         return response
@@ -187,7 +187,7 @@ class BaseDataTransformsTest(RedpandaTest):
             do_gc,
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"unable to gc committed offsets",
+            err_msg="unable to gc committed offsets",
             retry_on_exc=True,
         )
 
@@ -246,7 +246,7 @@ class BaseDataTransformsTest(RedpandaTest):
             do_deploy,
             timeout_sec=30,
             backoff_sec=5,
-            err_msg=f"unable to deploy invalid wasm transform",
+            err_msg="unable to deploy invalid wasm transform",
         )
 
 
@@ -323,7 +323,7 @@ class DataTransformsTest(BaseDataTransformsTest):
             all_offsets_committed,
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"all offsets did not commit",
+            err_msg="all offsets did not commit",
             retry_on_exc=True,
         )
         self._delete_wasm(name="identity-xform")
@@ -341,7 +341,7 @@ class DataTransformsTest(BaseDataTransformsTest):
             all_offsets_removed,
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"all offsets where not removed",
+            err_msg="all offsets where not removed",
             retry_on_exc=True,
         )
 
@@ -377,7 +377,7 @@ class DataTransformsTest(BaseDataTransformsTest):
             lambda: all_partitions_status("inactive"),
             timeout_sec=30,
             backoff_sec=1,
-            err_msg=f"some partitions didn't become inactive",
+            err_msg="some partitions didn't become inactive",
             retry_on_exc=True,
         )
 
@@ -395,7 +395,7 @@ class DataTransformsTest(BaseDataTransformsTest):
                 lambda: all_partitions_status("running"),
                 timeout_sec=30,
                 backoff_sec=1,
-                err_msg=f"some partitions didn't become active",
+                err_msg="some partitions didn't become active",
                 retry_on_exc=True,
             )
         else:  # NOTE: patching ENV is not yet implemented in rpk
@@ -416,7 +416,7 @@ class DataTransformsTest(BaseDataTransformsTest):
                 lambda: all_partitions_status("running") and env_is(env1),
                 timeout_sec=30,
                 backoff_sec=1,
-                err_msg=f"some partitions didn't come back",
+                err_msg="some partitions didn't come back",
                 retry_on_exc=True,
             )
 
@@ -845,7 +845,7 @@ class LogRecord:
             return (
                 self.key == other.key
                 and self.value_type == other.value_type
-                and type(self.value) == type(other.value)
+                and type(self.value) is type(other.value)
             )
 
     EXPECTED_ATTRS = [
@@ -950,7 +950,7 @@ class BaseDataTransformsLoggingTest(BaseDataTransformsTest):
             # we get a record.
             return record.offset == offset, record
 
-        if timeout != None:
+        if timeout is not None:
             return consume(timeout)[1]
 
         return wait_until_result(
@@ -1122,7 +1122,7 @@ class DataTransformsLoggingMetricsTest(BaseDataTransformsLoggingTest):
                 timeout_sec=2,
                 backoff_sec=0.1,
             )
-        except TimeoutError as e:
+        except TimeoutError:
             return None
 
     def unpack_samples(self, metric_samples):
@@ -1219,7 +1219,7 @@ class DataTransformsLoggingMetricsTest(BaseDataTransformsLoggingTest):
             lambda: get_total_events()[0] >= n_events_expected,
             timeout_sec=30,
             backoff_sec=5,
-            err_msg=f"never got all the events",
+            err_msg="never got all the events",
         )
 
         totals, dropped = get_total_events_per_xform()
@@ -1288,7 +1288,7 @@ class DataTransformsLoggingMetricsTest(BaseDataTransformsLoggingTest):
         it, ot = self.setup_identity_xform(
             input_topic,
             self.topics[1],
-            name=f"logger-xform",
+            name="logger-xform",
         )
 
         def get_buffer_usage() -> list[float]:
@@ -1327,7 +1327,7 @@ class DataTransformsLoggingMetricsTest(BaseDataTransformsLoggingTest):
                 lambda: any(bu > 1.0 for bu in get_buffer_usage()),
                 timeout_sec=10,
                 backoff_sec=1,
-                err_msg=f"buffers never filled up!",
+                err_msg="buffers never filled up!",
             )
 
         self.logger.debug(

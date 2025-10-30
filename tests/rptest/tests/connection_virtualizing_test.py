@@ -24,6 +24,9 @@ from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import wait_until
 from rptest.utils.xid_utils import random_xid_string
 
+import kafka.errors as Errors
+from kafka.protocol.types import Int32
+
 
 @dataclass
 class PartitionInfo:
@@ -121,10 +124,6 @@ class MpxMockClient:
 
     def close(self):
         self.client.close()
-
-
-import kafka.errors as Errors
-from kafka.protocol.types import Int32
 
 
 def no_validation_process_response(self, read_buffer):

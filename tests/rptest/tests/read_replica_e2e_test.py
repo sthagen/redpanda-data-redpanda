@@ -464,7 +464,9 @@ class TestReadReplicaService(EndToEndTest):
         self.start_consumer()
 
         # Assert zero bytes written for at least 20 seconds.
-        total_bytes = lambda: self._bucket_usage().total_bytes
+        def total_bytes():
+            return self._bucket_usage().total_bytes
+
         assert self.redpanda and self.redpanda.logger
         er = ExpectRate(total_bytes, self.redpanda.logger)
         zero_growth = RateTarget(
@@ -491,7 +493,7 @@ class TestReadReplicaService(EndToEndTest):
             try:
                 res = admin.get_partitions(topic, partition)
                 return True, res
-            except:
+            except Exception:
                 return False, None
 
         res = wait_until_result(try_get_partitions, timeout_sec=30, backoff_sec=1)

@@ -97,12 +97,12 @@ class ClientSwarmBase(Service, ABC):
         )
 
     def is_metrics_available(self, node):
-        path = f"metrics/summary"
+        path = "metrics/summary"
         path = f"{path}?seconds=1"
         try:
             self._get(node, path)
             return True
-        except:
+        except Exception:
             return False
 
     def is_alive(self) -> bool:
@@ -168,7 +168,7 @@ class ClientSwarmBase(Service, ABC):
             return self.total_success + self.total_error
 
     def get_metrics_summary(self, seconds: int | None = None) -> MetricsSummary:
-        path = f"metrics/summary"
+        path = "metrics/summary"
         if seconds:
             path = f"{path}?seconds={seconds}"
 

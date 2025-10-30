@@ -56,7 +56,7 @@ public:
       const void* buffer,
       const size_t len,
       ss::io_intent*) final {
-        vlog(logger().info, "write_dma pos {} len {}", pos, len);
+        vlog(logger().trace, "write_dma pos {} len {}", pos, len);
         auto written = write(pos, buffer, len);
         _store.size = std::max(_store.size, pos + written);
         return ss::make_ready_future<size_t>(written);
@@ -64,11 +64,12 @@ public:
 
     ss::future<size_t> write_dma(
       const uint64_t pos, const std::vector<iovec> iov, ss::io_intent*) final {
-        vlog(logger().info, "write_iov_dma ({:02}) begin", iov.size());
+        vlog(logger().trace, "write_iov_dma ({:02}) begin", iov.size());
         size_t written = 0;
         for (auto& io : iov) {
             const auto off = pos + written;
-            vlog(logger().info, "write_iov_dma pos {} len {}", off, io.iov_len);
+            vlog(
+              logger().trace, "write_iov_dma pos {} len {}", off, io.iov_len);
             written += write(off, io.iov_base, io.iov_len);
         }
         _store.size = std::max(_store.size, pos + written);
@@ -78,30 +79,30 @@ public:
     ss::future<size_t>
     read_dma(const uint64_t pos, void* buffer, const size_t len, ss::io_intent*)
       final {
-        vlog(logger().info, "read_dma pos {} len {}", pos, len);
+        vlog(logger().trace, "read_dma pos {} len {}", pos, len);
         auto ret = read(pos, buffer, len);
         return ss::make_ready_future<size_t>(ret);
     }
 
     ss::future<size_t> read_dma(
       const uint64_t pos, const std::vector<iovec> iov, ss::io_intent*) final {
-        vlog(logger().info, "read_iov_dma ({:02}) begin", iov.size());
+        vlog(logger().trace, "read_iov_dma ({:02}) begin", iov.size());
         size_t bytes_read = 0;
         for (auto& io : iov) {
             const auto off = pos + bytes_read;
-            vlog(logger().info, "read_iov_dma pos {} len {}", off, io.iov_len);
+            vlog(logger().trace, "read_iov_dma pos {} len {}", off, io.iov_len);
             bytes_read += read(off, io.iov_base, io.iov_len);
         }
         return ss::make_ready_future<size_t>(bytes_read);
     }
 
     ss::future<> flush() final {
-        vlog(logger().info, "flush");
+        vlog(logger().trace, "flush");
         return ss::now();
     }
 
     ss::future<struct stat> stat() final {
-        vlog(logger().info, "stat");
+        vlog(logger().trace, "stat");
 
         struct stat st; // NOLINT
         std::memset(&st, 0, sizeof(st));
@@ -115,7 +116,7 @@ public:
     }
 
     ss::future<> truncate(const uint64_t size) final {
-        vlog(logger().info, "truncate pos {} size {}", size, _store.size);
+        vlog(logger().trace, "truncate pos {} size {}", size, _store.size);
 
         if (size > _store.size) {
             auto pos = _store.size ? _store.size - 1 : 0;
@@ -131,7 +132,7 @@ public:
     }
 
     ss::future<> discard(uint64_t pos, uint64_t len) final {
-        vlog(logger().info, "discard pos {} len {}", pos, len);
+        vlog(logger().trace, "discard pos {} len {}", pos, len);
         // arrange for discards past eof to be noop/ignored to avoid extending
         // the capacity of the file while zeroing out the range.
         pos = std::min(pos, _store.size);
@@ -141,7 +142,7 @@ public:
     }
 
     ss::future<> allocate(const uint64_t pos, const uint64_t len) final {
-        vlog(logger().info, "allocate pos {} len {}", pos, len);
+        vlog(logger().trace, "allocate pos {} len {}", pos, len);
         // ignore allocations that increase capacity, but honor the zero range
         // flag that seastar adds to fallocate.
         return discard(pos, len);
@@ -165,7 +166,7 @@ public:
 
     ss::future<ss::temporary_buffer<uint8_t>>
     dma_read_bulk(const uint64_t pos, const size_t len, ss::io_intent*) final {
-        vlog(logger().info, "dma_read_bulk pos {} len {}", pos, len);
+        vlog(logger().trace, "dma_read_bulk pos {} len {}", pos, len);
         ss::temporary_buffer<uint8_t> data(std::min(len, _store.size - pos));
         auto bytes_read = read(pos, data.get_write(), len);
         vassert(bytes_read == data.size(), "unexpected read size");

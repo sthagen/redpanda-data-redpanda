@@ -27,6 +27,8 @@
 
 namespace cloud_topics {
 
+static constexpr auto sync_timeout = 10s;
+
 namespace {
 cluster_epoch extract_epoch(model::record_batch&& batch) {
     vassert(
@@ -329,6 +331,10 @@ ss::future<iobuf> ctp_stm::take_raft_snapshot(model::offset snapshot_at) {
 }
 
 ss::future<cluster_epoch_fence> ctp_stm::fence_epoch(cluster_epoch e) {
+    if (!co_await sync(sync_timeout)) {
+        vlog(_log.warn, "ctp_stm::fence_epoch sync timeout");
+        throw std::runtime_error(fmt_with_ctx(fmt::format, "Sync timeout"));
+    }
     auto term = _raft->confirmed_term();
     auto max_seen_epoch = _state.get_max_seen_epoch();
     if (max_seen_epoch.has_value() && max_seen_epoch.value() == e) {

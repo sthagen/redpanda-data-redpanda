@@ -59,7 +59,7 @@ class CoordinatorRetentionTest(RedpandaTest):
                 len(replica_last_snapshot_offsets) == 3
                 and replica_last_snapshot_offsets.count(True) == 1
             )
-        except:
+        except Exception:
             self.redpanda.logger.debug(
                 "Exception querying snapshot states", exc_info=True
             )

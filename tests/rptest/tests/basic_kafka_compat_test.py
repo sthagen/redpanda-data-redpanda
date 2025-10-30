@@ -24,8 +24,9 @@ from rptest.services.kafka import KafkaServiceAdapter
 from rptest.services.redpanda import RedpandaService, ValidationMode
 from rptest.tests.end_to_end import EndToEndTest
 
-KAFKA_VERSION = kafkatest.version.KafkaVersion("3.7.0")
 from rptest.services.redpanda_types import RedpandaServiceForClients
+
+KAFKA_VERSION = kafkatest.version.KafkaVersion("3.7.0")
 
 T = TypeVar("T")
 

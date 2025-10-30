@@ -386,6 +386,36 @@ func Test_nic_GetIRQs(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:       "azure mana",
+			driverName: "mana",
+			irqProcFile: &procFileMock{
+				getIRQProcFileLinesMap: func() (map[int]string, error) {
+					return map[int]string{
+						32: "32:        189  Hyper-V PCIe MSI 2147483648-edge      mana_hwc@pci:7870:00:00.0",
+						33: "33:       5282  Hyper-V PCIe MSI 2147483649-edge      mana_q0@pci:7870:00:00.0",
+						34: "34:       1627  Hyper-V PCIe MSI 2147483650-edge      mana_q1@pci:7870:00:00.0",
+					}, nil
+				},
+			},
+			irqDeviceInfo: &deviceInfoMock{
+				getIRQs: func(string, string) ([]int, error) {
+					return []int{32, 33, 34}, nil
+				},
+			},
+			want: []IrqInfoRes{
+				{
+					Num:        33,
+					ProcLine:   "33:       5282  Hyper-V PCIe MSI 2147483649-edge      mana_q0@pci:7870:00:00.0",
+					QueueIndex: 0,
+				},
+				{
+					Num:        34,
+					ProcLine:   "34:       1627  Hyper-V PCIe MSI 2147483650-edge      mana_q1@pci:7870:00:00.0",
+					QueueIndex: 1,
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -697,6 +727,26 @@ func Test_azureHyperVIrqToQueueIdx(t *testing.T) {
 			Num:       33,
 			ProcLine:  "33:       1465        806  Hyper-V PCIe MSI 2701534461952-edge      mlx5_async0@pci:4ea0:00:02.0",
 			indexFunc: azureHyperVIrqToQueueIdx,
+		}
+		require.Equal(t, math.MaxInt64, irq.QueueIndex())
+	}
+}
+
+func test_azureManaIrqToQueueIdx(t *testing.T) {
+	{
+		irq := IrqInfo{
+			Num:       34,
+			ProcLine:  "33:       5282  Hyper-V PCIe MSI 2147483649-edge      mana_q0@pci:7870:00:00.0",
+			indexFunc: azureManaIrqToQueueIdx,
+		}
+		require.Equal(t, 0, irq.QueueIndex())
+	}
+
+	{
+		irq := IrqInfo{
+			Num:       33,
+			ProcLine:  "32:        189  Hyper-V PCIe MSI 2147483648-edge      mana_hwc@pci:7870:00:00.0",
+			indexFunc: azureManaIrqToQueueIdx,
 		}
 		require.Equal(t, math.MaxInt64, irq.QueueIndex())
 	}

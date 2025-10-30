@@ -899,10 +899,10 @@ class RpkTool:
             initialized = (
                 obj["LEADER"] >= 0
                 and obj["EPOCH"] >= -1
-                and obj["REPLICAS"] != None
-                and obj["LOG-START-OFFSET"] != None
+                and obj["REPLICAS"] is not None
+                and obj["LOG-START-OFFSET"] is not None
                 and obj["LOG-START-OFFSET"] >= 0
-                and obj["HIGH-WATERMARK"] != None
+                and obj["HIGH-WATERMARK"] is not None
                 and obj["HIGH-WATERMARK"] >= 0
             )
 
@@ -1865,7 +1865,7 @@ class RpkTool:
                 except RpkException as e:
                     if e.returncode != 1:
                         raise e
-                    if not "NOT_COORDINATOR" in str(e):
+                    if "NOT_COORDINATOR" not in str(e):
                         e.parsed_output = parse_offset_delete_output(
                             e.stdout.splitlines()
                         )

@@ -1,6 +1,5 @@
 from typing import Any, Callable, ParamSpec, TypeVar
 from ducktape.errors import DucktapeError as DucktapeError
-from typing import Callable, TypeVar
 
 from rptest.services.cluster import Any
 

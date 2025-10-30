@@ -162,7 +162,7 @@ class WriteWorker(threading.Thread):
 
         schema_ids = self.get_schema_ids()
         if len(set(schema_ids)) != len(schema_ids):
-            self._push_err(f"Schema IDs reused!")
+            self._push_err("Schema IDs reused!")
 
     def run(self):
         try:

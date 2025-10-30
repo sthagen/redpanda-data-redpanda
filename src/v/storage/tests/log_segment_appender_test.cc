@@ -77,7 +77,7 @@ struct storage::segment_appender_test_accessor {
     }
     auto inflight_dispatched() { return sa._inflight_dispatched; }
     auto total_dispatched() { return sa._dispatched_writes; }
-    auto total_merged() { return sa._merged_writes; }
+    auto total_merged() { return sa.get_stats().merged_writes; }
     auto info() {
         return segment_appender_info{
           .committed_offset = sa._committed_offset,
@@ -103,7 +103,7 @@ ss::file open_file(std::string_view filename) {
 segment_appender
 make_segment_appender(ss::file file, storage::storage_resources& resources) {
     return segment_appender(
-      std::move(file), segment_appender::options(1, std::nullopt, resources));
+      std::move(file), segment_appender::options(std::nullopt, resources));
 }
 
 iobuf make_random_data(size_t len) {

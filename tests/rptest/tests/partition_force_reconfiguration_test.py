@@ -252,7 +252,7 @@ class PartitionForceReconfigurationTest(EndToEndTest, PartitionMovementMixin):
                     )
                     > 0
                 )
-            except:
+            except Exception:
                 return False
 
         self.redpanda.wait_until(
@@ -458,7 +458,7 @@ class PartitionForceReconfigurationTest(EndToEndTest, PartitionMovementMixin):
                     if len(partitions) == 0:
                         return -1
                     return partitions[0].end_offset
-                except:
+                except Exception:
                     return -1
 
             wait_until(

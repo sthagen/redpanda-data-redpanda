@@ -141,10 +141,10 @@ class SchemaGenerator:
             if isinstance(obj, str):
                 try:
                     return int(obj)
-                except:
+                except Exception:
                     try:
                         return float(obj)
-                    except:
+                    except Exception:
                         return obj
             elif isinstance(obj, dict):
                 return {k: fix_types(v) for k, v in obj.items()}

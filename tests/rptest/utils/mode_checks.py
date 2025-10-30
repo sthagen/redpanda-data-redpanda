@@ -31,7 +31,7 @@ def cleanup_on_early_exit(caller: Any):
         )
         hook()
 
-    caller.logger.debug(f"Cleaning up unused nodes.")
+    caller.logger.debug("Cleaning up unused nodes.")
 
     if test_context := getattr(caller, "test_context", None):
         test_context = rcast(TestContext, test_context)

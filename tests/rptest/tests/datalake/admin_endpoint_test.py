@@ -7,7 +7,6 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from typing import Any
 
 from ducktape.mark import matrix
 from ducktape.tests.test import TestContext
@@ -191,7 +190,7 @@ class DatalakeAdminEndpointTest(RedpandaTest):
                     response: admin_v2.datalake_pb.GetCoordinatorStateResponse = (
                         admin.datalake().get_coordinator_state(request)
                     )
-                except Exception as e:
+                except Exception:
                     return False
                 if topic not in response.state.topic_states:
                     return False

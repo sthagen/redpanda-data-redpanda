@@ -50,20 +50,42 @@ namespace storage {
 /// may be called even if other flushes or appends are in progress.
 class segment_appender {
 public:
+    struct stats {
+        // A counter of the number of writes that were successfully merged into
+        // a queued write prior to dispatch, hence don't need to be separately
+        // dispatched
+        size_t merged_writes{0};
+        // A counter of number of bytes requested to be written via append()
+        size_t bytes_requested{0};
+        // A counter of number of bytes actually written via dma_write calls
+        size_t bytes_written{0};
+        // A counter of number of append requests
+        size_t appends{0};
+        // A counter of number of flush calls
+        size_t flushes{0};
+        // A counter of number of disk fsync calls
+        size_t fsyncs{0};
+        // A counter of number of truncates
+        size_t truncates{0};
+        // A counter of number of fallocations
+        size_t fallocations{0};
+        // A counter of number of last page hydrations
+        size_t last_page_hydrations{0};
+
+        fmt::iterator format_to(fmt::iterator it) const;
+    };
+
     using chunk = segment_appender_chunk;
+    using committed_offset_clb = ss::noncopyable_function<void(size_t)>;
 
     static constexpr const size_t fallocation_alignment
       = segment_appender_fallocation_alignment;
-    static constexpr const size_t write_behind_memory = 1_MiB;
 
     struct options {
-        options(
-          size_t chunks_no, std::optional<uint64_t> s, storage_resources& r)
-          : number_of_chunks(chunks_no)
-          , segment_size(s)
+        options(std::optional<uint64_t> s, storage_resources& r)
+          : segment_size(s)
           , resources(r) {}
 
-        size_t number_of_chunks;
         // Generally a segment appender doesn't need to know the target size
         // of the segment it's appending to, but this is used as an input
         // to the dynamic fallocation size algorithm, to avoid falloc'ing
@@ -123,12 +145,17 @@ public:
     ss::future<> close();
     ss::future<> flush();
 
-    struct callbacks {
-        virtual ~callbacks() = default;
-        virtual void committed_physical_offset(size_t) = 0;
-    };
+    /**
+     * Registers a callback that is invoked whenever stable offset of the
+     * appender is advanced.
+     */
+    void set_stable_offset_callback(committed_offset_clb callback) {
+        _committed_offset_clb = std::move(callback);
+    }
 
-    void set_callbacks(callbacks* callbacks) { _callbacks = callbacks; }
+    fmt::iterator format_to(fmt::iterator) const;
+
+    const stats& get_stats() const { return _stats; }
 
 private:
     using chunk_ptr = ss::lw_shared_ptr<chunk>;
@@ -180,7 +207,7 @@ private:
         ss::promise<> p;
 
         friend std::ostream& operator<<(std::ostream& s, const flush_op& op) {
-            fmt::print(s, "{{offest: {}}}", op.offset);
+            fmt::print(s, "{{offset: {}}}", op.offset);
             return s;
         }
     };
@@ -273,11 +300,7 @@ private:
     // A counter of the number of dispatched writes (i.e., dma_write calls) over
     // the lifetime of the appender
     size_t _dispatched_writes{0};
-    // A counter of the number of writes that were succesfully merged into a
-    // queued write prior to dispatch, hence don't need to be separately
-    // dispatched
-    size_t _merged_writes{0};
-    callbacks* _callbacks = nullptr;
+    committed_offset_clb _committed_offset_clb;
     ss::future<>
     maybe_advance_stable_offset(const ss::lw_shared_ptr<inflight_write>&);
     ss::future<> process_flush_ops(size_t);
@@ -286,13 +309,12 @@ private:
     void handle_inactive_timer();
 
     size_t _chunk_size{0};
-
+    stats _stats;
     // Bit-map tracking the types of batches in the `_head` chunk that have
     // not been written to disk yet.
     static_assert(static_cast<uint8_t>(model::record_batch_type::MAX) <= 63);
     uint64_t _batch_types_to_write{0};
 
-    friend std::ostream& operator<<(std::ostream&, const segment_appender&);
     friend class file_io_sanitizer;
     friend struct segment_appender_test_accessor;
 };

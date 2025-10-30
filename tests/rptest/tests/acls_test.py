@@ -273,21 +273,21 @@ class AccessControlListTest(AccessControlListTestBase):
         # Run a few times for good health. The target condition
         # should be consistent
         for _ in range(repeat_check):
-            if pass_w_base_user != None:
+            if pass_w_base_user is not None:
                 wait_until(
                     check_base_user_perms,
                     timeout_sec=timeout_sec,
                     err_msg=f"base user: {err_msg}",
                 )
 
-            if pass_w_cluster_user != None:
+            if pass_w_cluster_user is not None:
                 wait_until(
                     check_cluster_user_perms,
                     timeout_sec=timeout_sec,
                     err_msg=f"cluster user: {err_msg}",
                 )
 
-            if pass_w_super_user != None:
+            if pass_w_super_user is not None:
                 wait_until(
                     check_super_user_perms,
                     timeout_sec=timeout_sec,
@@ -581,7 +581,7 @@ class AccessControlListTest(AccessControlListTestBase):
                 in cluster_cfg["kafka_mtls_principal_mapping_rules"]
             )
         else:
-            assert cluster_cfg["kafka_mtls_principal_mapping_rules"] == None
+            assert cluster_cfg["kafka_mtls_principal_mapping_rules"] is None
 
         self.check_permissions(
             pass_w_base_user=False,

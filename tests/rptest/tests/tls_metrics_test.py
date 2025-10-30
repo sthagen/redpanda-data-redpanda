@@ -162,7 +162,7 @@ class TLSMetricsTestBase(RedpandaTest):
                 timeout_sec=2,
                 backoff_sec=0.1,
             )
-        except TimeoutError as e:
+        except TimeoutError:
             return None
 
     def _unpack_samples(self, metric_samples):
@@ -346,7 +346,7 @@ class TLSMetricsTest(TLSMetricsTestBase):
 
         reloaded = check_crc()
 
-        assert original != reloaded, f"Checksums unexpectedly equal"
+        assert original != reloaded, "Checksums unexpectedly equal"
 
 
 class TLSMetricsTestChain(TLSMetricsTestBase):

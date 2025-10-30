@@ -526,7 +526,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
 
             structured_counts_snap_after = self.counts_per_table(dl, structured_tables)
             assert structured_counts_snap == structured_counts_snap_after, (
-                f"Expected no translation in structured main tables:\n"
+                "Expected no translation in structured main tables:\n"
                 "{structured_offsets_snap}\nvs\n{structured_offsets_snap_after}"
             )
 

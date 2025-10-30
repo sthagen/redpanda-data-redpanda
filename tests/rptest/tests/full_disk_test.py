@@ -306,7 +306,10 @@ class FullDiskReclaimTest(RedpandaTest):
         4. Trigger a low disk space alert
         5. Observe that data is reclaimed from disk
         """
-        nbytes = lambda mb: mb * 2**20
+
+        def nbytes(mb):
+            return mb * 2**20
+
         node = self.redpanda.nodes[0]
 
         produce_size = 3 * self.partition_count * self.log_segment_size
