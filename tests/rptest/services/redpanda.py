@@ -5287,7 +5287,9 @@ class RedpandaService(Service, RedpandaServiceABC):
         cmd = ["python3", script_path, dir]
         return int(node.account.ssh_output(shlex.join(cmd), timeout_sec=10))
 
-    def broker_address(self, node, listener: str = "dnslistener"):
+    def broker_address(
+        self, node: ClusterNode, listener: str = "dnslistener"
+    ) -> str | None:
         assert node in self.nodes, f"Node {node.account.hostname} is not started"
         assert node in self._started
         cfg = self._node_configs[node]
@@ -5302,7 +5304,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         else:
             return None
 
-    def admin_endpoint(self, node):
+    def admin_endpoint(self, node: ClusterNode):
         assert node in self.nodes, f"Node {node.account.hostname} is not started"
         return f"{node.account.hostname}:9644"
 
@@ -5314,10 +5316,12 @@ class RedpandaService(Service, RedpandaServiceABC):
     def admin_endpoints(self):
         return ",".join(self.admin_endpoints_list())
 
-    def brokers(self, limit=None, listener: str = "dnslistener") -> str:
+    def brokers(self, limit: int | None = None, listener: str = "dnslistener") -> str:
         return ",".join(self.brokers_list(limit, listener))
 
-    def brokers_list(self, limit=None, listener: str = "dnslistener") -> list[str]:
+    def brokers_list(
+        self, limit: int | None = None, listener: str = "dnslistener"
+    ) -> list[str]:
         brokers = [
             self.broker_address(n, listener) for n in list(self._started)[:limit]
         ]

@@ -13,6 +13,7 @@
 
 #include "cluster/cluster_link/frontend.h"
 #include "cluster/controller.h"
+#include "cluster/controller_stm.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/members_table.h"
 #include "cluster/metadata_cache.h"
@@ -100,6 +101,12 @@ struct shard_link_report_reducer {
             existing.status = response.status;
             for (auto& [pid, report] : response.partition_reports) {
                 existing.partition_reports.emplace(pid, std::move(report));
+            }
+        }
+        for (auto& [task_name, reports] : shard_result.task_status_reports) {
+            auto& existing = result->task_status_reports[task_name];
+            for (auto& report : reports) {
+                existing.push_back(std::move(report));
             }
         }
     }
@@ -1371,6 +1378,14 @@ service::shard_local_shadow_link_report(model::id_t id) {
     if (auto err = check_manager_state(); err != errc::success) {
         return rpc::shadow_link_status_report_response{.err_code = err};
     }
+    auto on_controller_leader = [this]() -> bool {
+        if (ss::this_shard_id() != cluster::controller_stm_shard) {
+            return false;
+        }
+        return _self
+               == _partition_leaders_table->local().get_leader(
+                 ::model::controller_ntp);
+    }();
     rpc::shadow_link_status_report_response result;
     result.link_id = id;
 
@@ -1405,6 +1420,31 @@ service::shard_local_shadow_link_report(model::id_t id) {
               offsets.update_time.time_since_epoch()),
             .shadow_partition_high_watermark = offsets.shadow_hwm,
           };
+    }
+
+    auto task_report_res = _manager->get_task_status_report(id);
+    if (!task_report_res.has_value()) {
+        vlog(
+          cllog.warn,
+          "Failed to get shard local shadow link task report for link {}: {} "
+          "({})",
+          id,
+          task_report_res.assume_error().code(),
+          task_report_res.assume_error().message());
+        result.err_code = task_report_res.assume_error().code();
+        return result;
+    }
+
+    auto task_report = std::move(task_report_res).assume_value();
+    for (auto& [name, report] : task_report.task_status_reports) {
+        if (
+          !on_controller_leader && report.is_controller_locked_task
+          && report.task_state == model::task_state::stopped) {
+            // skip reporting stopped controller locked tasks on non-leader
+            // nodes
+            continue;
+        }
+        result.task_status_reports[name].emplace_back(std::move(report));
     }
 
     vlog(
@@ -1444,6 +1484,14 @@ service::shadow_link_report(model::name_t name) {
                         for (const auto& [pid, report] :
                              topic_response.partition_reports) {
                             existing.partition_reports.emplace(pid, report);
+                        }
+                    }
+                    for (auto& [task_name, reports] :
+                         resp.task_status_reports) {
+                        auto& existing_reports
+                          = results.task_status_reports[task_name];
+                        for (auto& r : reports) {
+                            existing_reports.push_back(std::move(r));
                         }
                     }
                 });

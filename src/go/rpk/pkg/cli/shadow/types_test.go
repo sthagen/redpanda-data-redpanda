@@ -66,14 +66,14 @@ topic_metadata_sync_options:
     - "retention.ms"
 consumer_offset_sync_options:
   interval: "30s"
-  enabled: true
+  paused: false
   group_filters:
     - pattern_type: "LITERAL"
       filter_type: "INCLUDE"
       name: "*"
 security_sync_options:
   interval: "30s"
-  enabled: true
+  paused: false
 `,
 			want: ShadowLinkConfig{
 				Name: "test-shadow-link",
@@ -112,7 +112,7 @@ security_sync_options:
 				},
 				ConsumerOffsetSyncOptions: &ConsumerOffsetSyncOptions{
 					Interval: 30 * time.Second,
-					Enabled:  true,
+					Paused:   false,
 					GroupFilters: []*NameFilter{
 						{
 							PatternType: "LITERAL",
@@ -123,7 +123,7 @@ security_sync_options:
 				},
 				SecuritySyncOptions: &SecuritySettingsSyncOptions{
 					Interval: 30 * time.Second,
-					Enabled:  true,
+					Paused:   false,
 				},
 			},
 		},
@@ -249,7 +249,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				},
 				"consumer_offset_sync_options": {
 					"interval": 30000000000,
-					"enabled": true,
+					"paused": false,
 					"group_filters": [{
 						"pattern_type": "LITERAL",
 						"filter_type": "INCLUDE",
@@ -258,7 +258,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				},
 				"security_sync_options": {
 					"interval": 30000000000,
-					"enabled": true
+					"paused": false
 				}
 			}`,
 			want: ShadowLinkConfig{
@@ -298,7 +298,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				},
 				ConsumerOffsetSyncOptions: &ConsumerOffsetSyncOptions{
 					Interval: 30 * time.Second,
-					Enabled:  true,
+					Paused:   false,
 					GroupFilters: []*NameFilter{
 						{
 							PatternType: "LITERAL",
@@ -309,7 +309,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				},
 				SecuritySyncOptions: &SecuritySettingsSyncOptions{
 					Interval: 30 * time.Second,
-					Enabled:  true,
+					Paused:   false,
 				},
 			},
 		},

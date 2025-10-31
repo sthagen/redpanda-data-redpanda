@@ -225,7 +225,11 @@ void source_topic_syncer::update_config(const model::metadata& config) {
       config.configuration.topic_metadata_mirroring_cfg.get_task_interval());
 }
 
-ss::future<> source_topic_syncer::run_impl() {
+model::enabled_t source_topic_syncer::is_enabled() const {
+    return _config.is_enabled;
+}
+
+ss::future<task::state_transition> source_topic_syncer::run_impl() {
     vlog(logger().trace, "Running auto topic sensor task");
 
     auto& cluster = get_link()->get_cluster_connection();
@@ -237,8 +241,9 @@ ss::future<> source_topic_syncer::run_impl() {
     } catch (const std::exception& e) {
         auto msg = ssx::sformat("Failed to update metadata: {}", e.what());
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(model::task_state::link_unavailable, msg);
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
     // Ensure there is a controller on the source cluster
@@ -248,8 +253,9 @@ ss::future<> source_topic_syncer::run_impl() {
           "Failed to get controller id for link {}",
           get_link()->get_config().name);
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(model::task_state::link_unavailable, msg);
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
     // Grab the version of DescribeConfigs that's supported on the source
@@ -262,9 +268,9 @@ ss::future<> source_topic_syncer::run_impl() {
             auto msg = ssx::sformat(
               "Failed to get supported API version for describe_configs");
             vlog(logger().warn, "{}", msg);
-            std::ignore = change_state(
-              model::task_state::link_unavailable, msg);
-            co_return;
+            co_return state_transition{
+              .desired_state = model::task_state::link_unavailable,
+              .reason = std::move(msg)};
         }
         // Make sure the minimum version supported on the cluster is not higher
         // than the maximum version supported by the shadow cluster
@@ -275,9 +281,9 @@ ss::future<> source_topic_syncer::run_impl() {
               "Unsupported DescribeConfigs API version: {}",
               supported_api_versions.value());
             vlog(logger().warn, "{}", msg);
-            std::ignore = change_state(
-              model::task_state::link_unavailable, msg);
-            co_return;
+            co_return state_transition{
+              .desired_state = model::task_state::link_unavailable,
+              .reason = std::move(msg)};
         }
         describe_configs_version = std::min(
           supported_api_versions.value().max,
@@ -291,8 +297,9 @@ ss::future<> source_topic_syncer::run_impl() {
           "Failed to get supported API version for describe_configs: {}",
           e.what());
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(model::task_state::link_unavailable, msg);
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
     // If we are going to shadow the schema registry topic, we need to ensure
@@ -318,11 +325,10 @@ ss::future<> source_topic_syncer::run_impl() {
           logger().debug,
           "No candidate topics for creation or update for link {}",
           get_link()->get_config().name);
-        if (get_state() != model::task_state::active) {
-            std::ignore = change_state(
-              model::task_state::active, "Auto topic sensor task completed");
-        }
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason
+          = "No candidate topics for creation or update - run successful"};
     }
 
     // Build a list of topics to describe
@@ -349,9 +355,9 @@ ss::future<> source_topic_syncer::run_impl() {
     } catch (const std::exception& e) {
         auto msg = ssx::sformat("Failed to describe topics: {}", e.what());
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(
-          model::task_state::link_unavailable, std::move(msg));
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
     // Build a list of commands, fill it in with commands to add mirror topics,
@@ -365,11 +371,10 @@ ss::future<> source_topic_syncer::run_impl() {
     // Execute the commands
     co_await submit_commands(std::move(commands));
 
-    if (get_state() != model::task_state::active) {
-        std::ignore = change_state(
-          model::task_state::active, "Auto topic sensor task completed");
-    }
     vlog(logger().trace, "Auto topic sensor task completed");
+    co_return state_transition{
+      .desired_state = model::task_state::active,
+      .reason = "Auto topic sensor task completed"};
 }
 
 void source_topic_syncer::enqueue_create_mirror_topic_commands(

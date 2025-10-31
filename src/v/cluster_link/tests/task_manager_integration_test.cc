@@ -59,7 +59,13 @@ public:
         return false;
     }
 
-    ss::future<> run_impl() override { return ss::now(); }
+    ss::future<state_transition> run_impl() override {
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason = "Test task finished successfully"};
+    }
+
+    model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
 };
 
 class controller_locked_test_task : public controller_locked_task {
@@ -71,7 +77,13 @@ public:
 
     void update_config(const model::metadata&) override {}
 
-    ss::future<> run_impl() override { return ss::now(); }
+    ss::future<state_transition> run_impl() override {
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason = "Test task finished successfully"};
+    }
+
+    model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
 };
 
 class test_task_factory : public task_factory {
@@ -394,7 +406,11 @@ public:
 
     void update_config(const model::metadata&) override {}
 
-    ss::future<> run_impl() override { return ss::now(); }
+    ss::future<state_transition> run_impl() override {
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason = "Test task finished successfully"};
+    }
 
     ss::future<cl_result<void>> start() override {
         static unsigned num_calls = 0;
@@ -406,6 +422,8 @@ public:
             co_return co_await task::start();
         }
     }
+
+    model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
 };
 
 class evil_task_factory : public task_factory {

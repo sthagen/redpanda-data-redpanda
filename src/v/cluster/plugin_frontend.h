@@ -10,6 +10,7 @@
  */
 #include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
+#include "cluster/cluster_link/fwd.h"
 #include "cluster/commands.h"
 #include "cluster/fwd.h"
 #include "cluster/plugin_table.h"
@@ -46,6 +47,7 @@ public:
       partition_leaders_table*,
       plugin_table*,
       topic_table*,
+      ss::sharded<cluster::cluster_link::frontend>*,
       controller_stm*,
       rpc::connection_cache*,
       ss::abort_source*);
@@ -129,11 +131,14 @@ public:
      */
     class validator {
     public:
+        using is_active_shadow_topic_fn
+          = ss::noncopyable_function<bool(const model::topic&)>;
         validator(
           topic_table*,
           plugin_table*,
           absl::flat_hash_set<model::topic>,
-          size_t max_transforms);
+          size_t max_transforms,
+          is_active_shadow_topic_fn is_active_shadow_topic);
 
         // Ensures that the mutation is valid.
         //
@@ -152,6 +157,7 @@ public:
         plugin_table* _table;
         absl::flat_hash_set<model::topic> _no_sink_topics;
         size_t _max_transforms;
+        is_active_shadow_topic_fn _is_active_shadow_topic;
     };
 
 private:
@@ -161,6 +167,7 @@ private:
     rpc::connection_cache* _connections;
     plugin_table* _table;
     topic_table* _topics;
+    ss::sharded<cluster::cluster_link::frontend>* _shadow_link_frontend;
     ss::abort_source* _abort_source;
 
     // is null if not on shard0

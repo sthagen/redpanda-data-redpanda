@@ -8,9 +8,11 @@
 # by the Apache License, Version 2.0
 
 from collections import defaultdict
-from contextlib import contextmanager
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager, nullcontext
 import time
 import socket
+import random
 from typing import Any, Optional
 
 import google.protobuf.duration_pb2
@@ -27,6 +29,7 @@ from rptest.clients.admin.proto.redpanda.core.common.v1 import acl_pb2
 from rptest.clients.admin.v2 import Admin as AdminV2
 from rptest.clients.default import DefaultClient
 from rptest.clients.rpk import RpkTool
+from rptest.services.admin import Admin
 from rptest.services.cluster import TestContext
 from rptest.services.kgo_verifier_services import (
     KgoVerifierConsumerGroupConsumer,
@@ -44,6 +47,10 @@ from rptest.services.multi_cluster_services import (
 from rptest.services.redpanda import LoggingConfig, TLSProvider
 from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManager
 from rptest.tests.prealloc_nodes import PreallocNodesTest
+from rptest.util import (
+    bg_thread_cm,
+    contextmanager,
+)
 from rptest.utils.node_operations import FailureInjectorBackgroundThread
 
 
@@ -78,6 +85,11 @@ DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
     "redpanda.virtual.cluster.id",
     "redpanda.leaders.preference",
     "redpanda.cloud_topic.enabled",
+]
+
+CONTROLLER_LOCKED_TASKS = [
+    "Source Topic Sync",
+    "Security Migrator Task",
 ]
 
 
@@ -417,6 +429,28 @@ class ShadowLinkTestBase(PreallocNodesTest):
         return self.test_context.injected_args.get(
             SOURCE_CLUSTER_SPEC, DEFAULT_SOURCE_CLUSTER_SPEC
         )
+
+    def leadership_shuffler(
+        self, redpanda, topic: str, enabled: bool, namespace: str = "kafka"
+    ):
+        if not enabled:
+            return nullcontext()
+
+        @bg_thread_cm
+        def leadership_transfer_thread(redpanda, topic: str, namespace: str):
+            admin = Admin(redpanda, retry_codes=[503, 504])
+            while (yield):
+                try:
+                    partitions = admin.get_partitions(namespace=namespace, topic=topic)
+                    partition = random.choice(partitions)
+                    p_id = partition["partition_id"]
+                    admin.partition_transfer_leadership(
+                        namespace=namespace, topic=topic, partition=p_id
+                    )
+                except Exception as e:
+                    redpanda.logger.info(f"error transferring leadership: {e}")
+
+        return leadership_transfer_thread(redpanda, topic, namespace)
 
     def setUp(self):
         self.services = MultiClusterServices(
@@ -795,6 +829,8 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
         use_transactions: bool = False,
         msgs_per_transaction: int | None = None,
         transaction_abort_rate: float = 0.3,
+        fake_timestamp_ms: int | None = None,
+        producer_rate_limit_bps: int | None = None,
     ):
         self.verifier = ClusterLinkingProgressVerifier(
             self.test_context,
@@ -809,6 +845,8 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
             producer_properties={
                 "transaction_abort_rate": transaction_abort_rate,
                 "msgs_per_transaction": msgs_per_transaction,
+                "fake_timestamp_ms": fake_timestamp_ms,
+                "rate_limit_bps": producer_rate_limit_bps,
             },
             timeout_sec=180,
         )

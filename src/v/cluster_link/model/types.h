@@ -20,6 +20,7 @@
 #include "model/metadata.h"
 #include "model/timestamp.h"
 #include "serde/envelope.h"
+#include "serde/rw/bool_class.h"
 #include "serde/rw/chrono.h"
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
@@ -199,10 +200,14 @@ struct scram_credentials
     ss::sstring password;
     /// SASL-SCRAM mechanism to use
     ss::sstring mechanism;
+    /// This records the time point when the password was last updated
+    ::model::timestamp password_last_updated;
 
     friend bool operator==(const scram_credentials&, const scram_credentials&)
       = default;
-    auto serde_fields() { return std::tie(username, password, mechanism); }
+    auto serde_fields() {
+        return std::tie(username, password, mechanism, password_last_updated);
+    }
 
     friend std::ostream&
     operator<<(std::ostream& os, const scram_credentials& creds);
@@ -983,12 +988,23 @@ struct task_status_report
     ss::sstring task_name;
     task_state task_state;
     ss::sstring task_state_reason;
-
+    using is_controller_locked_task_t
+      = ss::bool_class<struct is_controller_locked_task_tag>;
+    is_controller_locked_task_t is_controller_locked_task{
+      is_controller_locked_task_t::no};
+    ::model::node_id node_id;
+    ss::shard_id shard;
     friend bool operator==(const task_status_report&, const task_status_report&)
       = default;
 
     auto serde_fields() {
-        return std::tie(task_name, task_state, task_state_reason);
+        return std::tie(
+          task_name,
+          task_state,
+          task_state_reason,
+          is_controller_locked_task,
+          node_id,
+          shard);
     }
 };
 
@@ -1187,6 +1203,9 @@ struct shadow_link_status_report_response
     chunked_hash_map<::model::topic, shadow_link_status_topic_response>
       topic_responses;
 
+    chunked_hash_map<ss::sstring, chunked_vector<model::task_status_report>>
+      task_status_reports;
+
     friend bool operator==(
       const shadow_link_status_report_response&,
       const shadow_link_status_report_response&)
@@ -1194,7 +1213,10 @@ struct shadow_link_status_report_response
 
     fmt::iterator format_to(fmt::iterator) const;
 
-    auto serde_fields() { return std::tie(err_code, link_id, topic_responses); }
+    auto serde_fields() {
+        return std::tie(
+          err_code, link_id, topic_responses, task_status_reports);
+    }
 };
 
 } // namespace cluster_link::rpc
@@ -1205,6 +1227,8 @@ struct shadow_link_status_report {
 
     chunked_hash_map<::model::topic, rpc::shadow_link_status_topic_response>
       topic_responses;
+    chunked_hash_map<ss::sstring, chunked_vector<model::task_status_report>>
+      task_status_reports;
 
     fmt::iterator format_to(fmt::iterator) const;
 };

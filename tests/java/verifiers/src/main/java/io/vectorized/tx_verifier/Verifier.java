@@ -18,9 +18,9 @@ class Verifier {
   final static int MAX_TRANSACTION_TIMEOUT_MS = 900000;
   final static String txId1 = "tx1";
   final static String txId2 = "tx2";
-  final static String topic1 = "topic1";
-  final static String topic2 = "topic2";
-  final static String groupId = "groupId";
+  static String topic1 = "topic1";
+  static String topic2 = "topic2";
+  static String groupId = "groupId";
 
   final static Map<String, StringAction> tests = Map.ofEntries(
       entry("init", Verifier::initPasses), entry("tx", Verifier::txPasses),
@@ -51,11 +51,16 @@ class Verifier {
       entry("concurrent-reads-writes", Verifier::txReadsWritesPasses));
 
   public static void main(final String[] args) throws Exception {
-    if (args.length != 2) {
-      throw new Exception("Verifier expects two args");
+    if (args.length != 2 && args.length != 5) {
+      throw new Exception("Verifier expects two or five args");
     }
     if (!tests.containsKey(args[0])) {
       throw new Exception("Unknown test: " + args[0]);
+    }
+    if (args.length == 5) {
+      topic1 = args[2];
+      topic2 = args[3];
+      groupId = args[4];
     }
     retry(args[0], tests.get(args[0]), args[1]);
   }

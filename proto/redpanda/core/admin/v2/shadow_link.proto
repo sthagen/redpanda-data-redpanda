@@ -366,6 +366,10 @@ message TopicMetadataSyncOptions {
         // at or after the specified timestamp.
         google.protobuf.Timestamp start_at_timestamp = 8;
     }
+    // Allows user to pause the topic sync task.  If paused, then
+    // the task will enter the 'paused' state and not sync topics or their
+    // properties from the source cluster
+    bool paused = 9;
 }
 // Options for how the Schema Registry is synced.
 message SchemaRegistrySyncOptions {
@@ -396,8 +400,10 @@ message ConsumerOffsetSyncOptions {
     // The effective interval for the task
     google.protobuf.Duration effective_interval = 2
         [(google.api.field_behavior) = OUTPUT_ONLY];
-    // Whether it's enabled
-    bool enabled = 3;
+    // Allows user to pause the consumer offset sync task.  If paused, then
+    // the task will enter the 'paused' state and not sync consumer offsets from
+    // the source cluster
+    bool paused = 3;
     // The filters
     repeated NameFilter group_filters = 4;
 }
@@ -409,8 +415,10 @@ message SecuritySettingsSyncOptions {
     // The effective interval for the task
     google.protobuf.Duration effective_interval = 2
         [(google.api.field_behavior) = OUTPUT_ONLY];
-    // Whether or not it's enabled
-    bool enabled = 3;
+    // Allows user to pause the security settings sync task.  If paused,
+    // then the task will enter the 'paused' state and will not sync security
+    // settings from the source cluster
+    bool paused = 3;
     // ACL filters
     repeated ACLFilter acl_filters = 4;
 }
@@ -500,6 +508,8 @@ message ShadowLinkTaskStatus {
     string reason = 3;
     // The broker the task is running on
     int32 broker_id = 4;
+    // The shard the task is running on
+    int32 shard = 5;
 }
 // Status of a ShadowTopic
 message ShadowTopicStatus {

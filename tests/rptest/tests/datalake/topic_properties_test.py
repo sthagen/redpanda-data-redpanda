@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from ducktape.tests.test import TestContext
 from rptest.clients.rpk import RpkTool
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import SISettings
@@ -15,7 +16,7 @@ from rptest.utils.si_utils import quiesce_uploads
 
 
 class TopicPropertiesTest(RedpandaTest):
-    def __init__(self, test_context):
+    def __init__(self, test_context: TestContext):
         super(TopicPropertiesTest, self).__init__(
             extra_rp_conf=dict({"iceberg_enabled": True}),
             si_settings=SISettings(test_context=test_context, fast_uploads=True),

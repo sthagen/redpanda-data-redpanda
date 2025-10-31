@@ -13,6 +13,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_join.h"
+#include "cluster/cluster_link/frontend.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_stm.h"
 #include "cluster/logger.h"
@@ -89,6 +90,7 @@ plugin_frontend::plugin_frontend(
   partition_leaders_table* l,
   plugin_table* t,
   topic_table* tp,
+  ss::sharded<cluster::cluster_link::frontend>* slfe,
   controller_stm* c,
   rpc::connection_cache* r,
   ss::abort_source* a)
@@ -97,6 +99,7 @@ plugin_frontend::plugin_frontend(
   , _connections(r)
   , _table(t)
   , _topics(tp)
+  , _shadow_link_frontend(slfe)
   , _abort_source(a)
   , _controller(c) {}
 
@@ -245,7 +248,15 @@ errc plugin_frontend::validate_mutation(const transform_cmd& cmd) {
         / config::shard_local_cfg()
             .data_transforms_per_function_memory_limit.value();
 
-    validator v(_topics, _table, std::move(no_sink_topics), max_transforms);
+    validator v(
+      _topics,
+      _table,
+      std::move(no_sink_topics),
+      max_transforms,
+      [this](const model::topic& t) {
+          return !_shadow_link_frontend->local().is_topic_mutable_for_kafka_api(
+            t);
+      });
     return v.validate_mutation(cmd);
 }
 
@@ -253,11 +264,13 @@ plugin_frontend::validator::validator(
   topic_table* topic_table,
   plugin_table* plugin_table,
   absl::flat_hash_set<model::topic> no_sink_topics,
-  size_t max)
+  size_t max,
+  is_active_shadow_topic_fn is_active_shadow_topic)
   : _topics(topic_table)
   , _table(plugin_table)
   , _no_sink_topics(std::move(no_sink_topics))
-  , _max_transforms(max) {}
+  , _max_transforms(max)
+  , _is_active_shadow_topic(std::move(is_active_shadow_topic)) {}
 
 errc plugin_frontend::validator::validate_mutation(const transform_cmd& cmd) {
     return ss::visit(
@@ -573,6 +586,15 @@ errc plugin_frontend::validator::validate_mutation(const transform_cmd& cmd) {
                     "attempted to deploy transform {} that would cause a "
                     "cycle",
                     cmd.value.name);
+                  return errc::transform_invalid_create;
+              }
+              if (_is_active_shadow_topic(out_name.tp)) {
+                  vlog(
+                    clusterlog.info,
+                    "attempted to deploy transform {} that writes to an active "
+                    "shadow topic {}",
+                    cmd.value.name,
+                    loggable_string(out_name.tp()));
                   return errc::transform_invalid_create;
               }
           }

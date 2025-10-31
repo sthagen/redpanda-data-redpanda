@@ -1580,6 +1580,21 @@ class RpkTool:
         output = self._execute(cmd)
         return list(filter(None, map(parse, output.splitlines())))
 
+    def cluster_connections_list(self, limit: int, filter_raw=None, order_by=None):
+        cmd = [
+            self._rpk_binary(),
+            "-X",
+            f"brokers={self._admin_host()}",
+            "cluster",
+            "connections",
+            "list",
+            "--format=json",
+            f"--limit={limit}",
+        ]
+        cmd += [f"--filter-raw={filter_raw}"] if filter_raw else []
+        cmd += [f"--order-by={order_by}"] if order_by else []
+        return self._execute(cmd)
+
     def _tls_settings(self):
         flags = []
         if self._tls_cert is not None:

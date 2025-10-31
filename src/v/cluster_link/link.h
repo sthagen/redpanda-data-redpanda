@@ -130,6 +130,7 @@ public:
 private:
     bool should_start_task(task* t) const;
     bool should_stop_task(task* t) const;
+    bool should_pause_task(task* t) const;
     ss::future<> run_task_reconciler();
     ss::future<cl_result<void>> do_register_task(std::unique_ptr<task>);
     void maybe_update_connection_configuration();

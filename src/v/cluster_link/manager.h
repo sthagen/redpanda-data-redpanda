@@ -160,6 +160,9 @@ public:
 
     model::cluster_link_task_status_report get_task_status_report() const;
 
+    cl_result<model::link_task_status_report>
+    get_task_status_report(model::id_t link_id) const;
+
     kafka::data::rpc::topic_metadata_cache& topic_metadata_cache() noexcept;
 
     kafka::data::rpc::partition_leader_cache& partition_leader_cache() noexcept;

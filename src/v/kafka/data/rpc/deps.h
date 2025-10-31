@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "cluster/cluster_link/fwd.h"
 #include "cluster/fwd.h"
 #include "cluster/types.h"
 #include "kafka/data/partition_proxy.h"
@@ -254,6 +255,31 @@ private:
     ss::sharded<cluster::shard_table>* _table;
     ss::sharded<cluster::partition_manager>* _manager;
     ss::smp_service_group _smp_group;
+};
+
+/**
+ * @brief Interface for obtaining information about shadow links
+ */
+class shadow_link_registry {
+public:
+    shadow_link_registry() = default;
+    shadow_link_registry(const shadow_link_registry&) = delete;
+    shadow_link_registry(shadow_link_registry&&) = delete;
+    shadow_link_registry& operator=(const shadow_link_registry&) = delete;
+    shadow_link_registry& operator=(shadow_link_registry&&) = delete;
+    virtual ~shadow_link_registry() = default;
+
+    static std::unique_ptr<shadow_link_registry>
+    make_default(ss::sharded<cluster::cluster_link::frontend>*);
+
+    /**
+     * @brief Check if a topic is a mutable
+     *
+     * @param topic The topic to check
+     * @return true if the topic is mutable
+     * @return false otherwise
+     */
+    virtual bool is_topic_mutable(const model::topic& topic) const = 0;
 };
 
 }; // namespace kafka::data::rpc

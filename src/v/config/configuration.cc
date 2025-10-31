@@ -972,17 +972,26 @@ configuration::configuration()
       *this,
       "transactional_id_expiration_ms",
       "Expiration time of producer IDs. Measured starting from the time of the "
-      "last write until now for a given ID.",
+      "last write until now for a given ID. Producer IDs are automatically "
+      "removed from memory when they expire, which helps manage memory usage. "
+      "However, this natural cleanup may not be sufficient for workloads with "
+      "high producer churn rates. For applications with long-running "
+      "transactions, ensure this value accommodates your typical transaction "
+      "lifetime to avoid premature producer ID expiration.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       10080min)
   , max_concurrent_producer_ids(
       *this,
       "max_concurrent_producer_ids",
-      "Maximum number of the active producers sessions. When the threshold is "
-      "passed, Redpanda terminates old sessions. When an idle producer "
-      "corresponding to the terminated session wakes up and produces, its "
-      "message batches are rejected, and an out of order sequence error is "
-      "emitted. Consumers don't affect this setting.",
+      "Maximum number of active producer sessions per shard. Each shard "
+      "tracks producer IDs using an LRU (Least Recently Used) eviction "
+      "policy. When the configured limit is exceeded, the least recently "
+      "used producer IDs are evicted from the cache. IMPORTANT: The default "
+      "value is unlimited, which can lead to unbounded memory growth and "
+      "out-of-memory (OOM) crashes in production environments with heavy "
+      "producer usage, especially when using transactions or idempotent "
+      "producers. It is strongly recommended to set a reasonable limit in "
+      "production deployments.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::numeric_limits<uint64_t>::max(),
       {.min = 1})

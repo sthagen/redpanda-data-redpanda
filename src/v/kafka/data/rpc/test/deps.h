@@ -517,6 +517,11 @@ private:
     fake_partition_manager_proxy* _fake_proxy;
 };
 
+class fake_shadow_link_registry : public shadow_link_registry {
+public:
+    bool is_topic_mutable(const model::topic&) const final { return true; }
+};
+
 class kafka_data_test_fixture {
 public:
     explicit kafka_data_test_fixture(

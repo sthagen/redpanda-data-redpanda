@@ -20,6 +20,14 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Use:   "shadow",
 		Args:  cobra.NoArgs,
 		Short: "Manage Redpanda Shadow Links",
+		Long: `Manage Redpanda Shadow Links.
+
+Shadowing is Redpanda’s enterprise-grade disaster recovery solution that
+establishes asynchronous, offset-preserving replication between two distinct
+Redpanda clusters. A cluster is able to create a dedicated client that
+continuously replicates source cluster data, including offsets, timestamps, and
+cluster metadata.
+`,
 	}
 	cmd.AddCommand(
 		newShadowConfigCommand(fs, p),

@@ -12,6 +12,7 @@
 #include "cluster_link/model/types.h"
 
 #include "base/format_to.h"
+#include "model/timestamp.h"
 #include "utils/to_string.h"
 
 #include <seastar/util/variant_utils.hh>
@@ -310,7 +311,7 @@ shadow_topic_partition_leader_report::format_to(fmt::iterator it) const {
       std::chrono::duration_cast<std::chrono::system_clock::duration>(
         last_update_time)};
 
-    auto time = std::format("Time: {:%FT%H:%M:%S.3}", time_point);
+    auto time = std::format("Time: {:%FT%H:%M:%S}", time_point);
     return fmt::format_to(
       it,
       "{{ source_start_offset: {}, source_hwm: {}, source_lso: {}, "
@@ -351,20 +352,25 @@ shadow_link_status_topic_response::format_to(fmt::iterator it) const {
 
 fmt::iterator
 shadow_link_status_report_response::format_to(fmt::iterator it) const {
-    fmt::format_to(
+    return fmt::format_to(
       it,
-      "{{ err_code: {}, link_id: {}, topic_responses: [",
+      "{{ err_code: {}, link_id: {}, topic_responses: {}, task_status_reports: "
+      "{} }}",
       err_code,
-      link_id);
-    bool first = true;
-    for (const auto& [topic, response] : topic_responses) {
-        if (!first) {
-            fmt::format_to(it, ", ");
-        }
-        first = false;
-        fmt::format_to(it, "{}: {}", topic, response);
-    }
-    return fmt::format_to(it, "] }}");
+      link_id,
+      fmt::join(
+        topic_responses | std::views::transform([](auto& t) {
+            return fmt::format("topic_name: {}, status: {}", t.first, t.second);
+        }),
+        ", "),
+      fmt::join(
+        task_status_reports | std::views::transform([](auto& t) {
+            return fmt::format(
+              "task_name: {}, statuses: {}",
+              t.first,
+              fmt::join(t.second.begin(), t.second.end(), ", "));
+        }),
+        ", "));
 }
 
 } // namespace cluster_link::rpc
@@ -373,11 +379,19 @@ namespace cluster_link::model {
 fmt::iterator shadow_link_status_report::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it,
-      "{{ link_id: {}, topic_responses: {} }}",
+      "{{ link_id: {}, topic_responses: {}, task_status_reports: {} }}",
       link_id,
       fmt::join(
         topic_responses | std::views::transform([](auto& t) {
             return fmt::format("{}: {}", t.first, t.second);
+        }),
+        ", "),
+      fmt::join(
+        task_status_reports | std::views::transform([](auto& t) {
+            return fmt::format(
+              "task_name: {}, statuses: {}",
+              t.first,
+              fmt::join(t.second.begin(), t.second.end(), ", "));
         }),
         ", "));
 }
@@ -392,11 +406,15 @@ auto fmt::formatter<cluster_link::model::task_state>::format(
 auto fmt::formatter<cluster_link::model::scram_credentials>::format(
   const cluster_link::model::scram_credentials& c, format_context& ctx)
   -> decltype(ctx.out()) {
+    auto time = std::format(
+      "{:%FT%H:%M:%S}", ::model::to_time_point(c.password_last_updated));
     return fmt::format_to(
       ctx.out(),
-      "{{username: {}, password: ****, mechanism: {}}}",
+      "{{username: {}, password: ****, mechanism: {}, password_last_updated: "
+      "{}}}",
       c.username,
-      c.mechanism);
+      c.mechanism,
+      time);
 }
 
 auto fmt::formatter<
@@ -615,10 +633,14 @@ auto fmt::formatter<cluster_link::model::task_status_report>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{task_name: {}, task_state: {}, task_state_reason: {}}}",
+      "{{task_name: {}, task_state: {}, task_state_reason: {}, "
+      "is_controller_locked_task: {}, node_id: {}, shard: {}}}",
       r.task_name,
       r.task_state,
-      r.task_state_reason);
+      r.task_state_reason,
+      r.is_controller_locked_task,
+      r.node_id,
+      r.shard);
 }
 
 auto fmt::formatter<decltype(cluster_link::model::link_task_status_report::

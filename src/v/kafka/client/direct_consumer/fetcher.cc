@@ -133,7 +133,9 @@ ss::future<> fetcher::stop() {
     _as.request_abort();
     _state_lock.broken();
     _partitions_updated.broken();
-    return _gate.close();
+    return _gate.close().then([logger = logger(), id = _id] {
+        vlog(logger.debug, "[broker: {}] fetcher stopped", id);
+    });
 }
 
 ss::future<fetcher::partitions_with_epoch> fetcher::collect_partitions() {

@@ -704,8 +704,11 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
     START_AT_EARLIEST_FIELD_NUMBER: builtins.int
     START_AT_LATEST_FIELD_NUMBER: builtins.int
     START_AT_TIMESTAMP_FIELD_NUMBER: builtins.int
+    PAUSED_FIELD_NUMBER: builtins.int
     exclude_default: builtins.bool
     'If false, then the following topic properties will be synced by default:\n    - `compression.type`\n    - `retention.bytes`\n    - `retention.ms`\n    - `delete.retention.ms`\n    - Replication Factor\n    - `min.compaction.lag.ms`\n    - `max.compaction.lag.ms`\n\n    If this is true, then only the properties listed in\n    `synced_shadow_topic_properties` will be synced.\n    '
+    paused: builtins.bool
+    "Allows user to pause the topic sync task.  If paused, then\n    the task will enter the 'paused' state and not sync topics or their\n    properties from the source cluster\n    "
 
     @property
     def interval(self) -> google.protobuf.duration_pb2.Duration:
@@ -773,13 +776,13 @@ class TopicMetadataSyncOptions(google.protobuf.message.Message):
         at or after the specified timestamp.
         """
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=..., start_at_earliest: global___TopicMetadataSyncOptions.EarliestOffset | None=..., start_at_latest: global___TopicMetadataSyncOptions.LatestOffset | None=..., start_at_timestamp: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., auto_create_shadow_topic_filters: collections.abc.Iterable[global___NameFilter] | None=..., synced_shadow_topic_properties: collections.abc.Iterable[builtins.str] | None=..., exclude_default: builtins.bool=..., start_at_earliest: global___TopicMetadataSyncOptions.EarliestOffset | None=..., start_at_latest: global___TopicMetadataSyncOptions.LatestOffset | None=..., start_at_timestamp: google.protobuf.timestamp_pb2.Timestamp | None=..., paused: builtins.bool=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'interval', b'interval', 'start_at_earliest', b'start_at_earliest', 'start_at_latest', b'start_at_latest', 'start_at_timestamp', b'start_at_timestamp', 'start_offset', b'start_offset']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'effective_interval', b'effective_interval', 'exclude_default', b'exclude_default', 'interval', b'interval', 'start_at_earliest', b'start_at_earliest', 'start_at_latest', b'start_at_latest', 'start_at_timestamp', b'start_at_timestamp', 'start_offset', b'start_offset', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties']) -> None:
+    def ClearField(self, field_name: typing.Literal['auto_create_shadow_topic_filters', b'auto_create_shadow_topic_filters', 'effective_interval', b'effective_interval', 'exclude_default', b'exclude_default', 'interval', b'interval', 'paused', b'paused', 'start_at_earliest', b'start_at_earliest', 'start_at_latest', b'start_at_latest', 'start_at_timestamp', b'start_at_timestamp', 'start_offset', b'start_offset', 'synced_shadow_topic_properties', b'synced_shadow_topic_properties']) -> None:
         ...
 
     def WhichOneof(self, oneof_group: typing.Literal['start_offset', b'start_offset']) -> typing.Literal['start_at_earliest', 'start_at_latest', 'start_at_timestamp'] | None:
@@ -836,10 +839,10 @@ class ConsumerOffsetSyncOptions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     INTERVAL_FIELD_NUMBER: builtins.int
     EFFECTIVE_INTERVAL_FIELD_NUMBER: builtins.int
-    ENABLED_FIELD_NUMBER: builtins.int
+    PAUSED_FIELD_NUMBER: builtins.int
     GROUP_FILTERS_FIELD_NUMBER: builtins.int
-    enabled: builtins.bool
-    "Whether it's enabled"
+    paused: builtins.bool
+    "Allows user to pause the consumer offset sync task.  If paused, then\n    the task will enter the 'paused' state and not sync consumer offsets from\n    the source cluster\n    "
 
     @property
     def interval(self) -> google.protobuf.duration_pb2.Duration:
@@ -855,13 +858,13 @@ class ConsumerOffsetSyncOptions(google.protobuf.message.Message):
     def group_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NameFilter]:
         """The filters"""
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., group_filters: collections.abc.Iterable[global___NameFilter] | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., paused: builtins.bool=..., group_filters: collections.abc.Iterable[global___NameFilter] | None=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'interval', b'interval']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'enabled', b'enabled', 'group_filters', b'group_filters', 'interval', b'interval']) -> None:
+    def ClearField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'group_filters', b'group_filters', 'interval', b'interval', 'paused', b'paused']) -> None:
         ...
 global___ConsumerOffsetSyncOptions = ConsumerOffsetSyncOptions
 
@@ -871,10 +874,10 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     INTERVAL_FIELD_NUMBER: builtins.int
     EFFECTIVE_INTERVAL_FIELD_NUMBER: builtins.int
-    ENABLED_FIELD_NUMBER: builtins.int
+    PAUSED_FIELD_NUMBER: builtins.int
     ACL_FILTERS_FIELD_NUMBER: builtins.int
-    enabled: builtins.bool
-    "Whether or not it's enabled"
+    paused: builtins.bool
+    "Allows user to pause the security settings sync task.  If paused,\n    then the task will enter the 'paused' state and will not sync security\n    settings from the source cluster\n    "
 
     @property
     def interval(self) -> google.protobuf.duration_pb2.Duration:
@@ -890,13 +893,13 @@ class SecuritySettingsSyncOptions(google.protobuf.message.Message):
     def acl_filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ACLFilter]:
         """ACL filters"""
 
-    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., enabled: builtins.bool=..., acl_filters: collections.abc.Iterable[global___ACLFilter] | None=...) -> None:
+    def __init__(self, *, interval: google.protobuf.duration_pb2.Duration | None=..., effective_interval: google.protobuf.duration_pb2.Duration | None=..., paused: builtins.bool=..., acl_filters: collections.abc.Iterable[global___ACLFilter] | None=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['effective_interval', b'effective_interval', 'interval', b'interval']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['acl_filters', b'acl_filters', 'effective_interval', b'effective_interval', 'enabled', b'enabled', 'interval', b'interval']) -> None:
+    def ClearField(self, field_name: typing.Literal['acl_filters', b'acl_filters', 'effective_interval', b'effective_interval', 'interval', b'interval', 'paused', b'paused']) -> None:
         ...
 global___SecuritySettingsSyncOptions = SecuritySettingsSyncOptions
 
@@ -1087,6 +1090,7 @@ class ShadowLinkTaskStatus(google.protobuf.message.Message):
     STATE_FIELD_NUMBER: builtins.int
     REASON_FIELD_NUMBER: builtins.int
     BROKER_ID_FIELD_NUMBER: builtins.int
+    SHARD_FIELD_NUMBER: builtins.int
     name: builtins.str
     'Name of the task'
     state: global___TaskState.ValueType
@@ -1095,11 +1099,13 @@ class ShadowLinkTaskStatus(google.protobuf.message.Message):
     'Reason for task being in state'
     broker_id: builtins.int
     'The broker the task is running on'
+    shard: builtins.int
+    'The shard the task is running on'
 
-    def __init__(self, *, name: builtins.str=..., state: global___TaskState.ValueType=..., reason: builtins.str=..., broker_id: builtins.int=...) -> None:
+    def __init__(self, *, name: builtins.str=..., state: global___TaskState.ValueType=..., reason: builtins.str=..., broker_id: builtins.int=..., shard: builtins.int=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['broker_id', b'broker_id', 'name', b'name', 'reason', b'reason', 'state', b'state']) -> None:
+    def ClearField(self, field_name: typing.Literal['broker_id', b'broker_id', 'name', b'name', 'reason', b'reason', 'shard', b'shard', 'state', b'state']) -> None:
         ...
 global___ShadowLinkTaskStatus = ShadowLinkTaskStatus
 

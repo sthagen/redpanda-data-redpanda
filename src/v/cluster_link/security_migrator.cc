@@ -270,13 +270,19 @@ void security_migrator::update_config(const model::metadata& config) {
       config.configuration.security_settings_sync_cfg.get_task_interval());
 }
 
-ss::future<> security_migrator::run_impl() {
+model::enabled_t security_migrator::is_enabled() const {
+    return _config.is_enabled;
+}
+
+ss::future<task::state_transition> security_migrator::run_impl() {
     vlog(logger().trace, "Running security migrator task");
     constexpr auto acl_creation_timeout = 5s;
 
     if (_config.acl_filters.empty()) {
         vlog(logger().debug, "No ACL filters configured, skipping task");
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason = "No ACL filters configured, skipping task"};
     }
 
     auto& cluster = get_link()->get_cluster_connection();
@@ -286,8 +292,9 @@ ss::future<> security_migrator::run_impl() {
     } catch (const std::exception& e) {
         auto msg = ssx::sformat("Failed to update metadata: {}", e.what());
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(model::task_state::link_unavailable, msg);
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
     if (!has_required_permissions(
@@ -299,8 +306,9 @@ ss::future<> security_migrator::run_impl() {
           security_migrator::required_permissions,
           cluster.get_cluster_authorized_operations());
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(model::task_state::link_unavailable, msg);
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
     kafka::api_version describe_acls_version;
@@ -311,9 +319,9 @@ ss::future<> security_migrator::run_impl() {
             auto msg = ssx::sformat(
               "Failed to get supported API version for DescribeACLs");
             vlog(logger().warn, "{}", msg);
-            std::ignore = change_state(
-              model::task_state::link_unavailable, msg);
-            co_return;
+            co_return state_transition{
+              .desired_state = model::task_state::link_unavailable,
+              .reason = std::move(msg)};
         }
 
         if (
@@ -323,9 +331,9 @@ ss::future<> security_migrator::run_impl() {
               "Unsupported API version for DescribeACLs: {}",
               supported_api_versions.value().min);
             vlog(logger().warn, "{}", msg);
-            std::ignore = change_state(
-              model::task_state::link_unavailable, msg);
-            co_return;
+            co_return state_transition{
+              .desired_state = model::task_state::link_unavailable,
+              .reason = std::move(msg)};
         }
 
         describe_acls_version = std::min(
@@ -339,19 +347,43 @@ ss::future<> security_migrator::run_impl() {
         auto msg = ssx::sformat(
           "Failed to get supported API version for DescribeACLs: {}", e.what());
         vlog(logger().warn, "{}", msg);
-        std::ignore = change_state(model::task_state::link_unavailable, msg);
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
     }
 
-    auto acls = co_await fetch_acls(describe_acls_version);
+    auto acls_f = co_await ss::coroutine::as_future(
+      fetch_acls(describe_acls_version));
+
+    if (acls_f.failed()) {
+        auto ex = acls_f.get_exception();
+        auto level = ssx::is_shutdown_exception(ex) ? ss::log_level::trace
+                                                    : ss::log_level::warn;
+        auto msg = ssx::sformat("Failed to fetch ACLs: {}", ex);
+        vlogl(logger(), level, "{}", msg);
+        co_return state_transition{
+          .desired_state = model::task_state::link_unavailable,
+          .reason = std::move(msg)};
+    }
+    auto acls = std::move(acls_f).get();
     vlog(logger().trace, "Fetched ACLs: {}", acls);
+
+    if (acls.empty()) {
+        vlog(logger().trace, "No ACLS fetched, nothing to migrate");
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason = "Security migrator task run successfully"};
+    }
 
     std::vector<security::acl_binding> bindings;
     try {
         bindings = to_acl_bindings(acls);
     } catch (const std::exception& e) {
         vlog(logger().warn, "Error transforming received ACLs: {}", e.what());
-        co_return;
+        co_return state_transition{
+          .desired_state = model::task_state::faulted,
+          .reason = ssx::sformat(
+            "Error transforming received ACLs: {}", e.what())};
     }
     vlog(logger().trace, "bindings fetched from source cluster: {}", bindings);
 
@@ -364,10 +396,10 @@ ss::future<> security_migrator::run_impl() {
         }
     });
 
-    if (get_state() != model::task_state::active) {
-        std::ignore = change_state(
-          model::task_state::active, "Security migrator task ran successfully");
-    }
+    vlog(logger().trace, "Security migrator task completed");
+    co_return state_transition{
+      .desired_state = model::task_state::active,
+      .reason = "Security migrator task completed"};
 }
 
 ss::future<chunked_vector<kafka::describe_acls_resource>>
@@ -388,10 +420,12 @@ security_migrator::fetch_acls(kafka::api_version describe_acls_version) {
 
     chunked_vector<kafka::describe_acls_resource> acls;
 
+    std::exception_ptr ex = nullptr;
+
     co_await ss::max_concurrent_for_each(
       requests,
       describe_acls_request_limit,
-      [this, &cluster, describe_acls_version, &acls](
+      [this, &cluster, describe_acls_version, &acls, &ex](
         kafka::describe_acls_request& req) {
           vlog(logger().trace, "Requesting ACLs: {}", req);
           return cluster.dispatch_to_any(std::move(req), describe_acls_version)
@@ -410,10 +444,17 @@ security_migrator::fetch_acls(kafka::api_version describe_acls_version) {
                 std::ranges::move(
                   response.data.resources, std::back_inserter(acls));
             })
-            .handle_exception([this](std::exception_ptr ex) {
-                vlog(logger().warn, "Failed to fetch ACLs: {}", ex);
+            .handle_exception([this, &ex](const std::exception_ptr& e) {
+                vlog(logger().warn, "Failed to fetch ACLs: {}", e);
+                if (!ex) {
+                    ex = e;
+                }
             });
       });
+
+    if (ex) {
+        std::rethrow_exception(ex);
+    }
 
     co_return acls;
 }

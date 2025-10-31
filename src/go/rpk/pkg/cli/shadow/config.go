@@ -39,15 +39,24 @@ func newGenerateCommand(fs afero.Fs, _ *config.Params) *cobra.Command {
 		Use:   "generate",
 		Args:  cobra.NoArgs,
 		Short: "Generate a Redpanda Shadow Link configuration file",
-		Long: `Generate a Redpanda Shadow Link configuration file
+		Long: `Generate a configuration file for creating a Shadow Link.
 
-By default, the command prints a sample configuration file to standard output.
-Use the --output flag to specify a file path to save the configuration file.
+This command creates a sample configuration file with placeholder values that
+you customize for your environment. 
 
-It generates a configuration file with placeholder values that you need to fill
-in with actual connection details and settings for your Shadow Link. You may
-also create a configuration file from an existing rpk profile or from a Redpanda
-configuration file.
+By default, this command prints the configuration to standard output. Use the
+--output flag to save the configuration to a file.
+
+After you generate the configuration file, update the placeholder values with
+your actual connection details and settings. Then use 'rpk shadow create' to
+create the Shadow Link.
+`,
+		Example: `
+Generate a configuration file and print it to standard output:
+  rpk shadow config generate
+
+Save the configuration file to a specific location:
+  rpk shadow config generate -o shadow-link.yaml
 `,
 		Run: func(_ *cobra.Command, _ []string) {
 			// TODO: support generating from an rpk profile or Redpanda config file.
@@ -120,7 +129,7 @@ func generateSampleConfig() *ShadowLinkConfig {
 		},
 		ConsumerOffsetSyncOptions: &ConsumerOffsetSyncOptions{
 			Interval: 30 * time.Second,
-			Enabled:  true,
+			Paused:   false,
 			GroupFilters: []*NameFilter{
 				{
 					PatternType: PatternTypeLiteral,
@@ -131,7 +140,7 @@ func generateSampleConfig() *ShadowLinkConfig {
 		},
 		SecuritySyncOptions: &SecuritySettingsSyncOptions{
 			Interval: 30 * time.Second,
-			Enabled:  false,
+			Paused:   false,
 			ACLFilters: []*ACLFilter{
 				{
 					ResourceFilter: &ACLResourceFilter{

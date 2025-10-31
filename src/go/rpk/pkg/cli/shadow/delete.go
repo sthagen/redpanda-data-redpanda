@@ -30,18 +30,29 @@ func newDeleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Use:   "delete [LINK_NAME]",
 		Args:  cobra.ExactArgs(1),
 		Short: "Delete a Redpanda Shadow Link",
-		Long: `Delete a Redpanda Shadow Link
+		Long: `Delete a Redpanda Shadow Link.
 
-Delete a Shadow Link by name. You cannot delete Shadow Links that have active
-Shadow topics. Run the failover command first to deactivate topics before 
-deletion.
+This command deletes a Shadow Link by name. By default, you cannot delete a
+Shadow Link that has active shadow topics. Use 'rpk shadow failover' first to
+deactivate topics before deletion, or use the --force flag to delete the Shadow
+Link and failover all its active shadow topics.
 
-The command prompts for confirmation by default. Use the --no-confirm flag to
-skip the confirmation prompt.
+The command prompts you to confirm the deletion. Use the --no-confirm flag to
+skip the confirmation prompt. The --force flag automatically disables the
+confirmation prompt.
 
-Use the -f/--force flag to delete a Shadow Link even if it has active Shadow
-topics. Effectively has the same result as Failing Over all topics + deleting
-the Shadow Link. This flag also disables the confirmation prompt.
+WARNING: Deleting a Shadow Link with --force permanently removes all shadow
+topics and stops replication. This operation cannot be undone.
+`,
+		Example: `
+Delete a Shadow Link:
+  rpk shadow delete my-shadow-link
+
+Delete a Shadow Link without confirmation:
+  rpk shadow delete my-shadow-link --no-confirm
+
+Force delete a Shadow Link with active shadow topics:
+  rpk shadow delete my-shadow-link --force
 `,
 		Run: func(cmd *cobra.Command, args []string) {
 			p, err := p.LoadVirtualProfile(fs)
@@ -55,7 +66,7 @@ the Shadow Link. This flag also disables the confirmation prompt.
 			link, err := cl.ShadowLinkService().GetShadowLink(cmd.Context(), connect.NewRequest(&adminv2.GetShadowLinkRequest{
 				Name: linkName,
 			}))
-			out.MaybeDie(err, "unable to get Redpanda Shadow Link information: %v", err)
+			out.MaybeDie(err, "unable to get Redpanda Shadow Link information: %v", handleConnectError(err, "get", linkName))
 
 			printShadowLinkInfo(link.Msg.GetShadowLink())
 			if !noConfirm && !forceDelete {
@@ -70,7 +81,7 @@ the Shadow Link. This flag also disables the confirmation prompt.
 				Name:  linkName,
 				Force: forceDelete,
 			}))
-			out.MaybeDie(err, "unable to delete Redpanda Shadow Link %q: %v", linkName, err)
+			out.MaybeDie(err, "unable to delete Redpanda Shadow Link %q: %v", linkName, handleConnectError(err, "delete", linkName))
 
 			fmt.Printf("Shadow Link %q deleted successfully\n", linkName)
 		},

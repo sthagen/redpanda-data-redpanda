@@ -490,6 +490,7 @@ ss::future<> controller::start(
       ss::sharded_parameter([this] { return &_partition_leaders.local(); }),
       ss::sharded_parameter([this] { return &_plugin_table.local(); }),
       ss::sharded_parameter([this] { return &_tp_state.local(); }),
+      &_cluster_link_frontend,
       ss::sharded_parameter([this] {
           return _stm.local_is_initialized() ? &_stm.local() : nullptr;
       }),

@@ -79,6 +79,8 @@ public:
         config::node().node_id.set_value(model::node_id{1});
     }
 
+    absl::flat_hash_set<model::topic> active_shadow_topics{};
+
     plugin_table _plugin_table;
     data_migrations::migrated_resources _migrated_resources;
     topic_table _topic_table{_migrated_resources};
@@ -86,7 +88,10 @@ public:
       &_topic_table,
       &_plugin_table,
       {model::topic("__internal_topic")},
-      max_transforms};
+      max_transforms,
+      [this](const model::topic& t) {
+          return this->active_shadow_topics.contains(t);
+      }};
 
     std::error_code
     create_topic(std::string_view name, topic_config config = {}) {
@@ -155,6 +160,8 @@ public:
             .disabled = disabled});
         return _topic_table.apply(std::move(cmd), ++_latest_offset).get();
     }
+
+    virtual void TearDown() override { active_shadow_topics.clear(); }
 };
 
 } // namespace
@@ -169,6 +176,19 @@ TEST_F(PluginValidationTest, ValidateSuccess) {
         .sinks = {"bar"},
       }),
       errc::success);
+}
+
+TEST_F(PluginValidationTest, ActiveShadowTopic) {
+    EXPECT_EQ(create_topic("foo"), errc::success);
+    EXPECT_EQ(create_topic("bar"), errc::success);
+    active_shadow_topics.insert(model::topic("bar"));
+    EXPECT_EQ(
+      upsert_transform({
+        .name = "qux",
+        .src = "foo",
+        .sinks = {"bar"},
+      }),
+      errc::transform_invalid_create);
 }
 
 TEST_F(PluginValidationTest, TooManyOutputTopics) {

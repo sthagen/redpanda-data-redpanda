@@ -4,6 +4,10 @@ redpanda_cc_library(
     name = "converter",
     srcs = ["converter.cc"],
     hdrs = ["converter.h"],
+    implementation_deps = [
+        "//src/v/crypto",
+        "//src/v/utils:base64",
+    ],
     visibility = ["//src/v/redpanda/admin/services/shadow_link:__subpackages__"],
     deps = [
         "//proto/redpanda/core/admin/v2:shadow_link_redpanda_proto",

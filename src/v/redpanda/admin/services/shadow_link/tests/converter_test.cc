@@ -10,7 +10,9 @@
  */
 
 #include "cluster_link/model/types.h"
+#include "crypto/crypto.h"
 #include "redpanda/admin/services/shadow_link/converter.h"
+#include "utils/base64.h"
 
 #include <gtest/gtest.h>
 
@@ -55,6 +57,46 @@ TEST(converter_test, create_to_metadata_no_authn) {
       cluster_link::model::earliest_offset_ts);
     EXPECT_FALSE(md.configuration.topic_metadata_mirroring_cfg.starting_offset
                    .has_value());
+    EXPECT_TRUE(md.configuration.topic_metadata_mirroring_cfg.is_enabled);
+    EXPECT_TRUE(md.configuration.consumer_groups_mirroring_cfg.is_enabled);
+    EXPECT_TRUE(md.configuration.security_settings_sync_cfg.is_enabled);
+}
+
+TEST(converter_test, create_to_metadata_tasks_disabled) {
+    const auto name = "test-link";
+    proto::admin::shadow_link shadow_link;
+    proto::admin::create_shadow_link_request req;
+    proto::admin::shadow_link_configurations shadow_link_configurations;
+    proto::admin::shadow_link_client_options shadow_link_client_options;
+
+    shadow_link_client_options.set_bootstrap_servers({"localhost:9092"});
+    shadow_link_configurations.set_client_options(
+      std::move(shadow_link_client_options));
+
+    proto::admin::topic_metadata_sync_options topic_metadata_sync_options;
+    topic_metadata_sync_options.set_paused(true);
+    shadow_link_configurations.set_topic_metadata_sync_options(
+      std::move(topic_metadata_sync_options));
+
+    proto::admin::consumer_offset_sync_options consumer_offset_sync_options;
+    consumer_offset_sync_options.set_paused(true);
+    shadow_link_configurations.set_consumer_offset_sync_options(
+      std::move(consumer_offset_sync_options));
+
+    proto::admin::security_settings_sync_options security_settings_sync_options;
+    security_settings_sync_options.set_paused(true);
+    shadow_link_configurations.set_security_sync_options(
+      std::move(security_settings_sync_options));
+
+    shadow_link.set_configurations(std::move(shadow_link_configurations));
+    shadow_link.set_name(ss::sstring{name});
+    req.set_shadow_link(std::move(shadow_link));
+
+    auto md = admin::convert_create_to_metadata(std::move(req));
+
+    EXPECT_FALSE(md.configuration.topic_metadata_mirroring_cfg.is_enabled);
+    EXPECT_FALSE(md.configuration.consumer_groups_mirroring_cfg.is_enabled);
+    EXPECT_FALSE(md.configuration.security_settings_sync_cfg.is_enabled);
 }
 
 TEST(converter_test, create_no_bootstrap) {
@@ -110,6 +152,7 @@ TEST(converter_test, create_with_authn_config_scram_256) {
     shadow_link.set_name(ss::sstring{name});
     req.set_shadow_link(std::move(shadow_link));
 
+    auto now = model::to_time_point(model::timestamp::now());
     auto md = admin::convert_create_to_metadata(std::move(req));
     ASSERT_TRUE(md.connection.authn_config.has_value());
     ASSERT_TRUE(
@@ -122,6 +165,11 @@ TEST(converter_test, create_with_authn_config_scram_256) {
     EXPECT_EQ(md_authn_config.username, username);
     EXPECT_EQ(md_authn_config.password, password);
     EXPECT_EQ(md_authn_config.mechanism, mechanism);
+    auto pwd_updated = model::to_time_point(
+      md_authn_config.password_last_updated);
+    // Expect the password updated time to be within 10s
+    EXPECT_GE(pwd_updated, now - 5s);
+    EXPECT_LE(pwd_updated, now + 5s);
 }
 
 TEST(converter_test, create_with_authn_config_scram_512) {
@@ -588,6 +636,7 @@ TEST(converter_test, metadata_to_shadow_link) {
       absl::FromChrono(
         cluster_link::model::topic_metadata_mirroring_config::
           task_interval_default));
+    EXPECT_FALSE(topic_metadata_sync_options.get_paused());
 
     const auto& security_settings
       = sl.get_configurations().get_security_sync_options();
@@ -598,6 +647,7 @@ TEST(converter_test, metadata_to_shadow_link) {
       absl::FromChrono(
         cluster_link::model::security_settings_sync_config::
           task_interval_default));
+    EXPECT_FALSE(security_settings.get_paused());
 
     const auto& cg_settings
       = sl.get_configurations().get_consumer_offset_sync_options();
@@ -607,6 +657,36 @@ TEST(converter_test, metadata_to_shadow_link) {
       absl::FromChrono(
         cluster_link::model::consumer_groups_mirroring_config::
           default_task_interval));
+    EXPECT_FALSE(cg_settings.get_paused());
+}
+
+TEST(converter_test, metadata_to_shadow_link_tasks_disabled) {
+    auto uuid = uuid_t::create();
+    cluster_link::model::metadata md;
+    md.name = cluster_link::model::name_t{"test-link"};
+    md.uuid = cluster_link::model::uuid_t(uuid);
+    md.connection.bootstrap_servers = {
+      net::unresolved_address("localhost", 9092)};
+    md.configuration.topic_metadata_mirroring_cfg.is_enabled
+      = cluster_link::model::enabled_t::no;
+    md.configuration.consumer_groups_mirroring_cfg.is_enabled
+      = cluster_link::model::enabled_t::no;
+    md.configuration.security_settings_sync_cfg.is_enabled
+      = cluster_link::model::enabled_t::no;
+
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
+
+    const auto& topic_metadata_sync_options
+      = sl.get_configurations().get_topic_metadata_sync_options();
+    EXPECT_TRUE(topic_metadata_sync_options.get_paused());
+
+    const auto& security_settings
+      = sl.get_configurations().get_security_sync_options();
+    EXPECT_TRUE(security_settings.get_paused());
+
+    const auto& cg_settings
+      = sl.get_configurations().get_consumer_offset_sync_options();
+    EXPECT_TRUE(cg_settings.get_paused());
 }
 
 TEST(converter_test, metadata_to_shadow_link_authn_scram_256) {
@@ -725,7 +805,10 @@ TEST(converter_test, metadata_to_shadow_link_tls_value) {
     ASSERT_TRUE(tls_settings.has_tls_pem_settings());
     const auto& tls_value_settings = tls_settings.get_tls_pem_settings();
     EXPECT_EQ(tls_value_settings.get_ca(), ca);
-    EXPECT_EQ(tls_value_settings.get_key(), key);
+    EXPECT_EQ(tls_value_settings.get_key(), "");
+    EXPECT_EQ(
+      tls_value_settings.get_key_fingerprint(),
+      bytes_to_base64(crypto::digest(crypto::digest_type::SHA256, key)));
     EXPECT_EQ(tls_value_settings.get_cert(), cert);
 }
 
@@ -930,7 +1013,9 @@ TEST(converter_test, update_scram_creds) {
     current_md.connection.authn_config = cluster_link::model::scram_credentials{
       .username = "old-user",
       .password = "old-password",
-      .mechanism = "SCRAM-SHA-256"};
+      .mechanism = "SCRAM-SHA-256",
+      .password_last_updated = model::to_timestamp(
+        std::chrono::system_clock::now() - 1h)};
     admin::set_client_id(current_md);
 
     proto::admin::scram_config scram_config;
@@ -954,6 +1039,7 @@ TEST(converter_test, update_scram_creds) {
         "configurations", "client_options", "authentication_configuration"});
     req.set_update_mask(std::move(mask));
 
+    auto now = model::to_time_point(model::timestamp::now());
     auto update_cmd = admin::create_update_cluster_link_config_cmd(
       std::move(req), current_md.copy());
 
@@ -964,6 +1050,11 @@ TEST(converter_test, update_scram_creds) {
     EXPECT_EQ(new_scram_config.username, "new-user");
     EXPECT_EQ(new_scram_config.password, "new-password");
     EXPECT_EQ(new_scram_config.mechanism, "SCRAM-SHA-512");
+    auto pwd_updated = model::to_time_point(
+      new_scram_config.password_last_updated);
+    // Expect the password updated time to be within 10s
+    EXPECT_GE(pwd_updated, now - 5s);
+    EXPECT_LE(pwd_updated, now + 5s);
 }
 
 TEST(converter_test, do_not_update_scram_creds) {

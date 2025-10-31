@@ -45,8 +45,20 @@ ss::future<cl_result<void>> stop_task(task* t) {
         co_return co_await t->stop();
     } catch (const std::exception& e) {
         res = err_info(
-          errc::failed_to_start_task,
+          errc::failed_to_stop_task,
           ssx::sformat("Failed to stop task {}: {}", t->name(), e.what()));
+    }
+
+    co_return res;
+}
+ss::future<cl_result<void>> pause_task(task* t) {
+    cl_result<void> res = outcome::success();
+    try {
+        co_return co_await t->pause();
+    } catch (const std::exception& e) {
+        res = err_info(
+          errc::failed_to_pause_task,
+          ssx::sformat("Failed to pause task {}: {}", t->name(), e.what()));
     }
 
     co_return res;
@@ -213,6 +225,14 @@ void link::update_config(
         vlog(cllog.trace, "Updating config for task {}", t->name());
         t->update_config(_config);
     }
+
+    // Configuration updates may change whether or not the tasks have been
+    // enabled, spawn off a task reconciler fiber to handle this
+    ssx::spawn_with_gate(_gate, [this] {
+        return ss::with_scheduling_group(_manager->scheduling_group(), [this] {
+            return run_task_reconciler();
+        });
+    });
 
     // reconcile the replicators. We do not need replicators running
     // if the link is not active or a specific topic in the link is not
@@ -407,6 +427,10 @@ bool link::should_start_task(task* t) const {
     return t->should_start(ss::this_shard_id(), _self);
 }
 
+bool link::should_pause_task(task* t) const {
+    return t->should_pause(ss::this_shard_id(), _self);
+}
+
 bool link::should_stop_task(task* t) const {
     return t->should_stop(ss::this_shard_id(), _self);
 }
@@ -442,6 +466,22 @@ ss::future<> link::run_task_reconciler() {
                 vlog(
                   cllog.error,
                   "Failed to start task {}: {}",
+                  name,
+                  res.assume_error().message());
+            }
+        }
+
+        if (!_as.abort_requested() && should_pause_task(t.get())) {
+            vlog(
+              cllog.info,
+              "Reconciler pausing task {} for cluster link {}",
+              name,
+              _config.name);
+            auto res = co_await pause_task(t.get());
+            if (!res) {
+                vlog(
+                  cllog.error,
+                  "Failed to pause task {}: {}",
                   name,
                   res.assume_error().message());
             }
@@ -506,6 +546,17 @@ ss::future<cl_result<void>> link::do_register_task(std::unique_ptr<task> t) {
             vlog(
               cllog.error,
               "Failed to start task {}: {}",
+              t->name(),
+              res.assume_error().message());
+        }
+    }
+    if (!_as.abort_requested() && should_pause_task(t.get())) {
+        vlog(cllog.info, "Pausing task {}", t->name());
+        res = co_await pause_task(t.get());
+        if (!res) {
+            vlog(
+              cllog.error,
+              "Failed to pause task {}: {}",
               t->name(),
               res.assume_error().message());
         }

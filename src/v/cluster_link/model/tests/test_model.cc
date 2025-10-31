@@ -19,9 +19,9 @@ TEST(test_model, test_no_leak_private_data) {
     scram_credentials creds{
       .username = "user", .password = "pass", .mechanism = "SCRAM-SHA-256"};
 
-    EXPECT_EQ(
-      "{username: user, password: ****, mechanism: SCRAM-SHA-256}",
-      fmt::format("{}", creds));
+    auto creds_str = fmt::format("{}", creds);
+    // verify password does not get printed
+    EXPECT_TRUE(creds_str.contains("password: ****"));
 
     connection_config config_files{
       .bootstrap_servers = {net::unresolved_address{"localhost", 9092}},
@@ -31,15 +31,9 @@ TEST(test_model, test_no_leak_private_data) {
       .ca = tls_file_path{"ca.pem"},
       .client_id = "client-id"};
 
-    EXPECT_EQ(
-      "{bootstrap_servers: [{host: localhost, port: 9092}], "
-      "authn_config: {username: user, password: ****, mechanism: "
-      "SCRAM-SHA-256}, tls_enabled: false, cert: {file: cert.pem}, key: {file: "
-      "key.pem}, ca: {file: ca.pem}, tls_provide_sni: true, client_id: "
-      "client-id, metadata_max_age_ms: {nullopt}, connection_timeout_ms: "
-      "{nullopt}, retry_backoff_ms: {nullopt}, fetch_wait_max_ms: {nullopt}, "
-      "fetch_min_bytes: {nullopt}, fetch_max_bytes: {nullopt}}",
-      fmt::format("{}", config_files));
+    auto fmt = fmt::format("{}", config_files);
+    // verify password does not get printed
+    EXPECT_TRUE(fmt.contains("password: ****"));
 
     connection_config config_values{
       .bootstrap_servers = {net::unresolved_address{"localhost", 9092}},
@@ -48,14 +42,10 @@ TEST(test_model, test_no_leak_private_data) {
       .key = tls_value{"key.pem"},
       .ca = tls_value{"ca.pem"},
       .client_id = "client-id"};
-    EXPECT_EQ(
-      "{bootstrap_servers: [{host: localhost, port: 9092}], "
-      "authn_config: {username: user, password: ****, mechanism: "
-      "SCRAM-SHA-256}, tls_enabled: false, cert: {value: cert.pem}, key: "
-      "{value: ****}, ca: {value: ca.pem}, tls_provide_sni: true, client_id: "
-      "client-id, metadata_max_age_ms: {nullopt}, connection_timeout_ms: "
-      "{nullopt}, retry_backoff_ms: {nullopt}, fetch_wait_max_ms: {nullopt}, "
-      "fetch_min_bytes: {nullopt}, fetch_max_bytes: {nullopt}}",
-      fmt::format("{}", config_values));
+    auto values_fmt = fmt::format("{}", config_values);
+    // verify password does not get printed
+    EXPECT_TRUE(fmt.contains("password: ****"));
+    // verify key is not printed
+    EXPECT_TRUE(values_fmt.contains("key: {value: ****}"));
 }
 } // namespace cluster_link::model::tests

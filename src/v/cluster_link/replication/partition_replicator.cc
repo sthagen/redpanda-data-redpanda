@@ -69,7 +69,7 @@ ss::future<> partition_replicator::start() {
         vlog(_log.debug, "Resuming replication from offset {}", start_offset);
     }
     co_await _source->start(start_offset);
-    ssx::repeat_until_gate_closed(_gate, [this] {
+    ssx::repeat_until_gate_closed_or_aborted(_gate, _as, [this] {
         return fetch_and_replicate().handle_exception(
           [this](const std::exception_ptr& e) {
               auto log_level = ssx::is_shutdown_exception(e)
@@ -83,7 +83,7 @@ ss::future<> partition_replicator::start() {
 ss::future<> partition_replicator::stop() {
     co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(_log.trace, "Stopping replicator");
-    _as.request_abort();
+    initiate_shutdown();
     // closing the gate first ensures all the units are returned to the
     // semaphores before the source is stopped.
     co_await _gate.close();
@@ -243,7 +243,13 @@ kafka::offset partition_replicator::get_partition_lag() const {
     return lso - hwm;
 }
 
+void partition_replicator::initiate_shutdown() noexcept { _as.request_abort(); }
+bool partition_replicator::shutdown_initiated() noexcept {
+    return _as.abort_requested();
+}
+
 ss::future<> partition_replicator::fetch_and_replicate() {
+    _as.check();
     _gate.check();
     // abort source for this iteration of fetch_and_replicate
     ss::abort_source as;

@@ -54,10 +54,14 @@ public:
         set_run_interval(cfg->run_interval);
     }
 
-    ss::future<> run_impl() override {
+    model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
+
+    ss::future<state_transition> run_impl() override {
         _last_run = ss::lowres_clock::now();
         _count++;
-        return ss::now();
+        co_return state_transition{
+          .desired_state = model::task_state::active,
+          .reason = "ran successfully"};
     }
 
     unsigned count() const noexcept { return _count; }
@@ -103,10 +107,8 @@ TEST_F_CORO(test_task_fixture, test_task_run) {
     ASSERT_EQ_CORO(task->get_state(), model::task_state::stopped);
 
     auto res = co_await task->pause();
-    EXPECT_FALSE(res.has_value())
-      << "Was able to pause task when in stopped state";
-    EXPECT_EQ(res.assume_error().code(), errc::invalid_task_state_change);
-    ASSERT_EQ_CORO(task->get_state(), model::task_state::stopped);
+    ASSERT_TRUE_CORO(res.has_value());
+    ASSERT_EQ_CORO(task->get_state(), model::task_state::paused);
 
     res = co_await task->start();
     ASSERT_TRUE_CORO(res.has_value())
@@ -252,10 +254,12 @@ public:
 
     void update_config(const model::metadata&) override {}
 
-    ss::future<> run_impl() override {
+    model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
+
+    ss::future<state_transition> run_impl() override {
         throw std::runtime_error("evil task failed");
     }
-};
+}; // namespace cluster_link
 
 class evil_task_fixture : public seastar_test {};
 
@@ -287,26 +291,23 @@ public:
 
     void update_config(const model::metadata&) override {}
 
-    ss::future<> run_impl() override {
+    model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
+
+    ss::future<state_transition> run_impl() override {
         if (get_state() == model::task_state::active) {
             vlog(logger().info, "Simulating link unavailability");
-            auto res = change_state(
-              model::task_state::link_unavailable, "Simulated link down");
-            vassert(
-              res.has_value()
-                && res.assume_value() == model::task_state::active,
-              "Failed to change state to link_unavailable");
+            co_return state_transition{
+              .desired_state = model::task_state::link_unavailable,
+              .reason = "Simulated link down"};
         } else if (get_state() == model::task_state::link_unavailable) {
             vlog(logger().info, "Simulating link availability");
-            auto res = change_state(
-              model::task_state::active, "Simulated link up");
-            vassert(
-              res.has_value()
-                && res.assume_value() == model::task_state::link_unavailable,
-              "Failed to change state to active");
+            co_return state_transition{
+              .desired_state = model::task_state::active,
+              .reason = "Simulated link up"};
         }
 
-        return ss::now();
+        co_return state_transition{
+          .desired_state = get_state(), .reason = "no state change"};
     }
 };
 

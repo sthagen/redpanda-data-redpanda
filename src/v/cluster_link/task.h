@@ -60,6 +60,8 @@ public:
 
     /// Returns true if the task should be stopped on the current node shard
     bool should_stop(ss::shard_id shard, ::model::node_id current_node) const;
+    /// Returns true if the task should be paused
+    bool should_pause(ss::shard_id shard, ::model::node_id current_node) const;
     /// Updates config of the task
     virtual void update_config(const model::metadata&) = 0;
 
@@ -84,9 +86,16 @@ public:
     model::task_state get_state() const noexcept;
 
     /// Returns the status report for this task
-    model::task_status_report get_status_report() const;
+    virtual model::task_status_report get_status_report() const;
+
+    /// Returns whether or not the task is enabled
+    virtual model::enabled_t is_enabled() const = 0;
 
 protected:
+    struct state_transition {
+        model::task_state desired_state;
+        ss::sstring reason;
+    };
     /// Returns true if the task should be started on the current node shard,
     /// this is only called when the task state allows it to be started
     virtual bool should_start_impl(ss::shard_id, ::model::node_id) const = 0;
@@ -95,16 +104,13 @@ protected:
     /// this is only called when the task state allows it to be stopped
     virtual bool should_stop_impl(ss::shard_id, ::model::node_id) const = 0;
 
-    /// Used by the implementation to change the state of the task
-    /// \return The previous state
-    cl_result<model::task_state>
-      change_state(model::task_state, ss::sstring = "");
     /// Changes the run interval
     void set_run_interval(ss::lowres_clock::duration);
     /// Returns the logger
     prefix_logger& logger();
     /// Implementation of the task logic that will run periodically
-    virtual ss::future<> run_impl() = 0;
+    /// It shall return the state the task should be in after running
+    virtual ss::future<state_transition> run_impl() = 0;
     /// Returns the owning link
     link* get_link() const noexcept;
 
@@ -113,6 +119,10 @@ private:
     void run_callbacks(const state_change&);
     /// Validates that the state change is valid
     bool valid_previous_state(model::task_state st) const;
+    /// Used by the task runner to change the state of the task
+    /// \return The previous state
+    cl_result<model::task_state>
+      change_state(model::task_state, ss::sstring = "");
 
 private:
     link* _link;
@@ -136,6 +146,8 @@ class controller_locked_task : public task {
 public:
     controller_locked_task(
       link* link, ss::lowres_clock::duration run_interval, ss::sstring name);
+
+    model::task_status_report get_status_report() const override;
 
 protected:
     /// Returns true if the task should be started on the current node shard

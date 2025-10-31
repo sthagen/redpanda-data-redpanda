@@ -26,7 +26,16 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Use:   "list",
 		Args:  cobra.NoArgs,
 		Short: "List Redpanda Shadow Links",
-		Long:  `List Redpanda Shadow Links`, // TODO: add more details.
+		Long: `List Redpanda Shadow Links.
+
+This command lists all Shadow Links on the shadow cluster, showing their
+names, unique identifiers, and current states. Use this command to get an
+overview of all configured Shadow Links and their operational status.
+`,
+		Example: `
+List all Shadow Links:
+  rpk shadow list
+`,
 		Run: func(cmd *cobra.Command, _ []string) {
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "unable to load rpk config: %v", err)
@@ -36,7 +45,7 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			out.MaybeDie(err, "unable to initialize admin client: %v", err)
 
 			link, err := cl.ShadowLinkService().ListShadowLinks(cmd.Context(), connect.NewRequest(&adminv2.ListShadowLinksRequest{}))
-			out.MaybeDie(err, "unable to list Redpanda Shadow Links: %v", err)
+			out.MaybeDie(err, "unable to list Redpanda Shadow Links: %v", handleConnectError(err, "list", ""))
 
 			tw := out.NewTable("NAME", "UID", "STATE")
 			defer tw.Flush()

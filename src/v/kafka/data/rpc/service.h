@@ -29,7 +29,9 @@ class local_service {
 public:
     local_service(
       std::unique_ptr<kafka::data::rpc::topic_metadata_cache> metadata_cache,
-      std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager);
+      std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
+      std::unique_ptr<kafka::data::rpc::shadow_link_registry>
+        shadow_link_registry);
 
     ss::future<ss::chunked_fifo<kafka_topic_data_result>> produce(
       ss::chunked_fifo<kafka_topic_data> topic_data,
@@ -52,6 +54,8 @@ private:
 
     std::unique_ptr<kafka::data::rpc::topic_metadata_cache> _metadata_cache;
     std::unique_ptr<kafka::data::rpc::partition_manager> _partition_manager;
+    std::unique_ptr<kafka::data::rpc::shadow_link_registry>
+      _shadow_link_registry;
 };
 
 /**

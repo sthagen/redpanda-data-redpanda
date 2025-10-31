@@ -95,10 +95,12 @@ model::record_header make_header(ss::sstring k, ss::sstring v) {
 local_service::local_service(
   std::unique_ptr<kafka::data::rpc::topic_metadata_cache> metadata_cache,
   std::unique_ptr<partition_manager> partition_manager,
-  std::unique_ptr<reporter> reporter)
+  std::unique_ptr<reporter> reporter,
+  std::unique_ptr<kafka::data::rpc::shadow_link_registry> shadow_link_registry)
   : _metadata_cache(std::move(metadata_cache))
   , _partition_manager(std::move(partition_manager))
-  , _reporter(std::move(reporter)) {}
+  , _reporter(std::move(reporter))
+  , _shadow_link_registry(std::move(shadow_link_registry)) {}
 
 ss::future<ss::chunked_fifo<transformed_topic_data_result>>
 local_service::produce(
@@ -145,6 +147,19 @@ ss::future<result<model::offset, cluster::errc>> local_service::produce(
       model::topic_namespace_view(ntp));
     if (!topic_cfg) {
         co_return cluster::errc::topic_not_exists;
+    }
+    if constexpr (std::is_same_v<decltype(ntp), model::ntp>) {
+        if (!_shadow_link_registry->is_topic_mutable(ntp.tp.topic))
+          [[unlikely]] {
+            co_return cluster::errc::partition_operation_failed;
+        }
+    } else if constexpr (std::derived_from<decltype(ntp), model::ktp>) {
+        if (!_shadow_link_registry->is_topic_mutable(ntp.get_topic()))
+          [[unlikely]] {
+            co_return cluster::errc::partition_operation_failed;
+        }
+    } else {
+        static_assert(false, "ntp must be model::ntp or model::ktp");
     }
     // TODO: More validation of the batches, such as null record rejection and
     // crc checks.

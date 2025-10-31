@@ -201,6 +201,21 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "kafka_connections_service_impl",
+    hdrs = [
+        "kafka_connections_service_impl.h",
+    ],
+    visibility = ["//src/v/redpanda/admin:__subpackages__"],
+    deps = [
+        "//proto/redpanda/core/admin/v2:kafka_connections_redpanda_proto",
+        "//src/v/base",
+        "//src/v/container:priority_queue",
+        "//src/v/ssx:async_algorithm",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "kafka_connections_service",
     srcs = [
         "kafka_connections_service.cc",
@@ -212,6 +227,7 @@ redpanda_cc_library(
     deps = [
         ":aip_filter",
         ":aip_ordering",
+        ":kafka_connections_service_impl",
         "//proto/redpanda/core/admin/v2:cluster_redpanda_proto",
         "//proto/redpanda/core/admin/v2:kafka_connections_redpanda_proto",
         "//src/v/base",

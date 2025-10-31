@@ -36,6 +36,11 @@ import json
 import re
 import socket
 
+import base64
+import google.protobuf.timestamp_pb2
+import hashlib
+import time
+
 
 class ClusterLinkingTopicSyncingTestBase(ShadowLinkTestBase):
     """
@@ -362,6 +367,7 @@ class ClusterLinkingTopicSyncingWithScram(ClusterLinkingTopicSyncingTestBase):
         )
 
     def validate_created_link(self, shadow_link: shadow_link_pb2.ShadowLink) -> None:
+        now = time.time()
         assert (
             shadow_link.configurations.client_options.authentication_configuration.WhichOneof(
                 "authentication"
@@ -373,6 +379,20 @@ class ClusterLinkingTopicSyncingWithScram(ClusterLinkingTopicSyncingTestBase):
 
         scram_config = shadow_link.configurations.client_options.authentication_configuration.scram_configuration
         assert scram_config.password_set, "Password not set in scram configuration"
+        assert scram_config.password == "", "Password should not be set"
+        assert scram_config.username == self.cluster_link_user, (
+            f"Username does not match: {scram_config.username} != {self.cluster_link_user}"
+        )
+        assert scram_config.scram_mechanism == self.cluster_link_mechanism, (
+            f"Mechanism does not match: {scram_config.scram_mechanism} != {self.cluster_link_mechanism}"
+        )
+        assert (
+            scram_config.password_set_at != google.protobuf.timestamp_pb2.Timestamp()
+        ), "Password set time not set"
+
+        assert now - 5 <= scram_config.password_set_at.seconds <= now + 5, (
+            f"Password set time not recent: {scram_config.password_set_at.seconds} vs {now}"
+        )
 
     def add_credentials_to_link(
         self, shadow_link: shadow_link_pb2.ShadowLink
@@ -492,6 +512,10 @@ class ClusterLinkingTopicSyncingWithTlsValues(ClusterLinkingTopicSyncingTestBase
             **kwargs,
         )
 
+        self._ca_value: str = ""
+        self._key_value: str = ""
+        self._cert_value: str = ""
+
     def validate_created_link(self, shadow_link: shadow_link_pb2.ShadowLink) -> None:
         assert (
             shadow_link.configurations.client_options.tls_settings.WhichOneof(
@@ -501,8 +525,23 @@ class ClusterLinkingTopicSyncingWithTlsValues(ClusterLinkingTopicSyncingTestBase
         ), (
             f"Expected 'tls_pem_settings' but got {shadow_link.configurations.client_options.tls_settings.WhichOneof('tls_settings')}"
         )
-
-        # TODO: Add key fingerprint
+        pem_settings = (
+            shadow_link.configurations.client_options.tls_settings.tls_pem_settings
+        )
+        assert pem_settings.ca == self._ca_value, (
+            f"CA value does not match: {pem_settings.ca} != {self._ca_value}"
+        )
+        assert pem_settings.cert == self._cert_value, (
+            f"Cert value does not match: {pem_settings.cert} != {self._cert_value}"
+        )
+        assert pem_settings.key == "", (
+            f"Key value should not be returned: {pem_settings.key}"
+        )
+        key_hash = hashlib.sha256(self._key_value.encode()).digest()
+        key_fingerprint = base64.b64encode(key_hash).decode()
+        assert pem_settings.key_fingerprint == key_fingerprint, (
+            f"Key fingerprint does not match: {pem_settings.key_fingerprint} != {key_fingerprint}"
+        )
 
     def setUp(self):
         super().setUp()
@@ -517,10 +556,13 @@ class ClusterLinkingTopicSyncingWithTlsValues(ClusterLinkingTopicSyncingTestBase
 
         ca_content = open(self.client_cert.ca.crt, "r").read()
         self.logger.debug(f"ca: {ca_content}")
+        self._ca_value = ca_content
         cert_content = open(self.client_cert.crt, "r").read()
         self.logger.debug(f"cert: {cert_content}")
+        self._cert_value = cert_content
         key_content = open(self.client_cert.key, "r").read()
         self.logger.debug(f"key: {key_content}")
+        self._key_value = key_content
 
         shadow_link.configurations.client_options.tls_settings.CopyFrom(
             tls_pb2.TLSSettings(
@@ -631,6 +673,13 @@ syntax = "proto3";
 
 message AType {
   float f = 1;
+}"""
+
+    simple_b_proto_def = """
+syntax = "proto3";
+
+message BType {
+  double d = 1;
 }"""
 
     def __init__(self, test_context, *args, **kwargs):
@@ -761,8 +810,50 @@ message AType {
         )
 
         # Verify we can query the shadow topic
-        self.get_shadow_topic(
+        schemas_topic = self.get_shadow_topic(
             shadow_link_name="test-link", shadow_topic_name="_schemas"
+        )
+        assert schemas_topic.source_topic_name == "_schemas", (
+            f"Expected topic name '_schemas'. Got '{schemas_topic.source_topic_name}'"
+        )
+
+        # Verify posting on target schema registry - read is allowed
+        second_target_id = self.post_schema_to_subject(
+            target_sr_client, "second", self.simple_a_proto_def
+        )
+        assert second_target_id == second_id, (
+            f"Expected id {second_id}. Got {second_target_id}"
+        )
+
+        # Verify posting on target schema registry - write is disabled
+        result_raw = target_sr_client.post_subjects_subject_versions(
+            subject="third",
+            data=json.dumps(
+                {"schema": self.simple_b_proto_def, "schemaType": "PROTOBUF"}
+            ),
+        )
+        assert result_raw.status_code == 412, (
+            f"Expected error code '412'. Got {result_raw.status_code}"
+        )
+
+        # Verify that replication keeps up with source SR
+        third_id = self.post_schema_to_subject(
+            source_sr_client, "third", self.simple_b_proto_def
+        )
+        self.logger.debug(f"Third id: {third_id}")
+
+        wait_until(
+            lambda: "third" in self.get_subjects(source_sr_client),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Failed to write to source SR",
+        )
+
+        wait_until(
+            subjects_match,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Subjects do not match",
         )
 
     @cluster(

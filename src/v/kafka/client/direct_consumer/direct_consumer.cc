@@ -259,6 +259,7 @@ ss::future<> direct_consumer::start() {
 }
 
 ss::future<> direct_consumer::stop() {
+    vlog(_cluster->logger().trace, "Stopping direct consumer");
     _cluster->unregister_metadata_cb(_metadata_callback_id);
     _fetched_data_queue->stop();
 
@@ -267,6 +268,8 @@ ss::future<> direct_consumer::stop() {
 
     co_await ss::parallel_for_each(
       _broker_fetchers, [](auto& pair) { return pair.second->stop(); });
+    _broker_fetchers.clear();
+    vlog(_cluster->logger().trace, "Direct consumer stopped");
 }
 
 ss::future<>

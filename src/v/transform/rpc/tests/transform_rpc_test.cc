@@ -86,6 +86,7 @@ using delegating_fake_topic_metadata_cache
 using fake_topic_creator = kdrt::fake_topic_creator;
 using record_batches = kdrt::record_batches;
 using produced_batch = kdrt::produced_batch;
+using fake_shadow_link_registry = kdrt::fake_shadow_link_registry;
 
 class fake_reporter : public reporter {
 public:
@@ -414,7 +415,9 @@ public:
                 auto fr = std::make_unique<fake_reporter>();
                 _remote_fr = fr.get();
                 return fr;
-            }))
+            }),
+            ss::sharded_parameter(
+              [] { return std::make_unique<fake_shadow_link_registry>(); }))
           .get();
 
         net::server_configuration scfg("transform_test_rpc_server");
@@ -454,7 +457,9 @@ public:
                 auto fr = std::make_unique<fake_reporter>();
                 _local_fr = fr.get();
                 return fr;
-            }))
+            }),
+            ss::sharded_parameter(
+              [] { return std::make_unique<fake_shadow_link_registry>(); }))
           .get();
         _conn_cache.start(std::ref(_as), std::nullopt).get();
         ::rpc::transport_configuration tcfg(

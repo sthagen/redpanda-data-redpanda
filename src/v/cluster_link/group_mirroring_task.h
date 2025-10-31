@@ -81,8 +81,10 @@ public:
 
     void update_config(const model::metadata& link_metadata) override;
 
+    model::enabled_t is_enabled() const final;
+
 protected:
-    ss::future<> run_impl() override;
+    ss::future<state_transition> run_impl() override;
 
     bool should_start_impl(ss::shard_id, ::model::node_id) const final;
 
@@ -149,8 +151,8 @@ private:
     void handle_offset_commit_response(
       kafka::group_id, kafka::offset_commit_response);
 
-    void make_unavailable(const error& err);
-    void make_active();
+    [[nodiscard]] state_transition make_unavailable(const error& err);
+    [[nodiscard]] state_transition make_active();
 
     ss::future<std::optional<kafka::offset>> get_partition_high_watermark(
       const ::model::topic& topic, ::model::partition_id p_id);

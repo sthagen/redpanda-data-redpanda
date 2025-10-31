@@ -35,7 +35,23 @@ func newStatusCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Use:   "status [LINK_NAME]",
 		Args:  cobra.ExactArgs(1),
 		Short: "Get the status of a Redpanda Shadow Link",
-		Long:  `Get the status of a Redpanda Shadow Link`, // TODO: add more details once we have a wider response.
+		Long: `Get the status of a Redpanda Shadow Link.
+
+This command shows the current status of a Shadow Link, including the overall
+state, task statuses, and per-topic replication progress. Use this command to
+monitor replication health and track how closely shadow topics follow the source
+cluster.
+
+By default, the command displays all status sections. Use the flags to display
+specific sections such as overview, task status, or topic status.
+`,
+		Example: `
+Display the status of a Shadow Link:
+  rpk shadow status my-shadow-link
+
+Display specific sections:
+  rpk shadow status my-shadow-link --print-overview --print-topic
+`,
 		Run: func(cmd *cobra.Command, args []string) {
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "unable to load rpk config: %v", err)
@@ -48,8 +64,7 @@ func newStatusCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			link, err := cl.ShadowLinkService().GetShadowLink(cmd.Context(), connect.NewRequest(&adminv2.GetShadowLinkRequest{
 				Name: linkName,
 			}))
-			// TODO: handle NotFound error and print a friendly message.
-			out.MaybeDie(err, "unable to get Redpanda Shadow Link status %q: %v", linkName, err)
+			out.MaybeDie(err, "unable to get Redpanda Shadow Link status %q: %v", linkName, handleConnectError(err, "get", linkName))
 
 			opts.defaultOrAll()
 			printShadowLinkStatus(link.Msg.GetShadowLink(), opts)

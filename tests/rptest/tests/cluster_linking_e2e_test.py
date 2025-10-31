@@ -20,7 +20,6 @@ import json
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.cluster.cluster_spec import ClusterSpec
 from connectrpc.errors import ConnectError, ConnectErrorCode
-from contextlib import nullcontext
 from ducktape.mark import matrix
 from ducktape.mark import ignore
 
@@ -29,7 +28,7 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
 )
 from rptest.clients.kafka_cli_tools import KafkaCliToolsError
-from rptest.clients.rpk import RpkTool, RPKACLInput, RpkException
+from rptest.clients.rpk import RpkTool, RPKACLInput, RpkException, RpkGroup
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import TestContext
 from rptest.services.admin import Admin
@@ -55,6 +54,7 @@ from rptest.services.redpanda import (
 )
 from rptest.services.tls import TLSCertManager
 from rptest.tests.cluster_linking_test_base import (
+    CONTROLLER_LOCKED_TASKS,
     DEFAULT_SYNCED_TOPIC_PROPERTIES,
     DISALLOWED_SYNCED_TOPIC_PROPERTIES,
     REQUIRED_SYNCED_TOPIC_PROPERTIES,
@@ -65,7 +65,6 @@ from rptest.tests.cluster_linking_test_base import (
 from rptest.tests.full_disk_test import FDT_LOG_ALLOW_LIST
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import (
-    bg_thread_cm,
     expect_exception,
     wait_until,
     wait_until_result,
@@ -321,6 +320,87 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             assert e.code == ConnectErrorCode.NOT_FOUND, (
                 f"Expected NOT_FOUND error code, got {e.code}"
             )
+
+        task_statuses = got_link.status.task_statuses
+        self.logger.info(f"Shadow link task_statuses: {task_statuses}")
+
+        # Get the controller leader
+        leader_id = Admin(self.target_cluster_service).get_partition_leader(
+            namespace="redpanda", topic="controller", partition=0
+        )
+
+        for task in task_statuses:
+            if task.name in CONTROLLER_LOCKED_TASKS:
+                assert task.state == shadow_link_pb2.TASK_STATE_ACTIVE, (
+                    f'Expected task "{task.name}" to be running, got {task.state}'
+                )
+                assert task.broker_id == leader_id, (
+                    f'Expected task "{task.name}" to be running on controller node {leader_id} not {task.broker_id}'
+                )
+                assert task.shard == 0, (
+                    f'Expected task "{task.name}" to be running on shard 0 not {task.shard}'
+                )
+
+    @cluster(num_nodes=6)
+    def test_task_states_change(self):
+        topic = TopicSpec(name="test-topic", partition_count=3, replication_factor=3)
+        self.source_default_client().create_topic(topic)
+        self.create_link("test-link")
+
+        wait_until(
+            lambda: self._topics_are_present_in_target_cluster([topic]),
+            timeout_sec=20,
+            err_msg="Failed to find topic in target cluster",
+        )
+
+        def _wait_for_controller_tasks_state(
+            expected_state: shadow_link_pb2.TaskState.ValueType,
+        ) -> bool:
+            # Get the controller leader
+            leader_id = Admin(self.target_cluster_service).get_partition_leader(
+                namespace="redpanda", topic="controller", partition=0
+            )
+            task_statuses = self.get_link("test-link").status.task_statuses
+            self.logger.debug(f"Task statuses: {task_statuses}")
+            for task in task_statuses:
+                if task.name in CONTROLLER_LOCKED_TASKS:
+                    assert task.broker_id == leader_id, (
+                        f'Expected task "{task.name}" to be running on controller node {leader_id} not {task.broker_id}'
+                    )
+                    assert task.shard == 0, (
+                        f'Expected task "{task.name}" to be running on shard 0 not {task.shard}'
+                    )
+                    if task.state != expected_state:
+                        return False
+            return True
+
+        wait_until(
+            lambda: _wait_for_controller_tasks_state(shadow_link_pb2.TASK_STATE_ACTIVE),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Controller locked tasks did not become active",
+        )
+
+        # Now shut down the source cluster
+        self.source_cluster.stop()
+
+        wait_until(
+            lambda: _wait_for_controller_tasks_state(
+                shadow_link_pb2.TASK_STATE_LINK_UNAVAILABLE
+            ),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Controller locked tasks did not become link unavailable",
+        )
+
+        # Now restart and expect things to recover
+        self.source_cluster.start()
+        wait_until(
+            lambda: _wait_for_controller_tasks_state(shadow_link_pb2.TASK_STATE_ACTIVE),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Controller locked tasks did not become active after source cluster restart",
+        )
 
     @cluster(num_nodes=6)
     def test_can_not_create_more_than_one_link(self):
@@ -1288,28 +1368,102 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             err_msg="Failed to replicate shadow topic",
         )
 
+    @cluster(num_nodes=6)
+    def test_no_wasm_deploy_on_shadow_topic(self):
+        self.target_cluster_service.set_cluster_config(
+            {"data_transforms_enabled": True}, expect_restart=True
+        )
+        self.create_link("test-link")
+        topic = TopicSpec(name="test-topic", partition_count=3, replication_factor=3)
+        self.source_default_client().create_topic(topic)
+
+        wait_until(
+            lambda: self._topics_are_present_in_target_cluster([topic]),
+            timeout_sec=20,
+            err_msg="Failed to find topic in target cluster",
+        )
+
+        shadow_topic = self.get_shadow_topic("test-link", topic.name)
+        assert shadow_topic.status.state == shadow_link_pb2.SHADOW_TOPIC_STATE_ACTIVE, (
+            f"Expected shadow topic to be active, got {shadow_topic.status.state}"
+        )
+
+        self.target_cluster_rpk.create_topic(
+            topic="wasm-input", partitions=3, replicas=3
+        )
+
+        with expect_exception(RpkException, lambda _: True):
+            # Now attempt to create a wasm targeting the shadow topic
+            self.target_cluster_rpk.deploy_wasm(
+                "test-wasm", "wasm-input", [topic.name], file="tinygo/identity.wasm"
+            )
+
+    def _execute_task_pausing(self, num_topics: int):
+        link_name = "test-link"
+        created_link = self.create_link(link_name=link_name)
+
+        for i in range(num_topics):
+            # First disable the task
+            created_link.configurations.topic_metadata_sync_options.paused = True
+            update_mask = google.protobuf.field_mask_pb2.FieldMask(
+                paths=["configurations.topic_metadata_sync_options.paused"]
+            )
+            self.logger.debug("Disabling topic_metadata_sync task")
+            self.update_link(shadow_link=created_link, update_mask=update_mask)
+
+            topic_name = f"source-topic-{i}"
+            self.logger.debug(f"Creating topic {topic_name} in source cluster")
+            topic = TopicSpec(name=topic_name, partition_count=3, replication_factor=3)
+            self.source_default_client().create_topic(topic)
+
+            self.logger.debug(
+                f"Verifying that topic {topic_name} is NOT created in target cluster"
+            )
+            # Verify that the topic is NOT created in the target cluster
+            with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
+                self.target_cluster.service.wait_until(
+                    lambda: self.topic_exists_in_target(topic_name),
+                    timeout_sec=10,
+                    backoff_sec=1,
+                )
+
+            # Now re-enable the task
+            created_link.configurations.topic_metadata_sync_options.paused = False
+            update_mask = google.protobuf.field_mask_pb2.FieldMask(
+                paths=["configurations.topic_metadata_sync_options.paused"]
+            )
+            self.logger.debug("Enabling topic_metadata_sync task")
+            self.update_link(shadow_link=created_link, update_mask=update_mask)
+
+            self.logger.debug(
+                f"Verifying that topic {topic_name} IS created in target cluster"
+            )
+            self.target_cluster.service.wait_until(
+                lambda: self.topic_exists_in_target(topic_name),
+                timeout_sec=10,
+                backoff_sec=1,
+            )
+
+    @cluster(num_nodes=6)
+    @matrix(shuffle_leadership=[True, False])
+    def test_task_pausing(self, shuffle_leadership: bool):
+        """
+        This test will verify that the pausing and resuming of shadow linking tasks
+        works as expected.  The test will create 10 topics, one at a time, pausing
+        and unpausing the source topic syncer task and verify that the topic is/is not
+        created in the target cluster as expected
+        """
+        num_topics = 5
+        with self.leadership_shuffler(
+            redpanda=self.target_cluster.service,
+            namespace="redpanda",
+            topic="controller",
+            enabled=shuffle_leadership,
+        ):
+            self._execute_task_pausing(num_topics=num_topics)
+
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
-    def leadership_shuffler(self, redpanda, topic: str, enabled: bool):
-        if not enabled:
-            return nullcontext()
-
-        @bg_thread_cm
-        def leadership_transfer_thread(redpanda, topic: str):
-            admin = Admin(redpanda, retry_codes=[503, 504])
-            while (yield):
-                try:
-                    partitions = admin.get_partitions(namespace="kafka", topic=topic)
-                    partition = random.choice(partitions)
-                    p_id = partition["partition_id"]
-                    admin.partition_transfer_leadership(
-                        namespace="kafka", topic=topic, partition=p_id
-                    )
-                except Exception as e:
-                    redpanda.logger.info(f"error transferring leadership: {e}")
-
-        return leadership_transfer_thread(redpanda, topic)
-
     def _get_shadow_topic(
         self,
         shadow_link_name: str,
@@ -1682,9 +1836,93 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         with self._maybe_failure_injector(with_failures):
             self._perform_auto_prefix_trimming(topic.name, partition_count)
 
+    @cluster(num_nodes=8)
+    @matrix(
+        timestamp_type=[
+            "CreateTime",
+            "LogAppendTime",
+        ],
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_replication_timestamps_match(self, timestamp_type, source_cluster_spec):
+        partition_count = 1
+        topic = TopicSpec(
+            name="source-topic",
+            partition_count=partition_count,
+            replication_factor=3,
+            message_timestamp_type=timestamp_type,
+        )
+
+        self.source_default_client().create_topic(topic)
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+        msg_cnt = 100
+        base_ts = 1664453149000
+        self.start_producer_consumer(
+            topic=topic.name,
+            msg_size=128,
+            msg_cnt=msg_cnt,
+            fake_timestamp_ms=base_ts,
+            producer_rate_limit_bps=1024,
+        )
+        self.verify()
+
+        def get_timestamps(rpk: RpkTool, n: int, offset: str):
+            return {
+                int(o): int(t)
+                for o, t in [
+                    tuple(s.split(","))
+                    for s in rpk.consume(
+                        topic=topic.name,
+                        n=n,
+                        offset=offset,
+                        format="%o,%d\n",
+                    ).splitlines()
+                ]
+            }
+
+        expected_timestamps = get_timestamps(
+            self.source_cluster_rpk, msg_cnt, offset="start"
+        )
+
+        consume_from = msg_cnt // 2
+        n_to_consume = msg_cnt - consume_from
+        consume_from_ts = expected_timestamps[msg_cnt // 2]
+
+        consumed = get_timestamps(
+            self.target_cluster_rpk, n=n_to_consume, offset=f"@{consume_from_ts}"
+        )
+
+        assert len(consumed) > 0, "No messages consumed"
+
+        assert min(consumed) == consume_from, (
+            f"Expected to {consume_from=}, but min consumed offset was {min(consumed)}"
+        )
+
+        assert all(ts == expected_timestamps[o] for o, ts in consumed.items()), (
+            f"Timestamps don't match {expected_timestamps=} vs {consumed=}"
+        )
+
 
 class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
-    def create_source_consumer(self, topic, group_name="test_group", consumer_count=1):
+    def create_source_consumer(
+        self,
+        topic: str,
+        group_name: str = "test_group",
+        consumer_count: int = 1,
+        continuous: bool = False,
+    ):
         return KgoVerifierConsumerGroupConsumer(
             self.test_context,
             self.source_cluster.service,
@@ -1692,6 +1930,24 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
             group_name=group_name,
             msg_size=128,
             readers=consumer_count,
+            continuous=continuous,
+        )
+
+    def create_target_consumer(
+        self,
+        topic: str,
+        group_name: str = "test_group",
+        consumer_count: int = 1,
+        continuous: bool = False,
+    ):
+        return KgoVerifierConsumerGroupConsumer(
+            self.test_context,
+            self.target_cluster.service,
+            topic=topic,
+            group_name=group_name,
+            msg_size=128,
+            readers=consumer_count,
+            continuous=continuous,
         )
 
     @cluster(num_nodes=7)
@@ -1756,7 +2012,10 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
         ),
     )
     @matrix(
-        with_failures=[True, False],
+        with_failures=[
+            True,
+            False,
+        ],
         source_cluster_spec=[
             SecondaryClusterSpec(ServiceType.REDPANDA),
             SecondaryClusterSpec(
@@ -1789,10 +2048,20 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
             else:
                 return self._nop_context_manager()
 
-        def _consume_with_group(topic: str, group_id: str):
+        def _consume_with_group(
+            topic: str,
+            group_id: str,
+            rpk: RpkTool = source_rpk,
+            format: str | None = None,
+        ) -> str | None:
             try:
-                source_rpk.consume(
-                    topic=topic, group=group_id, n=1, timeout=5, offset="start"
+                return rpk.consume(
+                    topic=topic,
+                    group=group_id,
+                    n=1,
+                    timeout=5,
+                    offset="start",
+                    format=format,
                 )
             except Exception as e:
                 self.logger.debug(
@@ -1850,6 +2119,165 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                     err_msg="Group states not consistent between source and target clusters",
                     retry_on_exc=True,
                 )
+
+            # now fail over all the topics and confirm that we start consuming at the right spot
+            for topic in topics:
+                metadata = self.failover_link_topic(
+                    link_name="test-link", topic=topic.name
+                )
+                self.logger.debug(f"Failover response: {metadata}")
+                t_status = [
+                    s.status.state
+                    for s in metadata.status.shadow_topics
+                    if s.name == topic.name
+                ]
+                assert next(iter(t_status), None) in [
+                    shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILING_OVER,
+                    shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER,
+                ], (
+                    "Topic state should be FAILING_OVER or FAILED_OVER after failover request"
+                )
+                self.wait_for_topic_status(
+                    link="test-link",
+                    topic=topic.name,
+                    target_status=shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER,
+                )
+
+            wait_until(
+                lambda: _wait_for_group_states_consistent(),
+                timeout_sec=120,
+                backoff_sec=3,
+                err_msg="Group states not consistent after failover",
+                retry_on_exc=True,
+            )
+
+            target_groups: dict[str, RpkGroup] = {
+                g: target_rpk.group_describe(group=g) for g in groups
+            }
+
+            for group_name, g_desc in target_groups.items():
+                partitions: dict[tuple[str, int], int | None] = {
+                    (p.topic, p.partition): p.current_offset for p in g_desc.partitions
+                }
+
+                assigned_topics = set(t for t, _ in partitions)
+
+                # make sure we can consume from every topic in the group
+                for topic in assigned_topics:
+                    r = _consume_with_group(
+                        topic,
+                        group_name,
+                        rpk=target_rpk,
+                        format="%p,%o\n",
+                    )
+                    assert r is not None, f"Failed to consume from {group_name=}"
+                    p, consumed = (int(v) for v in r.split(","))
+                    # sanity check the result against group description
+                    # assume the CG protocol works correctly for the rest of the partitions
+                    expected = partitions[(topic, p)]
+                    assert consumed == expected, (
+                        f"{group_name=}: {topic}/{p} {consumed=} but {expected=}"
+                    )
+
+    @cluster(num_nodes=8)
+    @matrix(
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_consumer_group_rebalance(self, source_cluster_spec):
+        partition_count = 120
+
+        topic = TopicSpec(
+            name=f"source-topic",
+            partition_count=int(partition_count),
+            replication_factor=3,
+        )
+
+        group = "test_group"
+        self.create_link("test-link")
+        source_rpk = RpkTool(self.source_cluster.service)
+        target_rpk = RpkTool(self.target_cluster.service)
+
+        n_messages = 1024 * 1024
+
+        self.source_default_client().create_topic(topic)
+
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.source_cluster.service,
+            topic.name,
+            128,
+            n_messages,
+            rate_limit_bps=1024,
+        )
+        producer.start()
+
+        n_consumers = 10
+
+        def group_is_ready(rpk: RpkTool):
+            gr = rpk.group_describe(group=group, summary=True)
+            return gr.members == n_consumers and gr.state == "Stable"
+
+        consumer = self.create_source_consumer(
+            topic.name,
+            group_name=group,
+            consumer_count=n_consumers,
+            continuous=True,
+        )
+        try:
+            consumer.start()
+            wait_until(
+                lambda: group_is_ready(source_rpk),
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg="Group never stabilized on source cluster",
+            )
+        finally:
+            consumer.stop()
+            consumer.free()
+
+        metadata = self.failover_link_topic(link_name="test-link", topic=topic.name)
+        self.logger.debug(f"Failover response: {metadata}")
+        t_status = [
+            s.status.state
+            for s in metadata.status.shadow_topics
+            if s.name == topic.name
+        ]
+        assert next(iter(t_status), None) in [
+            shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILING_OVER,
+            shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER,
+        ], "Topic state should be FAILING_OVER or FAILED_OVER after failover request"
+        self.wait_for_topic_status(
+            link="test-link",
+            topic=topic.name,
+            target_status=shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER,
+        )
+
+        consumer = self.create_target_consumer(
+            topic.name,
+            group_name=group,
+            consumer_count=n_consumers,
+            continuous=True,
+        )
+        try:
+            consumer.start()
+            wait_until(
+                lambda: group_is_ready(target_rpk),
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg="Group never stabilized on target cluster",
+            )
+            consumer.wait()
+        finally:
+            consumer.stop()
+            consumer.free()
+
+        producer.stop()
+        producer.free()
 
 
 class ShadowLinkSecurityTests(ShadowLinkTestBase):
@@ -1981,8 +2409,22 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
                 producer.do_free()
 
     @cluster(num_nodes=7)
-    @matrix(with_failures=[True, False])
-    def test_link_topic_failover(self, with_failures):
+    @ignore(
+        with_failures=True,
+        source_cluster_spec=SecondaryClusterSpec(
+            ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+        ),
+    )
+    @matrix(
+        with_failures=[True, False],
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_link_topic_failover(self, with_failures, source_cluster_spec):
         num_failover_topics = random.choice([1, 3, 5, 10])
         num_non_failover_topics = random.choice([0, 3, 5, 10])
 
@@ -2093,8 +2535,22 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
             )
 
     @cluster(num_nodes=7)
-    @matrix(with_failures=[True, False])
-    def test_link_failover(self, with_failures):
+    @ignore(
+        with_failures=True,
+        source_cluster_spec=SecondaryClusterSpec(
+            ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+        ),
+    )
+    @matrix(
+        with_failures=[True, False],
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_link_failover(self, with_failures, source_cluster_spec):
         self.create_link("test-link")
         num_topics = random.choice([0, 1, 3, 5, 10])
         if num_topics == 0:
@@ -2296,21 +2752,10 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         self.start_producer_consumer(topic=topic_1.name, msg_size=128, msg_cnt=1000)
         self.verify()
 
-        def check_shadow_topic_states(
-            node_samples: list[dict[str, MetricSamples]], n_active: int
-        ) -> bool:
+        def collect_shadow_topic_states(
+            node_samples: list[dict[str, MetricSamples]],
+        ) -> dict[str, int]:
             sts = "shadow_topic_state"
-            other_statuses = [
-                "failed",
-                "paused",
-                "failing_over",
-                "failed_over",
-                "promoting",
-                "promoted",
-            ]
-
-            if not node_samples:
-                return False
 
             by_status: dict[str, int] = {}
             for samples in node_samples:
@@ -2321,34 +2766,63 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
                     if status not in by_status:
                         by_status[status] = 0
                     by_status[status] += int(s.value)
-            return by_status["active"] == n_active and all(
-                [by_status[s] == 0 for s in other_statuses]
-            )
+            return by_status
+
+        def check_shadow_topic_states(
+            node_samples: list[dict[str, MetricSamples]],
+            expected_states: dict[str, int],
+        ) -> bool:
+            all_states = [
+                "active",
+                "failed",
+                "paused",
+                "failing_over",
+                "failed_over",
+                "promoting",
+                "promoted",
+            ]
+            expected = {
+                **expected_states,
+                **{s: 0 for s in all_states if s not in expected_states},
+            }
+
+            by_status = collect_shadow_topic_states(node_samples)
+            return all(by_status[s] == expected[s] for s in all_states)
+
+        def _get_total_value(
+            node_samples: list[dict[str, MetricSamples]], metric_name: str
+        ) -> Optional[int]:
+            total_value = 0
+            for samples in node_samples:
+                if metric_name not in samples:
+                    return None
+                for s in samples[metric_name].samples:
+                    total_value += int(s.value)
+            return total_value
 
         def check_total_value(
             node_samples: list[dict[str, MetricSamples]],
             metric_name: str,
             expected_total: int,
         ) -> bool:
-            total_records = 0
-            for samples in node_samples:
-                if metric_name not in samples:
-                    return False
-                for s in samples[metric_name].samples:
-                    total_records += s.value
-            return total_records == expected_total
+            total_records = _get_total_value(node_samples, metric_name)
+            return total_records is not None and total_records == expected_total
 
         # This function only checks that the result is greater than zero. i.e. something has been returned by this metric
         def check_value_positive(
             node_samples: list[dict[str, MetricSamples]], metric_name: str
         ) -> bool:
-            total_value = 0
-            for samples in node_samples:
-                if metric_name not in samples:
-                    return False
-                for s in samples[metric_name].samples:
-                    total_value += s.value
-            return total_value > 0
+            total_value = _get_total_value(node_samples, metric_name)
+            return total_value is not None and total_value > 0
+
+        # This function checks that the result is at least min_value.
+        def check_value_at_least(
+            node_samples: list[dict[str, MetricSamples]],
+            metric_name: str,
+            min_value: int,
+        ) -> bool:
+            total_value = _get_total_value(node_samples, metric_name)
+            return total_value is not None and total_value >= min_value
 
         def check_metric_exists(
             node_samples: list[dict[str, MetricSamples]], metric_name: str
@@ -2359,10 +2833,13 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             return True
 
         def active_shadow_topics_1(samples: list[dict[str, MetricSamples]]):
-            return check_shadow_topic_states(samples, 1)
+            return check_shadow_topic_states(samples, {"active": 1})
 
         def active_shadow_topics_2(samples: list[dict[str, MetricSamples]]):
-            return check_shadow_topic_states(samples, 2)
+            return check_shadow_topic_states(samples, {"active": 2})
+
+        def failed_over_topics_3(samples: list[dict[str, MetricSamples]]):
+            return check_shadow_topic_states(samples, {"failed_over": 3})
 
         def check_records_fetched_1000(samples: list[dict[str, MetricSamples]]):
             return check_total_value(samples, "total_records_fetched", 1000)
@@ -2379,8 +2856,14 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         def check_bytes_fetched(samples: list[dict[str, MetricSamples]]):
             return check_value_positive(samples, "total_bytes_fetched")
 
+        def check_bytes_fetched_128000(samples: list[dict[str, MetricSamples]]):
+            return check_value_at_least(samples, "total_bytes_fetched", 128000)
+
         def check_bytes_written(samples: list[dict[str, MetricSamples]]):
             return check_value_positive(samples, "total_bytes_written")
+
+        def check_bytes_written_128000(samples: list[dict[str, MetricSamples]]):
+            return check_value_at_least(samples, "total_bytes_written", 128000)
 
         def check_shadow_lag_zero(node_samples: list[dict[str, MetricSamples]]) -> bool:
             return check_total_value(node_samples, "shadow_lag", 0)
@@ -2393,25 +2876,34 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         def check_client_errors(node_samples: list[dict[str, MetricSamples]]) -> bool:
             return check_metric_exists(node_samples, "client_errors")
 
+        def validate_metrics(
+            timeout_sec: int, metric_validators: list[tuple[str, Callable]]
+        ):
+            for metric_name, validator in metric_validators:
+                self.logger.debug(f"Validating values of metric: {metric_name}")
+                wait_until(
+                    lambda: self._validate_metrics(
+                        target_nodes, [metric_name], validator
+                    ),
+                    timeout_sec=timeout_sec,
+                    backoff_sec=1,
+                    err_msg=f"Failed to get the expected metrics value for metric {metric_name}",
+                )
+
         target_nodes = self.target_cluster.service.nodes
 
-        metric_validators = [
-            ("shadow_topic_state", active_shadow_topics_1),
-            ("total_records_fetched", check_records_fetched_1000),
-            ("total_records_written", check_records_written_1000),
-            ("total_bytes_fetched", check_bytes_fetched),
-            ("total_bytes_written", check_bytes_written),
-            ("shadow_lag", check_shadow_lag_zero),
-            ("client_errors", check_client_errors),
-        ]
-        for metric_name, validator in metric_validators:
-            self.logger.debug(f"Validating values of metric: {metric_name}")
-            wait_until(
-                lambda: self._validate_metrics(target_nodes, [metric_name], validator),
-                timeout_sec=10,
-                backoff_sec=1,
-                err_msg=f"Failed to get the expected metrics value for metric {metric_name}",
-            )
+        validate_metrics(
+            timeout_sec=10,
+            metric_validators=[
+                ("shadow_topic_state", active_shadow_topics_1),
+                ("total_records_fetched", check_records_fetched_1000),
+                ("total_records_written", check_records_written_1000),
+                ("total_bytes_fetched", check_bytes_fetched_128000),
+                ("total_bytes_written", check_bytes_written_128000),
+                ("shadow_lag", check_shadow_lag_zero),
+                ("client_errors", check_client_errors),
+            ],
+        )
 
         topic_2 = TopicSpec(
             name="test-topic-2", partition_count=3, replication_factor=1
@@ -2420,23 +2912,18 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         self.start_producer_consumer(topic=topic_2.name, msg_size=128, msg_cnt=1500)
         self.verify()
 
-        metric_validators = [
-            ("shadow_topic_state", active_shadow_topics_2),
-            ("total_records_fetched", check_records_fetched_2500),
-            ("total_records_written", check_records_written_2500),
-            ("total_bytes_fetched", check_bytes_fetched),
-            ("total_bytes_written", check_bytes_written),
-            ("shadow_lag", check_shadow_lag_zero),
-            ("client_errors", check_client_errors),
-        ]
-        for metric_name, validator in metric_validators:
-            self.logger.debug(f"Validating values of metric: {metric_name}")
-            wait_until(
-                lambda: self._validate_metrics(target_nodes, [metric_name], validator),
-                timeout_sec=10,
-                backoff_sec=1,
-                err_msg=f"Failed to get the expected metrics value for metric {metric_name}",
-            )
+        validate_metrics(
+            timeout_sec=10,
+            metric_validators=[
+                ("shadow_topic_state", active_shadow_topics_2),
+                ("total_records_fetched", check_records_fetched_2500),
+                ("total_records_written", check_records_written_2500),
+                ("total_bytes_fetched", check_bytes_fetched),
+                ("total_bytes_written", check_bytes_written),
+                ("shadow_lag", check_shadow_lag_zero),
+                ("client_errors", check_client_errors),
+            ],
+        )
 
         topic_3 = TopicSpec(
             name="test-topic-3", partition_count=1, replication_factor=3
@@ -2456,30 +2943,30 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             use_transactions=True,
             msgs_per_transaction=10000,
         )
-        metric_validators = [
-            ("shadow_lag", check_shadow_lag_positive),
-        ]
-        for metric_name, validator in metric_validators:
-            self.logger.debug(f"Validating values of metric: {metric_name}")
-            wait_until(
-                lambda: self._validate_metrics(target_nodes, [metric_name], validator),
-                timeout_sec=30,
-                backoff_sec=1,
-                err_msg=f"Failed to get the expected metrics value for metric {metric_name}",
-            )
+        validate_metrics(
+            timeout_sec=30,
+            metric_validators=[
+                ("shadow_lag", check_shadow_lag_positive),
+            ],
+        )
         self.verify()
 
-        metric_validators = [
-            ("shadow_lag", check_shadow_lag_zero),
-        ]
-        for metric_name, validator in metric_validators:
-            self.logger.debug(f"Validating values of metric: {metric_name}")
-            wait_until(
-                lambda: self._validate_metrics(target_nodes, [metric_name], validator),
-                timeout_sec=30,
-                backoff_sec=1,
-                err_msg=f"Failed to get the expected metrics value for metric {metric_name}",
-            )
+        validate_metrics(
+            timeout_sec=30,
+            metric_validators=[
+                ("shadow_lag", check_shadow_lag_zero),
+            ],
+        )
+
+        self.failover_link(name="test-link")
+        self.wait_for_link_failover(link="test-link")
+
+        validate_metrics(
+            timeout_sec=10,
+            metric_validators=[
+                ("shadow_topic_state", failed_over_topics_3),
+            ],
+        )
 
 
 class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):

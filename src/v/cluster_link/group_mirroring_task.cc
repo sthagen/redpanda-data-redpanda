@@ -25,6 +25,10 @@ void group_mirroring_task::update_config(const model::metadata& link_metadata) {
     set_run_interval(_config.get_task_interval());
 }
 
+model::enabled_t group_mirroring_task::is_enabled() const {
+    return _config.is_enabled;
+}
+
 namespace {
 
 chunked_hash_set<::model::partition_id>
@@ -50,31 +54,28 @@ coordinators_on_current_shard(link& link, ss::shard_id, ::model::node_id) {
 }
 } // namespace
 
-ss::future<> group_mirroring_task::run_impl() {
+ss::future<task::state_transition> group_mirroring_task::run_impl() {
     auto result = co_await list_consumer_groups();
 
     if (!result.has_value()) {
-        make_unavailable(result.error());
-        co_return;
+        co_return make_unavailable(result.error());
     }
 
     if (_needs_coordinator_update) {
         auto result = co_await update_group_coordinators();
 
         if (!result.has_value()) {
-            make_unavailable(result.error());
-            co_return;
+            co_return make_unavailable(result.error());
         }
     }
 
     result = co_await synchronize_consumer_groups_offsets();
 
     if (!result.has_value()) {
-        make_unavailable(result.error());
-        co_return;
+        co_return make_unavailable(result.error());
     }
 
-    make_active();
+    co_return make_active();
 };
 
 bool group_mirroring_task::should_start_impl(
@@ -205,22 +206,21 @@ bool group_mirroring_task::should_group_be_mirrored(
     return current_shard_coordinators.contains(*maybe_partition);
 }
 
-void group_mirroring_task::make_unavailable(const error& err) {
+task::state_transition
+group_mirroring_task::make_unavailable(const error& err) {
     vlog(logger().warn, "Group mirroring task failed: {}", err);
 
-    if (get_state() != model::task_state::link_unavailable) {
-        std::ignore = change_state(
-          model::task_state::link_unavailable, fmt::format("{}", err));
-    }
+    return state_transition{
+      .desired_state = model::task_state::link_unavailable,
+      .reason = fmt::format("{}", err)};
 }
 
-void group_mirroring_task::make_active() {
+task::state_transition group_mirroring_task::make_active() {
     vlog(logger().trace, "Group mirroring task finished successfully");
 
-    if (get_state() != model::task_state::active) {
-        std::ignore = change_state(
-          model::task_state::active, "Group mirroring finished successfully");
-    }
+    return state_transition{
+      .desired_state = model::task_state::active,
+      .reason = "Group mirroring task finished successfully"};
 }
 
 ss::future<group_mirroring_task::result_t>
@@ -623,7 +623,7 @@ group_mirroring_task::list_groups_from_broker(::model::node_id broker_id) {
       broker_id, kafka::list_groups_api::key);
     if (!versions) {
         vlog(
-          logger().error,
+          logger().warn,
           "Broker {} does not support list groups API",
           broker_id);
         co_return std::unexpected<error>(ssx::sformat(

@@ -1,5 +1,5 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest", "redpanda_test_cc_library")
 load("//bazel/pbgen:pbgen.bzl", "redpanda_proto_library")
 
 proto_library(
@@ -61,5 +61,28 @@ redpanda_cc_gtest(
         "@abseil-cpp//absl/time",
         "@fmt",
         "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "list_kafka_connections_rpbench",
+    timeout = "long",
+    srcs = [
+        "list_kafka_connections_bench.cc",
+    ],
+    deps = [
+        "//proto/redpanda/core/admin/v2:cluster_redpanda_proto",
+        "//proto/redpanda/core/admin/v2:kafka_connections_redpanda_proto",
+        "//src/v/container:chunked_vector",
+        "//src/v/kafka/protocol",
+        "//src/v/random:generators",
+        "//src/v/redpanda/admin:aip_ordering",
+        "//src/v/redpanda/admin:kafka_connections_service_impl",
+        "//src/v/ssx:async_algorithm",
+        "//src/v/ssx:async_clear",
+        "//src/v/ssx:async_merge_top_k",
+        "@boost//:uuid",
+        "@seastar",
+        "@seastar//:benchmark",
     ],
 )

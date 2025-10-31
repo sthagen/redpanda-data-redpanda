@@ -362,26 +362,26 @@ func TestMapConsumerOffsetSyncOptions(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "disabled with zero interval",
+			name: "paused with zero interval",
 			opts: &ConsumerOffsetSyncOptions{
-				Enabled:  false,
+				Paused:   true,
 				Interval: 0,
 			},
 			want: &adminv2.ConsumerOffsetSyncOptions{
-				Enabled: false,
+				Paused: true,
 			},
 		},
 		{
-			name: "enabled with filters",
+			name: "not paused with filters",
 			opts: &ConsumerOffsetSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: 45 * time.Second,
 				GroupFilters: []*NameFilter{
 					{PatternType: PatternTypeLiteral, FilterType: FilterTypeInclude, Name: "*"},
 				},
 			},
 			want: &adminv2.ConsumerOffsetSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: durationpb.New(45 * time.Second),
 				GroupFilters: []*adminv2.NameFilter{
 					{PatternType: adminv2.PatternType_PATTERN_TYPE_LITERAL, FilterType: adminv2.FilterType_FILTER_TYPE_INCLUDE, Name: "*"},
@@ -410,19 +410,19 @@ func TestMapSecuritySyncOptions(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "disabled with no filters",
+			name: "paused with no filters",
 			opts: &SecuritySettingsSyncOptions{
-				Enabled:  false,
+				Paused:   true,
 				Interval: 0,
 			},
 			want: &adminv2.SecuritySettingsSyncOptions{
-				Enabled: false,
+				Paused: true,
 			},
 		},
 		{
-			name: "enabled with ACL filters",
+			name: "not paused with ACL filters",
 			opts: &SecuritySettingsSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: 120 * time.Second,
 				ACLFilters: []*ACLFilter{
 					{
@@ -441,7 +441,7 @@ func TestMapSecuritySyncOptions(t *testing.T) {
 				},
 			},
 			want: &adminv2.SecuritySettingsSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: durationpb.New(120 * time.Second),
 				AclFilters: []*adminv2.ACLFilter{
 					{
@@ -919,27 +919,27 @@ func TestAdminConsumerOffsetSyncToCfg(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "disabled with nil interval",
+			name: "paused with nil interval",
 			opts: &adminv2.ConsumerOffsetSyncOptions{
-				Enabled:  false,
+				Paused:   true,
 				Interval: nil,
 			},
 			want: &ConsumerOffsetSyncOptions{
-				Enabled:  false,
+				Paused:   true,
 				Interval: 0,
 			},
 		},
 		{
-			name: "enabled with filters",
+			name: "not paused with filters",
 			opts: &adminv2.ConsumerOffsetSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: durationpb.New(45 * time.Second),
 				GroupFilters: []*adminv2.NameFilter{
 					{PatternType: adminv2.PatternType_PATTERN_TYPE_LITERAL, FilterType: adminv2.FilterType_FILTER_TYPE_INCLUDE, Name: "*"},
 				},
 			},
 			want: &ConsumerOffsetSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: 45 * time.Second,
 				GroupFilters: []*NameFilter{
 					{PatternType: PatternTypeLiteral, FilterType: FilterTypeInclude, Name: "*"},
@@ -968,20 +968,20 @@ func TestAdminSecuritySyncToCfg(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "disabled with no filters",
+			name: "paused with no filters",
 			opts: &adminv2.SecuritySettingsSyncOptions{
-				Enabled:  false,
+				Paused:   true,
 				Interval: nil,
 			},
 			want: &SecuritySettingsSyncOptions{
-				Enabled:  false,
+				Paused:   true,
 				Interval: 0,
 			},
 		},
 		{
-			name: "enabled with ACL filters",
+			name: "not paused with ACL filters",
 			opts: &adminv2.SecuritySettingsSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: durationpb.New(120 * time.Second),
 				AclFilters: []*adminv2.ACLFilter{
 					{
@@ -1000,7 +1000,7 @@ func TestAdminSecuritySyncToCfg(t *testing.T) {
 				},
 			},
 			want: &SecuritySettingsSyncOptions{
-				Enabled:  true,
+				Paused:   false,
 				Interval: 120 * time.Second,
 				ACLFilters: []*ACLFilter{
 					{
@@ -1164,6 +1164,7 @@ func TestRoundTrip(t *testing.T) {
 		},
 		TopicMetadataSyncOptions: &TopicMetadataSyncOptions{
 			Interval: 45 * time.Second,
+			Paused:   true,
 			AutoCreateShadowTopicFilters: []*NameFilter{
 				{
 					PatternType: PatternTypeLiteral,
@@ -1197,7 +1198,7 @@ func TestRoundTrip(t *testing.T) {
 			StartAtEarliest: &StartAtEarliest{},
 		},
 		ConsumerOffsetSyncOptions: &ConsumerOffsetSyncOptions{
-			Enabled:  true,
+			Paused:   true,
 			Interval: 90 * time.Second,
 			GroupFilters: []*NameFilter{
 				{
@@ -1213,7 +1214,7 @@ func TestRoundTrip(t *testing.T) {
 			},
 		},
 		SecuritySyncOptions: &SecuritySettingsSyncOptions{
-			Enabled:  true,
+			Paused:   true,
 			Interval: 120 * time.Second,
 			ACLFilters: []*ACLFilter{
 				{

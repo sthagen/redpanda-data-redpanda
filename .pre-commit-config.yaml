@@ -1,0 +1,45 @@
+# Pre-commit hooks for Redpanda project
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+default_language_version:
+  python: python3
+
+repos:
+  # Python formatting and linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.10
+    hooks:
+      # we can't enable this one yet because we aren't ruff-check clean
+      # - id: ruff-check
+      #   args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Shell script formatting
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
+    hooks:
+      - id: shfmt
+        # args should be kept in sync with vtools/taskfiles/lint.yml
+        # except that we add -d to provide some feedback about the error
+        args: ['-i', '2', '-ci', '-s', '-w', '-d']
+
+  # Local hooks
+  - repo: local
+    hooks:
+        # runs python type checking (same as task rp:type-check) but only in
+        # manual mode for now as it's too slow for pre-commit for now
+      - id: python-type-check
+        name: Python type checking (pyright)
+        entry: env TC_DOCKER_ARGS=--quiet tools/type-checking/type-check.sh pre-commit
+        language: system
+        stages: [manual]
+        files: '(tests/rptest/.*\.py$)|(tools/type-checking/.*)'
+
+      - id: clang-format
+        name: C++ formatting (clang-format)
+        entry: ./tools/clang-format -i
+        language: script
+        types_or: [c++, c]
+        files: '\.(cc|h)$'
+

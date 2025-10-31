@@ -77,7 +77,9 @@ class TypeCheck:
 
         self._config: Path = self._tests_root / args.config
         self.pyright: Path = args.pyright_path
-        self._input_files: str | None = args.input_files or None
+        self._input_files: list[str] | None = (
+            args.input_files if args.input_files else None
+        )
         self._force_level: Level | None = (
             Level(args.force_level) if args.force_level else None
         )
@@ -276,7 +278,7 @@ class TypeCheck:
 
         return not failed
 
-    def promotion_check(self):
+    def promotion_check(self, always_update: bool = False):
         """Check if files can be promoted to stricter levels than their current assignment."""
 
         # Group files by their current level for efficient batch testing
@@ -307,9 +309,9 @@ class TypeCheck:
             print("No files can be promoted to stricter levels.")
 
         # Update strictness file if requested and there are promotable files
-        if self._args.update:
+        if (self._args.update or always_update) and promotable_files:
             self._update_strictness_file(promotable_files)
-            return True
+            return self._args.update
         else:
             is_sorted = self._check_strictness_file_sorted()
             return is_sorted and not promotable_files
@@ -522,6 +524,51 @@ class TypeCheck:
     def check_sorted(self):
         self._check_strictness_file_sorted()
 
+    def pre_commit(self):
+        """Run the promotion-check and check commands on changed files only.
+
+        This is intended to be used as a pre-commit hook to catch type checking issues
+        before they are committed.
+        """
+
+        # this is basically the same as ci, but we pre-process the
+        # input files to remove tests/ since things should be relative
+        # to tests/ not the repo-root
+
+        self._input_files = [
+            p.removeprefix("tests/")
+            for p in self._args.input_files
+            if p.startswith("tests/")
+        ]
+
+        # type-check
+        file_count = self.input_file_count()
+        if self.check():
+            print(f"Type check passed on {file_count} files")
+        else:
+            print(f"{self.info} run this command locally to reproduce:")
+            print("pre-commit run --hook-stage=manual python-type-check")
+            # fail eagerly since the considerations are different than CI:
+            # favor fast feedback as user will run again anyway
+            return False
+
+        if self.promotion_check(always_update=True):
+            print(f"Promotion check passed on {file_count} files")
+        else:
+            print(
+                f"{self.info} The updated type-check-strictness.json should be in your working tree now, run:"
+            )
+            print("git add tools/type-checking/type-check-strictness.json")
+            print("to add it to your stage and try again.")
+            return False
+
+        return True
+
+    def input_file_count(self) -> int:
+        """Return the number of input files that will be processed."""
+        strictness_map = self._get_input_files()
+        return sum(len(files) for files in strictness_map.values())
+
     def _update_strictness_file(
         self, promotable_files: list[tuple[Path, Level, Level]]
     ):
@@ -604,15 +651,20 @@ class TypeCheck:
 
     def _get_input_files(self):
         """Return a map of strictness level to a list of files which are in that level."""
-        input_files = self._input_files or "rptest/**/*.py"
-        if (abs_input := Path(self._tests_root / input_files)).is_file():
-            self.vprint(f"treating {input_files} as a file")
-            files = [abs_input]
-        else:
-            self.vprint(f"treating {input_files} as a glob")
-            files = list(self._tests_root.glob(input_files))
+        input_patterns = self._input_files if self._input_files else ["rptest/**/*.py"]
+
+        files: list[Path] = []
+        for pattern in input_patterns:
+            if (abs_input := Path(self._tests_root / pattern)).is_file():
+                self.vprint(f"treating {pattern} as a file")
+                files.append(abs_input)
+            else:
+                self.vprint(f"treating {pattern} as a glob")
+                matched = list(self._tests_root.glob(pattern))
+                files.extend(matched)
+
         if not files:
-            raise RuntimeError(f"No files matched input glob: {input_files}")
+            raise RuntimeError(f"No files matched input patterns: {input_patterns}")
 
         # If force level is specified, put all files at that level
         if self._force_level is not None:
@@ -706,7 +758,7 @@ class TypeCheck:
             raise
 
 
-CMDS = ["check", "promotion-check", "fruit", "ci", "check-sorted"]
+CMDS = ["check", "promotion-check", "fruit", "ci", "check-sorted", "pre-commit"]
 
 COMMAND_DOC = """Commands:\nmissing-check: Find files and directories which are not included in the pyrightconfig.json
 check: Run the type checker on the input set and print any errors to stdout
@@ -724,6 +776,7 @@ def main():
     )
 
     p.add_argument("command", type=str, help="Command to run", choices=CMDS)
+
     p.add_argument(
         "--tests-root",
         type=Path,
@@ -743,8 +796,6 @@ def main():
         help="Path to (or bare name of) pyright",
         default="pyright",
     )
-
-    p.add_argument("--input-files", help="Path (glob) to input file(s)", type=str)
 
     p.add_argument(
         "--force-level",
@@ -787,6 +838,14 @@ def main():
         type=int,
         default=10,
         help="Number of files to show per target level when using 'fruit' command (default: 10)",
+    )
+
+    p.add_argument(
+        "input_files",
+        nargs="*",
+        help="Path/globs to input file(s)",
+        type=str,
+        default=None,
     )
 
     args = p.parse_args()

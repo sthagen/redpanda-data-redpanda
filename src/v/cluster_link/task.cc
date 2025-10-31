@@ -101,7 +101,30 @@ private:
         vlog(_task->logger().trace, "run_task started");
         try {
             vlog(_task->logger().trace, "running task");
-            co_await _task->run_impl();
+            auto state_change = co_await _task->run_impl();
+            vlog(
+              _task->logger().trace,
+              "task run_impl completed, desired state: {}, reason: {}",
+              state_change.desired_state,
+              state_change.reason);
+            if (
+              _task->get_state() == model::task_state::stopped
+              || _task->get_state() == model::task_state::paused) {
+                vlog(
+                  _task->logger().debug,
+                  "{}",
+                  "task is {}, skipping state change",
+                  _task->get_state());
+                co_return;
+            }
+            auto res = _task->change_state(
+              state_change.desired_state, state_change.reason);
+            if (!res.has_value()) {
+                vlog(
+                  _task->logger().warn,
+                  "Failed to change task state: {}",
+                  res.assume_error().message());
+            }
         } catch (...) {
             auto e = std::current_exception();
             auto log_level = ssx::is_shutdown_exception(e)
@@ -153,8 +176,9 @@ ss::future<cl_result<void>> task::stop() noexcept {
       model::task_state::stopped, ssx::sformat("{} has stopped", name()));
     vassert(res.has_value(), "Failed to change state to stopped");
     if (_task_runner) {
-        co_await _task_runner->stop();
+        auto runner = std::move(_task_runner);
         _task_runner.reset();
+        co_await runner->stop();
     }
     co_return outcome::success();
 }
@@ -164,8 +188,9 @@ ss::future<cl_result<void>> task::pause() {
     BOOST_OUTCOME_CO_TRYX(change_state(
       model::task_state::paused, ssx::sformat("{} has paused", name())));
     if (_task_runner) {
-        co_await _task_runner->stop();
+        auto runner = std::move(_task_runner);
         _task_runner.reset();
+        co_await runner->stop();
     }
     co_return outcome::success();
 }
@@ -173,11 +198,13 @@ ss::future<cl_result<void>> task::pause() {
 /// Returns true if the task should be started on the current node shard
 bool task::should_start(
   ss::shard_id shard, ::model::node_id current_node) const {
-    if (get_state() != model::task_state::stopped) {
+    if (
+      get_state() != model::task_state::stopped
+      && get_state() != model::task_state::paused) {
         return false;
     }
-    return should_start_impl(shard, current_node);
-};
+    return is_enabled() && should_start_impl(shard, current_node);
+}
 
 /// Returns true if the task should be stopped on the current node shard
 bool task::should_stop(
@@ -186,13 +213,29 @@ bool task::should_stop(
         return false;
     }
     return should_stop_impl(shard, current_node);
-};
+}
+
+bool task::should_pause(
+  ss::shard_id shard, ::model::node_id current_node) const {
+    if (get_state() == model::task_state::paused) {
+        return false;
+    }
+    // A paused task is one that is disabled but can be resumed later
+    return !is_enabled() && should_start_impl(shard, current_node);
+}
 
 const ss::sstring& task::name() const noexcept { return _name; }
 
 controller_locked_task::controller_locked_task(
   link* link, ss::lowres_clock::duration run_interval, ss::sstring name)
   : task(link, run_interval, std::move(name)) {}
+
+model::task_status_report controller_locked_task::get_status_report() const {
+    auto report = task::get_status_report();
+    report.is_controller_locked_task
+      = model::task_status_report::is_controller_locked_task_t::yes;
+    return report;
+}
 
 bool controller_locked_task::should_start_impl(
   ss::shard_id shard, ::model::node_id current_node) const {
@@ -228,6 +271,10 @@ model::task_status_report task::get_status_report() const {
     report.task_name = name();
     report.task_state = get_state();
     report.task_state_reason = _last_state_change_response;
+    report.is_controller_locked_task
+      = model::task_status_report::is_controller_locked_task_t::no;
+    report.node_id = _link->self();
+    report.shard = ss::this_shard_id();
     return report;
 }
 
@@ -283,13 +330,10 @@ void task::run_callbacks(const state_change& change) {
 
 bool task::valid_previous_state(model::task_state st) const {
     switch (st) {
-    case model::task_state::paused:
-        return _state == model::task_state::active
-               || _state == model::task_state::link_unavailable
-               || _state == model::task_state::faulted;
     case model::task_state::link_unavailable:
         return _state == model::task_state::active;
-    // Always valid to change to stopped, active or faulted
+    // Always valid to change to stopped, active, paused or faulted
+    case model::task_state::paused:
     case model::task_state::stopped:
     case model::task_state::active:
     case model::task_state::faulted:

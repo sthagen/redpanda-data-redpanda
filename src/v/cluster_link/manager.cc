@@ -913,6 +913,18 @@ model::cluster_link_task_status_report manager::get_task_status_report() const {
     return report;
 }
 
+cl_result<model::link_task_status_report>
+manager::get_task_status_report(model::id_t link_id) const {
+    const auto it = _links.find(link_id);
+    if (it == _links.end()) {
+        return err_info(
+          errc::link_id_not_found,
+          ssx::sformat("Link with id '{}' not found", link_id));
+    }
+
+    return it->second->get_task_status_report();
+}
+
 ss::future<> manager::on_controller_leadership(::model::term_id term) {
     if (!_is_controller_leader) {
         co_return;

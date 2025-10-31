@@ -9,6 +9,7 @@
 
 from rptest.services.cluster import cluster
 from rptest.services.admin import Admin
+from ducktape.cluster.cluster import ClusterNode
 from ducktape.utils.util import wait_until
 from rptest.clients.types import TopicSpec
 from rptest.tests.prealloc_nodes import PreallocNodesTest
@@ -44,7 +45,7 @@ class IsolatedDecommissionedNodeTest(PreallocNodesTest):
 
         self.internal_port = 33145
         self.admin = Admin(self.redpanda)
-        self.isolated_node = None
+        self.isolated_node: ClusterNode | None = None
         self.max_records = 40
 
     def is_node_isolated(self):
@@ -161,7 +162,7 @@ class IsolatedDecommissionedNodeTest(PreallocNodesTest):
 
         with firewall_blocked([self.isolated_node], self.internal_port, True):
             wait_until(self.is_node_isolated, timeout_sec=90, backoff_sec=1)
-
+            assert self.isolated_node is not None
             producer = Producer(
                 {
                     "bootstrap.servers": self.redpanda.broker_address(

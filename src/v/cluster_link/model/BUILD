@@ -21,6 +21,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol",
         "//src/v/model",
         "//src/v/serde",
+        "//src/v/serde:bool_class",
         "//src/v/serde:chrono",
         "//src/v/serde:enum",
         "//src/v/serde:map",

@@ -139,6 +139,7 @@ func mapTopicMetadataSyncOptions(opts *TopicMetadataSyncOptions) *adminv2.TopicM
 	pbOpts := &adminv2.TopicMetadataSyncOptions{
 		SyncedShadowTopicProperties: opts.SyncedShadowTopicProperties,
 		ExcludeDefault:              opts.ExcludeDefault,
+		Paused:                      opts.Paused,
 	}
 
 	if opts.Interval > 0 {
@@ -173,7 +174,7 @@ func mapConsumerOffsetSyncOptions(opts *ConsumerOffsetSyncOptions) *adminv2.Cons
 	}
 
 	pbOpts := &adminv2.ConsumerOffsetSyncOptions{
-		Enabled: opts.Enabled,
+		Paused: opts.Paused,
 	}
 
 	if opts.Interval > 0 {
@@ -193,7 +194,7 @@ func mapSecuritySyncOptions(opts *SecuritySettingsSyncOptions) *adminv2.Security
 	}
 
 	pbOpts := &adminv2.SecuritySettingsSyncOptions{
-		Enabled: opts.Enabled,
+		Paused: opts.Paused,
 	}
 
 	if opts.Interval > 0 {
@@ -498,6 +499,7 @@ func adminTopicMetadataSyncToCfg(opts *adminv2.TopicMetadataSyncOptions) *TopicM
 	cfg := &TopicMetadataSyncOptions{
 		SyncedShadowTopicProperties: opts.GetSyncedShadowTopicProperties(),
 		ExcludeDefault:              opts.GetExcludeDefault(),
+		Paused:                      opts.GetPaused(),
 	}
 
 	if opts.GetInterval() != nil {
@@ -530,7 +532,7 @@ func adminConsumerOffsetSyncToCfg(opts *adminv2.ConsumerOffsetSyncOptions) *Cons
 	}
 
 	cfg := &ConsumerOffsetSyncOptions{
-		Enabled: opts.GetEnabled(),
+		Paused: opts.GetPaused(),
 	}
 
 	if opts.GetInterval() != nil {
@@ -550,7 +552,7 @@ func adminSecuritySyncToCfg(opts *adminv2.SecuritySettingsSyncOptions) *Security
 	}
 
 	cfg := &SecuritySettingsSyncOptions{
-		Enabled: opts.GetEnabled(),
+		Paused: opts.GetPaused(),
 	}
 
 	if opts.GetInterval() != nil {

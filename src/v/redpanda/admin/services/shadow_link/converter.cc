@@ -12,6 +12,8 @@
 #include "redpanda/admin/services/shadow_link/converter.h"
 
 #include "cluster_link/model/types.h"
+#include "crypto/crypto.h"
+#include "utils/base64.h"
 
 #include <algorithm>
 #include <optional>
@@ -37,8 +39,10 @@ using proto::admin::shadow_link;
 using proto::admin::shadow_link_client_options;
 using proto::admin::shadow_link_configurations;
 using proto::admin::shadow_link_status;
+using proto::admin::shadow_link_task_status;
 using proto::admin::shadow_topic;
 using proto::admin::shadow_topic_status;
+using proto::admin::task_state;
 using proto::admin::topic_metadata_sync_options;
 using proto::admin::topic_metadata_sync_options_earliest_offset;
 using proto::admin::topic_metadata_sync_options_latest_offset;
@@ -152,6 +156,8 @@ create_topic_metadata_mirroring_config(
           config.starting_offset = model::timestamp(absl::ToUnixMillis(t));
       });
 
+    config.is_enabled = cluster_link::model::enabled_t{!options.get_paused()};
+
     return config;
 }
 
@@ -184,6 +190,8 @@ create_consumer_groups_mirroring_config(
     }
 
     config.filters = to_filter_patterns(options.get_group_filters());
+
+    config.is_enabled = cluster_link::model::enabled_t{!options.get_paused()};
 
     return config;
 }
@@ -334,6 +342,8 @@ create_security_settings_sync_config(
     }
 
     config.acl_filters = to_acl_filters(options.get_acl_filters());
+
+    config.is_enabled = cluster_link::model::enabled_t{!options.get_paused()};
 
     return config;
 }
@@ -517,6 +527,9 @@ authentication_configuration create_authentication_configuration(
           scram_config scram_proto;
           scram_proto.set_username(ss::sstring{scram.username});
           scram_proto.set_password_set(true);
+          scram_proto.set_password_set_at(
+            absl::FromChrono(
+              model::to_time_point(scram.password_last_updated)));
           scram_proto.set_scram_mechanism(
             proto::admin::scram_mechanism::unspecified);
           if (scram.mechanism == "SCRAM-SHA-256") {
@@ -570,12 +583,16 @@ struct tls_visitor {
                 "tls_pem_settings");
           },
           [&key, &cert](tlspem_settings& pem_settings) {
-              pem_settings.set_key(ss::sstring{key()});
+              auto key_digest = bytes_to_base64(
+                crypto::digest(crypto::digest_type::SHA256, key()));
+              pem_settings.set_key_fingerprint(std::move(key_digest));
               pem_settings.set_cert(ss::sstring{cert()});
           },
           [this, &key, &cert](std::monostate) {
               tlspem_settings pem_settings;
-              pem_settings.set_key(ss::sstring{key()});
+              auto key_digest = bytes_to_base64(
+                crypto::digest(crypto::digest_type::SHA256, key()));
+              pem_settings.set_key_fingerprint(std::move(key_digest));
               pem_settings.set_cert(ss::sstring{cert()});
               _tls_settings->set_tls_pem_settings(std::move(pem_settings));
           });
@@ -856,6 +873,7 @@ security_settings_sync_options create_security_settings_sync_options(
     options.set_effective_interval(
       absl::FromChrono(config.get_task_interval()));
     options.set_acl_filters(to_acl_filters(config.acl_filters));
+    options.set_paused(!bool(config.is_enabled));
 
     return options;
 }
@@ -904,6 +922,8 @@ topic_metadata_sync_options create_topic_metadata_sync_options(
 
     starting_offset_to_proto(cfg.starting_offset, options);
 
+    options.set_paused(!bool(cfg.is_enabled));
+
     return options;
 }
 
@@ -915,6 +935,7 @@ consumer_offset_sync_options create_consumer_offset_sync_options(
         cfg.task_interval.value_or(ss::lowres_clock::duration::zero())));
     options.set_effective_interval(absl::FromChrono(cfg.get_task_interval()));
     options.set_group_filters(to_name_filters(cfg.filters));
+    options.set_paused(!bool(cfg.is_enabled));
 
     return options;
 }
@@ -973,6 +994,44 @@ chunked_vector<shadow_topic> create_shadow_topics(
     return shadow_topics;
 }
 
+task_state convert_task_state(cluster_link::model::task_state s) {
+    switch (s) {
+    case cluster_link::model::task_state::active:
+        return task_state::active;
+    case cluster_link::model::task_state::paused:
+        return task_state::paused;
+    case cluster_link::model::task_state::link_unavailable:
+        return task_state::link_unavailable;
+    case cluster_link::model::task_state::stopped:
+        return task_state::not_running;
+    case cluster_link::model::task_state::faulted:
+        return task_state::faulted;
+    }
+}
+
+chunked_vector<shadow_link_task_status> create_task_status(
+  const cluster_link::model::shadow_link_status_report& status_report) {
+    chunked_vector<shadow_link_task_status> task_status;
+    task_status.reserve(status_report.task_status_reports.size());
+
+    for (const auto& [task_name, statuses] :
+         status_report.task_status_reports) {
+        std::ranges::transform(
+          statuses, std::back_inserter(task_status), [](const auto& status) {
+              shadow_link_task_status task_status;
+              task_status.set_name(ss::sstring{status.task_name});
+              task_status.set_state(convert_task_state(status.task_state));
+              task_status.set_reason(ss::sstring{status.task_state_reason});
+              task_status.set_broker_id(status.node_id);
+              task_status.set_shard(status.shard);
+
+              return task_status;
+          });
+    }
+
+    return task_status;
+}
+
 shadow_link_status create_shadow_link_status(
   const cluster_link::model::metadata& md,
   const cluster_link::model::shadow_link_status_report& status_report) {
@@ -980,6 +1039,7 @@ shadow_link_status create_shadow_link_status(
 
     status.set_state(convert_link_status(md.state.status));
     status.set_shadow_topics(create_shadow_topics(md.state, status_report));
+    status.set_task_statuses(create_task_status(status_report));
 
     chunked_vector<ss::sstring> properties_synced;
     auto props = md.configuration.topic_metadata_mirroring_cfg
@@ -1062,6 +1122,58 @@ void merge_output_only_fields(
     to.connection.client_id = from.connection.client_id;
 }
 
+// Used to update any "change on" timestamps, e.g. the "password_set_at" field
+void update_timestamps(
+  const cluster_link::model::metadata& from,
+  cluster_link::model::metadata& to) {
+    if (from.connection.authn_config != to.connection.authn_config) {
+        if (!to.connection.authn_config.has_value()) {
+            return;
+        }
+        ss::visit(
+          *to.connection.authn_config,
+          [&from](cluster_link::model::scram_credentials& c) {
+              // If from does not hold SCRAM credentials, then update the
+              // timestamp of when then password was set
+              if (
+                !from.connection.authn_config.has_value()
+                || !std::holds_alternative<
+                   cluster_link::model::scram_credentials>(
+                  *from.connection.authn_config)) {
+                  if (c.password.empty()) {
+                      return;
+                  }
+                  c.password_last_updated = model::timestamp::now();
+                  return;
+              }
+              const auto& from_creds
+                = std::get<cluster_link::model::scram_credentials>(
+                  *from.connection.authn_config);
+              // If the passwords do not match, then update the timestamp of
+              // when the password was set
+              if (from_creds.password != c.password) {
+                  c.password_last_updated = model::timestamp::now();
+                  return;
+              }
+          });
+    }
+}
+
+// Used to update the timestamps for metadata fields
+void update_timestamps(cluster_link::model::metadata& to) {
+    if (!to.connection.authn_config.has_value()) {
+        return;
+    }
+    ss::visit(
+      *to.connection.authn_config,
+      [](cluster_link::model::scram_credentials& c) {
+          if (c.password.empty()) {
+              return;
+          }
+          c.password_last_updated = model::timestamp::now();
+      });
+}
+
 chunked_vector<topic_partition_information> status_to_partition_information(
   const cluster_link::rpc::shadow_link_status_topic_response& response) {
     chunked_vector<topic_partition_information> resp;
@@ -1093,6 +1205,7 @@ convert_create_to_metadata(create_shadow_link_request req) {
         auto metadata = shadow_link_to_metadata(
           std::move(req.get_shadow_link()));
         metadata.state.status = cluster_link::model::link_status::active;
+        update_timestamps(metadata);
         return metadata;
     } catch (const std::invalid_argument& e) {
         throw serde::pb::rpc::invalid_argument_exception(
@@ -1133,6 +1246,7 @@ create_update_cluster_link_config_cmd(
         auto updated_md = shadow_link_to_metadata(std::move(current_sl));
 
         merge_output_only_fields(current_metadata, updated_md);
+        update_timestamps(current_metadata, updated_md);
 
         return cluster_link::model::update_cluster_link_configuration_cmd{
           .connection = std::move(updated_md.connection),

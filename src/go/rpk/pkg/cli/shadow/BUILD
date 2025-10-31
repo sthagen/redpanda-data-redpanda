@@ -7,6 +7,7 @@ go_library(
         "create.go",
         "delete.go",
         "describe.go",
+        "errors.go",
         "failover.go",
         "list.go",
         "mapper.go",

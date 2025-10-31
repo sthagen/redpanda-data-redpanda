@@ -55,6 +55,7 @@ ss::future<> mux_remote_consumer::start() {
 }
 
 ss::future<> mux_remote_consumer::stop() noexcept {
+    vlog(cllog.trace, "Stopping mux remote consumer");
     _cv.broken();
     auto f = _gate.close();
     co_await _consumer->stop();
@@ -63,6 +64,7 @@ ss::future<> mux_remote_consumer::stop() noexcept {
     co_await ss::max_concurrent_for_each(
       _partitions, concurrent_stops, [](auto& p) { return p.second->stop(); });
     _partitions.clear();
+    vlog(cllog.trace, "mux remote consumer stopped");
 }
 
 mux_remote_consumer::result mux_remote_consumer::add(

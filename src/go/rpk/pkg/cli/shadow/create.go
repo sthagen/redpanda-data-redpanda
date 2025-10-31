@@ -31,15 +31,25 @@ func newCreateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Use:   "create",
 		Args:  cobra.NoArgs,
 		Short: "Create a Redpanda Shadow Link",
-		Long: `Create a Shadow Link
+		Long: `Create a Redpanda Shadow Link.
 
-Create a Shadow Link using a configuration file. The configuration file defines
-the connection details and settings for the Shadow Link. For details on the
-configuration file format, see:
-  rpk shadow config --help
+This command creates a Shadow Link using a configuration file that defines the
+connection details and synchronization settings.
 
-The command prompts for confirmation by default. Use the --no-confirm flag to
-skip the confirmation prompt.
+Before you create a Shadow Link, generate a configuration file with 'rpk shadow
+config generate' and update it with your source cluster details. The command
+prompts you to confirm the creation. Use the --no-confirm flag to skip the
+confirmation prompt.
+
+After you create the Shadow Link, use 'rpk shadow status' to monitor the
+replication progress.
+`,
+		Example: `
+Create a Shadow Link using a configuration file:
+  rpk shadow create --config-file shadow-link.yaml
+
+Create a Shadow Link without confirmation prompt:
+  rpk shadow create -c shadow-link.yaml --no-confirm
 `,
 		Run: func(cmd *cobra.Command, _ []string) {
 			p, err := p.LoadVirtualProfile(fs)
@@ -70,7 +80,7 @@ skip the confirmation prompt.
 			link, err := cl.ShadowLinkService().CreateShadowLink(cmd.Context(), connect.NewRequest(&adminv2.CreateShadowLinkRequest{
 				ShadowLink: shadowLinkConfigToProto(slCfg),
 			}))
-			out.MaybeDie(err, "unable to create shadow link: %v", err)
+			out.MaybeDie(err, "unable to create shadow link: %v", handleConnectError(err, "create", slCfg.Name))
 
 			fmt.Printf("Successfully created shadow link %q with ID %q. To query the status, run:\n  'rpk shadow status %[1]v'\n", link.Msg.GetShadowLink().GetName(), link.Msg.GetShadowLink().GetUid())
 		},

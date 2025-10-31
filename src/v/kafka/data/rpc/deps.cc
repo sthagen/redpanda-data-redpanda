@@ -11,6 +11,7 @@
 
 #include "kafka/data/rpc/deps.h"
 
+#include "cluster/cluster_link/frontend.h"
 #include "cluster/controller.h"
 #include "cluster/fwd.h"
 #include "cluster/metadata_cache.h"
@@ -205,6 +206,20 @@ private:
     cluster::controller* _controller;
 };
 
+class shadow_link_registry_impl : public shadow_link_registry {
+public:
+    explicit shadow_link_registry_impl(
+      ss::sharded<cluster::cluster_link::frontend>* fe)
+      : _fe{fe} {}
+
+    bool is_topic_mutable(const model::topic& topic) const final {
+        return _fe->local().is_topic_mutable_for_kafka_api(topic);
+    }
+
+private:
+    ss::sharded<cluster::cluster_link::frontend>* _fe;
+};
+
 } // namespace
 
 std::unique_ptr<partition_leader_cache>
@@ -296,6 +311,11 @@ partition_manager_proxy::get_term(const model::ntp& ntp) {
 std::unique_ptr<topic_creator>
 topic_creator::make_default(cluster::controller* controller) {
     return std::make_unique<topic_creator_impl>(controller);
+}
+
+std::unique_ptr<shadow_link_registry> shadow_link_registry::make_default(
+  ss::sharded<cluster::cluster_link::frontend>* fe) {
+    return std::make_unique<shadow_link_registry_impl>(fe);
 }
 
 } // namespace kafka::data::rpc

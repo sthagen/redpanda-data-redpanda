@@ -124,6 +124,10 @@ type TopicMetadataSyncOptions struct {
 	// How often to sync metadata
 	// If 0 provided, defaults to 30 seconds
 	Interval time.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
+	// Allows user to pause the topic sync task.  If paused, then
+	// the task will enter the 'paused' state and not sync topics or their
+	// properties from the source cluster.
+	Paused bool `json:"paused,omitempty" yaml:"paused,omitempty"`
 	// The topic filters to use
 	AutoCreateShadowTopicFilters []*NameFilter `json:"auto_create_shadow_topic_filters,omitempty" yaml:"auto_create_shadow_topic_filters,omitempty"`
 	// Additional topic properties to shadow
@@ -161,8 +165,10 @@ type ConsumerOffsetSyncOptions struct {
 	// Sync interval
 	// If 0 provided, defaults to 30 seconds
 	Interval time.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
-	// Whether it's enabled
-	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// Allows user to pause the consumer offset sync task. If paused, then
+	// the task will enter the 'paused' state and not sync consumer offsets from
+	// the source cluster
+	Paused bool `json:"paused,omitempty" yaml:"paused,omitempty"`
 	// The filters
 	GroupFilters []*NameFilter `json:"group_filters,omitempty" yaml:"group_filters,omitempty"`
 }
@@ -171,8 +177,10 @@ type SecuritySettingsSyncOptions struct {
 	// Sync interval
 	// If 0 provided, defaults to 30 seconds
 	Interval time.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
-	// Whether or not it's enabled
-	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	// Allows user to pause the security settings sync task. If paused,
+	// then the task will enter the 'paused' state and will not sync security
+	// settings from the source cluster
+	Paused bool `json:"paused,omitempty" yaml:"paused,omitempty"`
 	// ACL filters
 	ACLFilters []*ACLFilter `json:"acl_filters,omitempty" yaml:"acl_filters,omitempty"`
 }

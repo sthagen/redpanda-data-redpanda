@@ -10,7 +10,6 @@
 package shadow
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,6 +30,29 @@ func newDescribeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Use:   "describe [LINK_NAME]",
 		Args:  cobra.ExactArgs(1),
 		Short: "Describe a Redpanda Shadow Link",
+		Long: `Describe a Redpanda Shadow Link.
+
+This command shows the Shadow Link configuration, including connection settings,
+synchronization options, and filters. Use the flags to display specific sections
+or all sections of the configuration.
+
+By default, the command displays the overview and client configuration sections.
+Use the flags to display additional sections such as topic synchronization,
+consumer offset synchronization, and security synchronization settings.
+`,
+		Example: `
+Describe a Shadow Link with default sections (overview and client):
+  rpk shadow describe my-shadow-link
+
+Display all configuration sections:
+  rpk shadow describe my-shadow-link --print-all
+
+Display specific sections:
+  rpk shadow describe my-shadow-link --print-overview --print-topic
+
+Display only the client configuration:
+  rpk shadow describe my-shadow-link -c
+`,
 		Run: func(cmd *cobra.Command, args []string) {
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "unable to load rpk config: %v", err)
@@ -45,12 +67,7 @@ func newDescribeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			link, err := cl.ShadowLinkService().GetShadowLink(cmd.Context(), connect.NewRequest(&adminv2.GetShadowLinkRequest{
 				Name: linkName,
 			}))
-			if err != nil {
-				if ce := new(connect.Error); errors.As(err, &ce) && ce.Code() == connect.CodeNotFound {
-					out.Die("shadow link %q not found; use 'rpk shadow list' to list all available shadow links", linkName)
-				}
-				out.Die("unable to get Redpanda Shadow Link %q: %v", linkName, err)
-			}
+			out.MaybeDie(err, "unable to get Redpanda Shadow Link %q: %v", linkName, handleConnectError(err, "get", linkName))
 
 			printShadowLinkDescription(link.Msg.GetShadowLink(), opts)
 		},
@@ -216,6 +233,7 @@ func printTopicSync(opts *adminv2.TopicMetadataSyncOptions) {
 	}
 
 	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
+	tw.Print("PAUSED", opts.GetPaused())
 	if opts.HasStartOffset() {
 		var startOffset string
 		if opts.GetStartAtEarliest() != nil {
@@ -252,7 +270,7 @@ func printConsumerOffsetSync(opts *adminv2.ConsumerOffsetSyncOptions) {
 		return
 	}
 
-	tw.Print("ENABLED", opts.GetEnabled())
+	tw.Print("PAUSED", opts.GetPaused())
 	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
 
 	if len(opts.GetGroupFilters()) > 0 {
@@ -271,7 +289,7 @@ func printSecuritySync(opts *adminv2.SecuritySettingsSyncOptions) {
 		return
 	}
 
-	tw.Print("ENABLED", opts.GetEnabled())
+	tw.Print("PAUSED", opts.GetPaused())
 	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
 
 	if len(opts.GetAclFilters()) > 0 {
