@@ -56,6 +56,14 @@ public:
       = 0;
 
     virtual kafka::offset start_offset() = 0;
+
+    // If needed, push the highest seen producer ID into id_allocator. This
+    // helps avoid false-positive idempotency errors, e.g. if, after failing
+    // over, a new producer on the target cluster were assigned an ID already
+    // used on the source cluster. We can avoid this by always making sure the
+    // next ID persisted to the allocator is ahead of the highest producer ID
+    // we've seen from a source cluster batch.
+    virtual ss::future<> maybe_sync_pid() = 0;
 };
 
 class data_sink_factory {

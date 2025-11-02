@@ -196,6 +196,11 @@ public:
         return _instances[id]->app.metadata_cache.local();
     }
 
+    cluster::id_allocator_frontend&
+    get_local_id_allocator_frontend(model::node_id id) {
+        return _instances[id]->app.id_allocator_frontend.local();
+    }
+
     ss::sharded<cluster::partition_manager>&
     get_partition_manager(model::node_id id) {
         return _instances[id]->app.partition_manager;

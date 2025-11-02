@@ -45,6 +45,12 @@ size_t get_cloud_topics_l0_read_path_memory() {
 } // namespace
 
 template<class Clock>
+void read_pipeline<Clock>::stage::push_next_stage(
+  read_request<Clock>& r, bool signal) {
+    _parent->reenqueue(r, signal);
+}
+
+template<class Clock>
 read_pipeline<Clock>::read_pipeline()
   : _mem_quota(get_cloud_topics_l0_read_path_memory(), "read-pipeline")
   // TODO: use config parameter
@@ -124,7 +130,6 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
         err_fallback.cancel();
         co_return errc::shutting_down;
     }
-
     auto res = co_await std::move(fut);
     if (res.has_error()) {
         if (res.error() == errc::timeout) {
@@ -212,6 +217,32 @@ void read_pipeline<Clock>::register_pipeline_error(errc e) {
         // potentially throttle the read path.
         _breaker.register_error();
         break;
+    }
+}
+
+template<class Clock>
+void read_pipeline<Clock>::reenqueue(read_request<Clock>& r, bool signal) {
+    if (r._hook.is_linked()) {
+        r._hook.unlink();
+    }
+    if (r.has_expired()) {
+        vlog(r.rtc_logger.debug, "Read request has expired");
+        r.set_value(errc::timeout);
+    } else {
+        auto next = this->next_stage(r.stage);
+        vlog(
+          r.rtc_logger.debug,
+          "Read request is returned, stage will be propagated from {} to {} {}",
+          r.stage,
+          next,
+          signal ? "with signal" : "without signal");
+        // Move all re-enqueued requests to the next stage automatically
+        // and notify the corresponding event filter.
+        r.stage = next;
+        this->get_pending().push_back(r);
+        if (signal) {
+            this->signal(r.stage);
+        }
     }
 }
 

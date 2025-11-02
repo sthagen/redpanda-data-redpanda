@@ -12,4 +12,5 @@ cloud_topics:
     - tests/cloud_topics/
     - tests/follower_fetching_test.py
     - tests/nodes_decommissioning_test.py
+    - tests/partition_movement_test.py
     - tests/random_node_operations_smoke_test.py

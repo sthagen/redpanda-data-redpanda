@@ -44,6 +44,7 @@ from rptest.services.multi_cluster_services import (
     SecondaryClusterArgs,
     SecondaryClusterSpec,
     ServiceType,
+    Service as MultiService,
 )
 from rptest.services.redpanda import (
     MetricSamples,
@@ -2593,6 +2594,68 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
 
         self._produce_to_topics(
             topics, self.target_cluster.service, expect_failures=False
+        )
+
+    @cluster(num_nodes=7)
+    def test_producer_ids_failover(self):
+        self.create_link("test-link")
+        num_messages = 2
+        topic = TopicSpec(name="test-topic", partition_count=1, replication_factor=3)
+        self.source_default_client().create_topic(topic)
+
+        def produce(n: int, redpanda: MultiService):
+            KgoVerifierProducer.oneshot(
+                self.test_context,
+                redpanda,
+                topic.name,
+                128,
+                n,
+                timeout_sec=30,
+            )
+
+        def consume(n: int, offset: str = "start") -> list[int]:
+            try:
+                raw = self.target_cluster_rpk.consume(
+                    topic=topic.name,
+                    n=n,
+                    partition=0,
+                    timeout=5,
+                    offset=offset,
+                    format="%o,",
+                )
+                return [int(o) for o in raw.split(",")[0:-1]]
+            except Exception as e:
+                return []
+
+        produce(n=num_messages, redpanda=self.source_cluster.service)
+
+        self.target_cluster_service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        wait_until(
+            lambda: consume(1, offset=f"{num_messages - 1}") == [num_messages - 1],
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"First messages never appeared: {consume(num_messages)}",
+        )
+
+        self.failover_link(name="test-link")
+        self.wait_for_link_failover(link="test-link")
+
+        second_round = 2
+
+        produce(n=second_round, redpanda=self.target_cluster.service)
+
+        wait_until(
+            lambda: consume(second_round, offset=f"{num_messages}")
+            == list(range(num_messages, num_messages + second_round)),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Second Messages never appeared: {consume(num_messages)}",
         )
 
 

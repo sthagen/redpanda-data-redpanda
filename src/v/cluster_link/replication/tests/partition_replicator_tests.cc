@@ -171,6 +171,8 @@ public:
 
     kafka::offset start_offset() final { return _start_offset; }
 
+    ss::future<> maybe_sync_pid() final { return ss::now(); }
+
 private:
     model::ntp _ntp{"kafka", "test", model::partition_id(0)};
     mutex _replication_mu{"test_replication"};

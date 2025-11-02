@@ -56,6 +56,7 @@ public:
       ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
       ss::sharded<cluster::security_frontend>* security_fe,
       ss::sharded<kafka::data::rpc::client>* kafka_data_rpc_client,
+      ss::sharded<cluster::id_allocator_frontend>* id_alloc,
       ss::smp_service_group smp_group,
       ss::scheduling_group scheduling_group);
 
@@ -214,6 +215,7 @@ private:
     ss::sharded<cluster::health_monitor_frontend>* _hm_frontend;
     ss::sharded<cluster::security_frontend>* _security_fe;
     ss::sharded<kafka::data::rpc::client>* _kafka_data_rpc_client;
+    ss::sharded<cluster::id_allocator_frontend>* _id_allocator_frontend;
     ss::smp_service_group _smp_group;
     ss::scheduling_group _scheduling_group;
     std::unique_ptr<manager> _manager;
@@ -231,5 +233,6 @@ std::unique_ptr<replication::data_source> make_default_data_source(
 
 std::unique_ptr<replication::data_sink> make_default_data_sink(
   ss::lw_shared_ptr<cluster::partition> partition,
-  const cluster::metadata_cache&);
+  const cluster::metadata_cache&,
+  cluster::id_allocator_frontend&);
 } // namespace cluster_link

@@ -38,6 +38,7 @@ public:
       kafka::offset truncation_offset,
       ss::lowres_clock::time_point deadline) final;
     kafka::offset start_offset() final;
+    ss::future<> maybe_sync_pid() final { return ss::now(); }
 
 private:
     size_t _records_consumed;

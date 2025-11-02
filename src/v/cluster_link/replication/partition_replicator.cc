@@ -199,6 +199,7 @@ ss::future<> partition_replicator::replicate_and_wait(
             .finally(
               [inflight = std::move(inflight), data = std::move(data)]() {});
       });
+    co_await _sink->maybe_sync_pid();
 }
 
 partition_offsets_report

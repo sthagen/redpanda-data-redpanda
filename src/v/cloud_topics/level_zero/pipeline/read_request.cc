@@ -39,7 +39,7 @@ read_request<Clock>::read_request(
       cd_log, rtc, ssx::sformat("ct:read_request[{}]", this->ntp.path())) {
     vlog(
       rtc_logger.debug,
-      "read_request created, timeout: {}ms",
+      "read_request created, timeout: {}",
       std::chrono::duration_cast<std::chrono::milliseconds>(rtc.get_timeout()));
 }
 

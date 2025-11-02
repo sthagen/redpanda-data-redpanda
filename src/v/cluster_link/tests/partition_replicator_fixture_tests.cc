@@ -54,7 +54,9 @@ public:
         auto source = cluster_link::make_default_data_source(
           _source.tp, *_mux_consumer);
         auto sink = cluster_link::make_default_data_sink(
-          partition, get_local_cache(model::node_id{0}));
+          partition,
+          get_local_cache(model::node_id{0}),
+          get_local_id_allocator_frontend(model::node_id{0}));
         _replicator
           = std::make_unique<cluster_link::replication::partition_replicator>(
             _source,

@@ -105,6 +105,8 @@ public:
 
     kafka::offset start_offset() final { return {}; }
 
+    ss::future<> maybe_sync_pid() final { return ss::now(); }
+
 private:
     ss::gate _gate;
 };

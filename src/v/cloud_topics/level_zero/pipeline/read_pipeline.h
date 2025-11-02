@@ -58,7 +58,11 @@ public:
     public:
         explicit stage(pipeline_stage ps, read_pipeline<Clock>* parent)
           : _ps(ps)
-          , _parent(parent) {}
+          , _parent(parent)
+          , _logger(
+              cd_log,
+              parent->get_root_rtc(),
+              ssx::sformat("ct:read_pipeline[{}]", ps)) {}
 
         explicit operator pipeline_stage() const { return _ps; }
 
@@ -96,9 +100,19 @@ public:
             _parent->register_pipeline_error(e);
         }
 
+        /// Return read request back into the pipeline.
+        /// The read request advances to the next stage of the
+        /// pipeline.
+        /// \param r Read request to reenqueue
+        /// \param signal If true signal the next stage that new read request
+        void push_next_stage(read_request<Clock>& r, bool signal = true);
+
+        basic_retry_chain_logger<Clock>& logger() noexcept { return _logger; }
+
     private:
         pipeline_stage _ps;
         read_pipeline<Clock>* _parent;
+        basic_retry_chain_logger<Clock> _logger;
     };
 
     /// Register new pipeline stage
@@ -121,6 +135,15 @@ private:
 
     /// Register read-path errors
     void register_pipeline_error(errc);
+
+    /// Return read request which was already been in the pipeline
+    /// before back into the pipeline.
+    /// The method allows to reenqueue requests returned by get_read_requests
+    /// method.
+    /// \param req Read request to reenqueue
+    /// \param signal If true signal the next stage that new read request is
+    /// available
+    void reenqueue(read_request<Clock>& req, bool signal = true);
 
     // Total size of all fetch requests (estimated using max_bytes)
     size_t _current_size{0};
