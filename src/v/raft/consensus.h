@@ -26,7 +26,7 @@
 #include "raft/consensus_utils.h"
 #include "raft/coordinated_recovery_throttle.h"
 #include "raft/event_manager.h"
-#include "raft/follower_stats.h"
+#include "raft/follower_states.h"
 #include "raft/group_configuration.h"
 #include "raft/heartbeats.h"
 #include "raft/logger.h"
@@ -484,7 +484,7 @@ public:
     std::vector<follower_metrics> get_follower_metrics() const;
     result<follower_metrics> get_follower_metrics(model::node_id) const;
     size_t get_follower_count() const;
-    bool has_followers() const { return _fstats.size() > 0; }
+    bool has_followers() const { return _fstates.size() > 0; }
 
     offset_monitor<model::offset>& visible_offset_monitor() {
         return _consumable_offset_monitor;
@@ -514,7 +514,7 @@ public:
         _priority_tracker.reset_voter_priority_override();
     }
 
-    const follower_stats& get_follower_stats() const { return _fstats; }
+    const follower_states& get_follower_states() const { return _fstates; }
 
     compaction_coordinator& get_compaction_coordinator() {
         return _compaction_coordinator;
@@ -680,7 +680,7 @@ private:
     void update_node_append_timestamp(vnode);
     void maybe_update_node_reply_timestamp(vnode);
 
-    void update_follower_stats(const group_configuration&);
+    void update_follower_states(const group_configuration&);
     void trigger_leadership_notification();
 
     /// \brief _does not_ hold the lock.
@@ -887,7 +887,7 @@ private:
     timer_type _vote_timeout;
 
     /// used for keeping tally on followers
-    follower_stats _fstats;
+    follower_states _fstates;
 
     /// used to wait for background ops before shutting down
     ss::gate _bg;

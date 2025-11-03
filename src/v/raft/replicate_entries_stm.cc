@@ -196,7 +196,7 @@ replicate_entries_stm::append_to_self() {
  *     requests.
  */
 inline bool replicate_entries_stm::should_skip_follower_request(vnode id) {
-    if (auto it = _ptr->_fstats.find(id); it != _ptr->_fstats.end()) {
+    if (auto it = _ptr->_fstates.find(id); it != _ptr->_fstates.end()) {
         const follower_index_metadata& f_meta = it->second;
 
         auto seq_it = _followers_seq.find(id);
@@ -267,8 +267,8 @@ ss::future<result<replicate_result>> replicate_entries_stm::apply(units_t u) {
             return;
         }
         if (rni != _ptr->self()) {
-            auto it = _ptr->_fstats.find(rni);
-            if (it != _ptr->_fstats.end()) {
+            auto it = _ptr->_fstates.find(rni);
+            if (it != _ptr->_fstates.end()) {
                 it->second.expected_log_end_offset = _dirty_offset;
                 it->second.last_sent_protocol_meta = _meta;
             }

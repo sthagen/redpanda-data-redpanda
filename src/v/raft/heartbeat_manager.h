@@ -154,8 +154,8 @@ private:
       = std::pair<group_heartbeat, heartbeat_manager::follower_request_meta>;
 
     // registers heartbeats for a singular raft group
-    // this is synchronous because hb_m doesn't own nor lock _fstats
-    // don't yield the cpu while iterating fstats s.t. our iterator doesn't get
+    // this is synchronous because hb_m doesn't own nor lock _fstates
+    // don't yield the cpu while iterating fstates s.t. our iterator doesn't get
     // invalidated
     void fetch_heartbeats_for_raft_group(
       ss::lw_shared_ptr<consensus>& raft_group,

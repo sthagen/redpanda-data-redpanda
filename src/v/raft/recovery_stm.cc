@@ -608,13 +608,13 @@ ss::future<> recovery_stm::replicate(
             _node_id.id(), r.value(), seq, dirty_offset);
           // If follower stats aren't present we have to stop recovery as
           // follower was removed from configuration
-          if (!_ptr->_fstats.contains(_node_id)) {
+          if (!_ptr->_fstates.contains(_node_id)) {
               _stop_requested = true;
               return;
           }
           // If request was reordered we have to stop recovery as follower state
           // is not known
-          if (seq < _ptr->_fstats.get(_node_id).last_received_seq) {
+          if (seq < _ptr->_fstates.get(_node_id).last_received_seq) {
               _stop_requested = true;
               return;
           }
@@ -714,8 +714,8 @@ ss::future<> recovery_stm::apply() {
 }
 
 std::optional<follower_index_metadata*> recovery_stm::get_follower_meta() {
-    auto it = _ptr->_fstats.find(_node_id);
-    if (it == _ptr->_fstats.end()) {
+    auto it = _ptr->_fstates.find(_node_id);
+    if (it == _ptr->_fstates.end()) {
         vlog(_ctxlog.info, "Node is not longer in followers list");
         return std::nullopt;
     }

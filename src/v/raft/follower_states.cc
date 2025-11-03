@@ -7,13 +7,14 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "raft/follower_stats.h"
+#include "raft/follower_states.h"
 
 #include "absl/container/node_hash_map.h"
 #include "raft/group_configuration.h"
 
 namespace raft {
-void follower_stats::update_with_configuration(const group_configuration& cfg) {
+void follower_states::update_with_configuration(
+  const group_configuration& cfg) {
     cfg.for_each_replica([this](const vnode& rni) {
         if (rni == _self || _followers.contains(rni)) {
             return;
@@ -46,7 +47,7 @@ void follower_stats::update_with_configuration(const group_configuration& cfg) {
     }
 }
 
-std::ostream& operator<<(std::ostream& o, const follower_stats& s) {
+std::ostream& operator<<(std::ostream& o, const follower_states& s) {
     o << "{followers:" << s._followers.size() << ", [";
     for (auto& f : s) {
         o << f.second;

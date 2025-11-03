@@ -1032,7 +1032,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         shadow_link = self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1132,7 +1132,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         shadow_link = self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1312,7 +1312,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         topic = TopicSpec(name="test-topic", partition_count=3, replication_factor=1)
         self.source_default_client().create_topic(topic)
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1440,7 +1440,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                 f"Verifying that topic {topic_name} IS created in target cluster"
             )
             self.target_cluster.service.wait_until(
-                lambda: self.topic_exists_in_target(topic_name),
+                lambda: self.topic_partitions_exists_in_target(topic),
                 timeout_sec=10,
                 backoff_sec=1,
             )
@@ -1542,7 +1542,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1580,7 +1580,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1620,7 +1620,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         shadow_link = self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1670,7 +1670,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1699,7 +1699,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         )
         self.create_link("test-link")
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1828,7 +1828,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -1863,7 +1863,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic.name),
+            lambda: self.topic_partitions_exists_in_target(topic),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
@@ -2461,7 +2461,7 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
         # Wait for topics to be created in the target cluster
         for t in all_topics:
             self.target_cluster.service.wait_until(
-                lambda: self.topic_exists_in_target(t.name),
+                lambda: self.topic_partitions_exists_in_target(t),
                 timeout_sec=60,
                 backoff_sec=1,
                 err_msg=f"Topic {t.name} not found in target cluster",
@@ -2575,7 +2575,7 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
 
         for t in topics:
             self.target_cluster.service.wait_until(
-                lambda: self.topic_exists_in_target(t.name),
+                lambda: self.topic_partitions_exists_in_target(t),
                 timeout_sec=60,
                 backoff_sec=1,
                 err_msg=f"Topic {t.name} not found in target cluster",
@@ -2741,19 +2741,17 @@ class ShadowLinkUpdateBrokersTests(ShadowLinkPreAllocTestBase):
         self.source_cluster_rpk.create_topic(old_source_topic)
         self.other_source_cluster_rpk.create_topic(new_source_topic)
 
-        def topic_exists_in_target(topic: str):
-            topics = self.target_cluster_rpk.list_topics()
-            return topic in topics
-
         self.target_cluster.service.wait_until(
-            lambda: topic_exists_in_target(new_source_topic),
+            lambda: self.topic_exists_in_target(
+                new_source_topic, 1, self.target_cluster_rpk
+            ),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {new_source_topic} not found in target cluster",
         )
-        assert not topic_exists_in_target(old_source_topic), (
-            f"Topic {old_source_topic} should not be visible to the target cluster"
-        )
+        assert not self.topic_exists_in_target(
+            old_source_topic, None, self.target_cluster_rpk
+        ), f"Topic {old_source_topic} should not be visible to the target cluster"
 
 
 class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
@@ -2993,7 +2991,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         )
         self.source_default_client().create_topic(topic_3)
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic_3.name),
+            lambda: self.topic_partitions_exists_in_target(topic_3),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic_3.name} not found in target cluster",
@@ -3209,7 +3207,7 @@ class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):
             self.create_link_with_request(req=req)
 
             self.target_cluster.service.wait_until(
-                lambda: self.topic_exists_in_target(topic.name, 1),
+                lambda: self.topic_partitions_exists_in_target(topic),
                 timeout_sec=30,
                 backoff_sec=1,
                 err_msg=f"Topic {topic.name} not found in target cluster",

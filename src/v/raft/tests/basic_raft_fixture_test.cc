@@ -436,7 +436,7 @@ TEST_P_CORO(
           r->dirty_offset(),
           r->last_visible_index());
         if (r->is_leader()) {
-            for (auto& fs : r->get_follower_stats()) {
+            for (auto& fs : r->get_follower_states()) {
                 vlog(logger().info, "follower: {}", fs.second);
             }
         }
@@ -759,7 +759,7 @@ TEST_F_CORO(raft_fixture, test_delayed_snapshot_request) {
     // unchanged
 
     ASSERT_EQ_CORO(follower_node->raft()->config().all_nodes().size(), 3);
-    EXPECT_EQ(follower_node->raft()->get_follower_stats().size(), 2);
+    EXPECT_EQ(follower_node->raft()->get_follower_states().size(), 2);
     // entries in follower log should be truncated.
     ASSERT_EQ_CORO(
       follower_node->raft()->start_offset(), model::next_offset(last_included));

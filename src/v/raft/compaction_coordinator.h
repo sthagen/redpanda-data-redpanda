@@ -13,7 +13,7 @@
 
 #include "model/fundamental.h"
 #include "raft/consensus_client_protocol.h"
-#include "raft/follower_stats.h"
+#include "raft/follower_states.h"
 #include "raft/fundamental.h"
 #include "raft/logger.h"
 #include "random/simple_time_jitter.h"
@@ -56,7 +56,7 @@ class compaction_coordinator {
 public:
     compaction_coordinator(
       features::feature_table& features,
-      follower_stats& fstats,
+      follower_states& fstates,
       ss::shared_ptr<storage::log> log,
       vnode self,
       ctx_log& logger,
@@ -160,7 +160,7 @@ private:
     using jitter_t = simple_time_jitter<clock_t>;
     jitter_t _jitter;
     clock_t::duration _retry_interval;
-    follower_stats& _fstats;
+    follower_states& _fstates;
     vnode _self;
     raft::group_id _group;
     consensus_client_protocol& _client_protocol;

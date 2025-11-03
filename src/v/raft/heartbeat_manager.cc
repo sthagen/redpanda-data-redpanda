@@ -14,7 +14,7 @@
 #include "base/likely.h"
 #include "base/vlog.h"
 #include "features/feature_table.h"
-#include "follower_stats.h"
+#include "follower_states.h"
 #include "raft/consensus_client_protocol.h"
 #include "raft/errc.h"
 #include "raft/types.h"
@@ -67,8 +67,8 @@ void heartbeat_manager::fetch_heartbeats_for_raft_group(
     }
 
     // for all followers
-    for (auto follower_iterator{raft_group->_fstats.begin()};
-         follower_iterator != raft_group->_fstats.end();
+    for (auto follower_iterator{raft_group->_fstates.begin()};
+         follower_iterator != raft_group->_fstates.end();
          ++follower_iterator) {
         auto& [id, follower_metadata] = *follower_iterator;
         if (follower_metadata.last_received_reply_timestamp > last_heartbeat) {

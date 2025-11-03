@@ -195,6 +195,7 @@ DEFAULT_LOG_ALLOW_LIST: list[CompiledLogAllowElem] = [
     re.compile(
         r"Accessing .*, unexpected REST API error \"http status: Bad Request, error body: 400 Bad Request\" detected, code: _unknown_error_code_, request_id: , resource:"
     ),
+    re.compile(r"Configuring topic .* with id .*SEGV.*"),
 ]
 
 # Log errors that are expected in tests that restart nodes mid-test

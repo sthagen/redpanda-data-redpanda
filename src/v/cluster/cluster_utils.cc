@@ -322,13 +322,13 @@ partition_raft_state get_partition_raft_state(consensus_ptr ptr) {
     raft_state.replication_monitor_state = fmt::format(
       "{}", ptr->get_replication_monitor());
 
-    const auto& fstats = ptr->get_follower_stats();
-    if (ptr->is_elected_leader() && fstats.size() > 0) {
+    const auto& fstates = ptr->get_follower_states();
+    if (ptr->is_elected_leader() && fstates.size() > 0) {
         using follower_state = partition_raft_state::follower_state;
         std::vector<follower_state> followers;
-        followers.reserve(fstats.size());
-        for (const auto& fstat : fstats) {
-            const auto& md = fstat.second;
+        followers.reserve(fstates.size());
+        for (const auto& fstate : fstates) {
+            const auto& md = fstate.second;
             follower_state state;
             state.node = md.node_id.id();
             state.last_dirty_log_index = md.last_dirty_log_index;

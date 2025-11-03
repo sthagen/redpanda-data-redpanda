@@ -13,6 +13,13 @@
 
 #include "kafka/client/direct_consumer/fetcher.h"
 #include "kafka/server/tests/produce_consume_utils.h"
+#include "ssx/single_fiber_executor.h"
+
+#include <chrono>
+#include <exception>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 ss::logger logger{"direct-consumer-fixture"};
 
@@ -66,7 +73,8 @@ topic_assignment consumer_fixture::make_assignment(
     return assignment;
 }
 
-model::node_id consumer_fixture::get_partition_leader(const model::ntp& ntp) {
+ss::future<model::node_id>
+consumer_fixture::get_partition_leader_async(const model::ntp& ntp) {
     std::optional<model::node_id> leader_id;
     model::timeout_clock::time_point deadline = model::timeout_clock::now()
                                                 + 10s;
@@ -80,74 +88,169 @@ model::node_id consumer_fixture::get_partition_leader(const model::ntp& ntp) {
                       .local()
                       .get_leader(ntp);
 
-        ss::sleep(100ms).get();
+        co_await ss::sleep(100ms);
     }
-    return leader_id.value();
+    if (!leader_id) {
+        throw std::runtime_error(
+          fmt::format("never found leader for ntp: {}", ntp));
+    }
+    co_return leader_id.value();
+}
+
+model::node_id consumer_fixture::get_partition_leader(const model::ntp& ntp) {
+    return get_partition_leader_async(ntp).get();
 }
 
 ss::future<kafka::offset> consumer_fixture::produce_to_partition(
-  const model::topic& topic, int partition, model::record_batch batch) {
-    model::ntp ntp(
-      model::kafka_namespace, topic, model::partition_id(partition));
-    auto leader_id = get_partition_leader(ntp);
-    vlog(
-      logger.debug,
-      "[broker: {}] Producing {} to {}",
-      leader_id,
-      batch.header(),
-      ntp);
+  const model::topic& topic,
+  int partition,
+  model::record_batch batch,
+  std::chrono::milliseconds timeout,
+  std::chrono::milliseconds backoff) {
+    // bounce the captures into a coroutine frame
+    auto do_produce =
+      [this, topic, partition, batch = std::move(batch)](ss::abort_source&)
+      -> ss::future<std::expected<kafka::offset, std::runtime_error>> {
+        // produce to partition, throws runtime_error for expected produce
+        // errors
+        auto do_produce_async
+          = +[](
+               consumer_fixture* self,
+               model::topic topic,
+               int partition,
+               model::record_batch batch) -> ss::future<kafka::offset> {
+            model::ntp ntp(
+              model::kafka_namespace, topic, model::partition_id(partition));
+            auto leader_id = co_await self->get_partition_leader_async(ntp);
 
-    return instance(leader_id)->make_kafka_client().then(
-      [topic, partition, batch = std::move(batch)](auto transport) mutable {
-          return ss::do_with(
-            ::tests::kafka_produce_transport(std::move(transport)),
-            [topic, partition, batch = std::move(batch)](
-              auto& producer) mutable {
-                return producer.start().then([&producer,
-                                              topic,
-                                              partition,
-                                              batch = std::move(
-                                                batch)] mutable {
-                    return producer
-                      .produce_to_partition(
-                        topic, model::partition_id(partition), std::move(batch))
-                      .then(
-                        [](kafka::offset offset) { return ssx::now(offset); })
-                      .finally([&producer] { return producer.stop(); });
-                });
+            vlog(
+              logger.debug,
+              "[broker: {}] Produce records to {}",
+              leader_id,
+              ntp);
+
+            auto transport
+              = co_await self->instance(leader_id)->make_kafka_client();
+            auto client = ::tests::kafka_produce_transport(
+              std::move(transport));
+            co_await client.start();
+            co_return co_await client
+              .produce_to_partition(
+                topic, model::partition_id(partition), std::move(batch))
+              .finally([&client] { return client.stop(); });
+        };
+
+        // map runtime error into expected, will retry on runtime error
+        return do_produce_async(this, topic, partition, batch.copy())
+          .then_wrapped(
+            [](ss::future<kafka::offset> f)
+              -> std::expected<kafka::offset, std::runtime_error> {
+                if (!f.failed()) {
+                    return f.get();
+                }
+                try {
+                    std::rethrow_exception(f.get_exception());
+                } catch (const std::runtime_error& e) {
+                    vlog(
+                      logger.info,
+                      "failed to produce with error: {} will retry",
+                      e);
+                    return std::unexpected(e);
+                }
+                std::unreachable();
             });
-      });
+    };
+
+    auto stop = [](std::expected<kafka::offset, std::runtime_error> out) {
+        return out.has_value() ? ss::stop_iteration::yes
+                               : ss::stop_iteration::no;
+    };
+
+    ss::abort_source as;
+    retry_chain_node parent_rcn{as, timeout, backoff, retry_strategy::polling};
+    auto retry = ssx::repeater_with_rcn(do_produce, stop, &parent_rcn);
+    auto result = co_await retry(as);
+
+    // bubble up the last error if all retries exhausted
+    if (!result.has_value()) {
+        throw result.error();
+    }
+    co_return result.value();
 }
 
 ss::future<> consumer_fixture::produce_to_partition(
-  const model::topic& topic, int partition, size_t record_count) {
-    model::ntp ntp(
-      model::kafka_namespace, topic, model::partition_id(partition));
-    auto leader_id = get_partition_leader(ntp);
-    vlog(
-      logger.debug,
-      "[broker: {}] Produce {} records to {}",
-      leader_id,
-      record_count,
-      ntp);
+  const model::topic& topic,
+  int partition,
+  size_t record_count,
+  std::chrono::milliseconds timeout,
+  std::chrono::milliseconds backoff) {
+    // bounce the captures into a coroutine frame
+    auto do_produce = [this, topic, partition, record_count](ss::abort_source&)
+      -> ss::future<std::expected<void, std::runtime_error>> {
+        // produce to partition, throws runtime_error for expected produce
+        // errors
+        auto do_produce_async = +[](
+                                   consumer_fixture* self,
+                                   model::topic topic,
+                                   int partition,
+                                   size_t record_count) -> ss::future<void> {
+            model::ntp ntp(
+              model::kafka_namespace, topic, model::partition_id(partition));
+            auto leader_id = co_await self->get_partition_leader_async(ntp);
+            vlog(
+              logger.debug,
+              "[broker: {}] Produce {} records to {}",
+              leader_id,
+              record_count,
+              ntp);
 
-    return instance(leader_id)->make_kafka_client().then(
-      [topic, partition, record_count](auto transport) mutable {
-          return ss::do_with(
-            ::tests::kafka_produce_transport(std::move(transport)),
-            [topic, partition, record_count](auto& producer) mutable {
-                return producer.start().then(
-                  [&producer, topic, partition, record_count] {
-                      return producer
-                        .produce_to_partition(
-                          topic,
-                          model::partition_id(partition),
-                          ::tests::kv_t::sequence(0, record_count, partition))
-                        .then([](auto) {})
-                        .finally([&producer] { return producer.stop(); });
-                  });
+            auto transport
+              = co_await self->instance(leader_id)->make_kafka_client();
+            auto client = ::tests::kafka_produce_transport(
+              std::move(transport));
+            co_await client.start();
+            co_await client
+              .produce_to_partition(
+                topic,
+                model::partition_id(partition),
+                ::tests::kv_t::sequence(0, record_count, partition))
+              .finally([&client] { return client.stop(); });
+        };
+
+        // map runtime error into expected, will retry on runtime error
+        return do_produce_async(this, topic, partition, record_count)
+          .then_wrapped(
+            [](ss::future<void> f) -> std::expected<void, std::runtime_error> {
+                if (!f.failed()) {
+                    return {};
+                }
+                try {
+                    std::rethrow_exception(f.get_exception());
+                } catch (const std::runtime_error& e) {
+                    vlog(
+                      logger.info,
+                      "failed to produce with error: {} will retry",
+                      e);
+                    return std::unexpected(e);
+                }
+                std::unreachable();
             });
-      });
+    };
+
+    auto stop = [](std::expected<void, std::runtime_error> out) {
+        return out.has_value() ? ss::stop_iteration::yes
+                               : ss::stop_iteration::no;
+    };
+
+    ss::abort_source as;
+    retry_chain_node parent_rcn{as, timeout, backoff, retry_strategy::polling};
+    auto retry = ssx::repeater_with_rcn(do_produce, stop, &parent_rcn);
+    auto result = co_await retry(as);
+
+    // bubble up the last error if all retries exhausted
+    if (!result.has_value()) {
+        throw result.error();
+    }
 }
 
 ss::future<chunked_vector<model::record>>

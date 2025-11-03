@@ -40,7 +40,7 @@ class Finjector:
         self.enable_loop = False
         self.finjector_thread = None
         self.failure_length_provider = scale_dependent_length(scale)
-        self.failure_delay_provier = const_delay(10)
+        self.failure_delay_provider = kwargs.get("delay_provider", const_delay(10))
         self.allowed_nodes_provider = lambda f_type: self.redpanda.nodes
         self.allowed_failures = FailureSpec.FAILURE_TYPES
         self.custom_failures = []
@@ -137,7 +137,7 @@ class Finjector:
 
             delay = self.failure_delay_provier()
             if f_injector.cnt_in_flight() >= self.max_concurrent_failures:
-                delay = max(delay, f_injector.time_till_next_recovery())
+                delay = f_injector.time_till_next_recovery() + delay
             self.redpanda.logger.info(f"waiting {delay} seconds before next failure")
             time.sleep(delay)
 

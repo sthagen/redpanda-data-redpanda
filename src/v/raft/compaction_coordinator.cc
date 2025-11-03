@@ -13,7 +13,7 @@
 #include "config/property.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
-#include "raft/follower_stats.h"
+#include "raft/follower_states.h"
 #include "raft/fundamental.h"
 #include "raft/logger.h"
 #include "raft/types.h"
@@ -25,7 +25,7 @@ namespace raft {
 
 compaction_coordinator::compaction_coordinator(
   features::feature_table& features,
-  follower_stats& fstats,
+  follower_states& fstates,
   ss::shared_ptr<storage::log> log,
   vnode self,
   ctx_log& logger,
@@ -38,7 +38,7 @@ compaction_coordinator::compaction_coordinator(
   , _timer{[this] { collect_mcco_from_all_members(); }}
   , _jitter{base_interval()}
   , _retry_interval{retry_interval(base_interval())}
-  , _fstats(fstats)
+  , _fstates(fstates)
   , _self(self)
   , _group(group)
   , _client_protocol(client_protocol)
@@ -178,8 +178,8 @@ void compaction_coordinator::collect_mcco_from_all_members() {
         return;
     }
     update_local_mcco();
-    for (auto& [node_id, fstat] : _fstats) {
-        ssx::background = fstat.mcco_getter->submit(
+    for (auto& [node_id, fstate] : _fstates) {
+        ssx::background = fstate.mcco_getter->submit(
           [this, holder = _raft_bg.hold(), node_id](
             ss::abort_source& op_as) mutable {
               return get_and_process_compaction_mcco(node_id, op_as)
@@ -205,8 +205,8 @@ ss::future<> compaction_coordinator::get_and_process_compaction_mcco(
     if (op_as.abort_requested()) {
         co_return;
     }
-    auto fs_it = _fstats.find(node_id);
-    if (fs_it == _fstats.end()) {
+    auto fs_it = _fstates.find(node_id);
+    if (fs_it == _fstates.end()) {
         vlog(
           _logger.warn,
           "received max cleanly compacted offset from unknown node {}: {}, "
@@ -283,8 +283,8 @@ void compaction_coordinator::on_local_mcco_update(model::offset new_mcco) {
 }
 
 void compaction_coordinator::send_mtro_to_followers() {
-    for (const auto& [node_id, fstat] : _fstats) {
-        ssx::background = fstat.mtro_sender->submit(
+    for (const auto& [node_id, fstate] : _fstates) {
+        ssx::background = fstate.mtro_sender->submit(
           [this, holder = _raft_bg.hold(), node_id](
             ss::abort_source& op_as) mutable -> ss::future<> {
               // MTRO may get recalculated a few times triggered by MCCO
@@ -352,8 +352,8 @@ void compaction_coordinator::recalculate_mtro() {
     vassert(
       _is_leader, "only leader can recalculate max tombstone remove offset");
     model::offset new_mtro = _local_mcco;
-    for (const auto& [node_id, fstat] : _fstats) {
-        if (fstat.max_cleanly_compacted_offset == model::offset{}) {
+    for (const auto& [node_id, fstate] : _fstates) {
+        if (fstate.max_cleanly_compacted_offset == model::offset{}) {
             vlog(
               _logger.debug,
               "vnode: {} hasn't reported its max cleanly compacted offset, "
@@ -361,13 +361,13 @@ void compaction_coordinator::recalculate_mtro() {
               node_id);
             return;
         }
-        new_mtro = std::min(new_mtro, fstat.max_cleanly_compacted_offset);
+        new_mtro = std::min(new_mtro, fstate.max_cleanly_compacted_offset);
         vlog(
           _logger.trace,
           "on vnode: {} max cleanly compacted offset: {}, new max tombstone "
           "remove offset: {}",
           node_id,
-          fstat.max_cleanly_compacted_offset,
+          fstate.max_cleanly_compacted_offset,
           new_mtro);
     }
     update_mtro(new_mtro);

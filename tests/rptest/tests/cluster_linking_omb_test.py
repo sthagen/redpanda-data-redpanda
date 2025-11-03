@@ -40,7 +40,7 @@ class ClusterLinkingOMBTest(ShadowLinkTestBase):
             replicas=3,
         )
         self.target_cluster.service.wait_until(
-            lambda: self.topic_exists_in_target(topic_name),
+            lambda: self.topic_exists_in_target(topic_name, topic_partitions),
             timeout_sec=30,
             backoff_sec=1,
             err_msg=f"Topic {topic_name} not found in target cluster",

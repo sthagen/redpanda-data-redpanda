@@ -40,7 +40,7 @@ from rptest.services.redpanda import (
     SISettings,
     make_redpanda_service,
 )
-from rptest.tests.e2e_finjector import Finjector
+from rptest.tests.e2e_finjector import Finjector, const_delay
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import bg_thread_cm, wait_until_result
 from rptest.utils.data_migrations import DataMigrationTestMixin
@@ -202,7 +202,10 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
     def finj_thread(self):
         return self.flaky_admin_cm(
             Finjector(
-                self.redpanda, self.scale, max_concurrent_failures=1
+                self.redpanda,
+                self.scale,
+                max_concurrent_failures=1,
+                delay_provider=const_delay(5),
             ).finj_thread()
         )
 

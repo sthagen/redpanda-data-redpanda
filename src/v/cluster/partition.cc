@@ -1162,10 +1162,10 @@ result<recovery_state> partition::get_recovery_state() const {
     r_state.local_last_offset = _raft->dirty_offset();
     r_state.local_size = _raft->log()->size_bytes();
 
-    const auto& f_stats = _raft->get_follower_stats();
-    r_state.replicas.reserve(f_stats.size());
+    const auto& f_states = _raft->get_follower_states();
+    r_state.replicas.reserve(f_states.size());
 
-    for (auto& [follower_id, stats] : f_stats) {
+    for (auto& [follower_id, stats] : f_states) {
         if (!stats.is_recovering) {
             continue;
         }

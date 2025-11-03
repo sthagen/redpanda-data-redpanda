@@ -15,6 +15,7 @@
 #include "cluster/tests/utils.h"
 #include "cluster/types.h"
 #include "config/seed_server.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "random/generators.h"
 #include "redpanda/application.h"
@@ -385,6 +386,25 @@ public:
           ->transfer_leadership(
             raft::transfer_leadership_request{
               .group = partition->group(), .target = new_leader_id})
+          .discard_result();
+    }
+
+    ss::future<> assign_leader(
+      model::ntp ntp,
+      model::node_id current_leader,
+      model::node_id target_node) {
+        RPTEST_REQUIRE_CORO(!_instances.empty());
+        if (current_leader == target_node) {
+            // nothing to be done
+            co_return;
+        }
+        auto& leader_app = _instances.at(current_leader).get()->app;
+        auto partition = leader_app.partition_manager.local().get(ntp);
+        RPTEST_REQUIRE_CORO(partition);
+        co_return co_await partition
+          ->transfer_leadership(
+            raft::transfer_leadership_request{
+              .group = partition->group(), .target = target_node})
           .discard_result();
     }
 

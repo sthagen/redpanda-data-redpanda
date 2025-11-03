@@ -55,6 +55,7 @@ redpanda_test_cc_library(
         "//src/v/kafka/protocol",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model/tests:random",
+        "//src/v/ssx:single_fiber_executor",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",

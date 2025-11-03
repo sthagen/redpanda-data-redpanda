@@ -150,14 +150,14 @@ struct follower_index_metadata {
     friend std::ostream&
     operator<<(std::ostream& o, const follower_index_metadata& i);
 };
-class follower_stats {
+class follower_states {
 public:
     using container_t = absl::node_hash_map<vnode, follower_index_metadata>;
     using iterator = container_t::iterator;
     using const_iterator = container_t::const_iterator;
     using value_type = container_t::value_type;
 
-    explicit follower_stats(vnode self)
+    explicit follower_states(vnode self)
       : _self(self) {}
 
     const follower_index_metadata& get(vnode n) const {
@@ -211,7 +211,7 @@ public:
     }
 
 private:
-    friend std::ostream& operator<<(std::ostream&, const follower_stats&);
+    friend std::ostream& operator<<(std::ostream&, const follower_states&);
     vnode _self;
     container_t _followers;
 };

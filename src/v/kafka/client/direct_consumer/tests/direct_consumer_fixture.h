@@ -16,6 +16,8 @@
 #include "gtest/gtest.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 
+#include <chrono>
+
 using namespace kafka::client;
 
 namespace kafka::client::tests {
@@ -34,13 +36,25 @@ public:
       std::vector<int> partitions,
       std::optional<kafka::offset> initial_offset = std::nullopt);
 
+    // you can't perform a .get() inside a coroutine
+    ss::future<model::node_id>
+    get_partition_leader_async(const model::ntp& ntp);
+
     model::node_id get_partition_leader(const model::ntp& ntp);
 
     ss::future<kafka::offset> produce_to_partition(
-      const model::topic& topic, int partition, model::record_batch);
+      const model::topic& topic,
+      int partition,
+      model::record_batch batch,
+      std::chrono::milliseconds timeout = default_retry_timeout,
+      std::chrono::milliseconds backoff = default_retry_backoff);
 
     ss::future<> produce_to_partition(
-      const model::topic& topic, int partition, size_t record_count);
+      const model::topic& topic,
+      int partition,
+      size_t record_count,
+      std::chrono::milliseconds timeout = default_retry_timeout,
+      std::chrono::milliseconds backoff = default_retry_backoff);
 
     ss::future<chunked_vector<model::record>> consume_from_partition(
       const model::topic& topic, int partition, kafka::offset offset);
@@ -64,6 +78,9 @@ protected:
     std::unique_ptr<kafka::client::cluster> cluster;
     std::unique_ptr<kafka::client::direct_consumer> consumer;
     model::topic topic{"test-topic"};
+
+    static constexpr auto default_retry_timeout = 1s;
+    static constexpr auto default_retry_backoff = 100ms;
 };
 
 enum class session_config : uint8_t {

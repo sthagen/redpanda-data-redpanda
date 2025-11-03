@@ -152,29 +152,20 @@ TEST_P(BasicConsumerFixture, TestBasicNodeRestart) {
     this->remove_node_application(leader);
     this->create_node_application(leader);
 
-    this->wait_for_all_members(5s).get();
+    auto current_leader = this->get_partition_leader(test_ntp);
+
+    // the goal of this test is to check that consumption works on restart, make
+    // sure leadership retargets the original leader
+    this->assign_leader(test_ntp, current_leader, leader).get();
 
     // attempt to produce, with retry
-    bool did_produce{false};
-    for (int i{0}; i < 5; ++i) {
-        try {
-            produce_to_partition(
-              topic, test_partition_number, second_produce_count)
-              .get();
-            did_produce = true;
-            break;
-        } catch (...) {
-            vlog(
-              logger.info,
-              "attempt to produce failed for iteration: {} with: {}",
-              i,
-              std::current_exception());
-        }
-        // backoff
-        ss::sleep(1s).get();
-    }
-    ASSERT_TRUE(did_produce);
-    ASSERT_EQ(leader, this->get_partition_leader(test_ntp));
+    produce_to_partition(
+      topic,
+      test_partition_number,
+      second_produce_count,
+      std::chrono::seconds(10),
+      std::chrono::seconds(1))
+      .get();
 
     { // second fetch and assert
         auto fetched = fetch_until_empty(*consumer);

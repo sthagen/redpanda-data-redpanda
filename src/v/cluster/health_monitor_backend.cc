@@ -459,7 +459,7 @@ ss::future<errc> health_monitor_backend::walk_local_and_remote_reports(
               if (const auto& fs = partition_status.followers_stats) {
                   vlog(
                     clusterlog.trace,
-                    "leader found locally ntp={}/{}/{} follower_stats={}",
+                    "leader found locally ntp={}/{}/{} follower_state={}",
                     nt.ns,
                     nt.tp,
                     partition_status.id,

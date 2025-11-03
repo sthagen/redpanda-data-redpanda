@@ -126,12 +126,12 @@ consensus::consensus(
   , _client_protocol(client)
   , _remake_notification(std::move(remake_cb))
   , _leader_notification(std::move(leader_cb))
-  , _fstats(_self)
+  , _fstates(_self)
   , _ctxlog(group, _log->config().ntp())
   , _features(ft)
   , _compaction_coordinator(
       _features,
-      _fstats,
+      _fstates,
       _log,
       _self,
       _ctxlog,
@@ -165,7 +165,7 @@ consensus::consensus(
   , _replication_monitor(this) {
     setup_metrics();
     setup_public_metrics();
-    update_follower_stats(_configuration_manager.get_latest());
+    update_follower_states(_configuration_manager.get_latest());
     _vote_timeout.set_callback([this] {
         maybe_step_down();
         dispatch_vote(false);
@@ -228,7 +228,7 @@ void consensus::do_step_down(std::string_view ctx) {
           _term,
           _log->offsets().dirty_offset);
     }
-    _fstats.reset();
+    _fstates.reset();
     _vstate = vote_state::follower;
 }
 
@@ -265,7 +265,7 @@ clock_type::time_point consensus::majority_heartbeat() const {
             return clock_type::now();
         }
 
-        if (auto it = _fstats.find(rni); it != _fstats.end()) {
+        if (auto it = _fstates.find(rni); it != _fstates.end()) {
             return it->second.last_received_reply_timestamp;
         }
 
@@ -288,7 +288,7 @@ void consensus::shutdown_input() {
 ss::future<xshard_transfer_state> consensus::stop() {
     vlog(_ctxlog.info, "Stopping");
     shutdown_input();
-    for (auto& idx : _fstats) {
+    for (auto& idx : _fstates) {
         idx.second.follower_state_change.broken();
     }
     co_await _replication_monitor.stop();
@@ -372,9 +372,9 @@ consensus::success_reply consensus::update_follower_index(
         return success_reply::no;
     }
 
-    auto it = _fstats.find(node);
+    auto it = _fstates.find(node);
 
-    if (it == _fstats.end()) {
+    if (it == _fstates.end()) {
         return success_reply::no;
     }
 
@@ -537,10 +537,10 @@ void consensus::maybe_promote_to_voter(vnode id) {
         if (latest_cfg.is_voter(id)) {
             return ss::now();
         }
-        auto it = _fstats.find(id);
+        auto it = _fstates.find(id);
 
         // already removed
-        if (it == _fstats.end()) {
+        if (it == _fstates.end()) {
             return ss::now();
         }
 
@@ -619,7 +619,7 @@ void consensus::successfull_append_entries_reply(
 }
 
 size_t consensus::estimate_recovering_followers() const {
-    return std::count_if(_fstats.begin(), _fstats.end(), [](const auto& idx) {
+    return std::count_if(_fstates.begin(), _fstates.end(), [](const auto& idx) {
         return idx.second.is_recovering;
     });
 }
@@ -768,7 +768,7 @@ consensus::linearizable_barrier(model::timeout_clock::time_point deadline) {
             if (id == _self) {
                 return true;
             }
-            if (auto it = _fstats.find(id); it != _fstats.end()) {
+            if (auto it = _fstates.find(id); it != _fstates.end()) {
                 return it->second.last_successful_received_seq >= sequences[id];
             }
             return false;
@@ -1404,7 +1404,7 @@ consensus::abort_configuration_change(model::revision_id revision) {
      * replicas log. If new leader will be elected using new configuration it
      * will eventually propagate valid configuration to all the followers.
      */
-    update_follower_stats(new_cfg);
+    update_follower_states(new_cfg);
     _configuration_manager.set_override(std::move(new_cfg));
     do_step_down("reconfiguration-aborted");
 
@@ -1422,7 +1422,7 @@ ss::future<std::error_code> consensus::force_replace_configuration_locally(
         try_updating_configuration_version(new_cfg);
         vlog(_ctxlog.info, "Force replacing configuration with: {}", new_cfg);
 
-        update_follower_stats(new_cfg);
+        update_follower_states(new_cfg);
         _configuration_manager.set_override(std::move(new_cfg));
         do_step_down("forced-reconfiguration");
 
@@ -1566,7 +1566,7 @@ consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
               std::move(st).release_configurations());
         }
 
-        update_follower_stats(_configuration_manager.get_latest());
+        update_follower_states(_configuration_manager.get_latest());
 
         /**
          * fix for incorrectly persisted configuration index. In
@@ -1704,7 +1704,7 @@ ss::future<> consensus::truncate_state(model::offset truncate_at) {
 
     co_await _configuration_manager.truncate(truncate_at);
     _probe->configuration_update();
-    update_follower_stats(_configuration_manager.get_latest());
+    update_follower_states(_configuration_manager.get_latest());
 }
 
 model::offset consensus::read_last_applied() const {
@@ -1853,9 +1853,9 @@ ss::future<vote_reply> consensus::do_vote(vote_request r) {
     // w.r.t. supporting the 'hello' RPC.
     if (is_elected_leader() and r.term <= _term) {
         // Look up follower stats for the requester
-        if (auto it = _fstats.find(r.node_id); it != _fstats.end()) {
-            auto& fstats = it->second;
-            if (fstats.heartbeats_failed) {
+        if (auto it = _fstates.find(r.node_id); it != _fstates.end()) {
+            auto& fstate = it->second;
+            if (fstate.heartbeats_failed) {
                 vlog(
                   _ctxlog.debug,
                   "Vote request from peer {} with heartbeat failures, "
@@ -2402,7 +2402,7 @@ ss::future<> consensus::hydrate_snapshot() {
         co_await truncate_to_latest_snapshot(truncate_cfg.value());
     }
     _snapshot_size = co_await _snapshot_mgr.get_snapshot_size();
-    update_follower_stats(_configuration_manager.get_latest());
+    update_follower_states(_configuration_manager.get_latest());
 }
 
 std::optional<storage::truncate_prefix_config>
@@ -2992,7 +2992,7 @@ ss::future<storage::append_result> consensus::disk_append(
               // we can use latest configuration to update follower stats
               f = _configuration_manager.add(std::move(configurations))
                     .then([this] {
-                        update_follower_stats(
+                        update_follower_states(
                           _configuration_manager.get_latest());
                     });
           }
@@ -3028,7 +3028,7 @@ model::term_id consensus::get_term(model::offset o) const {
 
 clock_type::time_point
 consensus::last_sent_append_entries_req_timestamp(vnode id) {
-    return _fstats.get(id).last_sent_append_entries_req_timestamp;
+    return _fstates.get(id).last_sent_append_entries_req_timestamp;
 }
 
 protocol_metadata consensus::meta() const {
@@ -3058,18 +3058,18 @@ model::offset_delta consensus::get_offset_delta(
 }
 
 void consensus::update_node_append_timestamp(vnode id) {
-    if (auto it = _fstats.find(id); it != _fstats.end()) {
+    if (auto it = _fstates.find(id); it != _fstates.end()) {
         it->second.last_sent_append_entries_req_timestamp = clock_type::now();
     }
 }
 void consensus::maybe_update_node_reply_timestamp(vnode id) {
-    if (auto it = _fstats.find(id); it != _fstats.end()) {
+    if (auto it = _fstates.find(id); it != _fstates.end()) {
         it->second.last_received_reply_timestamp = clock_type::now();
     }
 }
 
 follower_req_seq consensus::next_follower_sequence(vnode id) {
-    if (auto it = _fstats.find(id); it != _fstats.end()) {
+    if (auto it = _fstates.find(id); it != _fstates.end()) {
         return it->second.next_follower_sequence();
     }
 
@@ -3079,8 +3079,8 @@ follower_req_seq consensus::next_follower_sequence(vnode id) {
 absl::flat_hash_map<vnode, follower_req_seq>
 consensus::next_followers_request_seq() {
     absl::flat_hash_map<vnode, follower_req_seq> ret;
-    ret.reserve(_fstats.size());
-    auto range = boost::make_iterator_range(_fstats.begin(), _fstats.end());
+    ret.reserve(_fstates.size());
+    auto range = boost::make_iterator_range(_fstates.begin(), _fstates.end());
     for (const auto& [node_id, _] : range) {
         ret.emplace(node_id, next_follower_sequence(node_id));
     }
@@ -3213,7 +3213,7 @@ consensus::do_maybe_update_leader_commit_idx(ssx::semaphore_units u) {
         if (id == _self) {
             return _flushed_offset;
         }
-        if (auto it = _fstats.find(id); it != _fstats.end()) {
+        if (auto it = _fstates.find(id); it != _fstates.end()) {
             return it->second.match_committed_index();
         }
 
@@ -3277,9 +3277,9 @@ void consensus::maybe_update_follower_commit_idx(
     }
 }
 
-void consensus::update_follower_stats(const group_configuration& cfg) {
+void consensus::update_follower_states(const group_configuration& cfg) {
     vlog(_ctxlog.trace, "Updating follower stats with config {}", cfg);
-    _fstats.update_with_configuration(cfg);
+    _fstates.update_with_configuration(cfg);
     _compaction_coordinator.on_group_configuration_change();
 }
 
@@ -3474,11 +3474,11 @@ ss::future<std::error_code> consensus::prepare_transfer_leadership(
 
     // After we have (maybe) waited for op_lock and batcher,
     // proceed to (maybe) wait for recovery to complete
-    if (!_fstats.contains(target_rni)) {
+    if (!_fstates.contains(target_rni)) {
         // Gone?  Nothing to wait for, proceed immediately.
         co_return make_error_code(errc::node_does_not_exists);
     }
-    auto& meta = _fstats.get(target_rni);
+    auto& meta = _fstates.get(target_rni);
     if (
       !meta.is_recovering
       && needs_recovery(meta, _log->offsets().dirty_offset)) {
@@ -3549,12 +3549,12 @@ consensus::do_transfer_leadership(transfer_leadership_request req) {
     // no explicit node was requested. choose the most up to date follower
     if (!target) {
         auto it = std::max_element(
-          _fstats.begin(), _fstats.end(), [](const auto& a, const auto& b) {
+          _fstates.begin(), _fstates.end(), [](const auto& a, const auto& b) {
               return a.second.last_dirty_log_index
                      < b.second.last_dirty_log_index;
           });
 
-        if (unlikely(it == _fstats.end())) {
+        if (unlikely(it == _fstates.end())) {
             vlog(
               _ctxlog.warn,
               "Cannot transfer leadership. No suitable target node found");
@@ -3636,7 +3636,7 @@ consensus::do_transfer_leadership(transfer_leadership_request req) {
          */
         _transferring_leadership = true;
 
-        if (!_fstats.contains(target_rni)) {
+        if (!_fstates.contains(target_rni)) {
             return seastar::make_ready_future<std::error_code>(
               make_error_code(errc::node_does_not_exists));
         }
@@ -3671,7 +3671,7 @@ consensus::do_transfer_leadership(transfer_leadership_request req) {
                     make_error_code(errc::not_leader));
               }
 
-              if (!_fstats.contains(target_rni)) {
+              if (!_fstates.contains(target_rni)) {
                   vlog(
                     _ctxlog.warn,
                     "Cannot transfer leadership: no stats for {}",
@@ -3681,7 +3681,7 @@ consensus::do_transfer_leadership(transfer_leadership_request req) {
                     make_error_code(errc::node_does_not_exists));
               }
 
-              auto& meta = _fstats.get(target_rni);
+              auto& meta = _fstates.get(target_rni);
               if (needs_recovery(meta, _log->offsets().dirty_offset)) {
                   vlog(
                     _ctxlog.warn,
@@ -3747,9 +3747,9 @@ consensus::do_transfer_leadership(transfer_leadership_request req) {
 
 ss::future<> consensus::transfer_and_stepdown(std::string_view ctx) {
     // select a follower with longest log
-    auto voters = _fstats
+    auto voters = _fstates
                   | std::views::filter(
-                    [](const follower_stats::container_t::value_type& p) {
+                    [](const follower_states::container_t::value_type& p) {
                         return !p.second.is_learner;
                     });
     auto it = std::max_element(
@@ -3854,7 +3854,7 @@ void consensus::maybe_update_majority_replicated_index() {
         if (id == _self) {
             return _log->offsets().dirty_offset;
         }
-        if (auto it = _fstats.find(id); it != _fstats.end()) {
+        if (auto it = _fstates.find(id); it != _fstates.end()) {
             return it->second.last_dirty_log_index;
         }
         return model::offset{};
@@ -3878,8 +3878,8 @@ consensus::inflight_appends_guard::inflight_appends_guard(
       _target,
       _term);
 
-    auto it = _parent->_fstats.find(_target);
-    if (it == _parent->_fstats.end()) {
+    auto it = _parent->_fstates.find(_target);
+    if (it == _parent->_fstates.end()) {
         // make unsuppress() a noop
         _parent = nullptr;
         return;
@@ -3897,8 +3897,8 @@ void consensus::inflight_appends_guard::mark_finished() {
         return;
     }
 
-    auto it = _parent->_fstats.find(_target);
-    if (it == _parent->_fstats.end()) {
+    auto it = _parent->_fstates.find(_target);
+    if (it == _parent->_fstates.end()) {
         // the follower could be removed while the guard is alive
         _parent = nullptr;
         return;
@@ -3918,7 +3918,7 @@ consensus::inflight_appends_guard consensus::track_append_inflight(vnode id) {
 }
 
 void consensus::update_heartbeat_status(vnode id, bool success) {
-    if (auto it = _fstats.find(id); it != _fstats.end()) {
+    if (auto it = _fstates.find(id); it != _fstates.end()) {
         if (success) {
             it->second.last_received_reply_timestamp = clock_type::now();
             it->second.heartbeats_failed = 0;
@@ -3982,9 +3982,9 @@ std::vector<follower_metrics> consensus::get_follower_metrics() const {
         return {};
     }
     std::vector<follower_metrics> ret;
-    ret.reserve(_fstats.size());
+    ret.reserve(_fstates.size());
     const auto offsets = _log->offsets();
-    for (const auto& f : _fstats) {
+    for (const auto& f : _fstates) {
         vlog(
           _ctxlog.trace,
           "build_follower_metrics node={} meta={} lstats={}",
@@ -4008,10 +4008,11 @@ consensus::get_follower_metrics(model::node_id id) const {
     if (!is_elected_leader()) {
         return errc::not_leader;
     }
-    auto it = std::find_if(_fstats.begin(), _fstats.end(), [id](const auto& p) {
-        return p.first.id() == id;
-    });
-    if (it == _fstats.end()) {
+    auto it = std::find_if(
+      _fstates.begin(), _fstates.end(), [id](const auto& p) {
+          return p.first.id() == id;
+      });
+    if (it == _fstates.end()) {
         return errc::node_does_not_exists;
     }
     return build_follower_metrics(
@@ -4023,7 +4024,7 @@ consensus::get_follower_metrics(model::node_id id) const {
 }
 
 size_t consensus::get_follower_count() const {
-    return is_elected_leader() ? _fstats.size() : 0;
+    return is_elected_leader() ? _fstates.size() : 0;
 }
 
 ss::future<std::optional<storage::timequery_result>>
@@ -4037,7 +4038,7 @@ std::optional<uint8_t> consensus::get_under_replicated() const {
     }
 
     uint8_t count = 0;
-    for (const auto& f : _fstats) {
+    for (const auto& f : _fstates) {
         auto f_metrics = build_follower_metrics(
           f.first.id(),
           _log->offsets(),
@@ -4154,7 +4155,7 @@ ss::future<full_heartbeat_reply> consensus::full_heartbeat(
     co_return reply;
 }
 void consensus::reset_last_sent_protocol_meta(const vnode& node) {
-    if (auto it = _fstats.find(node); it != _fstats.end()) {
+    if (auto it = _fstates.find(node); it != _fstates.end()) {
         it->second.last_sent_protocol_meta.reset();
     }
 }
@@ -4202,7 +4203,7 @@ ss::future<> consensus::do_flush() {
         }
         auto flushed = co_await std::move(flush);
         if (flushed && is_leader()) {
-            for (auto& [id, idx] : _fstats) {
+            for (auto& [id, idx] : _fstates) {
                 // force full heartbeat to move the committed index forward
                 idx.last_sent_protocol_meta.reset();
             }
@@ -4270,7 +4271,7 @@ size_t consensus::bytes_to_deliver_to_learners() const {
     }
 
     size_t total = 0;
-    for (auto& [f_id, f_meta] : _fstats) {
+    for (auto& [f_id, f_meta] : _fstates) {
         if (f_meta.is_learner) [[unlikely]] {
             total += _log->size_bytes_after_offset(f_meta.match_index);
         }
