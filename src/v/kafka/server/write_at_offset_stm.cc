@@ -313,6 +313,7 @@ ss::future<iobuf> write_at_offset_stm::take_raft_snapshot(model::offset) {
 ss::future<> write_at_offset_stm::apply_raft_snapshot(const iobuf&) {
     auto start_k_offset = _raft->log()->from_log_offset(_raft->start_offset());
     _last_offset = kafka::prev_offset(model::offset_cast(start_k_offset));
+    vlog(_log.trace, "Applied raft snapshot, last_offset: {}", _last_offset);
     co_return;
 }
 

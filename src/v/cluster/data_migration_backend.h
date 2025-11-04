@@ -290,7 +290,7 @@ private:
       const topic_reconciliation_state& tstate);
     void erase_tstate_if_done(
       migration_reconciliation_state& mrstate, topic_map_t::iterator it);
-    partition_consumer_group_map_t
+    result<partition_consumer_group_map_t, errc>
     build_migration_group_map(const migration_metadata& metadata) const;
 
     // call only with _mutex lock grabbed

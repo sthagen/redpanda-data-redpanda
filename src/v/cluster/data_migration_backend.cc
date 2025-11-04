@@ -247,11 +247,31 @@ backend::get_entities_status(id migration_id) {
         result<entities_status, errc> ret{entities_status{}};
 
         auto holder = _gate.hold();
+        auto group_map_result = build_migration_group_map(meta);
 
+        /**
+         * If we failed to build the group map, it might be because the
+         * consumer groups topic does not exist yet. Try to create it and
+         * build the map again.
+         */
+        if (group_map_result.has_error()) {
+            co_await _group_proxy.assure_topic_exists(
+              model::time_from_now(10s));
+            group_map_result = build_migration_group_map(meta);
+        }
+
+        if (group_map_result.has_error()) {
+            vlog(
+              dm_log.warn,
+              "get_entities_status: failed to build group map for migration "
+              "{}: {}",
+              migration_id,
+              group_map_result.error());
+            co_return errc::leadership_changed;
+        }
         chunked_vector<partition_consumer_group_map_t::value_type>
           groups_by_partition(
-            std::from_range,
-            build_migration_group_map(meta) | std::views::as_rvalue);
+            std::from_range, group_map_result.value() | std::views::as_rvalue);
         vlog(
           dm_log.debug,
           "get_entities_status: migration {}, groups by partition: {}",
@@ -1787,7 +1807,7 @@ ss::future<> backend::reconcile_existing_topic(
     }
 }
 
-backend::partition_consumer_group_map_t
+result<backend::partition_consumer_group_map_t, errc>
 backend::build_migration_group_map(const migration_metadata& metadata) const {
     partition_consumer_group_map_t ret;
     const auto& groups = std::visit(
@@ -1798,7 +1818,14 @@ backend::build_migration_group_map(const migration_metadata& metadata) const {
 
     for (const auto& group : groups) {
         auto partition = _group_proxy.partition_for(group);
-        vassert(partition, "cannot get ntp for group {}", group);
+        if (!partition) {
+            vlog(
+              dm_log.warn,
+              "cannot find partition for consumer group {} in migration {}",
+              group,
+              metadata.id);
+            return errc::partition_not_exists;
+        }
         auto [it, ins] = ret.try_emplace(*partition);
         it->second.push_back(group);
     }
@@ -1813,10 +1840,18 @@ ss::future<> backend::reconcile_migration(
       metadata.id,
       mrstate.scope.sought_state);
 
-    if (!mrstate.partition_group_map) {
-        mrstate.partition_group_map.emplace(
-          build_migration_group_map(metadata));
-    }
+    auto res = build_migration_group_map(metadata);
+    /**
+     * This is a fatal error as we cannot proceed with consumer group
+     * migration without being able to build the partition -> groups map.
+     */
+    vassert(
+      !res.has_error(),
+      "failed to build migration group map while reconciling migration - "
+      "error: {}",
+      res.error());
+
+    mrstate.partition_group_map.emplace(std::move(res.value()));
 
     co_await std::visit(
       [this, migration_id = metadata.id, &mrstate](

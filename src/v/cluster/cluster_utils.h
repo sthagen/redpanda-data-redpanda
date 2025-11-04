@@ -175,17 +175,31 @@ ss::future<std::error_code> replicate_and_wait(
   std::optional<model::term_id> term = std::nullopt) {
     return stm.invoke_on(
       controller_stm_shard,
-      [cmd = std::forward<Cmd>(cmd), term, &as = as, timeout](
+      [cmd = std::forward<Cmd>(cmd), term, &as, timeout](
         controller_stm& stm) mutable {
-          if (!stm.throttle<Cmd>()) {
-              return ss::make_ready_future<std::error_code>(
-                errc::throttling_quota_exceeded);
-          }
-
-          auto b = serde_serialize_cmd(std::forward<Cmd>(cmd));
-          return stm.replicate_and_wait(
-            std::move(b), timeout, as.local(), term);
+          return do_replicate_and_wait(
+            stm, as.local(), std::forward<Cmd>(cmd), timeout, term);
       });
+}
+
+template<typename Cmd>
+ss::future<std::error_code> do_replicate_and_wait(
+  controller_stm& stm,
+  ss::abort_source& as,
+  Cmd&& cmd,
+  model::timeout_clock::time_point timeout,
+  std::optional<model::term_id> term = std::nullopt) {
+    vassert(
+      ss::this_shard_id() == controller_stm_shard,
+      "do_replicate_and_wait must be called on controller_stm_shard");
+
+    if (!stm.throttle<Cmd>()) {
+        return ss::make_ready_future<std::error_code>(
+          errc::throttling_quota_exceeded);
+    }
+
+    auto b = serde_serialize_cmd(std::forward<Cmd>(cmd));
+    return stm.replicate_and_wait(std::move(b), timeout, as, term);
 }
 
 custom_assignable_topic_configuration_vector

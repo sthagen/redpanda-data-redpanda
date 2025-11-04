@@ -120,6 +120,7 @@ class ClusterLinkingProgressVerifier:
         preallocated_nodes: list,
         logger,
         use_transactions: bool = False,
+        use_compaction: bool = False,
         msg_count: int = 40000,
         msg_size: int = 4 * 1024,
         timeout_sec: int = 600,
@@ -137,6 +138,7 @@ class ClusterLinkingProgressVerifier:
         self.preallocated_nodes = preallocated_nodes
         self.logger = logger
         self.use_transactions = use_transactions
+        self.use_compaction = use_compaction
 
         self.msg_count = msg_count
         self.msg_size = msg_size
@@ -204,19 +206,37 @@ class ClusterLinkingProgressVerifier:
             - self.producer.produce_status.aborted_transaction_messages
         )
 
-    def source_consumer_finished(self):
-        return self.producer_finished() and (
-            self.source_consumer.consumer_status.validator.total_reads
-            >= self.expected_read_messages()
+    def max_offsets_match(
+        self, consumer: KgoVerifierConsumerGroupConsumer, producer: KgoVerifierProducer
+    ) -> bool:
+        return (
+            consumer.consumer_status.validator.max_offsets_consumed
+            == producer.produce_status.max_offsets_produced
         )
 
+    def source_consumer_finished(self):
+        if not self.producer_finished():
+            return False
+        elif self.use_compaction:
+            return self.max_offsets_match(self.source_consumer, self.producer)
+        else:
+            return (
+                self.source_consumer.consumer_status.validator.total_reads
+                >= self.expected_read_messages()
+            )
+
     def target_consumer_finished(self):
-        if not self.validate_number_of_messages_on_target:
+        if not self.producer_finished():
+            return False
+        elif not self.validate_number_of_messages_on_target:
             return True
-        return self.producer_finished() and (
-            self.target_consumer.consumer_status.validator.total_reads
-            >= self.expected_read_messages()
-        )
+        elif self.use_compaction:
+            return self.max_offsets_match(self.target_consumer, self.producer)
+        else:
+            return (
+                self.target_consumer.consumer_status.validator.total_reads
+                >= self.expected_read_messages()
+            )
 
     def workload_finished(self):
         return (
@@ -835,10 +855,8 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
         msg_size: int = 128,
         msg_cnt: int = 10000,
         use_transactions: bool = False,
-        msgs_per_transaction: int | None = None,
-        transaction_abort_rate: float = 0.3,
-        fake_timestamp_ms: int | None = None,
-        producer_rate_limit_bps: int | None = None,
+        use_compaction: bool = False,
+        producer_properties: dict[str, Any] | None = None,
     ):
         self.verifier = ClusterLinkingProgressVerifier(
             self.test_context,
@@ -850,12 +868,8 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
             msg_count=msg_cnt,
             msg_size=msg_size,
             use_transactions=use_transactions,
-            producer_properties={
-                "transaction_abort_rate": transaction_abort_rate,
-                "msgs_per_transaction": msgs_per_transaction,
-                "fake_timestamp_ms": fake_timestamp_ms,
-                "rate_limit_bps": producer_rate_limit_bps,
-            },
+            use_compaction=use_compaction,
+            producer_properties=producer_properties or {},
             timeout_sec=180,
         )
         self.verifier.start()

@@ -467,15 +467,26 @@ public:
           batches.front().base_offset());
         auto new_last_replicated_end = ::model::offset_cast(
           batches.back().last_offset());
-        vassert(
-          new_last_replicated_begin > _last_replicated_offset
-            && new_last_replicated_end > _last_replicated_offset,
-          "[{}] Replicating offsets must be monotonically increasing last "
-          "replicated: {}, attempting to replicate: [{}, {}]",
-          _partition->ntp(),
-          _last_replicated_offset,
-          new_last_replicated_begin,
-          new_last_replicated_end);
+
+        auto monotonic = new_last_replicated_begin > _last_replicated_offset
+                         && new_last_replicated_end > _last_replicated_offset;
+        if (!monotonic) {
+            vlog(
+              cllog.error,
+              "[{}] Replicating offsets must be monotonically increasing last "
+              "replicated: {}, attempting to replicate: [{}, {}]",
+              _partition->ntp(),
+              _last_replicated_offset,
+              new_last_replicated_begin,
+              new_last_replicated_end);
+            throw replication::monotonicity_violation_exception{fmt::format(
+              "[{}] Replicating offsets must be monotonically increasing last "
+              "replicated: {}, attempting to replicate: [{}, {}]",
+              _partition->ntp(),
+              _last_replicated_offset,
+              new_last_replicated_begin,
+              new_last_replicated_end)};
+        }
         vlog(
           cllog.trace,
           "[{}] Replicating batches in range [{} - {}], last_replicated: {}, "

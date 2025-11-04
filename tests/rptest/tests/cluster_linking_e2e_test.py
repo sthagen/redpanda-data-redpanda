@@ -1677,7 +1677,11 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         )
 
         self.start_producer_consumer(
-            topic=topic.name, msg_size=128, msg_cnt=10000, use_transactions=True
+            topic=topic.name,
+            msg_size=128,
+            msg_cnt=10000,
+            use_transactions=True,
+            producer_properties={"transaction_abort_rate": "0.3"},
         )
         self.verify()
 
@@ -1874,8 +1878,10 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             topic=topic.name,
             msg_size=128,
             msg_cnt=msg_cnt,
-            fake_timestamp_ms=base_ts,
-            producer_rate_limit_bps=1024,
+            producer_properties={
+                "fake_timestamp_ms": base_ts,
+                "rate_limit_bps": 1024,
+            },
         )
         self.verify()
 
@@ -1913,6 +1919,160 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
 
         assert all(ts == expected_timestamps[o] for o, ts in consumed.items()), (
             f"Timestamps don't match {expected_timestamps=} vs {consumed=}"
+        )
+
+    @cluster(num_nodes=8)
+    def test_replication_with_large_msgs(self):
+        msg_size = 2 * 1024 * 1024
+        max_bytes = 10 * msg_size
+        topic = TopicSpec(
+            name="source-topic",
+            partition_count=1,
+            replication_factor=3,
+            max_message_bytes=max_bytes,
+        )
+
+        self.source_default_client().create_topic(topic)
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.start_producer_consumer(
+            topic=topic.name,
+            msg_size=msg_size,
+            msg_cnt=20,
+            producer_properties={"batch_max_bytes": max_bytes},
+        )
+        self.verify()
+
+    @cluster(num_nodes=8)
+    def test_replication_with_compaction(self):
+        self.logger.info(
+            "Create a topic with compaction settings set but without compaction and tombstone removal enabled"
+        )
+        topic = TopicSpec(
+            name="compacted-topic",
+            partition_count=1,
+            replication_factor=3,
+            segment_bytes=1024 * 1024,
+            max_compaction_lag_ms=1000,
+            min_cleanable_dirty_ratio=0.0,
+        )
+        self.source_default_client().create_topic(topic)
+
+        req = self.create_default_link_request("test-link")
+        req.shadow_link.configurations.topic_metadata_sync_options.synced_shadow_topic_properties.extend(
+            ["segment.bytes", "min.cleanable.dirty.ratio"]
+        )
+        self.create_link_with_request(req=req)
+
+        self.logger.info("Replicate some data with compactable keys and tombstones")
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.start_producer_consumer(
+            topic=topic.name,
+            msg_size=128,
+            msg_cnt=10000,
+            producer_properties={
+                "key_set_cardinality": 600,
+                "tombstone_probability": 0.4,
+            },
+        )
+        self.verify()
+
+        def get_compaction_progress(
+            rpk: RpkTool = self.target_cluster_rpk,
+        ) -> tuple[int, int]:
+            keys: list[str] = []
+            tombstones = 0
+            for line in rpk.consume(
+                topic=topic.name,
+                offset=":end",
+                format="%k,%v\n",
+            ).splitlines():
+                key, value = line.split(",", maxsplit=1)
+                keys += [key]
+                if value == "":
+                    tombstones += 1
+
+            self.logger.info(
+                f"Data read from target topic: {len(keys)=}, {keys[:5]=}, {tombstones=}"
+            )
+            return len(keys), tombstones
+
+        self.logger.info("Verifying that replicated records can be compacted")
+        pre_compaction_keys, _ = get_compaction_progress()
+        self.source_default_client().alter_topic_configs(
+            topic.name,
+            {"cleanup.policy": "compact"},
+        )
+
+        def compaction_made_progress():
+            post_compaction_keys, _ = get_compaction_progress()
+            self.logger.info(
+                f"Compaction progress check: {pre_compaction_keys=}, {post_compaction_keys=}"
+            )
+            return post_compaction_keys < pre_compaction_keys
+
+        wait_until(
+            compaction_made_progress,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Target topic compaction did not make progress",
+        )
+
+        self.logger.info("Verifying that replicated tombstones can be removed")
+        _, pre_tombstone_removal_tombstones = get_compaction_progress()
+        self.source_default_client().alter_topic_configs(
+            topic.name,
+            {"delete.retention.ms": "1000"},
+        )
+
+        def tombstone_removal_made_progress():
+            _, post_tombstone_removal_tombstones = get_compaction_progress()
+            self.logger.info(
+                f"Tombstone removal progress check: {pre_tombstone_removal_tombstones=}, {post_tombstone_removal_tombstones=}"
+            )
+            return post_tombstone_removal_tombstones < pre_tombstone_removal_tombstones
+
+        wait_until(
+            tombstone_removal_made_progress,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Target topic tombstone removal did not make progress",
+        )
+
+        self.logger.info(
+            "Verifying that compaction state is consistent on both clusters"
+        )
+
+        def compaction_states_consistent():
+            source_keys, source_tombstones = get_compaction_progress(
+                self.source_cluster_rpk
+            )
+            target_keys, target_tombstones = get_compaction_progress(
+                self.target_cluster_rpk
+            )
+            self.logger.info(
+                f"Compaction state check: {source_keys=}, {target_keys=}, {source_tombstones=}, {target_tombstones=}"
+            )
+            return source_keys == target_keys and source_tombstones == target_tombstones
+
+        wait_until(
+            compaction_states_consistent,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Compaction state is not consistent between clusters",
         )
 
 
@@ -2175,7 +2335,7 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                     p, consumed = (int(v) for v in r.split(","))
                     # sanity check the result against group description
                     # assume the CG protocol works correctly for the rest of the partitions
-                    expected = partitions[(topic, p)]
+                    expected = partitions[(topic, p)] or 0
                     assert consumed == expected, (
                         f"{group_name=}: {topic}/{p} {consumed=} but {expected=}"
                     )
@@ -2694,7 +2854,10 @@ class ShadowLinkUpdateBrokersTests(ShadowLinkPreAllocTestBase):
             tls_cert=self.tls.create_cert("other-source-rpk"),
         )
 
-    @cluster(num_nodes=9)
+    @cluster(
+        num_nodes=9,
+        log_allow_list=[re.compile(".*Broker.*does not support list groups API.*")],
+    )
     def test_update_brokers(self):
         # Create a link pointing to the old source cluster
         shadow_link = self.create_link("test-link")
@@ -3002,7 +3165,10 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             msg_size=128,
             msg_cnt=100000,
             use_transactions=True,
-            msgs_per_transaction=10000,
+            producer_properties={
+                "msgs_per_transaction": "10000",
+                "transaction_abort_rate": "0.3",
+            },
         )
         validate_metrics(
             timeout_sec=30,

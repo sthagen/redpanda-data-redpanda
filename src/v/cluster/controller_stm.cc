@@ -175,12 +175,14 @@ ss::future<> controller_stm::apply_snapshot(
         // apply members early so that we have rpc clients to all cluster nodes.
         co_await std::get<members_manager&>(_state).apply_snapshot(
           offset, snapshot);
+        // lots of Redpanda downstream components rely on the topic metadata to
+        // be up to date. Therefore apply the topic table state first.
+        co_await std::get<topic_updates_dispatcher&>(_state).apply_snapshot(
+          offset, snapshot);
 
         // apply everything else in no particular order.
         co_await ss::when_all(
           std::get<config_manager&>(_state).apply_snapshot(offset, snapshot),
-          std::get<topic_updates_dispatcher&>(_state).apply_snapshot(
-            offset, snapshot),
           std::get<plugin_backend&>(_state).apply_snapshot(offset, snapshot),
           std::get<cluster_recovery_manager&>(_state).apply_snapshot(
             offset, snapshot),

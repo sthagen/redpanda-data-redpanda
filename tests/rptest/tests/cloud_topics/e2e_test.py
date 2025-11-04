@@ -97,30 +97,32 @@ class EndToEndCloudTopicsBase(EndToEndTest):
 
     def wait_until_reconciled(self, topic: str, partition: int, transactions: bool):
         def get_offsets():
-            hwm: int | None = None
-            for p in self.rpk.describe_topic(topic):
-                if p.id == partition:
-                    hwm = p.high_watermark
-                    break
+            last_record: int | None = None
+            output = self.rpk.consume(
+                topic,
+                partition=partition,
+                offset=":end",
+                format="%o\n",
+                read_committed=True,
+            )
+            for line in output.splitlines():
+                last_record = int(line)
             metastore = self.admin.metastore()
             req = metastore_pb.GetOffsetsRequest(
                 partition=ntp_pb.TopicPartition(topic=topic, partition=partition)
             )
-            return metastore.get_offsets(req=req).offsets.next_offset, hwm
+            return metastore.get_offsets(req=req).offsets.next_offset, last_record
 
         def is_reconciled() -> bool:
-            next_offset, hwm = get_offsets()
-            if transactions:
-                # This is a little hacky, but if we produced using transactions,
-                # we won't reconcile the last offset because it's an commit or
-                # abort transactional control batch.
-                return next_offset == ((hwm or 0) - 1)
-            return next_offset == hwm
+            next_offset, last_record = get_offsets()
+            # Check the last observable record's offset against the next offset expected.
+            # For transactions, this could be much less than the HWM if there are aborts.
+            return (next_offset - 1) == last_record
 
         def message() -> str:
             try:
-                next_offset, hwm = get_offsets()
-                return f"failed to reconcile all data: topic={topic}, partition={partition}, high_watermark={hwm}, next_offset={next_offset}"
+                next_offset, last_record = get_offsets()
+                return f"failed to reconcile all data: topic={topic}, partition={partition}, last_record={last_record}, next_offset={next_offset}"
             except Exception:
                 return f"failed to reconcile all data: topic={topic}, partition={partition}, unable to fetch offsets"
 

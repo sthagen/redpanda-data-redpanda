@@ -43,6 +43,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system/syslog"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -145,6 +146,7 @@ func executeBundle(ctx context.Context, bp bundleParams) error {
 		saveDmidecode(ctx, ps),
 		saveFree(ctx, ps),
 		saveIP(ctx, ps),
+		saveEthtool(ctx, ps),
 		saveInterrupts(ps),
 		saveKafkaMetadata(ctx, ps, bp.cl),
 		saveKernelSymbols(ps),
@@ -943,6 +945,32 @@ func saveIP(ctx context.Context, ps *stepParams) step {
 			filepath.Join(linuxUtilsRoot, "ip.txt"),
 			"ip", "addr",
 		)
+	}
+}
+
+// Saves various ethtool outputs from all interfaces.
+func saveEthtool(ctx context.Context, ps *stepParams) step {
+	return func() error {
+		netDir := "/sys/class/net"
+		interfaces := utils.ListFilesInPath(ps.fs, netDir)
+		for _, iface := range interfaces {
+			if exists, err := afero.Exists(ps.fs, filepath.Join(netDir, iface, "device")); err != nil || !exists {
+				// skip virtual interfaces
+				continue
+			}
+			commands := []string{"i", "l", "c"}
+			for _, cmd := range commands {
+				// ignore errors, some of these commands are very likely expected to fail
+				writeCommandOutputToZip(
+					ctx,
+					ps,
+					filepath.Join(linuxUtilsRoot, "ethtool", fmt.Sprintf("%s_%s.txt", iface, cmd)),
+					"ethtool", fmt.Sprintf("-%s", cmd), iface,
+				)
+			}
+		}
+
+		return nil
 	}
 }
 

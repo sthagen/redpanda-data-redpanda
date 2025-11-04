@@ -523,7 +523,7 @@ class ValidatorStatus:
         invalid_reads: int,
         offset_gaps: int,
         out_of_scope_invalid_reads: int,
-        max_offsets_consumed: Optional[int],
+        max_offsets_consumed: Dict[int, int],
         lost_offsets: Dict[str, int],
         tombstones_consumed: int,
     ):
@@ -550,7 +550,7 @@ class ValidatorStatus:
         self.name = ""
 
         # Clear other fields we aren't interested in, to avoid confusion.
-        self.max_offsets_consumed = None
+        self.max_offsets_consumed = {}
         self.lost_offsets = {}
 
         self.valid_reads += rhs.valid_reads

@@ -66,8 +66,6 @@ ss::future<> reconciler::start() {
 
 ss::future<> reconciler::stop() {
     _as.request_abort();
-    _control_sem.broken();
-
     co_await _gate.close();
 }
 
@@ -116,17 +114,12 @@ ss::future<> reconciler::reconciliation_loop() {
     ss::lowres_clock::duration next_wait = poll_frequency;
     while (!_gate.is_closed()) {
         try {
-            co_await _control_sem.wait(
-              next_wait, std::max(_control_sem.current(), size_t(1)));
-        } catch (const ss::semaphore_timed_out& ex) {
-            // Time to do some work.
-            std::ignore = ex;
+            co_await ss::sleep_abortable(next_wait, _as);
+        } catch (const ss::sleep_aborted&) {
+            // If the sleep was aborted, we can exit our loop
+            co_return;
         }
 
-        vlog(
-          lg.debug,
-          "Reconciliation loop tick with {} attached partitions",
-          _sources.size());
         if (config::shard_local_cfg()
               .cloud_topics_disable_reconciliation_loop()) {
             vlog(lg.debug, "Reconciliation loop disabled, skipping iteration");
@@ -210,8 +203,11 @@ ss::future<> reconciler::reconcile() {
     for (auto& [_, src] : _sources) {
         sources.push_back(src);
     }
+    vlog(
+      lg.debug,
+      "Reconciliation loop tick with {} attached partitions",
+      sources.size());
     if (sources.empty()) {
-        vlog(lg.trace, "No leader partitions to reconcile");
         co_return;
     }
 

@@ -1492,8 +1492,11 @@ consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
         std::optional<storage::truncate_prefix_config> start_truncate_cfg;
         auto snapshot_units = co_await _snapshot_lock.get_units();
         auto metadata = co_await read_snapshot_metadata();
+        // only set if snapshot was applied.
+        std::optional<model::offset> last_snapshot_index;
         if (metadata.has_value()) {
-            update_offset_from_snapshot(metadata.value());
+            update_snapshot_offset(metadata.value());
+            last_snapshot_index = _last_snapshot_index;
             co_await _configuration_manager.add(
               _last_snapshot_index, std::move(metadata->latest_configuration));
             _probe->configuration_update();
@@ -1508,8 +1511,17 @@ consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
             _snapshot_size = co_await _snapshot_mgr.get_snapshot_size();
         }
         co_await _log->start(start_truncate_cfg, _as);
+        if (last_snapshot_index) {
+            auto prev_commit_index = _commit_index;
+            _commit_index = std::max(_commit_index, *last_snapshot_index);
+            maybe_update_last_visible_index(_commit_index);
+            if (prev_commit_index != _commit_index) {
+                _commit_index_updated.broadcast();
+                _replication_monitor.notify_committed();
+                _event_manager.notify_commit_index();
+            }
+        }
         snapshot_units.return_all();
-
         vlog(
           _ctxlog.debug,
           "Starting raft bootstrap from {}",
@@ -2393,7 +2405,8 @@ ss::future<> consensus::hydrate_snapshot() {
     if (!metadata.has_value()) {
         co_return;
     }
-    update_offset_from_snapshot(metadata.value());
+    update_snapshot_offset(metadata.value());
+    auto last_snapshot_index = _last_snapshot_index;
     co_await _configuration_manager.add(
       _last_snapshot_index, std::move(metadata->latest_configuration));
     _probe->configuration_update();
@@ -2403,6 +2416,19 @@ ss::future<> consensus::hydrate_snapshot() {
     }
     _snapshot_size = co_await _snapshot_mgr.get_snapshot_size();
     update_follower_states(_configuration_manager.get_latest());
+    // update to commit index is deferred until the log is truncated
+    // to the snapshot last included index. This is done to ensure that
+    // the offset translator changes in the snapshot are applied before
+    // we move the commit index forward, so that any reads at or beyond
+    // the commit index can be properly translated.
+    auto prev_commit_index = _commit_index;
+    _commit_index = std::max(_commit_index, last_snapshot_index);
+    maybe_update_last_visible_index(_commit_index);
+    if (prev_commit_index != _commit_index) {
+        _commit_index_updated.broadcast();
+        _replication_monitor.notify_committed();
+        _event_manager.notify_commit_index();
+    }
 }
 
 std::optional<storage::truncate_prefix_config>
@@ -2469,7 +2495,7 @@ consensus::read_snapshot_metadata() {
     co_return metadata;
 }
 
-void consensus::update_offset_from_snapshot(
+void consensus::update_snapshot_offset(
   const raft::snapshot_metadata& metadata) {
     vassert(
       metadata.last_included_index >= _last_snapshot_index,
@@ -2484,15 +2510,6 @@ void consensus::update_offset_from_snapshot(
 
     _last_snapshot_index = metadata.last_included_index;
     _last_snapshot_term = metadata.last_included_term;
-
-    auto prev_commit_index = _commit_index;
-    _commit_index = std::max(_last_snapshot_index, _commit_index);
-    maybe_update_last_visible_index(_commit_index);
-    if (prev_commit_index != _commit_index) {
-        _commit_index_updated.broadcast();
-        _replication_monitor.notify_committed();
-        _event_manager.notify_commit_index();
-    }
 }
 
 ss::future<install_snapshot_reply>

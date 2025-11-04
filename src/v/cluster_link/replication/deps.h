@@ -113,4 +113,10 @@ public:
     virtual std::unique_ptr<data_source> make_source(const ::model::ntp&) = 0;
 };
 
+class monotonicity_violation_exception : public std::runtime_error {
+public:
+    explicit monotonicity_violation_exception(const std::string& msg)
+      : std::runtime_error(msg) {}
+};
+
 } // namespace cluster_link::replication

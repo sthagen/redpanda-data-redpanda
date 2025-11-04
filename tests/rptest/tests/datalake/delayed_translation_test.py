@@ -51,6 +51,7 @@ class DatalakeDelayedTranslationTest(RedpandaTest):
             si_settings=SISettings(
                 test_context=test_ctx,
                 log_segment_size=10 * 1024,
+                log_segment_size_min=10 * 1024,
                 cloud_storage_max_connections=5,
                 cloud_storage_enable_remote_read=True,
                 cloud_storage_enable_remote_write=True,

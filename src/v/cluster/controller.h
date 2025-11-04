@@ -304,9 +304,11 @@ private:
      * Create a \c bootstrap_cluster_cmd, replicate-and-wait it to the current
      * quorum, retry infinitely if replicate-and-wait fails.
      */
-    ss::future<> create_cluster(bootstrap_cluster_cmd_data cmd_data);
+    ss::future<>
+    create_cluster(bootstrap_cluster_cmd_data cmd_data, ss::abort_source& as);
 
-    ss::future<> cluster_creation_hook(cluster_discovery& discovery);
+    ss::future<>
+    cluster_creation_hook(cluster_discovery& discovery, ss::abort_source& as);
 
     std::optional<cloud_storage_clients::bucket_name> get_configured_bucket();
 

@@ -108,8 +108,10 @@ logger:
         self.logger.debug(f"Starting stream {name} with config {json.dumps(config)}")
         self._request("POST", f"streams/{name}", json=config)
 
-    def remove_stream(self, name: str):
-        self._request("DELETE", f"streams/{name}")
+    def remove_stream(self, name: str, operation_timeout_sec=30):
+        self._request(
+            "DELETE", f"streams/{name}", params={"timeout": f"{operation_timeout_sec}s"}
+        )
 
     def stream_metrics(self, name: str):
         metrics_resp = self._request("GET", "metrics")

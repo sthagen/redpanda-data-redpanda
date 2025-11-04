@@ -70,6 +70,7 @@ class PartitionMovementTest(PartitionMovementMixin, EndToEndTest):
                 "enable_leader_balancer": False,
                 "partition_autobalancing_mode": "off",
                 "core_balancing_on_core_count_change": False,
+                "core_balancing_continuous": False,
             },
             **kwargs,
         )

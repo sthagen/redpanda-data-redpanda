@@ -60,6 +60,7 @@ class ClusterLinkingWorkloadSpec:
         msg_size: int = 4 * 1024,
         validate_number_of_messages_on_target: bool = True,
         use_transactions: bool = False,
+        use_compaction: bool = False,
     ):
         self.topic = topic
         self.topic_properties = topic_properties
@@ -73,6 +74,7 @@ class ClusterLinkingWorkloadSpec:
             validate_number_of_messages_on_target
         )
         self.use_transactions = use_transactions
+        self.use_compaction = use_compaction
 
     def __str__(self) -> str:
         return (
@@ -84,7 +86,8 @@ class ClusterLinkingWorkloadSpec:
             f"msg_count={self.msg_count}, "
             f"msg_size={self.msg_size}, "
             f"validate_number_of_messages_on_target={self.validate_number_of_messages_on_target}, "
-            f"use_transactions={self.use_transactions})"
+            f"use_transactions={self.use_transactions}, "
+            f"use_compaction={self.use_compaction})"
         )
 
 
@@ -126,6 +129,8 @@ class ClusterLinkingWorkloadWorker:
             topic=self.spec.topic,
             preallocated_nodes=self.preallocated_nodes,
             logger=self.logger,
+            use_transactions=self.spec.use_transactions,
+            use_compaction=self.spec.use_compaction,
             msg_count=self.spec.msg_count,
             msg_size=self.spec.msg_size,
             producer_properties=self.spec.producer_properties,
@@ -346,9 +351,14 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
                     partition_count=self.partition_count,
                     msg_count=self.msg_count,
                     msg_size=self.msg_size,
+                    producer_properties={
+                        "key_set_cardinality": 600,
+                        "tombstone_probability": 0.4,
+                    },
                     consumer_properties={
                         "compacted": True,
                     },
+                    use_compaction=True,
                 ),
                 ClusterLinkingWorkloadSpec(
                     topic="topic-txns",

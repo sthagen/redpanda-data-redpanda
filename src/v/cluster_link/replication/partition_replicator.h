@@ -111,6 +111,9 @@ private:
     std::unique_ptr<data_source> _source;
     std::unique_ptr<data_sink> _sink;
     ss::scheduling_group _scheduling_group;
+    // set in start.
+    // The original start offset configured for this replicator.
+    kafka::offset _start_offset{};
     // to pipeline multiple replicate requests in parallel
     static constexpr ssize_t max_in_flight_requests = 5;
     ssx::semaphore _max_requests{

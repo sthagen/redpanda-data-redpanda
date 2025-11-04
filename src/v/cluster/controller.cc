@@ -250,11 +250,6 @@ ss::future<> controller::start(
   std::chrono::milliseconds application_start_time,
   ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&
     data_migrations_group_proxy) {
-    // Abort all background activity if start() is asked to abort mid-way.
-    auto shard0_as_sub = shard0_as.subscribe([this](const auto&) noexcept {
-        return _as.invoke_on_all(&ss::abort_source::request_abort);
-    });
-
     /**
      * Switch to cluster scheduling group to ensure that all the controller
      * services are started within that scheduling group.
@@ -646,7 +641,7 @@ ss::future<> controller::start(
     /// print the RF minimum warning
     _tp_frontend.local().print_rf_warning_message();
 
-    co_await cluster_creation_hook(discovery);
+    co_await cluster_creation_hook(discovery, shard0_as);
     {
         auto u = co_await _stm.local().lock_apply();
         // start shard_balancer before controller_backend so that it bootstraps
@@ -1000,7 +995,8 @@ ss::future<> controller::stop() {
     co_await _as.stop();
 }
 
-ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
+ss::future<> controller::create_cluster(
+  bootstrap_cluster_cmd_data cmd_data, ss::abort_source& as) {
     vassert(
       ss::this_shard_id() == controller_stm_shard,
       "Cluster can only be created from controller_stm_shard");
@@ -1017,7 +1013,7 @@ ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
         // really just a wait for the consensus object to finish writing its
         // last_voted_for from its self-vote.
         while (!_storage.local().get_cluster_uuid() && !_raft0->is_leader()) {
-            co_await ss::sleep_abortable(100ms, _as.local());
+            co_await ss::sleep_abortable(100ms, as);
         }
         if (_storage.local().get_cluster_uuid()) {
             // Cluster has been created by other seed node and replicated here
@@ -1034,7 +1030,7 @@ ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
           bucket_opt.has_value()
           && config::shard_local_cfg()
                .cloud_storage_attempt_cluster_restore_on_bootstrap.value()) {
-            retry_chain_node retry_node(_as.local(), 300s, 5s);
+            retry_chain_node retry_node(as, 300s, 5s);
             auto res
               = co_await cloud_metadata::download_highest_manifest_in_bucket(
                 _cloud_storage_api.local(),
@@ -1068,16 +1064,16 @@ ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
                       "retrying: {}",
                       err);
                     co_await ss::sleep_abortable(
-                      retry_jitter.next_duration(), _as.local());
+                      retry_jitter.next_duration(), as);
                     continue;
                 }
             }
         }
 
         vlog(clusterlog.info, "Creating cluster UUID {}", cmd_data.uuid);
-        const std::error_code errc = co_await replicate_and_wait(
-          _stm,
-          _as,
+        const std::error_code errc = co_await do_replicate_and_wait(
+          _stm.local(),
+          _as.local(),
           bootstrap_cluster_cmd{0, cmd_data},
           model::timeout_clock::now() + 30s,
           std::nullopt);
@@ -1094,7 +1090,7 @@ ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
             co_return;
         }
 
-        co_await ss::sleep_abortable(retry_jitter.next_duration(), _as.local());
+        co_await ss::sleep_abortable(retry_jitter.next_duration(), as);
         vlog(
           clusterlog.trace,
           "Will retry to create cluster UUID {}",
@@ -1107,7 +1103,8 @@ ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
  * after it has been created, before anything else has been written
  * to it, and before we have started communicating with peers.
  */
-ss::future<> controller::cluster_creation_hook(cluster_discovery& discovery) {
+ss::future<> controller::cluster_creation_hook(
+  cluster_discovery& discovery, ss::abort_source& as) {
     if (co_await discovery.is_cluster_founder()) {
         // Full cluster bootstrap
         bootstrap_cluster_cmd_data cmd_data;
@@ -1118,7 +1115,7 @@ ss::future<> controller::cluster_creation_hook(cluster_discovery& discovery) {
         cmd_data.founding_version
           = features::feature_table::get_latest_logical_version();
         cmd_data.initial_nodes = discovery.founding_brokers();
-        co_return co_await create_cluster(std::move(cmd_data));
+        co_return co_await create_cluster(std::move(cmd_data), as);
     }
 
     if (_storage.local().get_cluster_uuid()) {
@@ -1136,7 +1133,7 @@ ss::future<> controller::cluster_creation_hook(cluster_discovery& discovery) {
     bootstrap_cluster_cmd_data cmd_data;
     cmd_data.uuid = model::cluster_uuid(uuid_t::create());
     ssx::background
-      = create_cluster(std::move(cmd_data))
+      = create_cluster(std::move(cmd_data), _as.local())
           .handle_exception([](const std::exception_ptr e) {
               vlog(clusterlog.warn, "Error creating cluster UUID. {}", e);
           });

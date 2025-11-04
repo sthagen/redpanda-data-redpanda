@@ -172,7 +172,6 @@ private:
 
     // Top-level background worker that drives reconciliation.
     ss::future<> reconciliation_loop();
-    ssx::semaphore _control_sem{0, "reconciler::semaphore"};
 
     /*
      * Reconcile a set of sources into an object with id `oid`.

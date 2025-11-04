@@ -979,6 +979,7 @@ class RpkTool:
         format: str | None = None,
         timeout: float | None = None,
         use_schema_registry: str | None = None,
+        read_committed: bool = False,
     ) -> str:
         cmd = ["consume", topic]
         if group is not None:
@@ -999,6 +1000,8 @@ class RpkTool:
             cmd += ["--use-schema-registry=" + use_schema_registry]
         elif format is not None:
             cmd += ["-f", format]
+        if read_committed:
+            cmd += ["--read-committed"]
 
         return self._run_topic(
             cmd, timeout=timeout, use_schema_registry=use_schema_registry is not None

@@ -55,20 +55,19 @@ ss::future<> partition_replicator::start() {
     auto holder = _gate.hold();
     co_await _sink->start();
     auto last_replicated = _sink->last_replicated_offset();
-    kafka::offset start_offset{};
     if (last_replicated < kafka::offset{0}) {
         // Sink has not replicated anything yet.
         // We will start from configured start offset.
-        start_offset = co_await _config_provider.start_offset(_ntp, _as);
+        _start_offset = co_await _config_provider.start_offset(_ntp, _as);
         vlog(
           _log.debug,
           "Starting replication from configured start offset {}",
-          start_offset);
+          _start_offset);
     } else {
-        start_offset = kafka::next_offset(last_replicated);
-        vlog(_log.debug, "Resuming replication from offset {}", start_offset);
+        _start_offset = kafka::next_offset(last_replicated);
+        vlog(_log.debug, "Resuming replication from offset {}", _start_offset);
     }
-    co_await _source->start(start_offset);
+    co_await _source->start(_start_offset);
     ssx::repeat_until_gate_closed_or_aborted(_gate, _as, [this] {
         return fetch_and_replicate().handle_exception(
           [this](const std::exception_ptr& e) {
@@ -277,6 +276,15 @@ ss::future<> partition_replicator::fetch_and_replicate() {
         }
     } catch (const ss::sleep_aborted&) {
         // ignore, sleep from fetch was aborted.
+    } catch (const monotonicity_violation_exception& ex) {
+        // step down and try to recover on next leader term
+        vlog(
+          _log.warn,
+          "Monotonicity violation detected in replicator: {}, stepping down "
+          "partition",
+          ex.what());
+        _sink->notify_replicator_failure(_term);
+        as.request_abort();
     } catch (...) {
         auto eptr = std::current_exception();
         auto log_level = ssx::is_shutdown_exception(eptr)
@@ -287,8 +295,11 @@ ss::future<> partition_replicator::fetch_and_replicate() {
     }
     co_await gate.close();
     if (!_gate.is_closed() && !_as.abort_requested()) {
-        co_await _source->reset(
-          kafka::next_offset(_sink->last_replicated_offset()));
+        auto reset_offset = _start_offset;
+        if (_sink->last_replicated_offset() >= kafka::offset{0}) {
+            reset_offset = kafka::next_offset(_sink->last_replicated_offset());
+        }
+        co_await _source->reset(reset_offset);
         auto sleep_for = _backoff_policy.current_backoff_duration();
         vlog(
           _log.trace,
