@@ -36,6 +36,7 @@ redpanda_cc_library(
         "//src/v/features",
         "//src/v/redpanda/admin:kafka_connections_service",
         "//src/v/redpanda/admin/proxy:client",
+        "//src/v/resource_mgmt:available_memory",
         "//src/v/serde/protobuf:rpc",
         "@seastar",
     ],

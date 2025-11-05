@@ -2334,7 +2334,7 @@ ss::future<> disk_log_impl::apply_segment_ms() {
 
 ss::future<model::record_batch_reader>
 disk_log_impl::make_unchecked_reader(local_log_reader_config config) {
-    vassert(!_closed, "make_reader on closed log - {}", *this);
+    throw_if_closed();
     return _lock_mngr.range_lock(config).then(
       [this, cfg = config](std::unique_ptr<lock_manager::lease> lease) {
           return model::make_record_batch_reader<log_reader>(
@@ -2344,7 +2344,7 @@ disk_log_impl::make_unchecked_reader(local_log_reader_config config) {
 
 ss::future<model::record_batch_reader>
 disk_log_impl::make_cached_reader(local_log_reader_config config) {
-    vassert(!_closed, "make_reader on closed log - {}", *this);
+    throw_if_closed();
 
     auto rdr = _readers_cache->get_reader(config);
     if (rdr) {
@@ -3063,7 +3063,7 @@ disk_log_impl::max_eligible_for_compacted_reupload_offset(
 
 ss::future<model::record_batch_reader>
 disk_log_impl::make_reader(local_log_reader_config config) {
-    vassert(!_closed, "make_reader on closed log - {}", *this);
+    throw_if_closed();
     if (config.start_offset < _start_offset) {
         return ss::make_exception_future<model::record_batch_reader>(
           std::runtime_error(
@@ -3088,7 +3088,7 @@ disk_log_impl::make_reader(local_log_reader_config config) {
 
 ss::future<model::record_batch_reader>
 disk_log_impl::make_reader(timequery_config config) {
-    vassert(!_closed, "make_reader on closed log - {}", *this);
+    throw_if_closed();
     return _lock_mngr.range_lock(config).then(
       [this, cfg = config](std::unique_ptr<lock_manager::lease> lease) {
           auto start_offset = cfg.min_offset;
@@ -4582,6 +4582,12 @@ bool disk_log_impl::needs_compaction() const {
 
     auto dr = dirty_ratio();
     return dr >= config().min_cleanable_dirty_ratio() || exceed_compact_lag;
+}
+
+void disk_log_impl::throw_if_closed() const {
+    if (_closed) {
+        throw ss::abort_requested_exception();
+    }
 }
 
 } // namespace storage

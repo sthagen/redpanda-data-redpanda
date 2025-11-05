@@ -26,7 +26,11 @@ from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.clients.rp_storage_tool import RpStorageTool
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
-from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, MetricsEndpoint
+from rptest.services.redpanda import (
+    RESTART_LOG_ALLOW_LIST,
+    MetricsEndpoint,
+    RedpandaService,
+)
 
 EMPTY_SEGMENT_SIZE = 4096
 
@@ -623,7 +627,9 @@ def get_expected_ntp_restored_size(
     return expected_restored_sizes
 
 
-def nodes_report_cloud_segments(redpanda, target_segments, topic_name=None):
+def nodes_report_cloud_segments(
+    redpanda: RedpandaService, target_segments: int, topic_name: str | None = None
+):
     """
     Returns true if the nodes in the cluster collectively report having
     above the given number of segments for a specific topic, if provided.

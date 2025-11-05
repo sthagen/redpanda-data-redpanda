@@ -2918,6 +2918,14 @@ class ShadowLinkUpdateBrokersTests(ShadowLinkPreAllocTestBase):
 
 
 class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
+    SHADOW_TOPIC_STATE = "redpanda_shadow_link_shadow_topic_state"
+    TOTAL_RECORDS_FETCHED = "redpanda_shadow_link_total_records_fetched"
+    TOTAL_RECORDS_WRITTEN = "redpanda_shadow_link_total_records_written"
+    TOTAL_BYTES_FETCHED = "redpanda_shadow_link_total_bytes_fetched"
+    TOTAL_BYTES_WRITTEN = "redpanda_shadow_link_total_bytes_written"
+    SHADOW_LAG = "redpanda_shadow_link_shadow_lag"
+    CLIENT_ERRORS = "redpanda_shadow_link_client_errors"
+
     def _get_metrics_for_node(
         self,
         node: ClusterNode,
@@ -2979,13 +2987,11 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         def collect_shadow_topic_states(
             node_samples: list[dict[str, MetricSamples]],
         ) -> dict[str, int]:
-            sts = "shadow_topic_state"
-
             by_status: dict[str, int] = {}
             for samples in node_samples:
-                if sts not in samples:
+                if self.SHADOW_TOPIC_STATE not in samples:
                     continue
-                for s in samples[sts].samples:
+                for s in samples[self.SHADOW_TOPIC_STATE].samples:
                     status = s.labels["status"]
                     if status not in by_status:
                         by_status[status] = 0
@@ -3066,39 +3072,39 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             return check_shadow_topic_states(samples, {"failed_over": 3})
 
         def check_records_fetched_1000(samples: list[dict[str, MetricSamples]]):
-            return check_total_value(samples, "total_records_fetched", 1000)
+            return check_total_value(samples, self.TOTAL_RECORDS_FETCHED, 1000)
 
         def check_records_fetched_2500(samples: list[dict[str, MetricSamples]]):
-            return check_total_value(samples, "total_records_fetched", 2500)
+            return check_total_value(samples, self.TOTAL_RECORDS_FETCHED, 2500)
 
         def check_records_written_1000(samples: list[dict[str, MetricSamples]]):
-            return check_total_value(samples, "total_records_written", 1000)
+            return check_total_value(samples, self.TOTAL_RECORDS_WRITTEN, 1000)
 
         def check_records_written_2500(samples: list[dict[str, MetricSamples]]):
-            return check_total_value(samples, "total_records_written", 2500)
+            return check_total_value(samples, self.TOTAL_RECORDS_WRITTEN, 2500)
 
         def check_bytes_fetched(samples: list[dict[str, MetricSamples]]):
-            return check_value_positive(samples, "total_bytes_fetched")
+            return check_value_positive(samples, self.TOTAL_BYTES_FETCHED)
 
         def check_bytes_fetched_128000(samples: list[dict[str, MetricSamples]]):
-            return check_value_at_least(samples, "total_bytes_fetched", 128000)
+            return check_value_at_least(samples, self.TOTAL_BYTES_FETCHED, 128000)
 
         def check_bytes_written(samples: list[dict[str, MetricSamples]]):
-            return check_value_positive(samples, "total_bytes_written")
+            return check_value_positive(samples, self.TOTAL_BYTES_WRITTEN)
 
         def check_bytes_written_128000(samples: list[dict[str, MetricSamples]]):
-            return check_value_at_least(samples, "total_bytes_written", 128000)
+            return check_value_at_least(samples, self.TOTAL_BYTES_WRITTEN, 128000)
 
         def check_shadow_lag_zero(node_samples: list[dict[str, MetricSamples]]) -> bool:
-            return check_total_value(node_samples, "shadow_lag", 0)
+            return check_total_value(node_samples, self.SHADOW_LAG, 0)
 
         def check_shadow_lag_positive(
             node_samples: list[dict[str, MetricSamples]],
         ) -> bool:
-            return check_value_positive(node_samples, "shadow_lag")
+            return check_value_positive(node_samples, self.SHADOW_LAG)
 
         def check_client_errors(node_samples: list[dict[str, MetricSamples]]) -> bool:
-            return check_metric_exists(node_samples, "client_errors")
+            return check_metric_exists(node_samples, self.CLIENT_ERRORS)
 
         def validate_metrics(
             timeout_sec: int, metric_validators: list[tuple[str, Callable]]
@@ -3119,13 +3125,13 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         validate_metrics(
             timeout_sec=10,
             metric_validators=[
-                ("shadow_topic_state", active_shadow_topics_1),
-                ("total_records_fetched", check_records_fetched_1000),
-                ("total_records_written", check_records_written_1000),
-                ("total_bytes_fetched", check_bytes_fetched_128000),
-                ("total_bytes_written", check_bytes_written_128000),
-                ("shadow_lag", check_shadow_lag_zero),
-                ("client_errors", check_client_errors),
+                (self.SHADOW_TOPIC_STATE, active_shadow_topics_1),
+                (self.TOTAL_RECORDS_FETCHED, check_records_fetched_1000),
+                (self.TOTAL_RECORDS_WRITTEN, check_records_written_1000),
+                (self.TOTAL_BYTES_FETCHED, check_bytes_fetched_128000),
+                (self.TOTAL_BYTES_WRITTEN, check_bytes_written_128000),
+                (self.SHADOW_LAG, check_shadow_lag_zero),
+                (self.CLIENT_ERRORS, check_client_errors),
             ],
         )
 
@@ -3139,13 +3145,13 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         validate_metrics(
             timeout_sec=10,
             metric_validators=[
-                ("shadow_topic_state", active_shadow_topics_2),
-                ("total_records_fetched", check_records_fetched_2500),
-                ("total_records_written", check_records_written_2500),
-                ("total_bytes_fetched", check_bytes_fetched),
-                ("total_bytes_written", check_bytes_written),
-                ("shadow_lag", check_shadow_lag_zero),
-                ("client_errors", check_client_errors),
+                (self.SHADOW_TOPIC_STATE, active_shadow_topics_2),
+                (self.TOTAL_RECORDS_FETCHED, check_records_fetched_2500),
+                (self.TOTAL_RECORDS_WRITTEN, check_records_written_2500),
+                (self.TOTAL_BYTES_FETCHED, check_bytes_fetched),
+                (self.TOTAL_BYTES_WRITTEN, check_bytes_written),
+                (self.SHADOW_LAG, check_shadow_lag_zero),
+                (self.CLIENT_ERRORS, check_client_errors),
             ],
         )
 
@@ -3173,7 +3179,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         validate_metrics(
             timeout_sec=30,
             metric_validators=[
-                ("shadow_lag", check_shadow_lag_positive),
+                (self.SHADOW_LAG, check_shadow_lag_positive),
             ],
         )
         self.verify()
@@ -3181,7 +3187,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         validate_metrics(
             timeout_sec=30,
             metric_validators=[
-                ("shadow_lag", check_shadow_lag_zero),
+                (self.SHADOW_LAG, check_shadow_lag_zero),
             ],
         )
 
@@ -3191,7 +3197,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         validate_metrics(
             timeout_sec=10,
             metric_validators=[
-                ("shadow_topic_state", failed_over_topics_3),
+                (self.SHADOW_TOPIC_STATE, failed_over_topics_3),
             ],
         )
 

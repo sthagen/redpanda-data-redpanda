@@ -94,7 +94,8 @@ topic_purger::purge_tombstoned_topics(ss::abort_source* as) {
           ss::max_concurrent_for_each(
             ntrs_to_purge,
             max_concurrent_purges,
-            [this, &first_error](const cluster::nt_revision& ntr) {
+            [this, as, &first_error](const cluster::nt_revision& ntr) {
+                as->check();
                 return remove_tombstone_(ntr).then(
                   [&first_error](
                     const topic_purger::remove_tombstone_ret_t& ret) {

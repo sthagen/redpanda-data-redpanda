@@ -1120,7 +1120,9 @@ admin_server_cfg_from_global_cfg(scheduling_groups& sgs) {
       .endpoints = config::node().admin(),
       .endpoints_tls = config::node().admin_api_tls(),
       .admin_api_docs_dir = config::node().admin_api_doc_dir(),
-      .sg = sgs.admin_sg()};
+      .sg = sgs.admin_sg(),
+      .max_memory_usage_bytes = memory_groups().admin_max_memory(),
+    };
 }
 
 void application::configure_admin_server(model::node_id node_id) {
@@ -3521,6 +3523,12 @@ void application::start_runtime_services(
     _debug_bundle_service.invoke_on_all(&debug_bundle::service::start).get();
 
     if (!config::node().admin().empty()) {
+        _kafka_connections_service
+          .invoke_on_all([this](admin::kafka_connections_service& kcs) {
+              return kcs.start(_admin.local().memory_semaphore());
+          })
+          .get();
+
         _admin.invoke_on_all(&admin_server::start).get();
     }
 

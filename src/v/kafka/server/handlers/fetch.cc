@@ -38,6 +38,7 @@
 #include "model/timeout_clock.h"
 #include "net/connection.h"
 #include "random/generators.h"
+#include "ssx/future-util.h"
 #include "ssx/semaphore.h"
 
 #include <seastar/core/do_with.hh>
@@ -311,12 +312,24 @@ static ss::future<read_result> do_read_from_ntp(
               preferred_replica);
         }
     }
-    read_result result = co_await read_from_partition(
-      std::move(*kafka_partition), maybe_lso.value(), ntp_config.cfg, deadline);
+    auto res_fut = co_await ss::coroutine::as_future(read_from_partition(
+      std::move(*kafka_partition),
+      maybe_lso.value(),
+      ntp_config.cfg,
+      deadline));
+    if (res_fut.failed()) {
+        auto ex = res_fut.get_exception();
+        if (ssx::is_shutdown_exception(ex)) {
+            co_return make_errored_read_result(
+              md_cache, ntp_config.ktp(), error_code::not_leader_for_partition);
+        }
+        std::rethrow_exception(ex);
+    }
 
     // Note that units can be both increased and decreassed here. Increases
     // happen because there is no strict limit on read size when reading the
     // obligatory batch.
+    auto result = std::move(res_fut.get());
     memory_units.adjust_units(result.data_size_bytes());
     result.memory_units = std::move(memory_units);
     co_return result;

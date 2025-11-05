@@ -56,6 +56,7 @@ struct admin_server_cfg {
     std::vector<config::endpoint_tls_config> endpoints_tls;
     ss::sstring admin_api_docs_dir;
     ss::scheduling_group sg;
+    size_t max_memory_usage_bytes;
 };
 
 enum class service_kind {
@@ -125,6 +126,8 @@ public:
     private:
         std::string _parameter_name;
     };
+
+    ssx::semaphore& memory_semaphore() noexcept { return _memory_semaphore; }
 
 private:
     enum class auth_level {
@@ -808,4 +811,5 @@ private:
     // Value before the temporary override
     std::chrono::milliseconds _default_blocked_reactor_notify;
     ss::timer<> _blocked_reactor_notify_reset_timer;
+    ssx::semaphore _memory_semaphore;
 };

@@ -441,6 +441,8 @@ private:
     //    cleanable dirty ratio.
     bool needs_compaction() const final;
 
+    void throw_if_closed() const;
+
 private:
     // Computes the segment size based on the latest max_segment_size
     // configuration. This takes into consideration any segment size

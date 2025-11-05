@@ -14,7 +14,7 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from functools import partial, reduce
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import requests
 from ducktape.cluster.cluster import ClusterNode
@@ -192,7 +192,7 @@ class KgoRepeaterService(Service):
 
         wait_until(
             lambda: self._is_ready(node),
-            timeout_sec=5,
+            timeout_sec=10,
             backoff_sec=0.5,
             err_msg=f"Timed out waiting for status endpoint {self.who_am_i()} to be available",
         )
@@ -414,7 +414,9 @@ class KgoRepeaterService(Service):
         summed = reduce(partial(tuple_op, operator.add), latencies, (0, 0, 0))
         return tuple_op(operator.truediv, summed, (n, n, n))
 
-    def await_progress(self, msg_count, timeout_sec, err_msg=None):
+    def await_progress(
+        self, msg_count: int, timeout_sec: int, err_msg: str | Callable[[], str] = ""
+    ):
         """
         Call this in places you want to assert some progress
         is really being made: say how many messages should be
@@ -457,7 +459,11 @@ class KgoRepeaterService(Service):
 
 @contextmanager
 def repeater_traffic(
-    context, redpanda, *args, cleanup: Optional[Callable] = None, **kwargs
+    context: TestContext,
+    redpanda: RedpandaService,
+    *args: Any,
+    cleanup: Callable[[], None] | None = None,
+    **kwargs: Any,
 ):
     svc = KgoRepeaterService(context, redpanda, *args, **kwargs)
     svc.start()

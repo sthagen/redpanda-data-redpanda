@@ -342,7 +342,8 @@ admin_server::admin_server(
   , _debug_bundle_service(debug_bundle_service)
   , _kafka_connections_service(kafka_connections_service)
   , _default_blocked_reactor_notify(
-      ss::engine().get_blocked_reactor_notify_ms()) {
+      ss::engine().get_blocked_reactor_notify_ms())
+  , _memory_semaphore(_cfg.max_memory_usage_bytes, "admin/server-mem") {
     _server.set_content_streaming(true);
 }
 
@@ -549,6 +550,7 @@ ss::future<> admin_server::start() {
 
 ss::future<> admin_server::stop() {
     _blocked_reactor_notify_reset_timer.cancel();
+    _memory_semaphore.broken();
     co_await _server.stop();
     co_await _debug_bundle_file_handler.stop();
 }

@@ -73,8 +73,9 @@ class AdminV2ListKafkaConnectionsTest(RedpandaTest):
             self.redpanda,
             auth=(self.superuser.username, self.superuser.password),
         )
+        int32_max = 2_147_483_647
         req = cluster_pb.ListKafkaConnectionsRequest(
-            page_size=1000, order_by="source.port desc"
+            page_size=int32_max, order_by="source.port desc"
         )
 
         def valid_response() -> bool:

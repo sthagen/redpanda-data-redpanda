@@ -22,6 +22,7 @@
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
+#include "ssx/future-util.h"
 #include "ssx/when_all.h"
 
 namespace kafka {
@@ -142,14 +143,24 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
           kafka_partition->leader_epoch());
     }
 
-    auto res = co_await kafka_partition->timequery(
+    auto res_fut = co_await ss::coroutine::as_future(kafka_partition->timequery(
       storage::timequery_config{
         min_offset,
         timestamp,
         max_offset,
         {model::record_batch_type::raft_data},
-        octx.rctx.abort_source().local()});
+        octx.rctx.abort_source().local()}));
+    if (res_fut.failed()) {
+        auto ex = res_fut.get_exception();
+        if (ssx::is_shutdown_exception(ex)) {
+            co_return list_offsets_response::make_partition(
+              ktp.get_partition(), error_code::not_leader_for_partition);
+        }
+        // Not expecting any other kinds of exceptions -- just rethrow.
+        std::rethrow_exception(ex);
+    }
     auto id = ktp.get_partition();
+    auto res = res_fut.get();
     if (res) {
         co_return list_offsets_response::make_partition(
           id, res->time, res->offset, kafka_partition->leader_epoch());

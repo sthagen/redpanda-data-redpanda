@@ -19,6 +19,8 @@
 
 #include <seastar/core/coroutine.hh>
 
+using namespace std::chrono_literals;
+
 namespace proto {
 using namespace proto::admin;
 } // namespace proto
@@ -48,6 +50,35 @@ cluster_service_impl::list_kafka_connections(
     utils::check_license(_feature_table.local());
 
     auto& kcs = _kafka_connections_service.local();
+
+    auto rate_units = std::optional<kafka_connections_service::remote_units>{};
+    if (!ctx.is_proxied()) {
+        // Only apply rate limiting on external requests to avoid deadlock on
+        // concurrent requests arriving at the same time through two different
+        // nodes.
+        rate_units = co_await kcs.rate_limit();
+    }
+
+    if (req.get_page_size() < 0) {
+        throw serde::pb::rpc::invalid_argument_exception(
+          "page_size must be non-negative");
+    }
+
+    const auto capped_page_size = kcs.get_effective_limit(req.get_page_size());
+
+    if (capped_page_size < static_cast<size_t>(req.get_page_size())) {
+        vlog(
+          brlog.debug,
+          "list_kafka_connections: reducing page_size from {} to {} due to "
+          "memory constraints",
+          req.get_page_size(),
+          capped_page_size);
+    }
+
+    req.set_page_size(static_cast<int32_t>(capped_page_size));
+
+    auto mem_units = co_await kcs.memory_limit(capped_page_size);
+
     auto resp = ctx.is_proxied()
                   ? co_await kcs.list_kafka_connections_local(std::move(req))
                   : co_await kcs.list_kafka_connections_cluster_wide(

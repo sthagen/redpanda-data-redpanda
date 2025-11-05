@@ -8,10 +8,10 @@ buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.10-20251022210436-b
 buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.10-20251022210436-bbacedafcd60.1/go.mod h1:LUiEZ+N+YdoSrXkiPjXMLIrGZA/rQ891zrqwzXeNzgw=
 buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.10-20250904135917-9feeb2588236.1 h1:vjdv8if8q5whtYaE6tfbhoX80qWi/pnguP4RAxEaMaU=
 buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.10-20250904135917-9feeb2588236.1/go.mod h1:EhA16a3hhvTg9rzQ69ch2mJ2ppasEGJFy8ViCc8PYUE=
-buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.1-20251031041656-b5652b54ce76.2 h1:3S5JlZUa2mG5n5+K51gjEsRPx6O/jvLMSyP/NWHojwo=
-buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.1-20251031041656-b5652b54ce76.2/go.mod h1:DzxK2flGZATOVQYj2Yr2Vxgw6gA3S2O1gr1jxquVZBk=
-buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251031041656-b5652b54ce76.1 h1:sieB4fNFl0YhNthhlvByeBOtI67FNxlKjg3wNDbFm2U=
-buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251031041656-b5652b54ce76.1/go.mod h1:QenSPzqxZpyo9hHIpRzTetvDchelVDzimnmaggHKenc=
+buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.1-20251031193904-15e1d027dabd.2 h1:jCG4Odp8EuikMWru6WwVylzjrSfJImAfrNeImtfp6rs=
+buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.1-20251031193904-15e1d027dabd.2/go.mod h1:YY+peV2t5WRrsN5JCawfDfdePKQVNhaO+0l/9Tsi+oY=
+buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251031193904-15e1d027dabd.1 h1:qbwdlxQSRcBFlq8Kcl532kcMuR+64TuvnhLC49FxzJE=
+buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251031193904-15e1d027dabd.1/go.mod h1:QenSPzqxZpyo9hHIpRzTetvDchelVDzimnmaggHKenc=
 buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.19.1-20251027225853-643acf04839f.2 h1:lleqpbHhE/SYEI/oeW2RVLZghkfhnAtIL1xk+ioTCos=
 buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.19.1-20251027225853-643acf04839f.2/go.mod h1:lhAYzpdAM94nEirXzLwymBud3CxFzmHGPTdMGSEM79U=
 buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.10-20251027225853-643acf04839f.1 h1:+QCxgPzEelsR15FWSky3nurPjPh7PfelmNZmgvD7nRA=

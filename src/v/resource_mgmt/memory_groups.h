@@ -84,6 +84,9 @@ public:
     /// Max memory that both cloud storage uploads and read-path could use
     size_t tiered_storage_max_memory() const;
 
+    /// Max memory that the admin API subsystem should use
+    size_t admin_max_memory() const;
+
     /// Max memory that data transform subsystem should use.
     size_t data_transforms_max_memory() const;
 

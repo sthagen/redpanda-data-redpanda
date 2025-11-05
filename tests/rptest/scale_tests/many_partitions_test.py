@@ -11,7 +11,8 @@ import concurrent.futures
 import math
 import time
 from collections import Counter
-
+from typing import Any, Callable
+from ducktape.cluster.cluster import ClusterNode
 import numpy
 from ducktape.mark import parametrize
 from ducktape.utils.util import TimeoutError, wait_until
@@ -24,6 +25,7 @@ from rptest.services.kgo_verifier_services import (
     KgoVerifierProducer,
     KgoVerifierRandomConsumer,
 )
+from ducktape.tests.test import TestContext
 from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.openmessaging_benchmark_configs import OMBSampleConfigurations
 from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, LoggingConfig
@@ -78,7 +80,7 @@ class ManyPartitionsTest(PreallocNodesTest):
 
     LEADER_BALANCER_PERIOD_MS = 30000
 
-    def __init__(self, test_ctx, *args, **kwargs):
+    def __init__(self, test_ctx: TestContext, *args: Any, **kwargs: Any):
         self._ctx = test_ctx
         super(ManyPartitionsTest, self).__init__(
             test_ctx,
@@ -177,7 +179,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                 partitions = list(self.rpk.describe_topic(tn, tolerant=True))
             except RpkException as e:
                 # same as in _node_leadership_balanced
-                self.logger.warn(f"RPK error, assuming retryable: {e}")
+                self.logger.warning(f"RPK error, assuming retryable: {e}")
                 return False
 
             if len(partitions) < p_per_topic:
@@ -196,7 +198,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         return not any_incomplete
 
     def _node_leadership_balanced(self, topic_names: list[str], p_per_topic: int):
-        node_leader_counts = Counter()
+        node_leader_counts: Counter[int] = Counter()
         any_incomplete = False
         for tn in topic_names:
             try:
@@ -205,7 +207,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                 # We can get e.g. timeouts from rpk if it is trying to describe
                 # a big topic on a heavily loaded cluster: treat these as retryable
                 # and let our caller call us again.
-                self.logger.warn(f"RPK error, assuming retryable: {e}")
+                self.logger.warning(f"RPK error, assuming retryable: {e}")
                 return False
 
             if len(partitions) < p_per_topic:
@@ -252,7 +254,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         that doing so does not exhaust redpanda resources.
         """
 
-        def consumer_saw_msgs(consumer):
+        def consumer_saw_msgs(consumer: RpkConsumer):
             self.logger.info(
                 f"Consumer message_count={consumer.message_count} / {msg_count_per_topic}"
             )
@@ -278,10 +280,13 @@ class ManyPartitionsTest(PreallocNodesTest):
             consumer.stop()
             consumer.free()
 
-    def _repeater_worker_count(self, scale):
-        workers = 32 * scale.node_cpus
+    def _repeater_worker_count(self, scale: ScaleParameters):
+        assert scale.node_memory_mib / scale.node_cpus >= 3500, (
+            "Insufficient memory on client nodes for kgo-repeater worker count"
+        )
+        # Takes about half of the memory on 4GB per core nodes
+        workers = 16 * scale.node_cpus
         if self.redpanda.dedicated_nodes:
-            # 768 workers on a 24 core node has been seen to work well.
             return workers
         else:
             return min(workers, 4)
@@ -291,18 +296,17 @@ class ManyPartitionsTest(PreallocNodesTest):
         # ResourceSettings based on its parameters.
         pass
 
-    def _get_fd_counts(self):
+    def _get_fd_counts(self) -> list[tuple[str, int]]:
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=len(self.redpanda.nodes)
         ) as executor:
-            return list(
-                executor.map(
-                    lambda n: tuple(
-                        [n.name, sum(1 for _ in self.redpanda.lsof_node(n))]
-                    ),
-                    self.redpanda.nodes,
-                )
-            )
+
+            def count_node(n: ClusterNode) -> tuple[str, int]:
+                return (str(n.name), sum(1 for _ in self.redpanda.lsof_node(n)))
+
+            fd_counts = list(executor.map(count_node, self.redpanda.nodes))
+
+            return fd_counts
 
     def _concurrent_restart(self):
         """
@@ -315,7 +319,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=len(self.redpanda.nodes)
         ) as executor:
-            futs = []
+            futs: list[concurrent.futures.Future[Any]] = []
             for node in self.redpanda.nodes:
                 futs.append(
                     executor.submit(
@@ -331,7 +335,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                 f.result()
 
     def _single_node_restart(
-        self, scale: ScaleParameters, topic_names: list, n_partitions: int
+        self, scale: ScaleParameters, topic_names: list[str], n_partitions: int
     ):
         """
         Restart a single node to check stability through the movement of
@@ -382,9 +386,9 @@ class ManyPartitionsTest(PreallocNodesTest):
     def _restart_stress(
         self,
         scale: ScaleParameters,
-        topic_names: list,
+        topic_names: list[str],
         n_partitions: int,
-        inter_restart_check: callable,
+        inter_restart_check: Callable[[], None],
     ):
         """
         Restart the cluster several times, to check stability
@@ -422,7 +426,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                     f"Open files after {i} restarts on {node_name}: {file_count}"
                 )
 
-    def _tiered_storage_warmup(self, scale, topic_name):
+    def _tiered_storage_warmup(self, scale: ScaleParameters, topic_name: str):
         """
         When testing tiered storage, we want a realistic amount of metadata in the
         system: it takes too long to actually play in a day or week's worth of data,
@@ -463,7 +467,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                 f"Tiered storage warmup: waiting {expect_runtime}s for {target_cloud_segments} to be created"
             )
             msg_count = math.ceil(warmup_total_size / warmup_message_size)
-            producer = None
+            producer: KgoVerifierProducer | None = None
             try:
                 producer = KgoVerifierProducer(
                     self.test_context,
@@ -483,7 +487,8 @@ class ManyPartitionsTest(PreallocNodesTest):
                     err_msg="Waiting for cloud segments upload",
                 )
             finally:
-                producer.stop()
+                if producer:
+                    producer.stop()
                 self.free_preallocated_nodes()
         finally:
             self.logger.info(
@@ -498,7 +503,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                 str(scale.local_retention_after_warmup),
             )
 
-    def _write_and_random_read(self, scale: ScaleParameters, topic_names):
+    def _write_and_random_read(self, scale: ScaleParameters, topic_names: list[str]):
         """
         This is a relatively low intensity test, that covers random
         and sequential reads & validates correctness of offsets in the
@@ -518,7 +523,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         # Now that we've tested basic ability to form consensus and survive some
         # restarts, move on to a more general stress test.
         self.logger.info("Entering traffic stress test")
-        target_topic = topic_names[0]
+        target_topic: str = topic_names[0]
 
         # Assume fetches will be 10MB, the franz-go default
         fetch_bytes_per_partition = 10 * 1024 * 1024
@@ -763,7 +768,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
     )
     def test_many_partitions_compacted(
-        self, mib_per_partition, topic_partitions_per_shard
+        self, mib_per_partition: float, topic_partitions_per_shard: int
     ):
         self._test_many_partitions(
             compacted=True,
@@ -776,7 +781,9 @@ class ManyPartitionsTest(PreallocNodesTest):
         mib_per_partition=DEFAULT_MIB_PER_PARTITION,
         topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
     )
-    def test_many_partitions(self, mib_per_partition, topic_partitions_per_shard):
+    def test_many_partitions(
+        self, mib_per_partition: float, topic_partitions_per_shard: int
+    ):
         self._test_many_partitions(
             compacted=False,
             mib_per_partition=mib_per_partition,
@@ -791,7 +798,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
     )
     def test_many_partitions_tiered_storage(
-        self, compacted, mib_per_partition, topic_partitions_per_shard
+        self, compacted: bool, mib_per_partition: float, topic_partitions_per_shard: int
     ):
         self._test_many_partitions(
             compacted=compacted,
@@ -828,10 +835,10 @@ class ManyPartitionsTest(PreallocNodesTest):
 
     def _test_many_partitions(
         self,
-        compacted,
-        mib_per_partition,
-        topic_partitions_per_shard,
-        tiered_storage_enabled=False,
+        compacted: bool,
+        mib_per_partition: float,
+        topic_partitions_per_shard: int,
+        tiered_storage_enabled: bool = False,
     ):
         """
         Validate that redpanda works with partition counts close to its resource
@@ -922,7 +929,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         topic_names = [f"scale_{i:06d}" for i in range(0, n_topics)]
         for tn in topic_names:
             self.logger.info(f"Creating topic {tn} with {n_partitions} partitions")
-            config = {
+            config: dict[str, Any] = {
                 "segment.bytes": scale.segment_size,
                 "retention.bytes": scale.retention_bytes,
             }
@@ -965,7 +972,7 @@ class ManyPartitionsTest(PreallocNodesTest):
 
         # Start kgo-repeater
 
-        repeater_kwargs = {}
+        repeater_kwargs: dict[str, Any] = {}
         if compacted:
             # Each partition gets roughly 10 unique keys, after which
             # compaction should kick in.
@@ -976,6 +983,7 @@ class ManyPartitionsTest(PreallocNodesTest):
             # across partitions.
             repeater_kwargs["key_count"] = 2**32
 
+        self.logger.info("Entering restart stress test phase")
         # Main test phase: with continuous background traffic, exercise restarts and
         # any other cluster changes that might trip up at scale.
         repeater_msg_size = 16384
@@ -1015,7 +1023,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                 )
                 t1 = time.time()
                 repeater.await_progress(
-                    repeater_await_msgs, t, err_msg="Waiting for repeater messages"
+                    repeater_await_msgs, int(t), err_msg="Waiting for repeater messages"
                 )
                 t2 = time.time()
 
@@ -1040,12 +1048,11 @@ class ManyPartitionsTest(PreallocNodesTest):
             # Done with restarts, now do a longer traffic soak
             self.logger.info("Entering traffic soak phase")
 
-            # soak for two minutes
-            soak_time_seconds = 120
+            soak_time_seconds = 60
             soak_await_bytes = soak_time_seconds * scale.expect_bandwidth
-            soak_await_msgs = soak_await_bytes / repeater_msg_size
+            soak_await_msgs = int(soak_await_bytes / repeater_msg_size)
             # Add some leeway to avoid flakiness
-            soak_timeout = soak_time_seconds * 1.25
+            soak_timeout = int(soak_time_seconds * 1.25)
             t1 = time.time()
             initial_p, _ = repeater.total_messages()
             try:

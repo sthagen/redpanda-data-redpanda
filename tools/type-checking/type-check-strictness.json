@@ -179,7 +179,6 @@
         "rptest/tests/redpanda_test.py",
         "rptest/tests/remote_label_test.py",
         "rptest/tests/replication_factor_change_test.py",
-        "rptest/tests/resource_limits_test.py",
         "rptest/tests/restart_services_test.py",
         "rptest/tests/rpk_acl_test.py",
         "rptest/tests/rpk_cloud_test.py",
@@ -245,7 +244,6 @@
         "rptest/utils/partition_metrics.py",
         "rptest/utils/rpcn_utils.py",
         "rptest/utils/rpk_config.py",
-        "rptest/utils/scale_parameters.py",
         "rptest/utils/schema_registry_utils.py",
         "rptest/utils/unit_test.py"
     ],
@@ -291,7 +289,6 @@
         "rptest/remote_scripts/stream_verifier_txn.py",
         "rptest/scale_tests/audit_log_test.py",
         "rptest/scale_tests/cloud_storage_compaction_test.py",
-        "rptest/scale_tests/many_partitions_test.py",
         "rptest/scale_tests/many_topics_test.py",
         "rptest/scale_tests/tiered_storage_cache_stress_test.py",
         "rptest/scale_tests/tiered_storage_single_partition_test.py",

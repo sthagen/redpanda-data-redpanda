@@ -16,7 +16,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-static constexpr size_t total_shares_without_optionals = 85;
+static constexpr size_t total_shares_without_optionals = 87;
 static constexpr size_t total_wasm_shares = 10;
 static constexpr size_t total_datalake_shares = 10;
 static constexpr size_t total_cloud_topic_shares = 10;
@@ -88,6 +88,9 @@ TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
       groups.tiered_storage_max_memory(),
       IsApprox(total_available_memory * 10.0 / total_shares));
     EXPECT_THAT(
+      groups.admin_max_memory(),
+      IsApprox(total_available_memory * 2.0 / total_shares));
+    EXPECT_THAT(
       groups.recovery_max_memory(),
       IsApprox(total_available_memory * 10.0 / total_shares));
     EXPECT_THAT(
@@ -121,7 +124,7 @@ TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
       groups.data_transforms_max_memory() + groups.chunk_cache_max_memory()
         + groups.kafka_total_memory() + groups.recovery_max_memory()
         + groups.rpc_total_memory() + groups.tiered_storage_max_memory()
-        + groups.datalake_max_memory(),
+        + groups.admin_max_memory() + groups.datalake_max_memory(),
       total_available_memory);
 }
 

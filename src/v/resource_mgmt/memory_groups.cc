@@ -42,13 +42,15 @@ struct memory_shares {
     constexpr static size_t rpc = 20;
     constexpr static size_t recovery = 10;
     constexpr static size_t tiered_storage = 10;
+    constexpr static size_t admin = 2;
     constexpr static size_t data_transforms = 10;
     constexpr static size_t datalake = 10;
     constexpr static size_t cloud_topics = 10;
 
     static size_t
     total_shares(bool with_wasm, bool with_datalake, bool with_cloud_topics) {
-        size_t total = chunk_cache + kafka + rpc + recovery + tiered_storage;
+        size_t total = chunk_cache + kafka + rpc + recovery + tiered_storage
+                       + admin;
         if (with_wasm) {
             total += data_transforms;
         }
@@ -117,6 +119,10 @@ size_t system_memory_groups::tiered_storage_max_memory() const {
     return subsystem_memory<memory_shares::tiered_storage>();
 }
 
+size_t system_memory_groups::admin_max_memory() const {
+    return subsystem_memory<memory_shares::admin>();
+}
+
 size_t system_memory_groups::data_transforms_max_memory() const {
     if (!_wasm_enabled) {
         return 0;
@@ -166,8 +172,8 @@ void system_memory_groups::log_memory_group_allocations(seastar::logger& log) {
       "Per shard memory group allocations: total memory: {}, "
       "total memory minus pre-share reservations: {}, chunk cache: {}, kafka: "
       "{}, rpc: {}, recovery: {}, "
-      "tiered storage: {}, data transforms: {}, compaction: {}, datalake: {}, "
-      "partitions: {}",
+      "tiered storage: {}, admin: {}, data transforms: {}, compaction: {}, "
+      "datalake: {}, partitions: {}",
       human::bytes(ss::memory::stats().total_memory()),
       human::bytes(total_memory()),
       human::bytes(chunk_cache_max_memory()),
@@ -175,6 +181,7 @@ void system_memory_groups::log_memory_group_allocations(seastar::logger& log) {
       human::bytes(rpc_total_memory()),
       human::bytes(recovery_max_memory()),
       human::bytes(tiered_storage_max_memory()),
+      human::bytes(admin_max_memory()),
       human::bytes(data_transforms_max_memory()),
       human::bytes(compaction_reserved_memory()),
       human::bytes(datalake_max_memory()),

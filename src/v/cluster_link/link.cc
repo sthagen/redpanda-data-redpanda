@@ -105,7 +105,7 @@ link::link(
       std::move(data_source_factory),
       std::move(data_sink_factory),
       replication::replication_probe::configuration{
-        .group_name = _config.name,
+        .group_name = link_probe::shadow_link_group,
         .labels = {link_probe::shadow_link_name(_config.name)}})
   , _task_reconciler_interval(task_reconciler_interval)
   , _probe{} {}

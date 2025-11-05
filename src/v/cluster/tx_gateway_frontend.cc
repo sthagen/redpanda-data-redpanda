@@ -1929,12 +1929,16 @@ tx_gateway_frontend::handle_abort_tx(
         outcome->set_value(tx::errc::invalid_txn_state);
         co_return tx::errc::invalid_txn_state;
     } catch (...) {
-        vlog(
-          txlog.error,
-          "[tx_id={}] error aborting transaction: {} - {}",
+        auto ex = std::current_exception();
+        auto log_level = ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                                        : ss::log_level::error;
+        vlogl(
+          txlog,
+          log_level,
+          "[tx_id={}] exception aborting transaction: {} - {}",
           tx.id,
           tx,
-          std::current_exception());
+          ex);
         outcome->set_value(tx::errc::unknown_server_error);
         co_return tx::errc::unknown_server_error;
     }

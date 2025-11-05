@@ -124,10 +124,10 @@ func printTaskStatus(tasks []*adminv2.ShadowLinkTaskStatus) {
 		fmt.Println("No tasks to display right now.")
 		return
 	}
-	t := out.NewTable("Name", "Broker_ID", "State", "Reason")
+	t := out.NewTable("Name", "Broker_ID", "Shard", "State", "Reason")
 	defer t.Flush()
 	for _, task := range tasks {
-		t.Print(task.GetName(), task.GetBrokerId(), strings.TrimPrefix(task.GetState().String(), "TASK_STATE_"), task.GetReason())
+		t.Print(task.GetName(), task.GetBrokerId(), task.GetShard(), strings.TrimPrefix(task.GetState().String(), "TASK_STATE_"), task.GetReason())
 	}
 }
 
