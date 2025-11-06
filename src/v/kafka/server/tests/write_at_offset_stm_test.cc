@@ -27,6 +27,15 @@ copy_batches(const chunked_vector<model::record_batch>& batches) {
 
 static ss::logger t_log{"test_log"};
 using namespace testing;
+namespace kafka {
+class write_at_offset_stm_accessor {
+public:
+    static kafka::offset
+    get_expected_last_offset(const kafka::write_at_offset_stm& stm) {
+        return stm.expected_last_offset();
+    }
+};
+} // namespace kafka
 struct WriteAtOffsetStmFixture
   : public raft::stm_raft_fixture<kafka::write_at_offset_stm> {
     std::tuple<ss::shared_ptr<kafka::write_at_offset_stm>> create_stms(
@@ -70,6 +79,38 @@ struct WriteAtOffsetStmFixture
         return batches;
     }
 
+    std::
+      tuple<chunked_vector<chunked_vector<model::record_batch>>, kafka::offset>
+      generate_data_with_deltas(
+        kafka::offset starting_at,
+        size_t batch_count,
+        size_t records_per_batch) {
+        chunked_vector<chunked_vector<model::record_batch>> batches;
+
+        // randomly split batches into multiple batch groups
+        for (auto i : boost::irange(batch_count)) {
+            if (batches.empty() || tests::random_bool()) {
+                batches.emplace_back();
+            }
+            auto type
+              = i % 2 == 0
+                  ? model::record_batch_type::raft_data
+                  : model::record_batch_type::partition_properties_update;
+            storage::record_batch_builder builder(
+              type, kafka::offset_cast(starting_at));
+
+            for (size_t j = 0; j < records_per_batch; ++j) {
+                builder.add_raw_kv(
+                  serde::to_iobuf(tests::random_bytes(64)),
+                  serde::to_iobuf(starting_at()));
+                if (type == model::record_batch_type::raft_data) {
+                    starting_at++;
+                }
+            }
+            batches.back().push_back(std::move(builder).build());
+        }
+        return std::make_tuple(std::move(batches), kafka::offset(starting_at));
+    }
     struct offset_validating_consumer {
         ss::future<ss::stop_iteration> operator()(model::record_batch& batch) {
             if (batch.header().type != model::record_batch_type::raft_data) {
@@ -85,7 +126,7 @@ struct WriteAtOffsetStmFixture
                 if (offset() != expected_offset) {
                     valid = false;
                     t_log.error(
-                      "Expected offset {} does not batch {} record offset: {}",
+                      "Expected offset {} does not match {} record offset: {}",
                       expected_offset,
                       batch.header(),
                       offset);
@@ -444,26 +485,26 @@ TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
     initialize_state_machines(3).get();
     auto leader_id = wait_for_leader(10s).get();
     auto stm = get_leader_stm();
+    auto leader_raft = node(leader_id).raft();
     kafka::offset gen_offset{0};
     // store the truncation point, it is the base offset of second replicated
     // batch.
     model::offset snapshot_offset{};
-    for (int i = 0; i < 10; ++i) {
-        auto data = generate_data(
+    for (int i = 0; i < 200; ++i) {
+        auto res = generate_data_with_deltas(
           gen_offset,
           random_generators::get_int(1, 10),
           random_generators::get_int(1, 10));
-        gen_offset = model::offset_cast(
-          model::next_offset(data.back().back().last_offset()));
+        auto [data, last_offset] = std::move(res);
+        gen_offset = last_offset;
         for (auto& batches : data) {
-            auto expected_offsets = start_offsets(batches);
-            auto stages = stm->get()->replicate(
-              std::move(batches),
-              std::move(expected_offsets),
-              std::nullopt,
-              10s);
-            stages.request_enqueued.get();
-            auto result = stages.replicate_finished.get();
+            auto result = leader_raft
+                            ->replicate(
+                              std::move(batches),
+                              raft::replicate_options(
+                                raft::consistency_level::quorum_ack))
+                            .get();
+
             ASSERT_FALSE(result.has_error());
         }
         if (snapshot_offset == model::offset{}) {
@@ -494,6 +535,24 @@ TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
     ASSERT_THAT(
       follower.raft()->log()->offsets().start_offset,
       Eq(model::next_offset(snapshot_offset)));
+
+    auto leader_stm = get_leader_stm();
+    ASSERT_TRUE(leader_stm.has_value());
+    auto leader_last_offset
+      = leader_stm.value()->get_expected_last_offset(10s).get();
+    ASSERT_FALSE(leader_last_offset.has_error());
+    for (auto& [id, node] : nodes()) {
+        auto stm
+          = node->raft()->stm_manager()->get<kafka::write_at_offset_stm>();
+        stm->wait(node->raft()->committed_offset(), model::no_timeout).get();
+        auto last_offset
+          = kafka::write_at_offset_stm_accessor::get_expected_last_offset(*stm);
+        ASSERT_EQ(last_offset, leader_last_offset.value()) << fmt::format(
+          "Node {} has last offset {} but leader has {}",
+          id,
+          last_offset,
+          leader_last_offset.value());
+    }
     ASSERT_TRUE(logs_content_is_valid().get());
 }
 

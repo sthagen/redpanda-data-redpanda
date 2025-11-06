@@ -68,6 +68,7 @@ cluster::cluster(connection_configuration config)
   : _config(std::move(config))
   , _logger(
       kclog, fmt::format("{}", _config.client_id.value_or("kafka-client")))
+  , _topic_cache(metadata_age_multiplier * _config.max_metadata_age)
   , _brokers(_logger, std::make_unique<remote_broker_factory>(_config, _logger))
   , _next_seed(
       random_generators::get_int<size_t>(0, _config.initial_brokers.size() - 1))
@@ -385,6 +386,9 @@ ss::future<> cluster::do_update_configuration(connection_configuration config) {
 
     vlog(_logger.debug, "Updating cluster config to '{}'", config);
     _config = std::move(config);
+
+    _topic_cache.set_topic_timeout(
+      metadata_age_multiplier * _config.max_metadata_age);
 
     // all updates to the cluster brokers should happen under the
     // metadata update lock

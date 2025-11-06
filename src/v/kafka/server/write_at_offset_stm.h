@@ -137,6 +137,7 @@ public:
     get_expected_last_offset(model::timeout_clock::duration sync_timeout);
 
 private:
+    friend class write_at_offset_stm_accessor;
     ss::future<> do_apply(const model::record_batch& b) final;
 
     ss::future<raft::local_snapshot_applied>

@@ -219,6 +219,13 @@ public:
         return _plf->failover_link_topics(id, timeout);
     }
 
+    ss::future<::cluster::cluster_link::errc> delete_shadow_topic(
+      model::id_t id,
+      model::delete_mirror_topic_cmd cmd,
+      ::model::timeout_clock::time_point timeout) final {
+        return _plf->delete_mirror_topic(id, std::move(cmd), timeout);
+    }
+
 private:
     frontend* _plf;
     service* _svc;
@@ -1058,13 +1065,15 @@ ss::future<cl_result<model::metadata>> service::update_cluster_link(
 ss::future<cl_result<model::metadata>> service::update_mirror_topic_status(
   model::name_t link_name,
   ::model::topic topic,
-  model::mirror_topic_status status) {
+  model::mirror_topic_status status,
+  bool force_update) {
     auto h = _gate.hold();
     return with_manager([link_name = std::move(link_name),
                          topic = std::move(topic),
-                         status](manager* mgr) mutable {
+                         status,
+                         force_update](manager* mgr) mutable {
         return mgr->update_mirror_topic_status(
-          std::move(link_name), std::move(topic), status);
+          std::move(link_name), std::move(topic), status, force_update);
     });
 }
 
@@ -1083,6 +1092,18 @@ service::delete_cluster_link(model::name_t name, bool force_delete_link) {
     return with_manager(
       [name = std::move(name), force_delete_link](manager* mgr) mutable {
           return mgr->delete_cluster_link(std::move(name), force_delete_link);
+      });
+}
+
+ss::future<cl_result<model::metadata>>
+service::delete_shadow_topic_from_shadow_link(
+  model::name_t link_name, ::model::topic shadow_topic) {
+    auto h = _gate.hold();
+    return with_manager(
+      [link_name = std::move(link_name),
+       shadow_topic = std::move(shadow_topic)](manager* mgr) mutable {
+          return mgr->remove_shadow_topic_from_link(
+            std::move(link_name), std::move(shadow_topic));
       });
 }
 

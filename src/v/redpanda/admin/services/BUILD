@@ -7,7 +7,9 @@ redpanda_cc_library(
     srcs = ["utils.cc"],
     hdrs = ["utils.h"],
     deps = [
+        "//src/v/cluster",
         "//src/v/features",
+        "//src/v/model",
         "//src/v/serde/protobuf:rpc",
     ],
 )

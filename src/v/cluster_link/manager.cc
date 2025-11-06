@@ -13,6 +13,7 @@
 
 #include "cluster_link/deps.h"
 #include "cluster_link/logger.h"
+#include "cluster_link/model/types.h"
 #include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/deps.h"
 #include "model/namespace.h"
@@ -464,17 +465,19 @@ ss::future<cl_result<model::metadata>> manager::update_cluster_link(
 
 ss::future<cl_result<model::metadata>> manager::update_mirror_topic_status(
   model::name_t link_name,
-  const ::model::topic& topic,
-  model::mirror_topic_status status) {
+  ::model::topic topic,
+  model::mirror_topic_status status,
+  bool force_update) {
     static constexpr auto model_timeout = 30s;
     auto hold = _g.hold();
     vlog(
       cllog.info,
       "Attempting to update mirror topic '{}' status on link '{}' to status: "
-      "{}",
+      "{} (forced: {})",
       topic,
       link_name,
-      status);
+      status,
+      force_update);
     const auto link_id = _registry->find_link_id_by_name(link_name);
     if (!link_id.has_value()) {
         co_return err_info{
@@ -484,6 +487,8 @@ ss::future<cl_result<model::metadata>> manager::update_mirror_topic_status(
     model::update_mirror_topic_status_cmd cmd;
     cmd.topic = topic;
     cmd.status = status;
+    cmd.force_update = model::update_mirror_topic_status_cmd::force_update_t{
+      force_update};
     auto ec = co_await _registry->update_mirror_topic_state(
       *link_id, std::move(cmd), ::model::timeout_clock::now() + model_timeout);
     auto err = map_cluster_errc(ec);
@@ -594,6 +599,41 @@ manager::delete_cluster_link(model::name_t name, bool force_delete_link) {
     }
 
     co_return outcome::success();
+}
+
+ss::future<cl_result<model::metadata>> manager::remove_shadow_topic_from_link(
+  model::name_t link_name, ::model::topic shadow_topic) {
+    vlog(
+      cllog.info,
+      "Attempting to remove Shadow Topic '{}' from Shadow Link '{}'",
+      shadow_topic,
+      link_name);
+    auto hold = _g.hold();
+    auto link_id = _registry->find_link_id_by_name(link_name);
+    if (!link_id.has_value()) {
+        co_return err_info{
+          errc::link_id_not_found,
+          ssx::sformat("Unable to find link by name '{}'", link_name)};
+    }
+
+    model::delete_mirror_topic_cmd cmd;
+    cmd.topic = shadow_topic;
+
+    auto ec = co_await _registry->delete_shadow_topic(
+      *link_id, std::move(cmd), ::model::timeout_clock::now() + 30s);
+
+    auto err = map_cluster_errc(ec);
+    if (err != errc::success) {
+        co_return err_info(
+          err,
+          fmt::format(
+            "Failed to delete shadow topic '{}' from link '{}': {}",
+            shadow_topic,
+            link_name,
+            ec));
+    }
+
+    co_return get_cluster_link(link_name);
 }
 
 void manager::on_link_change(model::id_t id, ::model::revision_id revision) {

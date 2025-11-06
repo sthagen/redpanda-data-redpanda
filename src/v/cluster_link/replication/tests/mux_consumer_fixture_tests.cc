@@ -187,15 +187,20 @@ TEST_P(MuxConsumerFixture, TestResetPartition) {
     ss::abort_source as;
     // no data in the partition right now.
     auto fetch = _mux_consumer->fetch(tp, as);
-    // reset the consumer to offset 50, this should reset any inflight fetches.
 
     // publish some data into the partition in two batches.
     produce_to_partition(topic, 0, 100).get();
     produce_to_partition(topic, 0, 100).get();
+
+    // reset the consumer to offset 101, this should reset any inflight fetches.
     reset = _mux_consumer->reset(tp, kafka::offset{101});
     ASSERT_TRUE(reset.has_value()) << reset.error();
+
     // ignore first fetch result
-    auto first_fetch_res = fetch.get();
+    fetch.discard_result()
+      .handle_exception_type([](const ss::abort_requested_exception&) {})
+      .get();
+
     // note: consumer always fetches on batch boundaries.
     // fetch should fetch from offset [100 - 199) = 100 offsets
     auto fetch_res = _mux_consumer->fetch(tp, as).get();

@@ -950,7 +950,8 @@ partition_status build_partition_status(const partition& p) {
       = p.cloud_topic_max_gc_eligible_epoch();
     status.shard = ss::this_shard_id();
 
-    if (p.ntp().ns == model::kafka_namespace) {
+    if (p.ntp().ns == model::kafka_namespace && p.started()) {
+        // HWM cannot be reliably retrieved until raft has started
         status.high_watermark = model::offset_cast(
           p.log()->from_log_offset(p.high_watermark()));
     }

@@ -13,20 +13,30 @@
 #include "kafka/client/types.h"
 #include "kafka/client/utils.h"
 #include "kafka/protocol/metadata.h"
+#include "model/fundamental.h"
 
 #include <seastar/core/future.hh>
+
+#include <ranges>
 
 namespace kafka::client {
 
 void topic_cache::apply(
   const chunked_vector<metadata_response::topic>& topics) {
-    topics_t new_cache;
-    new_cache.reserve(topics.size());
-    for (const auto& t : topics) {
+    topics_t cache_update;
+    cache_update.reserve(topics.size());
+
+    auto now = ss::lowres_clock::now();
+    const auto get_successful = std::views::filter([](const auto& resp) {
+        return resp.error_code == kafka::error_code::none;
+    });
+    for (const auto& t : topics | get_successful) {
         static_assert(
           api_version_for(metadata_request::api_type::key) < api_version(12),
           "topic::name is nullable in v12+");
-        auto& cache_t = new_cache.emplace(*t.name, topic_data{}).first->second;
+        auto& cache_t
+          = cache_update.emplace(*t.name, topic_data{}).first->second;
+        cache_t.last_seen_time = now;
         cache_t.authorized_operations = t.topic_authorized_operations;
         if (t.topic_id != model::topic_id{}) {
             cache_t.topic_id = t.topic_id;
@@ -43,7 +53,76 @@ void topic_cache::apply(
         }
     }
 
-    std::exchange(_topics, std::move(new_cache));
+    merge_topics(std::move(cache_update));
+    remove_timeout_topics();
+}
+
+topic_cache::topic_data topic_cache::merge_topic_data(
+  topic_data&& cached_topic, topic_data&& updated_topic) {
+    for (auto& [partition_id, updated_data] : updated_topic.partitions) {
+        auto it = cached_topic.partitions.find(partition_id);
+        if (it == cached_topic.partitions.end()) {
+            // No cached data for this topic id
+            continue;
+        }
+
+        auto& cached_data = it->second;
+        if (cached_data.leader_epoch > updated_data.leader_epoch) {
+            // Stale update. Keep old data
+            updated_data = std::move(cached_data);
+        }
+    }
+
+    return std::move(updated_topic);
+}
+
+void topic_cache::merge_topics(topics_t cache_update) {
+    topics_t merged;
+
+    for (auto& [topic, cached_topic] : _topics) {
+        auto it = cache_update.find(topic);
+        if (it != cache_update.end()) {
+            // topic exist in update. It will be handled by the update loop
+            continue;
+        }
+
+        // topic doesn't exist in update. Keep cached value
+        merged.emplace(topic, std::move(cached_topic));
+    }
+
+    for (auto& [topic, updated_topic] : cache_update) {
+        auto it = _topics.find(topic);
+        if (it == _topics.end()) {
+            // topic doesn't have cached data. Accept new value
+            merged.emplace(topic, std::move(updated_topic));
+            continue;
+        }
+
+        auto& cached_topic = it->second;
+        if (cached_topic.topic_id != updated_topic.topic_id) {
+            // topic has new id. Keep updated value
+            merged.emplace(topic, std::move(updated_topic));
+            continue;
+        }
+
+        // topic exists in both cache and update. Merge their data
+        merged.emplace(
+          topic,
+          merge_topic_data(std::move(cached_topic), std::move(updated_topic)));
+    }
+
+    _topics = std::move(merged);
+}
+
+void topic_cache::remove_timeout_topics() {
+    auto now = ss::lowres_clock::now();
+    for (auto it = _topics.begin(); it != _topics.end();) {
+        if (now - it->second.last_seen_time > _topic_timeout) {
+            it = _topics.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 std::optional<model::node_id>

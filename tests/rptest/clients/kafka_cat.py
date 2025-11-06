@@ -68,6 +68,9 @@ class KafkaCat:
 
     def _cmd(self, cmd: list[str], input: str | None = None):
         res = self._cmd_raw(cmd + ["-J"], input=input)
+        assert res and not res.isspace(), (
+            f"kcat returned empty output for command: {' '.join(cmd)}"
+        )
         res = json.loads(res)
         self._redpanda.logger.debug(json.dumps(res, indent=2))
         return res

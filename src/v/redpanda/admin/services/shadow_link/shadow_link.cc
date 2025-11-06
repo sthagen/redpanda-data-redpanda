@@ -14,79 +14,12 @@
 #include "cluster/metadata_cache.h"
 #include "cluster_link/service.h"
 #include "redpanda/admin/services/shadow_link/converter.h"
+#include "redpanda/admin/services/shadow_link/err.h"
+#include "redpanda/admin/services/utils.h"
 #include "serde/protobuf/rpc.h"
 
 namespace admin {
 ss::logger sllog("shadow_link_service");
-namespace {
-
-void handle_error(cluster_link::errc err, ss::sstring info) {
-    switch (err) {
-    case cluster_link::errc::success:
-        vunreachable("Unexpected success code in handle_error");
-    case cluster_link::errc::invalid_task_state_change:
-    case cluster_link::errc::task_not_running:
-    case cluster_link::errc::task_already_running:
-    case cluster_link::errc::failed_to_start_task:
-    case cluster_link::errc::task_already_registered_on_link:
-    case cluster_link::errc::task_creation_failed:
-    case cluster_link::errc::rpc_error:
-    case cluster_link::errc::link_creation_failed:
-    case cluster_link::errc::topic_does_not_exist:
-    case cluster_link::errc::topic_metadata_stale:
-    case cluster_link::errc::failed_to_stop_task:
-    case cluster_link::errc::failed_to_pause_task:
-        throw serde::pb::rpc::internal_exception(std::move(info));
-    case cluster_link::errc::failed_to_connect_to_remote_cluster:
-    case cluster_link::errc::remote_cluster_does_not_support_required_api:
-    case cluster_link::errc::link_connection_failed:
-    case cluster_link::errc::service_not_ready:
-    case cluster_link::errc::service_shutting_down:
-        throw serde::pb::rpc::unavailable_exception(std::move(info));
-    case cluster_link::errc::cluster_link_disabled:
-    case cluster_link::errc::link_has_active_shadow_topics:
-    case cluster_link::errc::license_required:
-    case cluster_link::errc::link_unsupported_api_version:
-    case cluster_link::errc::link_cluster_unreachable:
-    case cluster_link::errc::link_broker_unreachable:
-    case cluster_link::errc::link_broker_verification_failed:
-    case cluster_link::errc::link_verification_unknown_error:
-        throw serde::pb::rpc::failed_precondition_exception(std::move(info));
-    case cluster_link::errc::link_id_not_found:
-        throw serde::pb::rpc::not_found_exception(std::move(info));
-    case cluster_link::errc::invalid_configuration:
-        throw serde::pb::rpc::invalid_argument_exception(std::move(info));
-    case cluster_link::errc::topic_already_mirrored:
-    case cluster_link::errc::topic_mirrored_by_other_link:
-    case cluster_link::errc::topic_not_being_mirrored:
-        throw serde::pb::rpc::already_exists_exception(std::move(info));
-    case cluster_link::errc::link_limit_reached:
-        throw serde::pb::rpc::resource_exhausted_exception(std::move(info));
-    }
-}
-
-template<typename T>
-T handle_error(cluster_link::cl_result<T> result) {
-    if (result.has_value()) {
-        return std::move(result).assume_value();
-    }
-    auto info = result.assume_error();
-    auto code = info.code();
-    handle_error(code, std::move(info).message());
-    // Handle error should throw
-    std::unreachable();
-}
-
-template<typename T>
-T handle_error(std::expected<T, cluster_link::errc> result) {
-    if (result.has_value()) {
-        return std::move(result).value();
-    }
-    handle_error(result.error(), ssx::sformat("{}", result.error()));
-    // Handle error should throw
-    __builtin_unreachable();
-}
-} // namespace
 
 shadow_link_service_impl::shadow_link_service_impl(
   admin::proxy::client proxy_client,
@@ -379,16 +312,8 @@ shadow_link_service_impl::list_shadow_topics(
 
 std::optional<model::node_id>
 shadow_link_service_impl::redirect_to(const model::ntp& ntp) {
-    auto leader_node = _md_cache->local().get_leader_id(ntp);
-    if (!leader_node) {
-        throw serde::pb::rpc::unavailable_exception{
-          ssx::sformat("Partition {} does not have a leader", ntp)};
-    }
-
-    if (*leader_node == _proxy_client.self_node_id()) {
-        return std::nullopt;
-    }
-    return *leader_node;
+    return utils::redirect_to_leader(
+      _md_cache->local(), ntp, _proxy_client.self_node_id());
 }
 
 ss::future<proto::admin::shadow_link>

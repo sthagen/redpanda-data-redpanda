@@ -16,12 +16,30 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "err",
+    srcs = ["err.cc"],
+    hdrs = ["err.h"],
+    implementation_deps = [
+        "//src/v/serde/protobuf:rpc",
+    ],
+    visibility = ["//src/v/redpanda:__subpackages__"],
+    deps = [
+        "//src/v/base",
+        "//src/v/cluster_link:errc",
+        "//src/v/ssx:sformat",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "shadow_link",
     srcs = ["shadow_link.cc"],
     hdrs = ["shadow_link.h"],
     implementation_deps = [
         ":converter",
+        ":err",
         "//src/v/cluster_link",
+        "//src/v/redpanda/admin/services:utils",
     ],
     visibility = ["//src/v/redpanda:__subpackages__"],
     deps = [

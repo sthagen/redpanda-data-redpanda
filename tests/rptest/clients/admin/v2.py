@@ -24,6 +24,10 @@ from rptest.clients.admin.proto.redpanda.core.admin.internal.v1 import (
     breakglass_pb2,
     breakglass_pb2_connect,
 )
+from rptest.clients.admin.proto.redpanda.core.admin.internal.shadow_link_internal.v1 import (
+    shadow_link_internal_pb2,
+    shadow_link_internal_pb2_connect,
+)
 from rptest.clients.admin.proto.redpanda.core.admin.internal.cloud_topics.v1 import (
     metastore_pb2,
     metastore_pb2_connect,
@@ -40,6 +44,7 @@ broker_pb = broker_pb2
 cluster_pb = cluster_pb2
 datalake_pb = datalake_pb2
 shadow_link_pb = shadow_link_pb2
+shadow_link_internal_pb = shadow_link_internal_pb2
 debug_pb = debug_pb2
 kafka_connections_pb = kafka_connections_pb2
 breakglass_pb = breakglass_pb2
@@ -136,4 +141,11 @@ class Admin:
     def metastore(self, **kwargs: Any) -> metastore_pb2_connect.MetastoreServiceClient:
         return self._make_service(
             metastore_pb2_connect.MetastoreServiceClient, **kwargs
+        )
+
+    def internal_shadow_link(
+        self, **kwargs: Any
+    ) -> shadow_link_internal_pb2_connect.ShadowLinkInternalServiceClient:
+        return self._make_service(
+            shadow_link_internal_pb2_connect.ShadowLinkInternalServiceClient, **kwargs
         )

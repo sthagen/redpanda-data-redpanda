@@ -198,6 +198,10 @@ private:
 
     ss::future<> do_update_configuration(connection_configuration config);
 
+    // This multiplier is applied to the max_metadata_age to define the
+    // topic_timeout for the topic_cache
+    static constexpr int metadata_age_multiplier = 3;
+
     connection_configuration _config;
     prefix_logger _logger;
     topic_cache _topic_cache;

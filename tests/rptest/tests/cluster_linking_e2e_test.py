@@ -731,7 +731,12 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             f"Expected topic filters to not be updated, got {updated_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters}"
         )
 
-    @cluster(num_nodes=6)
+    @cluster(
+        num_nodes=6,
+        log_allow_list=[
+            re.compile(".*Cluster link table reporting that link does not exist.*")
+        ],
+    )
     def test_delete_simple_link(self):
         def get_links_by_name():
             list_links = self.list_links()
@@ -1462,6 +1467,94 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             enabled=shuffle_leadership,
         ):
             self._execute_task_pausing(num_topics=num_topics)
+
+    @cluster(num_nodes=6)
+    def test_remove_shadow_topic_escape_hatch(self):
+        """
+        This test verifies that the escape hatch to remove the shadow topic from the shadow link
+        works as expected
+        """
+        topic_name = "test-topic"
+        topic = TopicSpec(name=topic_name, partition_count=1, replication_factor=1)
+        self.source_default_client().create_topic(topic)
+
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_partitions_exists_in_target(topic),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.source_cluster_rpk.produce(topic.name, "key", "message1")
+
+        def wait_for_replication():
+            k, v = tuple(
+                self.target_cluster_rpk.consume(
+                    topic=topic.name, n=1, format="%k,%v"
+                ).split(",")
+            )
+            self.logger.debug(f"Consumed key={k}, value={v} from shadow topic")
+            return k == "key" and v == "message1"
+
+        self.target_cluster.service.wait_until(
+            wait_for_replication,
+            timeout_sec=20,
+            backoff_sec=1,
+            err_msg="Failed to replicate message to shadow topic",
+        )
+
+        self.logger.info("Force remove shadow topic from shadow link")
+
+        self.remove_shadow_topic(
+            shadow_link_name="test-link", shadow_topic_name=topic_name
+        )
+
+        topics = self.list_shadow_topics("test-link")
+        assert len(topics) == 0, f"Expected no shadow topics, got {topics}"
+
+    @cluster(num_nodes=6)
+    def test_change_shadow_topic_state(self):
+        """
+        This test verifies that changing the shadow topic state works as expected
+        """
+        topic_name = "test-topic"
+        topic = TopicSpec(name=topic_name, partition_count=1, replication_factor=1)
+        self.source_default_client().create_topic(topic)
+
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_partitions_exists_in_target(topic),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.logger.info("Pausing shadow topic replication")
+        self.force_update_shadow_topic_state(
+            shadow_link_name="test-link",
+            shadow_topic_name=topic_name,
+            new_state=shadow_link_pb2.SHADOW_TOPIC_STATE_PAUSED,
+        )
+
+        shadow_topic = self.get_shadow_topic("test-link", topic_name)
+        assert shadow_topic.status.state == shadow_link_pb2.SHADOW_TOPIC_STATE_PAUSED, (
+            f"Expected shadow topic to be paused, got {shadow_topic.status.state}"
+        )
+
+        self.logger.info("Resuming shadow topic replication")
+        self.force_update_shadow_topic_state(
+            shadow_link_name="test-link",
+            shadow_topic_name=topic_name,
+            new_state=shadow_link_pb2.SHADOW_TOPIC_STATE_ACTIVE,
+        )
+
+        shadow_topic = self.get_shadow_topic("test-link", topic_name)
+        assert shadow_topic.status.state == shadow_link_pb2.SHADOW_TOPIC_STATE_ACTIVE, (
+            f"Expected shadow topic to be active, got {shadow_topic.status.state}"
+        )
 
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):

@@ -93,8 +93,9 @@ public:
      */
     ss::future<cl_result<model::metadata>> update_mirror_topic_status(
       model::name_t link_name,
-      const ::model::topic&,
-      model::mirror_topic_status);
+      ::model::topic,
+      model::mirror_topic_status,
+      bool force_update = false);
 
     /**
      * @brief Fails over the topics of a cluster link
@@ -109,6 +110,13 @@ public:
      */
     ss::future<cl_result<void>>
     delete_cluster_link(model::name_t name, bool force_delete_link);
+
+    /**
+     * @brief Removes a shadow topic from a shadow link.  Will remove all state
+     * of the topic but will not delete the topic
+     */
+    ss::future<cl_result<model::metadata>> remove_shadow_topic_from_link(
+      model::name_t link_name, ::model::topic shadow_topic);
 
     /// Used to notify that a cluster link has been updated
     void on_link_change(model::id_t id, ::model::revision_id);

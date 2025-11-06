@@ -167,8 +167,9 @@ public:
                        .tp_id;
         EXPECT_TRUE(tp_id.has_value());
 
-        l1::replicated_metastore meta(
-          get_ct_app(model::node_id{0}).get_sharded_l1_metastore_fe()->local());
+        l1::replicated_metastore meta(get_ct_app(model::node_id{0})
+                                        .get_sharded_l1_metastore_router()
+                                        ->local());
         auto l1_offset = co_await meta.get_offsets(
           model::topic_id_partition(*tp_id, model::partition_id{0}));
         if (!l1_offset.has_value()) {

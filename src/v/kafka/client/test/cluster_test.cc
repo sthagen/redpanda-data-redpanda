@@ -1,4 +1,5 @@
 #include "kafka/client/cluster.h"
+#include "kafka/client/configuration.h"
 #include "kafka/protocol/produce.h"
 #include "redpanda/tests/fixture.h"
 #include "storage/types.h"
@@ -6,7 +7,18 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+
 using namespace kafka::client;
+
+kafka::client::connection_configuration
+make_cluster_config(std::chrono::milliseconds max_metadata_age) {
+    return kafka::client::connection_configuration{
+      .initial_brokers = {net::unresolved_address{"localhost", 9092}},
+      .client_id = "test_client",
+      .max_metadata_age = max_metadata_age,
+    };
+}
 
 class ClusterFixture
   : public redpanda_thread_fixture
@@ -21,12 +33,9 @@ public:
         return seastar::make_ready_future<>();
     }
 
-    kafka::client::cluster create_cluster() {
-        kafka::client::connection_configuration config{
-          .initial_brokers = {net::unresolved_address{"localhost", 9092}},
-          .client_id = "test_client",
-        };
-        return kafka::client::cluster{std::move(config)};
+    kafka::client::cluster
+    create_cluster(std::chrono::milliseconds max_metadata_age = 10s) {
+        return kafka::client::cluster{make_cluster_config(max_metadata_age)};
     }
 };
 
@@ -238,4 +247,51 @@ TEST_F(ClusterFixture, TestDispatchingMultipleRequests) {
         auto r_number = serde::from_iobuf<int>(records[0].value().copy());
         ASSERT_EQ(static_cast<int64_t>(r_number), b.base_offset()());
     }
+}
+
+TEST_F(ClusterFixture, TestTopicTimeout) {
+    wait_for_controller_leadership().get();
+
+    // Create and start the client cluster
+    auto cluster = create_cluster(500ms);
+    cluster.start().get();
+    auto deferred_stop = ss::defer([&] { cluster.stop().get(); });
+
+    model::topic tpa("test-topic-a");
+    model::topic_namespace tpa_ns{model::kafka_namespace, tpa};
+
+    add_topic(tpa_ns).get();
+    RPTEST_REQUIRE_EVENTUALLY(3s, [&cluster, &tpa] {
+        return std::ranges::contains(cluster.get_topics().topics(), tpa);
+    });
+    delete_topic(tpa_ns).get();
+
+    // The timings in these checks are meant to bring us half a second before
+    // the stale time and then half a second after the stale time
+    ss::sleep(1000ms).get();
+    cluster.request_metadata_update().get();
+    ASSERT_TRUE(std::ranges::contains(cluster.get_topics().topics(), tpa));
+
+    ss::sleep(1000ms).get();
+    cluster.request_metadata_update().get();
+    ASSERT_FALSE(std::ranges::contains(cluster.get_topics().topics(), tpa));
+
+    // Check that updates happen correctly, as well
+    kafka::client::connection_configuration new_config = make_cluster_config(
+      1s);
+    cluster.update_configuration(std::move(new_config));
+
+    add_topic(tpa_ns).get();
+    RPTEST_REQUIRE_EVENTUALLY(3s, [&cluster, &tpa] {
+        return std::ranges::contains(cluster.get_topics().topics(), tpa);
+    });
+    delete_topic(tpa_ns).get();
+
+    ss::sleep(2500ms).get();
+    cluster.request_metadata_update().get();
+    ASSERT_TRUE(std::ranges::contains(cluster.get_topics().topics(), tpa));
+
+    ss::sleep(1000ms).get();
+    cluster.request_metadata_update().get();
+    ASSERT_FALSE(std::ranges::contains(cluster.get_topics().topics(), tpa));
 }

@@ -465,6 +465,13 @@ class TieredStorageTest(TieredStorageEndToEndTest, RedpandaTest):
         self.logger.info(f"Running timequery check, map size {len(self.timequery_map)}")
         if len(self.timequery_map) == 0:
             return
+
+        # For debugging timequery failures.
+        start_offset, end_offset = self.kafka_cat.list_offsets(self.topic, 0)
+        self.logger.debug(
+            f"Partition offset range before timequery: start={start_offset}, end={end_offset}"
+        )
+
         for ts, expected_offset in self.timequery_map.items():
             self.logger.debug(
                 f"Timequery check for timestamp: {ts}, expected offset: {expected_offset}"

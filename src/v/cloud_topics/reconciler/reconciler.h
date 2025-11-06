@@ -172,6 +172,7 @@ private:
 
     // Top-level background worker that drives reconciliation.
     ss::future<> reconciliation_loop();
+    ss::lowres_clock::duration reconciliation_interval() const;
 
     /*
      * Reconcile a set of sources into an object with id `oid`.

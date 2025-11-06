@@ -257,6 +257,12 @@ PREV_VERSION_LOG_ALLOW_LIST = [
     "raft - .*recovery append entries error.*client_request_timeout",
     # Pre v23.2 Redpanda's don't know how to interact with HNS Storage Accounts correctly
     "abs - .*FeatureNotYetSupportedForHierarchicalNamespaceAccounts",
+    # We added a condition to log these storage parser errors at `DEBUG` during
+    # recovery here: https://github.com/redpanda-data/redpanda/pull/27287
+    # However, old versions will still log at `ERROR` when there are not enough bytes
+    # left due to unclean shutdown in a segment being recovered. Ignore these
+    # in a mixed version test.
+    "storage - .*parser::consume_records error: parser_errc::input_stream_not_enough_bytes .* storage::checksumming_consumer",
 ]
 
 AUDIT_LOG_ALLOW_LIST = RESTART_LOG_ALLOW_LIST + [

@@ -21,6 +21,10 @@ from ducktape.cluster.cluster import ClusterNode
 from ducktape.services.service import Service
 from ducktape.utils.util import wait_until
 
+from rptest.clients.admin.proto.redpanda.core.admin.internal.shadow_link_internal.v1 import (
+    shadow_link_internal_pb2,
+    shadow_link_internal_pb2_connect,
+)
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
     shadow_link_pb2_connect,
@@ -440,6 +444,9 @@ class ShadowLinkTestBase(PreallocNodesTest):
         self.admin_v2: AdminV2
         self.services: MultiClusterServices
         self.service_client: shadow_link_pb2_connect.ShadowLinkServiceClient
+        self.internal_service_client: (
+            shadow_link_internal_pb2_connect.ShadowLinkServiceClient
+        )
         self.secondary_cluster_args: SecondaryClusterArgs = secondary_cluster_args
         self.source_cluster_spec: SecondaryClusterSpec = self.get_source_cluster_spec()
 
@@ -485,6 +492,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
         self.services.setUp()
         self.admin_v2 = AdminV2(self.target_cluster_service)
         self.service_client = self.admin_v2.shadow_link()
+        self.internal_service_client = self.admin_v2.internal_shadow_link()
 
     @property
     def source_cluster(self) -> Cluster:
@@ -686,6 +694,29 @@ class ShadowLinkTestBase(PreallocNodesTest):
             )
         )
         return resp.shadow_topics
+
+    def remove_shadow_topic(
+        self, shadow_link_name: str, shadow_topic_name: str
+    ) -> shadow_link_internal_pb2.RemoveShadowTopicResponse:
+        return self.internal_service_client.remove_shadow_topic(
+            req=shadow_link_internal_pb2.RemoveShadowTopicRequest(
+                shadow_link_name=shadow_link_name, shadow_topic_name=shadow_topic_name
+            )
+        )
+
+    def force_update_shadow_topic_state(
+        self,
+        shadow_link_name: str,
+        shadow_topic_name: str,
+        new_state: shadow_link_pb2.ShadowTopicState.ValueType,
+    ) -> shadow_link_internal_pb2.ForceUpdateShadowTopicStateResponse:
+        return self.internal_service_client.force_update_shadow_topic_state(
+            req=shadow_link_internal_pb2.ForceUpdateShadowTopicStateRequest(
+                shadow_link_name=shadow_link_name,
+                shadow_topic_name=shadow_topic_name,
+                new_state=new_state,
+            )
+        )
 
     def source_default_client(self):
         return DefaultClient(self.source_cluster.service)

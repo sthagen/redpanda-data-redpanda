@@ -95,6 +95,12 @@ public:
 
     virtual ss::future<::cluster::cluster_link::errc>
       failover_link_topics(model::id_t, ::model::timeout_clock::time_point) = 0;
+
+    virtual ss::future<::cluster::cluster_link::errc> delete_shadow_topic(
+      model::id_t,
+      model::delete_mirror_topic_cmd,
+      ::model::timeout_clock::time_point)
+      = 0;
 };
 
 /**

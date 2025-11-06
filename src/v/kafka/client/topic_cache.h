@@ -33,6 +33,7 @@ class topic_cache {
           = kafka::topic_authorized_operations_not_set;
         int16_t replication_factor;
         std::optional<model::topic_id> topic_id;
+        ss::lowres_clock::time_point last_seen_time;
     };
 
     using topics_t = chunked_hash_map<model::topic, topic_data>;
@@ -44,6 +45,10 @@ public:
     topic_cache& operator=(const topic_cache&) = delete;
     topic_cache& operator=(topic_cache&&) = delete;
     ~topic_cache() noexcept = default;
+
+    explicit topic_cache(std::chrono::milliseconds topic_timeout)
+      : _topics{}
+      , _topic_timeout{std::move(topic_timeout)} {}
 
     /// \brief Apply the given metadata response.
     void apply(const chunked_vector<metadata_response::topic>& topics);
@@ -67,9 +72,24 @@ public:
 
     const topics_t& cache() const noexcept;
 
+    void set_topic_timeout(std::chrono::milliseconds s) { _topic_timeout = s; }
+
 private:
+    /// \brief merges info from new_topics and _topics
+    void merge_topics(topics_t new_topics);
+
+    /// \brief remove topics that haven't been seen for _topic_timeout or more
+    void remove_timeout_topics();
+
+    /// \brief merges cached and update topic data
+    static topic_data merge_topic_data(topic_data&&, topic_data&&);
+
     /// \brief Cache of topic information.
     topics_t _topics;
+
+    /// \brief If a topic hasn't been updated in this much time, it will be
+    /// considered stale and removed
+    std::chrono::milliseconds _topic_timeout = std::chrono::seconds{60};
 };
 
 } // namespace kafka::client

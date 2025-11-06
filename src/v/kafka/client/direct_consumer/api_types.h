@@ -68,7 +68,7 @@ struct fetched_partition_data {
     kafka::error_code error = kafka::error_code::none;
     std::optional<chunked_vector<aborted_transaction>> aborted_transactions;
     subscription_epoch subscription_epoch;
-    size_t size_bytes;
+    size_t size_bytes{0};
 };
 
 struct fetched_topic_data {

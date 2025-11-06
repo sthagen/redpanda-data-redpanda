@@ -814,8 +814,11 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                 cmd.value.topic);
               return errc::topic_not_being_mirrored;
           }
-          if (!::cluster_link::model::is_valid_status_transition(
-                *status, cmd.value.status)) {
+          // If not a force update, ensure a valid status transition
+          if (
+            !cmd.value.force_update
+            && !::cluster_link::model::is_valid_status_transition(
+              *status, cmd.value.status)) {
               vlog(
                 cluster::clusterlog.warn,
                 "Attempting to change state of mirror topic {} from {} to "

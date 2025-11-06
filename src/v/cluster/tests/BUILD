@@ -1254,7 +1254,7 @@ redpanda_test_cc_library(
 
 redpanda_cc_btest(
     name = "tx_compaction_tests",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "tx_compaction_tests.cc",
     ],

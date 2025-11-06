@@ -59,6 +59,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
 
         extra_rp_conf = dict(
             enable_cluster_metadata_upload_loop=False,
+            retention_local_trim_interval=5_000,
         )
 
         super(NodesDecommissioningTest, self).__init__(

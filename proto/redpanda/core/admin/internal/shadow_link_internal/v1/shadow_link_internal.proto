@@ -1,0 +1,73 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.internal.shadow_link.v1;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "proto/redpanda/core/pbgen/rpc.proto";
+import "proto/redpanda/core/admin/v2/shadow_link.proto";
+
+option (redpanda.core.pbgen.cpp_namespace) =
+    "proto::admin::internal::shadow_link";
+
+// This internal Shadow Link service implements escape hatches and expert level
+// modification of Shadow Links.
+service ShadowLinkInternalService {
+    // This service allows users to remove a Shadow Topic from a Shadow Link,
+    // removing all state regarding the topic from the Shadow Link.  This does
+    // _not_ remove the actual topic.  This will halt any replication of data
+    // from the source topic, stop consumer group syncing, and will also stop
+    // any property syncing for the topic on the Shadow Cluster
+    rpc RemoveShadowTopic(RemoveShadowTopicRequest)
+        returns (RemoveShadowTopicResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+
+    // This call allows a user to force change the state of a Shadow Topic in a
+    // Shadow Link.
+    rpc ForceUpdateShadowTopicState(ForceUpdateShadowTopicStateRequest)
+        returns (ForceUpdateShadowTopicStateResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+}
+
+// Request to remove a Shadow Topic from a Shadow Link.
+message RemoveShadowTopicRequest {
+    // Name of the Shadow Link to remove the Shadow Topic from.
+    string shadow_link_name = 1;
+    // The name of the Shadow Topic to remove from the Shadow Link.
+    string shadow_topic_name = 2;
+}
+
+// Response to removing the Shadow Topic from the Shadow Link.
+message RemoveShadowTopicResponse {}
+
+// Request to change the state of a Shadow Topic.
+message ForceUpdateShadowTopicStateRequest {
+    // Name of the Shadow Link containing the Shadow Topic.
+    string shadow_link_name = 1;
+    // The name of the Shadow Topic to change the state of.
+    string shadow_topic_name = 2;
+    // The new desired state of the Shadow Topic.
+    redpanda.core.admin.v2.ShadowTopicState new_state = 3;
+}
+
+// Response to changing the state of a Shadow Topic.
+message ForceUpdateShadowTopicStateResponse {}

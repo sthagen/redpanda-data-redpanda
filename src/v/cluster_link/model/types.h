@@ -896,19 +896,23 @@ struct add_mirror_topic_cmd
 struct update_mirror_topic_status_cmd
   : serde::envelope<
       update_mirror_topic_status_cmd,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     /// Name of the topic
     ::model::topic topic;
     /// New state of the topic
     mirror_topic_status status{mirror_topic_status::active};
+    using force_update_t = ss::bool_class<struct force_update_tag>;
+    /// Whether or not to force the status update even if the transition is
+    /// invalid
+    force_update_t force_update{force_update_t::no};
 
     friend bool operator==(
       const update_mirror_topic_status_cmd&,
       const update_mirror_topic_status_cmd&)
       = default;
 
-    auto serde_fields() { return std::tie(topic, status); }
+    auto serde_fields() { return std::tie(topic, status, force_update); }
 };
 
 /// \brief Command used to update the properties of a mirror topic
