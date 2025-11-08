@@ -31,7 +31,7 @@ class RemoteAccountSSHConfig:
 
 class RemoteAccountError(Exception):
     account_str: str
-    msg: str
+    msg: str | bytes
 
     def __init__(self, account: Any, msg: str) -> None: ...
     def __str__(self) -> str: ...

@@ -19,6 +19,8 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/shadow",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/go/rpk/gen/protocomments/admin/v2:admin",
+        "//src/go/rpk/gen/protocomments/common/v1:common",
         "//src/go/rpk/pkg/adminapi",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/os",
@@ -29,17 +31,25 @@ go_library(
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//types/descriptorpb",
         "@org_golang_google_protobuf//types/known/durationpb",
+        "@org_golang_google_protobuf//types/known/fieldmaskpb",
         "@org_golang_google_protobuf//types/known/timestamppb",
+        "@org_uber_go_zap//:zap",
     ],
 )
 
 go_test(
     name = "shadow_test",
     srcs = [
+        "config_test.go",
         "create_test.go",
         "mapper_test.go",
         "types_test.go",
+        "update_test.go",
     ],
     embed = [":shadow"],
     deps = [
@@ -47,10 +57,7 @@ go_test(
         "@build_buf_gen_go_redpandadata_core_protocolbuffers_go//redpanda/core/common/v1:common",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@org_golang_google_genproto_googleapis_api//annotations",
-        "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//reflect/protoreflect",
-        "@org_golang_google_protobuf//types/descriptorpb",
         "@org_golang_google_protobuf//types/known/durationpb",
     ],
 )

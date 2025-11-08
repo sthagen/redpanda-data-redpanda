@@ -56,7 +56,7 @@ public:
 
     model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
 
-    ss::future<state_transition> run_impl() override {
+    ss::future<state_transition> run_impl(ss::abort_source&) override {
         _last_run = ss::lowres_clock::now();
         _count++;
         co_return state_transition{
@@ -256,7 +256,7 @@ public:
 
     model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
 
-    ss::future<state_transition> run_impl() override {
+    ss::future<state_transition> run_impl(ss::abort_source&) override {
         throw std::runtime_error("evil task failed");
     }
 }; // namespace cluster_link
@@ -293,7 +293,7 @@ public:
 
     model::enabled_t is_enabled() const final { return model::enabled_t::yes; }
 
-    ss::future<state_transition> run_impl() override {
+    ss::future<state_transition> run_impl(ss::abort_source&) override {
         if (get_state() == model::task_state::active) {
             vlog(logger().info, "Simulating link unavailability");
             co_return state_transition{

@@ -356,5 +356,5 @@ INSTANTIATE_TEST_SUITE_P(
       .input = R"({"oneofUint32": 1})",
       .update = R"({"oneofBool": true})",
       .mask = R"({"mask": "oneofUint32"})",
-      .expected = R"({"oneofUint32": 0})",
+      .expected = R"({})",
     }));

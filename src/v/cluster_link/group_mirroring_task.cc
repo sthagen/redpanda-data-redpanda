@@ -54,12 +54,15 @@ coordinators_on_current_shard(link& link, ss::shard_id, ::model::node_id) {
 }
 } // namespace
 
-ss::future<task::state_transition> group_mirroring_task::run_impl() {
+ss::future<task::state_transition>
+group_mirroring_task::run_impl(ss::abort_source& as) {
     auto result = co_await list_consumer_groups();
 
     if (!result.has_value()) {
         co_return make_unavailable(result.error());
     }
+
+    as.check();
 
     if (_needs_coordinator_update) {
         auto result = co_await update_group_coordinators();
@@ -68,6 +71,8 @@ ss::future<task::state_transition> group_mirroring_task::run_impl() {
             co_return make_unavailable(result.error());
         }
     }
+
+    as.check();
 
     result = co_await synchronize_consumer_groups_offsets();
 

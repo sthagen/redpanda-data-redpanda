@@ -203,7 +203,7 @@ public:
     /// \pre the number of keys is <= delete_objects_max_keys
     ss::future<upload_result> delete_object_batch(
       const cloud_storage_clients::bucket_name& bucket,
-      std::vector<cloud_storage_clients::object_key> keys,
+      chunked_vector<cloud_storage_clients::object_key> keys,
       retry_chain_node& parent,
       std::function<void(size_t)> req_cb);
 

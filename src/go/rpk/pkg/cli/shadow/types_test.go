@@ -14,17 +14,13 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/api/annotations"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v2"
 )
 
@@ -567,17 +563,4 @@ func walkProtoMessage(md protoreflect.MessageDescriptor, parentName string, m ma
 			walkProtoMessage(msgDesc, fullName, m, excludedPatterns)
 		}
 	}
-}
-
-func isFieldOutputOnly(field protoreflect.FieldDescriptor) bool {
-	f, ok := field.Options().(*descriptorpb.FieldOptions)
-	if !ok {
-		return false
-	}
-	e := proto.GetExtension(f, annotations.E_FieldBehavior)
-	fb, ok := e.([]annotations.FieldBehavior)
-	if !ok {
-		return false
-	}
-	return slices.Contains(fb, annotations.FieldBehavior_OUTPUT_ONLY)
 }

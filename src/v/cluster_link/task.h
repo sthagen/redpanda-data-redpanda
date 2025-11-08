@@ -110,7 +110,10 @@ protected:
     prefix_logger& logger();
     /// Implementation of the task logic that will run periodically
     /// It shall return the state the task should be in after running
-    virtual ss::future<state_transition> run_impl() = 0;
+    /// The caller must provide an abort_source that lives for the entire
+    /// duration of the run.  This abort source allows for stopping the run
+    /// early in case the task has stopped or paused.
+    virtual ss::future<state_transition> run_impl(ss::abort_source&) = 0;
     /// Returns the owning link
     link* get_link() const noexcept;
 

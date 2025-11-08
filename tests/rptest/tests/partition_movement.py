@@ -9,12 +9,17 @@
 
 import copy
 import random
+from typing import Any
 
 import requests
 from ducktape.utils.util import wait_until
 
+from rptest.clients.default import TopicDescription
 from rptest.services.admin import Admin
 from rptest.util import wait_until_result
+
+
+PartitionAssignment = dict[Any, Any]
 
 
 class PartitionMovementMixin:
@@ -23,7 +28,7 @@ class PartitionMovementMixin:
     INVALID_CORE = 12121212
 
     @staticmethod
-    def _random_partition(metadata):
+    def _random_partition(metadata: list[TopicDescription]):
         topic = random.choice(metadata)
         partition = random.choice(topic.partitions)
         return topic.name, partition.id
@@ -121,7 +126,13 @@ class PartitionMovementMixin:
                 result.append(dict(node_id=node_id, core=partition["core"]))
         return result
 
-    def _wait_post_move(self, topic, partition, assignments, timeout_sec):
+    def _wait_post_move(
+        self,
+        topic: str,
+        partition: int,
+        assignments: list[PartitionAssignment],
+        timeout_sec: int,
+    ):
         # We need to add retries, becasue of eventual consistency. Metadata will be updated but it can take some time.
         admin = Admin(self.redpanda, retry_codes=[404, 503, 504], retries_amount=10)
 
@@ -181,7 +192,7 @@ class PartitionMovementMixin:
 
         assert movement_cancelled or movement_finished
 
-    def _do_move_and_verify(self, topic, partition, timeout_sec):
+    def _do_move_and_verify(self, topic: str, partition: int, timeout_sec: int):
         _, new_assignment = self._dispatch_random_partition_move(
             topic=topic, partition=partition
         )
@@ -281,7 +292,11 @@ class PartitionMovementMixin:
                 )
 
     def _dispatch_random_partition_move(
-        self, topic, partition, x_core_only=False, allow_no_op=True
+        self,
+        topic: str,
+        partition: int,
+        x_core_only: bool = False,
+        allow_no_op: bool = True,
     ):
         """
         Request partition replicas to be randomly moved
@@ -324,13 +339,13 @@ class PartitionMovementMixin:
 
     def _request_move_cancel(
         self,
-        topic,
-        partition,
-        previous_assignment,
-        unclean_abort,
-        force_back=False,
-        new_assignment=None,
-        timeout=90,
+        topic: str,
+        partition: int,
+        previous_assignment: list[PartitionAssignment],
+        unclean_abort: bool,
+        force_back: bool = False,
+        new_assignment: list[PartitionAssignment] | None = None,
+        timeout: int = 90,
     ):
         """
         Request partition movement to interrupt and validates

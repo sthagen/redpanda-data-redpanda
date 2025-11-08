@@ -41,6 +41,7 @@ public:
 
     ss::future<> stop() {
         vlog(_task->logger().debug, "Stopping task runner");
+        _as.request_abort();
         _timer.cancel();
         co_await _gate.close();
         vlog(_task->logger().debug, "Task runner stopped");
@@ -101,7 +102,9 @@ private:
         vlog(_task->logger().trace, "run_task started");
         try {
             vlog(_task->logger().trace, "running task");
-            auto state_change = co_await _task->run_impl();
+            _as.check();
+            auto state_change = co_await _task->run_impl(_as);
+            _as.check();
             vlog(
               _task->logger().trace,
               "task run_impl completed, desired state: {}, reason: {}",
@@ -127,11 +130,17 @@ private:
             }
         } catch (...) {
             auto e = std::current_exception();
-            auto log_level = ssx::is_shutdown_exception(e)
-                               ? ss::log_level::debug
-                               : ss::log_level::error;
+            auto is_shutdown = ssx::is_shutdown_exception(e);
+            auto log_level = is_shutdown ? ss::log_level::debug
+                                         : ss::log_level::error;
+
             vlogl(
               _task->logger(), log_level, "task encountered an error: {}", e);
+            if (is_shutdown) {
+                // If shutting down, do not change state to faulted, instead
+                // exit
+                co_return;
+            }
             auto res = _task->change_state(
               model::task_state::faulted,
               ssx::sformat("{} failed with error: {}", _task->name(), e));
@@ -140,6 +149,7 @@ private:
     }
 
 private:
+    ss::abort_source _as;
     ss::gate _gate;
     ss::timer<ss::lowres_clock> _timer;
 

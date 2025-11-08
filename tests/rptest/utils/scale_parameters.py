@@ -66,6 +66,15 @@ class ScaleParameters:
         self.node_cpus = self.redpanda.get_node_cpu_count()
         node_disk_free = self.redpanda.get_node_disk_free()
 
+        # Targetting m6id.xlarge
+        self.target_per_node_throughput = 80 * 1024 * 1024 // replication_factor
+
+        if not self.redpanda.dedicated_nodes:
+            # Assume we only get one shard worth of throughput (compared to the CDT 4 core case)
+            self.target_per_node_throughput //= 4
+            # Half it for safety
+            self.target_per_node_throughput //= 2
+
         if self.redpanda.dedicated_nodes:
             # Emulate seastar's policy for default reserved memory
             reserved_memory = max(1536, int(0.07 * self.node_memory_mib) + 1)

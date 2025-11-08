@@ -189,6 +189,26 @@ class ThroughputTierInfo:
     max_partition_count: int
 
 
+class NotEnoughBrokersError(Exception):
+    pass
+
+
+class ClusterSpecError(Exception):
+    pass
+
+
+class NoPandyProxyError(Exception):
+    pass
+
+
+class MissingCriticalTopicsError(Exception):
+    pass
+
+
+class MissingBrokersMetricsError(Exception):
+    pass
+
+
 class CloudCluster:
     """
     Operations on a Redpanda Cloud cluster via the swagger API.
@@ -826,7 +846,7 @@ class CloudCluster:
         """Get the list of brokers from the pandaproxy API."""
         return self._query_panda_proxy("/brokers")["brokers"]
 
-    def _ensure_cluster_health(self, is_serverless_cluster=False) -> str | None:
+    def _ensure_cluster_health(self, is_serverless_cluster=False) -> None:
         """
         Check if current cluster is healthy
           - check connectivity
@@ -837,20 +857,16 @@ class CloudCluster:
         None otherwise.
         """
 
-        def warn_and_return(msg: str):
-            self._logger.warning(msg)
-            return msg
-
         # Get cluster details
         try:
             self._logger.info("Getting cluster specs")
             cluster = self._get_cluster(
                 self.current.cluster_id, is_serverless_cluster=is_serverless_cluster
             )
-        except Exception:
-            return warn_and_return(
-                f"# Failed to get info for cluster with Id: '{self.current.cluster_id}'"
-            )
+        except Exception as e:
+            raise ClusterSpecError(
+                f"Failed to get info for cluster with Id: '{self.current.cluster_id}'"
+            ) from e
 
         # list cluster specs
         self._logger.info(
@@ -859,11 +875,11 @@ class CloudCluster:
 
         if is_serverless_cluster:
             # if serverless cluster, assume healthy, we have no other state and we can't talk to the brokers directly
-            return None
+            return
 
         # Check if panda-proxy is available
         if "url" not in cluster["http_proxy"]:
-            return warn_and_return("Panda-Proxy listener is not available")
+            raise NoPandyProxyError("Panda-Proxy listener is not available")
         else:
             _u = self.panda_proxy_url()
             self._logger.info(f"Panda-Proxy listener: '{_u}'")
@@ -873,7 +889,9 @@ class CloudCluster:
         self._logger.info("Checking cluster brokers")
         brokers = self.get_brokers()
         if len(brokers) < 3:
-            return warn_and_return("Less than 3 brokers operational")
+            raise NotEnoughBrokersError(
+                f"Less than 3 brokers operational (had {len(brokers)})"
+            )
         else:
             self._logger.info(f"Console reports '{len(brokers)}' brokers")
 
@@ -900,7 +918,9 @@ class CloudCluster:
             self._logger.error(f"Missing critical topics: {missing_topics}")
             self._logger.error(f"Expected critical topics: {_critical}")
             self._logger.error(f"Actual topics found: {_topics}")
-            return warn_and_return("Cluster missing critical topics")
+            raise MissingCriticalTopicsError(
+                f"Cluster missing critical topics: {missing_topics}"
+            )
         else:
             _t = ", ".join(_intersect)
             self._logger.info(f"Critical topics present: '{_t}'")
@@ -915,25 +935,26 @@ class CloudCluster:
                 _brokers_metric = _metric
         if _brokers_metric is None:
             if self.config.require_broker_metrics_in_health_check:
-                return warn_and_return("Failed to get brokers metric")
+                raise MissingBrokersMetricsError(
+                    "Failed to get redpanda_cluster_brokers metric"
+                )
             else:
                 self._logger.info(
                     "Public metric 'redpanda_cluster_brokers' is unavailable, but it is not required."
                 )
-                return None
+                return
         else:
             self._logger.info("Public metric 'redpanda_cluster_brokers' is available")
 
         # Get Samples
         _instances = [s.value for s in _brokers_metric.samples]
         if max(_instances) < 3:
-            return warn_and_return("Prometheus reports less than 3 instances")
+            raise NotEnoughBrokersError("Prometheus reports less than 3 instances")
         else:
             self._logger.info(
                 f"Prometheus samples reports maximum of {max(_instances)} instances"
             )
         # All checks passed
-        return None
 
     def _select_cluster_id(self):
         """
@@ -975,47 +996,17 @@ class CloudCluster:
 
         # Prepare the cluster
         if self.current.cluster_id != "":
-            fail_on_unhealthy = self.current.cluster_id == self.config.id
             # Cluster already exist
             # Check if cluster is healthy
-            try:
-                # In case this is a provided cluster,
-                # make sure that we ready for the health check.
-                # Users and ACLs will not be recreated if they exists
-                self.current.consoleUrl = self._get_cluster_console_url()
-                self.update_cluster_acls(superuser)
-                # Do the health check
-                unhealthy_reason: str | None = self._ensure_cluster_health(
-                    is_serverless_cluster=is_serverless_cluster
-                )
-            except Exception as e:
-                if fail_on_unhealthy:
-                    raise
-                msg = f"Health check ended exceptionally: {e}"
-                self._logger.warning(msg)
-                unhealthy_reason = msg
+            # In case this is a provided cluster,
+            # make sure that we ready for the health check.
+            # Users and ACLs will not be recreated if they exists
+            self.current.consoleUrl = self._get_cluster_console_url()
+            self.update_cluster_acls(superuser)
+            # Do the health check
+            self._ensure_cluster_health(is_serverless_cluster=is_serverless_cluster)
 
-            if unhealthy_reason is not None:
-                if fail_on_unhealthy:
-                    # Cluster id was provided. Generate exception as
-                    # cluster creation not logical in this case
-                    raise RuntimeError(
-                        "Provided Cluster with id "
-                        f"'{self.config.id}' "
-                        f"failed health check: {unhealthy_reason}"
-                    )
-
-                # Health check fail, create new cluster
-                self._logger.warning(
-                    f"Cluster '{self.current.cluster_id}' not healthy, creating new"
-                )
-                self.current.cluster_id = ""
-
-                # Clean out cluster id file
-                self.rm_cluster_id_file()
-                # Create new cluster
-                self._create_new_cluster()
-            elif not is_serverless_cluster:
+            if not is_serverless_cluster:
                 # if serverless cluster we cannot ask about config profiles and such, the test will make assumptions
                 # about the supported capacity of serverless vclusters
                 # Just load needed info to create peering

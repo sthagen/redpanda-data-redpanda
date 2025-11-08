@@ -241,9 +241,8 @@ class RedpandaKerberosRulesTesting(RedpandaKerberosTestBase):
     @parametrize(
         rules=["RULE:[1:$1test$0](client.*)", "DEFAULT"],
         kerberos_principal="client",
-        rp_user=f"clienttest{REALM}",
         expected_topics=["restricted", "always_visible"],
-        acl=[("restricted", f"clienttest{REALM}"), ("always_visible", "*")],
+        acl=[["restricted", f"clienttest{REALM}"], ["always_visible", "*"]],
     )
     @parametrize(
         rules=[
@@ -252,17 +251,15 @@ class RedpandaKerberosRulesTesting(RedpandaKerberosTestBase):
             "DEFAULT",
         ],
         kerberos_principal="client",
-        rp_user="TESTGOODREDPANDA",
         expected_topics=["restricted", "always_visible"],
-        acl=[("restricted", "TESTGOODREDPANDA"), ("always_visible", "*")],
+        acl=[["restricted", "TESTGOODREDPANDA"], ["always_visible", "*"]],
     )
     def test_kerberos_mapping_rules(
         self,
         rules: list[str],
         kerberos_principal: str,
-        rp_user: str,
         expected_topics: list[str],
-        acl: list[tuple[str, str]],
+        acl: list[list[str]],
     ):
         self.client.add_primary(primary=kerberos_principal)
 

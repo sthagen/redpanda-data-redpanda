@@ -274,7 +274,8 @@ model::enabled_t security_migrator::is_enabled() const {
     return _config.is_enabled;
 }
 
-ss::future<task::state_transition> security_migrator::run_impl() {
+ss::future<task::state_transition>
+security_migrator::run_impl(ss::abort_source& as) {
     vlog(logger().trace, "Running security migrator task");
     constexpr auto acl_creation_timeout = 5s;
 
@@ -297,6 +298,8 @@ ss::future<task::state_transition> security_migrator::run_impl() {
           .reason = std::move(msg)};
     }
 
+    as.check();
+
     if (!has_required_permissions(
           cluster.get_cluster_authorized_operations(),
           security_migrator::required_permissions)) {
@@ -314,7 +317,7 @@ ss::future<task::state_transition> security_migrator::run_impl() {
     kafka::api_version describe_acls_version;
     try {
         auto supported_api_versions = co_await cluster.supported_api_versions(
-          kafka::describe_acls_api::key);
+          kafka::describe_acls_api::key, as);
         if (!supported_api_versions.has_value()) {
             auto msg = ssx::sformat(
               "Failed to get supported API version for DescribeACLs");
@@ -343,6 +346,9 @@ ss::future<task::state_transition> security_migrator::run_impl() {
           logger().debug,
           "Using describe_acls version: {}",
           describe_acls_version);
+    } catch (const ss::abort_requested_exception&) {
+        // Rethrow abort requested to allow caller to handle it
+        throw;
     } catch (const std::exception& e) {
         auto msg = ssx::sformat(
           "Failed to get supported API version for DescribeACLs: {}", e.what());
@@ -352,6 +358,7 @@ ss::future<task::state_transition> security_migrator::run_impl() {
           .reason = std::move(msg)};
     }
 
+    as.check();
     auto acls_f = co_await ss::coroutine::as_future(
       fetch_acls(describe_acls_version));
 
@@ -386,6 +393,8 @@ ss::future<task::state_transition> security_migrator::run_impl() {
             "Error transforming received ACLs: {}", e.what())};
     }
     vlog(logger().trace, "bindings fetched from source cluster: {}", bindings);
+
+    as.check();
 
     auto res = co_await get_link()->get_security_service().create_acls(
       std::move(bindings), acl_creation_timeout);

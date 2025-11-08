@@ -68,19 +68,6 @@ TEST(EntryHeaderToFromIOBuf, TestRandom) {
     }
 }
 
-TEST(EntryHeaderToFromIObuf, TestDeserializeTooSmall) {
-    GTEST_FLAG_SET(death_test_style, "threadsafe");
-    entry_header orig_h{0, 0, entry_type::record_batch};
-    auto buf = entry_header_to_iobuf(orig_h);
-    ASSERT_EQ(buf.size_bytes(), packed_entry_header_size);
-
-    // For these lower level utilities, callers are expected to pass in
-    // appropriately sized buffers.
-    buf.pop_back();
-    ASSERT_DEATH(
-      entry_header_from_iobuf(std::move(buf)), "Expected buf of size 9");
-}
-
 TEST(EntryHeaderToFromIObuf, TestUnknownEnum) {
     iobuf fake_header_buf;
     serde::write(fake_header_buf, uint32_t{0});

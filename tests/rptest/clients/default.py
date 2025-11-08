@@ -79,7 +79,7 @@ class DefaultClient:
         client = KafkaCliTools(self._redpanda)
         client.delete_topic(name)
 
-    def describe_topics(self, topics=None):
+    def describe_topics(self, topics: list[str] | None = None):
         """
         Describe topics. Pass topics=None to describe all topics, or a pass a
         list of topic names to restrict the call to a set of specific topics.

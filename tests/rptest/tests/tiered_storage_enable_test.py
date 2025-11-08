@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import math
 from ducktape.utils.util import wait_until
 
 from rptest.clients.rpk import RpkTool
@@ -55,7 +56,7 @@ class TestEnablingTieredStorage(PreallocNodesTest):
 
         self.producer.start(clean=False)
         self.producer.wait_for_acks(
-            5 * (self.producer_throughput / self.msg_size), 120, 1
+            5 * math.ceil(self.producer_throughput / self.msg_size), 120, 1
         )
 
     @cluster(num_nodes=4)

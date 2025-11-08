@@ -114,9 +114,9 @@ class LogLevelTest(RedpandaTest):
             )
 
     @cluster(num_nodes=1)
-    @parametrize(loggers=("admin_api_server", "raft"))
-    @parametrize(loggers=("raft", "admin_api_server"))
-    def test_log_level_multiple_expiry(self, loggers=tuple[str, str]):
+    @parametrize(loggers=["admin_api_server", "raft"])
+    @parametrize(loggers=["raft", "admin_api_server"])
+    def test_log_level_multiple_expiry(self, loggers: list[str]):
         """
         Check that more than one logger can be in a modified level and be expired correctly
         see https://redpandadata.atlassian.net/browse/CORE-96

@@ -14,7 +14,7 @@ import threading
 import time
 from enum import Enum
 from functools import partial, reduce
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Dict, Optional, Sequence, Union
 from urllib.parse import urlparse
 
 import confluent_kafka as ck
@@ -35,6 +35,7 @@ from rptest.services.keycloak import DEFAULT_REALM, KeycloakService
 from rptest.services.ocsf_server import OcsfServer
 from rptest.services.redpanda import (
     AUDIT_LOG_ALLOW_LIST,
+    RESTART_LOG_ALLOW_LIST,
     LoggingConfig,
     MetricSamples,
     MetricsEndpoint,
@@ -43,6 +44,7 @@ from rptest.services.redpanda import (
     SecurityConfig,
     TLSProvider,
 )
+from rptest.services.redpanda_installer import RedpandaInstaller, RedpandaVersion
 from rptest.services.redpanda_types import SaslCredentials
 from rptest.services.rpk_consumer import RpkConsumer
 from rptest.tests.cluster_config_test import wait_for_version_sync
@@ -290,6 +292,7 @@ class AuditLogConfig:
         num_partitions: int = 8,
         event_types=["management", "admin"],
         failure_policy: AuditFailurePolicy = AuditFailurePolicy.REJECT,
+        use_rpc: bool | None = False,
     ):
         """Initializes the config
 
@@ -308,7 +311,7 @@ class AuditLogConfig:
         self.num_partitions = num_partitions
         self.event_types = event_types
         self.failure_policy = failure_policy
-        self.use_rpc = False
+        self.use_rpc = use_rpc
 
     def to_conf(self) -> {str, str}:
         """Converts conf to dict
@@ -318,13 +321,17 @@ class AuditLogConfig:
         {str, str}
             Key,value dictionary of configs
         """
-        return {
+        result = {
             "audit_enabled": self.enabled,
             "audit_log_num_partitions": self.num_partitions,
             "audit_enabled_event_types": self.event_types,
             "audit_failure_policy": self.failure_policy.value,
-            "audit_use_rpc": self.use_rpc,
         }
+
+        if self.use_rpc is not None:
+            result["audit_use_rpc"] = self.use_rpc
+
+        return result
 
 
 class AuditLogTestSecurityConfig(SecurityConfig):
@@ -3282,3 +3289,124 @@ class AuditLogTestSmallBuffers(AuditLogTestBypassBase):
             },
             permit_no_auth=False,
         )
+
+
+class AuditLogUpgradeTest(AuditLogTestBase):
+    """
+    Tests audit logging functionality during version upgrades to ensure
+    audit logging continues to work on all nodes throughout the upgrade process.
+    """
+
+    def __init__(self, test_context):
+        security = AuditLogTestSecurityConfig.default_credentials()
+        audit_config = AuditLogConfig(
+            enabled=True,
+            num_partitions=3,
+            event_types=["admin"],
+            failure_policy=AuditFailurePolicy.REJECT,
+            use_rpc=None,
+        )
+
+        super(AuditLogUpgradeTest, self).__init__(
+            test_context=test_context,
+            num_brokers=3,
+            security=security,
+            audit_log_config=audit_config,
+            log_config=LoggingConfig(
+                "info", logger_levels={"auditing": "trace", "admin_api_server": "trace"}
+            ),
+        )
+
+        self.installer = self.redpanda._installer
+        self.initial_version = self.installer.highest_from_prior_feature_version(
+            RedpandaInstaller.HEAD
+        )
+
+    def setUp(self):
+        # Start with previous version
+        self.installer.install(self.redpanda.nodes, self.initial_version)
+        super().setUp()
+
+    def _test_audit_on_node(self, node: ClusterNode, phase_name: str):
+        # Get initial audit message count
+        initial_count = self._get_audit_message_count(node)
+
+        # Make admin API call to generate audit messages
+        _ = self.admin.get_features(node=node)
+
+        # Wait for audit messages to appear
+        def audit_messages_generated():
+            current_count = self._get_audit_message_count(node)
+            return current_count > initial_count
+
+        wait_until(
+            audit_messages_generated,
+            timeout_sec=30,
+            backoff_sec=2,
+            retry_on_exc=True,
+            err_msg=f"{phase_name}: No audit messages generated for node {node.name}",
+        )
+
+    def _test_audit_on_all_nodes(self, phase_name: str):
+        self.logger.info(f"{phase_name}: Testing audit logging on all nodes")
+
+        for node in self.redpanda.nodes:
+            self.logger.info(f"{phase_name}: Testing audit logging on node {node.name}")
+            self._test_audit_on_node(node, phase_name)
+
+        self.logger.info(f"{phase_name}: All nodes succeeded")
+
+    def _get_audit_message_count(self, node: ClusterNode):
+        def filter_fn(record):
+            hostname = record.get("http_request", {}).get("url", {}).get("hostname", "")
+            return node.name in hostname
+
+        # Read for up to 10 seconds, which should be enough to read all existing messages
+        start_time = time.time()
+
+        def stop_cond(records):
+            return time.time() > start_time + 10
+
+        return len(self.read_all_from_audit_log(filter_fn, stop_cond))
+
+    @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_audit_log_upgrade_all_nodes(self):
+        """
+        Test that audit logging works on all nodes during rolling upgrade
+        from previous major version to current version.
+        """
+
+        self.logger.info(
+            f"Starting audit log upgrade test: {self.initial_version} -> HEAD"
+        )
+
+        # Phase 1: Upgrade nodes one by one, testing after each upgrade
+        for i, node in enumerate(self.redpanda.nodes):
+            self.logger.info(f"Upgrading node {node.name}")
+            self.installer.install([node], self.installer.head_version())
+            self.redpanda.restart_nodes([node])
+
+            # Wait for cluster to stabilize
+            self.redpanda.wait_until(
+                self.redpanda.healthy,
+                timeout_sec=60,
+                backoff_sec=2,
+                err_msg=f"Cluster failed to stabilize after upgrading {node.name}",
+            )
+
+            # Test audit logging on all nodes (mix of old and new versions)
+            self._test_audit_on_all_nodes(f"upgraded_{i}")
+
+        # Phase 2: Test after rolling restart with all nodes upgraded
+        self.logger.info("Testing audit logging post-upgrade, post-rolling restart")
+        self.redpanda.rolling_restart_nodes(self.redpanda.nodes)
+
+        # Wait for cluster to stabilize
+        self.redpanda.wait_until(
+            self.redpanda.healthy,
+            timeout_sec=60,
+            backoff_sec=2,
+            err_msg="Cluster failed to stabilize after rolling restart",
+        )
+
+        self._test_audit_on_all_nodes("post_upgrade_restart")

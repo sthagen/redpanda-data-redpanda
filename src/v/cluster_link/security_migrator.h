@@ -42,7 +42,7 @@ public:
     model::enabled_t is_enabled() const final;
 
 protected:
-    ss::future<state_transition> run_impl() override;
+    ss::future<state_transition> run_impl(ss::abort_source&) override;
 
 private:
     ss::future<chunked_vector<kafka::describe_acls_resource>>

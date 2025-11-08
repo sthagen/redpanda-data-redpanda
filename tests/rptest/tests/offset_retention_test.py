@@ -8,6 +8,7 @@
 # by the Apache License, Version 2.0
 import time
 from functools import partial
+from typing import cast
 
 from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until
@@ -198,9 +199,9 @@ class OffsetRetentionDisabledAfterUpgrade(RedpandaTest):
         return not offsets_exist(True)
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
-    @parametrize(initial_version=(22, 2, 9))
-    @parametrize(initial_version=(22, 3, 11))
-    def test_upgrade_from_pre_v23(self, initial_version):
+    @parametrize(initial_version_as_list=[22, 2, 9])
+    @parametrize(initial_version_as_list=[22, 3, 11])
+    def test_upgrade_from_pre_v23(self, initial_version_as_list: list[int]):
         """
         1. test that retention feature doesn't work on legacy version
         2. upgrade cluster and test that feature still doesn't work
@@ -208,6 +209,9 @@ class OffsetRetentionDisabledAfterUpgrade(RedpandaTest):
         4. test that retention works properly
         """
         period = 30
+
+        # work-around for rule that params must roundtrip through json
+        initial_version = cast(tuple[int, int, int], tuple(initial_version_as_list))
 
         # in old cluster offset retention should not be active
         self._validate_pre_upgrade(initial_version)

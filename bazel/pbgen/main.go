@@ -605,6 +605,10 @@ func (g *headerGenerator) generateMessage(msg protoreflect.MessageDescriptor, w 
 					// Deducing this for the win!
 					w.Println("template<typename Self, typename... Args>")
 					w.Printf("auto visit_%s(this Self&& self, Args&&... args) { return seastar::visit(std::forward<Self>(self).%s_, std::forward<Args>(args)...); }\n", oneof.Name(), oneof.Name())
+					w.Printf("bool has_%s() const;\n", oneof.Name())
+					w.Printf("void clear_%s();\n", oneof.Name())
+				} else {
+					w.Printf("void clear_%s();\n", field.Name())
 				}
 			}
 			g.leadingComments(field, w)
@@ -997,17 +1001,20 @@ func (g *implGenerator) generateMessageFieldMaskApplyHelper(msg protoreflect.Mes
 					w.Printf("self->set_%s(std::move(update->get_%s()));\n", field.Name(), field.Name())
 				}
 			}
-			if field.ContainingOneof() != nil {
+			if oneof := field.ContainingOneof(); oneof != nil {
 				w.Printf("{%q, []([[maybe_unused]] auto path, auto* self, auto* update) {\n", field.Name())
 				w.Indent()
 				w.Printf("if (update->has_%s()) {\n", field.Name())
 				w.Indent()
-
 				printApplyFn()
 				w.Dedent()
 				w.Println("} else {")
 				w.Indent()
-				w.Printf("self->set_%s({});\n", field.Name())
+				if oneof.IsSynthetic() {
+					w.Printf("self->clear_%s();\n", field.Name())
+				} else {
+					w.Printf("self->clear_%s();\n", oneof.Name())
+				}
 				w.Dedent()
 				w.Println("}")
 				w.Dedent()
@@ -2003,6 +2010,12 @@ func (g *implGenerator) generateMessage(msg protoreflect.MessageDescriptor, w *c
 					displayName: string(oneof.Name()),
 					argValue:    fmt.Sprintf("%s_", oneof.Name()),
 				})
+				if oneof.IsSynthetic() {
+					w.Printf("void %s::clear_%s() { %s_ = std::monostate{}; }\n", parentType, field.Name(), oneof.Name())
+				} else {
+					w.Printf("bool %s::has_%s() const { return %s_.index() != 0; }\n", parentType, oneof.Name(), oneof.Name())
+					w.Printf("void %s::clear_%s() { %s_ = std::monostate{}; }\n", parentType, oneof.Name(), oneof.Name())
+				}
 			}
 			idx := getOneofFieldVariantIndex(oneof, field)
 			w.Printf("bool %s::has_%s() const { return %s_.index() == %d; }\n", parentType, field.Name(), oneof.Name(), idx)

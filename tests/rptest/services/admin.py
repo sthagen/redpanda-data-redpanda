@@ -482,6 +482,7 @@ class Admin:
         retry_codes: list[int] | None = None,
         auth=None,
         retries_amount: int = 5,
+        timeout_seconds: float = DEFAULT_TIMEOUT,
     ):
         self.redpanda = redpanda
 
@@ -513,6 +514,7 @@ class Admin:
         )
 
         self._session.mount("http://", HTTPAdapter(max_retries=retries))
+        self._timeout_seconds = timeout_seconds
 
     @staticmethod
     def ready(node):
@@ -744,7 +746,7 @@ class Admin:
             retry_connection = False
 
         if kwargs.get("timeout", None) is None:
-            kwargs["timeout"] = DEFAULT_TIMEOUT
+            kwargs["timeout"] = self._timeout_seconds
 
         # We will have to handle redirects ourselves (always set kwargs['allow_redirects'] = False),
         # see comment after _session.request() below.

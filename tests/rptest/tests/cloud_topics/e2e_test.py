@@ -214,6 +214,7 @@ class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
         self.per_transaction = 10
 
     def start_producer_with_tx(self):
+        assert self.redpanda and self.topic
         self.kgo_producer = KgoVerifierProducer(
             self.test_context,
             self.redpanda,
@@ -231,6 +232,7 @@ class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
 
     def start_consumer_with_tx(self):
         traffic_node = self.kgo_producer.nodes[0]
+        assert self.redpanda and self.topic
         self.kgo_consumer = KgoVerifierSeqConsumer(
             self.test_context,
             self.redpanda,

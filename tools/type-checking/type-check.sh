@@ -19,8 +19,8 @@ if [[ ${TC_SKIP_DOCKER_BUILD:-0} != "0" ]]; then
   echo "Skipping Docker build because TC_SKIP_DOCKER_BUILD=${TC_SKIP_DOCKER_BUILD}" >&2
 else
   echo "Building Docker image $tag..."
-  docker build -t $tag -f "tools/type-checking/Dockerfile" \
-    ${TARGET:+--target=$TARGET} ${TC_DOCKER_ARGS-} tests
+  docker build -t $tag -f "$ROOT_DIR/tools/type-checking/Dockerfile" \
+    ${TARGET:+--target=$TARGET} ${TC_DOCKER_ARGS-} "$ROOT_DIR/tests"
 fi
 
 # Run the container with the tests directory mounted

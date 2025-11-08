@@ -92,6 +92,7 @@
 #include "security/audit/schemas/types.h"
 #include "security/audit/types.h"
 #include "serde/protobuf/rpc.h"
+#include "ssx/future-util.h"
 #include "ssx/sformat.h"
 #include "strings/string_switch.h"
 #include "strings/utf8.h"
@@ -870,17 +871,21 @@ void admin_server::log_exception(
         return os.str();
     };
 
-    try {
-        std::rethrow_exception(eptr);
-    } catch (const ss::httpd::base_exception& ex) {
-        const auto status = static_cast<http_status_ut>(ex.status());
-        if (ex.status() == http_status::internal_server_error) {
-            vlog(adminlog.error, "{}", log_ex(status));
-        } else if (status >= 400) {
-            vlog(adminlog.warn, "{}", log_ex(status));
+    if (ssx::is_shutdown_exception(eptr)) {
+        vlog(adminlog.debug, "{}", log_ex());
+    } else {
+        try {
+            std::rethrow_exception(eptr);
+        } catch (const ss::httpd::base_exception& ex) {
+            const auto status = static_cast<http_status_ut>(ex.status());
+            if (ex.status() == http_status::internal_server_error) {
+                vlog(adminlog.error, "{}", log_ex(status));
+            } else if (status >= 400) {
+                vlog(adminlog.warn, "{}", log_ex(status));
+            }
+        } catch (...) {
+            vlog(adminlog.error, "{}", log_ex());
         }
-    } catch (...) {
-        vlog(adminlog.error, "{}", log_ex());
     }
 }
 
@@ -1350,6 +1355,7 @@ ss::future<> admin_server::throw_on_error(
         case cluster::errc::data_migration_invalid_resources:
         case cluster::errc::data_migration_invalid_definition:
         case cluster::errc::data_migrations_disabled:
+        case cluster::errc::resource_is_being_migrated:
             throw ss::httpd::bad_request_exception(
               fmt::format("{}", ec.message()));
         case cluster::errc::data_migration_not_exists:

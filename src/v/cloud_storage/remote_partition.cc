@@ -344,11 +344,7 @@ public:
             } catch (...) {
                 auto eptr = std::current_exception();
                 if (ssx::is_shutdown_exception(eptr)) {
-                    // Shutdown exception is not expected here. We're only
-                    // using this abort source to propagate exceptions.
-                    // The exception will be handled correctly but we need
-                    // to have an audit trail.
-                    vlog(_ctxlog.error, "Unexpected shutdown error: {}", eptr);
+                    vlog(_ctxlog.debug, "Shutdown error: {}", eptr);
                 } else {
                     auto reason = net::is_disconnect_exception(eptr);
                     if (reason.has_value()) {

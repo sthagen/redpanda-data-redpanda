@@ -71,7 +71,7 @@ message WellKnownProtos {
 }
 
 message SayGreetingRequest {
-    string greeting = 1;
+    optional string greeting = 1;
 }
 
 message SayGreetingResponse {

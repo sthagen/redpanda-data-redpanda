@@ -15,6 +15,7 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
+#include <seastar/util/variant_utils.hh>
 #include <span>
 
 class iobuf_parser;
@@ -430,6 +431,8 @@ public:
   // Use the iobuf version instead.
   static seastar::future<> from_json(serde::pb::json::peekable_parser*, say_greeting_request*);
 
+  void clear_greeting();
+  bool has_greeting() const;
   ss::sstring& get_greeting();
   const ss::sstring& get_greeting() const;
   void set_greeting(ss::sstring&& v);
@@ -448,7 +451,7 @@ public:
   void apply_field_path_from(std::span<const ss::sstring> path, say_greeting_request* update);
 
 private:
-  ss::sstring greeting_;
+  std::variant<std::monostate, ss::sstring> _greeting_;
 };
 
 class say_greeting_response : public serde::pb::base_message {

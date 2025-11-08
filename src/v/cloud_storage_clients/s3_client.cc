@@ -13,8 +13,10 @@
 #include "base/units.h"
 #include "base/vlog.h"
 #include "bytes/bytes.h"
+#include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
+#include "bytes/streambuf.h"
 #include "cloud_storage_clients/logger.h"
 #include "cloud_storage_clients/s3_error.h"
 #include "cloud_storage_clients/util.h"
@@ -274,19 +276,9 @@ request_creator::make_delete_object_request(
     return header;
 }
 
-struct delete_objects_body : public ss::data_source_impl {
-    ss::temporary_buffer<char> data;
-    explicit delete_objects_body(std::string_view body) noexcept
-      : data{body.data(), body.size()} {}
-    auto get() -> ss::future<ss::temporary_buffer<char>> override {
-        return ss::make_ready_future<ss::temporary_buffer<char>>(
-          std::exchange(data, {}));
-    }
-};
-
 result<std::tuple<http::client::request_header, ss::input_stream<char>>>
 request_creator::make_delete_objects_request(
-  const bucket_name& name, std::span<const object_key> keys) {
+  const bucket_name& name, const chunked_vector<object_key>& keys) {
     // https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjects.html
     // will generate this request:
     //
@@ -331,7 +323,9 @@ request_creator::make_delete_objects_request(
             delete_tree.add_child("Delete.Object", key_tree);
         }
 
-        auto out = std::ostringstream{};
+        iobuf buf;
+        iobuf_ostreambuf obuf(buf);
+        std::ostream out(&obuf);
         boost::property_tree::write_xml(out, delete_tree);
         if (!out.good()) {
             throw std::runtime_error(fmt_with_ctx(
@@ -339,7 +333,7 @@ request_creator::make_delete_objects_request(
               "failed to create delete request, state: {}",
               out.rdstate()));
         }
-        return out.str();
+        return buf;
     }();
 
     auto body_md5 = [&] {
@@ -364,17 +358,14 @@ request_creator::make_delete_objects_request(
 
     header.insert(
       boost::beast::http::field::content_length,
-      fmt::format("{}", body.size()));
+      fmt::format("{}", body.size_bytes()));
 
     auto ec = _apply_credentials->add_auth(header);
     if (ec) {
         return ec;
     }
     util::url_encode_target(header);
-    return {
-      std::move(header),
-      ss::input_stream<char>{ss::data_source{
-        std::make_unique<delete_objects_body>(std::move(body))}}};
+    return {std::move(header), make_iobuf_input_stream(std::move(body))};
 }
 
 std::string request_creator::make_host(const bucket_name& name) const {
@@ -1156,7 +1147,7 @@ iobuf_to_delete_objects_result(iobuf&& buf) {
 
 auto s3_client::do_delete_objects(
   const bucket_name& bucket,
-  std::span<const object_key> keys,
+  const chunked_vector<object_key>& keys,
   ss::lowres_clock::duration timeout)
   -> ss::future<client::delete_objects_result> {
     auto request = _requestor.make_delete_objects_request(bucket, keys);
@@ -1199,7 +1190,7 @@ auto s3_client::do_delete_objects(
 
 auto s3_client::delete_objects(
   const bucket_name& bucket,
-  std::vector<object_key> keys,
+  const chunked_vector<object_key>& keys,
   ss::lowres_clock::duration timeout)
   -> ss::future<result<delete_objects_result, error_outcome>> {
     const object_key dummy{""};

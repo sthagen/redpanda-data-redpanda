@@ -132,9 +132,9 @@ def wait_until_result(condition: Callable[[], Any], *args: Any, **kwargs: Any) -
 def wait_until_with_progress_check(
     check: Callable[[], Any],
     condition: Callable[[], Any],
-    timeout_sec: int,
-    progress_sec: int,
-    backoff_sec: int,
+    timeout_sec: float,
+    progress_sec: float,
+    backoff_sec: float,
     err_msg: str | None = None,
     logger: Logger | None = None,
 ):

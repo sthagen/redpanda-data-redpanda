@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 import time
+from typing import cast
 
 import requests.exceptions
 from ducktape.mark import parametrize
@@ -75,14 +76,18 @@ class ControlCharacterPermittedAfterUpgrade(ControlCharacterPermittedBase):
         )
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
-    @parametrize(initial_version=(22, 2, 9))
-    @parametrize(initial_version=(22, 3, 11))
-    @parametrize(initial_version=(23, 1, 1))
-    def test_upgrade_from_pre_v23_2(self, initial_version):
+    @parametrize(initial_version_as_list=[22, 2, 9])
+    @parametrize(initial_version_as_list=[22, 3, 11])
+    @parametrize(initial_version_as_list=[23, 1, 1])
+    def test_upgrade_from_pre_v23_2(self, initial_version_as_list: list[int]):
         """
         Validate that when upgrading from pre v23.2 that the flag is
         honored
         """
+
+        # work-around for rule that params must roundtrip through json
+        initial_version = cast(tuple[int, int, int], tuple(initial_version_as_list))
+
         self._validate_pre_upgrade(initial_version)
 
         # Creates a user with invalid control characters
@@ -143,13 +148,16 @@ class ControlCharacterNag(ControlCharacterPermittedBase):
     # before v24.2, dns query to s3 endpoint do not include the bucketname, which is required for AWS S3 fips endpoints
     @skip_fips_mode
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
-    @parametrize(initial_version=(22, 2, 9))
-    @parametrize(initial_version=(22, 3, 11))
-    @parametrize(initial_version=(23, 1, 1))
-    def test_validate_nag_message(self, initial_version):
+    @parametrize(initial_version_as_list=[22, 2, 9])
+    @parametrize(initial_version_as_list=[22, 3, 11])
+    @parametrize(initial_version_as_list=[23, 1, 1])
+    def test_validate_nag_message(self, initial_version_as_list: list[int]):
         """
         Validates that the nag message is present after upgrading a cluster
         """
+        # work-around for rule that params must roundtrip through json
+        initial_version = cast(tuple[int, int, int], tuple(initial_version_as_list))
+
         self._validate_pre_upgrade(initial_version)
 
         # Nag shouldn't be in logs

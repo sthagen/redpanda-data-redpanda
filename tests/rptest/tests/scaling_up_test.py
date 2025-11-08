@@ -195,7 +195,7 @@ class ScalingUpTest(PreallocNodesTest):
 
         self.producer.start(clean=False)
         self.producer.wait_for_acks(
-            5 * (self.producer_throughput / self.msg_size), 120, 1
+            5 * math.ceil(self.producer_throughput / self.msg_size), 120, 1
         )
 
     def start_consumer(self):

@@ -164,7 +164,8 @@ TEST_F_CORO(ctp_stm_fixture, test_fencing) {
 
     // Out of order fence for epoch 2 (should be waiting for the fence to be
     // released)
-    auto fut = api(node(*get_leader())).fence_epoch(ct::cluster_epoch{2});
+    auto leader_api = api(node(*get_leader()));
+    auto fut = leader_api.fence_epoch(ct::cluster_epoch{2});
     co_await ss::sleep(100ms);
 
     write_fence = {};

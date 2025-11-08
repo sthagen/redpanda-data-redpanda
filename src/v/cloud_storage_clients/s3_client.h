@@ -87,7 +87,7 @@ public:
     /// \return the header and an the body as an input_stream
     result<std::tuple<http::client::request_header, ss::input_stream<char>>>
     make_delete_objects_request(
-      const bucket_name& name, std::span<const object_key> keys);
+      const bucket_name& name, const chunked_vector<object_key>& keys);
 
     /// \brief Initialize http header for 'ListObjectsV2' request
     ///
@@ -198,7 +198,7 @@ public:
 
     ss::future<result<delete_objects_result, error_outcome>> delete_objects(
       const bucket_name& bucket,
-      std::vector<object_key> keys,
+      const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout) override;
 
 private:
@@ -239,7 +239,7 @@ private:
 
     ss::future<delete_objects_result> do_delete_objects(
       const bucket_name& bucket,
-      std::span<const object_key> keys,
+      const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout);
 
     template<typename T>

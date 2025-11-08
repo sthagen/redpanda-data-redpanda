@@ -351,6 +351,7 @@ redpanda_cc_library(
         "//src/v/serde",
         "//src/v/serde/protobuf:rpc",
         "//src/v/ssx:async_algorithm",
+        "//src/v/ssx:future_util",
         "//src/v/ssx:sformat",
         "//src/v/storage",
         "//src/v/strings:string_switch",

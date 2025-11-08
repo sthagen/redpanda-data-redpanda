@@ -44,7 +44,7 @@ public:
     model::enabled_t is_enabled() const final;
 
 protected:
-    ss::future<state_transition> run_impl() override;
+    ss::future<state_transition> run_impl(ss::abort_source&) override;
 
 private:
     struct topic_metadata {

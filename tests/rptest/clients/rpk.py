@@ -980,6 +980,7 @@ class RpkTool:
         timeout: float | None = None,
         use_schema_registry: str | None = None,
         read_committed: bool = False,
+        fetch_max_wait: float | None = None,
     ) -> str:
         cmd = ["consume", topic]
         if group is not None:
@@ -990,6 +991,11 @@ class RpkTool:
             cmd.append("-r")
         if fetch_max_bytes is not None:
             cmd += ["--fetch-max-bytes", str(fetch_max_bytes)]
+        if fetch_max_wait is not None:
+            cmd += [
+                "--fetch-max-wait",
+                f"{str(fetch_max_wait)}s",
+            ]
         if offset is not None:
             cmd += ["-o", f"{offset}"]
         if partition is not None:

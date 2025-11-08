@@ -18,6 +18,7 @@
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_storage_clients/types.h"
 #include "cloud_storage_clients/util.h"
+#include "container/chunked_vector.h"
 #include "model/metadata.h"
 #include "ssx/future-util.h"
 #include "ssx/semaphore.h"
@@ -764,7 +765,7 @@ ss::future<upload_result> remote::delete_objects(
     }
 
     const auto batches_to_delete = num_chunks(keys, delete_objects_max_keys());
-    std::vector<upload_result> results;
+    chunked_vector<upload_result> results;
     results.reserve(batches_to_delete);
 
     co_await ss::max_concurrent_for_each(
@@ -786,11 +787,10 @@ ss::future<upload_result> remote::delete_objects(
               chunk_end = keys.end();
           }
 
-          std::vector<cloud_storage_clients::object_key> key_batch;
-          key_batch.insert(
-            key_batch.end(),
-            std::make_move_iterator(chunk_begin),
-            std::make_move_iterator(chunk_end));
+          chunked_vector<cloud_storage_clients::object_key> key_batch;
+          auto chunk_size = std::distance(chunk_begin, chunk_end);
+          key_batch.reserve(chunk_size);
+          std::move(chunk_begin, chunk_end, std::back_inserter(key_batch));
 
           vassert(
             key_batch.size() > 0,
@@ -820,7 +820,7 @@ ss::future<upload_result> remote::delete_objects(
 
 ss::future<upload_result> remote::delete_object_batch(
   const cloud_storage_clients::bucket_name& bucket,
-  std::vector<cloud_storage_clients::object_key> keys,
+  chunked_vector<cloud_storage_clients::object_key> keys,
   retry_chain_node& parent,
   std::function<void(size_t)> req_cb) {
     ss::gate::holder gh{_gate};
@@ -947,7 +947,7 @@ ss::future<upload_result> remote::delete_objects_sequentially(
       "sequential deletes",
       _cloud_storage_backend);
 
-    std::vector<key_and_node> key_nodes;
+    chunked_vector<key_and_node> key_nodes;
     key_nodes.reserve(keys.size());
 
     std::transform(
@@ -960,7 +960,7 @@ ss::future<upload_result> remote::delete_objects_sequentially(
             .node = std::make_unique<retry_chain_node>(&parent)};
       });
 
-    std::vector<upload_result> results;
+    chunked_vector<upload_result> results;
     results.reserve(key_nodes.size());
     auto fut = co_await ss::coroutine::as_future(
       ss::max_concurrent_for_each(

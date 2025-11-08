@@ -58,13 +58,19 @@ class Diagnostic:
 
     @staticmethod
     def from_json(input: dict[str, Any], level: Level):
-        return Diagnostic(
-            Path(input["file"]),
-            input["severity"],
-            input["message"],
-            input["rule"],
-            level,
-        )
+        try:
+            return Diagnostic(
+                Path(input["file"]),
+                input["severity"],
+                input["message"],
+                # some errors like syntax errors may not have a rule
+                input.get("rule", "<unknown>"),
+                level,
+            )
+        except KeyError as e:
+            raise RuntimeError(
+                f"Unexpected diagnostic JSON: missing key {e}: {input}"
+            ) from e
 
 
 DiagMap = dict[Path, list[Diagnostic]]

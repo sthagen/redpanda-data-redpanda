@@ -11,13 +11,22 @@ package shadow
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
+	v2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
+	adminv2comments "github.com/redpanda-data/redpanda/src/go/rpk/gen/protocomments/admin/v2"
+	commonv1comments "github.com/redpanda-data/redpanda/src/go/rpk/gen/protocomments/common/v1"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"google.golang.org/genproto/googleapis/api/annotations"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v2"
 )
 
@@ -34,15 +43,19 @@ func newShadowConfigCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 }
 
 func newGenerateCommand(fs afero.Fs, _ *config.Params) *cobra.Command {
-	var output string
+	var outputPath string
+	var printTemplate bool
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Args:  cobra.NoArgs,
 		Short: "Generate a Redpanda Shadow Link configuration file",
 		Long: `Generate a configuration file for creating a Shadow Link.
 
-This command creates a sample configuration file with placeholder values that
-you customize for your environment. 
+By default, this command creates a sample configuration file with placeholder
+values that you customize for your environment.
+
+Use the --print-template flag to generate a configuration template with detailed
+field documentations.
 
 By default, this command prints the configuration to standard output. Use the
 --output flag to save the configuration to a file.
@@ -52,31 +65,45 @@ your actual connection details and settings. Then use 'rpk shadow create' to
 create the Shadow Link.
 `,
 		Example: `
-Generate a configuration file and print it to standard output:
+Generate a sample configuration and print it to standard output:
   rpk shadow config generate
 
-Save the configuration file to a specific location:
+Generate a configuration template with all the field documentation:
+  rpk shadow config generate --print-template
+
+Save the sample configuration to a file:
   rpk shadow config generate -o shadow-link.yaml
+
+Save the template with documentation to a file:
+  rpk shadow config generate --print-template -o shadow-link.yaml
 `,
 		Run: func(_ *cobra.Command, _ []string) {
-			// TODO: support generating from an rpk profile or Redpanda config file.
-			sampleConfig := generateSampleConfig()
-
-			yamlData, err := yaml.Marshal(sampleConfig)
-			out.MaybeDie(err, "unable to marshal configuration to YAML: %v", err)
-
-			if output != "" {
-				// TODO: check if file exists and prompt for confirmation to overwrite.
-				err = rpkos.ReplaceFile(fs, output, yamlData, 0o644)
-				out.MaybeDie(err, "unable to write configuration file to %q: %v", output, err)
-
-				fmt.Printf("Configuration file generated successfully: %s\n", output)
+			var outputData, successMsg string
+			if printTemplate {
+				template := generateConfigTemplate()
+				outputData = template
+				successMsg = "Template file generated successfully: %s\n"
 			} else {
-				fmt.Println(string(yamlData))
+				// TODO: support generating from an rpk profile or Redpanda config file.
+				sampleConfig := generateSampleConfig()
+				yamlData, err := yaml.Marshal(sampleConfig)
+				out.MaybeDie(err, "unable to marshal configuration to YAML: %v", err)
+				outputData = string(yamlData)
+				successMsg = "Configuration file generated successfully: %s\n"
+			}
+
+			if outputPath != "" {
+				// TODO: check if file exists and prompt for confirmation to overwrite.
+				err := rpkos.ReplaceFile(fs, outputPath, []byte(outputData), 0o644)
+				out.MaybeDie(err, "unable to write configuration file to %q: %v", outputPath, err)
+				fmt.Printf(successMsg, outputPath)
+			} else {
+				fmt.Println(outputData)
 			}
 		},
 	}
-	cmd.Flags().StringVarP(&output, "output", "o", "", "File path to save the generated configuration file. If not specified, prints to standard output")
+	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "File path to save the generated configuration file. If not specified, prints to standard output")
+	cmd.Flags().BoolVar(&printTemplate, "print-template", false, "Generate a configuration template with field documentation instead of a sample configuration")
 	return cmd
 }
 
@@ -160,5 +187,254 @@ func generateSampleConfig() *ShadowLinkConfig {
 		SchemaRegistrySyncOptions: &SchemaRegistrySyncOptions{
 			ShadowSchemaRegistryTopic: &ShadowSchemaRegistryTopic{},
 		},
+	}
+}
+
+func generateConfigTemplate() string {
+	var sb strings.Builder
+
+	sb.WriteString("# Shadow Link Configuration Template\n")
+
+	// Get the message descriptor from the global registry
+	cfg := &v2.ShadowLinkConfigurations{}
+	msg := cfg.ProtoReflect()
+	if msg == nil {
+		return "# Error: Could not find message descriptor"
+	}
+	msgDesc := msg.Descriptor()
+
+	if msgDesc == nil {
+		return "# Error: Message descriptor is nil\n"
+	}
+
+	// Walk through all fields and generate YAML with comments
+	fields := msgDesc.Fields()
+	for i := 0; i < fields.Len(); i++ {
+		field := fields.Get(i)
+
+		// Skip OUTPUT_ONLY fields
+		if isFieldOutputOnly(field) {
+			continue
+		}
+
+		writeFieldTemplate(&sb, field, 0)
+	}
+
+	return sb.String()
+}
+
+func isFieldOutputOnly(field protoreflect.FieldDescriptor) bool {
+	f, ok := field.Options().(*descriptorpb.FieldOptions)
+	if !ok {
+		return false
+	}
+	e := proto.GetExtension(f, annotations.E_FieldBehavior)
+	fb, ok := e.([]annotations.FieldBehavior)
+	if !ok {
+		return false
+	}
+	return slices.Contains(fb, annotations.FieldBehavior_OUTPUT_ONLY)
+}
+
+// getCommentForField dispatches to the appropriate package's comment registry.
+func getCommentForField(field protoreflect.FieldDescriptor) string {
+	// Determine which package based on the proto file path
+	protoFile := field.ParentFile().Path()
+
+	if strings.Contains(protoFile, "common/v1") {
+		return commonv1comments.GetCommentForField(field)
+	}
+	// Default to admin/v2
+	return adminv2comments.GetCommentForField(field)
+}
+
+// stripEnumPrefix removes common proto enum prefixes to match our config
+// enum expectations.
+//
+// The prefix is derived by converting the enum type name (last component of the
+// fully qualified name) from PascalCase to SCREAMING_SNAKE_CASE with a trailing
+// underscore.
+// For example:
+//   - "redpanda.core.common.v1.ACLResource" → "ACL_RESOURCE_"
+//   - "redpanda.core.admin.v2.PatternType" → "PATTERN_TYPE_"
+func stripEnumPrefix(enumValue protoreflect.EnumValueDescriptor) string {
+	enumName := string(enumValue.Name())
+	enumType := string(enumValue.Parent().FullName())
+
+	// Extract the type name (last component after the last dot)
+	lastDot := strings.LastIndex(enumType, ".")
+	if lastDot == -1 {
+		return enumName // No package prefix, return as-is
+	}
+	typeName := enumType[lastDot+1:]
+
+	prefix := toScreamingSnakeCase(typeName) + "_"
+
+	return strings.TrimPrefix(enumName, prefix)
+}
+
+// toScreamingSnakeCase converts a PascalCase string to SCREAMING_SNAKE_CASE.
+func toScreamingSnakeCase(s string) string {
+	var result strings.Builder
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			// Add underscore before uppercase letter if:
+			// - Previous character was lowercase, OR
+			// - Previous character was uppercase AND next character is lowercase (to handle "ACLResource" correctly)
+			prev := rune(s[i-1])
+			if prev >= 'a' && prev <= 'z' {
+				result.WriteRune('_')
+			} else if i+1 < len(s) {
+				next := rune(s[i+1])
+				if next >= 'a' && next <= 'z' {
+					result.WriteRune('_')
+				}
+			}
+		}
+		result.WriteRune(r)
+	}
+	return strings.ToUpper(result.String())
+}
+
+func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor, indent int) {
+	indentStr := strings.Repeat("  ", indent)
+
+	// Get field comment using the appropriate package registry
+	comment := getCommentForField(field)
+	if comment != "" {
+		// Write comment lines with proper indentation
+		lines := strings.Split(comment, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				sb.WriteString(fmt.Sprintf("%s# %s\n", indentStr, line))
+			}
+		}
+	}
+
+	// Get the field name (use proto name directly)
+	fieldName := string(field.Name())
+
+	// Write the field name
+	sb.WriteString(fmt.Sprintf("%s%s:", indentStr, fieldName))
+
+	// Handle different field types
+	if field.IsMap() {
+		sb.WriteString(" {}\n")
+	} else if field.IsList() {
+		// It's a repeated field
+		if field.Message() != nil {
+			// List of messages
+			sb.WriteString("\n")
+
+			// Write nested message fields with increased indent
+			nestedMsg := field.Message()
+			nestedFields := nestedMsg.Fields()
+			for i := 0; i < nestedFields.Len(); i++ {
+				nestedField := nestedFields.Get(i)
+
+				// Skip OUTPUT_ONLY fields in nested messages too
+				if isFieldOutputOnly(nestedField) {
+					continue
+				}
+
+				writeFieldTemplate(sb, nestedField, indent+2)
+			}
+		} else {
+			// List of scalars
+			sb.WriteString(" []\n")
+		}
+	} else if field.Message() != nil {
+		// It's a nested message
+		nestedMsg := field.Message()
+
+		// Check if it's a well-known type
+		fullName := string(nestedMsg.FullName())
+		if strings.HasPrefix(fullName, "google.protobuf.") {
+			// Handle well-known types
+			switch nestedMsg.Name() {
+			case "Duration":
+				sb.WriteString(" 30s  # duration (e.g., 30s, 1m, 1h)\n")
+			case "Timestamp":
+				sb.WriteString(" \"2024-01-01T00:00:00Z\"  # RFC3339 timestamp\n")
+			default:
+				sb.WriteString(" {}\n")
+			}
+		} else {
+			// Regular nested message
+			sb.WriteString("\n")
+
+			// Recursively write nested message fields
+			nestedFields := nestedMsg.Fields()
+			for i := 0; i < nestedFields.Len(); i++ {
+				nestedField := nestedFields.Get(i)
+
+				// Skip OUTPUT_ONLY fields
+				if isFieldOutputOnly(nestedField) {
+					continue
+				}
+
+				writeFieldTemplate(sb, nestedField, indent+1)
+			}
+		}
+	} else {
+		// Scalar field - provide a placeholder
+		switch field.Kind() {
+		case protoreflect.BoolKind:
+			sb.WriteString(" false\n")
+		case protoreflect.StringKind:
+			sb.WriteString(" \"\"\n")
+		case protoreflect.Int32Kind, protoreflect.Int64Kind, protoreflect.Uint32Kind, protoreflect.Uint64Kind,
+			protoreflect.Sint32Kind, protoreflect.Sint64Kind, protoreflect.Fixed32Kind, protoreflect.Fixed64Kind,
+			protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
+			sb.WriteString(" 0\n")
+		case protoreflect.FloatKind, protoreflect.DoubleKind:
+			sb.WriteString(" 0.0\n")
+		case protoreflect.EnumKind:
+			// Get the enum descriptor and use the first non-zero value if possible
+			enumDesc := field.Enum()
+			if enumDesc.Values().Len() > 0 {
+				// Try to find a non-unspecified value
+				var enumValue protoreflect.EnumValueDescriptor
+				for i := 0; i < enumDesc.Values().Len(); i++ {
+					val := enumDesc.Values().Get(i)
+					if val.Number() != 0 {
+						enumValue = val
+						break
+					}
+				}
+				// If all values are zero, use the first one
+				if enumValue == nil {
+					enumValue = enumDesc.Values().Get(0)
+				}
+
+				// Get comment for the enum value if available
+				protoFile := field.ParentFile().Path()
+				var enumComment string
+				if strings.Contains(protoFile, "common/v1") {
+					enumComment = commonv1comments.GetCommentForEnumValue(enumValue)
+				} else {
+					enumComment = adminv2comments.GetCommentForEnumValue(enumValue)
+				}
+				// Strip enum prefix to match rpk command expectations
+				strippedName := stripEnumPrefix(enumValue)
+				if enumComment != "" {
+					sb.WriteString(fmt.Sprintf(" %s  # %s\n", strippedName, enumComment))
+				} else {
+					sb.WriteString(fmt.Sprintf(" %s\n", strippedName))
+				}
+			} else {
+				sb.WriteString(" 0\n")
+			}
+		case protoreflect.BytesKind:
+			sb.WriteString(" \"\"\n")
+		default:
+			sb.WriteString(" null\n")
+		}
+	}
+
+	// Add a blank line after top-level fields for readability
+	if indent == 0 {
+		sb.WriteString("\n")
 	}
 }

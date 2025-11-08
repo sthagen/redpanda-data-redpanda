@@ -659,6 +659,8 @@ void test_all_types_edition2023::set_map_string_nested_enum(chunked_hash_map<ss:
 chunked_hash_map<ss::sstring, foreign_enum_edition2023>& test_all_types_edition2023::get_map_string_foreign_enum() { return map_string_foreign_enum_; }
 const chunked_hash_map<ss::sstring, foreign_enum_edition2023>& test_all_types_edition2023::get_map_string_foreign_enum() const { return map_string_foreign_enum_; }
 void test_all_types_edition2023::set_map_string_foreign_enum(chunked_hash_map<ss::sstring, foreign_enum_edition2023>&& v) { map_string_foreign_enum_ = std::move(v); }
+bool test_all_types_edition2023::has_oneof_field() const { return oneof_field_.index() != 0; }
+void test_all_types_edition2023::clear_oneof_field() { oneof_field_ = std::monostate{}; }
 bool test_all_types_edition2023::has_oneof_uint32() const { return oneof_field_.index() == 1; }
 uint32_t test_all_types_edition2023::get_oneof_uint32() const { return std::get<1>(oneof_field_); }
 void test_all_types_edition2023::set_oneof_uint32(uint32_t v) { oneof_field_.emplace<1>(v); }
@@ -5013,7 +5015,7 @@ void test_all_types_edition2023::apply_field_path_from(std::span<const ss::sstri
       if (update->has_oneof_uint32()) {
         self->set_oneof_uint32(std::move(update->get_oneof_uint32()));
       } else {
-        self->set_oneof_uint32({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_nested_message", []([[maybe_unused]] auto path, auto* self, auto* update) {
@@ -5023,56 +5025,56 @@ void test_all_types_edition2023::apply_field_path_from(std::span<const ss::sstri
         }
         self->get_oneof_nested_message().apply_field_path_from(path, &update->get_oneof_nested_message());
       } else {
-        self->set_oneof_nested_message({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_string", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_string()) {
         self->set_oneof_string(std::move(update->get_oneof_string()));
       } else {
-        self->set_oneof_string({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_bytes", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_bytes()) {
         self->set_oneof_bytes(std::move(update->get_oneof_bytes()));
       } else {
-        self->set_oneof_bytes({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_bool", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_bool()) {
         self->set_oneof_bool(std::move(update->get_oneof_bool()));
       } else {
-        self->set_oneof_bool({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_uint64", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_uint64()) {
         self->set_oneof_uint64(std::move(update->get_oneof_uint64()));
       } else {
-        self->set_oneof_uint64({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_float", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_float()) {
         self->set_oneof_float(std::move(update->get_oneof_float()));
       } else {
-        self->set_oneof_float({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_double", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_double()) {
         self->set_oneof_double(std::move(update->get_oneof_double()));
       } else {
-        self->set_oneof_double({});
+        self->clear_oneof_field();
       }
     }},
     {"oneof_enum", []([[maybe_unused]] auto path, auto* self, auto* update) {
       if (update->has_oneof_enum()) {
         self->set_oneof_enum(std::move(update->get_oneof_enum()));
       } else {
-        self->set_oneof_enum({});
+        self->clear_oneof_field();
       }
     }},
     {"groupliketype", []([[maybe_unused]] auto path, auto* self, auto* update) {

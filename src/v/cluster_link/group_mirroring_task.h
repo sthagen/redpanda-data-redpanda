@@ -84,7 +84,7 @@ public:
     model::enabled_t is_enabled() const final;
 
 protected:
-    ss::future<state_transition> run_impl() override;
+    ss::future<state_transition> run_impl(ss::abort_source&) override;
 
     bool should_start_impl(ss::shard_id, ::model::node_id) const final;
 

@@ -135,8 +135,10 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         super(DataMigrationsApiTest, self).__init__(
             test_context=test_context, *args, **kwargs
         )
-        self.flaky_admin = Admin(self.redpanda, retry_codes=[503, 504])
-        self.admin = Admin(self.redpanda)
+        self.flaky_admin = Admin(
+            self.redpanda, retry_codes=[503, 504], timeout_seconds=5
+        )
+        self.admin = Admin(self.redpanda, timeout_seconds=5)
         self.last_producer_id = 0
         self.last_consumer_id = 0
 
@@ -267,8 +269,8 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         self.assure_not_migratable(
             topic,
             {
-                "message": "Unexpected cluster error: Requested operation can not be executed as the resource is undergoing data migration",
-                "code": 500,
+                "message": "Requested operation can not be executed as the resource is undergoing data migration",
+                "code": 400,
             },
         )
 
@@ -1074,8 +1076,8 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
 
         wait_until(
             set_entities_status,
-            timeout_sec=60,
-            backoff_sec=2,
+            timeout_sec=120,
+            backoff_sec=0.5,
             err_msg=f"Entities status for migration {migration_id} not set",
             retry_on_exc=True,
         )

@@ -20,7 +20,7 @@ import "proto/redpanda/core/pbgen/options.proto";
 
 option (pbgen.cpp_namespace) = "proto::common";
 
-/// The ACL resource types
+// The ACL resource types
 enum ACLResource {
     ACL_RESOURCE_UNSPECIFIED = 0;
     // Wildcard for selecting any ACL resource
@@ -40,7 +40,7 @@ enum ACLResource {
     // Wildcard to match any SR ACL resource
     ACL_RESOURCE_SR_ANY = 8;
 }
-/// The ACL pattern type
+// The ACL pattern type
 enum ACLPattern {
     ACL_PATTERN_UNSPECIFIED = 0;
     // Wildcard to match any pattern
@@ -53,7 +53,7 @@ enum ACLPattern {
     // the principal is authorized to access
     ACL_PATTERN_MATCH = 4;
 }
-/// The ACL operation to match
+// The ACL operation to match
 enum ACLOperation {
     ACL_OPERATION_UNSPECIFIED = 0;
     ACL_OPERATION_ANY = 1;
@@ -68,7 +68,7 @@ enum ACLOperation {
     ACL_OPERATION_ALTER_CONFIGS = 10;
     ACL_OPERATION_IDEMPOTENT_WRITE = 11;
 }
-/// ACL permission types
+// ACL permission types
 enum ACLPermissionType {
     ACL_PERMISSION_TYPE_UNSPECIFIED = 0;
     ACL_PERMISSION_TYPE_ANY = 1;

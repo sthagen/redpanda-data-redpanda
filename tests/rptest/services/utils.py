@@ -1,10 +1,27 @@
-import collections
+from collections import defaultdict
+from logging import Logger
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Generator
+import traceback
+from typing import Any, Generator, Iterable, TypedDict
 
 from rptest.clients.kubectl import KubectlTool
+
+from ducktape.tests.test import TestContext
+from ducktape.cluster.cluster import ClusterNode
+
+from rptest.services.cloud_broker import CloudBroker
+
+VersionedNodes = Iterable[tuple[str | None, ClusterNode | CloudBroker]]
+
+
+class VersionAndLines(TypedDict):
+    version: str | None
+    lines: list[str]
+
+
+NodeToLines = dict[ClusterNode, VersionAndLines]
 
 
 def assert_int(v: Any) -> int:
@@ -52,18 +69,20 @@ class Stopwatch:
 
 
 class BadLogLines(Exception):
-    def __init__(self, node_to_lines):
+    def __init__(self, node_to_lines: NodeToLines):
         self.node_to_lines = node_to_lines
+        self._str = self._make_str(node_to_lines)
 
-    def __str__(self):
+    @staticmethod
+    def _make_str(node_to_lines: NodeToLines) -> str:
         # Pick the first line from the first node as an example, and include it
         # in the string output so that for single line failures, it isn't necessary
         # for folks to search back in the log to find the culprit.
-        example_lines = next(iter(self.node_to_lines.items()))[1]
+        example_lines = next(iter(node_to_lines.items()))[1]
         example = next(iter(example_lines["lines"]))
 
-        summary_list = []
-        for i in self.node_to_lines.items():
+        summary_list: list[str] = []
+        for i in node_to_lines.items():
             version_or_none = i[1]["version"]
             node_info = (
                 f"<{i[0].account.hostname}:{version_or_none}>"
@@ -73,6 +92,9 @@ class BadLogLines(Exception):
             summary_list.append(f"{node_info}({len(i[1])})")
         summary = ",".join(summary_list)
         return f'<BadLogLines nodes={summary} example="{example}">'
+
+    def __str__(self):
+        return self._str
 
     def __repr__(self):
         return self.__str__()
@@ -114,7 +136,7 @@ class LogSearch(ABC):
         "oversized allocation",
     ]
 
-    def __init__(self, test_context, allow_list, logger) -> None:
+    def __init__(self, test_context: TestContext, allow_list, logger: Logger) -> None:
         self._context = test_context
         self.allow_list = allow_list
         self.logger = logger
@@ -137,7 +159,7 @@ class LogSearch(ABC):
             yield x
 
     @abstractmethod
-    def _get_hostname(self, host) -> str:
+    def _get_hostname(self, host: Any) -> str:
         """Method to get name of the host. Overriden by each child."""
         return ""
 
@@ -173,8 +195,11 @@ class LogSearch(ABC):
             return True
         return False
 
-    def _search(self, versioned_nodes):
-        bad_lines = collections.defaultdict(lambda: {"version": None, "lines": []})
+    def _search(self, versioned_nodes: VersionedNodes):
+        def make_vl() -> VersionAndLines:
+            return {"version": None, "lines": []}
+
+        bad_lines: defaultdict[ClusterNode, VersionAndLines] = defaultdict(make_vl)
         test_name = self._context.function_name
         sw = Stopwatch()
         for version, node in versioned_nodes:
@@ -203,9 +228,9 @@ class LogSearch(ABC):
             self.logger.info(
                 sw.elapsedf(f"##### Time spent to scan bad logs on '{hostname}'")
             )
-        return bad_lines
+        return dict(bad_lines)
 
-    def search_logs(self, versioned_nodes):
+    def search_logs(self, versioned_nodes: VersionedNodes):
         """
         versioned_nodes is a list of Tuple[version, node]
         """

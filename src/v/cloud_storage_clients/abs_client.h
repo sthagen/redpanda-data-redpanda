@@ -212,7 +212,7 @@ public:
     /// \param timeout is a timeout of the operation
     ss::future<result<delete_objects_result, error_outcome>> delete_objects(
       const bucket_name& bucket,
-      std::vector<object_key> keys,
+      const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout) override;
 
     struct storage_account_info {

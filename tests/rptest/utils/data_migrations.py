@@ -16,6 +16,7 @@ from requests.exceptions import ConnectionError
 from rptest.clients.default import DefaultClient
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import (
+    Admin,
     InboundDataMigration,
     InboundTopic,
     MigrationAction,
@@ -40,6 +41,9 @@ def now():
 
 
 class DataMigrationTestMixin(RedpandaTest):
+    def get_admin(self, redpanda: RedpandaService) -> Admin:
+        return Admin(redpanda, timeout_seconds=5)
+
     def wait_partitions_appear(
         self, topics: list[TopicSpec], redpanda: RedpandaService | None = None
     ):
@@ -91,7 +95,7 @@ class DataMigrationTestMixin(RedpandaTest):
             redpanda = self.redpanda
 
         try:
-            return redpanda._admin.get_data_migration(id, node).json()
+            return self.get_admin(redpanda).get_data_migration(id, node).json()
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
                 return None
@@ -103,7 +107,7 @@ class DataMigrationTestMixin(RedpandaTest):
             redpanda = self.redpanda
 
         redpanda.logger.debug("calling self.admin.list_data_migrations")
-        migrations = redpanda._admin.list_data_migrations(node).json()
+        migrations = self.get_admin(redpanda).list_data_migrations(node).json()
         redpanda.logger.debug("received self.admin.list_data_migrations result")
         return {migration["id"]: migration for migration in migrations}
 
@@ -173,14 +177,14 @@ class DataMigrationTestMixin(RedpandaTest):
 
         def migration_id_if_exists():
             for n in redpanda.nodes:
-                for m in redpanda._admin.list_data_migrations(n).json():
+                for m in self.get_admin(redpanda).list_data_migrations(n).json():
                     if m == migration:
                         return m[id]
             return None
 
         time_before_creation = now()
         try:
-            reply = redpanda._admin.create_data_migration(migration).json()
+            reply = self.get_admin(redpanda).create_data_migration(migration).json()
             redpanda.logger.info(f"create migration reply: {reply}")
             migration_id = reply["id"]
         except requests.exceptions.HTTPError as e:
@@ -205,7 +209,7 @@ class DataMigrationTestMixin(RedpandaTest):
             redpanda = self.redpanda
 
         try:
-            redpanda._admin.delete_data_migration(id, node)
+            self.get_admin(redpanda).delete_data_migration(id, node)
             assert False
         except requests.exceptions.HTTPError:
             pass
@@ -251,7 +255,9 @@ class DataMigrationTestMixin(RedpandaTest):
         if redpanda is None:
             redpanda = self.redpanda
 
-        return redpanda._admin.get_migrated_entities_status(migration_id).json()
+        return (
+            self.get_admin(redpanda).get_migrated_entities_status(migration_id).json()
+        )
 
     def set_entities_status(
         self,
@@ -262,7 +268,7 @@ class DataMigrationTestMixin(RedpandaTest):
         if redpanda is None:
             redpanda = self.redpanda
 
-        redpanda._admin.put_migrated_entities_status(migration_id, state_data)
+        self.get_admin(redpanda).put_migrated_entities_status(migration_id, state_data)
 
     def migrate_between_clusters(
         self,
@@ -284,7 +290,9 @@ class DataMigrationTestMixin(RedpandaTest):
         out_migration_id = self.create_and_wait(out_migration, redpanda=source)
         source.logger.info(f"created outbound migration, id {out_migration_id}")
 
-        out_migration = source._admin.get_data_migration(out_migration_id).json()
+        out_migration = (
+            self.get_admin(source).get_data_migration(out_migration_id).json()
+        )
         assert len(out_migration["migration"]["topics"]) == len(topics)
 
         in_topics = []
@@ -313,7 +321,9 @@ class DataMigrationTestMixin(RedpandaTest):
             self.logger.info(
                 f"transitioning migration {rm.migration_id} on {rm.name} to {action}"
             )
-            rm.redpanda._admin.execute_data_migration_action(rm.migration_id, action)
+            self.get_admin(rm.redpanda).execute_data_migration_action(
+                rm.migration_id, action
+            )
 
         def wait_for_state(rm: RpAndMigration, states: List[str]):
             self.wait_for_migration_states(

@@ -2022,24 +2022,24 @@ class ClusterConfigIcebergTest(RedpandaTest):
         )
 
 
-"""
-PropertyAliasData:
-    primary_name: str  # this is the primary name in the current version of redpanda
-    aliased_name: str  # this is the legacy name, retained as an alias for backward compat
-    redpanda_version: RedpandaVersionLine  # this is the first version to use primary_name
-    test_values: list[Any, Any, Any]  # values for this property to run the tests
-    expect_restart: bool # setting property will ask for a restart
-"""
-PropertyAliasData = namedtuple(
-    "PropertyAliasData",
-    [
-        "primary_name",
-        "aliased_name",
-        "redpanda_version",
-        "test_values",
-        "expect_restart",
-    ],
-)
+class PropertyAliasData(NamedTuple):
+    """Data structure for property alias testing configuration."""
+
+    primary_name: str
+    """The primary name in the current version of redpanda."""
+
+    aliased_name: str
+    """The legacy name, retained as an alias for backward compat."""
+
+    redpanda_version: tuple[int, int]
+    """The first version to use primary_name."""
+
+    test_values: tuple[Any, Any, Any]
+    """Values for this property to run the tests."""
+
+    expect_restart: bool
+    """Setting property will ask for a restart."""
+
 
 cloud_storage_graceful_transfer_timeout = PropertyAliasData(
     primary_name="cloud_storage_graceful_transfer_timeout_ms",
@@ -2065,6 +2065,13 @@ data_transforms_per_core_memory_reservation = PropertyAliasData(
     expect_restart=True,
 )
 
+# Mapping from identifier string to PropertyAliasData for use in @matrix annotations
+PROPERTY_ALIAS_SETS: dict[str, PropertyAliasData] = {
+    "cloud_storage_graceful_transfer_timeout": cloud_storage_graceful_transfer_timeout,
+    "log_retention_ms": log_retention_ms,
+    "data_transforms_per_core_memory_reservation": data_transforms_per_core_memory_reservation,
+}
+
 
 class ClusterConfigAliasTest(RedpandaTest, ClusterConfigHelpersMixin):
     def __init__(self, *args, **kwargs):
@@ -2079,13 +2086,14 @@ class ClusterConfigAliasTest(RedpandaTest, ClusterConfigHelpersMixin):
 
     @cluster(num_nodes=3)
     @matrix(
-        prop_set=[
-            cloud_storage_graceful_transfer_timeout,
-            log_retention_ms,
-            data_transforms_per_core_memory_reservation,
+        prop_set_name=[
+            "cloud_storage_graceful_transfer_timeout",
+            "log_retention_ms",
+            "data_transforms_per_core_memory_reservation",
         ]
     )
-    def test_aliasing(self, prop_set: PropertyAliasData):
+    def test_aliasing(self, prop_set_name: str):
+        prop_set = PROPERTY_ALIAS_SETS[prop_set_name]
         """
         Validate that configuration property aliases enable the various means
         of setting a property to accept the old name (alias) as well as the new one.
@@ -2142,9 +2150,10 @@ class ClusterConfigAliasTest(RedpandaTest, ClusterConfigHelpersMixin):
     @cluster(num_nodes=3)
     @matrix(
         wipe_cache=[False, True],
-        prop_set=[cloud_storage_graceful_transfer_timeout, log_retention_ms],
+        prop_set_name=["cloud_storage_graceful_transfer_timeout", "log_retention_ms"],
     )
-    def test_aliasing_with_upgrade(self, wipe_cache: bool, prop_set: PropertyAliasData):
+    def test_aliasing_with_upgrade(self, wipe_cache: bool, prop_set_name: str):
+        prop_set = PROPERTY_ALIAS_SETS[prop_set_name]
         """
         Validate that a property written under an alias in a previous release
         is read correctly after upgrade.

@@ -187,6 +187,9 @@ DEFAULT_LOG_ALLOW_LIST: list[CompiledLogAllowElem] = [
     # just indicate a race in committing to Iceberg.
     re.compile(r"UpdateRequirement.*Assert"),
     re.compile("assert-ref-snapshot-id"),
+    re.compile("assert-current-schema-id"),
+    re.compile("assert-last-assigned-partition-id"),
+    re.compile("assert-default-spec-id"),
     # Temporary: https://redpandadata.atlassian.net/browse/CORE-9897
     # there is an ongoing investigation into s3_client receiving 400 Bad Request. For now, stop the CI bleed
     re.compile(
@@ -1271,8 +1274,8 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
     def wait_until(
         self,
         fn: Callable[[], Any],
-        timeout_sec: int,
-        backoff_sec: int,
+        timeout_sec: float,
+        backoff_sec: float,
         err_msg: str | Callable[[], str] = "",
         retry_on_exc: bool = False,
     ) -> None:
@@ -1312,9 +1315,9 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
         self,
         check: Callable[[], Any],
         condition: Callable[[], Any],
-        timeout_sec: int,
-        progress_sec: int,
-        backoff_sec: int,
+        timeout_sec: float,
+        progress_sec: float,
+        backoff_sec: float,
         err_msg: str | None = None,
         logger: Logger | None = None,
     ) -> None:
@@ -2176,9 +2179,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         if uh_reason is not None:
             raise CorruptedClusterError(uh_reason)
 
-        uh_reason = self._cloud_cluster._ensure_cluster_health()
-        if uh_reason is not None:
-            raise CorruptedClusterError(uh_reason)
+        self._cloud_cluster._ensure_cluster_health()
 
         expected_nodes = int(self.config_profile["nodes_count"])
         active, _, _ = self.get_redpanda_pods_presorted()
@@ -2921,7 +2922,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         allow_list = prepare_allow_list(allow_list)
 
-        _searchable_nodes = []
+        _searchable_nodes: list[tuple[str | None, Any]] = []
         for node in self.nodes:
             if self._skip_if_no_redpanda_log and not node.account.exists(
                 RedpandaService.STDOUT_STDERR_CAPTURE
@@ -4456,7 +4457,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         version_str = self.get_version(node)
         return ri_int_tuple(RI_VERSION_RE.findall(version_str)[0])
 
-    def get_version_if_not_head(self, node):
+    def get_version_if_not_head(self, node: ClusterNode) -> str | None:
         """
         Returns the redpanda binary version as a string if it differs from HEAD.
         I.e., if this node is running a previous version of redpanda.

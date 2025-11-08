@@ -59,7 +59,7 @@ public:
         return false;
     }
 
-    ss::future<state_transition> run_impl() override {
+    ss::future<state_transition> run_impl(ss::abort_source&) override {
         co_return state_transition{
           .desired_state = model::task_state::active,
           .reason = "Test task finished successfully"};
@@ -77,7 +77,7 @@ public:
 
     void update_config(const model::metadata&) override {}
 
-    ss::future<state_transition> run_impl() override {
+    ss::future<state_transition> run_impl(ss::abort_source&) override {
         co_return state_transition{
           .desired_state = model::task_state::active,
           .reason = "Test task finished successfully"};
@@ -361,8 +361,10 @@ TEST_P(task_manager_integration_test, controller_leadership_move_off) {
               std::string_view cb_task_name,
               task::state_change state_change) {
                 if (cb_link_name == link_name && cb_task_name == task_name) {
-                    change = std::move(state_change);
-                    cv.signal();
+                    if (state_change.cur == model::task_state::stopped) {
+                        change = std::move(state_change);
+                        cv.signal();
+                    }
                 }
             });
     auto remove_callback = ss::defer([this, notif_id, &link_name] {
@@ -406,7 +408,7 @@ public:
 
     void update_config(const model::metadata&) override {}
 
-    ss::future<state_transition> run_impl() override {
+    ss::future<state_transition> run_impl(ss::abort_source&) override {
         co_return state_transition{
           .desired_state = model::task_state::active,
           .reason = "Test task finished successfully"};

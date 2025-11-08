@@ -9,6 +9,7 @@
 
 import dataclasses
 import functools
+import json
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
@@ -221,6 +222,40 @@ def cluster(
 
         return extra_results
 
+    @staticmethod
+    def _check_injected_args_roundtrip(args: Any):
+        """Check that the injected args roundtrip through a JSON encode/decode, if
+        they do not, the test cannot be correctly parameterized on the command line."""
+
+        # In ducktape, "injected args", i.e. those passes with @matrix or
+        # @parametrize, annotations, should always use "json roundtrip-able"
+        # types, otherwise they cannot be re-invoked on the command line (or
+        # using a test suite file), as DT can only parse JSON arguments. Among
+        # other things, this means that PT retry will always fail to re-invoke
+        # test during retry and these tests will simply fail if they fail in their
+        # initial invocation.
+        #
+        # This means that you can only use types that are JSON de/serializable, such
+        # as: str, int, float, bool, None, list, dict.  You should not use any
+        # user defined types, or tuples, sets, enums, etc, as these do no roundtrip
+        # correctly. As a workaround, for tuples pass lists, for sets pass lists,
+        # and for any more complicated type, you can just pass a string identifier
+        # and look up the real type inside the test from a dict[str, MyComplexType].
+
+        try:
+            roundtripped = json.loads(json.dumps(args))
+        except Exception as e:
+            raise ValueError(
+                "Injected args cannot be serialized to JSON "
+                f"or do not roundtrip correctly: {args}"
+            ) from e
+
+        if roundtripped != args:
+            raise RuntimeError(  # see source (here) line for details
+                "Injected args do not roundtrip through JSON: "
+                f"original={args}, roundtripped={roundtripped}"
+            )
+
     def cluster_use_metadata_adder(f: Callable[..., Any]):
         Mark.mark(f, ClusterUseMetadata(**kwargs))
 
@@ -229,6 +264,9 @@ def cluster(
             # This decorator will only work on test classes that have a RedpandaService,
             # such as RedpandaTest subclasses
             assert hasattr(self, "redpanda")
+            assert hasattr(self, "test_context")
+
+            _check_injected_args_roundtrip(self.test_context.injected_args)
 
             # some checks only make sense on "vanilla" Redpanda nodes, i.e., those created on
             # VMs or docker containers inside a ducktape node, where we have ssh access, for

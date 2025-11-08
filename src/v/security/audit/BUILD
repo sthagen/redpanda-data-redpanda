@@ -38,6 +38,7 @@ redpanda_cc_library(
         "types.h",
     ],
     implementation_deps = [
+        "//src/v/features",
         "//src/v/kafka/data:record_batcher",
         "@abseil-cpp//absl/algorithm:container",
     ],

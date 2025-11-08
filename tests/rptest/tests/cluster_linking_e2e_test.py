@@ -188,6 +188,9 @@ class MultiClusterKafkaTest(MultiClusterTestBase):
 
 
 class ShadowLinkBasicTests(ShadowLinkTestBase):
+    def _expect_connect_error(self, expected_code: ConnectErrorCode):
+        return expect_exception(ConnectError, lambda e: e.code == expected_code)
+
     def _topics_are_present_in_target_cluster(self, topics):
         target_rpk = RpkTool(self.target_cluster.service)
         topics_in_target = {t for t in target_rpk.list_topics()}
@@ -305,22 +308,33 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
 
         links = self.list_links()
         assert len(links) == 1, f"Expected exactly one shadow link, got {len(links)}"
-        assert links[0].name == "test-link", (
-            f"Expected shadow link name to be 'test-link', got {links[0].name}"
+
+        test_link = links[0]
+        assert test_link.name == "test-link", (
+            f"Expected shadow link name to be 'test-link', got {test_link.name}"
         )
+
+        active = shadow_link_pb2.ShadowLinkState.SHADOW_LINK_STATE_ACTIVE
+        link_state = test_link.status.state
+        assert link_state == active, (
+            f"Expected shadow link state to be '{active}', got {link_state}"
+        )
+
+        link_uid = test_link.uid
+        assert link_uid, f"Expected some uid for shadow link"
 
         got_link = self.get_link(name="test-link")
         assert got_link.name == "test-link", (
             f"Expected shadow link name to be 'test-link', got {got_link.name}"
         )
 
-        try:
+        assert got_link.uid == link_uid, (
+            f"Expected shadow link uid to be '{link_uid}', got {got_link.uid}"
+        )
+
+        # Retrieving a non-existent link should fail
+        with self._expect_connect_error(ConnectErrorCode.NOT_FOUND):
             self.get_link(name="non-existent-link")
-            assert False, "Should not have gotten a non-existent link"
-        except ConnectError as e:
-            assert e.code == ConnectErrorCode.NOT_FOUND, (
-                f"Expected NOT_FOUND error code, got {e.code}"
-            )
 
         task_statuses = got_link.status.task_statuses
         self.logger.info(f"Shadow link task_statuses: {task_statuses}")
@@ -411,25 +425,14 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             f"Expected shadow link name to be 'test-link', got {shadow_link.name}"
         )
 
-        # Now attempt to create a second one with the same name
-        try:
+        # Attempting to create a second one with the same name should fail
+        with self._expect_connect_error(ConnectErrorCode.ALREADY_EXISTS):
             self.create_link("test-link")
-            assert False, (
-                "Should not have been able to create a second link with the same name"
-            )
-        except ConnectError as e:
-            assert e.code == ConnectErrorCode.ALREADY_EXISTS, (
-                f"Expected {ConnectErrorCode.ALREADY_EXISTS}, got {e.code}"
-            )
 
-        # Now create a second one with a different name
-        try:
+        # Attempting to create a second link should fail.
+        # Only one link is supported per cluster
+        with self._expect_connect_error(ConnectErrorCode.RESOURCE_EXHAUSTED):
             self.create_link("test-link-2")
-            assert False, "Should not have been able to create a second link"
-        except ConnectError as e:
-            assert e.code == ConnectErrorCode.RESOURCE_EXHAUSTED, (
-                f"Expected {ConnectErrorCode.RESOURCE_EXHAUSTED}, got {e.code}"
-            )
 
     @cluster(num_nodes=6)
     def test_topic_creation_in_target_cluster(self):
@@ -479,9 +482,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                 shadow_link_name="test-link", shadow_topic_name=t.name
             )
 
-        with expect_exception(
-            ConnectError, lambda e: e.code == ConnectErrorCode.NOT_FOUND
-        ):
+        with self._expect_connect_error(ConnectErrorCode.NOT_FOUND):
             self.get_shadow_topic(
                 shadow_link_name="test-link", shadow_topic_name="non-existent-topic"
             )
@@ -797,9 +798,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         # Now verify that we can delete the link when force=True
         self.delete_link(test_link, force=True)
 
-        with expect_exception(
-            ConnectError, lambda e: e.code == ConnectErrorCode.NOT_FOUND
-        ):
+        with self._expect_connect_error(ConnectErrorCode.NOT_FOUND):
             self.get_link(test_link)
 
     @cluster(num_nodes=6)
@@ -1255,10 +1254,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             :
         ] = bad_bootstrap_servers
 
-        with expect_exception(
-            ConnectError,
-            lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION,
-        ):
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
             self.create_link_with_request(req=bad_link_request)
 
         # Test invalid TLS settings, source cluster has no TLS
@@ -1273,10 +1269,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                 ),
             )
         )
-        with expect_exception(
-            ConnectError,
-            lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION,
-        ):
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
             self.create_link_with_request(req=bad_link_request)
 
         # Kill one broker on the source cluster to simulate partial connectivity
@@ -1300,10 +1293,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         rp._installer.install(rp.nodes, (25, 1))
         rp.for_nodes(rp.nodes, lambda node: rp.stop_node(node))
         rp.start(rp.nodes, clean_nodes=True)
-        with expect_exception(
-            ConnectError,
-            lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION,
-        ):
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
             self.create_link("link-to-incompatible-cluster")
 
     @cluster(
@@ -1555,6 +1545,72 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         assert shadow_topic.status.state == shadow_link_pb2.SHADOW_TOPIC_STATE_ACTIVE, (
             f"Expected shadow topic to be active, got {shadow_topic.status.state}"
         )
+
+
+class ShadowLinkingAuthzTests(ShadowLinkTestBase):
+    SUPERUSER_ERROR = "[permission_denied] Forbidden (superuser role required)"
+
+    def expect_superuser_error(self):
+        return expect_exception(
+            ConnectError,
+            lambda e: str(e) == self.SUPERUSER_ERROR,
+        )
+
+    @cluster(num_nodes=6)
+    def test_shadow_link_admin_api_authz(self):
+        topic = TopicSpec(name="source-topic", partition_count=3, replication_factor=1)
+        self.source_default_client().create_topic(topic)
+
+        link_name = "test-link"
+
+        shadow_link = self.create_link(link_name)
+        links = self.list_links()
+        assert len(links) == 1, (
+            f"Expected exactly one shadow link, got {len(links)}. Setup failed"
+        )
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.target_cluster_service.set_cluster_config(
+            values={"admin_api_require_auth": True}
+        )
+
+        # Verify that an unauthorised user can't access any of the sl api
+        with self.expect_superuser_error():
+            self.create_link(link_name)
+
+        with self.expect_superuser_error():
+            self.list_links()
+
+        with self.expect_superuser_error():
+            self.get_link(link_name)
+
+        with self.expect_superuser_error():
+            self.update_link(shadow_link)
+
+        with self.expect_superuser_error():
+            self.failover_link(link_name)
+
+        with self.expect_superuser_error():
+            self.get_shadow_topic(link_name, topic.name)
+
+        with self.expect_superuser_error():
+            self.list_shadow_topics(link_name)
+
+        with self.expect_superuser_error():
+            self.delete_link(link_name)
+
+        # And a spot check that a superuser can actually use them
+        with self.superuser_access():
+            links = self.list_links()
+            assert len(links) == 1, (
+                f"Expected exactly one shadow link, got {len(links)}."
+            )
 
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
@@ -2168,6 +2224,31 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg="Compaction state is not consistent between clusters",
         )
 
+    @cluster(num_nodes=9)
+    def test_with_restart(self):
+        self.create_link("test-link")
+
+        def restart_nodes(service):
+            for n in service.nodes:
+                service.restart_nodes([n])
+                time.sleep(5)
+
+        topic_1 = TopicSpec(
+            name="source-topic-1", partition_count=3, replication_factor=1
+        )
+        self.source_default_client().create_topic(topic_1)
+        self.start_producer_consumer(topic=topic_1.name, msg_size=128, msg_cnt=100000)
+        restart_nodes(self.target_cluster_service)
+        self.verify()
+
+        topic_2 = TopicSpec(
+            name="source-topic-2", partition_count=3, replication_factor=1
+        )
+        self.source_default_client().create_topic(topic_2)
+        self.start_producer_consumer(topic=topic_2.name, msg_size=128, msg_cnt=100000)
+        restart_nodes(self.source_cluster_service)
+        self.verify()
+
 
 class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
     def create_source_consumer(
@@ -2315,6 +2396,7 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                     n=1,
                     timeout=5,
                     offset="start",
+                    fetch_max_wait=2,
                     format=format,
                 )
             except Exception as e:
@@ -2341,6 +2423,9 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                 }
                 for p in g_desc.partitions:
                     if (p.topic, p.partition) not in t_partitions:
+                        self.logger.debug(
+                            f"Group {g_name} partition {p.topic}/{p.partition} not present in target_cluster"
+                        )
                         return False
                     if p.current_offset != t_partitions[(p.topic, p.partition)]:
                         self.logger.warn(

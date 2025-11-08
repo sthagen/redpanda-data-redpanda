@@ -38,6 +38,7 @@ redpanda_cc_library(
         "//src/v/cloud_roles",
         "//src/v/cloud_roles:types",
         "//src/v/config",
+        "//src/v/container:chunked_vector",
         "//src/v/container:intrusive",
         "//src/v/hashing:secure",
         "//src/v/http",

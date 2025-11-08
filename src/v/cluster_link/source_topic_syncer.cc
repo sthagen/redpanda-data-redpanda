@@ -229,7 +229,8 @@ model::enabled_t source_topic_syncer::is_enabled() const {
     return _config.is_enabled;
 }
 
-ss::future<task::state_transition> source_topic_syncer::run_impl() {
+ss::future<task::state_transition>
+source_topic_syncer::run_impl(ss::abort_source& as) {
     vlog(logger().trace, "Running auto topic sensor task");
 
     auto& cluster = get_link()->get_cluster_connection();
@@ -263,7 +264,7 @@ ss::future<task::state_transition> source_topic_syncer::run_impl() {
     kafka::api_version describe_configs_version;
     try {
         auto supported_api_versions = co_await cluster.supported_api_versions(
-          kafka::describe_configs_api::key);
+          kafka::describe_configs_api::key, as);
         if (!supported_api_versions.has_value()) {
             auto msg = ssx::sformat(
               "Failed to get supported API version for describe_configs");
@@ -292,6 +293,9 @@ ss::future<task::state_transition> source_topic_syncer::run_impl() {
           logger().debug,
           "Using describe_configs version: {}",
           describe_configs_version);
+    } catch (const ss::abort_requested_exception&) {
+        // Rethrow abort requested to allow caller to handle it
+        throw;
     } catch (const std::exception& e) {
         auto msg = ssx::sformat(
           "Failed to get supported API version for describe_configs: {}",
@@ -309,6 +313,7 @@ ss::future<task::state_transition> source_topic_syncer::run_impl() {
     // shadowing is active so the likelihood is small.
     sr_is_empty_t sr_is_empty{false};
     if (shadowing_entire_sr(_sr_config)) {
+        as.check();
         sr_is_empty = co_await check_if_schema_registry_is_empty();
     }
 
@@ -343,6 +348,8 @@ ss::future<task::state_transition> source_topic_syncer::run_impl() {
       std::views::keys(candidates_for_update),
       std::back_inserter(topics_to_describe));
 
+    as.check();
+
     kafka::describe_configs_response response;
     try {
         response = co_await describe_topics(
@@ -367,6 +374,8 @@ ss::future<task::state_transition> source_topic_syncer::run_impl() {
       commands, candidates_for_creation, response.data.results);
     enqueue_update_mirror_topic_commands(
       commands, candidates_for_update, response.data.results);
+
+    as.check();
 
     // Execute the commands
     co_await submit_commands(std::move(commands));

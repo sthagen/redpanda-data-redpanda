@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
+from typing import Optional
 
 from rptest.services.failure_injector import FailureSpec, make_failure_injector
 
@@ -46,6 +47,7 @@ class Finjector:
         self.custom_failures = []
         self.max_concurrent_failures = sys.maxsize
         self.configure_finjector(**kwargs)
+        self.error: Optional[Exception] = None
 
     def add_failure_spec(self, fspec):
         self.custom_failures.append(fspec)
@@ -89,6 +91,13 @@ class Finjector:
             if self.finjector_thread:
                 self.finjector_thread.join()
             self._cleanup(f_injector)
+            if self.error is not None:
+                self.redpanda.logger.error(
+                    f"Failure injector encountered error: {self.error}, failing the test"
+                )
+                raise Exception(
+                    "Failure injector thread encountered error"
+                ) from self.error
 
     @contextmanager
     def finj_manual(self):
@@ -133,8 +142,12 @@ class Finjector:
     def _failure_injector_loop(self, f_injector):
         while self.enable_loop:
             failure = self._next_failure()
-            f_injector.inject_failure(failure)
-
+            try:
+                f_injector.inject_failure(failure)
+            except Exception as e:
+                self.error = e
+                self.enable_loop = False
+                break
             delay = self.failure_delay_provier()
             if f_injector.cnt_in_flight() >= self.max_concurrent_failures:
                 delay = f_injector.time_till_next_recovery() + delay

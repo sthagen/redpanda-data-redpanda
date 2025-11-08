@@ -2228,11 +2228,11 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         )
 
     @cluster(num_nodes=3)
-    @parametrize(schemas=("avro", "avro_incompat", "AVRO"))
-    @parametrize(schemas=("proto3", "proto3_incompat", "PROTOBUF"))
-    @parametrize(schemas=("proto2", "proto2_incompat", "PROTOBUF"))
-    @parametrize(schemas=("json", "json_incompat", "JSON"))
-    def test_compatibility_messages(self, schemas):
+    @parametrize(schemas=["avro", "avro_incompat", "AVRO"])
+    @parametrize(schemas=["proto3", "proto3_incompat", "PROTOBUF"])
+    @parametrize(schemas=["proto2", "proto2_incompat", "PROTOBUF"])
+    @parametrize(schemas=["json", "json_incompat", "JSON"])
+    def test_compatibility_messages(self, schemas: list[str]):
         """
         Verify compatibility messages
         """

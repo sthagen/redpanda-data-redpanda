@@ -1057,6 +1057,32 @@ TEST(converter_test, update_scram_creds) {
     EXPECT_LE(pwd_updated, now + 5s);
 }
 
+TEST(converter_test, remove_scram_creds) {
+    cluster_link::model::metadata current_md;
+    current_md.name = cluster_link::model::name_t{"test-link"};
+    current_md.uuid = cluster_link::model::uuid_t{uuid_t::create()};
+    current_md.connection.bootstrap_servers = {
+      net::unresolved_address("localhost", 9092)};
+    current_md.connection.authn_config = cluster_link::model::scram_credentials{
+      .username = "old-user",
+      .password = "old-password",
+      .mechanism = "SCRAM-SHA-256",
+      .password_last_updated = model::to_timestamp(
+        std::chrono::system_clock::now() - 1h)};
+    admin::set_client_id(current_md);
+
+    proto::admin::update_shadow_link_request req;
+    serde::pb::field_mask mask;
+    mask.paths.emplace_back(
+      serde::pb::field_mask::path{
+        "configurations", "client_options", "authentication_configuration"});
+    req.set_update_mask(std::move(mask));
+
+    auto update_cmd = admin::create_update_cluster_link_config_cmd(
+      std::move(req), current_md.copy());
+    EXPECT_EQ(update_cmd.connection.authn_config, std::nullopt);
+}
+
 TEST(converter_test, do_not_update_scram_creds) {
     cluster_link::model::metadata current_md;
     current_md.name = cluster_link::model::name_t{"test-link"};

@@ -1481,14 +1481,16 @@ say_greeting_request::say_greeting_request() noexcept = default;
 say_greeting_request::say_greeting_request(say_greeting_request&&) noexcept = default;
 say_greeting_request& say_greeting_request::operator=(say_greeting_request&&) noexcept = default;
 say_greeting_request::~say_greeting_request() noexcept = default;
-ss::sstring& say_greeting_request::get_greeting() { return greeting_; }
-const ss::sstring& say_greeting_request::get_greeting() const { return greeting_; }
-void say_greeting_request::set_greeting(ss::sstring&& v) { greeting_ = std::move(v); }
+void say_greeting_request::clear_greeting() { _greeting_ = std::monostate{}; }
+bool say_greeting_request::has_greeting() const { return _greeting_.index() == 1; }
+ss::sstring& say_greeting_request::get_greeting() { return std::get<1>(_greeting_); }
+const ss::sstring& say_greeting_request::get_greeting() const { return std::get<1>(_greeting_); }
+void say_greeting_request::set_greeting(ss::sstring&& v) { _greeting_.emplace<1>(std::move(v)); }
 bool say_greeting_request::operator==(const say_greeting_request& other) const {
-  return (greeting_ == other.greeting_);
+  return (_greeting_ == other._greeting_);
 }
 fmt::iterator say_greeting_request::format_to(fmt::iterator it) const {
-  return fmt::format_to(it, "{{greeting: {}}}", greeting_);
+  return fmt::format_to(it, "{{_greeting: {}}}", _greeting_);
 }
 seastar::future<> say_greeting_request::from_proto(serde::pb::wire_format_parser* parser, say_greeting_request* self) {
   while (parser->bytes_left() > 0) {
@@ -1514,17 +1516,31 @@ seastar::future<say_greeting_request> say_greeting_request::from_proto(iobuf buf
 }
 seastar::future<iobuf> say_greeting_request::to_proto() const {
   iobuf buf;
-  // greeting
-  serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
-  serde::pb::write_length(static_cast<int32_t>(get_greeting().size()), &buf);
-  buf.append(get_greeting().data(), get_greeting().size());
+  // _greeting
+  switch (_greeting_.index()) {
+    case 1: {
+      // greeting
+      serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+      serde::pb::write_length(static_cast<int32_t>(get_greeting().size()), &buf);
+      buf.append(get_greeting().data(), get_greeting().size());
+      break;
+    }
+    default: // std::monostate do nothing
+  }
   co_return buf;
 }
 seastar::future<iobuf> say_greeting_request::to_json() const {
   serde::json::writer w;
   w.begin_object();
-  w.key("greeting");
-  w.string(get_greeting());
+  // _greeting
+  switch (_greeting_.index()) {
+    case 1: {
+      w.key("greeting");
+      w.string(get_greeting());
+      break;
+    }
+    default: // std::monostate do nothing
+  }
   w.end_object();
   co_return std::move(w).finish();
 }
@@ -1577,7 +1593,11 @@ void say_greeting_request::apply_field_path_from(std::span<const ss::sstring> pa
   }
   constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
     {"greeting", []([[maybe_unused]] auto path, auto* self, auto* update) {
-      self->set_greeting(std::move(update->get_greeting()));
+      if (update->has_greeting()) {
+        self->set_greeting(std::move(update->get_greeting()));
+      } else {
+        self->clear_greeting();
+      }
     }},
   });
   for (const auto& [name, apply] : fields) {
@@ -1612,6 +1632,9 @@ std::optional<serde::pb::field> say_greeting_request::lookup_field(std::span<con
   serde::pb::field found;
   switch (field_numbers.front()) {
   case 1: { // greeting
+    if (!has_greeting()) {
+      set_greeting({});
+    }
     found.value = get_greeting();
     break;
   }

@@ -76,6 +76,23 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "entry_stream_utils_death_test",
+    timeout = "short",
+    srcs = [
+        "entry_stream_utils_death_test.cc",
+    ],
+    # CORE-14523
+    flaky = True,
+    deps = [
+        "//src/v/bytes:iostream",
+        "//src/v/storage/mvlog",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "file_test",
     timeout = "short",
     srcs = [

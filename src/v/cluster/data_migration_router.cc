@@ -32,6 +32,8 @@
 
 namespace cluster::data_migrations {
 
+static constexpr std::chrono::milliseconds max_backoff(60);
+static constexpr std::chrono::milliseconds request_timeout(10);
 router::router(
   model::node_id self,
   group_proxy& group_proxy,
@@ -49,7 +51,7 @@ router::router(
       _get_group_offsets_handler,
       self,
       10,
-      100s)
+      max_backoff)
   , _set_group_offsets_handler{.parent = *this}
   , _set_group_offsets_router(
       shard_table,
@@ -59,7 +61,7 @@ router::router(
       _set_group_offsets_handler,
       self,
       10,
-      100s) {}
+      max_backoff) {}
 
 ss::future<get_group_offsets_reply>
 router::get_group_offsets(get_group_offsets_request&& req) {
@@ -68,7 +70,7 @@ router::get_group_offsets(get_group_offsets_request&& req) {
       std::move(req),
       model::ntp{
         model::kafka_namespace, model::kafka_consumer_offsets_topic, pid},
-      60s);
+      request_timeout);
 }
 
 ss::future<set_group_offsets_reply>
@@ -78,7 +80,7 @@ router::set_group_offsets(set_group_offsets_request&& req) {
       std::move(req),
       model::ntp{
         model::kafka_namespace, model::kafka_consumer_offsets_topic, pid},
-      60s);
+      request_timeout);
 };
 
 get_group_offsets_reply

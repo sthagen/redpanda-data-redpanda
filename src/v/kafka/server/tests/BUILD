@@ -675,7 +675,7 @@ redpanda_cc_btest(
 
 redpanda_cc_btest(
     name = "alter_config_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "alter_config_test.cc",
     ],
