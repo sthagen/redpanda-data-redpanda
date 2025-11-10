@@ -48,7 +48,7 @@ setup(
         #   Using a hash to unreleased version because we depend on new
         #   pluggable authentication mechanism.
         # "pyiceberg==0.9.1",
-        "pyiceberg@git+https://github.com/apache/iceberg-python@76a6451cd6863fe3d0e10d33da9b78af12e50111",
+        "pyiceberg@git+https://github.com/apache/iceberg-python@bb41a6dc7b7cd69bef67e11b989953c727a6193b",
         "adlfs==2024.7.0",
         "pyarrow",
         "pandas",

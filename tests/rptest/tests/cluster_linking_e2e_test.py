@@ -1671,7 +1671,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
 
         return self._check_partitions_match(rpk, shadow_topic_name, shadow_topic)
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     @matrix(
         shuffle_leadership=[True, False],
         source_cluster_spec=[
@@ -1714,7 +1714,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         )
 
     @cluster(
-        num_nodes=8,
+        num_nodes=7,
         log_allow_list=[
             re.compile(".*Failed to sync write_at_offset_stm for partition"),
         ],
@@ -1753,7 +1753,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             retry_on_exc=True,
         )
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     @matrix(
         source_cluster_spec=[
             SecondaryClusterSpec(ServiceType.REDPANDA),
@@ -1811,7 +1811,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             f"Instead got {link_state.status.shadow_topics}"
         )
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     def test_replication_with_transactions(self):
         topic = TopicSpec(name="source-topic", partition_count=1, replication_factor=3)
 
@@ -1955,7 +1955,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 err_msg=f"Timed out waiting for target to get start offset to be {o} in each partition",
             )
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     @ignore(
         with_failures=True,
         source_cluster_spec=SecondaryClusterSpec(
@@ -1990,7 +1990,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         with self._maybe_failure_injector(with_failures):
             self._perform_auto_prefix_trimming(topic.name, partition_count)
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     @matrix(
         timestamp_type=[
             "CreateTime",
@@ -2070,7 +2070,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             f"Timestamps don't match {expected_timestamps=} vs {consumed=}"
         )
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     def test_replication_with_large_msgs(self):
         msg_size = 2 * 1024 * 1024
         max_bytes = 10 * msg_size
@@ -2099,7 +2099,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         )
         self.verify()
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     def test_replication_with_compaction(self):
         self.logger.info(
             "Create a topic with compaction settings set but without compaction and tombstone removal enabled"
@@ -2224,7 +2224,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg="Compaction state is not consistent between clusters",
         )
 
-    @cluster(num_nodes=9)
+    @cluster(num_nodes=7)
     def test_with_restart(self):
         self.create_link("test-link")
 
@@ -3151,7 +3151,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             return False
         return validator(metrics)
 
-    @cluster(num_nodes=10)
+    @cluster(num_nodes=7)
     def test_link_metrics(self):
         topic_1 = TopicSpec(
             name="test-topic-1", partition_count=3, replication_factor=1

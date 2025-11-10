@@ -192,11 +192,7 @@ ss::future<std::optional<device_throughput>> get_storage_device_throughput() {
 } // namespace
 
 io_resources::io_resources(ss::scheduling_group sg)
-  : _max_concurrent_hydrations_per_shard(
-      config::shard_local_cfg()
-        .cloud_storage_max_concurrent_hydrations_per_shard.bind())
-  , _hydration_units(max_parallel_hydrations(), "cst_hydrations")
-  , _throughput_limit(
+  : _throughput_limit(
       // apply shard limit to downloads
       get_hard_throughput_limit().download_shard_throughput_limit,
       "ts-segment-downloads")
@@ -205,12 +201,6 @@ io_resources::io_resources(ss::scheduling_group sg)
   , _relative_throughput(
       config::shard_local_cfg().cloud_storage_throughput_limit_percent.bind())
   , _scheduling_group(sg) {
-    _max_concurrent_hydrations_per_shard.watch([this]() {
-        // The 'max_connections' parameter can't be changed without restarting
-        // redpanda.
-        _hydration_units.set_capacity(max_parallel_hydrations());
-    });
-
     auto reset_tp = [this] {
         ssx::spawn_with_gate(_gate, [this] { return update_throughput(); });
     };
@@ -224,7 +214,6 @@ io_resources::io_resources(ss::scheduling_group sg)
 ss::future<> io_resources::stop() {
     log.debug("Stopping cloud_io::io_resources...");
     _throughput_limit.shutdown();
-    _hydration_units.broken();
 
     co_await _gate.close();
     log.debug("Stopped cloud_io::io_resources...");
@@ -242,22 +231,6 @@ ss::future<> io_resources::start() {
 
 ss::scheduling_group io_resources::get_scheduling_group() const {
     return _scheduling_group;
-}
-
-size_t io_resources::max_parallel_hydrations() const {
-    auto max_connections
-      = config::shard_local_cfg().cloud_storage_max_connections();
-    auto n_readers = config::shard_local_cfg()
-                       .cloud_storage_max_partition_readers_per_shard();
-    if (n_readers) {
-        return std::min(
-          static_cast<unsigned>(max_connections), n_readers.value());
-    }
-    return max_connections / 2;
-}
-
-size_t io_resources::current_ongoing_hydrations() const {
-    return _hydration_units.outstanding();
 }
 
 ss::future<> io_resources::set_disk_max_bandwidth(size_t tput) {
@@ -300,11 +273,6 @@ void io_resources::set_net_max_bandwidth(size_t tput) {
           "Disabling cloud storage download throttling on this shard");
         _throttling_disabled = true;
     }
-}
-
-ss::future<ssx::semaphore_units> io_resources::get_hydration_units(size_t n) {
-    auto u = co_await _hydration_units.get_units(n);
-    co_return std::move(u);
 }
 
 ss::input_stream<char> io_resources::throttle_download(

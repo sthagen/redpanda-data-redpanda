@@ -28,11 +28,13 @@ from rptest.services.redpanda import (
 )
 from rptest.services.utils import BadLogLines, VersionAndLines
 
+from ducktape.tests.test import TestContext
+
 LOG_ALLOW_LIST = ["No such file or directory", "cannot be started once stopped"]
 
 
 class LocalPayloadDirectory:
-    def __init__(self, path=Path("/tmp/custom_payloads")):
+    def __init__(self, path: Path = Path("/tmp/custom_payloads")):
         """
         Used to enable the use of a set of custom payloads in OMB.
         Note that each payload needs to be the same size.
@@ -80,7 +82,10 @@ class OpenMessagingBenchmarkWorkers(Service):
     }
 
     def __init__(
-        self, ctx, num_workers=None, nodes: Optional[list[ClusterNode]] = None
+        self,
+        ctx: TestContext,
+        num_workers: int | None = None,
+        nodes: Optional[list[ClusterNode]] = None,
     ):
         """
         :param num_workers: allocate this many nodes as workers (mutually exclusive with `nodes`)
@@ -97,7 +102,7 @@ class OpenMessagingBenchmarkWorkers(Service):
             assert len(nodes) > 0
             self.nodes = nodes
 
-    def start_node(self, node, timeout_sec=60, **kwargs):
+    def start_node(self, node: ClusterNode, timeout_sec: int = 60, **kwargs: Any):
         self.logger.info(
             "Starting Open Messaging Benchmark worker node on %s", node.account.hostname
         )
@@ -163,13 +168,13 @@ class OpenMessagingBenchmarkWorkers(Service):
         for node in self.nodes:
             self.raise_on_bad_log_lines(node)
 
-    def stop_node(self, node, allow_fail=False, **_):
+    def stop_node(self, node: ClusterNode, allow_fail: bool = False, **_: Any):
         self.logger.info(
             f"Stopping Open Messaging Benchmark worker node on {node.account.hostname}"
         )
         node.account.kill_process("openmessaging-benchmark", allow_fail=allow_fail)
 
-    def clean_node(self, node, **_):
+    def clean_node(self, node: ClusterNode, **_: Any):
         self.logger.info(
             f"Cleaning Open Messaging Benchmark worker node on {node.account.hostname}"
         )
@@ -218,14 +223,14 @@ class OpenMessagingBenchmark(Service):
 
     def __init__(
         self,
-        ctx,
+        ctx: TestContext,
         redpanda: RedpandaService | RedpandaServiceCloud,
         driver: str | dict[str, Any] = "SIMPLE_DRIVER",
         workload: str | WorkloadTuple = "SIMPLE_WORKLOAD",
         node: ClusterNode | None = None,
-        worker_nodes=None,
-        topology="swarm",
-        num_workers=NUM_WORKERS,
+        worker_nodes: list[ClusterNode] | None = None,
+        topology: str = "swarm",
+        num_workers: int = NUM_WORKERS,
         local_payload_dir: LocalPayloadDirectory | None = None,
     ):
         """
@@ -279,12 +284,12 @@ class OpenMessagingBenchmark(Service):
             "Using driver: %s, workload: %s", self.driver["name"], self.workload["name"]
         )
 
-    def _create_benchmark_workload_file(self, node):
+    def _create_benchmark_workload_file(self, node: ClusterNode):
         conf = self.render("omb_workload.yaml", **self.workload)
         self.logger.info("Rendered workload config: \n %s", conf)
         node.account.create_file(OpenMessagingBenchmark.WORKLOAD_FILE, conf)
 
-    def _create_benchmark_driver_file(self, node):
+    def _create_benchmark_driver_file(self, node: ClusterNode):
         # if testing redpanda cloud, override with default superuser
         if isinstance(self.redpanda, RedpandaServiceCloud):
             u, p, m = self.redpanda._superuser
@@ -305,11 +310,11 @@ class OpenMessagingBenchmark(Service):
         )
         self.workers.start()
 
-    def _copy_custom_payload_dir_to_node(self, node):
+    def _copy_custom_payload_dir_to_node(self, node: ClusterNode):
         assert self._local_payload_dir is not None
         local_payload_dir = self._local_payload_dir.path
 
-        payload_file_list = []
+        payload_file_list: list[str] = []
         for file in os.listdir(local_payload_dir):
             file_path = os.path.join(local_payload_dir, file)
             if file.endswith("data") and not os.path.isdir(file_path):
@@ -335,7 +340,7 @@ class OpenMessagingBenchmark(Service):
         """Metrics from the results of an OMB run."""
         return self._metrics
 
-    def start_node(self, node, timeout_sec=5 * 60, **kwargs):
+    def start_node(self, node: ClusterNode, timeout_sec: int = 5 * 60, **kwargs: Any):
         idx = self.idx(node)
         self.logger.info(
             "Open Messaging Benchmark: benchmark node - %d on %s",
@@ -429,7 +434,9 @@ class OpenMessagingBenchmark(Service):
         if bad_lines:
             raise BadLogLines(bad_lines)
 
-    def check_succeed(self, validate_metrics=True, raise_exceptions=True):
+    def check_succeed(
+        self, validate_metrics: bool = True, raise_exceptions: bool = True
+    ):
         """
         Evaluates the success of a benchmark test based on various metrics and conditions.
 
@@ -488,7 +495,7 @@ class OpenMessagingBenchmark(Service):
         self,
         results: dict[str, Any],
         expected_max_latencies: dict[str, float],
-        max_spike_width=1,
+        max_spike_width: int = 1,
     ):
         """
         Detects and evaluates latency spikes in multiple series of latency data based on predefined thresholds.
@@ -514,10 +521,10 @@ class OpenMessagingBenchmark(Service):
             - If any sustained high latency is detected, the function advises against a retry regardless of other findings.
         """
 
-        def detect_spikes_in_series(latency_series, expected_max):
+        def detect_spikes_in_series(latency_series: list[float], expected_max: float):
             high_latency_start = None
             consecutive_high_latency_count = 0
-            isolated_spikes = []
+            isolated_spikes: list[tuple[int, int]] = []
             sustained_detected = False  # Track if sustained high latency is detected
 
             for i, value in enumerate(latency_series):
@@ -551,6 +558,7 @@ class OpenMessagingBenchmark(Service):
                 self.logger.debug(
                     f"Ending isolated spike detected from index {high_latency_start} to {len(latency_series) - 1}. Values: {latency_series[high_latency_start:]}"
                 )
+                assert high_latency_start is not None
                 isolated_spikes.append((high_latency_start, len(latency_series) - 1))
 
             return isolated_spikes, sustained_detected
@@ -595,7 +603,7 @@ class OpenMessagingBenchmark(Service):
 
         return should_retry
 
-    def wait_node(self, node, timeout_sec=None):
+    def wait_node(self, node: ClusterNode, timeout_sec: float | None = None):
         assert timeout_sec is not None
         process_pid = node.account.java_pids("benchmark")
         if len(process_pid) == 0:
@@ -612,7 +620,7 @@ class OpenMessagingBenchmark(Service):
         except Exception:
             return False
 
-    def stop_node(self, node, allow_fail=False, **_):
+    def stop_node(self, node: ClusterNode, allow_fail: bool = False, **_: Any):
         if self.workers is not None:
             self.workers.stop()
         self.logger.info(
@@ -620,7 +628,7 @@ class OpenMessagingBenchmark(Service):
         )
         node.account.kill_process("openmessaging-benchmark", allow_fail=allow_fail)
 
-    def clean_node(self, node, **_):
+    def clean_node(self, node: ClusterNode, **_: Any):
         self.logger.info(
             f"Cleaning Open Messaging Benchmark node on {node.account.hostname}"
         )

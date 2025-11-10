@@ -35,10 +35,10 @@ struct storage_e2e_fixture : public redpanda_thread_fixture {
                       tests::kv_t::sequence(i, 1));
                 }
             }
-            *incomplete -= 1;
         } catch (...) {
             eptr = std::current_exception();
         }
+        *incomplete -= 1;
         co_await producer.stop();
         if (eptr) {
             std::rethrow_exception(eptr);

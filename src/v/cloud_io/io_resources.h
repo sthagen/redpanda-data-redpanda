@@ -34,8 +34,6 @@ public:
     ss::future<> start();
     ss::future<> stop();
 
-    ss::future<ssx::semaphore_units> get_hydration_units(size_t n);
-
     /// Throttles the given stream such that calls to get on the resulting
     /// stream will wait some time if the underlying `_throughput_limit` is
     /// under stress.
@@ -50,11 +48,6 @@ public:
     ss::scheduling_group get_scheduling_group() const;
 
 private:
-    config::binding<std::optional<uint32_t>>
-      _max_concurrent_hydrations_per_shard;
-
-    size_t max_parallel_hydrations() const;
-
     /// Set bandwidth for tiered-storage scheduling_group
     ss::future<> set_disk_max_bandwidth(size_t tput);
 
@@ -66,8 +59,6 @@ private:
 
     /// Gate for background eviction
     ss::gate _gate;
-
-    adjustable_semaphore _hydration_units;
 
     token_bucket<> _throughput_limit;
     config::binding<std::optional<size_t>> _throughput_shard_limit_config;

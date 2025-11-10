@@ -171,6 +171,7 @@ class ClusterLinkingProgressVerifier:
         )
         self.producer.start(clean=True)
         self.producer.wait_for_acks(10, 40, 1)
+        self.producer.wait_for_offset_map()
         readers = 8
 
         self.source_consumer = KgoVerifierConsumerGroupConsumer(
@@ -181,6 +182,7 @@ class ClusterLinkingProgressVerifier:
             readers=readers,
             use_transactions=self.use_transactions,
             group_name=f"source-cg-{self.topic}",
+            nodes=self.preallocated_nodes,
             continuous=True,
             **self.consumer_properties,
         )

@@ -301,7 +301,7 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
             self.total_node_ops = 5
             self.partition_count = 12
 
-    @cluster(num_nodes=14)
+    @cluster(num_nodes=11)
     @matrix(failures=[False, True])
     def test_node_operations(self, failures: bool):
         self.setup_scale()

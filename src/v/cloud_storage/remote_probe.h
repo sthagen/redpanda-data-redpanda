@@ -11,10 +11,8 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_io/io_resources.h"
 #include "cloud_storage/types.h"
 #include "metrics/metrics.h"
-#include "model/fundamental.h"
 #include "utils/log_hist.h"
 
 #include <seastar/core/metrics_registration.hh>
@@ -33,8 +31,7 @@ public:
     explicit remote_probe(
       remote_metrics_disabled disabled,
       remote_metrics_disabled public_disabled,
-      materialized_resources&,
-      const cloud_io::io_resources&);
+      materialized_resources&);
     remote_probe(const remote_probe&) = delete;
     remote_probe& operator=(const remote_probe&) = delete;
     remote_probe(remote_probe&&) = delete;

@@ -23,7 +23,7 @@ class ClusterLinkingScaleTest(ShadowLinkPreAllocTestBase):
             partition_memory_reserve_percentage=ScaleParameters.DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
         )
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=7)
     @matrix(topic_count=[1, 5, 10])
     def test_many_partitions(self, topic_count: int):
         topics = [

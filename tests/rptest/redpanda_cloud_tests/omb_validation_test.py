@@ -54,20 +54,25 @@ class OMBValidationTest(RedpandaCloudTest):
         "message_size": 1 * KiB,
         "payload_file": "payload/payload-1Kb.data",
         "consumer_backlog_size_GB": 0,
-        "test_duration_minutes": 5,
-        "warmup_duration_minutes": 5,
+        "test_duration_minutes": 2,
+        "warmup_duration_minutes": 2,
     }
 
+    # The cloud tests are even more noisy than other OMB tests, these days we
+    # monitor them using our CPD infra so we don't want to have CI fail because
+    # of spikes. Hence, we put the actual test fail limits very high.
+    LATENCY_FAIL_FUDGE_FACTOR = 5
+
     DEFAULT_EXPECTED_MAX_LATENCIES = {
-        OMBSampleConfigurations.E2E_LATENCY_50PCT: 20.0,
-        OMBSampleConfigurations.E2E_LATENCY_75PCT: 25.0,
-        OMBSampleConfigurations.E2E_LATENCY_99PCT: 60.0,
-        OMBSampleConfigurations.E2E_LATENCY_999PCT: 100.0,
+        OMBSampleConfigurations.E2E_LATENCY_50PCT: 20.0 * LATENCY_FAIL_FUDGE_FACTOR,
+        OMBSampleConfigurations.E2E_LATENCY_75PCT: 25.0 * LATENCY_FAIL_FUDGE_FACTOR,
+        OMBSampleConfigurations.E2E_LATENCY_99PCT: 60.0 * LATENCY_FAIL_FUDGE_FACTOR,
+        OMBSampleConfigurations.E2E_LATENCY_999PCT: 100.0 * LATENCY_FAIL_FUDGE_FACTOR,
     }
 
     AZURE_EXPECTED_MAX_LATENCIES = DEFAULT_EXPECTED_MAX_LATENCIES | {
-        OMBSampleConfigurations.E2E_LATENCY_99PCT: 75.0,
-        OMBSampleConfigurations.E2E_LATENCY_999PCT: 175.0,
+        OMBSampleConfigurations.E2E_LATENCY_99PCT: 75.0 * LATENCY_FAIL_FUDGE_FACTOR,
+        OMBSampleConfigurations.E2E_LATENCY_999PCT: 175.0 * LATENCY_FAIL_FUDGE_FACTOR,
     }
 
     # Mapping of result keys from specific series to their expected max latencies

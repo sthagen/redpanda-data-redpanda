@@ -361,7 +361,7 @@ ss::future<download_result> remote::download_stream(
   transfer_details transfer_details,
   const try_consume_stream& cons_str,
   const std::string_view stream_label,
-  bool acquire_hydration_units,
+  [[maybe_unused]] bool acquire_hydration_units,
   std::optional<cloud_storage_clients::http_byte_range> byte_range,
   std::function<void(size_t)> throttle_metric_ms_cb) {
     const auto& path = transfer_details.key;
@@ -370,11 +370,6 @@ ss::future<download_result> remote::download_stream(
     auto guard = _gate.hold();
     retry_chain_node fib(&transfer_details.parent_rtc);
     retry_chain_logger ctxlog(log, fib);
-
-    ssx::semaphore_units hu;
-    if (acquire_hydration_units) {
-        hu = co_await _resources->get_hydration_units(1);
-    }
 
     auto fut = co_await [this, &fib, &transfer_details] {
         transfer_details.on_client_acquire();

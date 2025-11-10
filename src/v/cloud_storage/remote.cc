@@ -82,8 +82,7 @@ remote::remote(
       remote_metrics_disabled(
         static_cast<bool>(std::visit(
           [](auto&& cfg) { return cfg.disable_public_metrics; }, conf))),
-      *_materialized,
-      _io.local().resources()) {}
+      *_materialized) {}
 
 remote::remote(ss::sharded<cloud_io::remote>& io, const configuration& conf)
   : remote(io, conf.client_config) {}
@@ -391,34 +390,36 @@ ss::future<download_result> remote::download_stream(
   std::optional<cloud_storage_clients::http_byte_range> byte_range) {
     _as.check();
     auto holder = _gate.hold();
-    return io()
-      .download_stream(
-        {
-          // TODO: these metrics are for segments. Though this method appears to
-          // only be used for inventory downlaods.
-          .bucket = bucket,
-          .key = cloud_storage_clients::object_key{path()},
-          .parent_rtc = parent,
-          .success_cb = [this] { _probe.successful_download(); },
-          .success_size_cb =
-            [this](size_t sz) { _probe.register_download_size(sz); },
-          .failure_cb = [&metrics] { metrics.failed_download_metric(); },
-          .backoff_cb = [&metrics] { metrics.download_backoff_metric(); },
-          .client_acquire_cb = [this] { _probe.client_acquisition(); },
-          // TODO: pass type in as an argument.
-          .on_req_cb = make_notify_cb(
-            api_activity_type::segment_download, parent),
-          .measure_latency_cb =
-            [&metrics] { return metrics.download_latency_measurement(); },
-        },
-        cons_str,
-        stream_label,
-        false,
-        byte_range,
-        [this](size_t ms) {
-            _materialized->get_read_path_probe().download_throttled(ms);
-        })
-      .then([h = std::move(holder)](download_result r) { return r; });
+
+    ssx::semaphore_units hu;
+    hu = co_await materialized().get_hydration_units(1);
+
+    co_return co_await io().download_stream(
+      {
+        // TODO: these metrics are for segments. Though this method appears to
+        // only be used for inventory downlaods.
+        .bucket = bucket,
+        .key = cloud_storage_clients::object_key{path()},
+        .parent_rtc = parent,
+        .success_cb = [this] { _probe.successful_download(); },
+        .success_size_cb =
+          [this](size_t sz) { _probe.register_download_size(sz); },
+        .failure_cb = [&metrics] { metrics.failed_download_metric(); },
+        .backoff_cb = [&metrics] { metrics.download_backoff_metric(); },
+        .client_acquire_cb = [this] { _probe.client_acquisition(); },
+        // TODO: pass type in as an argument.
+        .on_req_cb = make_notify_cb(
+          api_activity_type::segment_download, parent),
+        .measure_latency_cb =
+          [&metrics] { return metrics.download_latency_measurement(); },
+      },
+      cons_str,
+      stream_label,
+      false,
+      byte_range,
+      [this](size_t ms) {
+          _materialized->get_read_path_probe().download_throttled(ms);
+      });
 }
 
 ss::future<download_result> remote::download_segment(

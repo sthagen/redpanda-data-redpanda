@@ -99,7 +99,9 @@ class OMBSampleConfigurations:
     }
 
     @staticmethod
-    def validate_metrics(metrics, validator: ValidatorDict, raise_exceptions=True):
+    def validate_metrics(
+        metrics: dict[str, Any], validator: ValidatorDict, raise_exceptions: bool = True
+    ):
         """Validates some predefined metrics rules against the metrics data.
 
         Args:
@@ -115,7 +117,7 @@ class OMBSampleConfigurations:
 
         results: list[str] = []
 
-        def kv_str(k, v):
+        def kv_str(k: str, v: Any) -> str:
             return f"Metric {k}, value {v}, "
 
         for key in validator.keys():
@@ -245,7 +247,7 @@ class OMBSampleConfigurations:
 
     # ------- Workload configurations --------
 
-    TOPIC1_PART100_1KB_4PROD_1250K_RATE = {
+    TOPIC1_PART100_1KB_4PROD_1250K_RATE: dict[str, Any] = {
         "name": "100-partitions-1000K-rate-4-producer",
         "topics": 1,
         "partitions_per_topic": 100,
@@ -258,7 +260,7 @@ class OMBSampleConfigurations:
         "warmup_duration_minutes": 5,
     }
 
-    SIMPLE_WORKLOAD = {
+    SIMPLE_WORKLOAD: dict[str, Any] = {
         "name": "Simple-workload-config",
         "topics": 1,
         "partitions_per_topic": 1,
@@ -271,7 +273,7 @@ class OMBSampleConfigurations:
         "warmup_duration_minutes": 1,
     }
 
-    DEDICATED_NODE_WORKLOAD = {
+    DEDICATED_NODE_WORKLOAD: dict[str, Any] = {
         "name": "Dedicated-node-workload",
         "topics": 1,
         "partitions_per_topic": 30,
@@ -285,7 +287,7 @@ class OMBSampleConfigurations:
     }
 
     # Release certifying smoke test we use for perf run.
-    RELEASE_CERT_SMOKE_LOAD_625k = {
+    RELEASE_CERT_SMOKE_LOAD_625k: dict[str, Any] = {
         "name": "SmokeLoad625kReleaseCert",
         "topics": 1,
         "partitions_per_topic": 100,
@@ -307,7 +309,7 @@ class OMBSampleConfigurations:
     # underlying OS command fails. As a workaround we pass these names as
     # the test parameters and use them as keys to lookup the corresponding
     # driver and workload combination.
-    DRIVERS = {
+    DRIVERS: dict[str, dict[str, Any]] = {
         "SIMPLE_DRIVER": SIMPLE_DRIVER,
         "ACK_ALL_GROUP_LINGER_1MS": ACK_ALL_GROUP_LINGER_1MS,
         "ACK_ALL_GROUP_LINGER_1MS_WITH_IDEMPOTENCE": ACK_ALL_GROUP_LINGER_1MS_WITH_IDEMPOTENCE,

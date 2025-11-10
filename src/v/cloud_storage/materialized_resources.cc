@@ -57,8 +57,12 @@ materialized_resources::materialized_resources()
       ss::make_shared<materialized_manifest_cache>(
         config::shard_local_cfg().cloud_storage_manifest_cache_size()))
   , _cache_carryover_bytes(
+      config::shard_local_cfg().cloud_storage_cache_trim_carryover_bytes.bind())
+
+  , _max_concurrent_hydrations_per_shard(
       config::shard_local_cfg()
-        .cloud_storage_cache_trim_carryover_bytes.bind()) {
+        .cloud_storage_max_concurrent_hydrations_per_shard.bind())
+  , _hydration_units(max_parallel_hydrations(), "cst_hydrations") {
     auto update_max_mem = [this]() {
         // Update memory capacity to accommodate new max number of segment
         // readers
@@ -124,6 +128,12 @@ materialized_resources::materialized_resources()
               _carryover_units.has_value() ? _carryover_units->count() : 0);
         });
     }
+
+    _max_concurrent_hydrations_per_shard.watch([this]() {
+        // The 'max_connections' parameter can't be changed without restarting
+        // redpanda.
+        _hydration_units.set_capacity(max_parallel_hydrations());
+    });
 }
 
 ts_read_path_probe& materialized_resources::get_read_path_probe() {
@@ -138,6 +148,8 @@ ss::future<> materialized_resources::stop() {
     _stm_timer.cancel();
 
     _mem_units.broken();
+
+    _hydration_units.broken();
 
     co_await _gate.close();
     cst_log.debug("Stopped materialized_segments...");
@@ -494,6 +506,28 @@ void materialized_resources::maybe_trim_segment(
             st.readers.pop_front();
         }
     }
+}
+
+ss::future<ssx::semaphore_units>
+materialized_resources::get_hydration_units(size_t n) {
+    auto u = co_await _hydration_units.get_units(n);
+    co_return std::move(u);
+}
+
+size_t materialized_resources::max_parallel_hydrations() const {
+    auto max_connections
+      = config::shard_local_cfg().cloud_storage_max_connections();
+    auto n_readers = config::shard_local_cfg()
+                       .cloud_storage_max_partition_readers_per_shard();
+    if (n_readers) {
+        return std::min(
+          static_cast<unsigned>(max_connections), n_readers.value());
+    }
+    return max_connections / 2;
+}
+
+size_t materialized_resources::current_ongoing_hydrations() const {
+    return _hydration_units.outstanding();
 }
 
 } // namespace cloud_storage

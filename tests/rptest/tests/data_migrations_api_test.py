@@ -229,16 +229,24 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             err_msg=f"Expected migration with id {migration_id} is absent",
         )
 
-    def assure_not_migratable(self, topic: TopicSpec, expected_response=None):
-        out_migration = OutboundDataMigration(
-            [make_namespaced_topic(topic.name)], consumer_groups=[]
-        )
+    def assure_not_migratable(
+        self, topic: TopicSpec | None, group: str | None, expected_response
+    ):
+        topics = [make_namespaced_topic(topic.name)] if topic is not None else []
+        groups = [group] if group is not None else []
+        out_migration = OutboundDataMigration(topics=topics, consumer_groups=groups)
         try:
             self.create_and_wait(out_migration)
-            assert False
+            assert False, (
+                f"Expected migration creation to fail with {expected_response}"
+            )
         except requests.exceptions.HTTPError as e:
-            if expected_response is not None:
-                assert e.response.json() == expected_response
+            assert e.response is not None, (
+                f"Expected error response to be present in exception {e}"
+            )
+            assert e.response.json() == expected_response, (
+                f"Expected error response: {expected_response}; actual: {e.response.json()}; "
+            )
 
     @cluster(num_nodes=3, log_allow_list=MIGRATION_LOG_ALLOW_LIST)
     def test_listing_inexistent_migration(self):
@@ -248,7 +256,9 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
     def test_outbound_missing_topic(self):
         topic = TopicSpec(partition_count=3)
         self.assure_not_migratable(
-            topic, {"message": "Topic does not exists", "code": 400}
+            topic=topic,
+            group=None,
+            expected_response={"message": "Topic does not exists", "code": 400},
         )
 
     @cluster(
@@ -267,8 +277,31 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         )
         self.create_and_wait(out1)
         self.assure_not_migratable(
-            topic,
-            {
+            topic=topic,
+            group=None,
+            expected_response={
+                "message": "Requested operation can not be executed as the resource is undergoing data migration",
+                "code": 400,
+            },
+        )
+
+    @cluster(
+        num_nodes=3,
+        log_allow_list=MIGRATION_LOG_ALLOW_LIST
+        + [
+            "Requested operation can not be executed as the resource is undergoing data migration"
+        ],
+    )
+    def test_conflicting_group_migrations(self):
+        topic = TopicSpec(partition_count=3)
+        self.client().create_topic(topic)
+        self.wait_partitions_appear([topic])
+        out1 = OutboundDataMigration([], consumer_groups=["group1"])
+        self.create_and_wait(out1)
+        self.assure_not_migratable(
+            topic=None,
+            group="group2",
+            expected_response={
                 "message": "Requested operation can not be executed as the resource is undergoing data migration",
                 "code": 400,
             },
@@ -307,8 +340,9 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             {"cloud_storage_enable_remote_write": True}, expect_restart=True
         )
         self.assure_not_migratable(
-            topic,
-            {
+            topic=topic,
+            group=None,
+            expected_response={
                 "message": "Data migration contains resources that are not eligible",
                 "code": 400,
             },
@@ -365,7 +399,9 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         self.redpanda.set_cluster_config({param_to_disable: False}, expect_restart=True)
         topic = TopicSpec(partition_count=3)
         self.client().create_topic(topic)
-        self.assure_not_migratable(topic, expected_error)
+        self.assure_not_migratable(
+            topic=topic, group=None, expected_response=expected_error
+        )
         # for scrubbing to complete
         self.redpanda.set_cluster_config({param_to_disable: True}, expect_restart=True)
 
@@ -521,8 +557,9 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             time.sleep(2)  # make sure test harness can see Redpanda is live
             self.toggle_license(on=False)
             self.assure_not_migratable(
-                topics[0],
-                {
+                topic=topics[0],
+                group=None,
+                expected_response={
                     "message": "Unexpected cluster error: Requested feature is disabled",
                     "code": 500,
                 },

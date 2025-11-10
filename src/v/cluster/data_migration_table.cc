@@ -264,14 +264,10 @@ migrations_table::validate_migrated_resources(
         }
     }
 
-    for (const auto& group : idm.groups) {
-        if (_resources.local().is_already_migrated(group)) {
-            return {
-              {errc::resource_is_being_migrated,
-               ssx::sformat(
-                 "group with name {} is already part of active migration",
-                 group)}};
-        }
+    if (!idm.groups.empty() && _resources.local().is_any_group_migrated()) {
+        return {
+          {errc::resource_is_being_migrated,
+           "cannot migrate groups when there are active group migrations"}};
     }
 
     return std::nullopt;
@@ -315,14 +311,10 @@ migrations_table::validate_migrated_resources(
         }
     }
 
-    for (const auto& group : odm.groups) {
-        if (_resources.local().is_already_migrated(group)) {
-            return {
-              {errc::resource_is_being_migrated,
-               ssx::sformat(
-                 "group with name {} is already part of active migration",
-                 group)}};
-        }
+    if (!odm.groups.empty() && _resources.local().is_any_group_migrated()) {
+        return {
+          {errc::resource_is_being_migrated,
+           "cannot migrate groups when there are active group migrations"}};
     }
 
     return std::nullopt;

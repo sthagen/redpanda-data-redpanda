@@ -4434,7 +4434,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         rp_install_path_root = self.rp_install_path()
         return f"{rp_install_path_root}/libexec/{name}"
 
-    def get_version(self, node):
+    def get_version(self, node: ClusterNode) -> str:
         """
         Returns the redpanda binary version as a string.
         """

@@ -337,11 +337,11 @@ class DatalakeDLQTest(RedpandaTest):
             verifier.start()
             verifier.wait()
 
-    @cluster(num_nodes=3)
+    @cluster(num_nodes=4)
     @matrix(
         cloud_storage_type=supported_storage_types(),
         # Lightweight matrix as we only care about custom suffix behavior here.
-        query_engine=[QueryEngineType.DUCKDB_PY],
+        query_engine=[QueryEngineType.SPARK],
         catalog_type=[filesystem_catalog_type()],
     )
     def test_dlq_table_for_invalid_records_custom_suffix(

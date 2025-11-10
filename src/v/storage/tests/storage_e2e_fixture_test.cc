@@ -27,6 +27,9 @@
 using namespace std::chrono_literals;
 
 namespace {
+
+ss::logger test_logger("storage_e2e_fixture_test");
+
 ss::future<> force_roll_log(storage::disk_log_impl* log) {
     try {
         co_await log->force_roll();
@@ -65,11 +68,21 @@ FIXTURE_TEST(test_compaction_segment_ms, storage_e2e_fixture) {
     auto partition = app.partition_manager.local().get(ntp);
     auto* log = dynamic_cast<storage::disk_log_impl*>(partition->log().get());
 
+    // Apply segment_ms while produces are in-flight.
+    size_t retention_rounds = 0;
     while (incomplete > 0) {
         log->apply_segment_ms().get();
+        retention_rounds++;
         ss::sleep(500ms).get();
     }
 
+    // Sanity check: ensure segment_ms was applied multiple times.
+    BOOST_REQUIRE_MESSAGE(
+      retention_rounds > 3, "segment_ms not applied enough times");
+
+    vlog(test_logger.info, "Applied segment_ms {} times", retention_rounds);
+
+    // Ensure all produces completed successfully.
     for (auto&& p : produces) {
         std::move(p).get();
     }

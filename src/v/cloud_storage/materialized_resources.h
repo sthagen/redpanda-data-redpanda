@@ -65,6 +65,8 @@ public:
     ss::future<segment_reader_units>
     get_segment_reader_units(model::opt_abort_source_t as);
 
+    ss::future<ssx::semaphore_units> get_hydration_units(size_t n);
+
     ss::future<ssx::semaphore_units>
     get_partition_reader_units(model::opt_abort_source_t as);
 
@@ -87,6 +89,8 @@ private:
 
     /// How many remote_segment_batch_reader instances exist
     size_t current_segment_readers() const;
+
+    size_t max_parallel_hydrations() const;
 
     /// How many partition_record_batch_reader_impl instances exist
     size_t current_ongoing_hydrations() const;
@@ -154,6 +158,11 @@ private:
     config::binding<uint32_t> _cache_carryover_bytes;
     // Memory reserved for cache carryover mechanism
     std::optional<ssx::semaphore_units> _carryover_units;
+
+    config::binding<std::optional<uint32_t>>
+      _max_concurrent_hydrations_per_shard;
+
+    adjustable_semaphore _hydration_units;
 };
 
 } // namespace cloud_storage
