@@ -163,7 +163,7 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
         )
 
         consumer = self.sasl_consumer(consume_user, cfg=consumer_cfg)
-        consumer.subscribe([self.input_t])
+        consumer.subscribe([self.input_t.name])
         records = self.consume(consumer)
         assert records is not None
 
@@ -251,7 +251,7 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
                 "auto.offset.reset": "earliest",
             },
         )
-        consumer.subscribe([self.output_t])
+        consumer.subscribe([self.output_t.name])
 
         index_from_input = 0
 

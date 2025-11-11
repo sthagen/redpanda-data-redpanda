@@ -72,7 +72,7 @@ class TestTieredStoragePause(PreallocNodesTest):
         self._retention_bytes = 10 * 1024 * 1024
 
     def get_metric(self, metric_name, endpoint):
-        res = defaultdict(int)
+        res = defaultdict(float)
         for n in self.redpanda.nodes:
             if n in self.redpanda._started:
                 resp = self.redpanda.metrics(n, endpoint)

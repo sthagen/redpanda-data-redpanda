@@ -9,6 +9,7 @@
 
 import os
 
+from confluent_kafka import KafkaError
 from confluent_kafka.admin import (
     AclBinding,
     AclBindingFilter,
@@ -26,6 +27,7 @@ from rptest.services.librdkafka_test_case import LibrdkafkaTestcase
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import expect_exception
 from rptest.utils.mode_checks import skip_debug_mode
+from rptest.utils.type_utils import rcast
 
 
 def tests_to_run():
@@ -154,7 +156,8 @@ class LibrdkafkaTest(RedpandaTest):
         )
 
         with expect_exception(
-            KafkaException, lambda e: "Invalid principal name" in e.args[0].str()
+            KafkaException,
+            lambda e: "Invalid principal name" in rcast(KafkaError, e.args[0]).str(),
         ):
             res = admin.create_acls([binding], request_timeout=10)
             for k in res:

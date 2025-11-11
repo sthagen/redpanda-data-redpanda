@@ -154,7 +154,7 @@ class ConsumerOffsetsVerifier:
             )
             # update positions
             for tp in current_offsets:
-                tp.offset = tp.offset + random.randint(1, 5)
+                tp.offset = tp.offset + random.randint(1, 5)  # type: ignore
             return current_offsets
 
         i = 0

@@ -7,11 +7,13 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from functools import wraps
 import os
 import pprint
 import threading
 from contextlib import contextmanager
 from logging import Logger
+import time
 from typing import Any, Callable, ContextManager, Optional, Type, TypeVar
 
 from ducktape.cluster.remoteaccount import RemoteCommandError
@@ -21,6 +23,7 @@ from requests.exceptions import HTTPError
 
 from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.services.storage import Segment
+from ducktape.cluster.cluster import ClusterNode
 
 T = TypeVar("T")
 E = TypeVar("E", bound=Exception)
@@ -416,7 +419,7 @@ def expect_http_error(status_code: int):
     return expect_exception(HTTPError, lambda e: e.response.status_code == status_code)
 
 
-def inject_remote_script(node, script_name):
+def inject_remote_script(node: ClusterNode, script_name: str) -> str:
     """
     Copy a script from the remote_scripts/ directory onto
     a remote node, ready for execution.
@@ -642,3 +645,25 @@ def not_none(value: T | None) -> T:
     if value is None:
         raise ValueError("value was unexpectedly None")
     return value
+
+
+def debounce(wait_sec: float):
+    """
+    Decorator that prevents a function from being called more than once
+    every `wait_sec` seconds. Subsequent calls within the wait period are ignored.
+    """
+
+    def decorator(func):
+        last_call_time = 0.0
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            nonlocal last_call_time
+            now = time.monotonic()
+            if now - last_call_time >= wait_sec:
+                last_call_time = now
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

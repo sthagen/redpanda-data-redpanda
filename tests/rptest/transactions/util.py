@@ -17,7 +17,7 @@ from rptest.util import wait_until_result
 
 
 @contextmanager
-def expect_kafka_error(err: Optional[ck.KafkaError] = None):
+def expect_kafka_error(err: int | None = None):
     try:
         yield
     except ck.KafkaException as e:
@@ -32,8 +32,8 @@ def expect_kafka_error(err: Optional[ck.KafkaError] = None):
 def try_transaction(
     producer: ck.Producer,
     consumer: ck.Consumer,
-    send_offset_err: Optional[ck.KafkaError] = None,
-    commit_err: Optional[ck.KafkaError] = None,
+    send_offset_err: int | None = None,
+    commit_err: int | None = None,
 ):
     producer.begin_transaction()
 

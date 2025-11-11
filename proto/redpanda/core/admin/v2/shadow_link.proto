@@ -290,7 +290,7 @@ message ShadowLinkClientOptions {
     int32 effective_fetch_max_bytes = 17
         [(google.api.field_behavior) = OUTPUT_ONLY];
     // Fetch partition max bytes.
-    // If 0 is provided, defaults to 1 MiB
+    // If 0 is provided, defaults to 5 MiB
     int32 fetch_partition_max_bytes = 18;
     // The effective fetch partition max bytes
     int32 effective_fetch_partition_max_bytes = 19

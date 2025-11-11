@@ -71,7 +71,7 @@ class TransactionsStreamsTest(RedpandaTest, TransactionsMixin):
             "enable.auto.commit": False,
         }
         consumer = ck.Consumer(consumer_conf)
-        consumer.subscribe([self.input_t])
+        consumer.subscribe([self.input_t.name])
 
         producer.init_transactions()
         consumed = 0

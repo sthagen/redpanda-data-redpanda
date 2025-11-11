@@ -17,6 +17,7 @@ setup(
         "kafka-python==2.0.6",
         "crc32c==2.2",
         "confluent-kafka==2.6.1",
+        "types-confluent-kafka==1.4.0",
         "zstandard==0.23.0",
         "xxhash==3.5.0",
         "protobuf==5.29.0",

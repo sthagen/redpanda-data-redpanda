@@ -137,13 +137,10 @@ class ScaleParameters:
             )
         )
 
-        self.logger.info(
-            f"Cluster partition limit is {self.partition_limit} = "
-            f"{node_count} * ({self.node_cpus} * ({shard_replicas_effective} // {replication_factor}) - {internal_partition_slack})"
-        )
-
+        reserve_msg = ""
         if shard0_reserve:
             self.partition_limit -= node_count * shard0_reserve
+            reserve_msg = f" - {node_count} * {shard0_reserve}"
 
         if not self.redpanda.dedicated_nodes:
             docker_limit = ScaleParameters.DOCKER_PARTITION_LIMIT
@@ -155,8 +152,7 @@ class ScaleParameters:
         else:
             self.logger.info(
                 f"Cluster partition limit is {self.partition_limit} = "
-                f"{node_count} * {self.node_cpus} * ({shard_replicas_effective} // {replication_factor}) "
-                f"- {node_count} * {shard0_reserve}"
+                f"{node_count} * ({self.node_cpus} * ({shard_replicas_effective} // {replication_factor}) - {internal_partition_slack}){reserve_msg}"
             )
 
         partition_replicas_per_node = int(

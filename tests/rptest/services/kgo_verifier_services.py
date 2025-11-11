@@ -106,8 +106,9 @@ class KgoVerifierService(Service):
     def __del__(self):
         self._release_port()
 
+    # when switched to 3.11 change return type to `Self`
     @classmethod
-    def oneshot(cls, *args, **kwargs):
+    def oneshot(cls, *args: Any, **kwargs: Any) -> Any:
         """
         Convenience method for constructing, running and releasing node.
 

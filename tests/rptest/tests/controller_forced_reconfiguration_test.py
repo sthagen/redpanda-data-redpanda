@@ -15,6 +15,7 @@ from ducktape.cluster.cluster import ClusterNode
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
 
+from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import PartitionDetails, Replica
 from rptest.services.cluster import cluster
@@ -221,6 +222,19 @@ class ControllerForceReconfigurationTest(RedpandaTest):
                         f"dead node: {killed_node_id} still in configuration"
                     )
 
+    def _wait_for_no_reconfigurations(self):
+        def no_pending_force_reconfigurations():
+            status = self.redpanda._admin.get_partition_balancer_status()
+            return status["partitions_pending_force_recovery_count"] == 0
+
+        wait_until(
+            no_pending_force_reconfigurations,
+            timeout_sec=120,
+            backoff_sec=3,
+            err_msg="reported force recovery count is non zero",
+            retry_on_exc=True,
+        )
+
     @cluster(num_nodes=6)
     def test_smoke_cfr(self):
         """
@@ -317,6 +331,21 @@ class ControllerForceReconfigurationTest(RedpandaTest):
             recovery_mode_enabled=False,
         )
 
+        self.logger.debug(f"recovering from: {killed_node_ids}")
+        self._rpk = RpkTool(self.redpanda)
+
+        # issue a node wise recovery
+        self._rpk.force_partition_recovery(
+            from_nodes=killed_node_ids, to_node=designated_survivor
+        )
+
+        self._wait_for_no_reconfigurations()
+
+        for dead_node_id in killed_node_ids:
+            self.redpanda._admin.decommission_broker(dead_node_id, designated_survivor)
+
+        self._check_topic_recovered(topic, cluster_size, killed_node_ids)
+
         KgoVerifierProducer.oneshot(  # type: ignore
             self.test_context,
             self.redpanda,
@@ -324,5 +353,3 @@ class ControllerForceReconfigurationTest(RedpandaTest):
             msg_size=10000,
             msg_count=1000,
         )
-
-        self._check_topic_recovered(topic, cluster_size, killed_node_ids)

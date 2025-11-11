@@ -75,7 +75,7 @@ class PythonLibrdkafka:
     def get_client(self):
         return AdminClient(self._get_config())
 
-    def get_producer(self):
+    def get_producer(self) -> Producer:
         producer_conf = self._get_config()
         self._redpanda.logger.debug(f"{producer_conf}")
         return Producer(producer_conf)

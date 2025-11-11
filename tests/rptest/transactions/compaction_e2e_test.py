@@ -194,6 +194,12 @@ class CompactionWithRecoveryTest(RedpandaTest, PartitionMovementMixin):
             "raft_max_recovery_memory": 32 * 1024,
             "log_compaction_interval_ms": 2000,
             "min_cleanable_dirty_ratio": 0.0,
+            # Disable leader balancer, as this test is doing its own
+            # partition movement and the balancer would interfere
+            "enable_leader_balancer": False,
+            "partition_autobalancing_mode": "off",
+            "core_balancing_on_core_count_change": False,
+            "core_balancing_continuous": False,
         }
         super(CompactionWithRecoveryTest, self).__init__(
             test_context=test_context, extra_rp_conf=extra_rp_conf

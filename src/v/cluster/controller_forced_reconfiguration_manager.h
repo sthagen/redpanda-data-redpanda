@@ -70,8 +70,6 @@ public:
      *     0. validation of the above requirements
      *     1. force reconfiguration of the raft0 group to exclude dead_nodes
      *     2. poll for a newly elected controller leader
-     *     3. force reconfigure all partitions with quorum loss off dead_nodes
-     *     4. decommission and remove all dead nodes
      * This operation is volatile until completion of step 2
      *     - successful leader election will replicate a configuration batch
      *     - on successful replication, the reduced raft0 group is persistent

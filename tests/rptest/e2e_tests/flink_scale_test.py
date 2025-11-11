@@ -128,7 +128,7 @@ class FlinkScaleTests(RedpandaTest):
         # Filter whole series with supplied method
         samples = []
         for s in metrics.samples:
-            if s[4]["method"] == method:
+            if s.labels["method"] == method:
                 samples.append(s)
         return samples
 

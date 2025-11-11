@@ -21,7 +21,7 @@ from ducktape.mark import matrix
 from rptest.clients.rpk import RpkTool
 from rptest.services.catalog_service import CatalogType
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import SISettings, SchemaRegistryConfig
+from rptest.services.redpanda import LoggingConfig, SISettings, SchemaRegistryConfig
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
@@ -34,12 +34,21 @@ class DatalakeManyTopicsTest(RedpandaTest):
         super(DatalakeManyTopicsTest, self).__init__(
             test_ctx,
             num_brokers=6,
-            si_settings=SISettings(test_context=test_ctx),
+            si_settings=SISettings(
+                test_context=test_ctx, skip_end_of_test_scrubbing=True
+            ),
             extra_rp_conf={
                 "iceberg_enabled": True,
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "iceberg_target_lag_ms": 5000,
             },
+            # Configure less-than-trace logging. Given how many
+            # topics/partitions there may be, log size can get huge,
+            # particularly in CDT.
+            log_config=LoggingConfig(
+                "debug",
+            ),
+            disable_cloud_storage_diagnostics=True,
             schema_registry_config=SchemaRegistryConfig(),
             *args,
             **kwargs,

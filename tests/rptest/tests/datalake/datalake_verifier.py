@@ -20,6 +20,7 @@ from rptest.clients.rpk import RpkPartition, RpkTool
 from rptest.services.redpanda import RedpandaService
 from rptest.tests.datalake.query_engine_base import QueryEngineBase
 from rptest.util import wait_until
+from rptest.utils.type_utils import rcast
 
 
 class DatalakeVerifier:
@@ -68,7 +69,7 @@ class DatalakeVerifier:
         # batches like aborted data batches / control batches
         self._next_positions = defaultdict(lambda: -1)
         self._cg = f"verifier-group-{random.randint(0, 1000000)}"
-        self._consumer: Consumer = self.create_consumer()
+        self._consumer: Consumer | None = self.create_consumer()
         self._query: QueryEngineBase = query_engine
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -132,6 +133,7 @@ class DatalakeVerifier:
                     TopicPartition(topic=self.topic, partition=p)
                     for p in self._consumed_messages.keys()
                 ]
+                assert self._consumer
                 positions = self._consumer.position(partitions)
                 for p in positions:
                     if p.error is not None:
@@ -163,6 +165,7 @@ class DatalakeVerifier:
         self._partition_hwms = self.partition_hwms()
         for p in self._partition_hwms:
             self.logger.debug(f"remembered partition {p.id=} hwm={p.high_watermark}, ")
+        assert self._consumer
         with self._consumer_lock:
             self._consumer.close()
             self._consumer = None
@@ -194,6 +197,7 @@ class DatalakeVerifier:
                 self._msg_semaphore.acquire()
                 if self._stop.is_set():
                     break
+                assert self._consumer
                 msg = self._consumer.poll(1.0)
                 if msg is None:
                     continue
@@ -209,7 +213,7 @@ class DatalakeVerifier:
                             self._msgs_batched.notify()
                     self._max_consumed_offsets[msg.partition()] = max(
                         self._max_consumed_offsets.get(msg.partition(), -1),
-                        msg.offset(),
+                        rcast(int, msg.offset()),
                     )
                     self.logger.debug(
                         f"Max consumed offsets: {self._max_consumed_offsets}"
@@ -362,7 +366,7 @@ class DatalakeVerifier:
         try:
             while not self._all_offsets_translated():
                 wait_until(
-                    lambda: self._made_progress(),
+                    lambda: self._made_progress() or self._all_offsets_translated(),
                     progress_timeout_sec,
                     backoff_sec=3,
                     err_msg=f"Error waiting for the query to make progress for topic {self.topic}",

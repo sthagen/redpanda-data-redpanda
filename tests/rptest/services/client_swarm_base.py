@@ -134,7 +134,7 @@ class ClientSwarmBase(Service, ABC):
         """
         url = self._remote_url(node, rest_handle)
         try:
-            r = requests.get(url, timeout=10)
+            r = requests.get(url, timeout=30)
         except Exception as e:
             raise RuntimeError(f"Failed to get data from '{url}'") from e
         return r.json()

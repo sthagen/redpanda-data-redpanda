@@ -51,8 +51,8 @@ partition_probe::partition_probe(const model::ntp& ntp) {
           sm::description("Size of chunk downloaded from cloud storage"),
           partition_labels),
       },
-      {sm::shard_label},
-      {sm::shard_label, metrics::partition_label});
+      {},
+      {metrics::partition_label});
 }
 
 ts_read_path_probe::ts_read_path_probe() {

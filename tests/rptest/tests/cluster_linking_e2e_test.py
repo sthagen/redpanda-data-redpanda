@@ -270,9 +270,9 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             f"Expected 0, got {client_options.fetch_partition_max_bytes}"
         )
         assert client_options.effective_fetch_partition_max_bytes == (
-            1 * 1024 * 1024
+            5 * 1024 * 1024
         ), (
-            f"Expected {1 * 1024 * 1024}, got {client_options.effective_fetch_partition_max_bytes}"
+            f"Expected {5 * 1024 * 1024}, got {client_options.effective_fetch_partition_max_bytes}"
         )
 
         topic_metadata_config = shadow_link.configurations.topic_metadata_sync_options
@@ -3347,7 +3347,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         self.start_producer_consumer(
             topic=topic_3.name,
             msg_size=128,
-            msg_cnt=100000,
+            msg_cnt=5000000,
             use_transactions=True,
             producer_properties={
                 "msgs_per_transaction": "10000",

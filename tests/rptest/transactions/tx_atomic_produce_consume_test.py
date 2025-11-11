@@ -14,6 +14,7 @@ from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 
 import confluent_kafka as ck
+from confluent_kafka import error as ck_error
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 
@@ -123,10 +124,6 @@ class ExactlyOnceVerifier:
             def transform(id: str):
                 try:
                     self.tx_transform(tx_id=id)
-                except ck.KafkaError as e:
-                    self._logger.error(
-                        f"Client error reported: {e.error} - {e.reason}, retryable: {e.retryable}"
-                    )
                 except BaseException as e:
                     self._logger.error(f"Error transforming {id} - {e} - {type(e)}")
 
@@ -289,11 +286,6 @@ class ExactlyOnceVerifier:
 
             producer.commit_transaction()
             in_transaction = False
-        except ck.KafkaError as e:
-            self._logger.error(
-                f"Client error reported: {e.error} - {e.reason}, retryable: {e.retryable}"
-            )
-            raise e
         finally:
             consumer.close()
             producer.flush()

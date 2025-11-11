@@ -1496,22 +1496,20 @@ service::shard_local_shadow_link_report(model::id_t id) {
     result.err_code = errc::success;
 
     for (const auto& [topic, offsets] : value) {
-        if (offsets.update_time == ss::lowres_clock::time_point{}) {
-            // no offsets have been set for this partition
-            continue;
+        auto& report = result.topic_responses[topic.tp.topic]
+                         .partition_reports[topic.tp.partition];
+        report.partition = topic.tp.partition;
+        report.shadow_partition_high_watermark = offsets.shadow_hwm;
+        // If last update time is default time_point, then we have not received
+        // a new offset report from the source cluster for this partition
+        if (offsets.update_time != ss::lowres_clock::time_point{}) {
+            report.source_partition_start_offset = offsets.source_start_offset;
+            report.source_partition_high_watermark = offsets.source_hwm;
+            report.source_partition_last_stable_offset = offsets.source_lso;
+            report.last_update_time
+              = std::chrono::duration_cast<std::chrono::milliseconds>(
+                offsets.update_time.time_since_epoch());
         }
-        result.topic_responses[topic.tp.topic]
-          .partition_reports[topic.tp.partition]
-          = rpc::shadow_topic_partition_leader_report{
-            .partition = topic.tp.partition,
-            .source_partition_start_offset = offsets.source_start_offset,
-            .source_partition_high_watermark = offsets.source_hwm,
-            .source_partition_last_stable_offset = offsets.source_lso,
-            .last_update_time
-            = std::chrono::duration_cast<std::chrono::milliseconds>(
-              offsets.update_time.time_since_epoch()),
-            .shadow_partition_high_watermark = offsets.shadow_hwm,
-          };
     }
 
     auto task_report_res = _manager->get_task_status_report(id);

@@ -25,13 +25,12 @@ option (redpanda.core.pbgen.cpp_namespace) = "proto::admin::internal";
 // extraordinary circumstances.
 //
 service BreakglassService {
-    // Forcibly recovers a cluster when the majority of nodes are lost.
-    // This operation is dangerous by design and will likely result in data
-    // loss.
-    // 1. Removes dead nodes from the controller group until a new leader
-    //    can be chosen.
-    // 2. Force reconfigures all partitions off of dead nodes.
-    // 3. Decommission & remove the dead nodes from the cluster.
+    // Forcibly recovers a cluster's controller when the majority of nodes
+    // are lost.
+    //
+    // This RPC will remove dead nodes from raft0 until a new controller
+    // leader is elected, at which point the cluster may be recovered
+    // with existing rpcs (nodewise-recovery, decommission brokers).
     //
     // Requirements:
     // 1. All surviving brokers must be booted into recovery mode.

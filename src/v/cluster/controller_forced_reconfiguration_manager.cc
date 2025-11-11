@@ -133,9 +133,6 @@ controller_forced_reconfiguration_manager::calculation_reconfiguration_group(
 ss::future<cluster::error_info> controller_forced_reconfiguration_manager::
   initialize_controller_forced_reconfiguration(
     std::vector<model::node_id> dead_nodes, uint16_t surviving_node_count) {
-    // constant
-    const auto timeout = std::chrono::minutes{15};
-
     vlog(
       clusterlog.info,
       "invocation of controller_forced_reconfiguration with dead_nodes: {}, "
@@ -282,71 +279,6 @@ ss::future<cluster::error_info> controller_forced_reconfiguration_manager::
           leader);
     }
 
-    { // step 3 force all partitions out of failed brokers
-        vlog(clusterlog.info, "starting all partition force recovery");
-        auto maybe_quorum_loss_partitions
-          = co_await controller.get_topics_frontend()
-              .local()
-              .partitions_with_lost_majority(dead_nodes);
-        if (!maybe_quorum_loss_partitions) {
-            co_return cluster::error_info{
-              .err = maybe_quorum_loss_partitions.error(),
-              .message
-              = "failed to gather list of partitions with quorum loss"};
-        }
-        auto& quorum_loss_partitions = maybe_quorum_loss_partitions.value();
-
-        // todo find reasonable timeout
-        auto ec = co_await controller.get_topics_frontend()
-                    .local()
-                    .force_recover_partitions_from_nodes(
-                      dead_nodes,
-                      std::move(quorum_loss_partitions),
-                      ss::lowres_clock::now() + timeout);
-
-        if (ec) {
-            co_return cluster::error_info{
-              .err = ec,
-              .message
-              = "controller force reconfiguration failed on force recovering "
-                "partitions"};
-        }
-        vlog(clusterlog.info, "finished all partition force recovery");
-    }
-
-    // we succeed the CFR even if some nodes fail to decommission or remove
-    std::vector<model::node_id> failed_to_decom_nodes{};
-    std::error_code last_decom_error{};
-    { // step 4 decommission and remove all dead brokers
-        vlog(clusterlog.info, "starting dead node decommission");
-        for (const auto dead_node : dead_nodes) {
-            const auto ec = co_await controller.get_members_frontend()
-                              .local()
-                              .decommission_node(dead_node);
-            if (ec) {
-                last_decom_error = ec;
-                failed_to_decom_nodes.emplace_back(dead_node);
-                vlog(
-                  clusterlog.warn,
-                  "controller force reconfiguration failed to "
-                  "decommission "
-                  "node: {}, with error: {}",
-                  dead_node,
-                  ec);
-                continue;
-            }
-        }
-        vlog(clusterlog.info, "finished dead node decommission");
-
-        if (!failed_to_decom_nodes.empty()) {
-            co_return cluster::error_info{
-              .err = last_decom_error,
-              .message = fmt::format(
-                "leader exiting, failed to decomission nodes: {}. If survivors "
-                "nodes are stable, decommission these brokers normally",
-                failed_to_decom_nodes)};
-        }
-    }
     co_return cluster::error_info{
       .err = cluster::errc::success,
       .message = "leader exiting successful controller forced recovery"};

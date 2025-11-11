@@ -245,7 +245,8 @@ class DatabricksTest(RedpandaTest):
                 )
                 for _ in range(count):
                     producer.produce(
-                        topic=test_case_topic_name, value=tc.record_generator()
+                        topic=test_case_topic_name,
+                        value=tc.record_generator(),  # type: ignore
                     )
                 producer.flush()
                 dl.wait_for_translation(test_case_topic_name, msg_count=count)

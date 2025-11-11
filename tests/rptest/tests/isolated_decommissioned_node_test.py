@@ -14,13 +14,15 @@ from ducktape.utils.util import wait_until
 from rptest.clients.types import TopicSpec
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.util import firewall_blocked
-from confluent_kafka import admin, Producer, KafkaException, Consumer
+from confluent_kafka import KafkaError, admin, Producer, KafkaException, Consumer
 from ducktape.mark import parametrize
 
 import confluent_kafka as ck
 
 import time
 import uuid
+
+from rptest.utils.type_utils import rcast
 
 
 def on_delivery(err, msg):
@@ -180,7 +182,7 @@ class IsolatedDecommissionedNodeTest(PreallocNodesTest):
             except ck.cimpl.KafkaException as e:
                 # We can get timeout only with switched off handler for isolation node
                 assert isolation_handler_mode == False
-                kafka_error = e.args[0]
+                kafka_error = rcast(KafkaError, e.args[0])
                 assert kafka_error.code() == ck.cimpl.KafkaError._MSG_TIMED_OUT
 
         if isolation_handler_mode:

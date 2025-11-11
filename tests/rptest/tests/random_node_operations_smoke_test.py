@@ -345,7 +345,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             self.key_set_cardinality = key_set_cardinality
             self.tolerate_data_loss = tolerate_data_loss
 
-        def _start_producer(self):
+        def _start_producer(self, clean: bool):
             self.producer = KgoVerifierProducer(
                 self.test_context,
                 self.redpanda,
@@ -358,13 +358,14 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                 tolerate_data_loss=self.tolerate_data_loss,
             )
 
-            self.producer.start(clean=False)
+            self.producer.start(clean=clean)
 
             wait_until(
                 lambda: self.producer.produce_status.acked > 10,
                 timeout_sec=120,
                 backoff_sec=1,
             )
+            self.producer.wait_for_offset_map()
 
         def _start_consumer(self, with_logs: bool = False):
             self.consumer = KgoVerifierConsumerGroupConsumer(
@@ -382,12 +383,12 @@ class RandomNodeOperationsBase(PreallocNodesTest):
 
             self.consumer.start(clean=False)
 
-        def start(self):
+        def start(self, clean: bool):
             self.logger.info(
                 f"starting workload: topic: {self.topic}, with [rate_limit: {self.rate_limit_bps}, message size: {self.msg_size}, message count: {self.msg_count}]"
             )
 
-            self._start_producer()
+            self._start_producer(clean=clean)
             self._start_consumer()
 
         def verify(self):
@@ -562,8 +563,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             compaction_enabled=True,
         )
 
-        regular_producer_consumer.start()
-        compacted_producer_consumer.start()
+        regular_producer_consumer.start(clean=True)
+        compacted_producer_consumer.start(clean=True)
 
         # if running with tiered storage create a topic with fast partition
         # moves enabled
@@ -599,7 +600,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             consumers_count=self.consumers_count,
             compaction_enabled=False,
         )
-        fast_producer_consumer.start()
+        fast_producer_consumer.start(clean=True)
 
         cloud_topics_consumer = RandomNodeOperationsBase.producer_consumer(
             test_context=self.test_context,
@@ -627,7 +628,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "redpanda.cloud_topic.enabled": "true",
                 },
             )
-            cloud_topics_consumer.start()
+            cloud_topics_consumer.start(clean=False)
 
         write_caching_enabled = enable_write_caching_testing()
         write_caching_producer_consumer = None
@@ -663,7 +664,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     tolerate_data_loss=True,
                 )
             )
-            write_caching_producer_consumer.start()
+            write_caching_producer_consumer.start(clean=False)
 
         # start admin operations fuzzer, it will provide a stream of
         # admin day 2 operations executed during the test

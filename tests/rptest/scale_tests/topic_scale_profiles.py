@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import pandas as pd
+from typing import Any
 
 
 @dataclass(kw_only=True)
@@ -115,7 +116,7 @@ class TopicScaleProfileManager:
     def _list_profiles(self):
         return [m for m in dir(self.profiles) if not m.startswith("__")]
 
-    def _load_profile_data(self, profile_name):
+    def _load_profile_data(self, profile_name: str):
         _profile_data = getattr(self.profiles, profile_name, None)
         if _profile_data is None:
             raise RuntimeError(
@@ -125,10 +126,10 @@ class TopicScaleProfileManager:
         else:
             return _profile_data
 
-    def get_profile(self, profile_name="default"):
+    def get_profile(self, profile_name: str = "default"):
         return TopicScaleTestProfile(**self._load_profile_data(profile_name))
 
-    def get_custom_profile(self, base_profile_name, data):
+    def get_custom_profile(self, base_profile_name: str, data: dict[str, Any]):
         _profile_data = self._load_profile_data(base_profile_name)
         _profile_data.update(data)
         try:

@@ -17,7 +17,7 @@ import time
 import typing
 from collections import namedtuple
 from dataclasses import dataclass, field
-from typing import Any, Iterator, Literal, overload
+from typing import Any, Iterator, Literal, Optional, overload
 
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.errors import TimeoutError
@@ -2351,7 +2351,9 @@ class RpkTool:
 
         return json.loads(out) if output_format == "json" else out
 
-    def force_partition_recovery(self, from_nodes, to_node=None):
+    def force_partition_recovery(
+        self, from_nodes: list[int], to_node: Optional[ClusterNode] = None
+    ):
         cmd = [
             self._rpk_binary(),
             "cluster",

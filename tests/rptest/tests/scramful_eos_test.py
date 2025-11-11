@@ -9,13 +9,14 @@
 
 from time import sleep
 
-from confluent_kafka import KafkaException, Producer
+from confluent_kafka import KafkaError, KafkaException, Producer
 
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import SecurityConfig
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.utils.type_utils import rcast
 
 TOPIC_AUTHORIZATION_FAILED = 29
 CLUSTER_AUTHORIZATION_FAILED = 31
@@ -54,7 +55,7 @@ class ScramfulEosTest(RedpandaTest):
             except KafkaException as e:
                 if retries == 0:
                     raise e
-                assert e.args[0].code() in accepted_ec, (
+                assert rcast(KafkaError, e.args[0]).code() in accepted_ec, (
                     f"only {accepted_ec} error codes are expected"
                 )
                 sleep(1)
@@ -92,7 +93,7 @@ class ScramfulEosTest(RedpandaTest):
         except AssertionError as e:
             raise e
         except KafkaException as e:
-            assert e.args[0].code() == TOPIC_AUTHORIZATION_FAILED, (
+            assert rcast(KafkaError, e.args[0]).code() == TOPIC_AUTHORIZATION_FAILED, (
                 "TOPIC_AUTHORIZATION_FAILED error is expected"
             )
 
@@ -175,9 +176,10 @@ class ScramfulEosTest(RedpandaTest):
         except AssertionError as e:
             raise e
         except KafkaException as e:
-            assert e.args[0].code() == TRANSACTIONAL_ID_AUTHORIZATION_FAILED, (
-                "TRANSACTIONAL_ID_AUTHORIZATION_FAILED is expected"
-            )
+            assert (
+                rcast(KafkaError, e.args[0]).code()
+                == TRANSACTIONAL_ID_AUTHORIZATION_FAILED
+            ), "TRANSACTIONAL_ID_AUTHORIZATION_FAILED is expected"
 
     @cluster(num_nodes=3)
     def test_tx_init_passes_1(self):

@@ -144,7 +144,7 @@ var Comments = map[string]string{
 	"redpanda.core.admin.v2.ShadowLinkClientOptions.fetch_min_bytes": `Fetch min bytes.
  If 0 is provided, defaults to 5 MiB`,
 	"redpanda.core.admin.v2.ShadowLinkClientOptions.fetch_partition_max_bytes": `Fetch partition max bytes.
- If 0 is provided, defaults to 1 MiB`,
+ If 0 is provided, defaults to 5 MiB`,
 	"redpanda.core.admin.v2.ShadowLinkClientOptions.fetch_wait_max_ms": `Fetch request timeout.
  If 0 is provided, defaults to 500ms`,
 	"redpanda.core.admin.v2.ShadowLinkClientOptions.metadata_max_age_ms": `Max metadata age.

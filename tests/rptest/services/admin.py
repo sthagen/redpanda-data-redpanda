@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from json.decoder import JSONDecodeError
 from logging import Logger
-from typing import Any, Callable, NamedTuple, Optional, Protocol, cast
+from typing import Any, Callable, List, NamedTuple, Optional, Protocol, cast
 from uuid import UUID
 
 import requests
@@ -1094,7 +1094,7 @@ class Admin:
 
         return self._request("post", path, node=node)
 
-    def list_reconfigurations(self, node=None):
+    def list_reconfigurations(self, node: ClusterNode | None = None):
         """
         List pending reconfigurations
         """
@@ -1135,7 +1135,9 @@ class Admin:
 
         return self._request("get", path, node=node).json()
 
-    def get_partition(self, ns: str, topic: str, id: int, node=None):
+    def get_partition(
+        self, ns: str, topic: str, id: int, node: ClusterNode | None = None
+    ) -> dict[str, Any]:
         return self._request("GET", f"partitions/{ns}/{topic}/{id}", node=node).json()
 
     def get_transactions(self, topic, partition, namespace, node=None):
@@ -1193,7 +1195,12 @@ class Admin:
         return self._request("get", path, node=node).json()
 
     def set_partition_replicas(
-        self, topic, partition, replicas, *, namespace="kafka", node=None
+        self,
+        topic: str,
+        partition: int,
+        replicas: List[dict[str, int]],
+        namespace: str = "kafka",
+        node: ClusterNode | None = None,
     ):
         """
         [ {"node_id": 0, "core": 1}, ... ]
@@ -1402,8 +1409,14 @@ class Admin:
         return partition_info["leader_id"]
 
     def transfer_leadership_to(
-        self, *, namespace, topic, partition, target_id=None, leader_id=None
-    ):
+        self,
+        *,
+        namespace: str,
+        topic: str,
+        partition: int,
+        target_id: int | None = None,
+        leader_id: int | None = None,
+    ) -> bool:
         """
         Looks up current ntp leader and transfer leadership to target node,
         this operations is NOP when current leader is the same as target.
@@ -1444,7 +1457,7 @@ class Admin:
         ret = self._request("post", path=path, node=leader)
         return ret.status_code == 200
 
-    def maintenance_start(self, node, dst_node=None):
+    def maintenance_start(self, node: ClusterNode, dst_node: ClusterNode | None = None):
         """
         Start maintenance on 'node', sending the request to 'dst_node'.
         """
@@ -1453,7 +1466,7 @@ class Admin:
         self.redpanda.logger.info(f"Starting maintenance on node {node.name}/{id}")
         return self._request("put", url, node=dst_node)
 
-    def maintenance_stop(self, node, dst_node=None):
+    def maintenance_stop(self, node: ClusterNode, dst_node: ClusterNode | None = None):
         """
         Stop maintenance on 'node', sending the request to 'dst_node'.
         """
@@ -1462,7 +1475,7 @@ class Admin:
         self.redpanda.logger.info(f"Stopping maintenance on node {node.name}/{id}")
         return self._request("delete", url, node=dst_node)
 
-    def maintenance_status(self, node):
+    def maintenance_status(self, node: ClusterNode):
         """
         Get maintenance status of a node.
         """
@@ -1501,7 +1514,9 @@ class Admin:
         path = f"cloud_storage/sync_local_state/{topic}/{partition}"
         return self._request("post", path, node=node)
 
-    def get_partition_balancer_status(self, node=None, **kwargs):
+    def get_partition_balancer_status(
+        self, node: Optional[ClusterNode] = None, **kwargs: Any
+    ) -> Any:
         return self._request(
             "GET", "cluster/partition_balancer/status", node=node, **kwargs
         ).json()

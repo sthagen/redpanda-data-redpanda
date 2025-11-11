@@ -1646,7 +1646,7 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
         if samples is not None and samples.samples:
             for s in samples.samples:
                 self.logger.debug(
-                    f"{s.family} on node {s.node.account.hostname} with labels: {s.labels} has value {s.value}"
+                    f"{s.sample} on node {s.node.account.hostname} with labels: {s.labels} has value {s.value}"
                 )
                 total += s.value
         else:

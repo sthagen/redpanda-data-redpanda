@@ -11,6 +11,7 @@ import concurrent.futures
 import math
 import time
 from enum import Enum
+from typing import Any
 
 import numpy
 from ducktape.mark import matrix
@@ -39,25 +40,25 @@ class Mode(str, Enum):
 
 class LargeMessagesTest(RedpandaTest):
     # Max time to wait for the cluster to be healthy once more.
-    HEALTHY_WAIT_SECONDS = 20 * 60
+    HEALTHY_WAIT_SECONDS: int = 20 * 60
 
     # Up to 5 min to stop the node with a lot of topics
-    STOP_TIMEOUT = 60 * 5
+    STOP_TIMEOUT: int = 60 * 5
 
     # Progress wait timeout
-    PROGRESS_TIMEOUT = 60 * 3
+    PROGRESS_TIMEOUT: int = 60 * 3
 
     # Leader balancer timeout time
-    LEADER_BALANCER_PERIOD_MS = 30000
+    LEADER_BALANCER_PERIOD_MS: int = 30000
 
     # default max batch is 1 MiB but due to the batch overhead we can't
     # actually accept a message payload of 1 MIB.
-    MAX_DEFAULT_MSG_SIZE_MIB = 0.9
+    MAX_DEFAULT_MSG_SIZE_MIB: float = 0.9
 
     # The maximum response size a client will tell RP its willing to receive.
-    FETCH_MAX_BYTES_MIB = 90
+    FETCH_MAX_BYTES_MIB: int = 90
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Topics
         # Prepare RP
         super().__init__(
@@ -111,12 +112,12 @@ class LargeMessagesTest(RedpandaTest):
         # not supported for now
         self.tiered_storage_enabled = False
 
-    def setUp(self):
+    def setUp(self) -> None:
         # defer redpanda startup to the test, it might want to tweak
         # ResourceSettings based on its parameters.
         pass
 
-    def _create_topics(self):
+    def _create_topics(self) -> None:
         self.logger.info("Entering topic creation")
         for tn in self.topic_names:
             self.logger.info(f"Creating topic {tn} with {self.n_partitions} partitions")
@@ -144,13 +145,13 @@ class LargeMessagesTest(RedpandaTest):
                 config=config,
             )
 
-    def _wait_until_cluster_healthy(self, include_underreplicated=True):
+    def _wait_until_cluster_healthy(self, include_underreplicated: bool = True) -> None:
         """
         Waits until the cluster is reporting no under-replicated
         or leaderless partitions.
         """
 
-        def is_healthy():
+        def is_healthy() -> bool:
             unavailable_count = self.redpanda.metric_sum(
                 "redpanda_cluster_unavailable_partitions",
                 metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS,
@@ -175,7 +176,7 @@ class LargeMessagesTest(RedpandaTest):
             err_msg="couldn't reach under-replicated count target of 0",
         )
 
-    def _run_unlimited_producers(self):
+    def _run_unlimited_producers(self) -> list[ProducerSwarm]:
         swarm_node_producers: list[ProducerSwarm] = []
         for topic in self.topic_prefixes:
             swarm_node_producers.append(
@@ -201,7 +202,7 @@ class LargeMessagesTest(RedpandaTest):
 
         return swarm_node_producers
 
-    def _run_consumers(self, group):
+    def _run_consumers(self, group: str) -> list[ConsumerSwarm]:
         swarm_node_consumers: list[ConsumerSwarm] = []
         node_message_count = int(0.95 * (self.message_count * self.n_clients))
         max_fetch_bytes = min(self.FETCH_MAX_BYTES_MIB * 2**20, 4 * self.message_size)
@@ -235,9 +236,11 @@ class LargeMessagesTest(RedpandaTest):
 
         return swarm_node_consumers
 
-    def _wait_workload_progress(self, swarm_nodes):
-        def _check_at_least_one():
-            metrics = []
+    def _wait_workload_progress(
+        self, swarm_nodes: list[ProducerSwarm] | list[ConsumerSwarm]
+    ) -> None:
+        def _check_at_least_one() -> bool:
+            metrics: list[float] = []
             for node in swarm_nodes:
                 metrics.append(node.get_metrics_summary(seconds=20).p50)
             total_rate = sum(metrics)
@@ -255,20 +258,16 @@ class LargeMessagesTest(RedpandaTest):
             err_msg="Producer Swarm nodes not making progress",
         )
 
-    def _get_rw_metrics(self):
+    def _get_rw_metrics(self) -> tuple[float, float]:
         # label options: kafka, internal
-        def _get_samples(name, label="kafka"):
+        def _get_samples(name: str, label: str = "kafka") -> tuple[list[float], float]:
             metrics = self.redpanda.metrics_sample(
-                name, metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS
+                name=name, metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS
             )
-            if metrics is not None:
-                samples = [
-                    s.value
-                    for s in metrics.samples
-                    if s.labels["redpanda_server"] == label
-                ]
-            else:
-                samples = []
+            assert metrics is not None
+            samples: list[float] = [
+                s.value for s in metrics.samples if s.labels["redpanda_server"] == label
+            ]
             total = sum(samples)
             return samples, total
 
@@ -292,7 +291,7 @@ class LargeMessagesTest(RedpandaTest):
         apply_throughput_limits: bool,
         mode: Mode,
         default_consumer_config: bool,
-    ):
+    ) -> None:
         """Test creates 10 topics, and uses client-swarm to
         generate 100 messages with parametrized size and sends this count
         to each topic and validates high watermark values along with expected
@@ -330,7 +329,10 @@ class LargeMessagesTest(RedpandaTest):
             self.n_partitions = (
                 int(self.scale.partition_limit * 0.9) // self.swarm_nodes
             )
-            self.n_clients = self.scale.node_cpus * self.scale.node_count * 4
+            clients_per_cpu = 4 if self.redpanda.dedicated_nodes else 1
+            self.n_clients = (
+                self.scale.node_cpus * self.scale.node_count * clients_per_cpu
+            )
             self.unique = False
         else:
             assert False
@@ -354,7 +356,7 @@ class LargeMessagesTest(RedpandaTest):
         # every increase of 1 in message_count increases total bytes written by this amount
         bytes_per_message_count = self.n_clients * self.message_size * self.swarm_nodes
 
-        self.expected_throughput = self.scale.expect_bandwidth
+        self.expected_throughput: float = float(self.scale.expect_bandwidth)
 
         # size message_count to hit the target runtime
         self.message_count = (
@@ -363,13 +365,13 @@ class LargeMessagesTest(RedpandaTest):
             )
             + 1
         )
-        assert self.message_count > 2, f"message count too low: {self.message_count}"
 
         # Enable large node-wide throughput limits to verify they work at scale
         # To avoid affecting the result of the test with the limit, set them
         # somewhat above the expect_bandwidth value per node.
+        per_broker_throttle: int | None = None
         if apply_throughput_limits:
-            per_broker_throttle = (
+            per_broker_throttle = int(
                 self.expected_throughput // len(self.redpanda.nodes) * 3
             )
             self.redpanda.add_extra_rp_conf(
@@ -395,11 +397,18 @@ class LargeMessagesTest(RedpandaTest):
         )
 
         self.logger.info(
-            f"Total data: {total_bytes / 1e6:.2f} MB, "
-            f"message count: {self.message_count}, "
-            f"Expected throughput >= {self.expected_throughput / 1e6:5.2f} MB/s, "
-            f"running_time_sec: {target_runtime_sec}"
+            "LargeMessagesTest parameters: "
+            f"mode={mode.value}, apply_throughput_limits={apply_throughput_limits}, "
+            f"message_size={self.message_size} bytes ({self.message_size / 2**20:.2f} MiB), "
+            f"n_topics={self.n_topics}, n_partitions={self.n_partitions}, replication_factor={self.replication_factor}, "
+            f"n_clients={self.n_clients}, swarm_nodes={self.swarm_nodes}, unique={self.unique}, "
+            f"total_data={total_bytes / 1e6:.2f} MB, message_count={self.message_count}, "
+            f"expected_throughput>={self.expected_throughput / 1e6:5.2f} MB/s, "
+            f"per_broker_throttle={per_broker_throttle if per_broker_throttle is not None else 'disabled'}, "
+            f"target_runtime_sec={target_runtime_sec}"
         )
+
+        assert self.message_count > 2, f"message count too low: {self.message_count}"
 
         # # Run swarm consumers
         swarm_consumers = self._run_consumers("large_messages_group")
@@ -428,8 +437,8 @@ class LargeMessagesTest(RedpandaTest):
         # Measure bandwidth each 2 seconds
         # if no new bytes received by RP, check swarm and exit
         # if at least one finished
-        bandwidth_in = []
-        bandwidth_out = []
+        bandwidth_in: list[float] = []
+        bandwidth_out: list[float] = []
         backoff_interval = 5
         total_elapsed = total_bytes_read = total_bytes_sent = 0
         overall_start_sec = interval_start_sec = time.time()
@@ -492,14 +501,14 @@ class LargeMessagesTest(RedpandaTest):
         self._wait_until_cluster_healthy()
 
         # Topic hwm getter
-        def _get_hwm(topic):
+        def _get_hwm(topic: str) -> int:
             _hwm = 0
             for partition in self.rpk.describe_topic(topic):
                 # Add correct high watermark for topic
                 _hwm += partition.high_watermark
             return _hwm
 
-        hwms = []
+        hwms: list[int] = []
         # Use Thread pool to speed things up
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as exec:
             swarmnode_hwms = sum(exec.map(_get_hwm, self.topic_names))
@@ -519,8 +528,8 @@ class LargeMessagesTest(RedpandaTest):
         bw_in_perc = numpy.percentile(bandwidth_in, [50, 90, 99])
         bw_out_perc = numpy.percentile(bandwidth_out, [50, 90, 99])
         # Prettify for log
-        str_in = []
-        str_out = []
+        str_in: list[str] = []
+        str_out: list[str] = []
         for val in bw_in_perc:
             str_in.append(f"{val / 1e6:.02f} MB/sec")
         for val in bw_out_perc:
@@ -535,7 +544,7 @@ class LargeMessagesTest(RedpandaTest):
         recv_tput_avg = total_bytes_read / total_elapsed
         send_tput_avg = total_bytes_sent / total_elapsed
 
-        def check_tput(tput: float, tname: str):
+        def check_tput(tput: float, tname: str) -> None:
             assert tput > self.expected_throughput, (
                 f"Measured {tname} bandwidth is lower than expected: "
                 f"{tput} vs {self.expected_throughput}"

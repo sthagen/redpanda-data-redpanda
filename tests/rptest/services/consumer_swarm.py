@@ -7,29 +7,30 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from typing import Optional
+from typing import Any, Callable
 
 from ducktape.tests.test import TestContext
 
 from rptest.services.client_swarm_base import ClientSwarmBase
+from rptest.services.redpanda import AnyRedpandaService
 
 
 class ConsumerSwarm(ClientSwarmBase):
     def __init__(
         self,
         context: TestContext,
-        redpanda,
+        redpanda: AnyRedpandaService,
         topic: str,
         group: str,
         consumers: int,
         records_per_consumer: int,
-        log_level="DEBUG",
-        properties={},
-        unique_topics: Optional[bool] = False,
-        static_prefix: Optional[bool] = False,
-        unique_groups=False,
-        topics_per_client: Optional[int] = None,
-    ):
+        log_level: str = "DEBUG",
+        properties: dict[str, Any] = {},
+        unique_topics: bool = False,
+        static_prefix: bool = False,
+        unique_groups: bool = False,
+        topics_per_client: int | None = None,
+    ) -> None:
         super().__init__(context, redpanda, topic, log_level, properties)
 
         self._group = group
@@ -40,7 +41,7 @@ class ConsumerSwarm(ClientSwarmBase):
         self._static_prefix = static_prefix
         self._topics_per_client = topics_per_client
 
-    def _additional_args(self):
+    def _additional_args(self) -> str:
         cmd = ""
         cmd += " consumers"
         cmd += f" --group {self._group}"
@@ -58,14 +59,16 @@ class ConsumerSwarm(ClientSwarmBase):
 
         return cmd
 
-    def await_first(self, timeout_sec, err_msg=None):
+    def await_first(
+        self, timeout_sec: int, err_msg: str | Callable[[], str] = ""
+    ) -> bool:
         class Checker:
-            def __init__(self, swarm: ConsumerSwarm):
+            def __init__(self, swarm: ConsumerSwarm) -> None:
                 self.swarm = swarm
                 self.checks_made = 0
                 self.check_passed = False
 
-            def __call__(self):
+            def __call__(self) -> bool:
                 try:
                     ms = self.swarm.get_metrics_summary()
                     self.checks_made += 1

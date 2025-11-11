@@ -642,7 +642,7 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
     effective_fetch_max_bytes: builtins.int
     'The effective fetch max bytes'
     fetch_partition_max_bytes: builtins.int
-    'Fetch partition max bytes.\n    If 0 is provided, defaults to 1 MiB\n    '
+    'Fetch partition max bytes.\n    If 0 is provided, defaults to 5 MiB\n    '
     effective_fetch_partition_max_bytes: builtins.int
     'The effective fetch partition max bytes'
 

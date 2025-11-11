@@ -15,6 +15,7 @@ from rptest.clients.python_librdkafka import PythonLibrdkafka
 from rptest.clients.rpk import RpkTool
 from rptest.services.cluster import cluster
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.utils.type_utils import rcast
 
 
 class CustomTopicAssignmentTest(RedpandaTest):
@@ -79,7 +80,7 @@ class CustomTopicAssignmentTest(RedpandaTest):
                 fut.result()
                 assert False
             except KafkaException as e:
-                kafka_error = e.args[0]
+                kafka_error = rcast(KafkaError, e.args[0])
                 self.redpanda.logger.debug(
                     f"topic {name} creation failed: {kafka_error}, expected error: {expected_error}"
                 )

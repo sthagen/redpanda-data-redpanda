@@ -45,7 +45,7 @@ class ThreadedProducer:
             }
         )
 
-        def delivery_clb(err: KafkaError, msg, start_time):
+        def delivery_clb(err: KafkaError | None, msg, start_time):
             if err:
                 self.logger.warn(f"error sending message: {err}")
 

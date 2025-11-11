@@ -10,7 +10,7 @@
 import re
 
 import confluent_kafka as ck
-from confluent_kafka import KafkaException
+from confluent_kafka import KafkaError, KafkaException
 from confluent_kafka.serialization import StringDeserializer
 from ducktape.utils.util import wait_until
 
@@ -19,6 +19,7 @@ from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import DEFAULT_LOG_ALLOW_LIST
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.utils.type_utils import rcast
 
 TIMEOUT_ALLOW_LIST = [re.compile(r".*Unexpected tx_error error: {tx::errc::timeout}.*")]
 
@@ -243,8 +244,10 @@ class TxDisableTopicTest(RedpandaTest):
         except KafkaException as e:
             did_time_out = True
             self.logger.debug(f"Exception and args were {e} with args: {e.args}")
-            assert e.args[0].retriable(), "The error should be retryable"
-            assert not e.args[0].txn_requires_abort(), (
+            assert rcast(KafkaError, e.args[0]).retriable(), (
+                "The error should be retryable"
+            )
+            assert not rcast(KafkaError, e.args[0]).txn_requires_abort(), (
                 "The commit shouldn't be irrevocable"
             )
 
@@ -344,8 +347,10 @@ class TxDisableTopicTest(RedpandaTest):
             producer.init_transactions(5)
         except KafkaException as e:
             did_time_out = True
-            assert e.args[0].retriable(), "The error should be retryable"
-            assert not e.args[0].txn_requires_abort(), (
+            assert rcast(KafkaError, e.args[0]).retriable(), (
+                "The error should be retryable"
+            )
+            assert not rcast(KafkaError, e.args[0]).txn_requires_abort(), (
                 "The commit shouldn't be irrevocable"
             )
         assert did_time_out, "should have timed out"

@@ -14,6 +14,7 @@ from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.utils.type_utils import rcast
 
 
 class TxOverflowTest(RedpandaTest):
@@ -74,6 +75,7 @@ class TxOverflowTest(RedpandaTest):
             oldest_producer.commit_transaction()
             assert False, ""
         except KafkaException as e:
-            assert e.args[0].code() == KafkaError.INVALID_PRODUCER_ID_MAPPING, (
-                f"observed code={e.args[0].code()}"
-            )
+            assert (
+                rcast(KafkaError, e.args[0]).code()
+                == KafkaError.INVALID_PRODUCER_ID_MAPPING
+            ), f"observed code={rcast(KafkaError, e.args[0]).code()}"

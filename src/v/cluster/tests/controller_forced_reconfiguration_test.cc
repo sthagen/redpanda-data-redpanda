@@ -9,14 +9,18 @@
 
 #include "base/vassert.h"
 #include "cluster/controller_forced_reconfiguration_manager.h"
+#include "cluster/errc.h"
+#include "cluster/members_frontend.h"
 #include "cluster/tests/cluster_test_fixture.h"
 #include "config/configuration.h"
 #include "gtest/gtest.h"
 #include "model/fundamental.h"
+#include "model/metadata.h"
 #include "model/namespace.h"
 #include "raft/fundamental.h"
-#include "test_utils/test.h"
+#include "redpanda/tests/fixture.h"
 
+#include <algorithm>
 #include <exception>
 
 namespace {
@@ -43,6 +47,16 @@ struct topic_config {
 constexpr auto small_wait = 3s;
 constexpr auto medium_wait = 15s;
 constexpr auto large_wait = 120s;
+
+namespace { // smoke tests
+static const auto default_topic = topic_config{
+  .name = model::topic{"test-topic"},
+  .partition_count = 3,
+  .replication_factor = 3};
+
+constexpr raft::vnode to_vnode(int node_id) {
+    return raft::vnode{model::node_id{node_id}, model::revision_id{0}};
+}
 
 template<typename T>
 auto typed_range(int begin, T end) {
@@ -125,21 +139,23 @@ public:
         }
     }
 
-    // kill the majority of the cluster nodes starting at 0
-    // for a cluster of size 5, will kill 0, 1, and 2
-    void induce_controller_loss() {
-        scope_logger sl{"induce controller loss"};
-
+    std::vector<model::node_id> get_nodes_to_kill() {
         // cluster size of 5 -> kill [0,3)
         uint16_t kill_up_to_exclusive = _cluster_size / 2 + 1;
-
         std::vector<model::node_id> nodes_to_kill{};
         nodes_to_kill.reserve(kill_up_to_exclusive);
         for (const auto node_number : typed_range(0, kill_up_to_exclusive)) {
             nodes_to_kill.emplace_back(node_number);
         }
+        return nodes_to_kill;
+    }
 
-        batch_kill_nodes(nodes_to_kill);
+    // kill the majority of the cluster nodes starting at 0
+    // for a cluster of size 5, will kill 0, 1, and 2
+    void induce_controller_loss() {
+        scope_logger sl{"induce controller loss"};
+
+        batch_kill_nodes(get_nodes_to_kill());
     }
 
     // snap the dead nodes to a vector
@@ -328,10 +344,150 @@ public:
         }
     }
 
+    // this assumes that the controller is alive, dont use this to poll or
+    // otherwise
+    redpanda_thread_fixture* safe_get_controller_rp() {
+        // get controller from living nodes
+        auto living_nodes = get_living_nodes();
+        wait_for_controller_leadership(living_nodes.front()).get();
+        auto* app = get_node_application(living_nodes.front());
+        auto maybe_controller_leader
+          = app->controller->get_partition_leaders().local().get_leader(
+            model::controller_ntp);
+        vassert(
+          maybe_controller_leader.has_value(),
+          "failed to get controller leader");
+
+        auto controller_leader = *maybe_controller_leader;
+        auto controller_rp = instance(controller_leader);
+
+        vassert(
+          controller_rp != nullptr,
+          "controller leader instance should not be nullptr");
+
+        return controller_rp;
+    }
+
+    // put one partition of the topic as much as possible onto the dead nodes
+    void move_partition_onto_dying_nodes(const topic_config& topic_config) {
+        auto to_move_ntp = model::ntp{
+          model::kafka_namespace, topic_config.name, model::partition_id{0}};
+
+        scope_logger sl{
+          fmt::format("move partition onto dying nodes {}", to_move_ntp)};
+
+        auto* controller_rp = safe_get_controller_rp();
+
+        // use topic table to request the move
+        auto& topics_frontend
+          = controller_rp->app.controller->get_topics_frontend().local();
+
+        std::vector<model::broker_shard> to_kill_broker_shards{
+          std::from_range,
+          std::ranges::views::transform(
+            get_nodes_to_kill(),
+            [](model::node_id node_id) -> model::broker_shard {
+                return model::broker_shard{.node_id = node_id, .shard = 0};
+            })};
+
+        // request the move
+        auto move_err
+          = topics_frontend
+              .move_partition_replicas(
+                to_move_ntp,
+                to_kill_broker_shards,
+                cluster::reconfiguration_policy::full_local_retention,
+                ss::lowres_clock::now() + medium_wait)
+              .get();
+        ASSERT_FALSE(move_err)
+          << "failed to move partition with error_code " << move_err;
+
+        // spin until theres no move in progress
+        auto& topics_table
+          = controller_rp->app.controller->get_topics_state().local();
+        wait_for(medium_wait, [&topics_table, to_move_ntp] {
+            return !topics_table.is_update_in_progress(to_move_ntp);
+        });
+    }
+
+    // execute nodewise recovery, wait for completion
+    void execute_nodewise_recovery() {
+        scope_logger sl{"nodewise recovery"};
+        auto* controller_rp = safe_get_controller_rp();
+
+        auto& topic_frontend
+          = controller_rp->app.controller->get_topics_frontend().local();
+        auto maybe_pwlm = topic_frontend
+                            .partitions_with_lost_majority(get_dead_nodes())
+                            .get();
+        ASSERT_TRUE(maybe_pwlm.has_value())
+          << "get partitions_with_lost_majority failed with error: "
+          << maybe_pwlm.error().message();
+
+        auto pwlm = std::move(maybe_pwlm).assume_value();
+
+        for (const auto& entry : pwlm) {
+            vlog(
+              _logger.info, "executing nodewise recovery on entry: {}", entry);
+        }
+
+        auto force_error = topic_frontend
+                             .force_recover_partitions_from_nodes(
+                               get_dead_nodes(),
+                               std::move(pwlm),
+                               ss::lowres_clock::now() + large_wait)
+                             .get();
+
+        ASSERT_FALSE(force_error)
+          << "failed to execute force recovery with error "
+          << force_error.message();
+
+        auto& topic_table
+          = controller_rp->app.controller->get_topics_state().local();
+
+        wait_for(large_wait, [&topic_table] {
+            return topic_table.updates_in_progress().size() == 0;
+        });
+    }
+
+    void decommission_dead_nodes() {
+        scope_logger sl{"decommission dead nodes"};
+
+        auto* controller_rp = safe_get_controller_rp();
+
+        auto& members_frontend
+          = controller_rp->app.controller->get_members_frontend().local();
+
+        for (auto dead_node : get_dead_nodes()) {
+            auto decom_err
+              = members_frontend.decommission_node(dead_node).get();
+            ASSERT_FALSE(decom_err) << "failed to decommission node "
+                                    << dead_node << " with error " << decom_err;
+        }
+
+        auto& members_table
+          = controller_rp->app.controller->get_members_table().local();
+
+        wait_for(large_wait, [&members_table, dead_nodes = get_dead_nodes()] {
+            for (const auto dead_node : dead_nodes) {
+                auto dead_meta = members_table.get_node_metadata(dead_node);
+                if (dead_meta) {
+                    vlog(
+                      _logger.info,
+                      "still has metadata for dead node: {}",
+                      dead_node);
+                    return false;
+                }
+            }
+            vlog(_logger.info, "successfully removed dead_nodes");
+            return true;
+        });
+    }
+
     void check_final_replica_locations() {
-        // given a cluster size of N, check that [0, floor(N/2)] are actually
-        // gone (killed to lose quorum)
-        // and that [ceil(N/2), N + ceil(N/2)] are alive
+        // given a cluster size of N, check that all nodes
+        // [0, floor(N/2)] are actually gone (killed to lose quorum)
+        // and that [floor(N/2) + 1, N + floor(N/2) + 1] are alive
         auto nodes = this->instance_ids();
 
         ASSERT_EQ(nodes.size(), _cluster_size);
@@ -367,19 +523,34 @@ class SizedCFRFixture : public CFRFixture {
 public:
     SizedCFRFixture() noexcept
       : CFRFixture(Size) {}
+
+    void do_smoke_test() {
+        // set up
+        setup_topic(default_topic);
+        move_partition_onto_dying_nodes(default_topic);
+
+        // disaster
+        induce_controller_loss();
+        toggle_recovery_mode(true);
+        check_no_controller_leader();
+
+        // recovery
+        force_recover_cluster();
+        check_controller_leader();
+        restore_node_number();
+        check_controller_leader();
+        toggle_recovery_mode(false);
+        check_controller_leader();
+        execute_nodewise_recovery();
+        decommission_dead_nodes();
+
+        // check recovery succeeded
+        wait_for_leader_restoration(default_topic);
+        check_final_replica_locations();
+    }
 };
 
 } // namespace
-
-namespace { // smoke tests
-static const auto default_topic = topic_config{
-  .name = model::topic{"test-topic"},
-  .partition_count = 3,
-  .replication_factor = 3};
-
-constexpr raft::vnode to_vnode(int node_id) {
-    return raft::vnode{model::node_id{node_id}, model::revision_id{0}};
-}
 
 TEST(CalculateRaftGroup, TwoSuvivors) {
     std::vector<raft::vnode> voter_config = {
@@ -396,6 +567,33 @@ TEST(CalculateRaftGroup, TwoSuvivors) {
     auto result_config = std::move(maybe_result_config).value();
 
     std::vector<raft::vnode> expected = {to_vnode(3), to_vnode(4), to_vnode(0)};
+
+    ASSERT_EQ(result_config.size(), expected.size());
+    for (const auto& result_node : result_config) {
+        ASSERT_TRUE(std::ranges::find(expected, result_node) != expected.end());
+    }
+}
+
+TEST(CalculateRaftGroup, EvenClusterSize) {
+    std::vector<raft::vnode> voter_config = {
+      to_vnode(0),
+      to_vnode(1),
+      to_vnode(2),
+      to_vnode(3),
+      to_vnode(4),
+      to_vnode(5)};
+
+    std::vector<model::node_id> dead_nodes = {
+      model::node_id{0}, model::node_id{1}, model::node_id{2}};
+
+    auto maybe_result_config
+      = cluster::controller_forced_reconfiguration_manager::
+        calculation_reconfiguration_group(dead_nodes, voter_config, 2);
+    ASSERT_TRUE(maybe_result_config.has_value());
+
+    auto result_config = std::move(maybe_result_config).value();
+
+    std::vector<raft::vnode> expected = {to_vnode(3), to_vnode(4), to_vnode(5)};
 
     ASSERT_EQ(result_config.size(), expected.size());
     for (const auto& result_node : result_config) {
@@ -440,57 +638,12 @@ TEST(CalculateRaftGroup, NotEnoughNodes) {
 }
 
 using CFRFixture5 = SizedCFRFixture<5>;
-TEST_F(CFRFixture5, Smoke5) {
-    setup_topic(default_topic);
-
-    induce_controller_loss();
-
-    toggle_recovery_mode(true);
-
-    check_no_controller_leader();
-
-    force_recover_cluster();
-
-    check_controller_leader();
-
-    restore_node_number();
-
-    check_controller_leader();
-
-    toggle_recovery_mode(false);
-
-    check_controller_leader();
-
-    wait_for_leader_restoration(default_topic);
-
-    check_final_replica_locations();
-}
+TEST_F(CFRFixture5, Smoke5) { do_smoke_test(); }
 
 using CFRFixture3 = SizedCFRFixture<3>;
-TEST_F(CFRFixture3, Smoke3) {
-    setup_topic(default_topic);
+TEST_F(CFRFixture3, Smoke3) { do_smoke_test(); }
 
-    induce_controller_loss();
-
-    toggle_recovery_mode(true);
-
-    check_no_controller_leader();
-
-    force_recover_cluster();
-
-    check_controller_leader();
-
-    restore_node_number();
-
-    check_controller_leader();
-
-    toggle_recovery_mode(false);
-
-    check_controller_leader();
-
-    wait_for_leader_restoration(default_topic);
-
-    check_final_replica_locations();
-}
+using CFRFixture4 = SizedCFRFixture<4>;
+TEST_F(CFRFixture4, Smoke4) { do_smoke_test(); }
 
 } // namespace

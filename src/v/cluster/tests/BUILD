@@ -1306,6 +1306,7 @@ redpanda_cc_gtest(
         "//src/v/model",
         "//src/v/raft:fundamental",
         "//src/v/random:generators",
+        "//src/v/redpanda/tests:fixture",
         "//src/v/security",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
