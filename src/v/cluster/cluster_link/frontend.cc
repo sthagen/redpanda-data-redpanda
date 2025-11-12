@@ -75,6 +75,20 @@ errc map_errc(std::error_code ec) {
     }
     return errc::rpc_error;
 }
+
+bool is_topic_mutable(::cluster_link::model::mirror_topic_status status) {
+    switch (status) {
+    case ::cluster_link::model::mirror_topic_status::active:
+    case ::cluster_link::model::mirror_topic_status::failed:
+    case ::cluster_link::model::mirror_topic_status::paused:
+    case ::cluster_link::model::mirror_topic_status::failing_over:
+    case ::cluster_link::model::mirror_topic_status::promoting:
+        return false;
+    case ::cluster_link::model::mirror_topic_status::failed_over:
+    case ::cluster_link::model::mirror_topic_status::promoted:
+        return true;
+    }
+}
 } // namespace
 
 frontend::frontend(
@@ -211,17 +225,7 @@ bool frontend::is_topic_mutable_for_kafka_api(const model::topic& topic) const {
         // topic does not belong to any cluster link
         return true;
     }
-    switch (*status) {
-    case ::cluster_link::model::mirror_topic_status::active:
-    case ::cluster_link::model::mirror_topic_status::failed:
-    case ::cluster_link::model::mirror_topic_status::paused:
-    case ::cluster_link::model::mirror_topic_status::failing_over:
-    case ::cluster_link::model::mirror_topic_status::promoting:
-        return false;
-    case ::cluster_link::model::mirror_topic_status::failed_over:
-    case ::cluster_link::model::mirror_topic_status::promoted:
-        return true;
-    }
+    return is_topic_mutable(*status);
 }
 
 std::optional<chunked_hash_map<
@@ -310,8 +314,16 @@ bool frontend::schema_registry_shadowing_active() const {
         if (!md.has_value()) {
             return false;
         }
-        // If mirror_schema_registry_topic option is set, then shadowing for
-        // SR is active
+        // Check to see if the schema registry topic is in the mirror topic list
+        const auto& mirror_topics = md->get().state.mirror_topics;
+        auto topic_it = mirror_topics.find(
+          ::model::schema_registry_internal_tp.topic);
+        if (topic_it != mirror_topics.end()) {
+            // If it is, return whether or not it is mutable based on its status
+            return !is_topic_mutable(topic_it->second.status);
+        }
+        // If mirror_schema_registry_topic option is set and the topic is not
+        // yet in the mirror topic list, then shadowing for SR is active
         const auto& sr_cfg = md->get().configuration.schema_registry_sync_cfg;
         if (
           sr_cfg.sync_schema_registry_topic_mode.has_value()
@@ -322,10 +334,7 @@ bool frontend::schema_registry_shadowing_active() const {
             return true;
         }
 
-        // If the schema registry topic is in the mirror_topics list, then
-        // disable writes
-        return md->get().state.mirror_topics.contains(
-          ::model::schema_registry_internal_tp.topic);
+        return false;
     });
 }
 

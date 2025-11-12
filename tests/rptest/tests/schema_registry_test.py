@@ -54,7 +54,12 @@ from rptest.services.redpanda_types import SaslCredentials
 from rptest.services.serde_client import SerdeClient
 from rptest.tests.pandaproxy_test import PandaProxyTLSProvider, User
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import expect_exception, inject_remote_script, search_logs_with_timeout
+from rptest.util import (
+    expect_exception,
+    inject_remote_script,
+    search_logs_with_timeout,
+    wait_until_result,
+)
 from rptest.utils.log_utils import wait_until_nag_is_set
 from rptest.utils.mode_checks import skip_fips_mode
 
@@ -2978,6 +2983,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
     @parametrize(move_controller_leader=True)
     def test_restarts(self, move_controller_leader: bool):
         admin = Admin(self.redpanda)
+        rpk = RpkTool(self.redpanda)
 
         def check_connection(hostname: str):
             result_raw = self.sr_client.get_subjects(hostname=hostname)
@@ -2985,6 +2991,22 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             self.logger.info(result_raw.json())
             assert result_raw.status_code == requests.codes.ok
             assert result_raw.json() == []
+
+        def get_leader_epoch():
+            def rpk_get_leader_epoch():
+                partitions = rpk.describe_topic("_schemas")
+                par_0 = next((p for p in partitions if p.id == 0), None)
+                if not par_0:
+                    return (False, (-1))
+                return (True, par_0.leader_epoch)
+
+            leader_epoch = wait_until_result(
+                rpk_get_leader_epoch,
+                timeout_sec=10,
+                backoff_sec=1,
+                err_msg="Could not get leader info",
+            )
+            return leader_epoch
 
         def restart_leader():
             leader = admin.get_partition_leader(
@@ -2995,11 +3017,25 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                 admin.partition_transfer_leadership(
                     namespace="redpanda", topic="controller", partition=0
                 )
+            last_epoch = get_leader_epoch()
             self.logger.info(f"Restarting node: {leader}")
             self.redpanda.restart_nodes(self.redpanda.get_node(leader))
-            admin.await_stable_leader(topic="_schemas", partition=0, namespace="kafka")
 
-        for _ in range(20):
+            def get_new_leader():
+                new_epoch = get_leader_epoch()
+                had_election = last_epoch < new_epoch
+                return (had_election, new_epoch)
+
+            new_epoch = wait_until_result(
+                get_new_leader,
+                timeout_sec=20,
+                backoff_sec=1,
+                err_msg="Leadership did not stabilize",
+            )
+            self.logger.info(f"Epoch: {new_epoch}")
+
+        for i in range(20):
+            self.logger.info(f"Iteration {i}")
             for n in self.redpanda.nodes:
                 check_connection(n.account.hostname)
             restart_leader()

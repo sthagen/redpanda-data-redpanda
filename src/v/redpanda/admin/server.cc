@@ -551,8 +551,11 @@ ss::future<> admin_server::start() {
 
 ss::future<> admin_server::stop() {
     _blocked_reactor_notify_reset_timer.cancel();
+    vlog(adminlog.debug, "admin_server::stop() - timer cancelled");
     _memory_semaphore.broken();
+    vlog(adminlog.debug, "admin_server::stop() - memory semaphore broken");
     co_await _server.stop();
+    vlog(adminlog.debug, "admin_server::stop() - _server stopped");
     co_await _debug_bundle_file_handler.stop();
 }
 

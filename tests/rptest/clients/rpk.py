@@ -1593,7 +1593,7 @@ class RpkTool:
         cmd = [
             self._rpk_binary(),
             "-X",
-            f"brokers={self._admin_host()}",
+            f"admin.hosts={self._admin_host()}",
             "cluster",
             "connections",
             "list",
@@ -2164,7 +2164,7 @@ class RpkTool:
 
         return self._run_registry(cmd)
 
-    def list_schemas(self, subjects=[], deleted=False):
+    def list_schemas(self, subjects: list[str] = [], deleted: bool = False):
         cmd = ["schema", "list"]
 
         if len(subjects) > 0:

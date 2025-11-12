@@ -682,6 +682,13 @@ message BType {
   double d = 1;
 }"""
 
+    simple_c_proto_def = """
+syntax = "proto3";
+
+message CType {
+  string id = 1;
+}"""
+
     def __init__(self, test_context, *args, **kwargs):
         super().__init__(
             test_context=test_context,
@@ -855,6 +862,29 @@ message BType {
             backoff_sec=1,
             err_msg="Subjects do not match",
         )
+
+        # Now fail over the Schemas topic and verify that we can now write to it
+        self.logger.info("Failing over the _schemas topic")
+        self.failover_link_topic(link_name="test-link", topic="_schemas")
+
+        def topic_has_failed_over(link_name: str, topic: str) -> bool:
+            shadow_topic = self.get_shadow_topic(
+                shadow_link_name=link_name, shadow_topic_name=topic
+            )
+            self.logger.debug(f"shadow_topic: {shadow_topic}")
+            return (
+                shadow_topic.status.state
+                == shadow_link_pb2.SHADOW_TOPIC_STATE_FAILED_OVER
+            )
+
+        wait_until(
+            lambda: topic_has_failed_over("test-link", "_schemas"),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="_schemas topic did not failover",
+        )
+
+        self.post_schema_to_subject(target_sr_client, "fourth", self.simple_c_proto_def)
 
     @cluster(
         num_nodes=6,

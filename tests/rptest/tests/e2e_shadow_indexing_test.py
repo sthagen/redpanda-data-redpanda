@@ -519,7 +519,11 @@ class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
                 except HTTPError as ex:
                     if "would cause data loss" in ex.response.text:
                         resets_refused += 1
+                    elif "Could not sync with log" in ex.response.text:
+                        # Benign, transient error.
+                        pass
                     else:
+                        # Some other unexpected error.
                         resets_failed += 1
                     self.logger.info(f"Reset from cloud failed: {ex}")
                 next_reset = now + timedelta(seconds=seconds_between_reset)

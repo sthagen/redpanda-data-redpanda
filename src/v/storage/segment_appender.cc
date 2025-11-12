@@ -630,11 +630,11 @@ ss::future<> segment_appender::flush() {
         // dispatching background head write.
         auto f = w.p.get_future();
         dispatch_background_head_write();
-        co_return co_await std::move(f);
+        return f;
     }
 
     if (file_byte_offset() <= _flushed_offset) {
-        co_return;
+        return ss::now();
     }
 
     /*
@@ -643,7 +643,7 @@ ss::future<> segment_appender::flush() {
      */
     if (!_inflight.empty()) {
         auto& w = _flush_ops.emplace_back(file_byte_offset());
-        co_return co_await w.p.get_future();
+        return w.p.get_future();
     }
 
     vassert(
@@ -653,13 +653,9 @@ ss::future<> segment_appender::flush() {
       _stable_offset,
       *this);
 
-    try {
-        co_await _out.flush();
-    } catch (const std::exception& e) {
+    return _out.flush().handle_exception([this](std::exception_ptr e) {
         vunreachable("Could not flush: {} - {}", e, *this);
-    };
-
-    ++_stats.fsyncs;
+    });
 }
 
 ss::future<> segment_appender::hard_flush() {

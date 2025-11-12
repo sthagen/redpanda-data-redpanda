@@ -504,6 +504,23 @@ class RandomNodeOperationsBase(PreallocNodesTest):
 
         client = DefaultClient(self.redpanda)
 
+        # wait until schema registry topic is created
+        # to avoid topic creation errors during restarts
+        def schema_registry_topic_created():
+            rpk = RpkTool(self.redpanda)
+            try:
+                rpk.list_schemas()
+            except:
+                return False
+            return True
+
+        wait_until(
+            schema_registry_topic_created,
+            180,
+            backoff_sec=2,
+            err_msg="Error waiting for schema registry topic to be created",
+        )
+
         # create some initial topics
         self._create_topics(self.topic_count)
         regular_topic = TopicSpec(
