@@ -561,7 +561,6 @@ class DisableTieredStorageTest(NodePoolMigrationTestBase):
         self.producer.wait(timeout_sec=60)
 
         info = describe_topic()
-        second_start_offset = info.start_offset
         second_hwm = info.high_watermark
 
         assert pm_last_offset() == last_uploaded, (

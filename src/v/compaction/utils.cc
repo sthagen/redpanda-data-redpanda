@@ -23,7 +23,7 @@ namespace compaction {
 bool is_removable_control_batch(
   const model::ntp& ntp,
   const model::record_batch_type batch_type,
-  [[maybe_unused]] ss::sharded<features::feature_table>& feature_table) {
+  ss::sharded<features::feature_table>& feature_table) {
     // Control batches in consumer offsets are special compared to
     // the ones in data partitions can be safely compacted away.
     // Fence batches can also be immediately removed when seen in the
@@ -31,13 +31,10 @@ bool is_removable_control_batch(
     // removal in a user topic is gated by
     // `log_compaction_disable_tx_batch_removal()`.
     auto is_co_topic = model::is_consumer_offsets_topic(ntp);
-    // TODO(tx_compact): Re-enable this when transactional control batch feature
-    // is added.
-    auto remove_user_tx_fence_enabled = false;
-    // auto remove_user_tx_fence_enabled
-    //   = !config::shard_local_cfg().log_compaction_disable_tx_batch_removal()
-    //     && feature_table.local().is_active(
-    //       features::feature::coordinated_compaction);
+    auto remove_user_tx_fence_enabled
+      = !config::shard_local_cfg().log_compaction_disable_tx_batch_removal()
+        && feature_table.local().is_active(
+          features::feature::coordinated_compaction);
     auto tx_fence_removable = batch_type == model::record_batch_type::tx_fence
                               && (is_co_topic || remove_user_tx_fence_enabled);
     return tx_fence_removable

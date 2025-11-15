@@ -390,7 +390,6 @@ class ConsumerGroupTest(RedpandaTest):
         self.start_producer()
         # wait for some messages
         wait_until(lambda: ConsumerGroupTest.consumed_at_least(consumers, 50), 30, 2)
-        rpk = RpkTool(self.redpanda)
         # at this point we have 2 consumers in stable group
         self.validate_group_state(
             group, expected_state="Stable", static_members=static_members
@@ -1281,88 +1280,6 @@ class OffsetFetchRequest_v5(Request):
     API_VERSION = 5
     RESPONSE_TYPE = OffsetFetchResponse_v5
     SCHEMA = OffsetFetchRequest_v3.SCHEMA
-
-
-class TestConsumer:
-    def __init__(self, bootstrap_servers, group, topic, id, logger):
-        self.bootstrap_servers = bootstrap_servers
-        self.id = id
-        self.group = group
-        self.topic = topic
-        self.consumer_thread = threading.Thread(
-            name=f"consumer-{id}", target=lambda this: this.loop(), args=[self]
-        )
-        self.stopped = threading.Event()
-        self.restart = threading.Event()
-        self.logger = logger
-        self.consumer_thread.daemon = True
-        self.consumer_thread.start()
-        self.last_consumed = None
-        self.lock = threading.Lock()
-        self.restarted = threading.Event()
-
-    def stop(self):
-        self.logger.info(f"stopping consumer with id: {self.id}")
-        self.stopped.set()
-        self.consumer_thread.join()
-
-    def loop(self):
-        self.consumer = Consumer(
-            {
-                "group.id": self.group,
-                "group.instance.id": f"consumer-{self.id}",
-                "bootstrap.servers": self.bootstrap_servers,
-                "session.timeout.ms": 10000,
-                "auto.offset.reset": "earliest",
-                "enable.auto.offset.store": False,
-            }
-        )
-        self.consumer.subscribe([self.topic])
-        self.logger.info(f"starting consumer with id: {self.id}")
-        while not self.stopped.is_set():
-            if self.restart.is_set():
-                self.logger.info(f"restarting consumer with id: {self.id}")
-                self.consumer.close()
-                self.consumer = Consumer(
-                    {
-                        "group.id": self.group,
-                        "group.instance.id": f"consumer-{self.id}",
-                        "bootstrap.servers": self.bootstrap_servers,
-                        "session.timeout.ms": 10000,
-                        "auto.offset.reset": "earliest",
-                        "enable.auto.offset.store": False,
-                    }
-                )
-                self.consumer.subscribe([self.topic])
-                self.consumer.poll(0.5)
-                self.restart.clear()
-                self.restarted.set()
-
-            try:
-                msg = self.consumer.poll(timeout=1.0)
-                if msg is None:
-                    continue
-                if msg.error():
-                    self.logger.error(f"consumer {self.id} error - {msg.error()}")
-                    continue
-
-                self.consumer.store_offsets(msg)
-                with self.lock:
-                    self.last_consumed = msg.offset()
-
-            except Exception as e:
-                self.logger.error(f"consumer {self.id} error - {e}")
-
-        self.consumer.close()
-
-    def get_last_consumed(self):
-        with self.lock:
-            return self.last_consumed
-
-    def restart_consumer(self):
-        self.restart.set()
-        self.restarted.wait()
-        self.restarted.clear()
 
 
 class TestConsumer:

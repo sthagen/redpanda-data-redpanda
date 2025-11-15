@@ -117,7 +117,7 @@ namespace cluster {
  * This stm periodically checks if there is any pending transaction for
  * expiration. The expiration kicks in the transaction is not committed/aborted
  * within the user set transaction timeout. A producer with an active
- * transaction cannot be evicted, so exipration ensures that with timely
+ * transaction cannot be evicted, so expiration ensures that with timely
  * expiration of open transactions, the producer states are candidates for
  * eviction.
  */
@@ -435,6 +435,15 @@ private:
     model::producer_id _highest_producer_id;
     // for monotonicity of computed LSO.
     model::offset _last_known_lso{-1};
+    /**
+     * LSO lock protects the LSO from being exposed before transaction begin
+     * batch is applied.
+     *
+     * The lock is acquired in write mode when a begin transaction batch is
+     * being handled protecting exposure of potentially invalid LSO until the
+     * begin batch is applied.
+     */
+    ss::rwlock _lso_lock;
 
     friend struct ::rm_stm_test_fixture;
 };

@@ -186,8 +186,6 @@ class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=get_cloud_storage_type()[0:1])
     def test_reset(self, cloud_storage_type):
-        brokers = self.redpanda.started_nodes()
-
         msg_count_before_reset = 50 * (self.segment_size // 2056)
         producer = KgoVerifierProducer(
             self.test_context,
@@ -1681,7 +1679,7 @@ class ShadowIndexingTrafficShapingTest(PreallocNodesTest):
             custom_node=self.preallocated_nodes,
         )
 
-        with self.EnableTrafficShaping(self.redpanda) as ts:
+        with self.EnableTrafficShaping(self.redpanda):
             self.redpanda.start()
             self.kafka_tools.create_topic(self.topics[0])
             rpk = RpkTool(self.redpanda)

@@ -1709,7 +1709,6 @@ class CloudCluster:
 
         Returns True if completed successfully, False otherwise.
         """
-        start_time = datetime.utcnow().isoformat()
         start_ts = time.time()
         poll_interval = 30
 

@@ -16,7 +16,6 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     PandaproxyConfig,
     RedpandaService,
-    AuditLogConfig,
     SaslCredentials,
     SchemaRegistryConfig,
     SecurityConfig,
@@ -26,6 +25,11 @@ from rptest.tests.pandaproxy_test import PandaProxyMTLSBase
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.schema_registry_test import SchemaRegistryMTLSBase
 from rptest.tests.scram_test import SaslPlainTLSProvider
+from rptest.tests.audit_log_test import (
+    AuditLogConfig,
+    AuditLogTestBase,
+    AuditLogTestSecurityConfig,
+)
 
 
 def make_from_dict(class_name, values):
@@ -1020,56 +1024,54 @@ class SchemaRegistryClientSecurityReportTest(RedpandaTest):
         validate_report(report, schema_registry_expected={})
 
 
-class AuditlogClientNoSecurityReportTest(RedpandaTest):
+class AuditlogClientSecurityReportTest(AuditLogTestBase):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, extra_rp_conf={"audit_enabled": True}, **kwargs)
+        security: AuditLogTestSecurityConfig = (
+            AuditLogTestSecurityConfig.default_credentials()
+        )
+        super().__init__(
+            *args,
+            audit_log_config=AuditLogConfig(use_rpc=False),
+            security=security,
+            **kwargs,
+        )
 
-    def setUp(self):
-        super().setUp()
+    def setUp(self, wait_for_audit_log: bool = True):
+        super().setUp(wait_for_audit_log)
 
-    @cluster(num_nodes=3)
+    @cluster(num_nodes=4)
     def test_security_report(self):
+        kafka_interface = KafkaInterface(
+            tls_enabled=False,
+            mutual_tls_enabled=False,
+            authorization_enabled=True,
+            authentication_method="SASL",
+            supported_sasl_mechanisms=sasl_default_mechs,
+        )
+
+        krb_interface = KafkaInterface(
+            tls_enabled=False,
+            mutual_tls_enabled=False,
+            authorization_enabled=True,
+            # kafka_authorization_method is set but no
+            # authentication method is set for this listener
+            authentication_method="None",
+            supported_sasl_mechanisms=None,
+        )
+
         audit_log_expected = KafkaClientInterface(
             tls_enabled=False,
             mutual_tls_enabled=False,
             configured_authentication_method="SCRAM_Ephemeral",
         )
 
-        expected_alerts = [
-            SecurityAlert(
-                affected_interface="audit_log_client",
-                listener_name="audit_log_client",
-                issue="NO_TLS",
-                description='"audit_log_client" interface "audit_log_client" is not using TLS. This is insecure and not recommended.',
-            ),
-        ]
         report = Admin(self.redpanda).security_report()
         validate_report(
             report,
+            kafka_expected={
+                "dnslistener": kafka_interface,
+                "iplistener": kafka_interface,
+                "kerberoslistener": krb_interface,
+            },
             audit_log_expected=audit_log_expected,
-            expected_alerts=expected_alerts,
         )
-
-
-class AuditlogClientSecurityReportTest(RedpandaTest):
-    def __init__(self, *args, **kwargs):
-        super().__init__(
-            *args,
-            audit_log_config=AuditLogConfig(),
-            extra_rp_conf={"audit_enabled": True},
-            **kwargs,
-        )
-
-    def setUp(self):
-        super().setUp()
-
-    @cluster(num_nodes=3)
-    def test_security_report(self):
-        audit_log_expected = KafkaClientInterface(
-            tls_enabled=True,
-            mutual_tls_enabled=True,
-            configured_authentication_method="SCRAM_Ephemeral",
-        )
-
-        report = Admin(self.redpanda).security_report()
-        validate_report(report, audit_log_expected=audit_log_expected)

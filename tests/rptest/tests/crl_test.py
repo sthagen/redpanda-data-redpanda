@@ -303,7 +303,6 @@ class CertificateRevocationTest(RedpandaTest):
     # kafka - server.cc:159 - Error[applying protocol] remote address: 172.31.37.188:59640 - seastar::timed_out_error (timedout)
     @cluster(num_nodes=3, log_allow_list=[re.compile(".*")])
     def test_noncogent(self):
-        node = self.redpanda.nodes[0]
         self.rpk.list_schemas()
 
         other_tls = tls.TLSCertManager(self.logger)

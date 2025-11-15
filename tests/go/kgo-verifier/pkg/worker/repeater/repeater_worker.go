@@ -290,6 +290,7 @@ func (v *Worker) Init() {
 		opts = append(opts, []kgo.Opt{
 			kgo.ProducerBatchMaxBytes(1024 * 1024),
 			kgo.RecordPartitioner(kgo.StickyKeyPartitioner(nil)),
+			kgo.ProducerLinger(0),
 		}...)
 
 		if v.transactionsEnabled {

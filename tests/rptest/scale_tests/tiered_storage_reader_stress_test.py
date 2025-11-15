@@ -216,12 +216,6 @@ class TieredStorageReaderStressTest(RedpandaTest):
         # We will use synthetic timestamps, to keep the test somewhat deterministic when we
         # select timequery points evenly spaced through the range
         base_fake_ts = 1688562373356
-        max_fake_ts = base_fake_ts + msg_count - 1
-
-        peak_readers = partition_count * concurrent_timequeries
-        peak_readers_per_shard = peak_readers // (
-            len((self.redpanda.nodes) * self.redpanda.get_node_cpu_count())
-        )
 
         self._create_topic(topic_name, partition_count, self.segment_size)
         self._produce_and_quiesce(

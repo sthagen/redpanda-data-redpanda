@@ -91,8 +91,6 @@ class WriteRejectTest(RedpandaTest):
     def _send_all_topics(self, msg: str, expect_blocked=False):
         """Send `msg` to all topics, retrying a fixed number of times for
         expected success or failure."""
-        futures = []
-        num_topics = self.NUM_MESSAGES
         pause: float = self.PAUSE_S
         was_blocked = False
         success = False

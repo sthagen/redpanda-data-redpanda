@@ -69,7 +69,7 @@ public:
         fmt::iterator format_to(fmt::iterator) const;
     };
 
-    static constexpr auto task_name = "Consumer Group Mirroring";
+    static constexpr auto task_name = "Consumer Group Shadowing";
     static constexpr auto concurrent_requests_limit = 32;
 
     group_mirroring_task(link* link, const model::metadata& link_metadata);

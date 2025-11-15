@@ -103,7 +103,7 @@ class CloudBroker:
             script_path, f"{self._kubeclient._remote_uri}:"
         )
         self.logger.debug(_scp_cmd)
-        res = subprocess.check_output(_scp_cmd)
+        subprocess.check_output(_scp_cmd)
         # Copy agent -> broker node
         remote_path = os.path.join("/tmp", script_name)
         _cp_cmd = self._kubeclient._ssh_prefix() + [
@@ -115,7 +115,7 @@ class CloudBroker:
             f"{self.nodeshell.pod_name}:{remote_path}",
         ]
         self.logger.debug(_cp_cmd)
-        res = subprocess.check_output(_cp_cmd)
+        subprocess.check_output(_cp_cmd)
         return
 
     def _query_broker(self, path, port=None):

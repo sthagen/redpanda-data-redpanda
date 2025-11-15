@@ -54,7 +54,5 @@ List all Shadow Links:
 			}
 		},
 	}
-	// TODO: support output formats other than text once we confirm the fields format reported in the state.
-	p.InstallFormatFlag(cmd)
 	return cmd
 }

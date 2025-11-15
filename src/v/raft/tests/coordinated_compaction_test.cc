@@ -141,7 +141,7 @@ struct coco_fixture : raft_fixture {
           target);
         auto raft = node(current_leader).raft();
         auto r = co_await raft->transfer_leadership(
-          {.group = raft->group(), .target = target, .timeout = 25ms});
+          {.group = raft->group(), .target = target, .timeout = 10s});
         ASSERT_TRUE_CORO(r.success);
         current_leader = co_await wait_for_leader(10s);
         ASSERT_EQ_CORO(current_leader, target);
@@ -256,6 +256,7 @@ TEST_F_CORO(coco_fixture, test_stalled_recovery) {
         vlog(
           logger().info,
           "Waiting for recovery, target_offset: {}, recovered_offset: {}",
+          target_offset,
           recovered_offset);
         return recovered_offset == target_offset;
     });

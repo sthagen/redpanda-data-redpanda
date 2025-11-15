@@ -390,7 +390,6 @@ class RaftAvailabilityTest(RedpandaTest):
         continue serving requests.
         """
         initial_leader_id, replicas = self._wait_for_leader()
-        initial_leader_node = self.redpanda.get_node_by_id(initial_leader_id)
 
         metric_checks = {}
         for n in self.redpanda.nodes:

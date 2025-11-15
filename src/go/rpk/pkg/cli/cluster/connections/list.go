@@ -12,6 +12,7 @@ package connections
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,16 +21,22 @@ import (
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
 	"connectrpc.com/connect"
 	"github.com/docker/go-units"
+	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/redpanda"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
 const defaultPageSize = 20
 
-var errInvalidStateFilter = errors.New("invalid state filter")
+var (
+	minVersion            = redpanda.Version{Major: 25, Feature: 3}
+	errInvalidStateFilter = errors.New("invalid state filter")
+)
 
 var stateOptionMap = map[string]adminv2.KafkaConnectionState{
 	"OPEN":   adminv2.KafkaConnectionState_KAFKA_CONNECTION_STATE_OPEN,
@@ -49,6 +56,26 @@ var tableHeaders = []string{
 	"PROD-TPUT/SEC",
 	"FETCH-TPUT/SEC",
 	"REQS/MIN",
+}
+
+func isFeatureSupported(ctx context.Context, client *rpadmin.AdminAPI) bool {
+	// Determine whether the broker version supports client connection monitoring
+	brokers, err := client.BrokerService().ListBrokers(ctx, &connect.Request[adminv2.ListBrokersRequest]{})
+	if err != nil || len(brokers.Msg.Brokers) == 0 {
+		return false
+	}
+
+	for _, broker := range brokers.Msg.Brokers {
+		if broker.BuildInfo == nil {
+			return false
+		}
+		version, err := redpanda.VersionFromString(broker.BuildInfo.Version)
+		if err != nil || !version.IsAtLeast(minVersion) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func getConnectionDuration(conn *adminv2.KafkaConnection) string {
@@ -185,11 +212,9 @@ List extended output for open connections in json format:
 			prof, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
-			// This doesn't support using the public API yet
-			config.CheckExitCloudAdmin(prof)
-
-			cl, err := adminapi.NewClient(cmd.Context(), fs, prof)
-			out.MaybeDie(err, "unable to initialize admin client: %v", err)
+			if prof.CloudCluster.IsServerless() {
+				out.Die("rpk cluster connections list is not supported on Redpanda serverless clusters")
+			}
 
 			// Build the filters based on the current flag set
 			filterClauses, err := filters.buildFilterClauses()
@@ -206,24 +231,38 @@ List extended output for open connections in json format:
 				PageSize: limit,
 			}
 
-			resp, err := cl.ClusterService().ListKafkaConnections(cmd.Context(), &connect.Request[adminv2.ListKafkaConnectionsRequest]{Msg: &req})
-			out.MaybeDie(err, "error listing connections: %v", err)
+			var response *adminv2.ListKafkaConnectionsResponse
+			if prof.FromCloud {
+				cl, err := publicapi.DataplaneClientFromRpkProfile(prof)
+				out.MaybeDie(err, "unable to initialize cloud API client: %v", err)
 
-			conns := make([]*Connection, len(resp.Msg.Connections))
-			for i, conn := range resp.Msg.Connections {
-				conns[i] = parseConnection(conn)
+				resp, err := cl.Monitoring.ListKafkaConnections(cmd.Context(), &connect.Request[adminv2.ListKafkaConnectionsRequest]{Msg: &req})
+				out.MaybeDie(err, "error listing connections: %v", err)
+
+				response = resp.Msg
+			} else {
+				cl, err := adminapi.NewClient(cmd.Context(), fs, prof)
+				out.MaybeDie(err, "unable to initialize admin client: %v", err)
+
+				// Check that we're at least at the minimum version
+				if !isFeatureSupported(cmd.Context(), cl) {
+					out.Die("rpk cluster connections list requires Redpanda version %s or later", minVersion.String())
+				}
+
+				resp, err := cl.ClusterService().ListKafkaConnections(cmd.Context(), &connect.Request[adminv2.ListKafkaConnectionsRequest]{Msg: &req})
+				out.MaybeDie(err, "error listing connections: %v", err)
+
+				response = resp.Msg
 			}
 
 			if p.Formatter.IsText() {
-				fmt.Println(printConnectionListTable(conns))
-			} else {
-				// Convert from the core format to ours
-				conns := make([]*Connection, len(resp.Msg.Connections))
-				for i, conn := range resp.Msg.Connections {
+				conns := make([]*Connection, len(response.Connections))
+				for i, conn := range response.Connections {
 					conns[i] = parseConnection(conn)
 				}
-
-				_, _, output, err := p.Formatter.Format(conns)
+				fmt.Println(printConnectionListTable(conns))
+			} else {
+				_, _, output, err := p.Formatter.Format(response)
 				out.MaybeDie(err, "unable to print in the required format %q: %v", p.Formatter.Kind, err)
 				out.Exit(output)
 			}

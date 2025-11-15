@@ -70,24 +70,20 @@ class RpkTunerTest(RedpandaTest):
         rpk.config_set("rpk.tune_coredump", "true")
 
         expected = """TUNER                  ENABLED  SUPPORTED  UNSUPPORTED-REASON
-aio_events             true     true       
-ballast_file           true     true       
-clocksource            true     true       
-coredump               true     true       
-cpu                    true     true       
-disk_irq               true     true       
-disk_nomerges          true     true       
-disk_scheduler         true     true       
+aio_events             true     true
+ballast_file           true     true
+clocksource            true     true
+coredump               true     true
+cpu                    true     true
+disk_irq               true     true
+disk_nomerges          true     true
+disk_scheduler         true     true
 disk_write_cache       true     false      Disk write cache tuner is only supported in GCP
-fstrim                 true     true       
-net                    true     true       
-swappiness             true     true       
-transparent_hugepages  true     true       
+fstrim                 true     true
+net                    true     true
+swappiness             true     true
+transparent_hugepages  true     true
 """
-
-        uname = str(node.account.ssh_output("uname -m"))
-        # either x86-64 or i386.
-        is_not_x86 = "86" not in uname
 
         r = str(node.account.ssh_output("dmidecode -s system-product-name"))
         isGCP = "Google Compute Engine" in r

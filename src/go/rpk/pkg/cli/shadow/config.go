@@ -93,7 +93,15 @@ Save the template with documentation to a file:
 			}
 
 			if outputPath != "" {
-				// TODO: check if file exists and prompt for confirmation to overwrite.
+				// We ignore the error on purpose, as rpkos.ReplaceFile will
+				// handle it accordingly.
+				if exists, _ := afero.Exists(fs, outputPath); exists {
+					confirm, err := out.Confirm("File %q already exists. Overwrite?", outputPath)
+					out.MaybeDie(err, "confirmation error: %v", err)
+					if !confirm {
+						out.Exit("Operation cancelled")
+					}
+				}
 				err := rpkos.ReplaceFile(fs, outputPath, []byte(outputData), 0o644)
 				out.MaybeDie(err, "unable to write configuration file to %q: %v", outputPath, err)
 				fmt.Printf(successMsg, outputPath)

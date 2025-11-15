@@ -239,7 +239,7 @@ class GroupMetricsTest(RedpandaTest):
 
         for i in range(100):
             payload = str(random.randint(0, 1000))
-            offset = rpk.produce(topic, "", payload, timeout=5)
+            rpk.produce(topic, "", payload, timeout=5)
 
         group_1 = "g1"
         metric_key = (topic, "0")
@@ -311,7 +311,7 @@ class GroupMetricsTest(RedpandaTest):
                 return False
             for i in range(100):
                 payload = str(random.randint(0, 1000))
-                offset = rpk.produce(topic, "", payload, timeout=5)
+                rpk.produce(topic, "", payload, timeout=5)
             metric_key = (topic, "0")
             rpk.consume(topic, group=group, n=50)
             metrics_offsets = self._get_offset_from_metrics(group)

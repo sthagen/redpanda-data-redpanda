@@ -380,21 +380,19 @@ ss::future<> run_workload(
     });
 
     struct batch_validator {
-        bool do_validate_batch([[maybe_unused]] const model::record_batch& b) {
-            // TODO(tx_compact): Re-enable this when transactional control batch
-            // feature is added.
-            // auto batch_type = b.header().type;
-            //  if (
-            //    batch_type == model::record_batch_type::group_fence_tx
-            //    || batch_type == model::record_batch_type::group_prepare_tx
-            //    || batch_type == model::record_batch_type::group_commit_tx
-            //    || batch_type == model::record_batch_type::group_abort_tx
-            //    || batch_type == model::record_batch_type::tx_fence) {
-            //      return true;
-            //  }
-            //  if (b.header().attrs.is_control()) {
-            //      return true;
-            //  }
+        bool do_validate_batch(const model::record_batch& b) {
+            auto batch_type = b.header().type;
+            if (
+              batch_type == model::record_batch_type::group_fence_tx
+              || batch_type == model::record_batch_type::group_prepare_tx
+              || batch_type == model::record_batch_type::group_commit_tx
+              || batch_type == model::record_batch_type::group_abort_tx
+              || batch_type == model::record_batch_type::tx_fence) {
+                return true;
+            }
+            if (b.header().attrs.is_control()) {
+                return true;
+            }
 
             return false;
         }

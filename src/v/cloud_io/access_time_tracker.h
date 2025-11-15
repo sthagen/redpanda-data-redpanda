@@ -65,7 +65,7 @@ public:
 
     size_t size() const { return _table.size(); }
 
-    chunked_vector<file_list_item> lru_entries() const;
+    ss::future<chunked_vector<file_list_item>> lru_entries();
 
 private:
     /// Returns true if the key's metadata should be tracked.
@@ -82,7 +82,7 @@ private:
     // Lock taken during async loops over the table (ser/de and trim())
     // modifications may proceed without the lock if it is not taken.
     // When releasing lock, drain _pending_upserts.
-    ss::semaphore _table_lock{1};
+    mutable ss::semaphore _table_lock{1};
 
     // Calls into add/remove populate this if the _serialization_lock is
     // unavailable.  The serialization code is responsible for draining it upon

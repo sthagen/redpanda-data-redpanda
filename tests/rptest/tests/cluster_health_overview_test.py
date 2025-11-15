@@ -117,7 +117,7 @@ class ClusterHealthOverviewTest(RedpandaTest):
                 return True, hov
             return False, None
 
-        hov = wait_until_result(one_node_down, 30, 2)
+        wait_until_result(one_node_down, 30, 2)
 
         # stop another node, cluster should start reporting leaderless
         # partitions with two out of five nodes down

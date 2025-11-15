@@ -138,6 +138,8 @@ def cluster(
                 f"Test {status_str}, doing failure checks on {redpanda.who_am_i()}..."
             )
 
+            redpanda.export_cluster_config()
+
             if not test_failed and check_allowed_error_logs:
                 # Only do log inspections on tests that are otherwise
                 # successful.  This executes *before* the end-of-test
@@ -154,8 +156,6 @@ def cluster(
                     if isinstance(redpanda, RedpandaService):
                         redpanda.cloud_storage_diagnostics()
                     raise
-
-            redpanda.export_cluster_config()
 
             if isinstance(redpanda, RedpandaService):
                 if test_failed:

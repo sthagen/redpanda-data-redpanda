@@ -22,6 +22,7 @@
 #include "model/timestamp.h"
 #include "reflection/adl.h"
 #include "ssx/future-util.h"
+#include "ssx/semaphore.h"
 #include "ssx/watchdog.h"
 #include "storage/api.h"
 #include "storage/chunk_cache.h"
@@ -224,6 +225,17 @@ size_t disk_log_impl::compute_max_segment_size() {
 ss::future<> disk_log_impl::remove() {
     vassert(!_closed, "Invalid double closing of log - {}", *this);
 
+    vlog(
+      stlog.debug, "waiting for locks before removing log {}", config().ntp());
+
+    // Request abort of compaction before obtaining rewrite lock holder.
+    _compaction_as.request_abort();
+
+    // To prevent a race between prefix truncation and closing, obtain the
+    // rewrite lock here and indicate it as broken for any future waiters.
+    auto rewrite_lock_holder = co_await _segment_rewrite_lock.get_units();
+    _segment_rewrite_lock.broken();
+
     // To prevent racing with a new segment being rolled, obtain the mutex here,
     // and indicate it as broken for any future waiters.
     auto roll_lock_holder = co_await _segments_rolling_lock.get_units();
@@ -231,7 +243,6 @@ ss::future<> disk_log_impl::remove() {
 
     _closed = true;
     // wait for compaction to finish
-    _compaction_as.request_abort();
     co_await _compaction_housekeeping_gate.close();
     // gets all the futures started in the background
     std::vector<ss::future<>> permanent_delete;
@@ -277,6 +288,17 @@ ss::future<> disk_log_impl::start(
 ss::future<std::optional<ss::sstring>> disk_log_impl::close() {
     vassert(!_closed, "Invalid double closing of log - {}", *this);
 
+    vlog(
+      stlog.debug, "waiting for locks before closing log {}", config().ntp());
+
+    // Request abort of compaction before obtaining rewrite lock holder.
+    _compaction_as.request_abort();
+
+    // To prevent a race between prefix truncation and closing, obtain the
+    // rewrite lock here and indicate it as broken for any future waiters.
+    auto rewrite_lock_holder = co_await _segment_rewrite_lock.get_units();
+    _segment_rewrite_lock.broken();
+
     // To prevent racing with a new segment being rolled, obtain the mutex here,
     // and indicate it as broken for any future waiters.
     auto roll_lock_holder = co_await _segments_rolling_lock.get_units();
@@ -289,10 +311,11 @@ ss::future<std::optional<ss::sstring>> disk_log_impl::close() {
       && !_eviction_monitor->promise.get_future().available()) {
         _eviction_monitor->promise.set_exception(segment_closed_exception());
     }
+
     // wait for compaction to finish
     vlog(stlog.trace, "waiting for {} compaction to finish", config().ntp());
-    _compaction_as.request_abort();
     co_await _compaction_housekeeping_gate.close();
+
     vlog(stlog.trace, "stopping {} readers cache", config().ntp());
 
     // close() on the segments is not expected to fail, but it might
@@ -2038,7 +2061,7 @@ ss::future<> disk_log_impl::new_segment(model::offset o, model::term_id t) {
       .then([this](ss::lw_shared_ptr<segment> handles) mutable {
           return remove_empty_segments().then(
             [this, h = std::move(handles)]() mutable {
-                vassert(!_closed, "cannot add log segment to closed log");
+                throw_if_closed();
                 if (config().is_locally_compacted()) {
                     h->mark_as_compacted_segment();
                 }
@@ -2065,7 +2088,7 @@ model::offset get_next_append_offset(const offset_stats& offsets) {
 
 // config timeout is for the one calling reader consumer
 log_appender disk_log_impl::make_appender(log_append_config cfg) {
-    vassert(!_closed, "make_appender on closed log - {}", *this);
+    throw_if_closed();
     auto now = log_clock::now();
     auto ofs = offsets();
     model::offset next_offset = get_next_append_offset(ofs);
@@ -2081,7 +2104,7 @@ log_appender disk_log_impl::make_appender(log_append_config cfg) {
 }
 
 ss::future<> disk_log_impl::flush() {
-    vassert(!_closed, "flush on closed log - {}", *this);
+    throw_if_closed();
     if (_segs.empty()) {
         return ss::make_ready_future<>();
     }
@@ -3214,7 +3237,7 @@ disk_log_impl::index_batch_base_offset_lower_bound(model::offset o) const {
 
 ss::future<std::optional<timequery_result>>
 disk_log_impl::timequery(timequery_config cfg) {
-    vassert(!_closed, "timequery on closed log - {}", *this);
+    throw_if_closed();
     if (_segs.empty()) {
         co_return std::nullopt;
     }
@@ -3312,41 +3335,52 @@ disk_log_impl::remove_prefix_full_segments(truncate_prefix_config cfg) {
           // guaranteed that no other operation will remove the segment from the
           // segment list head (front).
           auto ptr = _segs.front();
-          return _readers_cache->evict_segment_readers(ptr).then(
-            [this, ptr, prefix_truncate_offset](
-              readers_cache::range_lock_holder cache_lock) {
-                return ptr->write_lock().then(
-                  [this,
-                   ptr,
-                   prefix_truncate_offset,
-                   cache_lock = std::move(cache_lock)](
-                    ss::rwlock::holder lock_holder) {
-                      // after the lock is acquired, check if the segment is
-                      // still eligible for deletion as there might have been
-                      // concurrent appends. If segments collection is empty we
-                      // can skip prefix truncation as the segments were removed
-                      if (
-                        keep_segment_after_prefix_truncate(
-                          ptr, prefix_truncate_offset)
-                        || _segs.empty()) {
-                          return ss::make_ready_future<>();
-                      }
-                      _segs.pop_front();
-                      _probe->add_bytes_prefix_truncated(ptr->file_size());
-                      // first call the remove segments, then release the lock
-                      // before waiting for future to finish
-                      auto f = remove_segment_permanently(
-                        ptr, "remove_prefix_full_segments");
-                      lock_holder.return_all();
-
-                      return f;
-                  });
-            });
+          return do_remove_prefix_full_segment(
+            std::move(ptr), prefix_truncate_offset);
       });
 }
 
+ss::future<> disk_log_impl::do_remove_prefix_full_segment(
+  ss::lw_shared_ptr<segment> ptr, model::offset prefix_truncate_offset) {
+    auto cache_lock = co_await _readers_cache->evict_segment_readers(ptr);
+
+    // We will be calling `remove_segment_permanently()` below on what is
+    // potentially the active segment. If there is a concurrent append occuring,
+    // we may get into a race with the `disk_log_appender` since we return the
+    // units in `lock_holder` (i.e the segment's write lock) while the future
+    // for `remove_segment_permanently()` is still unresolved. In this case, we
+    // need to obtain units from `_segments_rolling_lock` to prevent any
+    // concurrency issues.
+    std::optional<ssx::semaphore_units> seg_rolling_units;
+    if (ptr->has_appender()) {
+        // This cannot throw due to a broken semaphore, as we are already
+        // holding `_segment_rewrite_lock`.
+        seg_rolling_units = co_await _segments_rolling_lock.get_units();
+    }
+
+    auto lock_holder = co_await ptr->write_lock();
+
+    // after the locks are acquired, check if the segment is
+    // still eligible for deletion as there might have been
+    // concurrent appends. If segments collection is empty we
+    // can skip prefix truncation as the segments were removed
+    if (
+      keep_segment_after_prefix_truncate(ptr, prefix_truncate_offset)
+      || _segs.empty()) {
+        co_return;
+    }
+    _segs.pop_front();
+    _probe->add_bytes_prefix_truncated(ptr->file_size());
+    // first call the remove segments, then release the lock
+    // before waiting for future to finish
+    auto f = remove_segment_permanently(ptr, "remove_prefix_full_segments");
+    lock_holder.return_all();
+
+    co_return co_await std::move(f);
+}
+
 ss::future<> disk_log_impl::truncate_prefix(truncate_prefix_config cfg) {
-    vassert(!_closed, "truncate_prefix() on closed log - {}", *this);
+    throw_if_closed();
     co_await _failure_probes.truncate_prefix().then([this, cfg]() mutable {
         // dispatch the actual truncation
         return do_truncate_prefix(cfg)
@@ -3434,7 +3468,7 @@ ss::future<> disk_log_impl::do_truncate_prefix(truncate_prefix_config cfg) {
 }
 
 ss::future<> disk_log_impl::truncate(truncate_config cfg) {
-    vassert(!_closed, "truncate() on closed log - {}", *this);
+    throw_if_closed();
     // We are truncating the offset translator before truncating the log
     // because if saving offset translator state fails (e.g. because of a
     // crash), we can retry and eventually log and offset translator will

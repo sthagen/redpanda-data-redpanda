@@ -685,7 +685,6 @@ class SaslPlainConfigTest(BaseScramTest):
         This test verifies that when enabling PLAIN you must also enable SCRAM
         """
         self._start_cluster(enable_tls=False)
-        admin = Admin(self.redpanda)
 
         def validate_sasl_plain_mech(mechs: List[str]):
             try:

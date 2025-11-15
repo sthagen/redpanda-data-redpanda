@@ -275,12 +275,6 @@ class ClusterTopology:
         assert region not in self.regions, f"region {region} already exists in cluster"
         self.regions[region.name] = region
 
-    def add_rack(self, rack: Rack):
-        if ClusterTopology.UNASSIGNED_REGION not in self.regions:
-            self.add_region(Region(ClusterTopology.UNASSIGNED_REGION))
-
-        self.regions[ClusterTopology.UNASSIGNED_REGION].add_rack(rack)
-
     def add_rack(self, region_name, rack: Rack):
         assert region_name in self.regions, (
             f"can not add rack to region {region_name} that does not exists"

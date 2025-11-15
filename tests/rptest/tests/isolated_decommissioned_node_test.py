@@ -96,7 +96,6 @@ class IsolatedDecommissionedNodeTest(PreallocNodesTest):
     @cluster(num_nodes=3)
     def create_topic_on_isolated_node_test(self):
         # Idea of this test it to pass only isolated broker to client and expect that client will get another brokers list and will communicate with them
-        topic = self.topics[0]
         self.isolated_node = self.redpanda.nodes[0]
         with firewall_blocked([self.isolated_node], self.internal_port, True):
             wait_until(self.is_node_isolated, timeout_sec=90, backoff_sec=1)

@@ -28,6 +28,20 @@
 #include <ranges>
 namespace cluster {
 
+namespace {
+template<typename F>
+auto handle_shutdown_exceptions(F fut) {
+    using fut_value_t = F::value_type;
+    return std::move(fut).handle_exception([](const std::exception_ptr& e) {
+        if (ssx::is_shutdown_exception(e)) {
+            // map shutdown exception to timeout error as we cannot be
+            // certain about the operation outcome.
+            return ssx::now<fut_value_t>(tm_stm::op_status::timeout);
+        }
+        return ss::make_exception_future<fut_value_t>(e);
+    });
+}
+} // namespace
 ss::future<result<raft::replicate_result>>
 tm_stm::replicate_quorum_ack(model::term_id term, model::record_batch&& batch) {
     auto opts = raft::replicate_options{
@@ -94,7 +108,8 @@ tm_stm::get_tx(kafka::transactional_id tx_id) {
 }
 
 ss::future<checked<model::term_id, tm_stm::op_status>> tm_stm::barrier() {
-    return ss::with_gate(_gate, [this] { return do_barrier(); });
+    return handle_shutdown_exceptions(
+      ss::with_gate(_gate, [this] { return do_barrier(); }));
 }
 
 ss::future<checked<model::term_id, tm_stm::op_status>> tm_stm::do_barrier() {
@@ -167,7 +182,8 @@ ss::future<ss::basic_rwlock<>::holder> tm_stm::prepare_transfer_leadership() {
 
 ss::future<checked<model::term_id, tm_stm::op_status>>
 tm_stm::sync(model::timeout_clock::duration timeout) {
-    return ss::with_gate(_gate, [this, timeout] { return do_sync(timeout); });
+    return handle_shutdown_exceptions(
+      ss::with_gate(_gate, [this, timeout] { return do_sync(timeout); }));
 }
 
 ss::future<checked<model::term_id, tm_stm::op_status>>
@@ -186,9 +202,10 @@ tm_stm::do_sync(model::timeout_clock::duration timeout) {
 
 ss::future<checked<tx_metadata, tm_stm::op_status>>
 tm_stm::update_tx(tx_metadata tx, model::term_id term) {
-    return ss::with_gate(_gate, [this, tx = std::move(tx), term]() mutable {
-        return do_update_tx(std::move(tx), term);
-    });
+    return handle_shutdown_exceptions(
+      ss::with_gate(_gate, [this, tx = std::move(tx), term]() mutable {
+          return do_update_tx(std::move(tx), term);
+      }));
 }
 
 ss::future<checked<tx_metadata, tm_stm::op_status>>

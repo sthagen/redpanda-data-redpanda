@@ -55,6 +55,7 @@ public:
       std::unique_ptr<consumer_groups_router> group_router,
       std::unique_ptr<partition_metadata_provider> partition_metadata_provider,
       std::unique_ptr<kafka_rpc_client_service> kafka_rpc_client_service,
+      std::unique_ptr<members_table_provider> members_table_provider,
       ss::lowres_clock::duration task_reconciler_interval,
       config::binding<int16_t> default_topic_replication,
       ss::scheduling_group scheduling_group);
@@ -211,6 +212,8 @@ public:
       chunked_hash_map<::model::ntp, replication::partition_offsets_report>>
     get_partition_offsets_report_for_link(model::id_t link_id) const;
 
+    members_table_provider& get_members_table_provider() noexcept;
+
 private:
     /// Called periodically to reconcile registered tasks on created links
     ss::future<> link_task_reconciler();
@@ -237,6 +240,7 @@ private:
     std::unique_ptr<consumer_groups_router> _group_router;
     std::unique_ptr<partition_metadata_provider> _partition_metadata_provider;
     std::unique_ptr<kafka_rpc_client_service> _kafka_rpc_client_service;
+    std::unique_ptr<members_table_provider> _members_table_provider;
     ssx::work_queue _queue;
 
     chunked_vector<std::unique_ptr<task_factory>> _task_factories;

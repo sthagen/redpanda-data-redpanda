@@ -15,8 +15,6 @@ from typing import Any
 from ducktape.mark import parametrize
 from ducktape.tests.test import TestContext
 
-from rptest.clients.admin.v2 import Admin as AdminV2
-from rptest.clients.admin.v2 import cluster_pb
 from rptest.clients.rpk import RpkTool
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster

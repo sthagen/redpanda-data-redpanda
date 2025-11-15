@@ -257,6 +257,7 @@ ss::future<checked<model::term_id, tx::errc>> rm_stm::begin_tx(
   std::chrono::milliseconds transaction_timeout_ms,
   model::partition_id tm) {
     auto state_lock = co_await _state_lock.hold_read_lock();
+    auto lso_lock_holder = co_await _lso_lock.hold_write_lock();
     if (!co_await sync(_sync_timeout())) {
         vlog(
           _ctx_log.trace,
@@ -738,7 +739,7 @@ ss::future<tx::errc> rm_stm::do_abort_tx(
             // Or it may mean that a tx coordinator
             //   - lost its state
             //   - rolled back to previous op
-            //   - the previous op happend to be an abort
+            //   - the previous op happened to be an abort
             //   - the coordinator retried it
             //
             // In the first case the least impactful way to reject the request.
@@ -1264,6 +1265,9 @@ ss::future<result<kafka_result>> rm_stm::replicate_msg(
 }
 
 model::offset rm_stm::last_stable_offset() {
+    if (_as.abort_requested()) [[unlikely]] {
+        return model::invalid_lso;
+    }
     // There are two main scenarios we deal with here.
     // 1. stm is still bootstrapping
     // 2. stm is past bootstrapping.
@@ -1278,6 +1282,8 @@ model::offset rm_stm::last_stable_offset() {
     // We optimize for the case where there are no inflight transactional
     // batch to return the high water mark.
     auto last_applied = last_applied_offset();
+
+    // scenario 1: still bootstrapping
     if (unlikely(
           !_bootstrap_committed_offset
           || last_applied < _bootstrap_committed_offset.value())) {
@@ -1287,6 +1293,29 @@ model::offset rm_stm::last_stable_offset() {
         return model::invalid_lso;
     }
 
+    // scenario 2: past bootstrapping
+    auto read_units = _state_lock.try_hold_read_lock();
+    if (!read_units) {
+        // A reset in progress means the stm may not be in a consistent state
+        // for LSO calculation. In this case we return the last known LSO to be
+        // conservative.
+        vlog(
+          _ctx_log.trace,
+          "state machine is resetting, last_known_lso: {}, last_applied: {}",
+          _last_known_lso,
+          last_applied);
+        return _last_known_lso;
+    }
+    auto lso_read_units = _lso_lock.try_hold_read_lock();
+    if (!lso_read_units) {
+        // LSO calculation is in progress, return last known LSO
+        vlog(
+          _ctx_log.trace,
+          "lso update in progress, last_known_lso: {}, last_applied: {}",
+          _last_known_lso,
+          last_applied);
+        return _last_known_lso;
+    }
     // Check for any in-flight transactions.
     auto first_tx_start = model::offset::max();
     if (_is_tx_enabled && !_active_tx_producers.empty()) {
@@ -1313,6 +1342,39 @@ model::offset rm_stm::last_stable_offset() {
         // transactions.
         lso = std::min(first_tx_start, next_to_apply);
     } else if (synced_leader) {
+        ////////////////  WARNING ///////////
+        // there is a real bug lurking here that overestimates the LSO beyond
+        // an open transaction.
+        //
+
+        // The problem manifests when the LSO is requested after successful
+        // replication of begin_tx batch but before the stm has applied it.
+        // In this case the LSO may be advanced beyond the begin_tx batch offset
+        // because the leader doesn't yet 'know' about the begin_tx batch and
+        // may not consider it in LSO calculation.
+
+        // Another problem is we do not let lso move backwards once
+        // computed (see _last_known_lso update below), So even if the
+        // stm has applied the begin_tx later, we will not correct
+        // the LSO to reflect the begin_tx presence.
+
+        // There is a test that caught this issue in rm_stm_tests which
+        // is disabled for now until we can fix the underlying problem.
+
+        // The impact of this overestimation is that compaction may compact
+        // away open transaction begin marker as it relies on LSO. The
+        // chances are rare but not impossible :(. if at that point the replica
+        // restarts and there are no further updates in the transaction, the
+        // transaction has no record of ever beginning.
+
+        // We need a better way to track in-flight transactions for the purposes
+        // of LSO calculation.
+
+        // An obvious solution is to clamp LSO to next_to_apply in all cases
+        // but it was tried in the past and caused performance regressions
+        // in non transaction workloads like write_caching, acks=0/1. So that
+        // is not a viable solution.
+
         // no inflight transactions in (last_applied, last_visible_index]
         lso = model::next_offset(last_visible_index);
     } else {
@@ -1834,6 +1896,7 @@ model::offset rm_stm::to_log_offset(kafka::offset k_offset) const {
 
 ss::future<raft::local_snapshot_applied>
 rm_stm::apply_local_snapshot(raft::stm_snapshot_header hdr, iobuf&& tx_ss_buf) {
+    auto data_buf = std::move(tx_ss_buf);
     auto units = co_await _state_lock.hold_write_lock();
 
     vlog(
@@ -1841,7 +1904,7 @@ rm_stm::apply_local_snapshot(raft::stm_snapshot_header hdr, iobuf&& tx_ss_buf) {
       "applying snapshot with last included offset: {}",
       hdr.offset);
     tx_snapshot_v6 data;
-    iobuf_parser data_parser(std::move(tx_ss_buf));
+    iobuf_parser data_parser(std::move(data_buf));
     if (hdr.version == tx_snapshot_v4::version) {
         tx_snapshot_v4 data_v4
           = co_await reflection::async_adl<tx_snapshot_v4>{}.from(data_parser);

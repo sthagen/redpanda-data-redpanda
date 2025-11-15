@@ -2327,9 +2327,6 @@ TEST_F(CompactionFixtureTest, SuperfluousPlaceholderRemoval) {
 }
 
 TEST_F(CompactionFixtureTest, AbortTransactions) {
-    // TODO(tx_compact): Re-enable this when transactional control batch feature
-    // is added.
-    return;
     using cluster::tx_executor;
     tx_executor exec;
     auto term = partition->raft()->term();
@@ -2403,9 +2400,6 @@ TEST_F(CompactionFixtureTest, AbortTransactions) {
 }
 
 TEST_F(CompactionFixtureTest, CommitTransactions) {
-    // TODO(tx_compact): Re-enable this when transactional control batch feature
-    // is added.
-    return;
     using cluster::tx_executor;
     tx_executor exec;
     auto term = partition->raft()->term();

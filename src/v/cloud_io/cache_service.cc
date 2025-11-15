@@ -371,7 +371,7 @@ ss::future<> cache::trim(
         - std::min(
           target_objects, _current_cache_objects + _reserved_cache_objects);
 
-    auto tracker_lru_entries = _access_time_tracker.lru_entries();
+    auto tracker_lru_entries = co_await _access_time_tracker.lru_entries();
     vlog(
       log.debug,
       "in-memory trim: set target_size {}/{}, size {}/{}, reserved {}/{}, "

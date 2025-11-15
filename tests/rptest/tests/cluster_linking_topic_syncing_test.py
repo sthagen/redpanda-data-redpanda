@@ -699,7 +699,7 @@ message CType {
             log_config=LoggingConfig(
                 "info",
                 logger_levels={
-                    "cluster_link": "trace",
+                    "shadow_link": "trace",
                     "kafka/client": "trace",
                     "kafka": "trace",
                     "schemaregistry": "trace",

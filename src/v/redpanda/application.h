@@ -199,8 +199,6 @@ public:
     ss::sharded<crypto::ossl_context_service> ossl_context_service;
     ss::sharded<kafka::datalake_throttle_manager> datalake_throttle_manager;
 
-    ss::sharded<kafka::consumer_group_lag_metrics_frontend>
-      _consumer_group_lag_metrics_frontend;
     kafka::server_app _kafka_server;
     ss::sharded<rpc::connection_cache> _connection_cache;
     ss::sharded<kafka::group_manager> _group_manager;

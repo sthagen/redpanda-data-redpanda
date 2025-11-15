@@ -110,8 +110,6 @@
 #include "features/fwd.h"
 #include "finjector/stress_fiber.h"
 #include "kafka/client/configuration.h"
-#include "kafka/server/consumer_group_lag_metrics_frontend.h"
-#include "kafka/server/consumer_group_lag_metrics_service.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
 #include "kafka/server/data_migration_group_proxy_impl.h"
 #include "kafka/server/group_manager.h"
@@ -2252,13 +2250,6 @@ void application::wire_up_redpanda_services(
     // group membership
     syschecks::systemd_message("Creating kafka group manager").get();
     construct_service(
-      _consumer_group_lag_metrics_frontend,
-      node_id,
-      std::ref(_connection_cache),
-      std::ref(metadata_cache),
-      std::ref(partition_manager))
-      .get();
-    construct_service(
       _group_manager,
       model::kafka_consumer_offsets_nt,
       std::ref(raft_group_manager),
@@ -3230,9 +3221,6 @@ void application::start_runtime_services(
     raft_group_manager.invoke_on_all(&raft::group_manager::start).get();
 
     syschecks::systemd_message("Starting Kafka group manager").get();
-    _consumer_group_lag_metrics_frontend
-      .invoke_on_all(&kafka::consumer_group_lag_metrics_frontend::start)
-      .get();
     _group_manager.invoke_on_all(&kafka::group_manager::start).get();
 
     // Initialize the Raft RPC endpoint before the rest of the runtime RPC
@@ -3439,11 +3427,6 @@ void application::start_runtime_services(
                   smp_service_groups.datalake_sg(),
                   &_datalake_coordinator_fe));
           }
-          runtime_services.push_back(
-            std::make_unique<kafka::consumer_group_lag_metrics_service>(
-              sched_groups.cluster_sg(),
-              smp_service_groups.cluster_smp_sg(),
-              std::ref(_consumer_group_lag_metrics_frontend)));
           if (
             config::shard_local_cfg().cloud_topics_enabled()
             && cloud_topics_app) {

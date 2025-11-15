@@ -594,6 +594,15 @@ private:
     container_type _acls;
 };
 
+class fake_members_table_provider : public members_table_provider {
+public:
+    void set_node_count(size_t count) { _node_count = count; }
+    size_t node_count() const final { return _node_count; }
+
+private:
+    size_t _node_count{3};
+};
+
 class cluster_link_manager_test_fixture {
 public:
     explicit cluster_link_manager_test_fixture(::model::node_id self);
@@ -690,6 +699,8 @@ public:
         return *_ftpc;
     }
 
+    fake_members_table_provider& members_table_provider() { return *_fmtp; }
+
 private:
     void setup_cluster_mock();
 
@@ -709,6 +720,7 @@ private:
     test_consumer_group_router* _consumer_group_router{nullptr};
     test_partition_metadata_provider* _partition_metadata_provider{nullptr};
     test_kafka_rpc_client_service* _tkrcs{nullptr};
+    fake_members_table_provider* _fmtp{nullptr};
     ss::sharded<manager> _manager;
     config::mock_property<int16_t> _default_topic_replication{1};
 

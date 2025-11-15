@@ -120,11 +120,11 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
 
         self.redpanda.logger.debug("init_transactions should fail without ACL")
         with expect_kafka_error(ck.KafkaError.TRANSACTIONAL_ID_AUTHORIZATION_FAILED):
-            producer = self.sasl_txn_producer(user, cfg=producer_cfg)
+            self.sasl_txn_producer(user, cfg=producer_cfg)
 
         self.allow_principal_sync(user.username, ["write"], "transactional-id", "0")
 
-        producer = self.sasl_txn_producer(user, cfg=producer_cfg)
+        self.sasl_txn_producer(user, cfg=producer_cfg)
 
     @ignore  # https://github.com/redpanda-data/redpanda/pull/26968 - broken by newer librdkafka
     @cluster(num_nodes=3)

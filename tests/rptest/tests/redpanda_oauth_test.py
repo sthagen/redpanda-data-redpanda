@@ -198,7 +198,7 @@ class RedpandaOIDCTestMethods(RedpandaOIDCTestBase):
         service_user_id = self.create_service_user()
 
         self.rpk.create_topic(EXAMPLE_TOPIC)
-        result = self.rpk.sasl_allow_principal(
+        self.rpk.sasl_allow_principal(
             f"User:{service_user_id}",
             ["all"],
             "topic",

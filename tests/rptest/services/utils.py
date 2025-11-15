@@ -3,7 +3,6 @@ from logging import Logger
 import re
 import time
 from abc import ABC, abstractmethod
-import traceback
 from typing import Any, Generator, Iterable, TypedDict
 
 from rptest.clients.kubectl import KubectlTool

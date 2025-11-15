@@ -1,8 +1,6 @@
 from typing import Any, Callable, ParamSpec, TypeVar
 from ducktape.errors import DucktapeError as DucktapeError
 
-from rptest.services.cluster import Any
-
 _F = TypeVar("_F", bound=Callable[..., object])
 
 class Mark:

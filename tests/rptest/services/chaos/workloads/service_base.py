@@ -147,7 +147,7 @@ class WorkloadServiceBase(ABC, Service):
             "brokers": self._brokers_str,
         }
         workload_config |= self.extra_config(node)
-        r = self._request(
+        self._request(
             "post", node, "init", json=workload_config, timeout_sec=timeout_sec
         )
 

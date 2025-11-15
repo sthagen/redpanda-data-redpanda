@@ -93,6 +93,8 @@ private:
       const chunked_vector<::model::topic>& topics,
       const model::topic_metadata_mirroring_config::properties_set& configs);
     ss::future<sr_is_empty_t> check_if_schema_registry_is_empty();
+    int16_t
+    maybe_clamp_rf(int16_t source_rf, const ::model::topic& topic) noexcept;
 
 private:
     model::topic_metadata_mirroring_config _config;

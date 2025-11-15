@@ -275,7 +275,7 @@ class ClusterMetricsTest(RedpandaTest):
                 controller, "cluster_partitions", value=40
             )
         except Exception as e:
-            topics_info = RpkTool(self.redpanda).list_topics()
+            RpkTool(self.redpanda).list_topics()
             raise e
 
     @cluster(num_nodes=3)

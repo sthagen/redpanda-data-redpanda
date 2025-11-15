@@ -912,7 +912,7 @@ class PandaProxyTestMethods(PandaProxyEndpoints):
         group_id = f"pandaproxy-group-{uuid.uuid4()}"
 
         self.logger.info("Create 3 topics")
-        topics = self._create_topics(create_topic_names(3), 3, 3)
+        self._create_topics(create_topic_names(3), 3, 3)
 
         self.logger.info("Create a consumer group")
         cc_res = self._create_consumer(group_id)

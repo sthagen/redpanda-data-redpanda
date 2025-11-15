@@ -14,7 +14,6 @@ from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 
 import confluent_kafka as ck
-from confluent_kafka import error as ck_error
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 

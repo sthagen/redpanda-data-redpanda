@@ -70,8 +70,6 @@ class ClusterBootstrapNew(RedpandaTest):
             pass
 
         for node in self.redpanda.nodes:
-            idx = self.redpanda.idx(node)
-
             # None of the nodes was configured in a way that could get past attempting
             # to join a cluster: node 1 has no seed servers, and nodes 2,3 are not in
             # their seed servers so do not self-identify as founders

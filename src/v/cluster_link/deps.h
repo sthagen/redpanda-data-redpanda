@@ -222,4 +222,19 @@ public:
       get_partition_offsets(chunked_vector<kafka::data::rpc::topic_partitions>)
       = 0;
 };
+
+class members_table_provider {
+public:
+    members_table_provider() = default;
+    members_table_provider(const members_table_provider&) = delete;
+    members_table_provider(members_table_provider&&) = delete;
+    members_table_provider& operator=(const members_table_provider&) = delete;
+    members_table_provider& operator=(members_table_provider&&) = delete;
+    virtual ~members_table_provider() = default;
+
+    virtual size_t node_count() const = 0;
+
+    static std::unique_ptr<members_table_provider>
+    make_default(ss::sharded<cluster::members_table>*);
+};
 } // namespace cluster_link

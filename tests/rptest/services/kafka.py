@@ -30,9 +30,6 @@ class KafkaServiceAdapter(RedpandaServiceForClients):
     def brokers_list(self) -> list[str]:
         return self._kafka_service.bootstrap_servers().split(",")
 
-    def start(self):
-        return self._kafka_service.start()
-
     def start(self, add_principals=""):
         return self._kafka_service.start(add_principals)
 

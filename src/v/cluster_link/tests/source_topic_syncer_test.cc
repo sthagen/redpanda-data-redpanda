@@ -485,6 +485,43 @@ TEST_F_CORO(source_topic_syncer_test, topic_with_no_replicas) {
     EXPECT_TRUE(mirror_topics.empty());
 }
 
+TEST_F_CORO(source_topic_syncer_test, topic_with_high_rf) {
+    fixture()->members_table_provider().set_node_count(1);
+    fixture()->get_cluster_mock().add_topic(
+      ::model::topic("test_topic"),
+      3,
+      3,
+      kafka::topic_authorized_operations(0x508));
+
+    co_await fixture()->upsert_link(get_default_metadata());
+
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        return link_metadata->get().state.mirror_topics.contains(
+          ::model::topic("test_topic"));
+    });
+
+    auto link_metadata = fixture()->find_link_by_name(
+      model::name_t("test_link"));
+    auto& mirror_topics = link_metadata->get().state.mirror_topics;
+    auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
+    ASSERT_NE_CORO(mirror_topic_it, mirror_topics.end());
+    EXPECT_EQ(mirror_topic_it->second.replication_factor, 1);
+
+    fixture()->members_table_provider().set_node_count(3);
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        auto& mirror_topics = link_metadata->get().state.mirror_topics;
+        auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
+        if (mirror_topic_it == mirror_topics.end()) {
+            return false;
+        }
+        return mirror_topic_it->second.replication_factor == 3;
+    });
+}
+
 class invalid_describe_configs_test : public source_topic_syncer_test {
 public:
     virtual ss::future<> SetUpAsync() override {

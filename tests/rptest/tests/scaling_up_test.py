@@ -269,7 +269,6 @@ class ScalingUpTest(PreallocNodesTest):
         # start single node cluster
         self.redpanda.start(nodes=self.redpanda.nodes[0:3])
         # create some topics
-        topics = []
         total_replicas = self.create_topics(rf=3, partition_count=partition_count)
         # add consumer group topic replicas
         total_replicas += self.group_topic_partitions * 3

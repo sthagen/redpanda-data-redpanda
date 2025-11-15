@@ -37,6 +37,8 @@ using namespace std::chrono_literals;
 static const failure_type<cluster::errc>
   invalid_producer_epoch(cluster::errc::invalid_producer_epoch);
 
+static constexpr auto timeout = 30min;
+
 struct batches_with_identity {
     model::batch_identity id;
     chunked_vector<model::record_batch> batches;
@@ -141,14 +143,8 @@ FIXTURE_TEST(test_tx_happy_tx, rm_stm_test_fixture) {
     }).get();
 
     auto pid2 = model::producer_identity{2, 0};
-    auto term_op = stm
-                     .begin_tx(
-                       pid2,
-                       tx_seq,
-                       std::chrono::milliseconds(
-                         std::numeric_limits<int32_t>::max()),
-                       model::partition_id(0))
-                     .get();
+    auto term_op
+      = stm.begin_tx(pid2, tx_seq, timeout, model::partition_id(0)).get();
     BOOST_REQUIRE((bool)term_op);
     BOOST_REQUIRE_EQUAL(stm.highest_producer_id(), pid2.get_id());
 
@@ -208,14 +204,8 @@ FIXTURE_TEST(test_tx_aborted_tx_1, rm_stm_test_fixture) {
     }).get();
 
     auto pid2 = model::producer_identity{2, 0};
-    auto term_op = stm
-                     .begin_tx(
-                       pid2,
-                       tx_seq,
-                       std::chrono::milliseconds(
-                         std::numeric_limits<int32_t>::max()),
-                       model::partition_id(0))
-                     .get();
+    auto term_op
+      = stm.begin_tx(pid2, tx_seq, timeout, model::partition_id(0)).get();
     BOOST_REQUIRE((bool)term_op);
     BOOST_REQUIRE_EQUAL(stm.highest_producer_id(), pid2.get_id());
 
@@ -284,14 +274,8 @@ FIXTURE_TEST(test_tx_aborted_tx_2, rm_stm_test_fixture) {
     }).get();
 
     auto pid2 = model::producer_identity{2, 0};
-    auto term_op = stm
-                     .begin_tx(
-                       pid2,
-                       tx_seq,
-                       std::chrono::milliseconds(
-                         std::numeric_limits<int32_t>::max()),
-                       model::partition_id(0))
-                     .get();
+    auto term_op
+      = stm.begin_tx(pid2, tx_seq, timeout, model::partition_id(0)).get();
     BOOST_REQUIRE_EQUAL(stm.highest_producer_id(), pid2.get_id());
     BOOST_REQUIRE((bool)term_op);
 
@@ -370,14 +354,12 @@ FIXTURE_TEST(test_stale_begin_tx_fenced, rm_stm_test_fixture) {
     auto tx_seq_old = model::tx_seq(9);
     auto tx_seq_new = model::tx_seq(11);
     auto pid1 = model::producer_identity{1, 0};
-    auto timeout = std::chrono::milliseconds(
-      std::numeric_limits<int32_t>::max());
 
-    auto begin_tx = [&stm, &pid1, timeout](model::tx_seq seq) {
+    auto begin_tx = [&stm, &pid1](model::tx_seq seq) {
         return stm.begin_tx(pid1, seq, timeout, model::partition_id(0)).get();
     };
 
-    auto commit_tx = [&stm, &pid1, timeout](model::tx_seq seq) {
+    auto commit_tx = [&stm, &pid1](model::tx_seq seq) {
         return stm.commit_tx(pid1, seq, timeout).get();
     };
 
@@ -421,25 +403,13 @@ FIXTURE_TEST(test_tx_begin_fences_produce, rm_stm_test_fixture) {
     BOOST_REQUIRE((bool)offset_r);
 
     auto pid20 = model::producer_identity{2, 0};
-    auto term_op = stm
-                     .begin_tx(
-                       pid20,
-                       tx_seq,
-                       std::chrono::milliseconds(
-                         std::numeric_limits<int32_t>::max()),
-                       model::partition_id(0))
-                     .get();
+    auto term_op
+      = stm.begin_tx(pid20, tx_seq, timeout, model::partition_id(0)).get();
     BOOST_REQUIRE((bool)term_op);
 
     auto pid21 = model::producer_identity{2, 1};
-    term_op = stm
-                .begin_tx(
-                  pid21,
-                  tx_seq,
-                  std::chrono::milliseconds(
-                    std::numeric_limits<int32_t>::max()),
-                  model::partition_id(0))
-                .get();
+    term_op
+      = stm.begin_tx(pid21, tx_seq, timeout, model::partition_id(0)).get();
     BOOST_REQUIRE((bool)term_op);
 
     rreader = make_batches(pid20, 0, 5, true);
@@ -468,14 +438,8 @@ FIXTURE_TEST(test_tx_post_aborted_produce, rm_stm_test_fixture) {
     BOOST_REQUIRE((bool)offset_r);
 
     auto pid20 = model::producer_identity{2, 0};
-    auto term_op = stm
-                     .begin_tx(
-                       pid20,
-                       tx_seq,
-                       std::chrono::milliseconds(
-                         std::numeric_limits<int32_t>::max()),
-                       model::partition_id(0))
-                     .get();
+    auto term_op
+      = stm.begin_tx(pid20, tx_seq, timeout, model::partition_id(0)).get();
     BOOST_REQUIRE((bool)term_op);
 
     rreader = make_batches(pid20, 0, 5, true);
@@ -512,8 +476,6 @@ FIXTURE_TEST(test_aborted_transactions, rm_stm_test_fixture) {
 
     static int64_t pid_counter = 0;
     const auto tx_seq = model::tx_seq(0);
-    const auto timeout = std::chrono::milliseconds(
-      std::numeric_limits<int32_t>::max());
     size_t segment_count = 1;
 
     auto& segments = disk_log->segments();
@@ -980,4 +942,90 @@ FIXTURE_TEST(test_concurrent_producer_evictions, rm_stm_test_fixture) {
     ss::sleep(20s).finally([&as] { as.request_abort(); }).get();
     ss::when_all_succeed(std::move(replicate_f), std::move(reset_f)).get();
     gate.close().get();
+}
+
+FIXTURE_TEST(test_lso_bound_by_open_tx, rm_stm_test_fixture) {
+    create_stm_and_start_raft();
+    auto& stm = *_stm;
+    auto raft = _raft;
+    stm.start().get();
+    stm.testing_only_disable_auto_abort();
+
+    wait_for_confirmed_leader();
+    wait_for_meta_initialized();
+
+    auto pid = model::producer_identity{0, 0};
+
+    auto random_sleep = []() {
+        auto sleep_ms = std::chrono::milliseconds{
+          random_generators::get_int(0, 5)};
+        return ss::sleep(sleep_ms);
+    };
+
+    auto snapshot_and_apply = [&] {
+        return local_snapshot(cluster::tx::tx_snapshot::version)
+          .then([&](auto snapshot) {
+              return random_sleep().then(
+                [this, snapshot = std::move(snapshot)]() mutable {
+                    return apply_snapshot(
+                             snapshot.header, std::move(snapshot.data))
+                      .discard_result();
+                });
+          });
+    };
+
+    std::optional<model::offset> open_tx_start_offset;
+    auto tx_and_snapshot = [&](model::tx_seq tx_seq) {
+        // begin tx
+        BOOST_REQUIRE(
+          stm.begin_tx(pid, tx_seq, timeout, model::partition_id(0)).get());
+
+        open_tx_start_offset = raft->committed_offset();
+
+        if (tests::random_bool()) {
+            // snapshot
+            snapshot_and_apply().get();
+        }
+        // replicate some batches
+        random_sleep().get();
+        auto result = replicate_all(stm, make_batches(pid, 0, 5, true)).get();
+        BOOST_REQUIRE(result.has_value());
+
+        if (tests::random_bool()) {
+            // snapshot
+            snapshot_and_apply().get();
+        }
+        random_sleep().get();
+
+        open_tx_start_offset.reset();
+        // commit
+        BOOST_REQUIRE_EQUAL(
+          stm.commit_tx(pid, tx_seq, timeout).get(), cluster::tx::errc::none);
+    };
+
+    ss::abort_source as;
+    auto lso_bound_checker_f = ss::do_until(
+      [&as] { return as.abort_requested(); },
+      [&] {
+          auto current_lso = stm.last_stable_offset();
+          bool lso_bound = !open_tx_start_offset
+                           || current_lso == open_tx_start_offset;
+          if (!lso_bound) {
+              vlog(
+                logger.error,
+                "LSO {} exceeded earliest open tx offset {}",
+                current_lso,
+                open_tx_start_offset);
+          }
+          BOOST_REQUIRE(lso_bound);
+          return ss::now();
+      });
+
+    auto deadline = ss::lowres_clock::now() + 10s;
+    model::tx_seq tx_seq{0};
+    while (ss::lowres_clock::now() < deadline) {
+        tx_and_snapshot(tx_seq++);
+    }
+    as.request_abort();
+    std::move(lso_bound_checker_f).get();
 }

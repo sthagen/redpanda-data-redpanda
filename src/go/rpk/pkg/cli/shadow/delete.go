@@ -97,7 +97,6 @@ func printShadowLinkInfo(link *adminv2.ShadowLink) {
 		fmt.Println("No Shadow Link information available")
 		return
 	}
-	// TODO: once we support cloud, confirm if we should query the cloud API to get the client information.
 	tw := out.NewTable()
 	defer tw.Flush()
 	tw.Print("Link Name:", link.GetName())

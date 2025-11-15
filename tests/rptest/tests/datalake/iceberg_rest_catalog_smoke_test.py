@@ -39,7 +39,6 @@ class IcebergRESTCatalogSmokeTest(IcebergRESTCatalogTest):
         self.catalog_service.set_filesystem_wrapper_mode(filesystem_catalog_mode)
         super().setUp()
 
-        warehouse = self.catalog_service.cloud_storage_warehouse
         catalog = self.catalog_service.client()
         namespace = "test_ns"
         catalog.create_namespace(namespace)
@@ -84,7 +83,6 @@ class IcebergRESTCatalogSmokeTest(IcebergRESTCatalogTest):
         self.catalog_service.set_filesystem_wrapper_mode(filesystem_catalog_mode)
         super().setUp()
 
-        warehouse = self.catalog_service.cloud_storage_warehouse
         catalog = self.catalog_service.client()
         namespace = "test_ns"
         catalog.create_namespace(namespace)

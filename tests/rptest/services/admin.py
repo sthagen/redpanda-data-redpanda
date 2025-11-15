@@ -123,7 +123,7 @@ class RoleError:
     @classmethod
     def from_http_error(cls, e: HTTPError):
         data = e.response.json()
-        return cls.from_json(e.response.json()["message"])
+        return cls.from_json(data["message"])
 
 
 class RoleUpdate(NamedTuple):

@@ -12,7 +12,6 @@ from time import sleep
 
 from ducktape.errors import TimeoutError
 from ducktape.mark import matrix
-from ducktape.utils.util import wait_until
 
 from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.clients.rpk import RpkTool
@@ -871,7 +870,7 @@ class TimestampDriftRetentionTest(RedpandaTest):
             redpanda=self.redpanda,
             topic=self.topic,
             msg_size=msg_size,
-            msg_count=(self.segment_size // msg_size) * segments_count,
+            msg_count=msg_count,
             fake_timestamp_ms=future_timestamp,
             batch_max_bytes=msg_size * 2,
         )
@@ -906,7 +905,6 @@ class TimestampDriftRetentionTest(RedpandaTest):
         # record having a timestamp 1ms greater than the last.
         msg_size = 14000
         segments_count = 10
-        msg_count = (self.segment_size // msg_size) * segments_count
 
         # Write msg_count messages with timestamps in the past
         producer = KgoVerifierProducer(

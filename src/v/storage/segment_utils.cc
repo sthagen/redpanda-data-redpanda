@@ -390,13 +390,8 @@ ss::future<storage::index_state> do_copy_segment_data(
     auto segment_last_offset = seg->offsets().get_committed_offset();
     auto compaction_placeholder_enabled = feature_table.local().is_active(
       features::feature::compaction_placeholder_batch);
-    // TODO(tx_compact): Re-enable this when transactional control batch feature
-    // is added.
-    auto unset_transactional_bit_enabled = false;
-    // auto unset_transactional_bit_enabled
-    //   = !config::shard_local_cfg().log_compaction_disable_tx_batch_removal()
-    //     && feature_table.local().is_active(
-    //       features::feature::coordinated_compaction);
+    auto unset_transactional_bit_enabled = feature_table.local().is_active(
+      features::feature::coordinated_compaction);
     const bool past_tombstone_delete_horizon
       = internal::is_past_tombstone_delete_horizon(seg, cfg);
     bool may_have_tombstone_records = false;
@@ -1391,9 +1386,6 @@ ss::future<bool> mark_segment_as_finished_self_compaction(
 
 bool is_past_transaction_batch_delete_horizon(
   ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
-    // TODO(tx_compact): Re-enable this when transactional control batch feature
-    // is added.
-    return false;
     if (config::shard_local_cfg().log_compaction_disable_tx_batch_removal()) {
         // Safety hatch for disabling control batch removal
         return false;

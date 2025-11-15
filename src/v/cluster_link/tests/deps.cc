@@ -95,6 +95,11 @@ ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
           _tkrcs = rpc.get();
           return rpc;
       }),
+      ss::sharded_parameter([this]() {
+          auto fmtp = std::make_unique<fake_members_table_provider>();
+          _fmtp = fmtp.get();
+          return fmtp;
+      }),
       1s,
       _default_topic_replication.bind(),
       ss::default_scheduling_group());

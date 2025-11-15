@@ -121,7 +121,7 @@ class IdempotencySnapshotDelivery(PreallocNodesTest):
             min_time_between_actions_sec=10,
             max_time_between_actions_sec=20,
         )
-        with random_process_kills(self.redpanda, pkill_config) as ctx:
+        with random_process_kills(self.redpanda, pkill_config):
             wait_until(lambda: producer.produce_status.acked >= msg_cnt, 240, 1)
             producer.stop()
 

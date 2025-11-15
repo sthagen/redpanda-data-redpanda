@@ -1495,7 +1495,9 @@ admin_server::get_security_report(std::unique_ptr<ss::http::request>) {
             ephemeral_credentials{
               _schema_registry->has_ephemeral_credentials()});
     }
-    if (config::shard_local_cfg().audit_enabled()) {
+    if (
+      config::shard_local_cfg().audit_enabled()
+      && !config::shard_local_cfg().audit_use_rpc()) {
         interfaces_report.audit_log_client
           = generate_kafka_client_interface_report(
             alerts,

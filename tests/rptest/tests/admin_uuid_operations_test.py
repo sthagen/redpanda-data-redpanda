@@ -43,7 +43,6 @@ class AdminUUIDOperationsTest(RedpandaTest):
 
     @cluster(num_nodes=3)
     def test_getting_node_id_to_uuid_map(self):
-        admin = Admin(self.redpanda)
         uuids = self.admin.get_broker_uuids()
         assert len(uuids) == 3, "UUID map should contain 3 brokers"
         all_ids = set()

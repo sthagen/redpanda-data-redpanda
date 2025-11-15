@@ -12,5 +12,5 @@
 #include "cluster_link/logger.h"
 
 namespace cluster_link {
-ss::logger cllog("cluster_link");
+ss::logger cllog("shadow_link");
 }

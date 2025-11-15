@@ -8,7 +8,6 @@
 # by the Apache License, Version 2.0
 
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import time
 import socket
@@ -52,10 +51,7 @@ from rptest.services.multi_cluster_services import (
 from rptest.services.redpanda import LoggingConfig, TLSProvider
 from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManager
 from rptest.tests.prealloc_nodes import PreallocNodesTest
-from rptest.util import (
-    bg_thread_cm,
-    contextmanager,
-)
+from rptest.util import bg_thread_cm
 from rptest.utils.node_operations import FailureInjectorBackgroundThread
 from urllib3.exceptions import ProtocolError
 
@@ -433,6 +429,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
         kwargs.setdefault("extra_rp_conf", {}).update(
             {
                 "enable_shadow_linking": True,
+                "group_initial_rebalance_delay": 1000,
             }
         )
         kwargs.setdefault(
@@ -441,7 +438,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
                 "info",
                 logger_levels={
                     "cluster": "trace",
-                    "cluster_link": "trace",
+                    "shadow_link": "trace",
                     "kafka/client": "trace",
                     "kafka": "trace",
                     "archival": "trace",

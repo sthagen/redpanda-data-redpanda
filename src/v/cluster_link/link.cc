@@ -423,6 +423,10 @@ link::get_partition_offsets_report() const {
     return _replication_mgr.get_partition_offsets_report();
 }
 
+members_table_provider& link::get_members_table_provider() noexcept {
+    return _manager->get_members_table_provider();
+}
+
 bool link::should_start_task(task* t) const {
     return t->should_start(ss::this_shard_id(), _self);
 }

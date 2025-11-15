@@ -14,7 +14,7 @@ import threading
 import time
 from enum import Enum
 from functools import partial, reduce
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Optional, Sequence, Union
 from urllib.parse import urlparse
 
 import confluent_kafka as ck
@@ -44,7 +44,7 @@ from rptest.services.redpanda import (
     SecurityConfig,
     TLSProvider,
 )
-from rptest.services.redpanda_installer import RedpandaInstaller, RedpandaVersion
+from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.services.redpanda_types import SaslCredentials
 from rptest.services.rpk_consumer import RpkConsumer
 from rptest.tests.cluster_config_test import wait_for_version_sync
@@ -2019,6 +2019,8 @@ class AuditLogTestInvalidConfig(AuditLogTestInvalidConfigBase):
         log_allow_list=[
             r"Failed to append authentication event to audit log",
             r"Failed to audit.*",
+            # This comes from logging the cluster configuration at the post-ops of the test"
+            r"modify or view cluster configuration was not audited due to audit queues being full.*",
         ],
     )
     @matrix(audit_transport_mode=get_audit_modes())
@@ -2071,6 +2073,8 @@ class AuditLogTestInvalidConfigMTLS(AuditLogTestInvalidConfigBase):
             r"Failed to append authentication event to audit log",
             r"Failed to audit.*",
             r"Failed to enqueue mTLS authentication event - audit log system error",
+            # This comes from logging the cluster configuration at the post-ops of the test"
+            r"modify or view cluster configuration was not audited due to audit queues being full.*",
         ],
     )
     @matrix(audit_transport_mode=get_audit_modes())

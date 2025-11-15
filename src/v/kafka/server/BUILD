@@ -1,10 +1,4 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
-load("//src/v/rpc:compiler.bzl", "redpanda_cc_rpc_library")
-
-redpanda_cc_rpc_library(
-    name = "consumer_group_lag_metrics_rpc",
-    src = "consumer_group_lag_metrics_rpc.json",
-)
 
 redpanda_cc_library(
     name = "qdc_monitor_config",
@@ -100,8 +94,6 @@ redpanda_cc_library(
     srcs = [
         "client_quota_translator.cc",
         "connection_context.cc",
-        "consumer_group_lag_metrics_frontend.cc",
-        "consumer_group_lag_metrics_service.cc",
         "data_migration_group_proxy_impl.cc",
         "fetch_memory_units.cc",
         "fetch_pid_controller.cc",
@@ -155,9 +147,6 @@ redpanda_cc_library(
         "atomic_token_bucket.h",
         "client_quota_translator.h",
         "connection_context.h",
-        "consumer_group_lag_metrics_frontend.h",
-        "consumer_group_lag_metrics_rpc_types.h",
-        "consumer_group_lag_metrics_service.h",
         "coordinator_ntp_mapper.h",
         "data_migration_group_proxy_impl.h",
         "errors.h",
@@ -252,7 +241,6 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":consumer_group_lag_metrics_rpc",
         ":datalake_throttle_manager",
         ":datalake_usage_api",
         ":logger",

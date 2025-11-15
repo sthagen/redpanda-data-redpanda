@@ -247,7 +247,7 @@ class TestVirtualConnections(RedpandaTest):
         # reinitialize the client
         mpx_client = MpxMockClient(self.redpanda)
         mpx_client.start()
-        partition_info = mpx_client.get_partition_info(spec.name, 0)
+        mpx_client.get_partition_info(spec.name, 0)
 
         # execute fetch and produce once again, now the fetch should not block the produce request as it will be processed in a virtual connection
         (fetch_fut, produce_fut) = self._fetch_and_produce(

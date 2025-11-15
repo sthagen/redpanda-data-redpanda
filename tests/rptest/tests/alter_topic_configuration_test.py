@@ -495,7 +495,7 @@ class ShadowIndexingGlobalConfig(RedpandaTest):
     @cluster(num_nodes=3)
     def test_topic_manifest_reupload(self):
         bucket_view = BucketView(self.redpanda)
-        initial = wait_until_result(
+        wait_until_result(
             lambda: bucket_view.get_topic_manifest(NT(ns="kafka", topic=self.topic)),
             timeout_sec=10,
             backoff_sec=1,

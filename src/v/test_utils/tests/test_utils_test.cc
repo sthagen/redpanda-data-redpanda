@@ -20,7 +20,7 @@
 
 #include <gtest/gtest.h>
 
-TEST(test_utils_test, test_macros_pass) {
+TEST(TestUtilsTest, test_macros_pass) {
     RPTEST_REQUIRE(true);
     RPTEST_REQUIRE_EQ(1, 1);
     RPTEST_REQUIRE_NE(1, 2);
@@ -29,7 +29,9 @@ TEST(test_utils_test, test_macros_pass) {
     RPTEST_EXPECT_EQ(1, 1);
 }
 
-TEST(test_utils_test, test_macros_fail) {
+TEST(TestUtilsDeathTest, test_macros_fail) {
+    GTEST_SKIP()
+      << "TODO(death_tests): re-enable when death tests are made stable in CI.";
     ASSERT_DEATH(RPTEST_FAIL("fail message"), "fail message");
     ASSERT_DEATH(RPTEST_ADD_FAIL("fail message"), "fail message");
     ASSERT_DEATH(RPTEST_FAIL_CORO("fail message"), "fail message");

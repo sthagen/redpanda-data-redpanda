@@ -457,9 +457,7 @@ class DataTransformsTest(BaseDataTransformsTest):
         )
 
         with expect_exception(TimeoutError, lambda _: True):
-            consumer_status = self._consume_output_topic(
-                topic=self.topics[1], status=producer_status
-            )
+            self._consume_output_topic(topic=self.topics[1], status=producer_status)
 
     @cluster(num_nodes=4)
     @matrix(

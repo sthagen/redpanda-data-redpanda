@@ -430,7 +430,6 @@ class TransactionsTest(RedpandaTest, TransactionsMixin):
 
     @cluster(num_nodes=3)
     def transaction_id_expiration_test(self):
-        admin = Admin(self.redpanda)
         rpk = RpkTool(self.redpanda)
         # Create an open transaction.
         producer = ck.Producer(
@@ -986,7 +985,7 @@ class TransactionsTest(RedpandaTest, TransactionsMixin):
     def check_pids_overflow_test(self):
         rpk = RpkTool(self.redpanda)
         max_concurrent_producer_ids = 10
-        ans = rpk.cluster_config_set(
+        rpk.cluster_config_set(
             "max_concurrent_producer_ids", str(max_concurrent_producer_ids)
         )
 

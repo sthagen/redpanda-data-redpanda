@@ -649,7 +649,9 @@ source_topic_syncer::find_candidate_topics_for_update(
             topic_metadata{
               .partition_count = partition_count,
               // Only mirror source topic replication factor if configured to do
-              .rf = mirror_rf ? std::make_optional(rf) : std::nullopt,
+              .rf = mirror_rf
+                      ? std::make_optional<int16_t>(maybe_clamp_rf(rf, topic))
+                      : std::nullopt,
               .topic_id = topic_id},
             std::move(mirror_metadata)));
     }
@@ -759,7 +761,9 @@ source_topic_syncer::find_candidate_topics_for_creation(
             .partition_count = partition_count,
             // Only mirror source topic replication factor if configured to do
             // so
-            .rf = mirror_rf ? std::make_optional(rf) : std::nullopt,
+            .rf = mirror_rf
+                    ? std::make_optional<int16_t>(maybe_clamp_rf(rf, topic))
+                    : std::nullopt,
             .topic_id = topic_id});
     }
 
@@ -842,6 +846,22 @@ source_topic_syncer::check_if_schema_registry_is_empty() {
     co_return pit->second.offsets.high_watermark == kafka::offset(0)
       ? sr_is_empty_t::yes
       : sr_is_empty_t::no;
+}
+
+int16_t source_topic_syncer::maybe_clamp_rf(
+  int16_t source_rf, const ::model::topic& topic) noexcept {
+    auto node_count = get_link()->get_members_table_provider().node_count();
+    if (std::cmp_less(node_count, source_rf)) {
+        vlog(
+          logger().info,
+          "Topic {} has a replication factor greater than current node "
+          "count ({} > {}).  Clamping replication factor",
+          topic,
+          source_rf,
+          node_count);
+        return static_cast<int16_t>(node_count);
+    }
+    return source_rf;
 }
 
 std::string_view

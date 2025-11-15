@@ -159,7 +159,7 @@ class TestTieredStoragePause(PreallocNodesTest):
         """If 'expected' set to True then the expectation is that the start offset is
         zero. Otherwise the expectation is that start offset is greater than zero"""
         rpk = RpkTool(self.redpanda)
-        partitions = rpk.describe_topic(self._topic)
+        rpk.describe_topic(self._topic)
 
         def _check():
             partitions = rpk.describe_topic(self._topic)

@@ -461,7 +461,6 @@ class RBACTest(RBACTestBase):
     @cluster(num_nodes=3)
     def test_members_endpoint_errors(self):
         alice = RoleMember.User("alice")
-        bob = RoleMember.User("bob")
 
         with expect_role_error(RoleErrorCode.ROLE_NOT_FOUND):
             self.superuser_admin.list_role_members(role=self.role_name0)

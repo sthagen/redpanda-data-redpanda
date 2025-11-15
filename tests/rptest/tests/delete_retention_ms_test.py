@@ -9,7 +9,6 @@
 
 
 from rptest.clients.rpk import RpkTool
-from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.tests.redpanda_test import RedpandaTest
 
@@ -34,7 +33,6 @@ class DeleteRetentionMsTest(RedpandaTest):
         assert cluster_prop == "1234567890"
 
         topic_name = "tapioca"
-        topic = TopicSpec(name=topic_name)
         self.rpk.create_topic(topic_name, partitions=1)
         topic_desc = self.rpk.describe_topic_configs(topic_name)
         assert topic_desc["delete.retention.ms"][0] == "1234567890"
@@ -42,7 +40,6 @@ class DeleteRetentionMsTest(RedpandaTest):
     @cluster(num_nodes=1)
     def test_alter_topic_config(self):
         topic_name = "tapioca"
-        topic = TopicSpec(name=topic_name)
         self.rpk.create_topic(topic_name, partitions=1)
         topic_desc = self.rpk.describe_topic_configs(topic_name)
 

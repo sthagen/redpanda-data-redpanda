@@ -570,12 +570,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         producer_kwargs["min_record_size"] = 64
         producer_kwargs["max_record_size"] = 64
 
-        effective_msg_size = (
-            producer_kwargs["min_record_size"]
-            + (producer_kwargs["max_record_size"] - producer_kwargs["min_record_size"])
-            // 2
-        )
-
         # connections per node at max (tier-5) is ~3700
         # Account for the metadata traffic of 1%
         _target_total = int(self._advertised_max_client_count)
@@ -1837,6 +1831,8 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
                 OMBSampleConfigurations.UNIT_TEST_LATENCY_VALIDATOR
                 | validator_overrides,
             ),
+            node=bench_node,
+            worker_nodes=worker_nodes,
         )
 
         benchmark.start()

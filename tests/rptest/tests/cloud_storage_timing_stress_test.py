@@ -307,7 +307,7 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
         msg_count = bytes_count // self.message_size
 
         self.logger.info(
-            f"Will consume at {bps / self.mib}MiB/s from topic={self.topic}"
+            f"Will consume at {bps / self.mib}MiB/s from topic={self.topic}, msg_count={msg_count}"
         )
 
         return KgoVerifierSeqConsumer(

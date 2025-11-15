@@ -164,7 +164,7 @@ class SchemaScaleTester:
 
         rpk = RpkTool(self.redpanda)
         schema_str = json.dumps(self.schema.to_json())
-        r = rpk.create_schema_from_str(f"{self.topic_name}_schema", schema_str)
+        rpk.create_schema_from_str(f"{self.topic_name}_schema", schema_str)
 
         for _ in range(3):
             self.produce(dl, self.topic_name, 500)

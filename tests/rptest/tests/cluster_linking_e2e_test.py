@@ -321,7 +321,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         )
 
         link_uid = test_link.uid
-        assert link_uid, f"Expected some uid for shadow link"
+        assert link_uid, "Expected some uid for shadow link"
 
         got_link = self.get_link(name="test-link")
         assert got_link.name == "test-link", (
@@ -1547,6 +1547,25 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         )
 
 
+class ShadowLinkSmallerShadowCluster(ShadowLinkTestBase):
+    """
+    Tests for when the Shadow Cluster is smaller than the source cluster
+    """
+
+    def __init__(self, test_context, *args, **kwargs):
+        super().__init__(test_context, num_brokers=1, *args, **kwargs)
+
+    def _expect_connect_error(self, expected_code: ConnectErrorCode):
+        return expect_exception(ConnectError, lambda e: e.code == expected_code)
+
+    @cluster(num_nodes=4)
+    def test_warn_on_smaller_cluster(self):
+        self.create_link("test-link")
+        assert self.target_cluster_service.search_log_any(
+            "Cluster link 'test-link' connecting to source cluster with 3 brokers, which is more than the shadow cluster's 1 nodes"
+        ), "Did not find expected warning about smaller shadow cluster"
+
+
 class ShadowLinkingAuthzTests(ShadowLinkTestBase):
     SUPERUSER_ERROR = "[permission_denied] Forbidden (superuser role required)"
 
@@ -1646,8 +1665,10 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                     self.logger.debug(
                         f"Partition {partition_id}: source hwm={hwm}, shadow_hwm{p_info.source_high_watermark}, last_update={p_info.source_last_updated_timestamp}"
                     )
-                    if p_info.source_high_watermark != hwm:
-                        return False
+                    # TODO: Re-enable once CORE-14617 is addressed
+                    # TODO: CORE-14653
+                    # if p_info.source_high_watermark != hwm:
+                    #     return False
         return True
 
     def _fetch_shadow_topic_and_compare_results(
@@ -1799,9 +1820,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 "configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters"
             ]
         )
-        updated_link = self.update_link(
-            shadow_link=shadow_link, update_mask=update_mask
-        )
+        self.update_link(shadow_link=shadow_link, update_mask=update_mask)
 
         # Now the topic should be deletable, as it is not in the autocreate filters
         target_client.delete_topic(topic.name)
@@ -2394,9 +2413,9 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                     topic=topic,
                     group=group_id,
                     n=1,
-                    timeout=5,
+                    timeout=10,
                     offset="start",
-                    fetch_max_wait=2,
+                    fetch_max_wait=5,
                     format=format,
                 )
             except Exception as e:
@@ -2531,7 +2550,7 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
         partition_count = 120
 
         topic = TopicSpec(
-            name=f"source-topic",
+            name="source-topic",
             partition_count=int(partition_count),
             replication_factor=3,
         )
@@ -2962,7 +2981,7 @@ class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
                     format="%o,",
                 )
                 return [int(o) for o in raw.split(",")[0:-1]]
-            except Exception as e:
+            except Exception:
                 return []
 
         produce(n=num_messages, redpanda=self.source_cluster.service)

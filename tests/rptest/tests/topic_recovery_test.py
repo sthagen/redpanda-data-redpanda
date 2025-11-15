@@ -507,7 +507,7 @@ class AdminApiBasedRestore(FastCheck):
     def _assert_duplicate_request_is_rejected(self):
         try:
             # A duplicate request should be rejected as a recovery is already running.
-            response = self.admin.initiate_topic_scan_and_recovery()
+            self.admin.initiate_topic_scan_and_recovery()
         except requests.exceptions.HTTPError as e:
             assert e.response.status_code == requests.status_codes.codes["conflict"], (
                 f"request status code: {e.response.status_code}"

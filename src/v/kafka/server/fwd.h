@@ -16,8 +16,6 @@ namespace kafka {
 // sorted
 class connection_context;
 class coordinator_ntp_mapper;
-class consumer_group_lag_metrics_frontend;
-class consumer_group_lag_metrics_service;
 class fetch_session_cache;
 class group_manager;
 class group_router;

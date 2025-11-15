@@ -183,7 +183,7 @@ class SIAdminApiTest(RedpandaTest):
             {"topic_names_pattern": "x", "retention_ms": 1, "retention_bytes": 1},
         ):
             try:
-                response = self.admin.initiate_topic_scan_and_recovery(payload=payload)
+                self.admin.initiate_topic_scan_and_recovery(payload=payload)
             except requests.exceptions.HTTPError as e:
                 assert (
                     e.response.status_code == requests.status_codes.codes["bad_request"]
@@ -200,7 +200,7 @@ class SIAdminApiTest(RedpandaTest):
     @cluster(num_nodes=3)
     def test_manifest_dump(self):
         with expect_http_error(404):
-            not_found_response = self.admin.get_partition_manifest("test-topic", 0)
+            self.admin.get_partition_manifest("test-topic", 0)
 
         self.rpk.create_topic("test-topic")
         self.admin.await_stable_leader("test-topic", 0)
@@ -217,6 +217,6 @@ class SIAdminApiTest(RedpandaTest):
         )
 
         with expect_http_error(400):
-            not_enabled_response = self.admin.get_partition_manifest("test-topic", 0)
+            self.admin.get_partition_manifest("test-topic", 0)
 
         self.redpanda.si_settings.set_expected_damage({"ntr_no_topic_manifest"})

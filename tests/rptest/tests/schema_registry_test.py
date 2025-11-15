@@ -2266,7 +2266,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         )
         self.logger.debug(result_raw)
         assert result_raw.status_code == requests.codes.ok
-        v1_id = result_raw.json()["id"]
+        result_raw.json()["id"]
 
         self.logger.debug("Set subject config - BACKWARD")
         result_raw = self.sr_client.set_config_subject(

@@ -349,8 +349,6 @@ class RpkACLTest(RedpandaTest):
         Schema Registry ACLs along Redpanda ACLs
         """
 
-        TOPIC_NAME = "some-topic"
-        ROLE_NAME = "admin"
         superclient = self._superclient()
 
         # Create ACL with only SR = 2 ACLs.

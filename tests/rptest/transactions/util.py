@@ -9,7 +9,6 @@
 
 import random
 from contextlib import contextmanager
-from typing import Optional
 
 import confluent_kafka as ck
 

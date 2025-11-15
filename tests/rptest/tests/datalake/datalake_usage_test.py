@@ -78,7 +78,6 @@ class IcebergUsageTest(RedpandaTest):
             )
             for window in reported_usages:
                 dl_usage = window["datalake_usage"]
-                ts = window["begin_timestamp"]
                 if (
                     "missing_reason" in dl_usage
                     and dl_usage["missing_reason"] != "not_controller_leader"

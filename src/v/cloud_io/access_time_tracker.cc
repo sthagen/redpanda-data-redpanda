@@ -293,15 +293,18 @@ access_time_tracker::get(const std::string& key) const {
 
 bool access_time_tracker::is_dirty() const { return _dirty; }
 
-chunked_vector<file_list_item> access_time_tracker::lru_entries() const {
+ss::future<chunked_vector<file_list_item>> access_time_tracker::lru_entries() {
+    auto lock_guard = co_await ss::get_units(_table_lock, 1);
     chunked_vector<file_list_item> items;
     items.reserve(_table.size());
     for (const auto& [path, metadata] : _table) {
         items.emplace_back(metadata.time_point(), path, metadata.size);
     }
+    lock_guard.return_all();
+    on_released_table_lock();
     std::ranges::sort(
       items, {}, [](const auto& item) { return item.access_time; });
-    return items;
+    co_return items;
 }
 
 std::chrono::system_clock::time_point file_metadata::time_point() const {

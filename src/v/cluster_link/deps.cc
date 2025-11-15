@@ -11,6 +11,7 @@
 
 #include "cluster_link/deps.h"
 
+#include "cluster/members_table.h"
 #include "cluster/security_frontend.h"
 #include "cluster_link/errc.h"
 #include "cluster_link/utils.h"
@@ -49,6 +50,20 @@ public:
 private:
     ss::sharded<kafka::data::rpc::client>* _client;
 };
+
+class members_table_provider_impl : public members_table_provider {
+public:
+    explicit members_table_provider_impl(
+      ss::sharded<cluster::members_table>* members_table)
+      : _members_table(members_table) {}
+
+    size_t node_count() const final {
+        return _members_table->local().node_count();
+    }
+
+private:
+    ss::sharded<cluster::members_table>* _members_table;
+};
 } // namespace
 
 std::unique_ptr<security_service> security_service::make_default(
@@ -66,5 +81,10 @@ std::unique_ptr<kafka_rpc_client_service>
 kafka_rpc_client_service::make_default(
   ss::sharded<kafka::data::rpc::client>* client) {
     return std::make_unique<kafka_rpc_client_impl>(client);
+}
+
+std::unique_ptr<members_table_provider> members_table_provider::make_default(
+  ss::sharded<cluster::members_table>* members_table) {
+    return std::make_unique<members_table_provider_impl>(members_table);
 }
 } // namespace cluster_link

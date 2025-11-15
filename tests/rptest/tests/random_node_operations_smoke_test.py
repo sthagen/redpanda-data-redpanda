@@ -510,7 +510,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             rpk = RpkTool(self.redpanda)
             try:
                 rpk.list_schemas()
-            except:
+            except Exception:
                 return False
             return True
 

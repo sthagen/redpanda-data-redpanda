@@ -127,6 +127,8 @@ public:
     chunked_hash_map<::model::ntp, replication::partition_offsets_report>
     get_partition_offsets_report() const;
 
+    members_table_provider& get_members_table_provider() noexcept;
+
 private:
     bool should_start_task(task* t) const;
     bool should_stop_task(task* t) const;
