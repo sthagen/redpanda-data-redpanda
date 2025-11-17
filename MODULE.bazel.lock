@@ -4373,7 +4373,7 @@
     "@@toolchains_llvm+//toolchain/extensions:llvm.bzl%llvm": {
       "general": {
         "bzlTransitiveDigest": "c1HwgmsVfl3HQfJp5j/lYNFyGkE5EiG6RookiyKG0oM=",
-        "usagesDigest": "8I9gdsRBinaMjJ5TZWklU2azuuh3ZY0YGTCfpacsflQ=",
+        "usagesDigest": "WPOfxHwPXkZYb3if92mQm4cdMnT15Uvnw9xGHXM2GCU=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -4481,16 +4481,16 @@
               "llvm_versions": {},
               "netrc": "",
               "sha256": {
-                "linux-aarch64": "ce0a8d7f4df980dd3aa0deacd390804f887d31065cd79b71827bba6cd4d2e2e8",
-                "linux-x86_64": "c424df0195e1641b6226dbb380a849d2013975150af40932392361d9893005ac"
+                "linux-aarch64": "f51afb38ca39cc93c6ed065a0c463d3587b975204d6028a63de33153caf3e104",
+                "linux-x86_64": "616e3f50b1f03b61ec712f4f28fa67668d60ae3edccea8508065a3f49dbbb24a"
               },
               "strip_prefix": {},
               "urls": {
                 "linux-aarch64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.8/llvm-20.1.8-debian-11-aarch64-2025-07-22.tar.zst"
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.8/llvm-20.1.8-debian-11-aarch64-2025-11-14.tar.zst"
                 ],
                 "linux-x86_64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.8/llvm-20.1.8-debian-11-x86_64-2025-07-22.tar.zst"
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.8/llvm-20.1.8-debian-11-x86_64-2025-11-14.tar.zst"
                 ]
               }
             }

@@ -90,3 +90,17 @@ alias(
     name = "format_clang",
     actual = ":clang_format",
 )
+
+sh_binary(
+    name = "clang-tidy",
+    srcs = ["clang-tool.sh"],
+    data = [
+        "//bazel/clang_tidy/plugins:plugins.so",
+    ],
+    tags = ["manual"],
+)
+
+alias(
+    name = "clang_tidy",
+    actual = ":clang-tidy",
+)

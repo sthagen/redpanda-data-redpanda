@@ -43,6 +43,7 @@ struct validation_args {
 };
 
 // Entry point for batch validation.
-std::optional<error_code_and_msg> validate_batch(const validation_args&);
+ss::future<std::optional<error_code_and_msg>>
+validate_batch(const validation_args&);
 
 } // namespace kafka

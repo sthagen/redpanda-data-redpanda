@@ -432,7 +432,8 @@ std::optional<error_code_and_msg> validate_batch(
 
 } // namespace
 
-std::optional<error_code_and_msg> validate_batch(const validation_args& args) {
+ss::future<std::optional<error_code_and_msg>>
+validate_batch(const validation_args& args) {
     const auto& validation_mode
       = config::shard_local_cfg().kafka_produce_batch_validation();
 
@@ -444,14 +445,22 @@ std::optional<error_code_and_msg> validate_batch(const validation_args& args) {
 
     if (batch.compressed()) {
         if (should_decompress(batch, validation_mode)) {
-            maybe_decompressed_batch = model::decompress_batch_sync(batch);
+            try {
+                maybe_decompressed_batch = co_await model::decompress_batch(
+                  batch);
+            } catch (...) {
+                co_return error_code_and_msg{
+                  .err = error_code::corrupt_message,
+                  .msg = "unable to decompress batch",
+                };
+            }
             maybe_decompressed_batch_ref = maybe_decompressed_batch.value();
         }
     } else {
         maybe_decompressed_batch_ref = batch;
     }
 
-    return validate_batch(
+    co_return validate_batch(
       batch,
       maybe_decompressed_batch_ref,
       validation_mode,
