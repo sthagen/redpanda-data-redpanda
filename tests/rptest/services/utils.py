@@ -63,7 +63,7 @@ class Stopwatch:
     def elapseds(self) -> str:
         return f"{self.elapsed:.2f}s"
 
-    def elapsedf(self, note) -> str:
+    def elapsedf(self, note: str) -> str:
         return f"{note}: {self.elapseds()}"
 
 

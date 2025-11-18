@@ -553,7 +553,11 @@ def wait_for_recovery_throttle_rate(redpanda, new_rate: int):
 
 
 def ssh_output_stderr(
-    source_service, node, cmd, allow_fail=False, timeout_sec=None
+    source_service: Any,
+    node: Any,
+    cmd: str,
+    allow_fail: bool = False,
+    timeout_sec: int | None = None,
 ) -> tuple[bytes, bytes]:
     """Runs the command via SSH and captures stdout and stderr, returning it as a byte strings.
     this is a copy/mode of ssh_output, with the intention midterm to upstream it to ducktape

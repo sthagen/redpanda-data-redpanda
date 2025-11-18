@@ -117,15 +117,22 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       iceberg_enabled,
       enable_cloud_topics,
       development_cluster_linking_enabled);
-    app.initialize(
-      proxy_config(proxy_port),
-      proxy_client_config(kafka_port),
-      schema_reg_config(schema_reg_port),
-      proxy_client_config(kafka_port),
-      audit_log_client_config(kafka_port),
-      sch_groups);
-    app.check_environment();
-    app.wire_up_and_start(*app_signal, true);
+    try {
+        app.initialize(
+          proxy_config(proxy_port),
+          proxy_client_config(kafka_port),
+          schema_reg_config(schema_reg_port),
+          proxy_client_config(kafka_port),
+          audit_log_client_config(kafka_port),
+          sch_groups);
+        app.check_environment();
+        app.wire_up_and_start(*app_signal, true);
+    } catch (...) {
+        // shutdown half-initialized app nicely so that its destructor doesn't
+        // assert and the exception bubbles up
+        app.shutdown();
+        throw;
+    }
 
     net::server_configuration scfg("fixture_config");
     scfg.max_service_memory_per_core = int64_t(

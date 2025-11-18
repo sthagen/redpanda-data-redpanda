@@ -119,6 +119,9 @@ redpanda_cc_library(
     hdrs = [
         "credential_manager.h",
     ],
+    implementation_deps = [
+        "//src/v/net:types",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         ":logger",

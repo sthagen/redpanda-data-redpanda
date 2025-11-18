@@ -33,6 +33,17 @@ struct ctp_stm_api_accessor {
     ct::ctp_stm_api api;
 };
 
+namespace cloud_topics {
+struct ctp_stm_accessor {
+    auto take_snapshot(ctp_stm& stm) { return stm.take_local_snapshot({}); }
+
+    auto install_snapshot(ctp_stm& stm, raft::stm_snapshot snapshot) {
+        return stm.apply_local_snapshot(
+          snapshot.header, std::move(snapshot.data));
+    }
+};
+} // namespace cloud_topics
+
 class ctp_stm_fixture : public raft::stm_raft_fixture<ct::ctp_stm> {
 public:
     ss::future<> start() {
@@ -408,4 +419,40 @@ TEST_F_CORO(ctp_stm_fixture, can_replay_truncated_log) {
     auto follower_stm = get_stm<0>(node(follower_id));
     co_await follower_stm->wait(dirty_offset, model::no_timeout);
     vlog(ct::cd_log.info, "recovery done: {}", follower_id);
+}
+
+TEST_F_CORO(ctp_stm_fixture, test_snapshot) {
+    co_await start();
+
+    co_await wait_for_leader(raft::default_timeout());
+
+    auto gc_epoch = co_await api(node(*get_leader())).get_inactive_epoch();
+
+    ASSERT_TRUE_CORO(gc_epoch);
+    ASSERT_FALSE_CORO(gc_epoch->has_value());
+
+    auto b1 = make_record_batch(ct::cluster_epoch{2}, model::offset{0}, 0);
+    auto res = co_await replicate_record_batch(
+      node(*get_leader()), std::move(b1));
+    ASSERT_TRUE_CORO(res.has_value());
+
+    auto max_epoch = api(node(*get_leader())).get_max_epoch();
+    auto max_seen_epoch = api(node(*get_leader())).get_max_seen_epoch();
+    ASSERT_TRUE_CORO(max_epoch.has_value());
+    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
+    ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{2});
+    ASSERT_EQ_CORO(max_seen_epoch.value(), ct::cluster_epoch{2});
+
+    auto& leader = node(*get_leader());
+    auto stm = get_stm<0>(leader);
+    ct::ctp_stm_accessor a;
+    auto snapshot = co_await a.take_snapshot(*stm);
+
+    co_await a.install_snapshot(*stm, std::move(snapshot));
+
+    // Acquire the fence for epoch 1 (should fail)
+    {
+        auto fence = co_await api(leader).fence_epoch(ct::cluster_epoch{1});
+        ASSERT_FALSE_CORO(fence.unit.has_value());
+    }
 }

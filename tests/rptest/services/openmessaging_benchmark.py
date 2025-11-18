@@ -30,7 +30,11 @@ from rptest.services.utils import BadLogLines, VersionAndLines
 
 from ducktape.tests.test import TestContext
 
-LOG_ALLOW_LIST = ["No such file or directory", "cannot be started once stopped"]
+LOG_ALLOW_LIST = [
+    "No such file or directory",
+    "cannot be started once stopped",
+    "has passed since batch creation",
+]
 
 
 class LocalPayloadDirectory:

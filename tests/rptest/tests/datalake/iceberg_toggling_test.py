@@ -199,7 +199,11 @@ class IcebergTogglingTest(RedpandaTest):
                 # Wait for records to be translated.
                 min_records_expected = total_records_sent()
                 dl.wait_for_translation(
-                    self.topic_name, min_records_expected, timeout=60, op=operator.gt
+                    self.topic_name,
+                    msg_count=min_records_expected,
+                    timeout=120,
+                    progress_sec=30,
+                    op=operator.gt,
                 )
 
                 self.rpk.alter_topic_config(
@@ -253,7 +257,10 @@ class IcebergTogglingTest(RedpandaTest):
 
             try:
                 dl.wait_for_translation(
-                    self.topic_name, msg_count=produced_records, timeout=30
+                    self.topic_name,
+                    msg_count=produced_records,
+                    timeout=90,
+                    progress_sec=30,
                 )
                 assert False, "Expected translation to fail but it did not"
             except ducktape.errors.TimeoutError:
@@ -262,7 +269,10 @@ class IcebergTogglingTest(RedpandaTest):
             self.set_iceberg_mode("value_schema_id_prefix")
 
             dl.wait_for_translation(
-                self.topic_name, msg_count=produced_records, timeout=30
+                self.topic_name,
+                msg_count=produced_records,
+                timeout=90,
+                progress_sec=30,
             )
 
     @cluster(num_nodes=3)
@@ -307,5 +317,5 @@ class IcebergTogglingTest(RedpandaTest):
 
             self.set_iceberg_mode("value_schema_id_prefix")
             dl.wait_for_translation(
-                self.topic_name, msg_count=total_produced, timeout=30
+                self.topic_name, msg_count=total_produced, timeout=90, progress_sec=30
             )

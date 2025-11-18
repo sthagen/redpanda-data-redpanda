@@ -1130,7 +1130,7 @@ class BucketView:
                         # and deleted by Redpanda concurrently.
                         # We don't expect this to happen with the manifests
                         # so this error is only handled in case of segments
-                        if err["Error"]["Code"] == "NoSuchKey":
+                        if err.response["Error"]["Code"] == "NoSuchKey":
                             self._state.ignored_objects += 1
             elif self.path_matcher.is_topic_manifest(o):
                 pass

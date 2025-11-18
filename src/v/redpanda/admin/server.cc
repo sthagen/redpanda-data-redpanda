@@ -352,7 +352,7 @@ namespace {
 class rpc_handler : public ss::httpd::handler_base {
 public:
     rpc_handler(
-      ss::noncopyable_function<void(const ss::http::request&)>
+      ss::noncopyable_function<request_auth_result(const ss::http::request&)>
         authenticate_request,
       serde::pb::rpc::route_descriptor descriptor)
       : _authenticate_request(std::move(authenticate_request))
@@ -363,8 +363,9 @@ public:
       std::unique_ptr<ss::http::request> req,
       std::unique_ptr<ss::http::reply> rep) override {
         try {
-            check_authentication(*req);
+            auto auth_result = check_authentication(*req);
             auto ctx = make_context(*req);
+            ctx.set_value(std::move(auth_result));
             auto is_proto = ctx.content_type
                             == serde::pb::rpc::content_type::proto;
             iobuf request_payload = co_await extract_payload(std::move(req));
@@ -398,9 +399,9 @@ public:
     }
 
 private:
-    void check_authentication(const ss::http::request& req) {
+    request_auth_result check_authentication(const ss::http::request& req) {
         try {
-            _authenticate_request(req);
+            return _authenticate_request(req);
         } catch (const ss::httpd::base_exception& e) {
             switch (e.status()) {
             case seastar::http::reply::status_type::unauthorized:
@@ -449,7 +450,7 @@ private:
         co_return payload;
     }
 
-    ss::noncopyable_function<void(const ss::http::request&)>
+    ss::noncopyable_function<request_auth_result(const ss::http::request&)>
       _authenticate_request;
     serde::pb::rpc::route_descriptor _descriptor;
 };
@@ -467,27 +468,28 @@ void admin_server::add_service(
           /*path_parameters=*/{},
           /*mandatory_params=*/{},
         };
-        ss::noncopyable_function<void(const ss::http::request&)> auth_handler;
+        ss::noncopyable_function<request_auth_result(const ss::http::request&)>
+          auth_handler;
         switch (route.authz_level) {
         case serde::pb::rpc::authz_level::unauthenticated:
             auth_handler = [this](const ss::http::request& req) {
-                std::optional<request_auth_result> auth_state;
-                auth_state.emplace(apply_auth<publik>(req));
-                log_request(req, auth_state.value());
+                auto auth_result = apply_auth<publik>(req);
+                log_request(req, auth_result);
+                return auth_result;
             };
             break;
         case serde::pb::rpc::authz_level::user:
             auth_handler = [this](const ss::http::request& req) {
-                std::optional<request_auth_result> auth_state;
-                auth_state.emplace(apply_auth<user>(req));
-                log_request(req, auth_state.value());
+                auto auth_result = apply_auth<user>(req);
+                log_request(req, auth_result);
+                return auth_result;
             };
             break;
         case serde::pb::rpc::authz_level::superuser:
             auth_handler = [this](const ss::http::request& req) {
-                std::optional<request_auth_result> auth_state;
-                auth_state.emplace(apply_auth<superuser>(req));
-                log_request(req, auth_state.value());
+                auto auth_result = apply_auth<superuser>(req);
+                log_request(req, auth_result);
+                return auth_result;
             };
             break;
         }

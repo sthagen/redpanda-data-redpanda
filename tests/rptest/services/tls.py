@@ -1,4 +1,3 @@
-import collections
 import os
 import pathlib
 import random
@@ -7,6 +6,7 @@ import subprocess
 import tempfile
 import typing
 from enum import Enum, IntEnum
+from typing import NamedTuple
 
 _ca_config_tmpl = """
 # OpenSSL CA configuration file
@@ -297,12 +297,21 @@ extendedKeyUsage        = serverAuth,clientAuth
 subjectKeyIdentifier    = hash
 """
 
-CertificateAuthority = collections.namedtuple(
-    "CertificateAuthority", ["cfg", "key", "crt", "crl"]
-)
-Certificate = collections.namedtuple(
-    "Certificate", ["cfg", "key", "crt", "ca", "p12_file", "p12_password"]
-)
+
+class CertificateAuthority(NamedTuple):
+    cfg: str
+    key: str
+    crt: str
+    crl: str | None
+
+
+class Certificate(NamedTuple):
+    cfg: str
+    key: str
+    crt: str
+    ca: CertificateAuthority
+    p12_file: str
+    p12_password: str
 
 
 class TLSKeyType(Enum):

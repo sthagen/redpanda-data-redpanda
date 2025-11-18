@@ -69,7 +69,7 @@ class ABSClient:
         blob_service = BlobServiceClient.from_connection_string(self.conn_str)
         blob_service.create_container(name)
 
-    def empty_and_delete_bucket(self, name: str, parallel=False):
+    def empty_and_delete_bucket(self, name: str, parallel: bool = False) -> None:
         """
         Simply proxy into `delete_bucket` as that deletes the blobs too
         """

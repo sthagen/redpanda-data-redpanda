@@ -336,25 +336,30 @@ ss::future<cluster_epoch_fence> ctp_stm::fence_epoch(cluster_epoch e) {
         throw std::runtime_error(fmt_with_ctx(fmt::format, "Sync timeout"));
     }
     auto term = _raft->confirmed_term();
-    auto max_seen_epoch = _state.get_max_seen_epoch();
-    if (max_seen_epoch.has_value() && max_seen_epoch.value() == e) {
+    // The max_seen_epoch is not persisted to disk as part of the snapshot
+    // because it represents in-flight batches. If this epoch is nullopt we
+    // should take max_applied_epoch into account.
+    auto get_applied_epoch = [this] { return _state.get_max_epoch(); };
+    auto fence_epoch = _state.get_max_seen_epoch().or_else(get_applied_epoch);
+    if (fence_epoch.has_value() && fence_epoch.value() == e) {
         // Case 1. Same epoch, need to acquire read-lock.
         auto unit = co_await _lock.hold_read_lock();
-        // Invariant: the max_seen_epoch is not nullopt because once
-        // set the max_seen_epoch is never resets.
-        if (_state.get_max_seen_epoch() == e) {
+        if (_state.get_max_seen_epoch().or_else(get_applied_epoch) == e) {
             // The max_seen_epoch didn't advance after the scheduling point
-            co_return cluster_epoch_fence{std::move(unit), term};
+            co_return cluster_epoch_fence{
+              .unit = std::move(unit), .term = term};
         }
     } else {
         // Case 2. New epoch, need to acquire write-lock.
         auto unit = co_await _lock.hold_write_lock();
-        auto current_epoch = _state.get_max_seen_epoch();
+        auto current_epoch = _state.get_max_seen_epoch().or_else(
+          get_applied_epoch);
         if (!current_epoch.has_value() || current_epoch.value() <= e) {
             _state.advance_max_seen_epoch(e);
             // Demote to reader lock after max_seen_epoch is updated.
             unit.return_units(unit.count() - 1);
-            co_return cluster_epoch_fence{std::move(unit), term};
+            co_return cluster_epoch_fence{
+              .unit = std::move(unit), .term = term};
         }
     }
     // If we reach here, it means that we need to discard the batch.

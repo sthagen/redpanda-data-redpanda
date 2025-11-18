@@ -41,7 +41,7 @@ redpanda_connect, redpanda_cluster`,
 
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
-			if !p.FromCloud {
+			if !p.CheckFromCloud() {
 				out.Die("this command is only available for cloud clusters")
 			}
 			var url string

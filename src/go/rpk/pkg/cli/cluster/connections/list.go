@@ -211,10 +211,7 @@ List extended output for open connections in json format:
 
 			prof, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
-
-			if prof.CloudCluster.IsServerless() {
-				out.Die("rpk cluster connections list is not supported on Redpanda serverless clusters")
-			}
+			config.CheckExitServerlessAdmin(prof)
 
 			// Build the filters based on the current flag set
 			filterClauses, err := filters.buildFilterClauses()
@@ -232,7 +229,7 @@ List extended output for open connections in json format:
 			}
 
 			var response *adminv2.ListKafkaConnectionsResponse
-			if prof.FromCloud {
+			if prof.CheckFromCloud() {
 				cl, err := publicapi.DataplaneClientFromRpkProfile(prof)
 				out.MaybeDie(err, "unable to initialize cloud API client: %v", err)
 

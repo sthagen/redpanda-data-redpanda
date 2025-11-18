@@ -28,6 +28,9 @@ from rptest.services.spark_service import SparkService
 from rptest.services.trino_service import TrinoService
 from rptest.tests.datalake.query_engine_base import QueryEngineBase, QueryEngineType
 from rptest.tests.datalake.query_engine_factory import get_query_engine_by_type
+from rptest.util import (
+    wait_until_with_progress_check,
+)
 
 
 class DatalakeServices:
@@ -319,7 +322,8 @@ class DatalakeServices:
         self,
         topic,
         msg_count,
-        timeout=30,
+        timeout=90,
+        progress_sec=30,
         backoff_sec=5,
         table_override=None,
         op=operator.eq,
@@ -331,27 +335,38 @@ class DatalakeServices:
 
         self.wait_for_iceberg_table("redpanda", table_name, timeout, backoff_sec)
 
-        def translation_done():
+        def get_counts():
             assert len(self.query_engines) > 0, (
                 "At least one query engine is required to check translation status"
             )
 
-            counts = dict(
+            return dict(
                 map(
                     lambda e: (e.engine_name(), e.count_table("redpanda", table_name)),
                     self.query_engines,
                 )
             )
+
+        # just want to know that something moved
+        def total_count():
+            counts = get_counts()
+            return sum(c for _, c in counts.items())
+
+        def translation_done():
+            counts = get_counts()
             self.redpanda.logger.debug(
                 f"Current counts for {table_name}: {counts}, want {op=} {msg_count}"
             )
             return all([op(c, msg_count) for _, c in counts.items()])
 
-        wait_until(
-            translation_done,
+        wait_until_with_progress_check(
+            check=total_count,
+            condition=translation_done,
             timeout_sec=timeout,
+            progress_sec=progress_sec,
             backoff_sec=backoff_sec,
             err_msg=f"Timed out waiting for events from {topic} to appear in datalake",
+            logger=self.redpanda.logger,
         )
 
     def produce_to_topic(self, topic, msg_size, msg_count, rate_limit_bps=None):

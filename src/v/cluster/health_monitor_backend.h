@@ -199,7 +199,7 @@ private:
          * The size of either list is capped at max_partitions_report, and
          * other elements are dropped.
          */
-        absl::node_hash_set<model::ntp> leaderless, under_replicated;
+        chunked_hash_set<model::ntp> leaderless, under_replicated;
 
         /**
          * The true count of leaderless and under-replicated partitions, not

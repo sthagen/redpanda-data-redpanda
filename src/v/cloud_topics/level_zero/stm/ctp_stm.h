@@ -19,6 +19,7 @@
 namespace cloud_topics {
 
 class ctp_stm_api;
+struct ctp_stm_accessor;
 
 /// The STM that tracks current cluster epoch and LRO.
 /// The goal is to guarantee that the cluster epoch is monotonic and
@@ -29,6 +30,7 @@ class ctp_stm_api;
 /// metadata batch to its in-memory state.
 class ctp_stm final : public raft::persisted_stm<> {
     friend class ctp_stm_api;
+    friend struct ctp_stm_accessor; // for tests
 
 public:
     static constexpr const char* name = "ctp_stm";

@@ -1607,7 +1607,7 @@ class CloudCluster:
             max_partition_count=int(tier["max_partition_count"]),
         )
 
-    def scale_cluster(self, nodes_count):
+    def scale_cluster(self, nodes_count: int):
         """Scale out/in cluster to specified number of nodes.
 
         Uses cloud admin api.
@@ -1618,7 +1618,9 @@ class CloudCluster:
         )
 
     # Update cluster properties using Admin API
-    def set_cluster_config_overrides(self, cluster_id, config_values):
+    def set_cluster_config_overrides(
+        self, cluster_id: str, config_values: list[dict[str, str]]
+    ) -> Any:
         """
         Set configuration overrides for a specific Redpanda cloud cluster using Admin API
 

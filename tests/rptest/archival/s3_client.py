@@ -186,7 +186,7 @@ class S3Client:
 
         return
 
-    def create_bucket(self, name):
+    def create_bucket(self, name: str):
         """Create bucket in S3"""
         try:
             res = self._cli.create_bucket(
@@ -224,7 +224,7 @@ class S3Client:
             err_msg=f"Bucket {name} didn't become visible to ListObjectsvv2 requests",
         )
 
-    def empty_and_delete_bucket(self, name, parallel=False):
+    def empty_and_delete_bucket(self, name: str, parallel: bool = False) -> None:
         failed_deletions = self.empty_bucket(name, parallel=parallel)
 
         assert len(failed_deletions) == 0
@@ -438,7 +438,7 @@ class S3Client:
             else:
                 raise
 
-    def get_object_data(self, bucket, key):
+    def get_object_data(self, bucket: str, key: str) -> bytes:
         resp = self._get_object(bucket, key)
         return resp["Body"].read()
 
@@ -505,10 +505,10 @@ class S3Client:
 
     def list_objects(
         self,
-        bucket,
-        topic: Optional[str] = None,
-        prefix: Optional[str] = None,
-        client=None,
+        bucket: str,
+        topic: str | None = None,
+        prefix: str | None = None,
+        client: object | None = None,
     ) -> Iterator[ObjectMetadata]:
         """
         :param bucket: S3 bucket name

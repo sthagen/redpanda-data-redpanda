@@ -32,6 +32,9 @@ redpanda_cc_library(
     name = "cluster",
     srcs = ["cluster.cc"],
     hdrs = ["cluster.h"],
+    implementation_deps = [
+        "//src/v/redpanda/admin/proxy:context",
+    ],
     deps = [
         ":utils",
         "//proto/redpanda/core/admin/v2:cluster_redpanda_proto",

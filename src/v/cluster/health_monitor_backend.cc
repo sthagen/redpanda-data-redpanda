@@ -1122,8 +1122,8 @@ ss::future<> health_monitor_backend::fill_aggregate_with_offline_partitions(
 health_monitor_backend::aggregated_report
 health_monitor_backend::aggregate_reports(const report_cache_t& reports) {
     struct collector {
-        absl::node_hash_set<model::ntp> to_ntp_set() const {
-            absl::node_hash_set<model::ntp> ret;
+        chunked_hash_set<model::ntp> to_ntp_set() const {
+            chunked_hash_set<model::ntp> ret;
             for (const auto& [topic, parts] : t_to_p) {
                 for (auto part : parts) {
                     ret.emplace(topic.ns, topic.tp, part);
@@ -1144,9 +1144,9 @@ health_monitor_backend::aggregate_reports(const report_cache_t& reports) {
             return sum;
         }
 
-        absl::node_hash_map<
+        chunked_hash_map<
           model::topic_namespace,
-          absl::node_hash_set<model::partition_id>>
+          chunked_hash_set<model::partition_id>>
           t_to_p;
     };
 

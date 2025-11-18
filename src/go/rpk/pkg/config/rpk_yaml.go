@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
 
 	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
@@ -367,6 +368,13 @@ func (p *RpkProfile) ActualConfig() (*RpkYaml, bool) {
 	return p.c.ActualRpkYaml()
 }
 
+// CheckFromCloud returns if this profile is a cloud profile, warning if
+// the profile is targeting a Cloud profile but is not marked as such.
+func (p *RpkProfile) CheckFromCloud() bool {
+	warnIfMisconfiguredCloudProfile(p)
+	return p.FromCloud
+}
+
 // HasClientCredentials returns if both ClientID and ClientSecret are non-empty.
 func (a *RpkCloudAuth) HasClientCredentials() bool {
 	return a.ClientID != "" && a.ClientSecret != ""
@@ -517,5 +525,46 @@ func MaybePrintAuthSwitchMessage(priorAuth *RpkCloudAuth, currentAuth *RpkCloudA
 	}
 	if priorAuth.Name != currentAuth.Name {
 		fmt.Printf("rpk switched from talking to organization %q (%s) to %q (%s).\n", priorAuth.Organization, priorAuth.OrgID, currentAuth.Organization, currentAuth.OrgID)
+	}
+}
+
+// isLikelyCloudCluster checks if the broker URLs indicate this is a cloud
+// cluster.
+func isLikelyCloudCluster(p *RpkProfile) bool {
+	for _, broker := range p.KafkaAPI.Brokers {
+		if isLikelyCloudBrokerURL(broker) {
+			return true
+		}
+	}
+	for _, addr := range p.AdminAPI.Addresses {
+		if isLikelyCloudBrokerURL(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// isLikelyCloudBrokerURL checks if a broker URL matches known cloud cluster
+// patterns.
+func isLikelyCloudBrokerURL(url string) bool {
+	return strings.Contains(strings.ToLower(url), ".cloud.redpanda.com")
+}
+
+// warnIfMisconfiguredCloudProfile checks if the cluster appears to be a cloud
+// cluster but the profile is not properly configured with FromCloud=true. If
+// so, it prints a helpful warning message and exits.
+func warnIfMisconfiguredCloudProfile(p *RpkProfile) {
+	if !p.FromCloud && isLikelyCloudCluster(p) {
+		fmt.Fprintln(os.Stderr, `This appears to be a Redpanda Cloud cluster, but your rpk profile is not aware of it.
+
+Please configure rpk to use Redpanda Cloud by running:
+
+  rpk cloud login
+
+Then select a cluster or use:
+
+  rpk cloud cluster select
+
+For more information, run 'rpk cloud cluster select --help'.`)
 	}
 }

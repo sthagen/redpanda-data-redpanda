@@ -1343,7 +1343,7 @@ class RpkTool:
             ]
         )
 
-    def cluster_config_export(self, file, all):
+    def cluster_config_export(self, file: str, all: bool) -> str:
         cmd = [
             self._rpk_binary(),
             "--api-urls",

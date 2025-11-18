@@ -13,6 +13,7 @@
 #include "cloud_storage_clients/client.h"
 #include "cloud_storage_clients/client_probe.h"
 #include "http/tests/utils.h"
+#include "http/utils.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/iostream.hh>
@@ -247,11 +248,13 @@ struct s3_imposter_fixture::content_handler {
             if (
               fixture._search_on_get_list
               && request.get_query_param("list-type") == "2") {
-                auto prefix = request.get_query_param("prefix");
-                auto delimiter = request.get_query_param("delimiter");
+                ss::sstring prefix = http::uri_decode(
+                  request.get_query_param("prefix"));
+                ss::sstring delimiter = http::uri_decode(
+                  request.get_query_param("delimiter"));
                 auto max_keys_str = request.get_query_param("max-keys");
-                auto continuation_token_str = request.get_query_param(
-                  "continuation-token");
+                ss::sstring continuation_token_str = http::uri_decode(
+                  request.get_query_param("continuation-token"));
                 std::optional<size_t> max_keys = (max_keys_str.empty())
                                                    ? std::optional<size_t>{}
                                                    : std::stoi(max_keys_str);

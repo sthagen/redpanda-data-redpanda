@@ -12,15 +12,19 @@ import json
 import os
 import re
 import threading
-import typing
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from time import sleep
+from typing import Any, Iterable, Literal, TYPE_CHECKING
 
 import requests
-from ducktape.utils.util import wait_until
 
+from ducktape.utils.util import wait_until
+from ducktape.cluster.cluster import ClusterNode
+
+if TYPE_CHECKING:
+    from rptest.services.redpanda import RedpandaService
 from rptest.utils.bookend_collection import BookendCollection
 from rptest.utils.mode_checks import in_fips_environment
 
@@ -42,7 +46,7 @@ REDPANDA_INSTALLER_HEAD_TAG = "head"
 
 RedpandaVersionTriple = tuple[int, int, int]
 RedpandaVersionLine = tuple[int, int]
-RedpandaVersion = typing.Literal["head"] | RedpandaVersionLine | RedpandaVersionTriple
+RedpandaVersion = Literal["head"] | RedpandaVersionLine | RedpandaVersionTriple
 
 
 def wait_for_num_versions(redpanda, num_versions):
@@ -72,7 +76,7 @@ def wait_for_num_versions(redpanda, num_versions):
     return unique_versions
 
 
-def int_tuple(str_tuple):
+def int_tuple(str_tuple: tuple[str, str, str]) -> tuple[int, int, int]:
     """
     Converts
     ("x": string, "y": string, "z": string) => (x: int, y: int, z: int)
@@ -183,7 +187,7 @@ class RedpandaInstaller:
                 logger.error(f"Command failed: {captured_output}")
                 raise
 
-    def __init__(self, redpanda):
+    def __init__(self, redpanda: "RedpandaService"):
         """
         Constructs an installer for the given RedpandaService.
         """
@@ -216,7 +220,7 @@ class RedpandaInstaller:
         self._arch_lock = threading.Lock()
         self._arch = None
 
-    def installed_version(self, node) -> RedpandaVersion:
+    def installed_version(self, node: ClusterNode) -> RedpandaVersion:
         assert node in self._installed_versions, (
             f"Node {node} not in installed versions dictionary {self._installed_versions}"
         )
@@ -631,7 +635,7 @@ class RedpandaInstaller:
         )
 
     def install(
-        self, nodes: list[typing.Any], version: RedpandaVersion
+        self, nodes: list[Any], version: RedpandaVersion
     ) -> tuple[RedpandaVersionTriple, str]:
         """
         Installs the release on the given nodes such that the next time the
@@ -775,7 +779,7 @@ class RedpandaInstaller:
                 # Re-raise the exception so the caller can handle it.
                 raise ssh_exc
 
-    def reset_current_install(self, nodes):
+    def reset_current_install(self, nodes: Iterable[ClusterNode]):
         """
         WARNING: should not be used to upgrade to the originally installed
         binaries; use 'install(RedpandaInstaller.HEAD)' for that. This should
