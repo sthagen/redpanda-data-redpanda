@@ -257,6 +257,7 @@ public:
           std::chrono::milliseconds{0},
           nullptr,
           nullptr);
+        cfg.max_tx_remove_offset = max_collect_offset;
         auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
         // sliding_window_compact takes cfg by const&, so return will be a
         // use-after-free

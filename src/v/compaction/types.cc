@@ -23,11 +23,13 @@ std::ostream& operator<<(std::ostream& o, const compaction_config& c) {
       o,
       "{{max_removable_local_log_offset:{}, "
       "max_tombstone_remove_offset:{}, "
+      "max_tx_remove_offset:{}, "
       "should_sanitize:{}, "
       "tombstone_retention_ms:{}, "
       "tx_retention_ms:{}}}",
       c.max_removable_local_log_offset,
       c.max_tombstone_remove_offset,
+      c.max_tx_remove_offset,
       c.sanitizer_config,
       c.tombstone_retention_ms,
       c.tx_retention_ms);

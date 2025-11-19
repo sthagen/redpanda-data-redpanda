@@ -51,6 +51,9 @@ struct compaction_config {
     // Cannot remove tombstones past this offset
     model::offset max_tombstone_remove_offset;
 
+    // Cannot remove transactional control batches past this offset
+    model::offset max_tx_remove_offset;
+
     // The retention time for tombstones. Tombstone removal occurs only for
     // "clean" compacted segments past the tombstone deletion horizon timestamp,
     // which is a segment's `clean_compact_timestamp + tombstone_retention_ms`.

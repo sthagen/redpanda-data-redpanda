@@ -16,6 +16,8 @@ import urllib.parse
 from enum import IntEnum
 from typing import List
 
+from typing_extensions import assert_never
+
 import requests
 from confluent_kafka import KafkaError, KafkaException
 from ducktape.cluster.cluster import ClusterNode
@@ -520,7 +522,7 @@ class SaslPlainTest(BaseScramTest):
                 self.redpanda, user=username, passwd=password, algorithm=algorithm
             )
         else:
-            assert False, f"Unknown client type: {client_type}"
+            assert_never(client_type)  # pyright: ignore[reportUnreachable]
 
     def _make_topic(
         self,
@@ -553,7 +555,7 @@ class SaslPlainTest(BaseScramTest):
             elif isinstance(client, KafkaCliTools):
                 client.create_topic(topic)
             else:
-                assert False, f"Unknown client type: {client} ({type(client)})"
+                assert False, f"Unknown client type: {client} ({type(client)})"  # pyright: ignore[reportUnreachable]
             assert expect_success, "Should have failed with SASL/PLAIN disabled"
         except RpkException as e:
             assert isinstance(client, RpkTool), (

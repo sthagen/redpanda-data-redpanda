@@ -1393,8 +1393,7 @@ bool is_past_transaction_batch_delete_horizon(
 
     if (
       seg->has_self_compact_timestamp() && cfg.tx_retention_ms.has_value()
-      && seg->offsets().get_stable_offset()
-           <= cfg.max_tombstone_remove_offset) {
+      && seg->offsets().get_stable_offset() <= cfg.max_tx_remove_offset) {
         const auto now = model::to_time_point(model::timestamp::now());
         return (now
                 - model::to_time_point(

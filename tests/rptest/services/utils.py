@@ -290,9 +290,9 @@ class LogSearchCloud(LogSearch):
             tz = tz[0] if len(tz) > 0 else "+00:00"
             # Find all log files for target pod
             # Return type without capture is always str, so ignore type
-            logfiles = pod.nodeshell("find /var/log/pods -type f")  # type: ignore
+            logfiles = pod.nodeshell("find /var/log/pods -type f")
             for logfile in logfiles:
-                if pod.name in logfile and "redpanda-configurator" not in logfile:  # type: ignore
+                if pod.name in logfile and "redpanda-configurator" not in logfile:
                     self.logger.info(f"Inspecting '{logfile}'")
                     lines = pod.nodeshell(f"cat {logfile} | grep {expr}")
                     loglines += lines

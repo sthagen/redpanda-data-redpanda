@@ -10,6 +10,8 @@
 import os
 from time import sleep
 
+from typing_extensions import assert_never
+
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.mark import ignore
 from ducktape.utils.util import wait_until
@@ -47,7 +49,7 @@ class RedpandaFIPSStartupTestBase(RedpandaTest):
         elif fips_mode == RedpandaService.FIPSMode.permissive:
             return "permissive"
         else:
-            assert False, f"Unknown FIPS Mode; {fips_mode}"
+            assert_never(fips_mode)  # pyright: ignore[reportUnreachable]
 
     def __init__(
         self,

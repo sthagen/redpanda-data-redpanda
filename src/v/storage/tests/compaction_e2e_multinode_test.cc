@@ -72,9 +72,10 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
     first_log->force_roll().get();
     BOOST_REQUIRE_EQUAL(first_log->segment_count(), 2);
     ss::abort_source as;
-    storage::housekeeping_config conf(
+    auto conf = storage::housekeeping_config::make_config(
       model::timestamp::min(),
       std::nullopt,
+      first_log->stm_manager()->max_removable_local_log_offset(),
       first_log->stm_manager()->max_removable_local_log_offset(),
       first_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
@@ -125,9 +126,10 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
 
     // The segments should maintain their last records.
     // {[3]} {[5]} {[0 1 2 3 4 5]}
-    storage::housekeeping_config conf2(
+    auto conf2 = storage::housekeeping_config::make_config(
       model::timestamp::min(),
       std::nullopt,
+      new_log->stm_manager()->max_removable_local_log_offset(),
       new_log->stm_manager()->max_removable_local_log_offset(),
       new_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
@@ -200,11 +202,14 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
     first_log->flush().get();
     first_log->force_roll().get();
     ss::abort_source as;
-    storage::housekeeping_config conf(
+    auto collect_offset
+      = first_log->stm_manager()->max_removable_local_log_offset();
+    auto conf = storage::housekeeping_config::make_config(
       model::timestamp::min(),
       std::nullopt,
-      first_log->stm_manager()->max_removable_local_log_offset(),
-      first_log->stm_manager()->max_removable_local_log_offset(),
+      collect_offset,
+      collect_offset,
+      collect_offset,
       std::nullopt,
       std::nullopt,
       std::chrono::milliseconds{0},
@@ -231,9 +236,10 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
     new_log->flush().get();
     new_log->force_roll().get();
 
-    storage::housekeeping_config conf2(
+    auto conf2 = storage::housekeeping_config::make_config(
       model::timestamp::min(),
       std::nullopt,
+      new_log->stm_manager()->max_removable_local_log_offset(),
       new_log->stm_manager()->max_removable_local_log_offset(),
       new_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,

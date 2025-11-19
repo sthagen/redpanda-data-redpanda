@@ -40,7 +40,7 @@ setup(
         "google-cloud-storage==3.1.0",
         "proto-plus==1.26.1",
         "rsa==4.9",
-        "python-keycloak==3.12.0",
+        "python-keycloak==5.8.1",
         "z3-solver==4.12.2",
         "hypothesis==6.82",
         "jsonschema==4.10.0",
@@ -64,6 +64,7 @@ setup(
         "duckdb==1.3.1",
         "connect-python==0.4.2",
         "avro==1.12.0",
+        "typing-extensions==4.15",
     ],
     scripts=[],
 )

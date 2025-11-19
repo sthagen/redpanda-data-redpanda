@@ -1129,7 +1129,7 @@ message_type {
         custom_partition_spec=[None, "(timestamp_us)", "(number)"],
     )
     def test_iceberg_partition_key_file_location(
-        self, cloud_storage_type, catalog_type, custom_partition_spec: str
+        self, cloud_storage_type, catalog_type, custom_partition_spec: str | None
     ):
         """
         Test that the data file location includes the partition key

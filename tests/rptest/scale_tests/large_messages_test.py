@@ -13,6 +13,8 @@ import time
 from enum import Enum
 from typing import Any
 
+from typing_extensions import assert_never
+
 import numpy
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
@@ -335,7 +337,7 @@ class LargeMessagesTest(RedpandaTest):
             )
             self.unique = False
         else:
-            assert False
+            assert_never(mode)  # pyright: ignore[reportUnreachable]
 
         self.topic_prefix_template = "large-messages"
         self.topic_prefixes = [

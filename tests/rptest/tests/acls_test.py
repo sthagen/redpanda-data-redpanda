@@ -609,7 +609,7 @@ class AccessControlListTest(AccessControlListTestBase):
             elif format == tls.DNFormat.RFC2253:
                 return "rfc2253"
             else:
-                raise ValueError(f"Unknown format: {format}")
+                raise ValueError(f"Unknown format: {format}")  # pyright: ignore[reportUnreachable]
 
         dn_name = self.tls.get_cert_subject_dn(
             self.cluster_describe_user_cert, format=dn_format

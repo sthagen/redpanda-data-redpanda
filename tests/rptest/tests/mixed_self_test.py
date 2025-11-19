@@ -184,9 +184,19 @@ class RedpandaMixedTestSelfTest(RedpandaMixedTest):
             )
 
             assert isinstance(res1, float), f"expected float {metric} on {ep}"
-            assert res2 > res1, (
-                f"expected {metric} to increase over time: {res1} {res2}"
+
+            assert res1 > 0 and res2 > 0, (
+                f"expected positive {metric} on {ep}, got {res1}, {res2}"
             )
+
+            if metric == awake:
+                # awake is too quantized (ms level) to increase every time
+                valid = res2 >= res1
+                msg = "not decrease"
+            else:
+                valid = res2 > res1
+                msg = "increase"
+            assert valid, f"expected {metric} to {msg} over time: {res1} {res2}"
 
         for m in [uptime, polls, awake]:
             test_sum(MetricsEndpoint.METRICS, m)

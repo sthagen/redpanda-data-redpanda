@@ -223,6 +223,10 @@ public:
 
     const prefix_logger& log() const { return _log; }
 
+    model::offset last_locally_snapshotted_offset() const override {
+        return _last_snapshot_offset;
+    }
+
 protected:
     ss::future<> start() override;
 

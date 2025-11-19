@@ -266,7 +266,7 @@ class ControllerForceReconfigurationTest(RedpandaTest):
 
         self.client().create_topic(topic)
 
-        KgoVerifierProducer.oneshot(  # type: ignore
+        KgoVerifierProducer.oneshot(
             self.test_context,
             self.redpanda,
             topic,
@@ -346,7 +346,7 @@ class ControllerForceReconfigurationTest(RedpandaTest):
 
         self._check_topic_recovered(topic, cluster_size, killed_node_ids)
 
-        KgoVerifierProducer.oneshot(  # type: ignore
+        KgoVerifierProducer.oneshot(
             self.test_context,
             self.redpanda,
             topic,

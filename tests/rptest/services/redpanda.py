@@ -292,6 +292,8 @@ PREV_VERSION_LOG_ALLOW_LIST = [
     # left due to unclean shutdown in a segment being recovered. Ignore these
     # in a mixed version test.
     "storage - .*parser::consume_records error: parser_errc::input_stream_not_enough_bytes .* storage::checksumming_consumer",
+    # Failure to handle Schema Registry requests due to Redpanda being shutdown (fix is in https://github.com/redpanda-data/redpanda/pull/26909)
+    "schemaregistry - .* - exception_reply: .*seastar::sleep_aborted",
 ]
 
 AUDIT_LOG_ALLOW_LIST = RESTART_LOG_ALLOW_LIST + [
@@ -2458,7 +2460,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
                         f"bash {remote_path} '{pod.name}' '{test_start_time}'".split(),
                         capture=True,
                     ):
-                        lfile.writelines([line])  # type: ignore
+                        lfile.writelines([line])
             except Exception as e:
                 self.logger.warning(f"Error getting logs for {pod.name}: {e}")
             return pod.name
@@ -3371,10 +3373,10 @@ class RedpandaService(Service, RedpandaServiceABC):
             if node not in to_start:  # pyright: ignore[reportUnnecessaryContains]
                 continue
             raise RuntimeError("unreachable")
-            unexpected_ns = set(node.ns) - {"redpanda"}
+            unexpected_ns = set(node.ns) - {"redpanda"}  # pyright: ignore[reportUnreachable]
             if unexpected_ns:
-                for ns in unexpected_ns:
-                    self.logger.error(
+                for ns in unexpected_ns:  # pyright: ignore[reportUnreachable]
+                    self.logger.error(  # pyright: ignore[reportUnreachable]
                         f"node {node.name}: unexpected namespace: {ns}, "
                         f"topics: {set(node.ns[ns].topics)}"
                     )
@@ -3385,7 +3387,7 @@ class RedpandaService(Service, RedpandaServiceABC):
                 "kvstore",
             }
             if unexpected_rp_topics:
-                self.logger.error(
+                self.logger.error(  # pyright: ignore[reportUnreachable]
                     f"node {node.name}: unexpected topics in redpanda namespace: "
                     f"{unexpected_rp_topics}"
                 )

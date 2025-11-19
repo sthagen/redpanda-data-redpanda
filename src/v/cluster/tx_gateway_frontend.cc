@@ -1866,8 +1866,11 @@ tx_gateway_frontend::handle_commit_tx(
             }
             co_return r.error();
         } catch (...) {
-            vlog(
-              txlog.error,
+            vlogl(
+              txlog,
+              ssx::is_shutdown_exception(std::current_exception())
+                ? ss::log_level::debug
+                : ss::log_level::error,
               "[tx_id={}] error committing transaction: {} - {}",
               tx.id,
               tx,
@@ -1917,8 +1920,11 @@ tx_gateway_frontend::handle_abort_tx(
                 outcome->set_value(tx::errc::none);
                 co_return r.value();
             }
-            vlog(
-              txlog.error,
+            vlogl(
+              txlog,
+              ssx::is_shutdown_exception(std::current_exception())
+                ? ss::log_level::debug
+                : ss::log_level::error,
               "[tx_id={}] error aborting transaction: {} - {}",
               tx.id,
               tx,

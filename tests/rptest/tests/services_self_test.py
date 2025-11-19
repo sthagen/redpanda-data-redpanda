@@ -647,7 +647,7 @@ class RedpandaServiceSelfRawTest(Test):
         try:
             test.setUp()
             try:
-                test.run()  # type: ignore
+                test.run()
                 raise RuntimeError("inner test passed when it shouldn't")
             except BadLogLines:
                 # expected, as the test intentionally emits a bad log line

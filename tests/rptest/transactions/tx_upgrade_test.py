@@ -18,7 +18,6 @@ import confluent_kafka as ck
 from ducktape.errors import TimeoutError
 from ducktape.utils.util import wait_until
 
-from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
@@ -37,6 +36,7 @@ from rptest.services.redpanda_installer import (
 )
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_debug_mode
+from rptest.tests.log_compaction_test import LogCompactionTxRemovalMixin
 
 
 class TxUpgradeTestBase(RedpandaTest):
@@ -149,7 +149,7 @@ class TxUpgradeTest(TxUpgradeTestBase):
         )
 
 
-class TxUpgradeCompactionTest(TxUpgradeTestBase):
+class TxUpgradeCompactionTest(TxUpgradeTestBase, LogCompactionTxRemovalMixin):
     """
     Test validating interaction between compaction and transactions during rolling-restart upgrades (including mixed-version node cluster interaction)
     """
@@ -159,6 +159,9 @@ class TxUpgradeCompactionTest(TxUpgradeTestBase):
             "log_compaction_interval_ms": 4000,
             "log_segment_size": 2 * 1024**2,  # 2 MiB
             "compacted_log_segment_size": 1024**2,  # 1 MiB
+            # Trigger tombstone removal quickly
+            "storage_target_replay_bytes": 100,
+            "log_segment_ms": 60,
         }
 
         super(TxUpgradeCompactionTest, self).__init__(
@@ -197,28 +200,6 @@ class TxUpgradeCompactionTest(TxUpgradeTestBase):
             backoff_sec=self.extra_rp_conf["log_compaction_interval_ms"] / 1000 * 4,
             err_msg="Compaction did not stabilize.",
         )
-
-    def check_tx_batches(self):
-        viewer = OfflineLogViewer(self.redpanda)
-        for node in self.redpanda.nodes:
-            num_control_batches = 0
-            num_fence_batches = 0
-            partitions = viewer.read_kafka_records(node, self.topic_spec.name)
-            for partition in partitions:
-                for record_or_batch in partition:
-                    if "expanded_attrs" not in record_or_batch:
-                        continue
-                    if record_or_batch["expanded_attrs"]["control_batch"]:
-                        num_control_batches += 1
-                    if record_or_batch["type_name"] == "tx_fence":
-                        num_fence_batches += 1
-
-            assert num_control_batches == 0, (
-                f"expected 0 control batches (abort/commit batches), saw {num_control_batches} on node {node.name}"
-            )
-            assert num_fence_batches == 0, (
-                f"expected 0 tx_fence batches, saw {num_fence_batches}  on node {node.name}"
-            )
 
     @skip_debug_mode
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
@@ -272,7 +253,22 @@ class TxUpgradeCompactionTest(TxUpgradeTestBase):
         self.redpanda.restart_nodes(self.redpanda.nodes)
 
         self.wait_for_sliding_window_compaction()
-        self.check_tx_batches()
+
+        def produce_func():
+            producer = ck.Producer({"bootstrap.servers": self.redpanda.brokers()})
+
+            def random_string(n=5):
+                return "".join(random.choice(string.ascii_letters) for _ in range(n))
+
+            for i in range(0, 10000):
+                producer.produce(
+                    topic=self.topic_spec.name,
+                    key=random_string(),
+                    value=random_string(1024),
+                )
+            producer.flush()
+
+        self.wait_for_all_tx_batches_removed(produce_func)
 
 
 class TxUpgradeRevertTest(RedpandaTest):

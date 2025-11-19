@@ -272,7 +272,6 @@
     "off": [
         "**/*_pb2_connect.py",
         "rptest/chaos_tests/single_fault_test.py",
-        "rptest/clients/ping_pong.py",
         "rptest/clients/rpk.py",
         "rptest/clients/rpk_remote.py",
         "rptest/context/databricks.py",

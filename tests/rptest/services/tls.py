@@ -384,8 +384,6 @@ class TLSCertManager:
 
                 if retries >= 3:
                     raise
-            else:
-                self._logger.debug(output)
 
             retries += 1
 
@@ -490,7 +488,7 @@ class TLSCertManager:
         elif format == DNFormat.RFC2253:
             nameopt = "-nameopt rfc2253"
         else:
-            raise ValueError(f"Unknown DN format: {format}")
+            raise ValueError(f"Unknown DN format: {format}")  # pyright: ignore[reportUnreachable]
 
         resp = self._exec(f"openssl x509 -in {cert.crt} -noout -subject {nameopt}")
         assert resp.startswith("subject="), (

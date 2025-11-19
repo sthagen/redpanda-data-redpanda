@@ -353,7 +353,7 @@ class KubectlTool:
             "bash",
             "-c",
         ] + ['"' + remote_cmd + '"']
-        return self._ssh_cmd(cmd)  # type: ignore
+        return self._ssh_cmd(cmd)
 
     def exists(self, remote_path: str, pod_name: str | None = None) -> bool:
         self._install()

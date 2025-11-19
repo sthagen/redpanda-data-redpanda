@@ -415,6 +415,7 @@ void redpanda_thread_fixture::configure(
         if (archival_cfg) {
             // Copy archival config to this shard to avoid `config::binding`
             // asserting on cross-shard access.
+            // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
             auto local_cfg = archival_cfg;
 
             config.get("cloud_storage_disable_tls").set_value(true);
@@ -457,6 +458,10 @@ void redpanda_thread_fixture::configure(
 
         config.get("enable_shadow_linking")
           .set_value(development_cluster_linking_enabled);
+
+        // Disable automatic cluster metadata uploads by default. Only tests
+        // that explicitly want it should enable it.
+        config.get("enable_cluster_metadata_upload_loop").set_value(false);
     }).get();
 }
 

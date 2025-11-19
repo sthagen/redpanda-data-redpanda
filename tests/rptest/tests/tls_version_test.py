@@ -74,8 +74,6 @@ def tls_version_to_openssl(ver: TLSVersion) -> str:
         return "-tls1_2"
     elif ver == TLSVersion.v1_3:
         return "-tls1_3"
-    else:
-        raise ValueError(f"Unknown TLS Version: {ver}")
 
 
 def tls_version_to_config(ver: TLSVersion) -> str:
@@ -87,8 +85,6 @@ def tls_version_to_config(ver: TLSVersion) -> str:
         return "v1.2"
     elif ver == TLSVersion.v1_3:
         return "v1.3"
-    else:
-        raise ValueError(f"Unknown TLS Version: {ver}")
 
 
 class TLSVersionTestBase(RedpandaTest):
@@ -230,8 +226,6 @@ class TLSVersionTestBase(RedpandaTest):
             ]
         elif key_type == TLSKeyType.ECDSA:
             return [c for c in ciphers if c.startswith("ECDHE-ECDSA")]
-        else:
-            raise ValueError(f"Unsupported key type: {key_type}")
 
     def _get_openssl_ciphers(self, key_type: TLSKeyType) -> List:
         # Get the list of ciphers supported by the installed version of OpenSSL
