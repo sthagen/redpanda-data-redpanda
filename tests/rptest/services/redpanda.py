@@ -4283,8 +4283,12 @@ class RedpandaService(Service, RedpandaServiceABC):
             self.logger.info(f"Scanning node {node.account.hostname} log for errors...")
 
             crash_log = None
+            # crashes appear near the "end" of the file, so examine only the last
+            # 10 MB, to avoid timeouts on large logs
             for line in node.account.ssh_capture(
-                f"grep -e SEGV -e Segmentation\\ fault -e [Aa]ssert -e Sanitizer -e 'Aborting on shard' -e 'crash reason to crash file' {RedpandaService.STDOUT_STDERR_CAPTURE} || true",
+                f"tail --bytes=10000000 {RedpandaService.STDOUT_STDERR_CAPTURE} "
+                "| grep -e SEGV -e Segmentation\\ fault -e [Aa]ssert -e Sanitizer "
+                "-e 'Aborting on shard' -e 'crash reason to crash file' || true",
                 timeout_sec=30,
             ):
                 if "SEGV" in line and any(

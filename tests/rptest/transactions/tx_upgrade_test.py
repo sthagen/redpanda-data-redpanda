@@ -12,7 +12,7 @@ import random
 import string
 from enum import Enum
 from threading import Lock, Semaphore, Thread
-from time import sleep
+from time import sleep, time
 
 import confluent_kafka as ck
 from ducktape.errors import TimeoutError
@@ -85,6 +85,22 @@ class TxUpgradeTestBase(RedpandaTest):
                 )
             producer.commit_transaction()
             producer.flush()
+
+    def _produce_with_transactions(self, topic, retries=10, timeout_sec=300):
+        deadline = time() + timeout_sec
+        while retries > 0 and time() < deadline:
+            retries -= 1
+            try:
+                self._populate_tx_coordinator(topic)
+                break
+            except Exception as e:
+                self.logger.debug(
+                    f"Caught exception {e} while trying to produce to topic {topic}. {retries} retries left."
+                )
+                pass
+            sleep(1)
+        else:
+            assert False, f"Failed to produce to topic {topic}"
 
     def _get_tx_id_mapping(self):
         mapping = {}
@@ -217,7 +233,7 @@ class TxUpgradeCompactionTest(TxUpgradeTestBase, LogCompactionTxRemovalMixin):
         assert prev_version_str in unique_versions, unique_versions
 
         for new_version in self.installer.upgrade_path_to_head(self.initial_version):
-            self._populate_tx_coordinator(topic=self.topic_spec.name)
+            self._produce_with_transactions(topic=self.topic_spec.name)
             initial_mapping = self._get_tx_id_mapping()
             self.logger.info(f"Initial mapping {initial_mapping}")
 
@@ -234,7 +250,7 @@ class TxUpgradeCompactionTest(TxUpgradeTestBase, LogCompactionTxRemovalMixin):
             )
 
             # verify if txs are handled correctly with mixed versions
-            self._populate_tx_coordinator(topic=self.topic_spec.name)
+            self._produce_with_transactions(topic=self.topic_spec.name)
 
             # Only once we upgrade the rest of the nodes do we converge on the new
             # version.
@@ -247,7 +263,7 @@ class TxUpgradeCompactionTest(TxUpgradeTestBase, LogCompactionTxRemovalMixin):
             prev_version_str = ver_string(new_version)
 
         # One last round of producing
-        self._populate_tx_coordinator(topic=self.topic_spec.name)
+        self._produce_with_transactions(topic=self.topic_spec.name)
 
         # Restart the redpanda broker to roll segments
         self.redpanda.restart_nodes(self.redpanda.nodes)

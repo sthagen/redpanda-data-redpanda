@@ -69,7 +69,7 @@ ACL_RESOURCE_SR_REGISTRY: ACLResource.ValueType
 'Schema Registry wide resource'
 ACL_RESOURCE_SR_ANY: ACLResource.ValueType
 'Wildcard to match any SR ACL resource'
-global___ACLResource = ACLResource
+Global___ACLResource: typing_extensions.TypeAlias = ACLResource
 
 class _ACLPattern:
     ValueType = typing.NewType('ValueType', builtins.int)
@@ -98,7 +98,7 @@ ACL_PATTERN_PREFIXED: ACLPattern.ValueType
 'Match a prefix'
 ACL_PATTERN_MATCH: ACLPattern.ValueType
 'Match serves as a catch-all for all the names of a topic\nthe principal is authorized to access\n'
-global___ACLPattern = ACLPattern
+Global___ACLPattern: typing_extensions.TypeAlias = ACLPattern
 
 class _ACLOperation:
     ValueType = typing.NewType('ValueType', builtins.int)
@@ -133,7 +133,7 @@ ACL_OPERATION_CLUSTER_ACTION: ACLOperation.ValueType
 ACL_OPERATION_DESCRIBE_CONFIGS: ACLOperation.ValueType
 ACL_OPERATION_ALTER_CONFIGS: ACLOperation.ValueType
 ACL_OPERATION_IDEMPOTENT_WRITE: ACLOperation.ValueType
-global___ACLOperation = ACLOperation
+Global___ACLOperation: typing_extensions.TypeAlias = ACLOperation
 
 class _ACLPermissionType:
     ValueType = typing.NewType('ValueType', builtins.int)
@@ -152,4 +152,4 @@ ACL_PERMISSION_TYPE_UNSPECIFIED: ACLPermissionType.ValueType
 ACL_PERMISSION_TYPE_ANY: ACLPermissionType.ValueType
 ACL_PERMISSION_TYPE_ALLOW: ACLPermissionType.ValueType
 ACL_PERMISSION_TYPE_DENY: ACLPermissionType.ValueType
-global___ACLPermissionType = ACLPermissionType
+Global___ACLPermissionType: typing_extensions.TypeAlias = ACLPermissionType

@@ -653,9 +653,11 @@ ss::future<> segment_appender::flush() {
       _stable_offset,
       *this);
 
-    return _out.flush().handle_exception([this](std::exception_ptr e) {
-        vunreachable("Could not flush: {} - {}", e, *this);
-    });
+    return _out.flush()
+      .then([this] { ++_stats.fsyncs; })
+      .handle_exception([this](std::exception_ptr e) {
+          vunreachable("Could not flush: {} - {}", e, *this);
+      });
 }
 
 ss::future<> segment_appender::hard_flush() {

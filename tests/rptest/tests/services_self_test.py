@@ -7,14 +7,16 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from contextlib import contextmanager
+import signal
 from subprocess import CalledProcessError
-from typing import Any
+from typing import Any, Callable, Iterator
 
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.cluster.remoteaccount import RemoteCommandError
 from ducktape.mark import matrix
 from ducktape.mark.resource import cluster as dt_cluster
-from ducktape.tests.test import Test
+from ducktape.tests.test import Test, TestContext
 
 from rptest.clients.kubectl import is_redpanda_pod
 from rptest.clients.rpk import RpkTool
@@ -34,6 +36,7 @@ from rptest.services.producer_swarm import ProducerSwarm
 from rptest.services.redpanda import (
     CloudStorageType,
     LogSearchLocal,
+    LoggingConfig,
     RedpandaService,
     RedpandaServiceCloud,
     SISettings,
@@ -41,9 +44,9 @@ from rptest.services.redpanda import (
     make_redpanda_mixed_service,
     make_redpanda_service,
 )
-from rptest.services.utils import BadLogLines
+from rptest.services.utils import BadLogLines, NodeCrash
 from rptest.tests.prealloc_nodes import PreallocNodesTest
-from rptest.tests.redpanda_test import RedpandaMixedTest, RedpandaTest
+from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import expect_exception
 from rptest.utils.mode_checks import (
     ignore_if_not_asan,
@@ -64,13 +67,13 @@ class OpenBenchmarkSelfTest(RedpandaTest):
 
     BENCHMARK_WAIT_TIME_MIN = 5
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, num_brokers=3, **kwargs)
 
     @skip_debug_mode  # Sends meaningful traffic, and not intended to test Redpanda
     @cluster(num_nodes=6)
     @matrix(driver=["SIMPLE_DRIVER"], workload=["SIMPLE_WORKLOAD"])
-    def test_default_omb_configuration(self, driver, workload):
+    def test_default_omb_configuration(self, driver: str, workload: str) -> None:
         benchmark = OpenMessagingBenchmark(
             self.test_context, self.redpanda, driver, workload
         )
@@ -85,12 +88,12 @@ class OpenBenchmarkSelfTest(RedpandaTest):
 
 
 class ProducerSwarmSelfTest(RedpandaTest):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, num_brokers=3, **kwargs)
 
     @skip_debug_mode  # Sends meaningful traffic, and not intended to test Redpanda
     @cluster(num_nodes=4)
-    def test_producer_swarm(self):
+    def test_producer_swarm(self) -> None:
         spec = TopicSpec(name="test_topic", partition_count=10, replication_factor=3)
         self.client().create_topic(spec)
         topic_name = spec.name
@@ -109,7 +112,7 @@ class ProducerSwarmSelfTest(RedpandaTest):
         producer.stop()
 
     @cluster(num_nodes=4)
-    def test_wait_start_stop(self):
+    def test_wait_start_stop(self) -> None:
         spec = TopicSpec(partition_count=10, replication_factor=1)
         self.client().create_topic(spec)
         topic_name = spec.name
@@ -137,13 +140,13 @@ class ProducerSwarmSelfTest(RedpandaTest):
         producer.stop()
 
 
-class KgoRepeaterSelfTest(RedpandaMixedTest):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, min_brokers=3, **kwargs)
+class KgoRepeaterSelfTest(RedpandaTest):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, num_brokers=3, **kwargs)
 
     @skip_debug_mode  # Sends meaningful traffic, and not intended to test Redpanda
     @cluster(num_nodes=5)
-    def test_kgo_repeater(self):
+    def test_kgo_repeater(self) -> None:
         topic = "test"
         self.client().create_topic(
             TopicSpec(
@@ -176,14 +179,14 @@ class KgoRepeaterSelfTest(RedpandaMixedTest):
 
 
 class KgoVerifierSelfTest(PreallocNodesTest):
-    def __init__(self, test_context, *args, **kwargs):
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any) -> None:
         super().__init__(
             test_context=test_context, node_prealloc_count=1, *args, **kwargs
         )
 
     @skip_debug_mode  # Sends meaningful traffic, and not intended to test Redpanda
     @cluster(num_nodes=4)
-    def test_kgo_verifier(self):
+    def test_kgo_verifier(self) -> None:
         topic = "test"
         self.client().create_topic(
             TopicSpec(
@@ -255,7 +258,7 @@ class BucketScrubSelfTest(RedpandaTest):
     the bucket validation will fail.
     """
 
-    def __init__(self, test_context, *args, **kwargs):
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any) -> None:
         super().__init__(
             test_context,
             *args,
@@ -270,7 +273,7 @@ class BucketScrubSelfTest(RedpandaTest):
     @matrix(
         cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
     )
-    def test_missing_segment(self, cloud_storage_type):
+    def test_missing_segment(self, cloud_storage_type: CloudStorageType) -> None:
         topic = "test"
 
         partition_count = 16
@@ -365,15 +368,15 @@ class SimpleSelfTest(Test):
     Runs a few methods of RedpandaService.
     """
 
-    def __init__(self, test_context):
+    def __init__(self, test_context: TestContext) -> None:
         super(SimpleSelfTest, self).__init__(test_context)
         self.redpanda = make_redpanda_mixed_service(test_context, min_brokers=3)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.redpanda.start()
 
     @cluster(num_nodes=3, check_allowed_error_logs=False)
-    def test_cloud(self):
+    def test_cloud(self) -> None:
         """
         Execute a few of the methods that will connect to the k8s pod.
         """
@@ -401,15 +404,15 @@ class KubectlSelfTest(Test):
     in the cloud.
     """
 
-    def __init__(self, test_context):
+    def __init__(self, test_context: TestContext) -> None:
         super().__init__(test_context)
         self.redpanda = make_redpanda_mixed_service(test_context)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.redpanda.start()
 
     @cluster(num_nodes=3)
-    def test_kubectl_tool(self):
+    def test_kubectl_tool(self) -> None:
         rp = self.redpanda
 
         if isinstance(rp, RedpandaServiceCloud):
@@ -428,8 +431,8 @@ class KubectlSelfTest(Test):
 
 class KubectlLocalOnlyTest(Test):
     @dt_cluster(num_nodes=0)
-    def test_is_redpanda_pod(self):
-        test_cases = {
+    def test_is_redpanda_pod(self) -> None:
+        test_cases: dict[str, dict[str, Any]] = {
             "regular_hit": {
                 "pod": {
                     "metadata": {
@@ -469,8 +472,8 @@ class KubectlLocalOnlyTest(Test):
             },
         }
         for test_name, test_case in test_cases.items():
-            pod_obj = test_case["pod"]
-            expected_result = test_case["result"]
+            pod_obj: dict[str, Any] = test_case["pod"]
+            expected_result: bool = test_case["result"]
             try:
                 actual_result = is_redpanda_pod(pod_obj, "CLUSTER_ID")
             except KeyError as err:
@@ -486,22 +489,22 @@ class FailureInjectorSelfTest(Test):
     Verify instantiation of a FailureInjectorBase subclass through the factory method.
     """
 
-    def __init__(self, test_context):
+    def __init__(self, test_context: TestContext) -> None:
         super(FailureInjectorSelfTest, self).__init__(test_context)
         self.redpanda = make_redpanda_service(test_context, 3)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.redpanda.start()
 
     @cluster(num_nodes=3, check_allowed_error_logs=False)
-    def test_finjector(self):
+    def test_finjector(self) -> None:
         fi = make_failure_injector(self.redpanda)
         fi.inject_failure(FailureSpec(FailureSpec.FAILURE_ISOLATE, None))
 
 
 def _assert_expected_backtrace_contents(
     test: RedpandaTest, needle: str = "::log_backtrace"
-):
+) -> None:
     """
     Assert that the backtrace capture file contains needle.
     """
@@ -521,7 +524,7 @@ def _assert_expected_backtrace_contents(
 class RedpandaServiceSelfTest(RedpandaTest):
     @cluster(num_nodes=1)
     @matrix(simple_backtrace=[True, False])
-    def test_backtrace(self, simple_backtrace: bool):
+    def test_backtrace(self, simple_backtrace: bool) -> None:
         rp = self.redpanda
         node = rp.nodes[0]
 
@@ -536,7 +539,7 @@ class RedpandaServiceSelfTest(RedpandaTest):
 
     @cluster(num_nodes=1)
     @matrix(fail_test=[False, True])
-    def test_cluster_decorator_backtrace(self, fail_test: bool):
+    def test_cluster_decorator_backtrace(self, fail_test: bool) -> None:
         """This test checks that the @cluster decorator successfully captures the
         backtrace when the wrapped test failed, and only if it fails."""
         rp = self.redpanda
@@ -555,17 +558,17 @@ class RedpandaServiceSelfTest(RedpandaTest):
 
         # We need something that looks like a RedpandaTest to use the @cluster decorator
         class DummyTest:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.redpanda = rp
                 self.test_context = tc
 
             @cluster(num_nodes=1)
-            def run(self):
+            def run(self) -> None:
                 if fail_test:
                     raise FailThisTest()
 
         try:
-            DummyTest().run()
+            DummyTest().run()  # type: ignore[call-arg]
             assert not fail_test, "inner test passed when it shouldn't"
         except FailThisTest:
             assert fail_test, "inner test failed when it shouldn't"
@@ -580,7 +583,7 @@ class RedpandaServiceSelfTest(RedpandaTest):
 
     @cluster(num_nodes=1, check_allowed_error_logs=False)
     @ignore_if_not_asan
-    def test_asan_backtrace(self):
+    def test_asan_backtrace(self) -> None:
         """This test checks that we correctly backtrace from an ASAN crash. This
         backtrace is the one done by ASAN itself, not the decode_backtrace() one
         we do in ducktape in test teardown."""
@@ -588,13 +591,13 @@ class RedpandaServiceSelfTest(RedpandaTest):
 
     @cluster(num_nodes=1, check_allowed_error_logs=False)
     @ignore_if_not_ubsan
-    def test_ubsan_backtrace(self):
+    def test_ubsan_backtrace(self) -> None:
         """This test checks that we correctly backtrace from a UBSAN crash. This
         backtrace is the one done by UBSAN itself, not the decode_backtrace() one
         we do in ducktape in test teardown."""
         self._crash_test_impl(CrashType.UBSAN_CRASH)
 
-    def _crash_test_impl(self, crash_type: CrashType):
+    def _crash_test_impl(self, crash_type: CrashType) -> None:
         """This test checks that we correctly capture a backtrace from a crash
         of the given type."""
         rp = self.redpanda
@@ -604,7 +607,7 @@ class RedpandaServiceSelfTest(RedpandaTest):
         # if it was properly decoded
         self._assert_log_content(node, "in (anonymous namespace)::trigger_crash")
 
-    def _assert_log_content(self, node: ClusterNode, needle: str):
+    def _assert_log_content(self, node: ClusterNode, needle: str) -> None:
         """
         Assert that the redpanda log contains the expected content.
         """
@@ -620,7 +623,7 @@ class RedpandaServiceSelfTest(RedpandaTest):
         self.logger.debug(f"Found matching log line: {lines[0]}")
 
     @cluster(num_nodes=1)
-    def test_start(self):
+    def test_start(self) -> None:
         pass
 
 
@@ -631,27 +634,53 @@ class RedpandaServiceSelfRawTest(Test):
 
     # We need something that looks like a RedpandaTest to use the @cluster decorator
     class InnerTest(RedpandaTest):
-        def __init__(self, *args: Any):
-            super().__init__(*args, num_brokers=1)
+        def __init__(self, *args: Any) -> None:
+            # force the log level here because the behavior differs slightly between info and
+            # debug: at debug we pick up a different NodeCrash log line (emitted by crash tracker)
+            # which makes the content assertion in test_raise_on_crash fail
+            super().__init__(*args, num_brokers=1, log_config=LoggingConfig("info"))
 
         @cluster(num_nodes=1)
-        def run(self):
-            node = self.redpanda.nodes[0]
-            self.redpanda._admin.trigger_crash(node, CrashType.ASSERT)
+        def run(self, func: Callable[[RedpandaTest], None]) -> None:
+            func(self)
+
+    @contextmanager
+    def _with_inner(
+        self, func: Callable[[RedpandaTest], None]
+    ) -> Iterator[RedpandaTest]:
+        test = self.InnerTest(self.test_context)
+        try:
+            test.setUp()
+            yield test
+        finally:
+            test.tearDown()
 
     @dt_cluster(num_nodes=1)
     @ignore_if_not_debug
-    def test_cluster_decorator_backtrace(self):
-        test = self.InnerTest(self.test_context)
+    def test_cluster_decorator_backtrace(self) -> None:
+        def func(rptest: RedpandaTest) -> None:
+            node = rptest.redpanda.nodes[0]
+            rptest.redpanda._admin.trigger_crash(node, CrashType.ASSERT)
 
-        try:
-            test.setUp()
+        with self._with_inner(func) as test:
             try:
-                test.run()
+                test.run(func=func)  # type: ignore
                 raise RuntimeError("inner test passed when it shouldn't")
             except BadLogLines:
                 # expected, as the test intentionally emits a bad log line
                 pass
             _assert_expected_backtrace_contents(test, "::trigger_crash")
-        finally:
-            test.tearDown()
+
+    @dt_cluster(num_nodes=1)
+    def test_raise_on_crash(self) -> None:
+        def func(rptest: RedpandaTest) -> None:
+            node = rptest.redpanda.nodes[0]
+            rptest.redpanda.signal_redpanda(node, signal.SIGSEGV)
+            raise RuntimeError("test is failing")  # to trigger raise_on_crash
+
+        with self._with_inner(func) as test:
+            try:
+                test.run(func=func)  # type: ignore
+                raise RuntimeError("inner test passed when it shouldn't")
+            except NodeCrash as e:
+                assert "SIGSEGV" in str(e)
