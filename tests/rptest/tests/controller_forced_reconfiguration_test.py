@@ -175,7 +175,7 @@ class ControllerForceReconfigurationTest(RedpandaTest):
         client: breakglass_pb2_connect.BreakglassServiceClient,
         request: breakglass_pb2.ControllerForcedReconfigurationRequest,
     ) -> UnaryOutput[breakglass_pb2.ControllerForcedReconfigurationResponse]:
-        return client.call_controller_forced_reconfiguration(request)  # type: ignore
+        return client.call_controller_forced_reconfiguration(request)
 
     def _join_new_node(self, joiner_node: ClusterNode):
         self.redpanda.clean_node(joiner_node)

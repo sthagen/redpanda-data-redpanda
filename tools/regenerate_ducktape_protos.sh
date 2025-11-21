@@ -53,7 +53,7 @@ uv run --python 3.11 --no-project \
   --with 'grpcio-tools==1.71' \
   --with protoletariat -- \
   protol \
-  --dont-create-package \
+  --create-package \
   --in-place \
   --module-suffixes "_pb2.py" \
   --module-suffixes "_pb2.pyi" \

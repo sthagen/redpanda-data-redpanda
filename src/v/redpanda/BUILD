@@ -134,6 +134,20 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+# Enable or disable --emit-relocs for the redpanda binary (only)
+bool_flag(
+    name = "emit_relocs",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "use_emit_relocs",
+    flag_values = {
+        ":emit_relocs": "true",
+    },
+    visibility = ["//visibility:public"],
+)
+
 redpanda_cc_binary(
     name = "redpanda",
     srcs = [
@@ -144,6 +158,13 @@ redpanda_cc_binary(
             ":use_lto": [
                 "-flto=thin",
                 "-ffat-lto-objects",
+            ],
+            "//conditions:default": [
+            ],
+        }) +
+        select({
+            ":use_emit_relocs": [
+                "-Wl,--emit-relocs",
             ],
             "//conditions:default": [
             ],

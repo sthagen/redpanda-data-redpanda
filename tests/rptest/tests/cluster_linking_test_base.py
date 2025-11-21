@@ -279,6 +279,11 @@ class ClusterLinkingProgressVerifier:
             total += lag
         return total
 
+    def stop_kgo_services(self):
+        self.source_consumer.stop()
+        self.target_consumer.stop()
+        self.producer.stop()
+
     def validate_progress(self, progress_timeout=60, backoff_delay=5):
         total_last_lag = float("inf")
         replication_last_progress = time.time()
@@ -321,9 +326,6 @@ class ClusterLinkingProgressVerifier:
                 self.logger.error(
                     f"No workload progress for {progress_timeout}s, source reads: {source_reads} (last: {source_consumer_last_reads}), target reads: {target_reads} (last: {target_consumer_last_reads}), producer acks: {producer_acked} (last: {producer_last_acked})"
                 )
-                self.source_consumer.stop()
-                self.target_consumer.stop()
-                self.producer.stop()
                 raise Exception("Workload stalled")
 
             total_last_lag = total_current_lag
@@ -922,7 +924,7 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
         self.verifier: ClusterLinkingProgressVerifier
         self.started = False
 
-    def start_producer_consumer(
+    def _start_producer_consumer(
         self,
         topic: str = "test-topic",
         msg_size: int = 128,
@@ -947,6 +949,14 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
         )
         self.verifier.start()
         self.started = True
+
+    @contextmanager
+    def producer_consumer(self, **kwargs: Any):
+        self._start_producer_consumer(**kwargs)
+        try:
+            yield
+        finally:
+            self.verifier.stop_kgo_services()
 
     def verify(self):
         success, error = self.verifier.wait_and_verify()

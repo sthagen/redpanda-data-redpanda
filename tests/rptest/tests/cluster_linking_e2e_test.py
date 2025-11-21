@@ -1720,8 +1720,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         with self.leadership_shuffler(
             self.target_cluster.service, topic.name, enabled=shuffle_leadership
         ):
-            self.start_producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000)
-            self.verify()
+            with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000):
+                self.verify()
 
         self.logger.info("Starting cycle looking for shadow topic status")
         wait_until(
@@ -1756,12 +1756,12 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
 
-        self.start_producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000)
-        with (
-            self.create_source_failure_injector(),
-            self.create_target_failure_injector(),
-        ):
-            self.verify()
+        with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000):
+            with (
+                self.create_source_failure_injector(),
+                self.create_target_failure_injector(),
+            ):
+                self.verify()
 
         self.logger.info("Starting cycle looking for shadow topic status")
         wait_until(
@@ -1795,8 +1795,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             backoff_sec=1,
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
-        self.start_producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000)
-        self.verify()
+        with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000):
+            self.verify()
 
         target_client = self.target_default_client()
 
@@ -1844,14 +1844,14 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
 
-        self.start_producer_consumer(
+        with self.producer_consumer(
             topic=topic.name,
             msg_size=128,
             msg_cnt=10000,
             use_transactions=True,
             producer_properties={"transaction_abort_rate": "0.3"},
-        )
-        self.verify()
+        ):
+            self.verify()
 
     @cluster(num_nodes=8)
     def test_replication_with_truncated_topic(self):
@@ -1895,12 +1895,11 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             return self._nop_context_manager()
 
     def _perform_auto_prefix_trimming(self, topic_name: str, partition_count: int):
-        self.start_producer_consumer(topic=topic_name, msg_size=128, msg_cnt=100000)
         offsets = [1000, 1001, 1200, 1500, 2000, 2500]
 
         def wait_for_records(rpk: RpkTool, offset: int, expected_partition_count: int):
             num_parts = 0
-            for part in rpk.describe_topic("source-topic"):
+            for part in rpk.describe_topic(topic_name):
                 num_parts += 1
                 if (part.high_watermark or 0) < offset:
                     return False
@@ -1922,14 +1921,14 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
 
             self.logger.info(f"Trimming source topic prefixes to {o}")
             self.source_cluster_rpk.trim_prefix(
-                topic="source-topic", partitions=partitions, offset=o
+                topic=topic_name, partitions=partitions, offset=o
             )
 
             def wait_for_start_offset(
                 rpk: RpkTool, offset: int, expected_partition_count: int
             ):
                 num_parts = 0
-                for part in rpk.describe_topic("source-topic"):
+                for part in rpk.describe_topic(topic_name):
                     num_parts += 1
                     self.logger.info(
                         f"Offset for source-topic/{part.id} is {part.start_offset}"
@@ -1953,7 +1952,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             for part in range(0, partition_count):
                 self.logger.info(f"Producing trim-trigger message to partition {part}")
                 self.source_cluster_rpk.produce(
-                    topic="source-topic",
+                    topic=topic_name,
                     key="trim-trigger",
                     msg="trim-trigger",
                     partition=part,
@@ -2007,7 +2006,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         )
 
         with self._maybe_failure_injector(with_failures):
-            self._perform_auto_prefix_trimming(topic.name, partition_count)
+            with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000):
+                self._perform_auto_prefix_trimming(topic.name, partition_count)
 
     @cluster(num_nodes=7)
     @matrix(
@@ -2042,7 +2042,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         )
         msg_cnt = 100
         base_ts = 1664453149000
-        self.start_producer_consumer(
+        with self.producer_consumer(
             topic=topic.name,
             msg_size=128,
             msg_cnt=msg_cnt,
@@ -2050,8 +2050,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 "fake_timestamp_ms": base_ts,
                 "rate_limit_bps": 1024,
             },
-        )
-        self.verify()
+        ):
+            self.verify()
 
         def get_timestamps(rpk: RpkTool, n: int, offset: str):
             return {
@@ -2110,13 +2110,13 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
 
-        self.start_producer_consumer(
+        with self.producer_consumer(
             topic=topic.name,
             msg_size=msg_size,
             msg_cnt=20,
             producer_properties={"batch_max_bytes": max_bytes},
-        )
-        self.verify()
+        ):
+            self.verify()
 
     @cluster(num_nodes=7)
     def test_replication_with_compaction(self):
@@ -2147,7 +2147,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
 
-        self.start_producer_consumer(
+        with self.producer_consumer(
             topic=topic.name,
             msg_size=128,
             msg_cnt=10000,
@@ -2155,8 +2155,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 "key_set_cardinality": 600,
                 "tombstone_probability": 0.4,
             },
-        )
-        self.verify()
+        ):
+            self.verify()
 
         def get_compaction_progress(
             rpk: RpkTool = self.target_cluster_rpk,
@@ -2256,17 +2256,17 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             name="source-topic-1", partition_count=3, replication_factor=1
         )
         self.source_default_client().create_topic(topic_1)
-        self.start_producer_consumer(topic=topic_1.name, msg_size=128, msg_cnt=100000)
-        restart_nodes(self.target_cluster_service)
-        self.verify()
+        with self.producer_consumer(topic=topic_1.name, msg_size=128, msg_cnt=100000):
+            restart_nodes(self.target_cluster_service)
+            self.verify()
 
         topic_2 = TopicSpec(
             name="source-topic-2", partition_count=3, replication_factor=1
         )
         self.source_default_client().create_topic(topic_2)
-        self.start_producer_consumer(topic=topic_2.name, msg_size=128, msg_cnt=100000)
-        restart_nodes(self.source_cluster_service)
-        self.verify()
+        with self.producer_consumer(topic=topic_2.name, msg_size=128, msg_cnt=100000):
+            restart_nodes(self.source_cluster_service)
+            self.verify()
 
 
 class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
@@ -3178,8 +3178,8 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         self.source_default_client().create_topic(topic_1)
         self.create_link("test-link")
 
-        self.start_producer_consumer(topic=topic_1.name, msg_size=128, msg_cnt=1000)
-        self.verify()
+        with self.producer_consumer(topic=topic_1.name, msg_size=128, msg_cnt=1000):
+            self.verify()
 
         def collect_shadow_topic_states(
             node_samples: list[dict[str, MetricSamples]],
@@ -3336,8 +3336,8 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             name="test-topic-2", partition_count=3, replication_factor=1
         )
         self.source_default_client().create_topic(topic_2)
-        self.start_producer_consumer(topic=topic_2.name, msg_size=128, msg_cnt=1500)
-        self.verify()
+        with self.producer_consumer(topic=topic_2.name, msg_size=128, msg_cnt=1500):
+            self.verify()
 
         validate_metrics(
             timeout_sec=10,
@@ -3363,7 +3363,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic_3.name} not found in target cluster",
         )
 
-        self.start_producer_consumer(
+        with self.producer_consumer(
             topic=topic_3.name,
             msg_size=128,
             msg_cnt=5000000,
@@ -3372,14 +3372,14 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
                 "msgs_per_transaction": "10000",
                 "transaction_abort_rate": "0.3",
             },
-        )
-        validate_metrics(
-            timeout_sec=30,
-            metric_validators=[
-                (self.SHADOW_LAG, check_shadow_lag_positive),
-            ],
-        )
-        self.verify()
+        ):
+            validate_metrics(
+                timeout_sec=30,
+                metric_validators=[
+                    (self.SHADOW_LAG, check_shadow_lag_positive),
+                ],
+            )
+            self.verify()
 
         validate_metrics(
             timeout_sec=30,

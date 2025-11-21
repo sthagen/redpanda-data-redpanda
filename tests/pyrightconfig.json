@@ -32,5 +32,12 @@
     // disabled checks
 
     // widespread, allow for now
-    "reportPrivateUsage": "none"
+    "reportPrivateUsage": "none",
+
+    "executionEnvironments": [
+        {
+            "root": "rptest/clients/admin/proto",
+            "reportUnusedImport": false
+        }
+    ]
 }

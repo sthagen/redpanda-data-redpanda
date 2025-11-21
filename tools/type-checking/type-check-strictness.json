@@ -149,7 +149,6 @@
         "rptest/tests/leadership_transfer_test.py",
         "rptest/tests/librdkafka_test.py",
         "rptest/tests/license_upgrade_test.py",
-        "rptest/tests/list_kafka_connections_test.py",
         "rptest/tests/log_level_test.py",
         "rptest/tests/log_segment_ms_test.py",
         "rptest/tests/maintenance.py",
@@ -271,7 +270,6 @@
         "rptest/utils/si_utils.py"
     ],
     "off": [
-        "**/*_pb2_connect.py",
         "rptest/chaos_tests/single_fault_test.py",
         "rptest/clients/rpk.py",
         "rptest/clients/rpk_remote.py",
