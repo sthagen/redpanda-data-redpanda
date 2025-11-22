@@ -30,6 +30,7 @@ from rptest.tests.audit_log_test import (
     AuditLogTestBase,
     AuditLogTestSecurityConfig,
 )
+from rptest.utils.mode_checks import skip_fips_mode
 
 
 def make_from_dict(class_name, values):
@@ -1039,6 +1040,7 @@ class AuditlogClientSecurityReportTest(AuditLogTestBase):
     def setUp(self, wait_for_audit_log: bool = True):
         super().setUp(wait_for_audit_log)
 
+    @skip_fips_mode
     @cluster(num_nodes=4)
     def test_security_report(self):
         kafka_interface = KafkaInterface(

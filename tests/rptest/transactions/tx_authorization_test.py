@@ -30,8 +30,8 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
         TopicSpec(partition_count=1, replication_factor=3),
     )
 
-    USER_1 = SaslCredentials("user-1", "password", "SCRAM-SHA-256")
-    USER_2 = SaslCredentials("user-2", "password", "SCRAM-SHA-256")
+    USER_1 = SaslCredentials("user-1", "password0123456789", "SCRAM-SHA-256")
+    USER_2 = SaslCredentials("user-2", "password0123456789", "SCRAM-SHA-256")
 
     def __init__(self, test_context):
         extra_rp_conf = {

@@ -1249,7 +1249,7 @@ class RpkNodeConfig:
 
 class RedpandaServiceConstants:
     SUPERUSER_CREDENTIALS: SaslCredentials = SaslCredentials(
-        "admin", "admin", "SCRAM-SHA-256"
+        "admin", "admin1234567890", "SCRAM-SHA-256"
     )
 
 

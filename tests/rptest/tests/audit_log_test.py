@@ -3373,6 +3373,7 @@ class AuditLogUpgradeTest(AuditLogTestBase):
 
         return len(self.read_all_from_audit_log(filter_fn, stop_cond))
 
+    @skip_fips_mode
     @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_audit_log_upgrade_all_nodes(self):
         """

@@ -774,7 +774,7 @@ class ScramLiveUpdateTest(RedpandaTest):
 
 class ScramBootstrapUserTest(RedpandaTest):
     BOOTSTRAP_USERNAME = "bob"
-    BOOTSTRAP_PASSWORD = "sekrit"
+    BOOTSTRAP_PASSWORD = "sekrit0123456789"
 
     # BOOTSTRAP_MECHANISM = 'SCRAM-SHA-512'
 
@@ -837,6 +837,7 @@ class ScramBootstrapUserTest(RedpandaTest):
     def test_bootstrap_user(self, mechanism):
         # Anonymous access should be refused
         admin = Admin(self.redpanda)
+        new_password = "newpassword0123456789"
         with expect_http_error(403):
             admin.list_users()
 
@@ -847,7 +848,7 @@ class ScramBootstrapUserTest(RedpandaTest):
         assert self.BOOTSTRAP_USERNAME in admin.list_users()
 
         # Modify the bootstrap user's credential
-        admin.update_user(self.BOOTSTRAP_USERNAME, "newpassword", "SCRAM-SHA-256")
+        admin.update_user(self.BOOTSTRAP_USERNAME, new_password, "SCRAM-SHA-256")
 
         # Getting 401 with old credentials everywhere will show that the
         # credential update has propagated to all nodes
@@ -864,7 +865,7 @@ class ScramBootstrapUserTest(RedpandaTest):
             admin.list_users()
 
         # Using new credential should succeed
-        admin = Admin(self.redpanda, auth=(self.BOOTSTRAP_USERNAME, "newpassword"))
+        admin = Admin(self.redpanda, auth=(self.BOOTSTRAP_USERNAME, new_password))
         admin.list_users()
 
         # Modified credential should survive a restart: this verifies that
