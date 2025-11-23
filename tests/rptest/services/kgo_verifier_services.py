@@ -697,7 +697,9 @@ class KgoVerifierProducer(KgoVerifierService):
         if not self._status_thread:
             return True
 
-        what = f"{self.who_am_i()} wait: awaiting message count"
+        what = (
+            f"{self.who_am_i()} wait: awaiting message count on topic '{self._topic}'"
+        )
         self.logger.debug(what)
 
         def is_finished() -> bool:
