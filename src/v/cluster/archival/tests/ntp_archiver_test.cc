@@ -332,6 +332,8 @@ FIXTURE_TEST(
     // This test asserts that uploading of segment index will only happen if the
     // segment upload is successful. Indices uploaded without segments are not
     // found during cleanup, thus leaving behind orphan items in the bucket.
+    // The test triggers ExpiredToken error which forces token to be refreshed.
+    // There is a check that validates that the refresh was requested.
 
     std::vector<segment_desc> segments = {
       {manifest_ntp, model::offset(0), model::term_id(1)},
@@ -346,12 +348,14 @@ FIXTURE_TEST(
     auto fail_resp = http_test_utils::response{
       .body = R"xml(<?xml version="1.0" encoding="UTF-8"?>
 <Error>
-    <Code>AccessDenied</Code>
-    <Message>Access Denied</Message>
+    <Code>ExpiredToken</Code>
+    <Message>ExpiredToken</Message>
     <Resource>resource</Resource>
     <RequestId>requestid</RequestId>
 </Error>)xml",
-      .status = http_test_utils::response::status_type::forbidden};
+      .status = http_test_utils::response::status_type::forbidden,
+      .content_type = "xml",
+    };
     std::regex logexpr{".*/0-.*log\\.\\d+"};
     fail_request_if(
       [&logexpr](const ss::http::request& req) {
@@ -392,6 +396,7 @@ FIXTURE_TEST(
     BOOST_REQUIRE_EQUAL(non_compacted_result.num_succeeded, 0);
     BOOST_REQUIRE_EQUAL(non_compacted_result.num_failed, 1);
     requests_size_eventually(1);
+    auth_token_refresh_eventually(1);
 }
 
 // NOLINTNEXTLINE

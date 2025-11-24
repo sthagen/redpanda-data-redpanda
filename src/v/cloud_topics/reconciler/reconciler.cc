@@ -683,6 +683,11 @@ ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
           add_objects_result.error()));
     }
 
+    vlog(
+      lg.debug,
+      "Successfully added {} objects to L1 metastore",
+      objects.size());
+
     // Now update the LRO, taking into account any corrections from
     // the metastore.
     const auto& corrected_next_offsets

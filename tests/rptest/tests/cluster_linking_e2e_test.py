@@ -3114,6 +3114,9 @@ class ShadowLinkUpdateBrokersTests(ShadowLinkPreAllocTestBase):
         ), f"Topic {old_source_topic} should not be visible to the target cluster"
 
 
+Validator = Callable[[list[dict[str, MetricSamples]]], bool]
+
+
 class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
     SHADOW_TOPIC_STATE = "redpanda_shadow_link_shadow_topic_state"
     TOTAL_RECORDS_FETCHED = "redpanda_shadow_link_total_records_fetched"
@@ -3128,22 +3131,11 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         node: ClusterNode,
         patterns: list[str],
     ) -> Optional[dict[str, MetricSamples]]:
-        def get_metrics_from_node_sync(patterns: list[str]):
-            samples = self.redpanda.metrics_samples(
-                patterns, [node], MetricsEndpoint.PUBLIC_METRICS
-            )
-            success = set(samples.keys()) == set(patterns)
-            return success, samples
-
-        try:
-            samples = wait_until_result(
-                lambda: get_metrics_from_node_sync(patterns),
-                timeout_sec=2,
-                backoff_sec=0.1,
-            )
-            return samples
-        except ducktape.errors.TimeoutError:
-            return None
+        samples = self.redpanda.metrics_samples(
+            patterns, [node], MetricsEndpoint.PUBLIC_METRICS
+        )
+        self.logger.debug(f"patterns: {patterns} node: {node.name} samples: {samples}")
+        return samples
 
     def _get_metrics_for_nodes(
         self,
@@ -3160,10 +3152,7 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
         return metrics
 
     def _validate_metrics(
-        self,
-        nodes: list[ClusterNode],
-        patterns: list[str],
-        validator: Callable[[list[dict[str, MetricSamples]]], bool],
+        self, nodes: list[ClusterNode], patterns: list[str], validator: Validator
     ):
         metrics = self._get_metrics_for_nodes(nodes, patterns)
         if metrics is None:
@@ -3304,10 +3293,12 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             return check_metric_exists(node_samples, self.CLIENT_ERRORS)
 
         def validate_metrics(
-            timeout_sec: int, metric_validators: list[tuple[str, Callable]]
+            timeout_sec: int, metric_validators: list[tuple[str, Validator]]
         ):
             for metric_name, validator in metric_validators:
-                self.logger.debug(f"Validating values of metric: {metric_name}")
+                self.logger.debug(
+                    f"Validating values of metric: '{metric_name}', method: '{getattr(validator, '__name__')}'"
+                )
                 wait_until(
                     lambda: self._validate_metrics(
                         target_nodes, [metric_name], validator

@@ -11,6 +11,7 @@
 #include "cloud_io/remote.h"
 
 #include "bytes/iostream.h"
+#include "cloud_io/auth_refresh_bg_op.h"
 #include "cloud_io/logger.h"
 #include "cloud_io/provider.h"
 #include "cloud_io/transfer_details.h"
@@ -330,6 +331,11 @@ ss::future<upload_result> remote::upload_stream(
         case cloud_storage_clients::error_outcome::fail:
             result = upload_result::failed;
             break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = upload_result::failed;
+            break;
         }
     }
 
@@ -460,6 +466,11 @@ ss::future<download_result> remote::download_stream(
         case cloud_storage_clients::error_outcome::key_not_found:
             result = download_result::notfound;
             break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = download_result::failed;
+            break;
         }
     }
     transfer_details.on_failure();
@@ -552,6 +563,11 @@ remote::download_object(download_request download_request) {
         case cloud_storage_clients::error_outcome::key_not_found:
             result = download_result::notfound;
             break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = download_result::failed;
+            break;
         }
     }
     transfer_details.on_failure();
@@ -631,6 +647,11 @@ ss::future<download_result> remote::object_exists(
             break;
         case cloud_storage_clients::error_outcome::key_not_found:
             result = download_result::notfound;
+            break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = download_result::failed;
             break;
         }
     }
@@ -713,6 +734,11 @@ remote::delete_object(transfer_details transfer_details) {
               "from bucket {}",
               path,
               bucket);
+            break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = upload_result::failed;
             break;
         }
     }
@@ -879,6 +905,11 @@ ss::future<upload_result> remote::delete_object_batch(
               "from bucket {}",
               keys.size(),
               bucket);
+            break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = upload_result::failed;
             break;
         }
     }
@@ -1114,6 +1145,11 @@ ss::future<list_result> remote::list_objects(
               "Unexpected key_not_found outcome received when listing bucket "
               "{}",
               bucket);
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = cloud_storage_clients::error_outcome::fail;
+            break;
         }
     }
 
@@ -1197,6 +1233,11 @@ ss::future<upload_result> remote::upload_object(upload_request upload_request) {
         case cloud_storage_clients::error_outcome::fail:
             result = upload_result::failed;
             break;
+        case cloud_storage_clients::error_outcome::authentication_failed:
+            vlog(ctxlog.info, "Token expired, refreshing credentials");
+            maybe_request_auth_refresh();
+            result = upload_result::failed;
+            break;
         }
     }
 
@@ -1230,6 +1271,22 @@ remote::propagate_credentials(cloud_roles::credentials credentials) {
       [c = std::move(credentials)](remote& svc) mutable {
           svc._pool.local().load_credentials(std::move(c));
       });
+}
+
+void remote::maybe_request_auth_refresh() {
+    if (ss::this_shard_id() == auth_refresh_shard_id) {
+        _auth_refresh_bg_op.maybe_refresh_credentials();
+    } else {
+        ssx::spawn_with_gate(_gate, [this] {
+            return container().invoke_on(auth_refresh_shard_id, [](remote& r) {
+                r._auth_refresh_bg_op.maybe_refresh_credentials();
+            });
+        });
+    }
+}
+
+uint64_t remote::token_refresh_count() const noexcept {
+    return _auth_refresh_bg_op.token_refresh_count();
 }
 
 } // namespace cloud_io

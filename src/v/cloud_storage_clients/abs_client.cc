@@ -16,6 +16,7 @@
 #include "cloud_storage_clients/abs_error.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_storage_clients/logger.h"
+#include "cloud_storage_clients/types.h"
 #include "cloud_storage_clients/util.h"
 #include "cloud_storage_clients/xml_sax_parser.h"
 #include "config/configuration.h"
@@ -509,12 +510,24 @@ ss::future<result<T, error_outcome>> abs_client::send_request(
           || err.http_code() == status::unauthorized) {
             vlog(
               abs_log.error,
-              "Received [{}] {} error response from ABS. This indicates "
-              "misconfiguration of ABS and/or Redpanda: {}",
+              "Received [{}] {} error response from ABS. This could indicate "
+              "either misconfiguration (e.g. unauthorized IP address) or "
+              "invalidation of the SAS token: {}.",
               err.http_code(),
               err.code_string(),
               err.message());
-            outcome = error_outcome::fail;
+            if (err.code() == abs_error_code::authentication_failed) {
+                // Unfortunately, we can only get a common REST API error code
+                // here:
+                // https://learn.microsoft.com/en-us/rest/api/storageservices/common-rest-api-error-codes
+                // According to this page:
+                // https://learn.microsoft.com/en-us/troubleshoot/azure/azure-storage/blobs/authentication/storage-troubleshoot-403-errors
+                // the expired token will trigger generic AuthenticationFailed
+                // error.
+                outcome = error_outcome::authentication_failed;
+            } else {
+                outcome = error_outcome::fail;
+            }
             _probe->register_failure(err.code());
         } else if (
           err.code() == abs_error_code::container_being_disabled

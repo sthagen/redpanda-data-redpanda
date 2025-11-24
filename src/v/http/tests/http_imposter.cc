@@ -119,6 +119,10 @@ void http_imposter_fixture::set_routes(ss::httpd::routes& r) {
               if (fp[i](req)) {
                   auto response = _fail_responses[i];
                   repl.set_status(response.status);
+                  if (response.content_type.has_value()) {
+                      content_type = response.content_type.value();
+                      repl.set_content_type(content_type);
+                  }
                   vlog(
                     http_imposter_log.trace,
                     "HTTP imposter id {} failing request {} - {} - {} with "

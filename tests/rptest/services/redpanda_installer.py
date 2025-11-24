@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 from rptest.utils.bookend_collection import BookendCollection
 from rptest.utils.mode_checks import in_fips_environment
-from typing import Any
 
 # Match any version that may result from a redpanda binary, which may not be a
 # released version.

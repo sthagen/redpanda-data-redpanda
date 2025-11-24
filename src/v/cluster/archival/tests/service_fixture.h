@@ -207,6 +207,13 @@ public:
           to, [&] { return get_requests().size() == expected; });
     }
 
+    void auth_token_refresh_eventually(
+      size_t expected, ss::lowres_clock::duration to = 3s) {
+        RPTEST_REQUIRE_EVENTUALLY(to, [this, expected] {
+            return io.local().token_refresh_count() == expected;
+        });
+    }
+
     ss::sharded<cloud_storage_clients::client_pool> pool;
     ss::sharded<cloud_io::remote> io;
     ss::sharded<cloud_storage::remote> remote;

@@ -209,8 +209,12 @@ public:
 
     const io_resources& resources() const { return *_resources; }
 
+    // The method is supposed to be used by tests.
+    uint64_t token_refresh_count() const noexcept;
+
 private:
     ss::future<> propagate_credentials(cloud_roles::credentials credentials);
+    void maybe_request_auth_refresh();
 
     ss::sharded<cloud_storage_clients::client_pool>& _pool;
     ss::gate _gate;

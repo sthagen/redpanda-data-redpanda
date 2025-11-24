@@ -26,6 +26,7 @@ struct response {
     ss::sstring body;
     std::vector<std::pair<ss::sstring, ss::sstring>> headers;
     status_type status;
+    std::optional<ss::sstring> content_type;
 };
 
 struct request_info {

@@ -1,4 +1,3 @@
-load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
@@ -25,11 +24,6 @@ buildifier(
     mode = "fix",
 )
 
-native_binary(
-    name = "minio",
-    src = "@minio//file",
-)
-
 # Run a dev_cluster, by default the data directory is in the repository root.
 #
 #     bazel run //tools:dev_cluster -- --nodes 1
@@ -44,22 +38,22 @@ py_binary(
         "dev_cluster.py",
     ],
     args = [
-        "-e $(rootpath //src/v/redpanda:redpanda)",
-        "-o $(rootpath :minio)",
+        "--executable $(rootpath //src/v/redpanda:redpanda)",
         "--rpk $(rootpath //src/go/rpk/cmd/rpk)",
-        "--prometheus $(rootpath @prometheus//:prometheus)",
-        "--grafana $(rootpath @grafana//:grafana)",
+        "--minio_executable $(rootpath //bazel/thirdparty:minio)",
+        "--prometheus $(rootpath //bazel/thirdparty:prometheus)",
+        "--grafana $(rootpath //bazel/thirdparty:grafana)",
         "--lsan_suppression_file $(rootpath //:lsan_suppressions)",
         "--ubsan_suppression_file $(rootpath //:ubsan_suppressions)",
     ],
     data = [
-        ":minio",
         "//:lsan_suppressions",
         "//:ubsan_suppressions",
+        "//bazel/thirdparty:grafana",
+        "//bazel/thirdparty:minio",
+        "//bazel/thirdparty:prometheus",
         "//src/go/rpk/cmd/rpk",
         "//src/v/redpanda",
-        "@grafana",
-        "@prometheus",
     ],
     visibility = ["//visibility:public"],
     deps = [

@@ -54,6 +54,14 @@ public:
 
     ss::future<> stop();
 
+    // Trigger credentials refresh (in case if IAM is used).
+    // Also, apply some basic rate limiting.
+    void maybe_refresh_credentials();
+
+    // The method returns a counter which is incremented every
+    // time the token refresh is requested.
+    uint64_t token_refresh_count() const noexcept;
+
 private:
     void do_start_auth_refresh_op(
       cloud_roles::credentials_update_cb_t credentials_update_cb,
@@ -64,6 +72,8 @@ private:
     cloud_storage_clients::client_configuration _client_conf;
     model::cloud_credentials_source _cloud_credentials_source;
     std::optional<cloud_roles::refresh_credentials> _refresh_credentials;
+    std::optional<ss::lowres_clock::time_point> _last_refresh_time;
+    uint64_t _refresh_cnt{0};
 };
 
 } // namespace cloud_io

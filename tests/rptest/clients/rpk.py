@@ -485,6 +485,7 @@ class RpkTool:
         perm = f"--allow-{ptype}" if not deny else f"--deny-{ptype}"
 
         cmd = [
+            "security",
             "acl",
             "create",
             perm,
@@ -1060,7 +1061,7 @@ class RpkTool:
                 if out is not None:
                     return parse_describe_group(out)
                 return None
-            except:
+            except Exception:
                 # rpk will not print out the COORDINATOR-PARTITION field for
                 # parsing when __consumer_offsets topic hasn't been created yet.
                 # instead of trying to be fancy and adapt to such output, we

@@ -16,6 +16,7 @@
 #include <optional>
 
 namespace cloud_io {
+static constexpr auto refresh_rate = std::chrono::seconds(10);
 
 auth_refresh_bg_op::auth_refresh_bg_op(
   ss::gate& gate,
@@ -111,6 +112,26 @@ void auth_refresh_bg_op::do_start_auth_refresh_op(
 bool auth_refresh_bg_op::is_static_config() const {
     return _cloud_credentials_source
            == model::cloud_credentials_source::config_file;
+}
+
+void auth_refresh_bg_op::maybe_refresh_credentials() {
+    _refresh_cnt++;
+    auto refresh_allowed = [this]() {
+        if (!_last_refresh_time.has_value()) {
+            return true;
+        }
+        auto ts = _last_refresh_time.value();
+        auto now = ss::lowres_clock::now();
+        return ts < now ? now - ts > refresh_rate : false;
+    }();
+    if (refresh_allowed && _refresh_credentials.has_value()) {
+        _refresh_credentials->refresh();
+        _last_refresh_time = ss::lowres_clock::now();
+    }
+}
+
+uint64_t auth_refresh_bg_op::token_refresh_count() const noexcept {
+    return _refresh_cnt;
 }
 
 cloud_roles::credentials auth_refresh_bg_op::build_static_credentials() const {
