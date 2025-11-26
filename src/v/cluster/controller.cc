@@ -684,8 +684,6 @@ ss::future<> controller::start(
       std::ref(_partition_manager),
       std::ref(_as));
 
-    co_await set_raft_manager_remake_cb();
-
     co_await _members_backend.invoke_on(
       members_manager::shard, &members_backend::start);
     co_await _config_manager.invoke_on(
@@ -955,7 +953,6 @@ ss::future<> controller::stop() {
     co_await _data_migration_frontend.stop();
     co_await _topic_mount_handler.stop();
     co_await _config_manager.stop();
-    co_await clear_raft_manager_remake_cb();
     co_await _api.stop();
     co_await _shard_balancer.stop();
     co_await _backend.stop();
@@ -1303,27 +1300,6 @@ controller::validate_configuration_invariants() {
         // configuration_invariants in kvstore later.
     }
     co_return invariants;
-}
-
-ss::future<std::error_code> controller::trigger_remake_cb(raft::group_id g) {
-    auto ec = co_await _api.local().remake_partition(g);
-    if (ec) {
-        vlog(clusterlog.warn, "Unable to remake group {}, {}", g, ec);
-    }
-    co_return ec;
-}
-
-ss::future<> controller::set_raft_manager_remake_cb() {
-    co_await _raft_manager.invoke_on_all([this](raft::group_manager& gm) {
-        gm.set_remake_cb(
-          [this](raft::group_id g) -> ss::future<std::error_code> {
-              return trigger_remake_cb(g);
-          });
-    });
-}
-
-ss::future<> controller::clear_raft_manager_remake_cb() {
-    co_await _raft_manager.invoke_on_all(&raft::group_manager::clear_remake_cb);
 }
 
 ss::future<cluster::error_info>

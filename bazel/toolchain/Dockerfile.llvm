@@ -24,7 +24,7 @@ RUN echo "deb http://archive.debian.org/debian bullseye-backports main" > /etc/a
       zlib1g-dev \
       pkg-config
 
-ARG LLVM_VERSION=20
+ARG LLVM_VERSION=21
 
 RUN wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && /llvm.sh ${LLVM_VERSION} all
 

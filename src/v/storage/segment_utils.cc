@@ -799,18 +799,6 @@ ss::future<compaction_result> self_compact_segment(
       = co_await maybe_rebuild_compaction_index(
         s, stm_manager, cfg, read_holder, resources, pb, feature_table);
 
-    const bool segment_already_compacted
-      = (state == compacted_index::recovery_state::already_compacted);
-
-    if (segment_already_compacted && !should_force_compaction) {
-        vlog(
-          gclog.debug,
-          "detected {} is already compacted",
-          s->path().to_compacted_index());
-        co_await internal::mark_segment_as_finished_self_compaction(s, pb);
-        co_return compaction_result{s->size_bytes()};
-    }
-
     const bool is_valid_index_state
       = (state == compacted_index::recovery_state::index_recovered)
         || (state == compacted_index::recovery_state::already_compacted);

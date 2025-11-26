@@ -1294,7 +1294,7 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
 
     @abstractmethod
     def raise_on_bad_logs(
-        self, allow_list: LogAllowList = (), test_start_time: float | None = None
+        self, allow_list: LogAllowList = (), test_start_time: float = 0
     ) -> None:
         pass
 
@@ -2340,17 +2340,21 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
             # Check if stored pod and loaded one is the same
             _stored_pod = _get_stored_pod(pod["metadata"]["uid"])
             if _stored_pod is None:
-                raise NodeCrash((_name, "Pod not found among prior stored ones"))
+                raise NodeCrash([(_name, "Pod not found among prior stored ones")])
 
             # Check if container inside pod stayed the same
             container_id = _get_container_id(pod["status"])
             if _get_container_id(_stored_pod._status) != container_id:
-                raise NodeCrash((_name, "Pod container mismatch with prior stored one"))
+                raise NodeCrash(
+                    [(_name, "Pod container mismatch with prior stored one")]
+                )
 
             # Check that restart count is the same
             restart_count = _get_restart_count(pod["status"])
             if _get_restart_count(_stored_pod._status) != restart_count:
-                raise NodeCrash((_name, "Pod has been restarted due to possible crash"))
+                raise NodeCrash(
+                    [(_name, "Pod has been restarted due to possible crash")]
+                )
 
         # Worth to note that rebuilding stored broker classes
         # can be skipped in this case since nothing changed now
@@ -2397,7 +2401,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         return self.cluster_unhealthy_reason is not None
 
     def raise_on_bad_logs(
-        self, allow_list: LogAllowList = (), test_start_time: float | None = None
+        self, allow_list: LogAllowList = (), test_start_time: float = 0
     ) -> None:
         """
         Raise a BadLogLines exception if any nodes' logs contain errors
@@ -3020,7 +3024,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         self._skip_if_no_redpanda_log = v
 
     def raise_on_bad_logs(
-        self, allow_list: LogAllowList = (), test_start_time: float | None = None
+        self, allow_list: LogAllowList = (), test_start_time: float = 0
     ):
         """
         Raise a BadLogLines exception if any nodes' logs contain errors not
@@ -4485,9 +4489,12 @@ class RedpandaService(Service, RedpandaServiceABC):
             file, _ = fstat
             if len(file.parents) == 1:
                 return False
-            if file.parents[-2].name == "cloud_storage_cache":
+            if file.parents[-2].name in ["cloud_storage_cache", "debug-bundle"]:
                 return False
-            if "compaction.staging" in file.name:
+            if (
+                "compaction.staging" in file.name
+                or "compaction.compaction_index" in file.name
+            ):
                 # compaction staging files are temporary and are generally
                 # cleaned up after compaction finishes, or at next round of
                 # compaction if a file was stranded. during shutdown of any

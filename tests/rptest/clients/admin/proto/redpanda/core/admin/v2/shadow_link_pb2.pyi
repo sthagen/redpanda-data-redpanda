@@ -905,28 +905,65 @@ Global___SecuritySettingsSyncOptions: typing_extensions.TypeAlias = SecuritySett
 
 @typing.final
 class AuthenticationConfiguration(google.protobuf.message.Message):
-    """Authentication config.  Currently only supporting SASL/SCRAM,
-    however made as a oneof for expansion
+    """Authentication config.  Supports:
+    * SASL/SCRAM
+    * SASL/PLAIN
     """
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     SCRAM_CONFIGURATION_FIELD_NUMBER: builtins.int
+    PLAIN_CONFIGURATION_FIELD_NUMBER: builtins.int
 
     @property
     def scram_configuration(self) -> Global___ScramConfig:
         """SASL/SCRAM configuration"""
 
-    def __init__(self, *, scram_configuration: Global___ScramConfig | None=...) -> None:
+    @property
+    def plain_configuration(self) -> Global___PlainConfig:
+        """SASL/PLAIN configuration"""
+
+    def __init__(self, *, scram_configuration: Global___ScramConfig | None=..., plain_configuration: Global___PlainConfig | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['authentication', b'authentication', 'scram_configuration', b'scram_configuration']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['authentication', b'authentication', 'plain_configuration', b'plain_configuration', 'scram_configuration', b'scram_configuration']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['authentication', b'authentication', 'scram_configuration', b'scram_configuration']) -> None:
+    def ClearField(self, field_name: typing.Literal['authentication', b'authentication', 'plain_configuration', b'plain_configuration', 'scram_configuration', b'scram_configuration']) -> None:
         ...
 
-    def WhichOneof(self, oneof_group: typing.Literal['authentication', b'authentication']) -> typing.Literal['scram_configuration'] | None:
+    def WhichOneof(self, oneof_group: typing.Literal['authentication', b'authentication']) -> typing.Literal['scram_configuration', 'plain_configuration'] | None:
         ...
 Global___AuthenticationConfiguration: typing_extensions.TypeAlias = AuthenticationConfiguration
+
+@typing.final
+class PlainConfig(google.protobuf.message.Message):
+    """PLAIN settings"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    USERNAME_FIELD_NUMBER: builtins.int
+    PASSWORD_FIELD_NUMBER: builtins.int
+    PASSWORD_SET_FIELD_NUMBER: builtins.int
+    PASSWORD_SET_AT_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    'PLAIN username'
+    password: builtins.str
+    'Password'
+    password_set: builtins.bool
+    'Indicates that the password has been set'
+
+    @property
+    def password_set_at(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        """Timestamp of when the password was last set - only valid if password_set
+        is true
+        """
+
+    def __init__(self, *, username: builtins.str=..., password: builtins.str=..., password_set: builtins.bool=..., password_set_at: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['password_set_at', b'password_set_at']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['password', b'password', 'password_set', b'password_set', 'password_set_at', b'password_set_at', 'username', b'username']) -> None:
+        ...
+Global___PlainConfig: typing_extensions.TypeAlias = PlainConfig
 
 @typing.final
 class ScramConfig(google.protobuf.message.Message):

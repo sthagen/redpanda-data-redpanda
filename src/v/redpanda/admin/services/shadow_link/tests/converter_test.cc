@@ -247,6 +247,53 @@ TEST(converter_test, create_with_authn_config_scram_unspecified) {
       serde::pb::rpc::invalid_argument_exception);
 }
 
+TEST(converter_test, create_with_plain) {
+    const auto name = "test-link";
+    const auto username = "test-user";
+    const auto password = "test-password";
+
+    proto::admin::shadow_link shadow_link;
+    proto::admin::create_shadow_link_request req;
+    proto::admin::shadow_link_configurations shadow_link_configurations;
+    proto::admin::shadow_link_client_options shadow_link_client_options;
+    proto::admin::authentication_configuration authn_config;
+    proto::admin::plain_config plain_config;
+
+    plain_config.set_username(ss::sstring{username});
+    plain_config.set_password(ss::sstring{password});
+    authn_config.set_plain_configuration(std::move(plain_config));
+    shadow_link_client_options.set_authentication_configuration(
+      std::move(authn_config));
+
+    shadow_link_client_options.set_bootstrap_servers({"localhost:9092"});
+    shadow_link_configurations.set_client_options(
+      std::move(shadow_link_client_options));
+
+    shadow_link.set_configurations(std::move(shadow_link_configurations));
+    shadow_link.set_name(ss::sstring{name});
+    req.set_shadow_link(std::move(shadow_link));
+
+    auto now = model::to_time_point(model::timestamp::now());
+    auto md = admin::convert_create_to_metadata(std::move(req));
+
+    ASSERT_TRUE(md.connection.authn_config.has_value());
+    ASSERT_TRUE(
+      std::holds_alternative<cluster_link::model::scram_credentials>(
+        md.connection.authn_config.value()));
+    const auto& md_authn_config
+      = std::get<cluster_link::model::scram_credentials>(
+        md.connection.authn_config.value());
+
+    EXPECT_EQ(md_authn_config.username, username);
+    EXPECT_EQ(md_authn_config.password, password);
+    EXPECT_EQ(md_authn_config.mechanism, "PLAIN");
+    auto pwd_updated = model::to_time_point(
+      md_authn_config.password_last_updated);
+    // Expect the password updated time to be within 10s
+    EXPECT_GE(pwd_updated, now - 5s);
+    EXPECT_LE(pwd_updated, now + 5s);
+}
+
 TEST(converter_test, create_with_tls_flag_only) {
     const auto name = "test-link";
     proto::admin::shadow_link shadow_link;
@@ -743,6 +790,26 @@ TEST(converter_test, metadata_to_shadow_link_authn_invalid_scram) {
       .mechanism = "SCRAM-SHA-NOPE"};
     EXPECT_THROW(
       admin::metadata_to_shadow_link(std::move(md), {}), std::invalid_argument);
+}
+
+TEST(converter_test, metadata_to_shadow_link_authn_plain) {
+    cluster_link::model::metadata md;
+    md.connection.authn_config = cluster_link::model::scram_credentials{
+      .username = "test-user",
+      .password = "test-password",
+      .mechanism = "PLAIN"};
+
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
+
+    const auto& client_options = sl.get_configurations().get_client_options();
+    ASSERT_TRUE(client_options.has_authentication_configuration());
+    ASSERT_TRUE(client_options.get_authentication_configuration()
+                  .has_plain_configuration());
+    const auto& plain_config = client_options.get_authentication_configuration()
+                                 .get_plain_configuration();
+    EXPECT_EQ(plain_config.get_username(), "test-user");
+    EXPECT_TRUE(plain_config.get_password_set());
+    EXPECT_TRUE(plain_config.get_password().empty());
 }
 
 TEST(converter_test, metadata_to_shadow_link_tls_file) {

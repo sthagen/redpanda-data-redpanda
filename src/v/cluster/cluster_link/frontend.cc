@@ -981,8 +981,8 @@ errc frontend::validator::validate_connection_config(
               }
 
               if (
-                c.mechanism != "SCRAM-SHA-256"
-                && c.mechanism != "SCRAM-SHA-512") {
+                c.mechanism != "SCRAM-SHA-256" && c.mechanism != "SCRAM-SHA-512"
+                && c.mechanism != "PLAIN") {
                   vlog(
                     cluster::clusterlog.warn,
                     "Unsupported SCRAM mechanism: {}",

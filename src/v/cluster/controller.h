@@ -291,15 +291,6 @@ private:
     friend controller_probe;
     friend class controller_forced_reconfiguration_manager;
 
-    using remake_cb_t
-      = ss::noncopyable_function<ss::future<std::error_code>(model::ntp)>;
-
-    ss::future<std::error_code> trigger_remake_cb(raft::group_id g);
-
-    ss::future<> set_raft_manager_remake_cb();
-
-    ss::future<> clear_raft_manager_remake_cb();
-
     /**
      * Create a \c bootstrap_cluster_cmd, replicate-and-wait it to the current
      * quorum, retry infinitely if replicate-and-wait fails.

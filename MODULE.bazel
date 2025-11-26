@@ -52,6 +52,13 @@ bazel_dep(name = "bzip2", version = "1.0.8.bcr.2")
 bazel_dep(name = "googleapis", version = "0.0.0-20250703-f9d6fe4a")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
+single_version_override(
+    module_name = "buildifier_prebuilt",
+    patches = [
+        "//bazel/thirdparty:buildifier-find.patch",
+    ],
+)
+
 bazel_dep(name = "rules_shell", version = "0.4.1", dev_dependency = True)
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python", dev_dependency = True)
@@ -138,19 +145,6 @@ COMPILE_FLAGS = {
 }
 
 COMPILERS = {
-    "previous": {
-        "tars": {
-            "aarch64": {
-                "build_date": "2025-03-15",
-                "sha": "cdba86609d71cfc379bfce9fb5ce97389cc08320fb713c6abab8d698a53e3fa2",
-            },
-            "x86_64": {
-                "build_date": "2025-03-15",
-                "sha": "196ae29712c646f3ccc39edea880e8637025bd0aeae5892c48bfb1382fe127db",
-            },
-        },
-        "version": "19.1.7",
-    },
     "current": {
         "tars": {
             "aarch64": {
@@ -163,6 +157,19 @@ COMPILERS = {
             },
         },
         "version": "20.1.8",
+    },
+    "next": {
+        "tars": {
+            "aarch64": {
+                "build_date": "2025-11-25",
+                "sha": "37257804087a26b0ede7c0349d3f44db7b7439e551fc6c753f7934ead654c1b8",
+            },
+            "x86_64": {
+                "build_date": "2025-11-25",
+                "sha": "b3aa9cb72c2e46bd1cc3f17f3772b37a424e54f796253961382163eab2f4a9c0",
+            },
+        },
+        "version": "21.1.6",
     },
 }
 

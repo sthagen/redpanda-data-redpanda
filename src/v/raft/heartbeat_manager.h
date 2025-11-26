@@ -198,11 +198,6 @@ private:
     void process_reply(
       model::node_id n,
       const absl::node_hash_map<raft::group_id, follower_request_meta>& groups,
-      result<heartbeat_reply> result);
-
-    void process_reply(
-      model::node_id n,
-      const absl::node_hash_map<raft::group_id, follower_request_meta>& groups,
       result<heartbeat_reply_v2> result);
 
     consensus_ptr validate_heartbeat_reply(

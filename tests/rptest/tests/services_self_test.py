@@ -11,13 +11,15 @@ from contextlib import contextmanager
 import signal
 from subprocess import CalledProcessError
 from typing import Any, Callable, Iterator
+import time
 
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.cluster.remoteaccount import RemoteCommandError
-from ducktape.mark import matrix
+from ducktape.mark import matrix, ignore
 from ducktape.mark.resource import cluster as dt_cluster
 from ducktape.tests.test import Test, TestContext
 
+from rptest.clients.admin.v2 import Admin as AdminV2, debug_pb
 from rptest.clients.kubectl import is_redpanda_pod
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
@@ -521,6 +523,22 @@ def _assert_expected_backtrace_contents(
     )
 
 
+def _assert_log_content(test: RedpandaTest, node: ClusterNode, needle: str) -> None:
+    """
+    Assert that the redpanda log contains the expected content.
+    """
+    log_searcher = LogSearchLocal(
+        test.test_context,
+        [],
+        test.redpanda.logger,
+        test.redpanda.STDOUT_STDERR_CAPTURE,
+    )
+
+    lines = list(log_searcher._capture_log(node, f"'{needle}'"))
+    assert lines, f"Did not find expected string '{needle}' in redpanda log"
+    test.logger.debug(f"Found matching log line: {lines[0]}")
+
+
 class RedpandaServiceSelfTest(RedpandaTest):
     @cluster(num_nodes=1)
     @matrix(simple_backtrace=[True, False])
@@ -605,26 +623,87 @@ class RedpandaServiceSelfTest(RedpandaTest):
         rp._admin.trigger_crash(node, crash_type)
         # look for this snipptet which will appear at the top of the backtrace
         # if it was properly decoded
-        self._assert_log_content(node, "in (anonymous namespace)::trigger_crash")
-
-    def _assert_log_content(self, node: ClusterNode, needle: str) -> None:
-        """
-        Assert that the redpanda log contains the expected content.
-        """
-        log_searcher = LogSearchLocal(
-            self.test_context,
-            [],
-            self.redpanda.logger,
-            self.redpanda.STDOUT_STDERR_CAPTURE,
-        )
-
-        lines = list(log_searcher._capture_log(node, f"'{needle}'"))
-        assert lines, f"Did not find expected string '{needle}' in redpanda log"
-        self.logger.debug(f"Found matching log line: {lines[0]}")
+        _assert_log_content(self, node, "in (anonymous namespace)::trigger_crash")
 
     @cluster(num_nodes=1)
     def test_start(self) -> None:
         pass
+
+
+class RedpandaClusteredServiceSelfTest(RedpandaTest):
+    """Same as RedpandaServiceSelfTest but uses a 3-broker cluster.
+    Use this only for tests that need more than one broker."""
+
+    def __init__(self, test_context: TestContext) -> None:
+        super().__init__(test_context, num_brokers=3)
+
+    @cluster(num_nodes=3, check_allowed_error_logs=False)
+    def test_raise_on_bad_logs(self):
+        """
+        Test that the LogMessage admin API correctly logs messages and that
+        ERROR level logs are caught by raise_on_bad_logs.
+        """
+        admin_v2 = AdminV2(self.redpanda)
+        # use the last node for a slightly better test
+        node = self.redpanda.nodes[2]
+
+        # Create a unique error message that we can search for
+        test_error_msg = "TEST_LOG_MESSAGE_API_ERROR_MARKER_12345"
+
+        # Use the new LogMessage API to log an error
+        request = debug_pb.LogMessageRequest(
+            message=test_error_msg, level=debug_pb.LOG_LEVEL_ERROR
+        )
+        admin_v2.debug(node=node).log_message(request)
+
+        # Verify the error message was logged
+        _assert_log_content(self, node, test_error_msg)
+
+        def validate_exception(e: BadLogLines) -> bool:
+            # should have the marker and also the name of node 2
+            exn_str = str(e)
+            return test_error_msg in exn_str and node.name in exn_str
+
+        # Now verify that raise_on_bad_logs will catch this error
+        with expect_exception(BadLogLines, validate_exception):
+            self.redpanda.raise_on_bad_logs(allow_list=[])
+
+    @ignore
+    @cluster(num_nodes=3, check_allowed_error_logs=False)
+    def test_bll_bench(self):
+        """
+        Test that the LogMessage admin API correctly logs messages and that
+        ERROR level logs are caught by raise_on_bad_logs.
+
+        Ignored by default since we don't want to run benchmarks in CI.
+        """
+        # create and delete a 1000-partition topic 10 times
+        rpk = RpkTool(self.redpanda)
+
+        parts = 1000
+
+        for i in range(10):
+            topic_name = f"bll_bench_{i}"
+
+            def _all_partitions_present():
+                try:
+                    desc = list(rpk.describe_topic(topic_name))
+                    return len(desc) == parts
+                except Exception:
+                    return False
+
+            # 1000 partitions, replication factor 1 to avoid excess resource usage
+            rpk.create_topic(topic_name, partitions=parts, replicas=3)
+            self.redpanda.wait_until(
+                _all_partitions_present, timeout_sec=30, backoff_sec=1
+            )
+            rpk.delete_topic(topic_name)
+            self.logger.warning(f"c d topic {i}")
+
+        start = time.time()
+        self.redpanda.raise_on_bad_logs(allow_list=[])
+        elapsed = time.time() - start
+        self.logger.warning(f"raise_on_bad_logs elapsed {elapsed:.3f}s")
 
 
 class RedpandaServiceSelfRawTest(Test):

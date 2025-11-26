@@ -2380,6 +2380,7 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
     def test_continuous_group_sync(self, with_failures, source_cluster_spec):
         partition_count = 120
         topic_count = 6
+        failure_duration = 10 if with_failures else 0
 
         topics = [
             TopicSpec(
@@ -2398,13 +2399,16 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
 
         def _maybe_failure_injector():
             if with_failures:
-                return self.create_source_failure_injector()
+                return self.create_source_failure_injector(
+                    max_suspend_duration_seconds=failure_duration
+                )
             else:
                 return self._nop_context_manager()
 
         def _consume_with_group(
             topic: str,
             group_id: str,
+            fetch_max_wait: float,
             rpk: RpkTool = source_rpk,
             format: str | None = None,
         ) -> str | None:
@@ -2413,9 +2417,9 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                     topic=topic,
                     group=group_id,
                     n=1,
-                    timeout=10,
+                    timeout=fetch_max_wait + 5,
                     offset="start",
-                    fetch_max_wait=5,
+                    fetch_max_wait=fetch_max_wait,
                     format=format,
                 )
             except Exception as e:
@@ -2454,11 +2458,29 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
             return True
 
         def _execute_random_updates(cnt: int):
+            backoff_sec = 2
+            backoff_and_a_bit_sec = backoff_sec + 1
+            retries = 3
+            fetch_max_wait_sec = failure_duration + 5
+            fetch_timeout_sec = fetch_max_wait_sec + 5
+            iteration_timeout_sec = (
+                fetch_timeout_sec + backoff_and_a_bit_sec
+            ) * retries
             for _ in range(cnt):
                 topic = topics[random.randint(0, len(topics) - 1)].name
                 group = groups[random.randint(0, len(groups) - 1)]
                 self.logger.debug(f"Consuming from topic {topic}, group {group}")
-                _consume_with_group(topic, group)
+                wait_until(
+                    lambda: _consume_with_group(
+                        topic,
+                        group,
+                        fetch_max_wait=fetch_max_wait_sec,
+                    )
+                    is not None,
+                    timeout_sec=iteration_timeout_sec,
+                    backoff_sec=backoff_sec,
+                    err_msg=f"Failed to consume from topic {topic}, group {group}",
+                )
 
         for t in topics:
             self.source_default_client().create_topic(t)
@@ -2527,6 +2549,7 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                         group_name,
                         rpk=target_rpk,
                         format="%p,%o\n",
+                        fetch_max_wait=5,
                     )
                     assert r is not None, f"Failed to consume from {group_name=}"
                     p, consumed = (int(v) for v in r.split(","))

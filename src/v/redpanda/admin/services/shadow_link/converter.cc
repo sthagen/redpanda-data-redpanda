@@ -30,6 +30,7 @@ using proto::admin::authentication_configuration;
 using proto::admin::consumer_offset_sync_options;
 using proto::admin::create_shadow_link_request;
 using proto::admin::name_filter;
+using proto::admin::plain_config;
 using proto::admin::schema_registry_sync_options;
 using proto::admin::schema_registry_sync_options_shadow_schema_registry_topic;
 using proto::admin::scram_config;
@@ -407,6 +408,19 @@ create_authn_settings(const authentication_configuration& authn_config) {
             scram_mechanism_to_string(scram.get_scram_mechanism())};
           return creds;
       },
+      [](const plain_config& plain)
+        -> cluster_link::model::connection_config::authn_variant {
+          if (plain.get_username().empty() || plain.get_password().empty()) {
+              throw std::invalid_argument(
+                "When setting PLAIN configuration, must provide username and "
+                "password");
+          }
+          cluster_link::model::scram_credentials creds;
+          creds.username = plain.get_username();
+          creds.password = plain.get_password();
+          creds.mechanism = "PLAIN";
+          return creds;
+      },
       [](std::monostate)
         -> cluster_link::model::connection_config::authn_variant {
           throw std::invalid_argument(
@@ -524,26 +538,38 @@ authentication_configuration create_authentication_configuration(
       authn,
       [](const cluster_link::model::scram_credentials& scram)
         -> authentication_configuration {
-          scram_config scram_proto;
-          scram_proto.set_username(ss::sstring{scram.username});
-          scram_proto.set_password_set(true);
-          scram_proto.set_password_set_at(
-            absl::FromChrono(
-              model::to_time_point(scram.password_last_updated)));
-          scram_proto.set_scram_mechanism(
-            proto::admin::scram_mechanism::unspecified);
-          if (scram.mechanism == "SCRAM-SHA-256") {
-              scram_proto.set_scram_mechanism(
-                proto::admin::scram_mechanism::scram_sha_256);
-          } else if (scram.mechanism == "SCRAM-SHA-512") {
-              scram_proto.set_scram_mechanism(
-                proto::admin::scram_mechanism::scram_sha_512);
-          } else {
-              throw std::invalid_argument(
-                ssx::sformat("Unknown SCRAM mechanism: {}", scram.mechanism));
-          }
           authentication_configuration authn;
-          authn.set_scram_configuration(std::move(scram_proto));
+          if (scram.mechanism == "PLAIN") {
+              plain_config plain_proto;
+              plain_proto.set_username(ss::sstring{scram.username});
+              plain_proto.set_password_set(true);
+              plain_proto.set_password_set_at(
+                absl::FromChrono(
+                  model::to_time_point(scram.password_last_updated)));
+              authn.set_plain_configuration(std::move(plain_proto));
+          } else {
+              scram_config scram_proto;
+              scram_proto.set_username(ss::sstring{scram.username});
+              scram_proto.set_password_set(true);
+              scram_proto.set_password_set_at(
+                absl::FromChrono(
+                  model::to_time_point(scram.password_last_updated)));
+              scram_proto.set_scram_mechanism(
+                proto::admin::scram_mechanism::unspecified);
+              if (scram.mechanism == "SCRAM-SHA-256") {
+                  scram_proto.set_scram_mechanism(
+                    proto::admin::scram_mechanism::scram_sha_256);
+              } else if (scram.mechanism == "SCRAM-SHA-512") {
+                  scram_proto.set_scram_mechanism(
+                    proto::admin::scram_mechanism::scram_sha_512);
+              } else {
+                  throw std::invalid_argument(
+                    ssx::sformat(
+                      "Unknown SCRAM mechanism: {}", scram.mechanism));
+              }
+
+              authn.set_scram_configuration(std::move(scram_proto));
+          }
           return authn;
       });
 }

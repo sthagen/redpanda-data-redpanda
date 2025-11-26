@@ -114,9 +114,7 @@ FIXTURE_TEST(remake_partition_test, remake_partition_fixture) {
     add_topic(model::topic_namespace_view{test_ntp}).get();
     wait_for_leader(test_ntp).get();
 
-    auto group
-      = controller->get_partition_manager().local().get(test_ntp)->group();
-    auto ec = controller->get_api().local().remake_partition(group).get();
+    auto ec = controller->get_api().local().remake_partition(test_ntp).get();
     BOOST_REQUIRE_EQUAL(ec, cluster::errc::success);
 
     // Wait till partition is recreated
@@ -234,8 +232,7 @@ FIXTURE_TEST(remake_partition_with_produce_test, remake_partition_fixture) {
         BOOST_REQUIRE_EQUAL(records.size(), total_num_records);
     }
 
-    auto group = p->group();
-    auto ec = controller->get_api().local().remake_partition(group).get();
+    auto ec = controller->get_api().local().remake_partition(test_ntp).get();
     BOOST_REQUIRE_EQUAL(ec, cluster::errc::success);
 
     // Wait till partition is recreated

@@ -4373,99 +4373,11 @@
     "@@toolchains_llvm+//toolchain/extensions:llvm.bzl%llvm": {
       "general": {
         "bzlTransitiveDigest": "c1HwgmsVfl3HQfJp5j/lYNFyGkE5EiG6RookiyKG0oM=",
-        "usagesDigest": "WPOfxHwPXkZYb3if92mQm4cdMnT15Uvnw9xGHXM2GCU=",
+        "usagesDigest": "OXxJAxR1mn/Pqehud4kY2dgNEDreduIrM+5001WyCKE=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
         "generatedRepoSpecs": {
-          "previous_llvm_toolchain_llvm": {
-            "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%llvm",
-            "attributes": {
-              "alternative_llvm_sources": [],
-              "auth_patterns": {},
-              "distribution": "auto",
-              "exec_arch": "",
-              "exec_os": "",
-              "extra_llvm_distributions": {},
-              "libclang_rt": {},
-              "llvm_mirror": "",
-              "llvm_version": "19.1.7",
-              "llvm_versions": {},
-              "netrc": "",
-              "sha256": {
-                "linux-aarch64": "cdba86609d71cfc379bfce9fb5ce97389cc08320fb713c6abab8d698a53e3fa2",
-                "linux-x86_64": "196ae29712c646f3ccc39edea880e8637025bd0aeae5892c48bfb1382fe127db"
-              },
-              "strip_prefix": {},
-              "urls": {
-                "linux-aarch64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/llvm-19.1.7-debian-11-aarch64-2025-03-15.tar.zst"
-                ],
-                "linux-x86_64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/llvm-19.1.7-debian-11-x86_64-2025-03-15.tar.zst"
-                ]
-              }
-            }
-          },
-          "previous_llvm_toolchain": {
-            "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%toolchain",
-            "attributes": {
-              "absolute_paths": false,
-              "archive_flags": {},
-              "compile_flags": {
-                "linux-aarch64": [
-                  "--target=aarch64-unknown-linux-gnu",
-                  "-march=armv8-a+crc+crypto",
-                  "-U_FORTIFY_SOURCE",
-                  "-fstack-protector",
-                  "-fno-omit-frame-pointer",
-                  "-fcolor-diagnostics",
-                  "-Wall",
-                  "-Wthread-safety",
-                  "-Wself-assign"
-                ],
-                "linux-x86_64": [
-                  "--target=x86_64-unknown-linux-gnu",
-                  "-march=westmere",
-                  "-U_FORTIFY_SOURCE",
-                  "-fstack-protector",
-                  "-fno-omit-frame-pointer",
-                  "-fcolor-diagnostics",
-                  "-Wall",
-                  "-Wthread-safety",
-                  "-Wself-assign"
-                ]
-              },
-              "conly_flags": {},
-              "coverage_compile_flags": {},
-              "coverage_link_flags": {},
-              "cxx_builtin_include_directories": {},
-              "cxx_flags": {},
-              "cxx_standard": {
-                "": "c++23"
-              },
-              "dbg_compile_flags": {},
-              "exec_arch": "",
-              "exec_os": "",
-              "extra_exec_compatible_with": {},
-              "extra_target_compatible_with": {},
-              "link_flags": {},
-              "link_libs": {},
-              "llvm_versions": {
-                "": "19.1.7"
-              },
-              "opt_compile_flags": {},
-              "opt_link_flags": {},
-              "stdlib": {},
-              "target_settings": {},
-              "unfiltered_compile_flags": {},
-              "toolchain_roots": {},
-              "sysroot": {
-                "linux-x86_64": "'@@+non_module_dependencies+x86_64_sysroot//:sysroot'",
-                "linux-aarch64": "'@@+non_module_dependencies+aarch64_sysroot//:sysroot'"
-              }
-            }
-          },
           "current_llvm_toolchain_llvm": {
             "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%llvm",
             "attributes": {
@@ -4541,6 +4453,94 @@
               "link_libs": {},
               "llvm_versions": {
                 "": "20.1.8"
+              },
+              "opt_compile_flags": {},
+              "opt_link_flags": {},
+              "stdlib": {},
+              "target_settings": {},
+              "unfiltered_compile_flags": {},
+              "toolchain_roots": {},
+              "sysroot": {
+                "linux-x86_64": "'@@+non_module_dependencies+x86_64_sysroot//:sysroot'",
+                "linux-aarch64": "'@@+non_module_dependencies+aarch64_sysroot//:sysroot'"
+              }
+            }
+          },
+          "next_llvm_toolchain_llvm": {
+            "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%llvm",
+            "attributes": {
+              "alternative_llvm_sources": [],
+              "auth_patterns": {},
+              "distribution": "auto",
+              "exec_arch": "",
+              "exec_os": "",
+              "extra_llvm_distributions": {},
+              "libclang_rt": {},
+              "llvm_mirror": "",
+              "llvm_version": "21.1.6",
+              "llvm_versions": {},
+              "netrc": "",
+              "sha256": {
+                "linux-aarch64": "37257804087a26b0ede7c0349d3f44db7b7439e551fc6c753f7934ead654c1b8",
+                "linux-x86_64": "b3aa9cb72c2e46bd1cc3f17f3772b37a424e54f796253961382163eab2f4a9c0"
+              },
+              "strip_prefix": {},
+              "urls": {
+                "linux-aarch64": [
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-21.1.6/llvm-21.1.6-debian-11-aarch64-2025-11-25.tar.zst"
+                ],
+                "linux-x86_64": [
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-21.1.6/llvm-21.1.6-debian-11-x86_64-2025-11-25.tar.zst"
+                ]
+              }
+            }
+          },
+          "next_llvm_toolchain": {
+            "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%toolchain",
+            "attributes": {
+              "absolute_paths": false,
+              "archive_flags": {},
+              "compile_flags": {
+                "linux-aarch64": [
+                  "--target=aarch64-unknown-linux-gnu",
+                  "-march=armv8-a+crc+crypto",
+                  "-U_FORTIFY_SOURCE",
+                  "-fstack-protector",
+                  "-fno-omit-frame-pointer",
+                  "-fcolor-diagnostics",
+                  "-Wall",
+                  "-Wthread-safety",
+                  "-Wself-assign"
+                ],
+                "linux-x86_64": [
+                  "--target=x86_64-unknown-linux-gnu",
+                  "-march=westmere",
+                  "-U_FORTIFY_SOURCE",
+                  "-fstack-protector",
+                  "-fno-omit-frame-pointer",
+                  "-fcolor-diagnostics",
+                  "-Wall",
+                  "-Wthread-safety",
+                  "-Wself-assign"
+                ]
+              },
+              "conly_flags": {},
+              "coverage_compile_flags": {},
+              "coverage_link_flags": {},
+              "cxx_builtin_include_directories": {},
+              "cxx_flags": {},
+              "cxx_standard": {
+                "": "c++23"
+              },
+              "dbg_compile_flags": {},
+              "exec_arch": "",
+              "exec_os": "",
+              "extra_exec_compatible_with": {},
+              "extra_target_compatible_with": {},
+              "link_flags": {},
+              "link_libs": {},
+              "llvm_versions": {
+                "": "21.1.6"
               },
               "opt_compile_flags": {},
               "opt_link_flags": {},

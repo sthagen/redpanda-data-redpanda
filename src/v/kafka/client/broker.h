@@ -191,6 +191,8 @@ private:
     ss::future<>
     do_authenticate_scram512(ss::sstring username, ss::sstring password);
     ss::future<> do_authenticate_oauthbearer(ss::sstring token);
+    ss::future<>
+    do_authenticate_plain(ss::sstring username, ss::sstring password);
     ss::future<security::server_first_message>
     send_scram_client_first(const security::client_first_message& client_first);
     ss::future<security::server_final_message>

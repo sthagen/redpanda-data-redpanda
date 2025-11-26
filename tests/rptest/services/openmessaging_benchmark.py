@@ -26,7 +26,7 @@ from rptest.services.redpanda import (
     RedpandaService,
     RedpandaServiceCloud,
 )
-from rptest.services.utils import BadLogLines, VersionAndLines
+from rptest.services.utils import BadLogLines, NodeToLines, VersionAndLines
 
 from ducktape.tests.test import TestContext
 
@@ -150,7 +150,7 @@ class OpenMessagingBenchmarkWorkers(Service):
         def make_vl() -> VersionAndLines:
             return {"version": None, "lines": []}
 
-        bad_lines: dict[ClusterNode, VersionAndLines] = collections.defaultdict(make_vl)
+        bad_lines: NodeToLines = collections.defaultdict(make_vl)
         self.logger.info(f"Scanning node {node.account.hostname} log for errors...")
 
         for line in node.account.ssh_capture(
@@ -420,7 +420,7 @@ class OpenMessagingBenchmark(Service):
         def make_vl() -> VersionAndLines:
             return {"version": None, "lines": []}
 
-        bad_lines: dict[ClusterNode, VersionAndLines] = collections.defaultdict(make_vl)
+        bad_lines: NodeToLines = collections.defaultdict(make_vl)
         self.logger.info(f"Scanning node {node.account.hostname} log for errors...")
 
         for line in node.account.ssh_capture(

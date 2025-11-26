@@ -8,7 +8,7 @@
 # by the Apache License, Version 2.0
 
 import confluent_kafka as ck
-from ducktape.cluster.cluster import ClusterNode
+from ducktape.mark import ignore
 from ducktape.utils.util import wait_until
 
 from rptest.clients.rpk import AclList, RpkTool
@@ -37,7 +37,6 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
         extra_rp_conf = {
             "enable_leader_balancer": False,
             "partition_autobalancing_mode": "off",
-            "group_initial_rebalance_delay": 1,
         }
 
         super().__init__(
@@ -96,15 +95,15 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
     def allow_principal_sync(self, principal, operations, resource, resource_name):
         self.rpk.sasl_allow_principal(principal, operations, resource, resource_name)
 
-        def acl_ready(node: ClusterNode):
-            lst = AclList.parse_raw(self.rpk.acl_list(node=node))
+        def acl_ready():
+            lst = AclList.parse_raw(self.rpk.acl_list())
             return [
                 lst.has_permission(principal, op, resource, resource_name)
                 for op in operations
             ]
 
         wait_until(
-            lambda: all(acl_ready(node) for node in self.redpanda.nodes),
+            lambda: acl_ready(),
             timeout_sec=5,
             backoff_sec=1,
             err_msg="ACL not updated in time",
@@ -127,6 +126,7 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
 
         self.sasl_txn_producer(user, cfg=producer_cfg)
 
+    @ignore  # https://github.com/redpanda-data/redpanda/pull/26968 - broken by newer librdkafka
     @cluster(num_nodes=3)
     def simple_authz_test(self):
         consume_user = self.USER_1
@@ -186,8 +186,16 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
         with try_transaction(
             producer,
             consumer,
-            send_offset_err=ck.KafkaError.TOPIC_AUTHORIZATION_FAILED,
-            commit_err=ck.KafkaError.TOPIC_AUTHORIZATION_FAILED,
+            send_offset_err=ck.KafkaError.GROUP_AUTHORIZATION_FAILED,
+            commit_err=ck.KafkaError.GROUP_AUTHORIZATION_FAILED,
+        ):
+            process_records(producer, records, on_delivery_purged)
+
+        self.allow_principal_sync(produce_user.username, ["read"], "group", "test")
+
+        producer = self.sasl_txn_producer(produce_user, cfg=producer_cfg)
+        with try_transaction(
+            producer, consumer, commit_err=ck.KafkaError.TOPIC_AUTHORIZATION_FAILED
         ):
             process_records(producer, records, on_delivery_purged)
 
@@ -195,18 +203,10 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
             produce_user.username, ["write"], "topic", self.output_t.name
         )
 
-        with try_transaction(
-            producer,
-            consumer,
-            send_offset_err=ck.KafkaError.GROUP_AUTHORIZATION_FAILED,
-            commit_err=ck.KafkaError.GROUP_AUTHORIZATION_FAILED,
-        ):
-            process_records(producer, records, self.on_delivery)
-
-        self.allow_principal_sync(produce_user.username, ["read"], "group", "test")
-
         # Now we have all the requisite permissions set up, and we should be able to
         # make progress
+
+        producer = self.sasl_txn_producer(produce_user, cfg=producer_cfg)
 
         num_consumed_records = 0
         consumed_from_input_topic = []

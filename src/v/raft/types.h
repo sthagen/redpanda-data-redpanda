@@ -252,49 +252,6 @@ struct heartbeat_metadata {
     operator<<(std::ostream& o, const heartbeat_metadata& r);
 };
 
-/// \brief this is our _biggest_ modification to how raft works
-/// to accomodate for millions of raft groups in a cluster.
-/// internally, the receiving side will simply iterate and dispatch one
-/// at a time, as well as the receiving side will trigger the
-/// individual raft responses one at a time - for example to start replaying the
-/// log at some offset
-struct heartbeat_request
-  : serde::
-      envelope<heartbeat_request, serde::version<0>, serde::compat_version<0>> {
-    std::vector<heartbeat_metadata> heartbeats;
-
-    heartbeat_request() noexcept = default;
-    explicit heartbeat_request(std::vector<heartbeat_metadata> heartbeats)
-      : heartbeats(std::move(heartbeats)) {}
-
-    friend std::ostream&
-    operator<<(std::ostream& o, const heartbeat_request& r);
-
-    friend bool operator==(const heartbeat_request&, const heartbeat_request&)
-      = default;
-
-    ss::future<> serde_async_write(iobuf& out);
-    void serde_read(iobuf_parser&, const serde::header&);
-};
-
-struct heartbeat_reply
-  : serde::
-      envelope<heartbeat_reply, serde::version<0>, serde::compat_version<0>> {
-    std::vector<append_entries_reply> meta;
-
-    heartbeat_reply() noexcept = default;
-    explicit heartbeat_reply(std::vector<append_entries_reply> meta)
-      : meta(std::move(meta)) {}
-
-    friend std::ostream& operator<<(std::ostream& o, const heartbeat_reply& r);
-
-    friend bool operator==(const heartbeat_reply&, const heartbeat_reply&)
-      = default;
-
-    void serde_write(iobuf& out);
-    void serde_read(iobuf_parser&, const serde::header&);
-};
-
 struct vote_request
   : serde::envelope<vote_request, serde::version<0>, serde::compat_version<0>> {
     vnode node_id;
@@ -627,55 +584,6 @@ struct xshard_transfer_state {
     // corresponding term. It will be used to try to immediately regain the
     // leadership on the destination shard.
     std::optional<model::term_id> leader_term;
-};
-
-struct remake_learner_state_request
-  : serde::envelope<
-      remake_learner_state_request,
-      serde::version<0>,
-      serde::compat_version<0>> {
-    friend std::ostream&
-    operator<<(std::ostream& o, const remake_learner_state_request& r) {
-        fmt::print(
-          o,
-          "{{node_id: {}, target_node_id: {}, group: {}, term: {}}}",
-          r.node_id,
-          r.target_node_id,
-          r.group,
-          r.term);
-        return o;
-    }
-
-    auto serde_fields() {
-        return std::tie(node_id, target_node_id, group, term);
-    }
-
-    raft::group_id target_group() const { return group; }
-    vnode source_node() const { return node_id; }
-    vnode target_node() const { return target_node_id; }
-
-    vnode node_id;
-    vnode target_node_id;
-    raft::group_id group;
-    model::term_id term;
-};
-
-struct remake_learner_state_reply
-  : serde::envelope<
-      remake_learner_state_reply,
-      serde::version<0>,
-      serde::compat_version<0>> {
-    using is_success = ss::bool_class<struct remake_learner_state_tag>;
-
-    friend std::ostream&
-    operator<<(std::ostream& o, const remake_learner_state_reply& r) {
-        fmt::print(o, "success: {}", r.success);
-        return o;
-    }
-
-    auto serde_fields() { return std::tie(success); }
-
-    is_success success = is_success::no;
 };
 
 struct get_compaction_mcco_request

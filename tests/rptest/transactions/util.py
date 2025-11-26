@@ -38,8 +38,7 @@ def try_transaction(
 
     yield
 
-    while producer.flush(0) > 0:
-        producer.poll(0.1)
+    producer.flush(0.0)
 
     with expect_kafka_error(send_offset_err):
         producer.send_offsets_to_transaction(

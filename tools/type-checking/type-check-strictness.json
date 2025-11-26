@@ -318,7 +318,6 @@
         "rptest/services/tls.py",
         "rptest/services/transform_verifier_service.py",
         "rptest/services/trino_service.py",
-        "rptest/services/utils.py",
         "rptest/tests/acls_test.py",
         "rptest/tests/adjacent_segment_merging_test.py",
         "rptest/tests/admin_api_auth_test.py",
