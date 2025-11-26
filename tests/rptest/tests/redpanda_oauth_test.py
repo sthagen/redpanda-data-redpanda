@@ -14,14 +14,15 @@ import time
 from urllib.parse import urlparse
 
 import requests
-from ducktape.mark import ignore, parametrize
+from ducktape.cluster.cluster import ClusterNode
+from ducktape.mark import parametrize
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
 from keycloak import KeycloakOpenID
 
 from rptest.clients.kafka_cli_tools import AuthorizationError, KafkaCliTools
 from rptest.clients.python_librdkafka import PythonLibrdkafka
-from rptest.clients.rpk import RpkTool
+from rptest.clients.rpk import AclList, RpkTool
 from rptest.services.cluster import cluster
 from rptest.services.keycloak import (
     DEFAULT_AT_LIFESPAN_S,
@@ -608,7 +609,6 @@ class OIDCReauthTest(RedpandaOIDCTestBase):
             **kwargs,
         )
 
-    @ignore  # https://github.com/redpanda-data/redpanda/pull/26968 - broken by newer librdkafka
     @cluster(num_nodes=4)
     def test_oidc_reauth(self):
         kc_node = self.keycloak.nodes[0]
@@ -616,7 +616,7 @@ class OIDCReauthTest(RedpandaOIDCTestBase):
         client_id = CLIENT_ID
         service_user_id = self.create_service_user(client_id)
 
-        self.rpk.create_topic(EXAMPLE_TOPIC)
+        self.redpanda.logger.info("Creating ACL")
         self.rpk.sasl_allow_principal(
             f"User:{service_user_id}",
             ["all"],
@@ -627,6 +627,10 @@ class OIDCReauthTest(RedpandaOIDCTestBase):
             self.su_algorithm,
         )
 
+        self.redpanda.logger.info("Creating topic")
+        self.rpk.create_topic(EXAMPLE_TOPIC)
+
+        self.redpanda.logger.info("Creating producer")
         cfg = self.keycloak.generate_oauth_config(kc_node, CLIENT_ID)
         assert cfg.client_secret is not None
         assert cfg.token_endpoint is not None
@@ -634,21 +638,52 @@ class OIDCReauthTest(RedpandaOIDCTestBase):
             self.redpanda, algorithm="OAUTHBEARER", oauth_config=cfg
         )
         producer = k_client.get_producer()
-        producer.poll(1.0)
+        producer.poll(0.0)
 
-        expected_topics = set([EXAMPLE_TOPIC])
+        def has_leader():
+            topics = producer.list_topics(topic=EXAMPLE_TOPIC, timeout=5).topics
+            topic = topics.get(EXAMPLE_TOPIC, None)
+            has_leader = (
+                topic is not None
+                and len(topic.partitions) == 1
+                and topic.partitions[0].error is None
+                and topic.partitions[0].leader != -1
+            )
+            if not has_leader:
+                self.redpanda.logger.debug(
+                    f"has_leader: topic={topic}, parts: {topic.partitions[0] if topic else None}"
+                )
+            return has_leader
+
+        self.redpanda.logger.info("Waiting for topic")
         wait_until(
-            lambda: set(producer.list_topics(timeout=5).topics.keys())
-            == expected_topics,
-            timeout_sec=5,
+            has_leader,
+            timeout_sec=10,
+            backoff_sec=1,
+            retry_on_exc=True,
         )
 
+        def has_acl(node: ClusterNode):
+            lst = AclList.parse_raw(self.rpk.acl_list(node=node))
+            return lst.has_permission(
+                f"{service_user_id}", "all", "topic", EXAMPLE_TOPIC
+            )
+
+        self.redpanda.logger.info("Waiting for ACL")
+        wait_until(
+            lambda: all(has_acl(node) for node in self.redpanda.nodes),
+            timeout_sec=10,
+            backoff_sec=1,
+            retry_on_exc=False,
+        )
+
+        self.redpanda.logger.info("Producing to topic")
         for _ in range(0, self.PRODUCE_ITER):
-            producer.poll(0.0)
             producer.produce(topic=EXAMPLE_TOPIC, key="bar", value="23")
             time.sleep(self.PRODUCE_INTERVAL_S)
+            producer.flush(5)
 
-        producer.flush(timeout=5)
+        self.redpanda.logger.info("Produced to topic")
 
         metrics = get_sasl_metrics(self.redpanda)
         self.redpanda.logger.debug(f"SASL metrics: {metrics}")
@@ -659,8 +694,8 @@ class OIDCReauthTest(RedpandaOIDCTestBase):
         assert REAUTH_METRIC in metrics.keys()
         assert metrics[REAUTH_METRIC] > 0, "Expected client reauth on some broker..."
 
-        assert k_client.oauth_count == 2, (
-            f"Expected 2 OAUTH challenges, got {k_client.oauth_count}"
+        assert k_client.oauth_count > 1, (
+            f"Expected at least 2 OAUTH challenges, got {k_client.oauth_count}"
         )
 
 

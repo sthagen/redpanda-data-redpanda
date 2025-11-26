@@ -357,6 +357,8 @@ TEST_F_CORO(ctp_stm_fixture, truncates_below_lro) {
         co_await replicate_record_batch(
           leader, make_record_batch(ct::cluster_epoch{1}, model::offset{o}, 0));
     }
+    // Wait for all nodes to replicate up to offset 1023 before rolling.
+    co_await wait_for_committed_offset(model::offset{1023}, 10s);
     // Segment roll on all the nodes so we can take a snapshot.
     for (auto& vnode : all_vnodes()) {
         co_await node(vnode.id()).raft()->log()->force_roll();
@@ -389,6 +391,8 @@ TEST_F_CORO(ctp_stm_fixture, can_replay_truncated_log) {
         co_await replicate_record_batch(
           leader, make_record_batch(ct::cluster_epoch{1}, model::offset{o}, 0));
     }
+    // Wait for all nodes to replicate up to offset 1023 before rolling.
+    co_await wait_for_committed_offset(model::offset{1023}, 10s);
     // Segment roll on all the nodes so we can take a snapshot.
     for (auto& vnode : all_vnodes()) {
         co_await node(vnode.id()).raft()->log()->force_roll();

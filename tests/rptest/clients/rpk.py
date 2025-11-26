@@ -485,6 +485,7 @@ class RpkTool:
         perm = f"--allow-{ptype}" if not deny else f"--deny-{ptype}"
 
         cmd = [
+            "security",
             "acl",
             "create",
             perm,

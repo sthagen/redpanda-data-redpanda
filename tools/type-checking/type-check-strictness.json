@@ -199,7 +199,6 @@
         "rptest/tests/tiered_storage_pause_test.py",
         "rptest/tests/timestamp_policy_test.py",
         "rptest/tests/topic_id_migrator_test.py",
-        "rptest/tests/topic_label_aggregation_test.py",
         "rptest/tests/topic_limits_test.py",
         "rptest/tests/upgrade_with_workload.py",
         "rptest/tests/usage_stats_test.py",

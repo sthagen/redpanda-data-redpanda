@@ -2196,6 +2196,11 @@ ss::future<> disk_log_impl::force_roll() {
     auto roll_lock_holder = co_await _segments_rolling_lock.get_units();
     auto t = term();
     auto next_offset = model::next_offset(offsets().dirty_offset);
+    vlog(
+      stlog.debug,
+      "{} force_roll: new segment start offset {}",
+      config().ntp(),
+      next_offset);
     if (_segs.empty()) {
         co_return co_await new_segment(next_offset, t);
     }
