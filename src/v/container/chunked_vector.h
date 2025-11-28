@@ -482,6 +482,9 @@ public:
     using const_iterator = iter<true>;
     using iterator = iter<false>;
 
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+
     iterator begin() { return iterator(this, 0); }
     iterator end() { return iterator(this, _size); }
 
@@ -490,6 +493,23 @@ public:
 
     const_iterator cbegin() const { return const_iterator(this, 0); }
     const_iterator cend() const { return const_iterator(this, _size); }
+
+    reverse_iterator rbegin() { return reverse_iterator(end()); }
+    reverse_iterator rend() { return reverse_iterator(begin()); }
+
+    const_reverse_iterator rbegin() const {
+        return const_reverse_iterator(end());
+    }
+    const_reverse_iterator rend() const {
+        return const_reverse_iterator(begin());
+    }
+
+    const_reverse_iterator crbegin() const {
+        return const_reverse_iterator(end());
+    }
+    const_reverse_iterator crend() const {
+        return const_reverse_iterator(begin());
+    }
 
     /**
      * @brief Erases all elements from begin to the end of the vector.

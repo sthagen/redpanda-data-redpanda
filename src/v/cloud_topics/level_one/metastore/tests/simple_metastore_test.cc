@@ -105,12 +105,12 @@ public:
       std::optional<model::timestamp> with_tombstones_ts = std::nullopt) {
         auto tp = model::topic_id_partition::from(tpr_str);
         auto& cmp_meta = out[tp];
-        cmp_meta.new_cleaned_range
-          = metastore::compaction_update::cleaned_range{
+        cmp_meta.new_cleaned_ranges.push_back(
+          metastore::compaction_update::cleaned_range{
             .base_offset = base,
             .last_offset = last,
             .has_tombstones = with_tombstones_ts.has_value(),
-          };
+          });
         if (with_tombstones_ts) {
             cmp_meta.cleaned_at = *with_tombstones_ts;
         }
@@ -1648,4 +1648,70 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetAfterBytes) {
     ASSERT_FALSE(get_res.has_value()) << "for size: " << query_size;
     ASSERT_EQ(get_res.error(), metastore::errc::out_of_range)
       << "for size: " << query_size;
+}
+
+TEST(SimpleMetastoreTest, TestCompactionMultipleDirtyRangesMadeClean) {
+    simple_metastore m;
+    {
+        om_list_t os;
+        os.emplace_back(om_builder(oid1, 100, 1100)
+                          .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
+                          .build());
+        auto add_res = m.add_objects(
+                          os, terms_builder().add(tid_a, 0_tm, 0_o).build())
+                         .get();
+        ASSERT_TRUE(add_res.has_value());
+    }
+
+    // Clean range is [5, 15].
+    {
+        om_list_t os;
+        os.emplace_back(om_builder(oid2, 100, 1100)
+                          .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
+                          .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 5_o, 15_o, 3000_t);
+        auto compact_res = m.compact_objects(os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    {
+        // Verify compaction state and dirty ranges: [0, 4] and [16, 20].
+        auto cmp = m.get_compaction_offsets(tp, 3000_t).get();
+        ASSERT_TRUE(cmp.has_value());
+        EXPECT_THAT(
+          cmp->dirty_ranges.to_vec(),
+          testing::ElementsAre(
+            MatchesRange(0_o, 4_o), MatchesRange(16_o, 20_o)));
+        EXPECT_THAT(
+          cmp->removable_tombstone_ranges.to_vec(),
+          testing::ElementsAre(MatchesRange(5_o, 15_o)));
+    }
+
+    // Clean range is [5, 15]. Try to make both of [[0, 4], [16, 20]] clean.
+    {
+        om_list_t os;
+        os.emplace_back(om_builder(oid3, 100, 1100)
+                          .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
+                          .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 0_o, 4_o, 6000_t);
+        cmb.clean(tid_a, 16_o, 20_o, 6000_t);
+        auto compact_res = m.compact_objects(os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    {
+        // Verify compaction state (no dirty ranges).
+        auto cmp_before = m.get_compaction_offsets(tp, 6000_t).get();
+        ASSERT_TRUE(cmp_before.has_value());
+        EXPECT_THAT(cmp_before->dirty_ranges.to_vec(), testing::IsEmpty());
+        EXPECT_THAT(
+          cmp_before->removable_tombstone_ranges.to_vec(),
+          testing::ElementsAre(MatchesRange(0_o, 20_o)));
+    }
 }

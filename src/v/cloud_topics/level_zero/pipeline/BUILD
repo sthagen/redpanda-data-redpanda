@@ -100,6 +100,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
+        "//src/v/cloud_topics/level_zero/common:micro_probe",
         "//src/v/container:chunked_vector",
         "//src/v/container:intrusive",
         "//src/v/model",

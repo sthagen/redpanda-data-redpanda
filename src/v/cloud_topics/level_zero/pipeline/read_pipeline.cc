@@ -131,6 +131,7 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
         co_return errc::shutting_down;
     }
     auto res = co_await std::move(fut);
+
     if (res.has_error()) {
         if (res.error() == errc::timeout) {
             err_fallback.cancel();

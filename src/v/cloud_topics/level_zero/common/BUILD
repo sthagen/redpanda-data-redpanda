@@ -32,6 +32,13 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "micro_probe",
+    hdrs = [
+        "micro_probe.h",
+    ],
+)
+
+redpanda_cc_library(
     name = "level_zero_probe",
     srcs = [
         "level_zero_probe.cc",
@@ -40,6 +47,7 @@ redpanda_cc_library(
         "level_zero_probe.h",
     ],
     deps = [
+        ":micro_probe",
         "//src/v/metrics",
         "//src/v/utils:hdr_hist",
         "//src/v/utils:log_hist",

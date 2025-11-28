@@ -468,13 +468,17 @@ simple_metastore::compact_objects(
       compaction_updates;
     for (const auto& [tp, cm] : compaction_metas) {
         compaction_state_update p_update;
-        if (cm.new_cleaned_range.has_value()) {
-            p_update.new_cleaned_range.emplace(
-              compaction_state_update::cleaned_range{
-                .base_offset = cm.new_cleaned_range->base_offset,
-                .last_offset = cm.new_cleaned_range->last_offset,
-                .has_tombstones = cm.new_cleaned_range->has_tombstones,
-              });
+        if (!cm.new_cleaned_ranges.empty()) {
+            auto& new_cleaned_ranges = cm.new_cleaned_ranges;
+            chunked_vector<compaction_state_update::cleaned_range> ranges;
+            ranges.reserve(new_cleaned_ranges.size());
+            for (const auto& cleaned_range : new_cleaned_ranges) {
+                ranges.push_back(
+                  {.base_offset = cleaned_range.base_offset,
+                   .last_offset = cleaned_range.last_offset,
+                   .has_tombstones = cleaned_range.has_tombstones});
+            }
+            p_update.new_cleaned_ranges = std::move(ranges);
         }
         p_update.removed_tombstones_ranges = cm.removed_tombstones_ranges;
         p_update.cleaned_at = cm.cleaned_at;

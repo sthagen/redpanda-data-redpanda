@@ -888,6 +888,7 @@
           {
             "name": "version",
             "in": "path",
+            "description": "The schema version to retrieve. Use an integer for a specific version or 'latest' for the most recent version.",
             "required": true,
             "type": "string"
           },
@@ -956,6 +957,7 @@
           {
             "name": "version",
             "in": "path",
+            "description": "The schema version to delete. Use an integer for a specific version or 'latest' for the most recent version.",
             "required": true,
             "type": "string"
           },
@@ -1014,6 +1016,7 @@
           {
             "name": "version",
             "in": "path",
+            "description": "The schema version to retrieve. Use an integer for a specific version or 'latest' for the most recent version.",
             "required": true,
             "type": "string"
           },
@@ -1084,6 +1087,7 @@
           {
             "name": "version",
             "in": "path",
+            "description": "The schema version to check. Use an integer for a specific version or 'latest' for the most recent version.",
             "required": true,
             "type": "string"
           }
@@ -1139,6 +1143,7 @@
           {
             "name": "version",
             "in": "path",
+            "description": "The schema version to check. Use an integer for a specific version or 'latest' for the most recent version.",
             "required": true,
             "type": "string"
           }
@@ -1198,8 +1203,9 @@
           {
             "name": "version",
             "in": "path",
+            "description": "The schema version to check compatibility against. Use an integer for a specific version or 'latest' for the most recent version.",
             "required": true,
-            "type": "integer"
+            "type": "string"
           },
           {
             "name": "schema_def",

@@ -109,6 +109,11 @@ public:
 
         basic_retry_chain_logger<Clock>& logger() noexcept { return _logger; }
 
+        /// Track per-request statistics
+        void register_micro_probe(const micro_probe& p) {
+            _parent->_probe.register_micro_probe(p);
+        }
+
     private:
         pipeline_stage _ps;
         read_pipeline<Clock>* _parent;

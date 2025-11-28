@@ -15,6 +15,7 @@
 #include "cloud_io/io_result.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
+#include "cloud_topics/level_zero/common/micro_probe.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
 #include "storage/record_batch_utils.h"
@@ -118,21 +119,24 @@ model::record_batch make_raft_data_batch(materialized_extent ext) {
 
 ss::future<result<iobuf>> materialize_from_cache(
   std::filesystem::path cache_file_name,
-  cloud_io::basic_cache_service_api<>* cache);
+  cloud_io::basic_cache_service_api<>* cache,
+  micro_probe* probe);
 
 ss::future<result<iobuf>> materialize_from_cloud_storage(
   std::filesystem::path cache_file_name,
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
-  basic_retry_chain_node<>* rtc);
+  basic_retry_chain_node<>* rtc,
+  micro_probe* probe);
 
 ss::future<result<bool>> materialize(
   materialized_extent* ext,
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
-  basic_retry_chain_node<>* rtc) {
+  basic_retry_chain_node<>* rtc,
+  micro_probe* probe) {
     bool hydrated = false;
     // This iobuf contains the record batch replaced by the placeholder. It
     // might potentially contain data that belongs to other placeholder
@@ -181,14 +185,15 @@ ss::future<result<bool>> materialize(
     }
 
     if (status.value() == cloud_io::cache_element_status::available) {
-        auto res = co_await materialize_from_cache(cache_file_name, cache);
+        auto res = co_await materialize_from_cache(
+          cache_file_name, cache, probe);
         if (res.has_error()) {
             co_return res.error();
         }
         ext->object = std::move(res.value());
     } else {
         auto res = co_await materialize_from_cloud_storage(
-          cache_file_name, bucket, api, cache, rtc);
+          cache_file_name, bucket, api, cache, rtc, probe);
         if (res.has_error()) {
             co_return res.error();
         }
@@ -199,9 +204,10 @@ ss::future<result<bool>> materialize(
 
 ss::future<result<iobuf>> materialize_from_cache(
   std::filesystem::path cache_file_name,
-  cloud_io::basic_cache_service_api<>* cache) {
+  cloud_io::basic_cache_service_api<>* cache,
+  micro_probe* probe) {
     iobuf result_buf;
-
+    probe->num_cache_reads++;
     auto buffer_size = config::shard_local_cfg().storage_read_buffer_size();
     auto read_ahead = config::shard_local_cfg().storage_read_readahead_count();
     auto fut = co_await ss::coroutine::as_future(
@@ -217,6 +223,7 @@ ss::future<result<iobuf>> materialize_from_cache(
     }
 
     auto target = make_iobuf_ref_output_stream(result_buf);
+    probe->cache_read_bytes += sz_stream->size;
     co_await ss::copy(sz_stream->body, target);
     co_await sz_stream->body.close();
     co_return result_buf;
@@ -227,17 +234,24 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
-  basic_retry_chain_node<>* rtc) {
+  basic_retry_chain_node<>* rtc,
+  micro_probe* probe) {
     // Populate the cache
     iobuf payload;
     cloud_io::download_request req{
-                .transfer_details = {
-                    .bucket = bucket, 
-                    .key = cloud_storage_clients::object_key(cache_file_name), 
-                    .parent_rtc = *rtc,
-                    },
-                .display_str = "L0",
-                .payload = payload};
+      .transfer_details = {
+        .bucket = bucket,
+        .key = cloud_storage_clients::object_key(cache_file_name),
+        .parent_rtc = *rtc,
+        .success_cb =
+          [probe, &payload] {
+              probe->num_cloud_reads++;
+              probe->cloud_read_bytes += payload.size_bytes();
+          },
+        .backoff_cb = [probe] { probe->num_cloud_reads++; },
+      },
+      .display_str = "L0",
+      .payload = payload};
 
     auto dl_result = result_from_ready_future(
       co_await ss::coroutine::as_future(api->download_object(std::move(req))),
@@ -275,6 +289,7 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
 
     if (!sr_guard.has_error()) {
         // TODO: use proper priority class
+        probe->num_cache_writes++;
         auto put_future = co_await ss::coroutine::as_future(
           cache->put(cache_file_name, buf_str, sr_guard.value()));
 
@@ -289,6 +304,8 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
               "be "
               "propagated to the client but Redpanda may use more resources.",
               e);
+        } else {
+            probe->cache_write_bytes += payload.size_bytes();
         }
     } else if (sr_guard.error() == errc::shutting_down) {
         co_return errc::shutting_down;

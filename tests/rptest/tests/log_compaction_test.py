@@ -930,6 +930,16 @@ class LogCompactionTxRemovalUpgradeTest(LogCompactionTxRemovalTestBase):
         self.redpanda._installer.install(self.redpanda.nodes, version)
         self.redpanda.restart_nodes(self.redpanda.nodes)
 
+        wait_until(
+            self.redpanda.healthy,
+            timeout_sec=20,
+            backoff_sec=2,
+            err_msg="Cluster did not become healthy after restart/upgrade",
+        )
+        self.redpanda._admin.await_stable_leader(
+            namespace="redpanda", topic="controller", partition=0
+        )
+
     @cluster(num_nodes=4)
     @matrix(test_case_name=list(LogCompactionTxRemovalTestBase.test_cases.keys()))
     def test_tx_control_batch_removal_with_upgrade(self, test_case_name):

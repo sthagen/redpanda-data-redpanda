@@ -64,12 +64,17 @@ compaction_state_update
 meta_to_rpc_compact_update(const metastore::compaction_update& update) {
     compaction_state_update rpc_update;
 
-    if (update.new_cleaned_range) {
-        compaction_state_update::cleaned_range range;
-        range.base_offset = update.new_cleaned_range->base_offset;
-        range.last_offset = update.new_cleaned_range->last_offset;
-        range.has_tombstones = update.new_cleaned_range->has_tombstones;
-        rpc_update.new_cleaned_range = std::move(range);
+    if (!update.new_cleaned_ranges.empty()) {
+        auto& new_cleaned_ranges = update.new_cleaned_ranges;
+        chunked_vector<compaction_state_update::cleaned_range> ranges;
+        ranges.reserve(new_cleaned_ranges.size());
+        for (const auto& cleaned_range : new_cleaned_ranges) {
+            ranges.push_back(
+              {.base_offset = cleaned_range.base_offset,
+               .last_offset = cleaned_range.last_offset,
+               .has_tombstones = cleaned_range.has_tombstones});
+        }
+        rpc_update.new_cleaned_ranges = std::move(ranges);
     }
 
     rpc_update.removed_tombstones_ranges = update.removed_tombstones_ranges;
@@ -345,7 +350,7 @@ replicated_metastore::replace_objects(
         req.new_objects = std::move(new_objects);
 
         // Empty compaction updates for basic replace
-        req.compaction_updates = {};
+        req.compaction_updates.clear();
         auto reply_fut = co_await ss::coroutine::as_future(
           fe_.replace_objects(std::move(req)));
         if (reply_fut.failed()) {

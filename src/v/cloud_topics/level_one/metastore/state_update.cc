@@ -380,32 +380,33 @@ replace_objects_update::can_apply(const state& state) {
                     "{}",
                     tidp)));
             }
-            if (compaction_update.new_cleaned_range.has_value()) {
-                const auto& req_cleaned_range
-                  = *compaction_update.new_cleaned_range;
-
+            if (!compaction_update.new_cleaned_ranges.empty()) {
+                const auto& req_cleaned_ranges
+                  = compaction_update.new_cleaned_ranges;
                 // Check that the new extents span the start of the log to the
                 // end of the new clean range.
                 auto& [_, new_extents] = *new_extent_iter;
                 auto req_last = new_extents.rbegin()->last_offset;
-                if (req_cleaned_range.last_offset > req_last) {
+                auto clean_last = req_cleaned_ranges.back().last_offset;
+                if (clean_last > req_last) {
                     return std::unexpected(stm_update_error(
                       fmt::format(
                         "Cleaned range for {} does not match requested new "
                         "extents' last_offset {} > {}",
                         tidp,
-                        req_cleaned_range.last_offset,
+                        clean_last,
                         req_last)));
                 }
                 auto req_extents_base = new_extents.begin()->base_offset;
-                if (req_extents_base > req_cleaned_range.base_offset) {
+                auto clean_base = req_cleaned_ranges.front().base_offset;
+                if (req_extents_base > clean_base) {
                     return std::unexpected(stm_update_error(
                       fmt::format(
                         "Cleaned range start_offset for {} is not covered by "
                         "extents: {} > {}",
                         tidp,
                         req_extents_base,
-                        req_cleaned_range.base_offset)));
+                        clean_base)));
                 }
 
                 // Check that the extents replace down to the start of the log.
@@ -423,23 +424,26 @@ replace_objects_update::can_apply(const state& state) {
 
                 // Check that ranges with tombstones don't overlap with existing
                 // ranges with tombstones.
-                if (
-                  req_cleaned_range.has_tombstones
-                  && p_state.compaction_state.has_value()
-                  && !p_state.compaction_state->may_add(
-                    compaction_state::cleaned_range_with_tombstones{
-                      .base_offset = req_cleaned_range.base_offset,
-                      .last_offset = req_cleaned_range.last_offset,
-                      .cleaned_with_tombstones_at
-                      = compaction_update.cleaned_at,
-                    })) {
-                    return std::unexpected(stm_update_error(
-                      fmt::format(
-                        "Cleaned range for {} has tombstones and overlaps with "
-                        "an existing cleaned range with tombstones: [{}, {}]",
-                        tidp,
-                        req_cleaned_range.base_offset,
-                        req_cleaned_range.last_offset)));
+                for (const auto& req_cleaned_range : req_cleaned_ranges) {
+                    if (
+                      req_cleaned_range.has_tombstones
+                      && p_state.compaction_state.has_value()
+                      && !p_state.compaction_state->may_add(
+                        compaction_state::cleaned_range_with_tombstones{
+                          .base_offset = req_cleaned_range.base_offset,
+                          .last_offset = req_cleaned_range.last_offset,
+                          .cleaned_with_tombstones_at
+                          = compaction_update.cleaned_at,
+                        })) {
+                        return std::unexpected(stm_update_error(
+                          fmt::format(
+                            "Cleaned range for {} has tombstones and overlaps "
+                            "with an existing cleaned range with tombstones: "
+                            "[{}, {}]",
+                            tidp,
+                            req_cleaned_range.base_offset,
+                            req_cleaned_range.last_offset)));
+                    }
                 }
             }
 
@@ -533,33 +537,36 @@ replace_objects_update::apply(state& state) {
             if (!p_state.compaction_state.has_value()) {
                 p_state.compaction_state.emplace();
             }
-            if (compaction_update.new_cleaned_range.has_value()) {
-                const auto& req_cleaned_range
-                  = *compaction_update.new_cleaned_range;
-                [[maybe_unused]] auto inserted
-                  = p_state.compaction_state->cleaned_ranges.insert(
-                    req_cleaned_range.base_offset,
-                    req_cleaned_range.last_offset);
-                dassert(
-                  inserted,
-                  "Invalid interval [{}, {}]",
-                  req_cleaned_range.base_offset,
-                  req_cleaned_range.last_offset);
-                if (req_cleaned_range.has_tombstones) {
+            if (!compaction_update.new_cleaned_ranges.empty()) {
+                const auto& req_cleaned_ranges
+                  = compaction_update.new_cleaned_ranges;
+                for (const auto& req_cleaned_range : req_cleaned_ranges) {
                     [[maybe_unused]] auto inserted
-                      = p_state.compaction_state->add(
-                        compaction_state::cleaned_range_with_tombstones{
-                          .base_offset = req_cleaned_range.base_offset,
-                          .last_offset = req_cleaned_range.last_offset,
-                          .cleaned_with_tombstones_at
-                          = compaction_update.cleaned_at,
-                        });
+                      = p_state.compaction_state->cleaned_ranges.insert(
+                        req_cleaned_range.base_offset,
+                        req_cleaned_range.last_offset);
                     dassert(
                       inserted,
-                      "Failed to insert cleaned range with tombstones: [{}, "
-                      "{}]",
+                      "Invalid interval [{}, {}]",
                       req_cleaned_range.base_offset,
                       req_cleaned_range.last_offset);
+                    if (req_cleaned_range.has_tombstones) {
+                        [[maybe_unused]] auto inserted
+                          = p_state.compaction_state->add(
+                            compaction_state::cleaned_range_with_tombstones{
+                              .base_offset = req_cleaned_range.base_offset,
+                              .last_offset = req_cleaned_range.last_offset,
+                              .cleaned_with_tombstones_at
+                              = compaction_update.cleaned_at,
+                            });
+                        dassert(
+                          inserted,
+                          "Failed to insert cleaned range with tombstones: "
+                          "[{}, "
+                          "{}]",
+                          req_cleaned_range.base_offset,
+                          req_cleaned_range.last_offset);
+                    }
                 }
             }
 

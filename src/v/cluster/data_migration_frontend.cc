@@ -349,9 +349,8 @@ ss::future<std::error_code> frontend::insert_barrier() {
      * preliminary validation.
      */
     static_assert(controller_stm_shard == data_migrations_shard);
-    auto barrier_result
-      = co_await _controller.local().insert_linearizable_barrier(
-        _operation_timeout + model::timeout_clock::now());
+    auto barrier_result = co_await _controller.local()
+                            .insert_linearizable_barrier(barrier_deadline);
     if (!barrier_result) {
         co_return barrier_result.error();
     }

@@ -17,6 +17,7 @@
 #include "cloud_topics/level_zero/reader/materialized_extent.h"
 #include "cloud_topics/logger.h"
 #include "model/fundamental.h"
+#include "model/record_batch_reader.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
@@ -36,7 +37,8 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
-  retry_chain_node* rtc) {
+  retry_chain_node* rtc,
+  micro_probe* probe) {
     absl::node_hash_map<object_id, iobuf> hydrated;
     chunked_vector<materialized_extent> extents;
     for (const auto& extent : query) {
@@ -49,7 +51,8 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
             // TODO: check that id of the payload matches
             back.object = payload.share(0, payload.size_bytes());
         } else {
-            auto res = co_await materialize(&back, bucket, api, cache, rtc);
+            auto res = co_await materialize(
+              &back, bucket, api, cache, rtc, probe);
             if (res.has_error()) {
                 co_return res.error();
             }
@@ -63,30 +66,35 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
 
 } // namespace
 
-ss::future<result<chunked_vector<model::record_batch>>>
-materialize_placeholders(
+ss::future<materialize_result> materialize_placeholders(
   cloud_storage_clients::bucket_name bucket,
   chunked_vector<extent_meta> query,
   cloud_io::remote_api<ss::lowres_clock>& api,
   cloud_io::basic_cache_service_api<ss::lowres_clock>& cache,
   retry_chain_node& rtc,
   retry_chain_logger& logger) {
+    micro_probe probe;
     auto extents = co_await materialize_sorted_run(
-      std::move(query), bucket, &api, &cache, &rtc);
+      std::move(query), bucket, &api, &cache, &rtc, &probe);
     if (extents.has_error()) {
         vlog(
           logger.warn,
           "Failed to materialize sorted run: {}",
           extents.error().message());
-        co_return extents.error();
+        co_return materialize_result{
+          .batches = extents.error(),
+          .probe = probe,
+        };
     }
 
     chunked_vector<model::record_batch> results;
     for (auto& e : extents.value()) {
         results.push_back(make_raft_data_batch(std::move(e)));
     }
-
-    co_return std::move(results);
+    co_return materialize_result{
+      .batches = std::move(results),
+      .probe = probe,
+    };
 }
 
 } // namespace cloud_topics::l0

@@ -10,6 +10,7 @@
 
 #include "cloud_topics/batch_cache/batch_cache.h"
 
+#include "config/configuration.h"
 #include "ssx/future-util.h"
 #include "storage/batch_cache.h"
 #include "storage/log_manager.h"
@@ -24,7 +25,8 @@ namespace cloud_topics {
 batch_cache::batch_cache(
   storage::log_manager* log_manager, std::chrono::milliseconds gc_interval)
   : _gc_interval(gc_interval)
-  , _lm(log_manager) {}
+  , _lm(log_manager)
+  , _probe(config::shard_local_cfg().disable_metrics()) {}
 
 batch_cache::batch_cache(
   ss::sharded<storage::api>& log_manager, std::chrono::milliseconds gc_interval)
@@ -67,6 +69,7 @@ void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
         }
     }
     it->second->put(b, storage::batch_cache::is_dirty_entry::no);
+    _probe.register_put(b.size_bytes());
 }
 
 std::optional<model::record_batch>
@@ -76,8 +79,15 @@ batch_cache::get(const model::ntp& ntp, model::offset o) {
     }
     _gate.check();
     if (auto it = _index.find(ntp); it != _index.end()) {
-        return it->second->get(o);
+        auto rb = it->second->get(o);
+        if (rb.has_value()) {
+            _probe.register_get(rb->size_bytes());
+        } else {
+            _probe.register_miss();
+        }
+        return rb;
     }
+    _probe.register_miss();
     return std::nullopt;
 }
 

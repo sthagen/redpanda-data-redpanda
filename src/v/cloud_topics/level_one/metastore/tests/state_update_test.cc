@@ -101,12 +101,12 @@ public:
     }
     replace_objects_builder& clean(
       std::string_view tp_str,
-      struct compaction_state_update::cleaned_range r,
+      compaction_state_update::cleaned_range r,
       model::timestamp cleaned_at) {
         auto tp = model::topic_id_partition::from(tp_str);
         auto& c_state = out.compaction_updates[tp.topic_id][tp.partition];
         c_state.cleaned_at = cleaned_at;
-        c_state.new_cleaned_range = r;
+        c_state.new_cleaned_ranges.push_back(std::move(r));
         return *this;
     }
     replace_objects_builder& clean_tombstones(

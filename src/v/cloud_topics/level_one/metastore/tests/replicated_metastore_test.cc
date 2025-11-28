@@ -345,9 +345,9 @@ TEST_F(ReplicatedMetastoreTest, TestBasicCompact) {
     for (int i = 0; i < partitions_count; ++i) {
         metastore::compaction_update update;
         update.cleaned_at = model::timestamp::now();
-        update.new_cleaned_range.emplace();
-        update.new_cleaned_range->base_offset = o{0};
-        update.new_cleaned_range->last_offset = o{999};
+        update.new_cleaned_ranges.push_back(
+          metastore::compaction_update::cleaned_range{
+            .base_offset = o{0}, .last_offset = o{999}});
         cmap[make_tp(i)] = std::move(update);
     }
     auto cmp_res = meta.compact_objects(*new_objs, cmap).get();

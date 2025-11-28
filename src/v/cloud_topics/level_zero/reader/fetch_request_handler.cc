@@ -125,7 +125,10 @@ ss::future<> fetch_handler::process_single_request(l0::read_request<>* req) {
             co_return;
         }
 
-        auto res = extent.get();
+        auto [res, probe] = extent.get();
+        // The registration happens even for failed requests because
+        // failed requests are consuming resources (API calls).
+        _pipeline_stage.register_micro_probe(probe);
         if (res.has_error()) {
             vlog(
               req->rtc_logger.warn,

@@ -99,7 +99,7 @@ struct add_objects_update
 struct compaction_state_update
   : public serde::envelope<
       compaction_state_update,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     // NOTE: intentionally duplicate code from
     // metastore::compaction_update::cleaned_range, defined separately to
@@ -122,11 +122,11 @@ struct compaction_state_update
     };
     auto serde_fields() {
         return std::tie(
-          new_cleaned_range, removed_tombstones_ranges, cleaned_at);
+          new_cleaned_ranges, removed_tombstones_ranges, cleaned_at);
     }
-    // The cleaned range for this compaction, if any. May or may not have
-    // tombstones.
-    std::optional<cleaned_range> new_cleaned_range;
+    // The cleaned ranges for this compaction, if any. Ranges may or may not
+    // have tombstones.
+    chunked_vector<cleaned_range> new_cleaned_ranges;
 
     // Expected that these ranges correspond to existing cleaned ranges with
     // tombstones, and indicate that these ranges may be removed.

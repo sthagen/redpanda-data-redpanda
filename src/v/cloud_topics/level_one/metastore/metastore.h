@@ -261,9 +261,9 @@ public:
             // Whether or not the cleaned range included any tombstones.
             bool has_tombstones{false};
         };
-        // A range indicating that the data's keys have been fully deduplicated
+        // Ranges indicating that the data's keys have been fully deduplicated
         // from the start of the log.
-        std::optional<cleaned_range> new_cleaned_range;
+        chunked_vector<cleaned_range> new_cleaned_ranges;
 
         // Ranges of cleaned offsets that previously had tombstones, that have
         // been removed.

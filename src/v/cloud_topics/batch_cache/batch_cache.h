@@ -11,6 +11,7 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "cloud_topics/batch_cache/probe.h"
 #include "model/fundamental.h"
 #include "storage/api.h"
 #include "storage/batch_cache.h"
@@ -75,6 +76,7 @@ private:
     // Periodic cleanup of the index
     ss::timer<> _cleanup_timer;
     ss::gate _gate;
+    batch_cache_probe _probe;
 
     friend struct batch_cache_accessor;
 };
