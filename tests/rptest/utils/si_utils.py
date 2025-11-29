@@ -1574,6 +1574,7 @@ class BucketView:
         """
         try:
             if not self.path_matcher.is_segment(o):
+                self.logger.debug(f"Object '{o}' is not a segment")
                 return None
 
             segment_path = parse_s3_segment_path(o.key)

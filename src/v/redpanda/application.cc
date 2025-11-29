@@ -1889,7 +1889,8 @@ void application::wire_up_redpanda_services(
           std::ref(controller->get_partition_leaders()),
           config::node().node_id().value(),
           config::shard_local_cfg().internal_topic_replication_factor(),
-          config::shard_local_cfg().transaction_coordinator_partitions.bind());
+          config::shard_local_cfg().transaction_coordinator_partitions.bind(),
+          std::ref(_as.local()));
     }
 
     if (archival_storage_enabled() && !config::node().recovery_mode_enabled()) {
@@ -3411,7 +3412,8 @@ void application::start_runtime_services(
                   std::ref(metadata_cache),
                   std::ref(_connection_cache),
                   std::ref(controller->get_partition_leaders()),
-                  config::node().node_id().value()));
+                  config::node().node_id().value(),
+                  _as.local()));
           }
           runtime_services.push_back(
             std::make_unique<cluster::data_migrations::service_handler>(

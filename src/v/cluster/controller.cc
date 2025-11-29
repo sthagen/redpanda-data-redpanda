@@ -363,7 +363,8 @@ ss::future<> controller::start(
       std::ref(_shard_table),
       std::ref(_metadata_cache),
       std::ref(_connections),
-      std::ref(_partition_leaders));
+      std::ref(_partition_leaders),
+      ss::sharded_parameter([this] { return std::ref(_as.local()); }));
     co_await _data_migration_worker.start(
       _raft0->self().id(),
       ss::sharded_parameter(

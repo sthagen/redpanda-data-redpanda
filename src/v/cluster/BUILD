@@ -737,6 +737,7 @@ redpanda_cc_library(
         "//src/v/serde:uuid",
         "//src/v/serde:variant",
         "//src/v/serde:vector",
+        "//src/v/ssx:abort_source",
         "//src/v/ssx:async_algorithm",
         "//src/v/ssx:async_clear",
         "//src/v/ssx:checkpoint_mutex",
