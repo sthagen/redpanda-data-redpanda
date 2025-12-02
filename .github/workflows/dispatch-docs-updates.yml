@@ -1,5 +1,5 @@
 ---
-name: Dispatch Admin API docs update on latest release
+name: Dispatch docs updates on latest release
 
 on:
   release:
@@ -51,13 +51,24 @@ jobs:
             echo "is_latest=false" >> $GITHUB_OUTPUT
           fi
 
-      # Dispatch to docs repo if latest
-      - name: Dispatch to docs repo
+      # Dispatch to api-docs repo if latest
+      - name: Dispatch to api-docs repo
         if: steps.latest.outputs.is_latest == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ env.ACTIONS_BOT_TOKEN }}
           repository: redpanda-data/api-docs
           event-type: redpanda-openapi-bundle
+          client-payload: |
+            { "tag": "${{ github.event.release.tag_name }}" }
+
+      # Dispatch to docs repo for property docs generation if latest
+      - name: Dispatch property docs generation to docs repo
+        if: steps.latest.outputs.is_latest == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ env.ACTIONS_BOT_TOKEN }}
+          repository: redpanda-data/docs
+          event-type: trigger-property-docs-generation
           client-payload: |
             { "tag": "${{ github.event.release.tag_name }}" }

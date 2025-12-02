@@ -467,6 +467,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/config",
         "//src/v/raft",
+        "//src/v/ssx:when_all",
         "//src/v/test_utils:seastar_boost",
         "@boost//:range",
         "@boost//:test",

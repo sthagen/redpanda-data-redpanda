@@ -8,9 +8,10 @@
 # by the Apache License, Version 2.0
 
 from contextlib import contextmanager
+import random
 import signal
 from subprocess import CalledProcessError
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, cast
 import time
 
 from ducktape.cluster.cluster import ClusterNode
@@ -28,7 +29,12 @@ from rptest.services.cluster import cluster
 from rptest.services.failure_injector import FailureSpec, make_failure_injector
 from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.kgo_verifier_services import (
+    KgoVerifierParams,
     KgoVerifierConsumerGroupConsumer,
+    KgoVerifierMultiProducer,
+    KgoVerifierMultiConsumerGroupConsumer,
+    KgoVerifierMultiRandomConsumer,
+    KgoVerifierMultiSeqConsumer,
     KgoVerifierProducer,
     KgoVerifierRandomConsumer,
     KgoVerifierSeqConsumer,
@@ -251,6 +257,150 @@ class KgoVerifierSelfTest(PreallocNodesTest):
         producer.wait(timeout_sec=60)
         rand_consumer.wait(timeout_sec=60)
         group_consumer.wait(timeout_sec=60)
+        seq_consumer.wait(timeout_sec=60)
+
+    @skip_debug_mode  # Sends meaningful traffic, and not intended to test Redpanda
+    @cluster(num_nodes=4)
+    def test_kgo_verifier_multi(self):
+        topics = [
+            KgoVerifierParams(
+                TopicSpec(
+                    name=n,
+                    partition_count=16,
+                    retention_bytes=16 * 1024 * 1024,
+                    segment_bytes=1024 * 1024,
+                ),
+                msg_size=random.randint(2**13, 2**14),
+                msg_count=random.randint(800, 1200),
+                group_name=f"group-{n}",
+            )
+            for n in [
+                "test-1",
+                "test-2",
+                "test-3",
+            ]
+        ]
+
+        for topic in topics:
+            self.client().create_topic(cast(TopicSpec, topic.topic))
+
+        producer = KgoVerifierMultiProducer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+        )
+
+        producer.start()
+        producer.wait_for_acks(
+            [t.msg_count for t in topics],
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+        producer.wait_for_offset_map()
+
+        seq_consumer = KgoVerifierMultiSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            producer=producer,
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+            trace_logs=True,
+        )
+        seq_consumer.start(clean=False)
+
+        rand_consumer = KgoVerifierMultiRandomConsumer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            100,
+            2,  # parallel
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+            trace_logs=True,
+        )
+        rand_consumer.start(clean=False)
+
+        group_consumer = KgoVerifierMultiConsumerGroupConsumer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            2,  # readers
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+            trace_logs=True,
+        )
+        group_consumer.start(clean=False)
+
+        producer.wait(timeout_sec=60)
+        seq_consumer.wait(timeout_sec=60)
+        rand_consumer.wait(timeout_sec=60)
+        group_consumer.wait(timeout_sec=60)
+
+
+class KgoVerifierMultiNodeSelfTest(PreallocNodesTest):
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any) -> None:
+        super().__init__(
+            test_context=test_context, node_prealloc_count=2, *args, **kwargs
+        )
+
+    @skip_debug_mode
+    @cluster(num_nodes=5)
+    def test_kgo_verifier_multi_node(self) -> None:
+        topics = [
+            KgoVerifierParams(
+                TopicSpec(
+                    name=t,
+                    partition_count=16,
+                    retention_bytes=16 * 1024 * 1024,
+                    segment_bytes=1024 * 1024,
+                ),
+                msg_size=random.randint(2**13, 2**14),
+                msg_count=random.randint(800, 1200),
+                node=n,
+                group_name=f"group-{t}",
+            )
+            for t, n in zip(
+                [
+                    "test-1",
+                    "test-2",
+                ],
+                self.preallocated_nodes,
+            )
+        ]
+
+        for topic in topics:
+            self.client().create_topic(cast(TopicSpec, topic.topic))
+
+        producer = KgoVerifierMultiProducer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+        )
+        producer.start()
+        producer.wait_for_acks(
+            [t.msg_count for t in topics],
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+        producer.wait_for_offset_map()
+
+        seq_consumer = KgoVerifierMultiSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            producer=producer,
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+            trace_logs=True,
+        )
+        seq_consumer.start(clean=False)
+
+        producer.wait(timeout_sec=60)
         seq_consumer.wait(timeout_sec=60)
 
 

@@ -31,6 +31,8 @@ redpanda_package(
 redpanda_package(
     name = "ducktape",
     out = "redpanda_ducktape",
+    fips_config = "@openssl-fips//:fipsmodule_cnf",
+    fips_module = "@openssl-fips//:fipsmodule_so",
     include_sysroot_libs = True,
     install_path = "/opt/redpanda_installs/redpanda",
     redpanda_binary = "//:redpanda",

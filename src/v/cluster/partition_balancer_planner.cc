@@ -363,6 +363,12 @@ void partition_balancer_planner::init_per_node_state(
         }
 
         if (time_since_last_seen > _config.node_availability_timeout_sec) {
+            vlog(
+              clusterlog.info,
+              "node {} is unresponsive and unavailable, time since last status "
+              "reply: {} ms",
+              id,
+              time_since_last_seen / 1ms);
             ctx.timed_out_unavailable_nodes.insert(id);
 
             if (
@@ -980,7 +986,13 @@ auto partition_balancer_planner::request_context::do_with_partition(
         if (state == reconfiguration_state::in_progress) {
             // partition is dead in the water, it lost quorum in the middle of
             // moving
+
             if (!has_quorum(all_unavailable_nodes, orig_replicas)) {
+                vlog(
+                  clusterlog.trace,
+                  "[{}] in progress move found to have source replica quorum "
+                  "loss",
+                  ntp);
                 partition part{immutable_partition{
                   ntp,
                   orig_replicas,
@@ -1549,15 +1561,6 @@ ss::future<> partition_balancer_planner::get_node_drain_actions(
   const absl::flat_hash_set<model::node_id>& nodes,
   change_reason reason) {
     if (nodes.empty()) {
-        co_return;
-    }
-
-    if (std::all_of(nodes.begin(), nodes.end(), [&](model::node_id id) {
-            auto it = ctx.allocation_nodes().find(id);
-            return it != ctx.allocation_nodes().end()
-                   && it->second->final_partitions()() == 0;
-        })) {
-        // all nodes already drained
         co_return;
     }
 

@@ -459,9 +459,6 @@ reconciler::build_object(
             co_return std::unexpected(
               reconcile_error("abort requested while building object"));
         }
-        auto start_offset = kafka::next_offset(src->last_reconciled_offset());
-        auto read_result = co_await add_source_to_object(
-          ctx, src, start_offset);
 
         // Enforce the size limit, but always allow one partition in.
         auto current_size = ctx.builder->file_size();
@@ -473,7 +470,14 @@ reconciler::build_object(
               max_object_size);
             break;
         }
-        ctx.size_budget = max_object_size - current_size;
+        // Beware underflow if the first partition sneaks a batch in over the
+        // size limit.
+        ctx.size_budget = current_size >= max_object_size
+                            ? 0
+                            : max_object_size - current_size;
+        auto start_offset = kafka::next_offset(src->last_reconciled_offset());
+        auto read_result = co_await add_source_to_object(
+          ctx, src, start_offset);
 
         if (!read_result.has_value()) {
             // Log an error, we don't want a single stuck partition to

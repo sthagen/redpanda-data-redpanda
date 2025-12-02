@@ -109,6 +109,7 @@ from rptest.util import (
     wait_until_result,
     wait_until_with_progress_check,
     debounce,
+    get_fips_mode,
 )
 from rptest.utils.mode_checks import in_fips_environment
 from rptest.utils.rpenv import sample_license
@@ -2594,11 +2595,6 @@ class RedpandaService(Service, RedpandaServiceABC):
     # Thread name of shards to be used with redpanda_tid()
     SHARD_0_THREAD_NAME = "redpanda"
     SHARD_1_THREAD_NAME = "reactor-1"
-
-    class FIPSMode(Enum):
-        disabled = 0
-        permissive = 1
-        enabled = 2
 
     nodes: list[ClusterNode]
 
@@ -5103,13 +5099,12 @@ class RedpandaService(Service, RedpandaServiceABC):
             return cur_ver == RedpandaInstaller.HEAD or cur_ver >= (24, 2, 1)
 
         if in_fips_environment() and is_fips_capable(node):
-            self.logger.info(
-                "Operating in FIPS environment, enabling FIPS mode for Redpanda"
-            )
+            fips_mode = get_fips_mode().value
+            self.logger.info(f"Setting Redpanda to FIPS mode: {fips_mode}")
             doc = yaml.full_load(conf)
             doc["redpanda"].update(
                 dict(
-                    fips_mode="enabled",
+                    fips_mode=fips_mode,
                     openssl_config_file=self.get_openssl_config_file_path(),
                     openssl_module_directory=self.get_openssl_modules_directory(),
                 )

@@ -497,7 +497,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         to_decommission = random.choice(brokers)["node_id"]
 
         # throttle recovery
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
 
         # schedule partition move to the node that is being decommissioned
 
@@ -547,7 +547,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         self.start_producer()
         self.start_consumer()
         # set recovery rate to small value to stop moves
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
 
         def calculate_total_learners_gap() -> int | None:
             gap = self.redpanda.metrics_sample("learners_gap_bytes")
@@ -619,7 +619,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         to_decommission = random.choice(brokers)["node_id"]
 
         # throttle recovery
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
 
         self.logger.info(
             f"decommissioning node: {to_decommission}",
@@ -651,7 +651,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         to_decommission = random.choice(brokers)["node_id"]
 
         # throttle recovery
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
 
         self.logger.info(
             f"decommissioning node: {to_decommission}",
@@ -689,7 +689,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         to_decommission = random.choice(brokers)["node_id"]
 
         # throttle recovery
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
 
         # schedule partition move from the node being decommissioned before actually calling decommission
 
@@ -752,7 +752,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         )
 
         # throttle recovery
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
 
         self.logger.info(
             f"decommissioning node: {to_decommission_1}",
@@ -897,7 +897,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         if not node_is_alive:
             self.redpanda.stop_node(to_decommission)
 
-        self._set_recovery_rate(1)
+        self._set_recovery_rate(0)
         for i in range(1, 10):
             # set recovery rate to small value to prevent node
             # from finishing decommission operation

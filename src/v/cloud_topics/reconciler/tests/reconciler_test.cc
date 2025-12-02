@@ -240,6 +240,43 @@ TEST_F(ReconcilerTest, ObjectSizeLimitMultipleSources) {
       metastore_next_offset(src2), Optional(kafka::offset{last_offset_2 + 1}));
 }
 
+// Test that when two sources each exceed max_object_size (64MiB), only one
+// is processed per reconciliation round. This verifies that the size_budget
+// calculation doesn't underflow (which would allow both to be processed).
+TEST_F(ReconcilerTest, ObjectSizeLimitOneSourcePerRound) {
+    auto src1 = add_source();
+    auto src2 = add_source();
+
+    // Each source: 13 batches of 5MiB = 65MiB, exceeding the 64MiB limit.
+    constexpr auto batch_count = 13;
+    constexpr auto record_count = 1;
+    constexpr auto record_size = 5_MiB;
+    for (size_t i = 0; i < batch_count; ++i) {
+        src1->add_batch(
+          {.allow_compression = false,
+           .count = record_count,
+           .record_sizes = std::vector<size_t>(record_count, record_size)});
+        src2->add_batch(
+          {.allow_compression = false,
+           .count = record_count,
+           .record_sizes = std::vector<size_t>(record_count, record_size)});
+    }
+
+    reconcile();
+
+    constexpr auto last_offset = batch_count * record_count - 1;
+    auto lro1 = src1->last_reconciled_offset();
+    auto lro2 = src2->last_reconciled_offset();
+
+    // Exactly one source should be fully processed, the other should not
+    // advance. We're agnostic to which one goes first.
+    bool src1_done = lro1 == kafka::offset{last_offset};
+    bool src2_done = lro2 == kafka::offset{last_offset};
+    EXPECT_TRUE(src1_done != src2_done)
+      << "Expected exactly one source to be processed per round. "
+      << "src1 LRO: " << lro1 << ", src2 LRO: " << lro2;
+}
+
 TEST_F(ReconcilerTest, SourceReadFailure) {
     auto src = add_source();
     src->add_batch({.count = 10});

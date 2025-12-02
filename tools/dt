@@ -179,6 +179,15 @@ class DucktapeRunner:
             libexec_link.unlink()
         libexec_link.symlink_to("../bin/redpanda")
 
+        # Add path to fips.so in fips module cnf for redpanda to find it
+        openssl_dir = rp_bazel_out / "openssl"
+        fips_mod_cnf = openssl_dir / "fipsmodule.cnf"
+        fips_so = openssl_dir / "fips.so"
+        os.chmod(fips_mod_cnf, 0o664)
+        with open(fips_mod_cnf, 'a') as file:
+            file.write(f"module = {fips_so}\n")
+
+
     def _link_package_artifacts(
         self, package_target_name: str, out_dir_name: str, use_hardlink: bool
     ):
@@ -188,13 +197,17 @@ class DucktapeRunner:
             self.src_dir / "bazel-bin" / "bazel" / "packaging" / package_target_name
         )
 
-        for dir_name in ["bin", "lib"]:
-            out_dir = out_path / dir_name
-            out_dir.mkdir(parents=True, exist_ok=True)
-
+        def get_out_dir(name):
+            if name == "fips":
+                return "openssl"
+            return name
+        for dir_name in ["bin", "lib", "fips"]:
             source_dir = source_base / dir_name
             if not source_dir.exists():
                 continue
+
+            out_dir = out_path / get_out_dir(dir_name)
+            out_dir.mkdir(parents=True, exist_ok=True)
 
             # Link/copy all files in the directory
             for source_file in source_dir.rglob("*"):
@@ -386,6 +399,10 @@ class DucktapeRunner:
         for env_var in ["REDPANDA_SAMPLE_LICENSE", "REDPANDA_SECOND_SAMPLE_LICENSE"]:
             if env_var in os.environ:
                 docker_cmd.extend(["--env", f"{env_var}={os.environ[env_var]}"])
+
+        # Enable fips permissive
+        if self.args.with_fips:
+            docker_cmd.extend(["--env", f"REDPANDA_FIPS_PERMISSIVE=1"])
 
         # Add the image
         docker_cmd.append(self.ducktape_test_node_image)
@@ -790,6 +807,12 @@ def main():
         nargs="*",
         help="Arguments to pass to ducktape (default: tests/rptest/test_suite_quick.yml)",
     )
+    run_parser.add_argument(
+        "--with-fips",
+        action="store_true",
+        default=False,
+        help="Run redpanda in fips permissive mode",
+    )
 
     # 'start' subcommand
     start_parser = subparsers.add_parser(
@@ -852,6 +875,12 @@ def main():
         nargs="*",
         help="Arguments to pass to ducktape (default: tests/rptest/test_suite_quick.yml)",
     )
+    test_parser.add_argument(
+        "--with-fips",
+        action="store_true",
+        default=False,
+        help="Run redpanda in fips permissive mode",
+    )
 
     # 'stop' subcommand
     _ = subparsers.add_parser(
@@ -908,6 +937,12 @@ def main():
         "--ducktape-globals",
         default="",
         help='Additional ducktape globals as JSON string (e.g. \'{"s3_bucket": "my-bucket"}\')',
+    )
+    repl_parser.add_argument(
+        "--with-fips",
+        action="store_true",
+        default=False,
+        help="Run redpanda in fips permissive mode",
     )
 
     args = parser.parse_args()
