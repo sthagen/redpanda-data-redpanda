@@ -117,9 +117,9 @@ class ShadowIndexingCompactedTopicTest(EndToEndTest):
             timeout_sec=300,
         )
 
-        original_snapshot = self.redpanda.storage(all_nodes=True).segments_by_node(
-            "kafka", self.topic, 0
-        )
+        original_snapshot = self.redpanda.storage(
+            nodes=self.redpanda.nodes
+        ).segments_by_node("kafka", self.topic, 0)
 
         for node, node_segments in original_snapshot.items():
             assert len(node_segments) >= expected_segment_count, (

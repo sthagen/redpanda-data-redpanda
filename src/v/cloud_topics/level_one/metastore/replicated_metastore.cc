@@ -208,6 +208,16 @@ replicated_object_builder::finish(
     return {};
 }
 
+metastore::extent_metadata_vec
+rpc_to_meta_extent_metadata(chunked_vector<rpc::extent_metadata> v) {
+    metastore::extent_metadata_vec res;
+    res.reserve(v.size());
+    for (auto& e : v) {
+        res.emplace_back(e.base_offset, e.last_offset, e.max_timestamp);
+    }
+    return res;
+}
+
 } // anonymous namespace
 
 replicated_metastore::replicated_metastore(leader_router& fe)
@@ -672,8 +682,9 @@ replicated_metastore::get_compaction_info(const compaction_info_spec& log) {
     resp.dirty_ratio = reply.dirty_ratio;
     resp.earliest_dirty_ts = reply.earliest_dirty_ts;
     resp.offsets_response = {
-      .dirty_ranges = reply.dirty_ranges,
-      .removable_tombstone_ranges = reply.removable_tombstone_ranges};
+      .dirty_ranges = std::move(reply.dirty_ranges),
+      .removable_tombstone_ranges = std::move(reply.removable_tombstone_ranges),
+      .extents = rpc_to_meta_extent_metadata(std::move(reply.extents))};
 
     co_return resp;
 }

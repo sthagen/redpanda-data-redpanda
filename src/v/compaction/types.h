@@ -115,11 +115,15 @@ struct stats {
     // Number of transactional control batches that were removed.
     // This is only relevant for local storage compaction.
     size_t control_batches_discarded{0};
+    // Number of tombstone records that were removed due to expiration (not
+    // including those removed by de-duplication)
+    size_t expired_tombstones_discarded{0};
 
     // Returns whether any data was removed by this reducer.
     bool has_removed_data() const {
         return batches_discarded > 0 || records_discarded > 0
-               || control_batches_discarded > 0;
+               || control_batches_discarded > 0
+               || expired_tombstones_discarded > 0;
     }
 
     friend std::ostream& operator<<(std::ostream& os, const stats& s);

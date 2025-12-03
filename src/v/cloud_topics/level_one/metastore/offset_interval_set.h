@@ -56,6 +56,10 @@ public:
     chunked_vector<interval> to_vec() const;
     void truncate_with_new_start_offset(kafka::offset);
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", iset_);
+    }
+
 private:
     interval_set<kafka::offset::type> iset_;
 };

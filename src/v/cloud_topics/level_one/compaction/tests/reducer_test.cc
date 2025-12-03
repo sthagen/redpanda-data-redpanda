@@ -141,7 +141,7 @@ TEST_F(ReducerTestFixture, Reducer) {
     auto src = std::make_unique<l1::compaction_source>(
       ntp,
       tidp,
-      compaction_info->offsets_response,
+      std::move(compaction_info->offsets_response),
       &map,
       &_metastore,
       &_io,

@@ -3262,6 +3262,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         auto_assign_node_id: bool = False,
         omit_seeds_on_idx_one: bool = True,
         node_config_overrides: NodeConfigOverridesT = {},
+        skip_storage_init_check: bool = False,
         **kwargs: Any,
     ) -> None:
         """
@@ -3369,32 +3370,38 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         self.wait_for_membership(first_start=first_start)
 
-        self.logger.info("Verifying storage is in expected state")
-        storage = self.storage()
-        for node in storage.nodes:
-            # https://redpandadata.slack.com/archives/C07HD9U0EHL/p1762830593745199
-            if node not in to_start:  # pyright: ignore[reportUnnecessaryContains]
-                continue
-            raise RuntimeError("unreachable")
-            unexpected_ns = set(node.ns) - {"redpanda"}  # pyright: ignore[reportUnreachable]
-            if unexpected_ns:
-                for ns in unexpected_ns:  # pyright: ignore[reportUnreachable]
-                    self.logger.error(  # pyright: ignore[reportUnreachable]
-                        f"node {node.name}: unexpected namespace: {ns}, "
-                        f"topics: {set(node.ns[ns].topics)}"
-                    )
-                raise RuntimeError("Unexpected files in data directory")
+        if not skip_storage_init_check:
+            self.logger.info("Verifying storage is in expected state")
 
-            unexpected_rp_topics = set(node.ns["redpanda"].topics) - {
-                "controller",
-                "kvstore",
+            expected = {
+                "redpanda": {"controller", "kvstore"},
+                "kafka": {
+                    "_redpanda.audit_log",
+                    "_redpanda.transform_logs",
+                },
+                "kafka_internal": {"ct_l1_domain"},
             }
-            if unexpected_rp_topics:
-                self.logger.error(  # pyright: ignore[reportUnreachable]
-                    f"node {node.name}: unexpected topics in redpanda namespace: "
-                    f"{unexpected_rp_topics}"
-                )
-                raise RuntimeError("Unexpected files in data directory")
+            expected["l1_staging"] = set()  # make type deduction happy
+
+            storage = self.storage(nodes=to_start)
+            for node in storage.nodes:
+                unexpected_ns = set(node.ns) - set(expected.keys())
+                if unexpected_ns:
+                    for ns in unexpected_ns:
+                        self.logger.error(
+                            f"node {node.name}: unexpected namespace: {ns}, "
+                            f"topics: {set(node.ns[ns].topics)}"
+                        )
+                    raise RuntimeError("Unexpected files in data directory")
+
+                for ns in node.ns:
+                    unexpected_topics = set(node.ns[ns].topics) - expected[ns]
+                    if unexpected_topics:
+                        self.logger.error(
+                            f"node {node.name}: unexpected topics in {ns} namespace: "
+                            f"{unexpected_topics}"
+                        )
+                        raise RuntimeError("Unexpected files in data directory")
 
         if self.sasl_enabled():
             username, password, algorithm = self._superuser
@@ -5474,11 +5481,15 @@ class RedpandaService(Service, RedpandaServiceABC):
         return store
 
     def storage(
-        self, all_nodes: bool = False, sizes: bool = False, scan_cache: bool = True
-    ):
+        self,
+        *,
+        nodes: Collection[ClusterNode] | None = None,
+        sizes: bool = False,
+        scan_cache: bool = True,
+    ) -> ClusterStorage:
         """
-        :param all_nodes: if true, report on all nodes, otherwise only report
-                          on started nodes.
+        :param nodes: if None, only report on started nodes. Otherwise, report
+                      on the nodes in the `nodes` list parameter.
         :param sizes: if true, stat each segment file and record its size in the
                       `size` attribute of Segment.
         :param scan_cache: if false, skip scanning the tiered storage cache; use
@@ -5486,20 +5497,19 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         :returns: instances of ClusterStorage
         """
+        if nodes is None:
+            nodes = self._started
+        assert nodes, "Empty node list specified for storage stat collection"
+
         store = ClusterStorage()
-        self.logger.debug(
-            f"Starting storage checks all_nodes={all_nodes} sizes={sizes}"
-        )
-        nodes = self.nodes if all_nodes else list(self._started)
+        self.logger.debug(f"Starting storage checks nodes={nodes} sizes={sizes}")
 
         def compute_node_storage(node: ClusterNode):
             s = self.node_storage(node, sizes=sizes, scan_cache=scan_cache)
             store.add_node(s)
 
         self.for_nodes(nodes, compute_node_storage)
-        self.logger.debug(
-            f"Finished storage checks all_nodes={all_nodes} sizes={sizes}"
-        )
+        self.logger.debug(f"Finished storage checks nodes={nodes} sizes={sizes}")
         return store
 
     def copy_data(self, dest: str, node: ClusterNode):

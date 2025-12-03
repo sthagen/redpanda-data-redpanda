@@ -11,9 +11,11 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "base/format_to.h"
 #include "bytes/iobuf_parser.h"
 #include "serde/rw/map.h"
 #include "serde/rw/rw.h"
+#include "utils/to_string.h"
 
 /**
  * A container that contains non-empty, open intervals.
@@ -105,6 +107,10 @@ public:
     friend void write(iobuf& out, interval_set is) {
         using serde::write;
         return write(out, std::move(is.set_));
+    }
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", set_);
     }
 
 private:

@@ -155,8 +155,11 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
     _job_state = compaction_job_state::running;
     _inflight_ntp = ntp;
 
-    // Copy
-    auto compaction_offsets = log->info_and_ts->info.offsets_response;
+    auto compaction_offsets = metastore::compaction_offsets_response{
+      .dirty_ranges = log->info_and_ts->info.offsets_response.dirty_ranges,
+      .removable_tombstone_ranges
+      = log->info_and_ts->info.offsets_response.removable_tombstone_ranges,
+      .extents = log->info_and_ts->info.offsets_response.extents.copy()};
 
     // Lazy initialization of offset map.
     if (!_map) {
@@ -166,7 +169,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
     auto src = std::make_unique<compaction_source>(
       std::move(ntp),
       tidp,
-      compaction_offsets,
+      std::move(compaction_offsets),
       _map.get(),
       _metastore,
       _io,

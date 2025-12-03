@@ -49,6 +49,18 @@ struct extent
     size_t len;
     // TODO: avoid duplicating the UUIDs with some indirection.
     object_id oid;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{offsets:({}~{}), max_timestamp:{}, filepos:{}, len:{}, oid:{}",
+          base_offset,
+          last_offset,
+          max_timestamp,
+          filepos,
+          len,
+          oid);
+    }
 };
 
 // Offset that corresponds to the start of a given term.

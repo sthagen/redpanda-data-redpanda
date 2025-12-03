@@ -189,6 +189,18 @@ struct get_offsets_request
     model::topic_id_partition tp;
 };
 
+struct extent_metadata
+  : serde::
+      envelope<extent_metadata, serde::version<0>, serde::compat_version<0>> {
+    auto serde_fields() {
+        return std::tie(base_offset, last_offset, max_timestamp);
+    }
+
+    kafka::offset base_offset;
+    kafka::offset last_offset;
+    model::timestamp max_timestamp;
+};
+
 struct get_compaction_info_reply
   : serde::envelope<
       get_compaction_info_reply,
@@ -200,7 +212,8 @@ struct get_compaction_info_reply
           dirty_ranges,
           removable_tombstone_ranges,
           dirty_ratio,
-          earliest_dirty_ts);
+          earliest_dirty_ts,
+          extents);
     }
 
     errc ec;
@@ -208,6 +221,7 @@ struct get_compaction_info_reply
     offset_interval_set removable_tombstone_ranges;
     double dirty_ratio;
     std::optional<model::timestamp> earliest_dirty_ts;
+    chunked_vector<extent_metadata> extents;
 };
 struct get_compaction_info_request
   : serde::envelope<

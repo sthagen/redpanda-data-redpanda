@@ -268,7 +268,7 @@ def wait_for_removal_of_n_segments(
 
     def segments_removed():
         current_snapshot = redpanda.storage(
-            all_nodes=True, scan_cache=False
+            nodes=redpanda.nodes, scan_cache=False
         ).segments_by_node("kafka", topic, partition_idx)
 
         redpanda.logger.debug(

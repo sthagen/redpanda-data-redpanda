@@ -45,6 +45,21 @@ rpc::errc convert_metastore_errc(metastore::errc e) {
         return rpc::errc::timed_out;
     }
 }
+
+chunked_vector<rpc::extent_metadata>
+meta_to_rpc_extent_metadata(metastore::extent_metadata_vec v) {
+    chunked_vector<rpc::extent_metadata> res;
+    res.reserve(v.size());
+    for (auto& e : v) {
+        res.push_back(
+          rpc::extent_metadata{
+            .base_offset = e.base_offset,
+            .last_offset = e.last_offset,
+            .max_timestamp = e.max_timestamp});
+    }
+    return res;
+}
+
 } // namespace
 
 domain_manager::domain_manager(ss::shared_ptr<simple_stm> stm, io* io)
@@ -355,7 +370,9 @@ domain_manager::get_compaction_info(rpc::get_compaction_info_request req) {
       .removable_tombstone_ranges = std::move(
         get_res->offsets_response.removable_tombstone_ranges),
       .dirty_ratio = get_res->dirty_ratio,
-      .earliest_dirty_ts = get_res->earliest_dirty_ts};
+      .earliest_dirty_ts = get_res->earliest_dirty_ts,
+      .extents = meta_to_rpc_extent_metadata(
+        std::move(get_res->offsets_response.extents))};
 }
 
 ss::future<rpc::get_term_for_offset_reply>

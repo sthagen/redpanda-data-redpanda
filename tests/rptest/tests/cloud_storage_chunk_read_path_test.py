@@ -145,7 +145,7 @@ class CloudStorageChunkReadTest(PreallocNodesTest):
         finally:
             producer.stop()
 
-        snapshot = self.redpanda.storage(all_nodes=True).segments_by_node(
+        snapshot = self.redpanda.storage(nodes=self.redpanda.nodes).segments_by_node(
             "kafka", self.topic, 0
         )
 

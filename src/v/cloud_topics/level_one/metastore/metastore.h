@@ -260,6 +260,15 @@ public:
 
             // Whether or not the cleaned range included any tombstones.
             bool has_tombstones{false};
+
+            fmt::iterator format_to(fmt::iterator it) const {
+                return fmt::format_to(
+                  it,
+                  "{{offsets:({}~{}), has_tombstones:{}}}",
+                  base_offset,
+                  last_offset,
+                  has_tombstones);
+            }
         };
         // Ranges indicating that the data's keys have been fully deduplicated
         // from the start of the log.
@@ -271,9 +280,36 @@ public:
 
         // Timestamp at which the compaction operation happened.
         model::timestamp cleaned_at;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{new_cleaned_ranges:{}, removed_tombstone_ranges:{}, "
+              "cleaned_at:{}}}",
+              new_cleaned_ranges,
+              removed_tombstones_ranges,
+              cleaned_at);
+        }
     };
     using compaction_map_t
       = chunked_hash_map<model::topic_id_partition, compaction_update>;
+
+    struct extent_metadata {
+        kafka::offset base_offset;
+        kafka::offset last_offset;
+        model::timestamp max_timestamp;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{offsets:({}~{}), max_timestamp:{}}}",
+              base_offset,
+              last_offset,
+              max_timestamp);
+        }
+    };
+    using extent_metadata_vec = chunked_vector<extent_metadata>;
+
     struct compaction_offsets_response {
         // Offset ranges whose keys have not been fully deduplicated from the
         // start of the log.
@@ -285,6 +321,17 @@ public:
         // A compaction method, when iterating over a tombstone record, may
         // consult this to determine if the tombstone should be removed.
         offset_interval_set removable_tombstone_ranges;
+
+        extent_metadata_vec extents;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{dirty_ranges:{}, removable_tombstone_ranges:{}, extents:{}}}",
+              dirty_ranges,
+              removable_tombstone_ranges,
+              extents);
+        }
     };
     // Similar to replace_objects(), but with additional constraints based on
     // compaction metadata. See get_compaction_info() for more details on
@@ -308,6 +355,15 @@ public:
         std::optional<model::timestamp> earliest_dirty_ts;
         // Dirty ranges & removable tombstone ranges.
         compaction_offsets_response offsets_response;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{dirty_ratio:{}, earliest_dirty_ts:{}, offsets_response:{}}}",
+              dirty_ratio,
+              earliest_dirty_ts,
+              offsets_response);
+        }
     };
 
     // Returns metadata required to determine what to compact for the given
