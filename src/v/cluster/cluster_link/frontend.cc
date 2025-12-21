@@ -1089,7 +1089,7 @@ errc frontend::validator::validate_metadata_mirroring_config(
 }
 
 ss::future<errc> frontend::failover_link_topics(
-  ::cluster_link::model::id_t id, model::timeout_clock::time_point timeout) {
+  ::cluster_link::model::id_t id, model::timeout_clock::duration timeout) {
     auto meta = _table->find_link_by_id(id);
     if (!meta.has_value()) {
         co_return errc::does_not_exist;
@@ -1136,7 +1136,7 @@ ss::future<errc> frontend::failover_link_topics(
                    {.topic = t,
                     .status
                     = ::cluster_link::model::mirror_topic_status::failing_over},
-                   timeout)
+                   model::timeout_clock::now() + timeout)
             .then([&errors](errc err_code) {
                 if (err_code != errc::success) {
                     errors.push_back(err_code);

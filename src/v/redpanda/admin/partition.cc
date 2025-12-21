@@ -216,8 +216,9 @@ admin_server::get_reconfigurations_handler(std::unique_ptr<ss::http::request>) {
 
     auto [reconfiguration_states, reconciliations]
       = co_await ss::when_all_succeed(
-        _controller->get_api().local().get_partitions_reconfiguration_state(
-          ntps, deadline),
+        _controller->get_api()
+          .local()
+          .get_partitions_leader_reconfiguration_state(ntps, deadline),
         _controller->get_api().local().get_global_reconciliation_state(
           ntps, deadline));
 

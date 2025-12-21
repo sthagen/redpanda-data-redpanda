@@ -45,7 +45,7 @@ ss::future<std::unique_ptr<ss::http::reply>> flexible_function_handler::handle(
               // in `http/mime_types.cc`, in order to construct a reply with
               // the `Content-Type` header set to `application/xml`, we
               // need to hard code a path here.
-              rep->set_mime_type("application/xml");
+              rep->set_content_type("application/xml");
               rep->done();
           } else {
               rep->done(_content_type);

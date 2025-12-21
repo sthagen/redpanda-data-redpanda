@@ -522,6 +522,7 @@ TEST(DeduplicateSegmentsTest, TestBadReader) {
         first_seg,
         *appender,
         *compacted_idx_writer,
+        disk_log.stm_manager(),
         disk_log.get_probe(),
         storage::internal::should_apply_delta_time_offset(b.feature_table()),
         b.feature_table(),

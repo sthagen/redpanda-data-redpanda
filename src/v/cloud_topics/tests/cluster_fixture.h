@@ -41,16 +41,14 @@ public:
     void add_node() {
         static constexpr int kafka_port_base = 9092;
         static constexpr int rpc_port_base = 11000;
-        static constexpr int proxy_port_base = 8082;
-        static constexpr int schema_reg_port_base = 8081;
         auto [s3_conf, a_conf, cs_conf] = get_cloud_storage_configurations(
           httpd_host_name, httpd_port_number());
         create_node_application(
           next_node_id(),
           kafka_port_base,
           rpc_port_base,
-          proxy_port_base,
-          schema_reg_port_base,
+          std::nullopt,
+          std::nullopt,
           configure_node_id::yes,
           empty_seed_starts_cluster::yes,
           s3_conf,

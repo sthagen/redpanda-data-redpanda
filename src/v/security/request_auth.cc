@@ -114,6 +114,15 @@ request_auth_result request_authenticator::do_authenticate(
         username = security::credential_user{decoded_bytes.substr(0, colon)};
         security::credential_password password{decoded_bytes.substr(colon + 1)};
 
+        if (crypto::is_scram_password_too_short(password())) {
+            vlog(
+              logger.info,
+              "Client auth failure: password length less than {} characters",
+              crypto::hmac_key_fips_min_bytes);
+            throw ss::httpd::bad_request_exception(
+              "Malformed Authorization header");
+        }
+
         const auto cred_opt = cred_store.get<security::scram_credential>(
           username);
         if (!cred_opt.has_value()) {

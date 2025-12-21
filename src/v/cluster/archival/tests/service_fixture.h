@@ -210,7 +210,7 @@ public:
     void auth_token_refresh_eventually(
       size_t expected, ss::lowres_clock::duration to = 3s) {
         RPTEST_REQUIRE_EVENTUALLY(to, [this, expected] {
-            return io.local().token_refresh_count() == expected;
+            return pool.local().token_refresh_count() == expected;
         });
     }
 

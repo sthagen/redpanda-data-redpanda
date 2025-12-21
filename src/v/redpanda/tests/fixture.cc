@@ -50,6 +50,7 @@
 #include "random/generators.h"
 #include "redpanda/application.h"
 #include "resource_mgmt/cpu_scheduling.h"
+#include "resource_mgmt/memory_groups.h"
 #include "security/acl.h"
 #include "security/sasl_authentication.h"
 #include "security/scram_algorithm.h"
@@ -79,11 +80,10 @@ redpanda_thread_fixture::redpanda_thread_fixture(
   model::node_id node_id,
   int32_t kafka_port,
   int32_t rpc_port,
-  int32_t proxy_port,
-  int32_t schema_reg_port,
+  std::optional<int32_t> proxy_port,
+  std::optional<int32_t> schema_reg_port,
   std::vector<config::seed_server> seed_servers,
   ss::sstring base_dir,
-  std::optional<scheduling_groups> sch_groups,
   bool remove_on_shutdown,
   std::optional<cloud_storage_clients::s3_configuration> s3_config,
   std::optional<archival::configuration> archival_cfg,
@@ -119,12 +119,17 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       development_cluster_linking_enabled);
     try {
         app.initialize(
-          proxy_config(proxy_port),
-          proxy_client_config(kafka_port),
-          schema_reg_config(schema_reg_port),
-          proxy_client_config(kafka_port),
-          audit_log_client_config(kafka_port),
-          sch_groups);
+          proxy_port.transform(
+            [this](auto port) { return proxy_config(port); }),
+          proxy_port.and_then([this, kafka_port](auto) {
+              return std::make_optional(proxy_client_config(kafka_port));
+          }),
+          schema_reg_port.transform(
+            [this](auto port) { return schema_reg_config(port); }),
+          schema_reg_port.and_then([this, kafka_port](auto) {
+              return std::make_optional(proxy_client_config(kafka_port));
+          }),
+          audit_log_client_config(kafka_port));
         app.check_environment();
         app.wire_up_and_start(*app_signal, true);
     } catch (...) {
@@ -146,9 +151,9 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       .start(
         &configs,
         app.smp_service_groups.kafka_smp_sg(),
-        app.sched_groups.fetch_sg(),
-        app.sched_groups.produce_sg(),
-        app.sched_groups.kafka_sg(),
+        scheduling_groups::instance().fetch_sg(),
+        scheduling_groups::instance().produce_sg(),
+        scheduling_groups::instance().kafka_sg(),
         std::ref(app.metadata_cache),
         std::ref(app.controller->get_topics_frontend()),
         std::ref(app.controller->get_config_frontend()),
@@ -182,15 +187,7 @@ redpanda_thread_fixture::redpanda_thread_fixture(
 // creates single node with default configuration
 redpanda_thread_fixture::redpanda_thread_fixture()
   : redpanda_thread_fixture(
-      model::node_id(1),
-      9092,
-      33145,
-      8082,
-      8081,
-      {},
-      test_directory(),
-      std::nullopt,
-      true) {}
+      model::node_id(1), 9092, 33145, 8082, 8081, {}, test_directory(), true) {}
 
 // Restart the fixture with an existing data directory
 redpanda_thread_fixture::redpanda_thread_fixture(
@@ -203,7 +200,6 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       8081,
       {},
       existing_data_dir.string(),
-      std::nullopt,
       true) {}
 
 struct init_cloud_storage_tag {};
@@ -221,7 +217,6 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       8081,
       {},
       test_directory(),
-      std::nullopt,
       true,
       get_s3_config(port, url_style),
       get_archival_config(),
@@ -241,7 +236,6 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       8081,
       {},
       test_directory(),
-      std::nullopt,
       true,
       get_s3_config(port, url_style),
       get_archival_config(),
@@ -265,7 +259,6 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       8081,
       {},
       test_directory(),
-      std::nullopt,
       true,
       get_s3_config(port, url_style),
       get_archival_config(),

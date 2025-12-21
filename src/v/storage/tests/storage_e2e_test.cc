@@ -4579,7 +4579,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
     // timed uploads.
     size_t tail_length = 5;
 
-    for (size_t i = 0; i < tail_length; i++) {
+    for (size_t i = 0; i < std::min(tail_length, summaries.size()); i++) {
         auto ix_batch = summaries.size() - 1 - i;
         res = log
                 ->offset_range_size(
@@ -5041,7 +5041,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
     // timed uploads.
     size_t tail_length = 5;
 
-    for (size_t i = 0; i < tail_length; i++) {
+    for (size_t i = 0; i < std::min(tail_length, c_summaries.size()); i++) {
         SUCCEED() << fmt::format("Checking i = {}", i);
         auto ix_batch = c_summaries.size() - 1 - i;
         res = log
@@ -6446,14 +6446,14 @@ TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
         } while (log->segments().back()->size_bytes() < size);
     };
 
-    auto add_segment_func = [&]() {
+    auto add_segment_func = [&](this auto) -> ss::future<> {
         auto size = random_generators::get_int(4_KiB, 10_MiB);
         add_segment(size, model::term_id(0));
-        log->force_roll().get();
+        co_await log->force_roll();
     };
 
-    add_segment_func();
-    add_segment_func();
+    add_segment_func().get();
+    add_segment_func().get();
 
     ss::abort_source as;
     compaction::compaction_config cfg(

@@ -77,7 +77,7 @@ private:
         explicit token_bucket(size_t /*initial_size*/);
         ss::future<> throttle(size_t /*bytes*/, ss::abort_source&);
         /// Adds granted capacity to the token bucket (removes if negative)
-        void renew_capacity(size_t granted_capacity);
+        void renew_capacity(ssize_t added_capacity);
         void shutdown() {
             _mutex.broken();
             _cv.broken();
@@ -87,7 +87,7 @@ private:
             return _admitted_bytes_since_last_reset;
         }
         ssize_t available() const { return _available_units; }
-        size_t last_reset_capacity() const { return _last_reset_capacity; }
+        ssize_t last_reset_capacity() const { return _last_reset_capacity; }
 
     private:
         ssize_t _available_units{0};
@@ -99,13 +99,13 @@ private:
         /// is last reset. We use this as a heuristic when estimating
         /// the capacity needed for the next tick. See required_capacity().
         size_t _admitted_bytes_since_last_reset{0};
-        size_t _last_reset_capacity;
+        ssize_t _last_reset_capacity;
     };
 
     /// Helpers to reset capacity on all/specific shard to the passed capacity.
     /// Used by the coordinator.
-    ss::future<> renew_capacity_all_shards(size_t /* new capacity*/);
-    ss::future<> renew_capacity_on_shard(ss::shard_id, size_t /*new capacity*/);
+    ss::future<> renew_capacity_all_shards(ssize_t added_capacity);
+    ss::future<> renew_capacity_on_shard(ss::shard_id, ssize_t added_capacity);
 
     void arm_coordinator_timer();
 

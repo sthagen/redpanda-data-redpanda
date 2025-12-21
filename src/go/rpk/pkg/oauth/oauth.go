@@ -1,3 +1,12 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.md
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0
+
 package oauth
 
 import (
@@ -7,8 +16,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/authtoken"
 	"go.uber.org/zap"
 )
 
@@ -63,7 +72,7 @@ func ClientCredentialFlow(ctx context.Context, cl Client, auth *config.RpkCloudA
 	// We only validate the token if we have the client ID, if one of them is
 	// not present we just start the login flow again.
 	if auth.AuthToken != "" && auth.ClientID != "" && !forceReload {
-		expired, err := ValidateToken(auth.AuthToken, cl.Audience(), auth.ClientID)
+		expired, err := authtoken.ValidateToken(auth.AuthToken, cl.Audience(), auth.ClientID)
 		if err != nil {
 			return Token{}, false, fmt.Errorf("unable to validate your authorization token: %v", err)
 		}
@@ -90,7 +99,7 @@ func DeviceFlow(ctx context.Context, cl Client, auth *config.RpkCloudAuth, noUI,
 	// We only validate the token if we have the client ID, if one of them is
 	// not present we just start the login flow again.
 	if auth.AuthToken != "" && auth.ClientID != "" && !forceReload {
-		expired, err := ValidateToken(auth.AuthToken, cl.Audience(), auth.ClientID)
+		expired, err := authtoken.ValidateToken(auth.AuthToken, cl.Audience(), auth.ClientID)
 		if err != nil {
 			return Token{}, false, fmt.Errorf("unable to validate your authorization token: %v", err)
 		}
@@ -176,71 +185,6 @@ func waitForDeviceToken(ctx context.Context, cl Client, dcode DeviceCode) (Token
 			return Token{}, fmt.Errorf("failed to retrieve token: %v", ctx.Err())
 		}
 	}
-}
-
-// ValidateToken validates that the token is valid, not yet expired, it is for
-// the given audience, and it is for the given client ID.
-//
-// If the token is valid, this returns false, nil.
-// If the token is expired, this returns true, nil
-// Otherwise, this returns false, *BadClientTokenError.
-func ValidateToken(token, audience string, clientIDs ...string) (expired bool, rerr error) {
-	if token == "" {
-		return false, ErrMissingToken
-	}
-	defer func() {
-		if rerr != nil {
-			rerr = &BadClientTokenError{rerr}
-		}
-	}()
-	// A missing audience is not validated when using WithAudience below.
-	if audience == "" {
-		return false, errors.New("invalid empty audience")
-	}
-
-	parsed, err := jwt.Parse([]byte(token), jwt.WithVerify(false))
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired()) {
-			return true, nil
-		}
-		if errors.Is(err, jwt.ErrInvalidAudience()) {
-			return false, fmt.Errorf("token audience %v does not contain our expected audience %q", parsed.Audience(), audience)
-		}
-		return false, fmt.Errorf("unable to parse jwt token: %v", err)
-	}
-
-	// A missing "exp" field shows up as a zero time.
-	if parsed.Expiration().IsZero() {
-		return false, errors.New("invalid non-expiring token")
-	}
-
-	err = jwt.Validate(parsed,
-		jwt.WithAudience(audience))
-	if err != nil {
-		if errors.Is(err, jwt.ErrTokenExpired()) {
-			return true, nil
-		}
-		if errors.Is(err, jwt.ErrInvalidAudience()) {
-			return false, fmt.Errorf("token audience %v does not contain our expected audience %q", parsed.Audience(), audience)
-		}
-		return false, fmt.Errorf("token validation error: %v", err)
-	}
-
-	for _, clientID := range clientIDs {
-		err = jwt.Validate(parsed,
-			jwt.WithClaimValue("azp", clientID),
-		)
-		if err == nil {
-			return false, nil
-		}
-		switch err.Error() {
-		case `"azp" not satisfied: values do not match`:
-			continue
-		default:
-			return false, fmt.Errorf("token validation error: %w", err)
-		}
-	}
-	return false, fmt.Errorf("token client id %q is not our expected client id %q", parsed.PrivateClaims()["azp"], clientIDs)
 }
 
 func isURL(str string) bool {

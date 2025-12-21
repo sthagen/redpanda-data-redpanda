@@ -18,7 +18,6 @@
 #include "cloud_topics/level_one/compaction/scheduling_policies.h"
 #include "cloud_topics/level_one/compaction/worker_manager.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
-#include "cluster/metadata_cache.h"
 #include "config/property.h"
 #include "model/fundamental.h"
 #include "ssx/semaphore.h"

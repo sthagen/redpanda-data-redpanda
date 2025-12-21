@@ -3330,7 +3330,7 @@ group::do_try_abort_old_tx(model::producer_identity pid) {
         producer_tx.coordinator_partition,
         pid,
         producer_tx.tx_seq,
-        config::shard_local_cfg().rm_sync_timeout_ms.value()));
+        config::shard_local_cfg().internal_rpc_request_timeout_ms.value()));
 
     if (r.ec != cluster::tx::errc::none) {
         co_return r.ec;

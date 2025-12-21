@@ -200,6 +200,7 @@ partition_state partition_state::copy() const {
       .compaction_state = compaction_state
                             ? std::make_optional(compaction_state->copy())
                             : std::nullopt,
+      .compaction_epoch = compaction_epoch,
     };
     return res;
 }

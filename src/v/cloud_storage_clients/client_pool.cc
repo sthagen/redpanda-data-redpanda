@@ -13,9 +13,10 @@
 #include "cloud_storage_clients/abs_client.h"
 #include "cloud_storage_clients/logger.h"
 #include "cloud_storage_clients/s3_client.h"
+#include "crash_tracker/recorder.h"
 #include "model/timeout_clock.h"
+#include "ssx/abort_source.h"
 #include "ssx/future-util.h"
-#include "utils/functional.h"
 
 #include <seastar/core/smp.hh>
 #include <seastar/core/timed_out_error.hh>
@@ -24,6 +25,7 @@
 #include <chrono>
 #include <optional>
 #include <random>
+#include <stdexcept>
 #include <utility>
 
 using namespace std::chrono_literals;
@@ -31,27 +33,21 @@ using namespace std::chrono_literals;
 namespace {
 constexpr auto self_configure_attempts = 3;
 constexpr auto self_configure_backoff = 1s;
-constexpr auto self_config_timeout = 15s;
+constexpr auto pool_ready_timeout = 15s;
 } // namespace
 
 namespace cloud_storage_clients {
 
 client_pool::client_pool(
-  size_t size,
-  client_configuration conf,
-  client_pool_overdraft_policy policy,
-  std::optional<std::reference_wrapper<stop_signal>> application_stop_signal)
+  size_t size, client_configuration conf, client_pool_overdraft_policy policy)
   : _capacity(size)
   , _config(std::move(conf))
-  , _probe(std::visit([](auto&& p) { return p._probe; }, _config))
-  , _policy(policy) {
-    if (ss::this_shard_id() == self_config_shard) {
-        ssx::spawn_with_gate(
-          _gate, [this, app_stop_signal = application_stop_signal]() {
-              return client_self_configure(app_stop_signal);
-          });
-    }
-}
+  , _probe(std::visit([](auto&& p) { return p.make_probe(); }, _config))
+  , _policy(policy)
+  , _credential_manager(
+      *this, _config, ss::visit(_config, [](const common_configuration& c) {
+          return c.cloud_credentials_source;
+      })) {}
 
 ss::future<> client_pool::client_self_configure(
   std::optional<std::reference_wrapper<stop_signal>> application_stop_signal) {
@@ -84,6 +80,12 @@ ss::future<> client_pool::client_self_configure(
             vassert(
               application_stop_signal.has_value(),
               "Application abort source not present in client pool");
+
+            crash_tracker::get_recorder().record_crash_exception(
+              std::make_exception_ptr(
+                std::runtime_error(
+                  "Cloud storage client self-configuration failed. "
+                  "Check your cloud storage credentials and configuration.")));
 
             application_stop_signal->get().signaled();
 
@@ -162,11 +164,32 @@ ss::future<> client_pool::accept_self_configure_result(
           _config, *result);
     }
 
-    populate_client_pool();
-
     // We signal the waiters only after the client pool is initialized, so
     // that any upload operations waiting are ready to proceed.
     _self_config_barrier.signal(_self_config_barrier.max_counter());
+}
+
+ss::future<> client_pool::start(
+  std::optional<std::reference_wrapper<stop_signal>> application_stop_signal) {
+    _transport_config = co_await build_transport_configuration(_config);
+
+    if (ss::this_shard_id() == self_config_shard) {
+        ssx::spawn_with_gate(
+          _gate, [this, app_stop_signal = application_stop_signal]() {
+              return client_self_configure(app_stop_signal);
+          });
+    }
+
+    // All shards wait for self-configuration to complete before populating
+    // client pool. By that time we have built transport configuration (happened
+    // above), have valid credentials (self configuration waits on them), and
+    // have applied self-configuration results (if any).
+    ssx::spawn_with_gate(_gate, [this]() {
+        return ss::get_units(_self_config_barrier, 1, _as)
+          .then([this](ssx::semaphore_units) { populate_client_pool(); });
+    });
+
+    co_await _credential_manager.start();
 }
 
 ss::future<> client_pool::stop() {
@@ -177,6 +200,7 @@ ss::future<> client_pool::stop() {
     }
     _cvar.broken();
     _self_config_barrier.broken();
+    _pool_ready_barrier.broken();
     _credentials_var.broken();
     // Wait for all background operations to complete.
     co_await _bg_gate.close();
@@ -192,6 +216,8 @@ ss::future<> client_pool::stop() {
 
     co_await ss::when_all_succeed(stops.begin(), stops.end());
 
+    co_await _credential_manager.stop();
+
     vlog(pool_log.info, "Stopped client pool");
     _probe = nullptr;
 }
@@ -206,6 +232,7 @@ void client_pool::shutdown_connections() {
     _as.request_abort();
     _cvar.broken();
     _self_config_barrier.broken();
+    _pool_ready_barrier.broken();
     _credentials_var.broken();
 
     for (auto& it : _leased) {
@@ -269,8 +296,15 @@ ss::future<client_pool::client_lease> client_pool::acquire(
         // but we have scheduled an upload. This wait ensures that when we call
         // the storage API we have a set of valid credentials.
         if (std::optional<ssx::semaphore_units> u = ss::try_get_units(
-              _self_config_barrier, 1);
+              _pool_ready_barrier, 1);
             !u.has_value()) {
+            const auto ready_deadline = std::min(
+              deadline.value_or(ss::lowres_clock::time_point::max()),
+              ss::lowres_clock::now() + pool_ready_timeout);
+            auto timeout_as = ss::abort_on_expiry(ready_deadline);
+            auto wait_as = ssx::composite_abort_source(
+              as, timeout_as.abort_source());
+
             // Timeout exception will be thrown if the credentials are not
             // refreshed yet. The code in the 'remote' class handles this
             // exception. Most of the time this exception means that the
@@ -278,11 +312,11 @@ ss::future<client_pool::client_lease> client_pool::acquire(
             // properly.
             try {
                 u = co_await ss::get_units(
-                  _self_config_barrier, 1, self_config_timeout);
+                  _pool_ready_barrier, 1, wait_as.as());
             } catch (const ss::timed_out_error&) {
                 vlog(
-                  pool_log.error,
-                  "Failed to acquire credentials within timeout");
+                  pool_log.warn,
+                  "Timed out waiting for client pool to be ready");
                 throw;
             }
         }
@@ -535,6 +569,8 @@ size_t client_pool::size() const noexcept { return _pool.size(); }
 size_t client_pool::max_size() const noexcept { return _capacity; }
 
 void client_pool::populate_client_pool() {
+    vlog(pool_log.info, "Populating client pool with {} clients", _capacity);
+
     _pool.reserve(_capacity);
     for (size_t i = 0; i < _capacity; i++) {
         _pool.emplace_back(make_client());
@@ -547,21 +583,31 @@ void client_pool::populate_client_pool() {
       !_cvar.has_waiters(),
       "This is a bug: _cvar is not expected to have waiters at this point. "
       "Missing synchronization?");
+
+    _pool_ready_barrier.signal(_pool_ready_barrier.max_counter());
 }
 
-client_pool::http_client_ptr client_pool::make_client() const noexcept {
-    return std::visit(
-      [this](const auto& cfg) -> http_client_ptr {
-          using cfg_type = std::decay_t<decltype(cfg)>;
-          if constexpr (std::is_same_v<s3_configuration, cfg_type>) {
-              return ss::make_shared<s3_client>(cfg, _as, _apply_credentials);
-          } else if constexpr (std::is_same_v<abs_configuration, cfg_type>) {
-              return ss::make_shared<abs_client>(cfg, _as, _apply_credentials);
-          } else {
-              static_assert(always_false_v<cfg_type>, "Unknown client type");
-          }
+client_pool::http_client_ptr client_pool::make_client() noexcept {
+    return ss::visit(
+      _config,
+      [this](const s3_configuration& cfg) -> http_client_ptr {
+          return ss::make_shared<s3_client>(
+            weak_from_this(),
+            cfg,
+            _transport_config,
+            _probe,
+            _as,
+            _apply_credentials);
       },
-      _config);
+      [this](const abs_configuration& cfg) -> http_client_ptr {
+          return ss::make_shared<abs_client>(
+            weak_from_this(),
+            cfg,
+            _transport_config,
+            _probe,
+            _as,
+            _apply_credentials);
+      });
 }
 
 void client_pool::release(http_client_ptr leased) {
@@ -575,6 +621,23 @@ void client_pool::release(http_client_ptr leased) {
       "tried to release a client but the pool is at capacity");
     _pool.emplace_back(std::move(leased));
     _cvar.signal();
+}
+
+void client_pool::maybe_refresh_credentials() {
+    if (ss::this_shard_id() == cloud_roles::auth_refresh_shard_id) {
+        return _credential_manager.maybe_refresh_credentials();
+    } else {
+        return ssx::spawn_with_gate(_gate, [this] {
+            return container().invoke_on(
+              cloud_roles::auth_refresh_shard_id, [](client_pool& pool) {
+                  pool._credential_manager.maybe_refresh_credentials();
+              });
+        });
+    }
+}
+
+uint64_t client_pool::token_refresh_count() const noexcept {
+    return _credential_manager.token_refresh_count();
 }
 
 void client_pool::load_credentials(cloud_roles::credentials credentials) {

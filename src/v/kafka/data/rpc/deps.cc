@@ -150,7 +150,8 @@ public:
                          .local()
                          .autocreate_topics(
                            {std::move(topic_cfg)},
-                           config::shard_local_cfg().create_topic_timeout_ms());
+                           config::shard_local_cfg()
+                             .internal_rpc_request_timeout_ms());
             vassert(res.size() == 1, "expected a single result");
             co_return res[0].ec;
         } catch (const std::exception& ex) {
@@ -187,13 +188,13 @@ public:
     ss::future<cluster::errc>
     update_topic(cluster::topic_properties_update update) final {
         try {
-            auto res
-              = co_await _controller->get_topics_frontend()
-                  .local()
-                  .update_topic_properties(
-                    {update},
-                    ss::lowres_clock::now()
-                      + config::shard_local_cfg().alter_topic_cfg_timeout_ms());
+            auto res = co_await _controller->get_topics_frontend()
+                         .local()
+                         .update_topic_properties(
+                           {update},
+                           ss::lowres_clock::now()
+                             + config::shard_local_cfg()
+                                 .internal_rpc_request_timeout_ms());
             vassert(res.size() == 1, "expected a single result");
             co_return res[0].ec;
         } catch (const std::exception& ex) {

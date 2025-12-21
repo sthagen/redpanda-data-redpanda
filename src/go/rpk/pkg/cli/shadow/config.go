@@ -43,8 +43,11 @@ func newShadowConfigCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 }
 
 func newGenerateCommand(fs afero.Fs, _ *config.Params) *cobra.Command {
-	var outputPath string
-	var printTemplate bool
+	var (
+		outputPath    string
+		printTemplate bool
+		cloud         bool
+	)
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Args:  cobra.NoArgs,
@@ -52,7 +55,8 @@ func newGenerateCommand(fs afero.Fs, _ *config.Params) *cobra.Command {
 		Long: `Generate a configuration file for creating a Shadow Link.
 
 By default, this command creates a sample configuration file with placeholder
-values that you customize for your environment.
+values that you can customize for your environment. If you are generating a 
+Shadow Link for Redpanda Cloud, use the --for-cloud flag.
 
 Use the --print-template flag to generate a configuration template with detailed
 field documentations.
@@ -84,8 +88,7 @@ Save the template with documentation to a file:
 				outputData = template
 				successMsg = "Template file generated successfully: %s\n"
 			} else {
-				// TODO: support generating from an rpk profile or Redpanda config file.
-				sampleConfig := generateSampleConfig()
+				sampleConfig := generateSampleConfig(cloud)
 				yamlData, err := yaml.Marshal(sampleConfig)
 				out.MaybeDie(err, "unable to marshal configuration to YAML: %v", err)
 				outputData = string(yamlData)
@@ -111,12 +114,13 @@ Save the template with documentation to a file:
 		},
 	}
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "File path to save the generated configuration file. If not specified, prints to standard output")
+	cmd.Flags().BoolVar(&cloud, "for-cloud", false, "Generate configuration suitable for Redpanda Cloud")
 	cmd.Flags().BoolVar(&printTemplate, "print-template", false, "Generate a configuration template with field documentation instead of a sample configuration")
 	return cmd
 }
 
-func generateSampleConfig() *ShadowLinkConfig {
-	return &ShadowLinkConfig{
+func generateSampleConfig(cloud bool) *ShadowLinkConfig {
+	slCfg := &ShadowLinkConfig{
 		Name: "sample-shadow-link",
 		ClientOptions: &ShadowLinkClientOptions{
 			BootstrapServers: []string{"localhost:9092", "localhost:19092"},
@@ -196,6 +200,29 @@ func generateSampleConfig() *ShadowLinkConfig {
 			ShadowSchemaRegistryTopic: &ShadowSchemaRegistryTopic{},
 		},
 	}
+	if cloud {
+		slCfg.CloudOptions = &CloudShadowLinkOptions{
+			SourceRedpandaID: "m7xtv2qq5njbhwruk88f",
+			ShadowRedpandaID: "p9skc1dd3fmzgvquj66h",
+		}
+
+		slCfg.ClientOptions.BootstrapServers = nil
+		// This is confusing on Cloud, user is already providing the Redpanda ID.
+		slCfg.ClientOptions.SourceClusterID = ""
+		// Cloud only accepts passwords from the secret store.
+		slCfg.ClientOptions.AuthenticationConfiguration.ScramConfiguration.Password = "${secrets.PASSWORD_FROM_SHADOW_CLUSTER_SECRET_STORE}"
+
+		// Replace TLS settings as file settings are not valid in Cloud.
+		slCfg.ClientOptions.TLSSettings = &TLSSettings{
+			Enabled: true,
+			TLSPEMSettings: &TLSPEMSettings{
+				CA:   "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+				Key:  "${secrets.KEY_FROM_SHADOW_CLUSTER_SECRET_STORE}",
+				Cert: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+			},
+		}
+	}
+	return slCfg
 }
 
 func generateConfigTemplate() string {

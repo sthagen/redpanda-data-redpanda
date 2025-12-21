@@ -26,6 +26,8 @@ const object_id oid1 = l1::create_object_id();
 const object_id oid2 = l1::create_object_id();
 const object_id oid3 = l1::create_object_id();
 const object_id oid4 = l1::create_object_id();
+const object_id oid5 = l1::create_object_id();
+const object_id oid6 = l1::create_object_id();
 const std::string_view tidp_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tidp_b = "deadbeef-bbbb-0000-0000-000000000000/0";
 const std::string_view tidp_c = "deadbeef-cccc-0000-0000-000000000000/0";
@@ -114,6 +116,14 @@ public:
         auto tp = model::topic_id_partition::from(tp_str);
         auto& c_state = out.compaction_updates[tp.topic_id][tp.partition];
         c_state.removed_tombstones_ranges.insert(base, last);
+        return *this;
+    }
+    replace_objects_builder& set_expected_epoch(
+      std::string_view tp_str,
+      partition_state::compaction_epoch_t compaction_epoch) {
+        auto tp = model::topic_id_partition::from(tp_str);
+        auto& c_state = out.compaction_updates[tp.topic_id][tp.partition];
+        c_state.expected_compaction_epoch = compaction_epoch;
         return *this;
     }
     replace_objects_update build() { return std::move(out); }
@@ -498,6 +508,394 @@ TEST(StateUpdateTest, TestEmptyReplace) {
       testing::StrEq("No objects requested"));
 }
 
+TEST(StateUpdateTest, TestReplaceValidNonContiguous) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
+    // non-contiguous update. While the update itself is non-contiguous, the
+    // individual objects still align with existing extents, and is therefore
+    // valid.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+    ASSERT_EQ(p.extents.size(), 3);
+}
+
+TEST(StateUpdateTest, TestReplaceValidNonContiguousSplitExtent) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
+    // non-contiguous update whose objects align with existing extents.
+    // The update should see oid3 split into two new extents (for a total of 4
+    // extents).
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 200_o, 249_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid6, 100, 1100)
+                            .add(tidp_a, 250_o, 299_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+    ASSERT_EQ(p.extents.size(), 4);
+}
+
+TEST(StateUpdateTest, TestReplaceInvalidNonContiguousBadOffsets) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
+    // invalid non-contiguous update with bad offsets.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 200_o, 249_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid6, 100, 1100)
+                            .add(tidp_a, 239_o, 299_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("breaks partition .+ offset ordering"));
+
+    auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+    ASSERT_EQ(p.extents.size(), 3);
+}
+
+TEST(StateUpdateTest, TestReplaceInvalidNonContiguousDoesNotSpan) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
+    // invalid non-contiguous update that doesn't exactly span existing extents.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 200_o, 249_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid6, 100, 1100)
+                            .add(tidp_a, 250_o, 298_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex(
+        "Partition .+ doesn't contain extents that span exactly"));
+
+    auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+    ASSERT_EQ(p.extents.size(), 3);
+}
+
+TEST(StateUpdateTest, TestReplaceSingleExtentBeforeNewStartOffset) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto set_start_update = set_start_offset_update::build(s, tp, 150_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Attempt to replace with a list of valid objects, with one extent
+    // containing offsets before the truncation point (the new start offset).
+    // The metastore should be able to apply the update by ignoring the first
+    // extent.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid6, 100, 1100)
+                            .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+}
+
+TEST(StateUpdateTest, TestReplaceWithAlignedExtentsBeforeNewStartOffset) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 30_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 31_o, 60_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 61_o, 100_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto set_start_update = set_start_offset_update::build(s, tp, 61_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Attempt to replace with a list of valid objects built before the
+    // truncation occurred. The metastore should be able to accept and prune the
+    // extents below the start offset.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 30_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 31_o, 60_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid6, 100, 1100)
+                            .add(tidp_a, 61_o, 100_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(p_state->get().extents.size(), 1);
+}
+
+TEST(StateUpdateTest, TestReplaceAllExtentsBeforeNewStartOffset) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto set_start_update = set_start_offset_update::build(s, tp, 300_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Attempt to replace with a list of valid objects, with all extents
+    // containing offsets before the truncation point (the new start offset).
+    // The metastore should be able to recognize this is a no-op.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 100_o, 199_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid6, 100, 1100)
+                            .add(tidp_a, 200_o, 299_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex(
+        "Partition .+ doesn't contain extents that span exactly"));
+}
+
+TEST(StateUpdateTest, TestReplaceMultipleExtentsBeforeNewStartOffset) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 100_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto set_start_update = set_start_offset_update::build(s, tp, 75_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Attempt to replace with a list of valid objects, with some extents
+    // containing offsets before the truncation point (the new start offset).
+    // If we fail to consider the fact that the extent {0,100} is still
+    // present in the existing state, removing the first two extents would
+    // result in a misaligned update and a failure to replace.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid2, 100, 1100)
+                            .add(tidp_a, 0_o, 30_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid3, 100, 1100)
+                            .add(tidp_a, 31_o, 60_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 61_o, 100_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(p_state->get().extents.size(), 1);
+}
+
+TEST(StateUpdateTest, TestReplaceMisalignedButContiguousWithNewStartOffset) {
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100, 1100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid2, 100, 1100)
+                        .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                        .build())
+                 .add(new_obj_builder(oid3, 100, 1100)
+                        .add(tidp_a, 21_o, 30_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto set_start_update = set_start_offset_update::build(s, tp, 15_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Attempt to replace with a list of extents that are misaligned to the
+    // existing extents ([11,20],[21,30]), but form a valid, contiguous update
+    // when considering the new start offset.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid4, 100, 1100)
+                            .add(tidp_a, 0_o, 15_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid5, 100, 1100)
+                            .add(tidp_a, 16_o, 30_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(p_state->get().extents.size(), 2);
+}
+
 TEST(StateUpdateTest, TestReplaceWithCompaction) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
@@ -526,6 +924,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
             range{
               .base_offset = 5_o, .last_offset = 10_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
 
     auto replace_res = replace.apply(s);
@@ -542,6 +941,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     EXPECT_THAT(
       prt_a.compaction_state->cleaned_ranges_with_tombstones,
       ElementsAre(MatchesRange(5_o, 10_o)));
+    EXPECT_EQ(prt_a.compaction_epoch, partition_state::compaction_epoch_t{1});
 
     // Compact an extent, marking [3, 4] cleaned with tombstones.
     replace
@@ -554,6 +954,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
             range{
               .base_offset = 3_o, .last_offset = 4_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{1})
           .build();
     replace_res = replace.apply(s);
     ASSERT_TRUE(replace_res.has_value());
@@ -565,6 +966,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     EXPECT_THAT(
       prt_a.compaction_state->cleaned_ranges_with_tombstones,
       ElementsAre(MatchesRange(3_o, 4_o), MatchesRange(5_o, 10_o)));
+    EXPECT_EQ(prt_a.compaction_epoch, partition_state::compaction_epoch_t{2});
 
     // Now mark [3, 8] as having removed tombstones.
     replace = replace_objects_builder()
@@ -572,6 +974,8 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                        .build())
                 .clean_tombstones(tidp_a, 3_o, 8_o)
+                .set_expected_epoch(
+                  tidp_a, partition_state::compaction_epoch_t{2})
                 .build();
     replace_res = replace.apply(s);
     ASSERT_TRUE(replace_res.has_value()) << replace_res.error();
@@ -583,6 +987,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     EXPECT_THAT(
       prt_a.compaction_state->cleaned_ranges_with_tombstones,
       ElementsAre(MatchesRange(9_o, 10_o)));
+    EXPECT_EQ(prt_a.compaction_epoch, partition_state::compaction_epoch_t{3});
 }
 
 TEST(StateUpdateTest, TestCompactionMissingExtent) {
@@ -611,6 +1016,7 @@ TEST(StateUpdateTest, TestCompactionMissingExtent) {
             range{
               .base_offset = 5_o, .last_offset = 10_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
     auto replace_res = replace.apply(s);
     ASSERT_FALSE(replace_res.has_value());
@@ -645,6 +1051,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
             range{
               .base_offset = 5_o, .last_offset = 11_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
     auto replace_res = replace.apply(s);
     ASSERT_FALSE(replace_res.has_value());
@@ -689,6 +1096,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
             range{
               .base_offset = 0_o, .last_offset = 20_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
     auto replace_res = replace.apply(s);
     ASSERT_FALSE(replace_res.has_value());
@@ -732,6 +1140,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
             range{
               .base_offset = 11_o, .last_offset = 20_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
     auto replace_res = replace.apply(s);
     ASSERT_FALSE(replace_res.has_value());
@@ -766,6 +1175,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
             range{
               .base_offset = 5_o, .last_offset = 10_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
     auto replace_res = replace.apply(s);
     ASSERT_TRUE(replace_res.has_value());
@@ -780,6 +1190,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
             range{
               .base_offset = 10_o, .last_offset = 10_o, .has_tombstones = true},
             1999_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{1})
           .build();
     replace_res = replace.apply(s);
     ASSERT_FALSE(replace_res.has_value());
@@ -809,6 +1220,8 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
                             .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                             .build())
                      .clean_tombstones(tidp_a, 5_o, 10_o)
+                     .set_expected_epoch(
+                       tidp_a, partition_state::compaction_epoch_t{0})
                      .build();
     auto replace_res = replace.apply(s);
     ASSERT_FALSE(replace_res.has_value());
@@ -1211,6 +1624,7 @@ TEST(StateUpdateTest, TestSetStartOffsetWithCompactionState) {
             range{
               .base_offset = 5_o, .last_offset = 15_o, .has_tombstones = true},
             3000_t)
+          .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
     auto replace_res = replace_update.apply(s);
     ASSERT_TRUE(replace_res.has_value());
@@ -1227,6 +1641,8 @@ TEST(StateUpdateTest, TestSetStartOffsetWithCompactionState) {
     EXPECT_THAT(
       p_state->get().compaction_state->cleaned_ranges_with_tombstones,
       ElementsAre(MatchesRange(5_o, 15_o)));
+    EXPECT_EQ(
+      p_state->get().compaction_epoch, partition_state::compaction_epoch_t{1});
 
     // Set start offset to fall within the cleaned range (offset 10)
     auto set_start_update = set_start_offset_update::build(s, tp, 10_o);
@@ -1250,6 +1666,8 @@ TEST(StateUpdateTest, TestSetStartOffsetWithCompactionState) {
     EXPECT_THAT(
       p_state->get().compaction_state->cleaned_ranges_with_tombstones,
       ElementsAre(MatchesRange(10_o, 15_o)));
+    EXPECT_EQ(
+      p_state->get().compaction_epoch, partition_state::compaction_epoch_t{1});
 }
 
 TEST(StateUpdateTest, TestRemoveObjectsBasic) {
@@ -1504,4 +1922,73 @@ TEST(StateUpdateTest, TestRemoveMissingTopic) {
     ASSERT_TRUE(remove_topics_res->apply(s).has_value());
     EXPECT_EQ(0, s.topic_to_state.size());
     EXPECT_EQ(1, s.objects.size());
+}
+
+TEST(StateUpdateTest, TestCompactionValidatesEpoch) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300, 1300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    {
+        // Attempt to fully compact partition A with an invalid compaction
+        // epoch.
+        auto replace = replace_objects_builder()
+                         .add(new_obj_builder(oid2, 100, 1100)
+                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                                .build())
+                         .clean(
+                           tidp_a,
+                           range{
+                             .base_offset = 0_o,
+                             .last_offset = 10_o,
+                             .has_tombstones = true},
+                           1999_t)
+                         .set_expected_epoch(
+                           tidp_a, partition_state::compaction_epoch_t{999})
+                         .build();
+
+        auto replace_res = replace.apply(s);
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_THAT(
+          std::string(replace_res.error()()),
+          testing::ContainsRegex(
+            "Expected compaction epoch .+ does not match the current"));
+    }
+
+    {
+        // Fix the expected epoch and see state increment its internal
+        // compaction_epoch.
+        auto replace = replace_objects_builder()
+                         .add(new_obj_builder(oid2, 100, 1100)
+                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                                .build())
+                         .clean(
+                           tidp_a,
+                           range{
+                             .base_offset = 0_o,
+                             .last_offset = 10_o,
+                             .has_tombstones = true},
+                           1999_t)
+                         .set_expected_epoch(
+                           tidp_a, partition_state::compaction_epoch_t{0})
+                         .build();
+
+        auto replace_res = replace.apply(s);
+        ASSERT_TRUE(replace_res.has_value());
+        auto tp = model::topic_id_partition::from(tidp_a);
+        auto p_state = s.partition_state(tp);
+        ASSERT_TRUE(p_state.has_value());
+        ASSERT_TRUE(p_state->get().compaction_state.has_value());
+        ASSERT_EQ(
+          p_state->get().compaction_epoch,
+          partition_state::compaction_epoch_t{1});
+    }
 }

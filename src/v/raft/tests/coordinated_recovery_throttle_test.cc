@@ -238,10 +238,10 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
         // bandwidth after rebalancing.
         ssize_t total_available = 0;
         for (auto current : all_available().get()) {
-            BOOST_REQUIRE(abs(current) < ss::smp::count);
+            BOOST_REQUIRE(std::abs(current) < ss::smp::count);
             total_available += current;
         }
-        BOOST_REQUIRE(abs(total_available) < ss::smp::count);
+        BOOST_REQUIRE(std::abs(total_available) < ss::smp::count);
 
         // Nothing waiting
         BOOST_REQUIRE_EQUAL(
@@ -270,7 +270,7 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
             }
             ++shard_id;
         }
-        BOOST_REQUIRE(abs(total_available) < ss::smp::count);
+        BOOST_REQUIRE(std::abs(total_available) < ss::smp::count);
 
         // Step 5: In a few ticks, all shards should be back to fair rate.
         wait_until([this] {
@@ -351,11 +351,11 @@ FIXTURE_TEST(overusing, test_fixture) {
     // Check that available capacity is back to normal.
     // and balance is non-negative on all shards
     auto available = all_available().get();
-    BOOST_REQUIRE(std::ranges::all_of(available, [](size_t current) {
+    BOOST_REQUIRE(std::ranges::all_of(available, [](auto current) {
         return current >= 0;
     }));
     auto sum = std::ranges::fold_left(available, ssize_t{0}, std::plus{});
-    auto deviation_from_full = abs(
+    auto deviation_from_full = std::abs(
       sum - ss::smp::count * initial_rate_per_shard);
     // allow for rounding errors
     BOOST_REQUIRE(deviation_from_full <= ss::smp::count);
@@ -391,7 +391,7 @@ FIXTURE_TEST(overusing_a_lot, test_fixture) {
     all_available()
       .then([](auto available) {
           return std::ranges::all_of(
-            available, [](size_t current) { return current >= 0; });
+            available, [](auto current) { return current >= 0; });
       })
       .get();
 }
@@ -410,4 +410,29 @@ FIXTURE_TEST(overusing_on_zero_rate, test_fixture) {
     update_rate(ss::smp::count);
     coordinator_tick().get();
     f.get();
+}
+
+FIXTURE_TEST(allowance_staying_negative, test_fixture) {
+    ssize_t original_rate = 100 * ss::smp::count;
+    ssize_t reduced_rate = 10 * ss::smp::count;
+    ssize_t oversized_request = 10000 * ss::smp::count;
+
+    update_rate(original_rate);
+    coordinator_tick().get();
+
+    throttle_on_shard(0, oversized_request).get();
+    update_rate(reduced_rate);
+    coordinator_tick().get();
+
+    auto available = all_available().get();
+    BOOST_REQUIRE(std::ranges::all_of(available, [this](auto current) {
+        vlog(logger.info, "current: {}", current);
+        return current < 0;
+    }));
+    auto sum = std::ranges::fold_left(available, ssize_t{0}, std::plus{});
+    auto expected_sum = original_rate + reduced_rate - oversized_request;
+
+    auto deviation = std::abs(sum - expected_sum);
+    // allow for rounding errors
+    BOOST_REQUIRE(deviation <= ss::smp::count);
 }

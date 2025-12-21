@@ -96,3 +96,25 @@ redpanda_proto_library(
         "@abseil-cpp//absl/time:time",
     ],
 )
+
+proto_library(
+    name = "security_proto",
+    srcs = ["security.proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/redpanda/core/pbgen:options_proto",
+        "//proto/redpanda/core/pbgen:rpc_proto",
+        "@protobuf//:timestamp_proto",
+    ],
+)
+
+redpanda_proto_library(
+    name = "security_redpanda_proto",
+    protos = [
+        ":security_proto",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@abseil-cpp//absl/time:time",
+    ],
+)

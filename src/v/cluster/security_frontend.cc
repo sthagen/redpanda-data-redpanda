@@ -228,13 +228,26 @@ ss::future<std::vector<errc>> security_frontend::do_create_acls(
                return res;
            });
 
-    errc err;
+    auto contains_group_principal = [&bindings]() {
+        return std::ranges::any_of(
+          bindings, [](const security::acl_binding& b) {
+              return b.entry().principal().type()
+                     == security::principal_type::group;
+          });
+    };
+
+    errc err{errc::success};
     if (should_sanction) {
-        err = errc::feature_disabled;
+        err = errc::feature_sanctioned;
         vlog(
           clusterlog.warn,
           "{}",
           features::enterprise_error_message::acl_with_rbac());
+    } else if (
+      !_features.local().is_active(features::feature::group_based_authorization)
+      && contains_group_principal()) {
+        err = errc::feature_disabled;
+        vlog(clusterlog.warn, "GBAC feature not yet active");
     } else {
         try {
             create_acls_cmd_data data;

@@ -128,7 +128,10 @@ public:
      * Returns the effective last offset as perceived by the state machine. This
      * function calls `persisted_stm::sync()` to make sure the returned offset
      * is up to date.
-
+     *
+     * Callers are supposed to maintain the lifetime of the STM until the
+     * returned future is ready.
+     *
      * NOTE: the resulting offset can move backward if the inflight replicate
      * request fails
      *

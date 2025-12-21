@@ -142,6 +142,7 @@ public:
       model::offset segment_last_offset,
       bool compaction_placeholder_enabled,
       bool unset_transaction_bit_enabled,
+      ss::lw_shared_ptr<storage::stm_manager> stm_mgr,
       compacted_index_writer* cidx = nullptr,
       bool inject_failure = false,
       ss::abort_source* as = nullptr)
@@ -151,6 +152,7 @@ public:
       , _compaction_placeholder_enabled(compaction_placeholder_enabled)
       , _unset_transaction_bit_enabled(unset_transaction_bit_enabled)
       , _appender(a)
+      , _stm_mgr(stm_mgr)
       , _compacted_idx(cidx)
       , _idx(index_state::make_empty_index(index_base_offset, apply_offset))
       , _internal_topic(internal_topic)
@@ -191,6 +193,8 @@ private:
     bool _unset_transaction_bit_enabled;
 
     segment_appender* _appender;
+
+    ss::lw_shared_ptr<storage::stm_manager> _stm_mgr;
 
     // Compacted index writer for the newly written segment. May not be
     // supplied if the compacted index isn't expected to change, e.g. when

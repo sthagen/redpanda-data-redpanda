@@ -22,7 +22,7 @@ import (
 	container "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cobraext"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/authtoken"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
@@ -417,7 +417,7 @@ func createCloudProfile(ctx context.Context, yAuthVir *config.RpkCloudAuth, cfg 
 
 	overrides := cfg.DevOverrides()
 	auth0Cl := auth0.NewClient(overrides)
-	expired, err := oauth.ValidateToken(yAuthVir.AuthToken, auth0Cl.Audience(), yAuthVir.ClientID)
+	expired, err := authtoken.ValidateToken(yAuthVir.AuthToken, auth0Cl.Audience(), yAuthVir.ClientID)
 	if err != nil {
 		return CloudClusterOutputs{}, err
 	}

@@ -137,7 +137,6 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
-        "//src/v/cloud_io:auth_refresh_bg_op",
         "//src/v/cloud_io:basic_cache_service_api",
         "//src/v/cloud_io:cache",
         "//src/v/cloud_io:io_resources",

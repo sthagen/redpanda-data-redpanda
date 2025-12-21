@@ -28,15 +28,6 @@ template<typename Logger>
 error_outcome handle_client_transport_error(
   std::exception_ptr current_exception, Logger& logger);
 
-/// \brief: Drain the reponse stream pointed to by the 'resp' handle into an
-/// iobuf
-ss::future<iobuf> drain_response_stream(http::client::response_stream_ref resp);
-
-/// \brief: Drain the reponse stream pointed to by the 'resp' handle into an
-/// iobuf
-ss::future<iobuf>
-drain_chunked_response_stream(http::client::response_stream_ref resp);
-
 /// \brief: Convert iobuf that contains xml data to boost::property_tree
 boost::property_tree::ptree iobuf_to_ptree(iobuf&& buf, ss::logger& logger);
 

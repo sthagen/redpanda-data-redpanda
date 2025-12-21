@@ -220,6 +220,11 @@ static ss::future<read_result> do_read_from_ntp(
   std::optional<model::timeout_clock::time_point> deadline,
   const bool obligatory_batch_read,
   fetch_memory_units_manager& units_mgr) {
+    // If it's the obligatory batch read then we need to allow for the
+    // configured max bytes to exceeded if the next batch in the partition
+    // is larger. This is needed to conform with KIP-74.
+    ntp_config.cfg.strict_max_bytes = !obligatory_batch_read;
+
     // control available memory
     auto memory_units = units_mgr.zero_units();
     if (!ntp_config.cfg.skip_read) {
@@ -486,47 +491,57 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
     const size_t max_bytes_per_fetch = std::min<size_t>(
       config::shard_local_cfg().kafka_max_bytes_per_fetch(), bytes_left);
 
+    const auto config_indexes = std::views::iota(
+      (size_t)0, ntp_fetch_configs.size());
+
     chunked_vector<read_result> results;
     results.reserve(ntp_fetch_configs.size());
-
-    for (auto& ntp_cfg : ntp_fetch_configs) {
-        // Strict checking/enforcing of max bytes per fetch occurs in
-        // `fill_fetch_responses`. This check only exists to avoid unneeded
-        // partition reads.
-        if (total_read_size >= max_bytes_per_fetch) {
-            ntp_cfg.cfg.skip_read = true;
-        }
-
-        // In Kafka first non-empty partition in a request or session
-        // is considered the `obligatory` batch read.
-        const bool obligatory_batch_read = total_read_size == 0;
-
-        // If it's the obligatory batch read then we need to allow for the
-        // configured max bytes to exceeded if the next batch in the partition
-        // is larger. This is needed to conform with KIP-74.
-        ntp_cfg.cfg.strict_max_bytes = !obligatory_batch_read;
-
-        auto&& res = co_await do_read_from_ntp(
-          cluster_pm,
-          md_cache,
-          replica_selector,
-          ntp_cfg,
-          deadline,
-          obligatory_batch_read,
-          units_mgr);
-
-        res.partition = ntp_cfg.ktp().get_partition();
-
-        auto read_size = res.data_size_bytes();
-        total_read_size += read_size;
-
-        if (res.delta_from_tip_ms.has_value()) {
-            read_probe.add_read_event_delta_from_tip(
-              res.delta_from_tip_ms.value());
-        }
-
-        results.push_back(std::move(res));
+    for (const auto& _ : config_indexes) {
+        results.emplace_back(error_code::none);
     }
+
+    co_await ss::max_concurrent_for_each(
+      config_indexes,
+      config::shard_local_cfg().fetch_max_read_concurrency(),
+      [&](auto cfg_idx) {
+          auto& ntp_cfg = ntp_fetch_configs[cfg_idx];
+
+          // Strict checking/enforcing of max bytes per fetch occurs in
+          // `fill_fetch_responses`. This check only exists to avoid unneeded
+          // partition reads.
+          if (total_read_size >= max_bytes_per_fetch) {
+              ntp_cfg.cfg.skip_read = true;
+          }
+
+          // In Kafka first non-empty partition in a request or session
+          // is considered the `obligatory` batch read. The logic below
+          // is designed to approximate this behavior. Up to
+          // `fetch_max_read_concurrency` partition reads will be considered
+          // obligatory until a batch is read.
+          const bool obligatory_batch_read = total_read_size == 0;
+
+          return do_read_from_ntp(
+                   cluster_pm,
+                   md_cache,
+                   replica_selector,
+                   ntp_cfg,
+                   deadline,
+                   obligatory_batch_read,
+                   units_mgr)
+            .then([&, cfg_idx](read_result&& res) {
+                res.partition = ntp_cfg.ktp().get_partition();
+
+                auto read_size = res.data_size_bytes();
+                total_read_size += read_size;
+
+                if (res.delta_from_tip_ms.has_value()) {
+                    read_probe.add_read_event_delta_from_tip(
+                      res.delta_from_tip_ms.value());
+                }
+
+                results[cfg_idx] = std::move(res);
+            });
+      });
 
     vlog(
       klog.trace,

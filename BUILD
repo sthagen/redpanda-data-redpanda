@@ -35,7 +35,7 @@ alias(
 
 alias(
     name = "rpk",
-    actual = "//src/go/rpk/cmd/rpk:rpk",
+    actual = "//src/go/rpk/cmd/rpk:rpk_wrapper",
     visibility = ["//visibility:public"],
 )
 

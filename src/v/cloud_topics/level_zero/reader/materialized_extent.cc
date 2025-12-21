@@ -81,7 +81,7 @@ result<T> result_from_ready_future(ss::future<T>&& ready, FormatFunc fmt) {
 /// The type of the error code should be known
 template<class T, class E>
 result<T> result_convert(result<T>&& res) {
-    if (res.has_error()) {
+    if (!res.has_value()) {
         errc_converter<E, errc> conv;
         return conv(res.error());
     }
@@ -187,14 +187,14 @@ ss::future<result<bool>> materialize(
     if (status.value() == cloud_io::cache_element_status::available) {
         auto res = co_await materialize_from_cache(
           cache_file_name, cache, probe);
-        if (res.has_error()) {
+        if (!res.has_value()) {
             co_return res.error();
         }
         ext->object = std::move(res.value());
     } else {
         auto res = co_await materialize_from_cloud_storage(
           cache_file_name, bucket, api, cache, rtc, probe);
-        if (res.has_error()) {
+        if (!res.has_value()) {
             co_return res.error();
         }
         ext->object = std::move(res.value());
@@ -214,7 +214,7 @@ ss::future<result<iobuf>> materialize_from_cache(
       cache->get_stream(cache_file_name, buffer_size, read_ahead));
     auto sz_stream_result = result_from_ready_future<errc::cache_read_error>(
       std::move(fut));
-    if (sz_stream_result.has_error()) {
+    if (!sz_stream_result.has_value()) {
         co_return sz_stream_result.error();
     }
     auto sz_stream = std::move(sz_stream_result.value());
@@ -259,7 +259,7 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
           vlog(cd_log.error, "Unexpected error during L0 download: {}", e);
       });
 
-    if (dl_result.has_error()) {
+    if (!dl_result.has_value()) {
         co_return dl_result.error();
     }
 
@@ -287,7 +287,7 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
     // by increasing the load. And we do have data from the cloud
     // storage at this point anyway.
 
-    if (!sr_guard.has_error()) {
+    if (sr_guard.has_value()) {
         // TODO: use proper priority class
         probe->num_cache_writes++;
         auto put_future = co_await ss::coroutine::as_future(

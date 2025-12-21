@@ -16,6 +16,7 @@
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/worker.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
+#include "cluster/metadata_cache.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 
@@ -42,7 +43,8 @@ public:
       log_compaction_queue&,
       ss::sharded<file_io>*,
       ss::sharded<replicated_metastore>*,
-      ss::sharded<compaction_committer>*);
+      ss::sharded<compaction_committer>*,
+      ss::sharded<cluster::metadata_cache>*);
 
     // Starts the pool of workers, making them available for compaction jobs.
     ss::future<> start();
@@ -100,6 +102,8 @@ private:
 
     // Owned by `scheduler`.
     ss::sharded<compaction_committer>* _committer;
+
+    ss::sharded<cluster::metadata_cache>* _metadata_cache;
 
     // A sharded pool of compaction workers.
     ss::sharded<compaction_worker> _workers;

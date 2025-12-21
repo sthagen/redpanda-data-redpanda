@@ -52,7 +52,7 @@ public:
       audit_probe& probe,
       ss::timer<>::time_point timeout) final {
         constexpr auto map_ec = [](cluster::errc ec) -> kafka::error_code {
-            vlog(adtlog.debug, "Error producing audit data: {}", ec);
+            vlog(adtlog.debug, "Audit data produce result: {}", ec);
             if (ec == cluster::errc::success) {
                 return kafka::error_code::none;
             }

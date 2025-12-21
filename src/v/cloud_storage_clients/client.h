@@ -22,6 +22,8 @@
 
 namespace cloud_storage_clients {
 
+class client_pool;
+
 // Corresponds to the Range HTTP header in the form <range-start>-<range-end>
 //
 // range-start: An integer in the given unit indicating the start position of
@@ -35,8 +37,12 @@ class client {
 public:
     struct no_response {};
 
+public:
+    explicit client(ss::weak_ptr<client_pool> pool_ptr)
+      : _pool_ptr(std::move(pool_ptr)) {}
     virtual ~client() = default;
 
+public:
     virtual ss::future<result<client_self_configuration_output, error_outcome>>
     self_configure() = 0;
 
@@ -180,6 +186,9 @@ public:
       const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout)
       = 0;
+
+protected:
+    ss::weak_ptr<client_pool> _pool_ptr;
 };
 
 } // namespace cloud_storage_clients

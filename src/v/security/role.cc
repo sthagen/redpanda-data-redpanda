@@ -24,6 +24,8 @@ role_member_type member_type_for_principal_type(security::principal_type p) {
         return role_member_type::user;
     case security::principal_type::ephemeral_user:
     case security::principal_type::role:
+    // TODO(GBAC) - CORE-14895
+    case security::principal_type::group:
         vunreachable("Invalid principal_type {{{}}} for role membership", p);
     }
     __builtin_unreachable();

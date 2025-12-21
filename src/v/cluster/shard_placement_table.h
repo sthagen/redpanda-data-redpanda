@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/node_hash_map.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "cluster/shard_placement_table_probe.h"
 #include "cluster/types.h"
@@ -131,6 +132,8 @@ public:
           std::optional<model::revision_id> expected_log_revision) const;
 
         friend std::ostream& operator<<(std::ostream&, const placement_state&);
+
+        fmt::iterator format_to(fmt::iterator) const;
 
         placement_state() = default;
 
@@ -362,3 +365,35 @@ struct current_state_marker
 };
 
 } // namespace cluster
+
+template<>
+struct fmt::formatter<cluster::shard_placement_table::reconciliation_action>
+  : fmt::formatter<std::string_view> {
+    inline auto format(
+      cluster::shard_placement_table::reconciliation_action action,
+      format_context& ctx) const -> decltype(ctx.out()) {
+        std::string_view result = "unknown";
+        switch (action) {
+            using enum cluster::shard_placement_table::reconciliation_action;
+        case remove_partition:
+            result = "reconciliation_action::remove_partition";
+            break;
+        case remove_kvstore_state:
+            result = "reconciliation_action::remove_kvstore_state";
+            break;
+        case transfer:
+            result = "reconciliation_action::transfer";
+            break;
+        case wait_for_target_update:
+            result = "reconciliation_action::wait_for_target_update";
+            break;
+        case create:
+            result = "reconciliation_action::create";
+            break;
+        case remake:
+            result = "reconciliation_action::remake";
+            break;
+        }
+        return formatter<std::string_view>::format(result, ctx);
+    }
+};

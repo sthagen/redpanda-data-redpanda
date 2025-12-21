@@ -17,6 +17,7 @@
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
 #include "bytes/streambuf.h"
+#include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/logger.h"
 #include "cloud_storage_clients/s3_error.h"
 #include "cloud_storage_clients/util.h"
@@ -591,6 +592,9 @@ ss::future<result<T, error_outcome>> s3_client::send_request(
               key,
               bucket);
             outcome = error_outcome::authentication_failed;
+            if (auto p = _pool_ptr.get()) {
+                p->maybe_refresh_credentials();
+            }
         } else {
             // Unexpected REST API error, we can't recover from this
             // because the issue is not temporary (e.g. bucket doesn't
@@ -617,19 +621,27 @@ ss::future<result<T, error_outcome>> s3_client::send_request(
 }
 
 s3_client::s3_client(
+  ss::weak_ptr<client_pool> pool_ptr,
   const s3_configuration& conf,
+  const net::base_transport::configuration& transport_conf,
+  ss::shared_ptr<client_probe> probe,
   ss::lw_shared_ptr<const cloud_roles::apply_credentials> apply_credentials)
-  : _requestor(conf, std::move(apply_credentials))
-  , _client(conf)
-  , _probe(conf._probe) {}
+  : client(std::move(pool_ptr))
+  , _requestor(conf, std::move(apply_credentials))
+  , _client(transport_conf, nullptr, probe)
+  , _probe(std::move(probe)) {}
 
 s3_client::s3_client(
+  ss::weak_ptr<client_pool> pool_ptr,
   const s3_configuration& conf,
+  const net::base_transport::configuration& transport_conf,
+  ss::shared_ptr<client_probe> probe,
   const ss::abort_source& as,
   ss::lw_shared_ptr<const cloud_roles::apply_credentials> apply_credentials)
-  : _requestor(conf, std::move(apply_credentials))
-  , _client(conf, &as, conf._probe, conf.max_idle_time)
-  , _probe(conf._probe) {}
+  : client(std::move(pool_ptr))
+  , _requestor(conf, std::move(apply_credentials))
+  , _client(transport_conf, &as, probe, conf.max_idle_time)
+  , _probe(std::move(probe)) {}
 
 ss::future<result<client_self_configuration_output, error_outcome>>
 s3_client::self_configure() {
@@ -800,7 +812,7 @@ ss::future<http::client::response_stream_ref> s3_client::do_get_object(
                   }
                   const auto content_type = util::get_response_content_type(
                     ref->get_headers());
-                  return util::drain_response_stream(std::move(ref))
+                  return http::drain(std::move(ref))
                     .then([content_type, result](iobuf&& res) {
                         return parse_rest_error_response<
                           http::client::response_stream_ref>(
@@ -835,7 +847,7 @@ ss::future<s3_client::head_object_result> s3_client::do_head_object(
       .then(
         [key](const http::client::response_stream_ref& ref)
           -> ss::future<head_object_result> {
-            return ref->prefetch_headers().then(
+            return http::drain<void>(ref).then(
               [ref, key]() -> ss::future<head_object_result> {
                   auto status = ref->get_headers().result();
                   if (status == boost::beast::http::status::not_found) {
@@ -918,27 +930,26 @@ ss::future<> s3_client::do_put_object(
           return ss::futurize_invoke(make_request)
             .then([id, accept_no_content](
                     const http::client::response_stream_ref& ref) {
-                return util::drain_response_stream(ref).then(
-                  [ref, id, accept_no_content](iobuf&& res) {
-                      auto status = ref->get_headers().result();
-                      using enum boost::beast::http::status;
-                      if (const auto is_no_content_and_accepted
-                          = status == no_content && accept_no_content;
-                          status != ok && !is_no_content_and_accepted) {
-                          vlog(
-                            s3_log.warn,
-                            "S3 PUT request failed for key {}: {} {:l}",
-                            id,
-                            status,
-                            ref->get_headers());
-                          const auto content_type
-                            = util::get_response_content_type(
-                              ref->get_headers());
-                          return parse_rest_error_response<>(
-                            content_type, status, std::move(res));
-                      }
-                      return ss::now();
-                  });
+                return http::drain(ref).then([ref, id, accept_no_content](
+                                               iobuf&& res) {
+                    auto status = ref->get_headers().result();
+                    using enum boost::beast::http::status;
+                    if (const auto is_no_content_and_accepted
+                        = status == no_content && accept_no_content;
+                        status != ok && !is_no_content_and_accepted) {
+                        vlog(
+                          s3_log.warn,
+                          "S3 PUT request failed for key {}: {} {:l}",
+                          id,
+                          status,
+                          ref->get_headers());
+                        const auto content_type
+                          = util::get_response_content_type(ref->get_headers());
+                        return parse_rest_error_response<>(
+                          content_type, status, std::move(res));
+                    }
+                    return ss::now();
+                });
             })
             .handle_exception_type(
               [](const ss::abort_requested_exception& err) {
@@ -1030,7 +1041,7 @@ ss::future<s3_client::list_bucket_result> s3_client::do_list_objects_v2(
                       header);
                     // In the error path we drain the response stream fully, the
                     // error response should not be very large.
-                    return util::drain_chunked_response_stream(resp).then(
+                    return http::drain(resp).then(
                       [result = header.result(), content_type](iobuf buf) {
                           return parse_rest_error_response<list_bucket_result>(
                             content_type, result, std::move(buf));
@@ -1089,7 +1100,7 @@ ss::future<> s3_client::do_delete_object(
     vlog(s3_log.trace, "send https request:\n{}", header.value());
     return _client.request(std::move(header.value()), timeout)
       .then([key](const http::client::response_stream_ref& ref) {
-          return util::drain_response_stream(ref).then([ref, key](iobuf&& res) {
+          return http::drain(ref).then([ref, key](iobuf&& res) {
               auto status = ref->get_headers().result();
               if (
                 status != boost::beast::http::status::ok
@@ -1190,25 +1201,24 @@ auto s3_client::do_delete_objects(
                    .finally([&] { return to_delete.close(); });
              })
       .then([](const http::client::response_stream_ref& response) {
-          return util::drain_response_stream(response).then(
-            [response](iobuf&& res) {
-                auto status = response->get_headers().result();
-                if (status != boost::beast::http::status::ok) {
-                    const auto content_type = util::get_response_content_type(
-                      response->get_headers());
-                    return parse_rest_error_response<delete_objects_result>(
-                      content_type, status, std::move(res));
-                }
-                auto parse_result = iobuf_to_delete_objects_result(
-                  std::move(res));
-                if (std::holds_alternative<client::delete_objects_result>(
-                      parse_result)) {
-                    return ss::make_ready_future<delete_objects_result>(
-                      std::get<client::delete_objects_result>(parse_result));
-                }
-                return ss::make_exception_future<delete_objects_result>(
-                  std::get<rest_error_response>(parse_result));
-            });
+          return http::drain(response).then([response](iobuf&& res) {
+              auto status = response->get_headers().result();
+              if (status != boost::beast::http::status::ok) {
+                  const auto content_type = util::get_response_content_type(
+                    response->get_headers());
+                  return parse_rest_error_response<delete_objects_result>(
+                    content_type, status, std::move(res));
+              }
+              auto parse_result = iobuf_to_delete_objects_result(
+                std::move(res));
+              if (std::holds_alternative<client::delete_objects_result>(
+                    parse_result)) {
+                  return ss::make_ready_future<delete_objects_result>(
+                    std::get<client::delete_objects_result>(parse_result));
+              }
+              return ss::make_exception_future<delete_objects_result>(
+                std::get<rest_error_response>(parse_result));
+          });
       });
 }
 

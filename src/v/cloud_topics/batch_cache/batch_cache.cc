@@ -98,7 +98,7 @@ ss::future<> batch_cache::cleanup_index_entries() {
     // '_index'  collection to avoid accumulating orphaned entries.
     auto it = _index.begin();
     while (it != _index.end()) {
-        if (!it->second->empty()) {
+        if (it->second->empty()) {
             it = _index.erase(it);
         } else {
             ++it;

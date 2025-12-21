@@ -600,7 +600,7 @@ ADMIN_TLS_CONFIG = dict(
 
 class AdminSecurityReportTest(RedpandaTest):
     BOOTSTRAP_USERNAME = "bob"
-    BOOTSTRAP_PASSWORD = "sekrit"
+    BOOTSTRAP_PASSWORD = "sekrit01234567"
     BOOTSTRAP_MECHANISM = "SCRAM-SHA-512"
 
     def __init__(self, test_context, *args, **kwargs):

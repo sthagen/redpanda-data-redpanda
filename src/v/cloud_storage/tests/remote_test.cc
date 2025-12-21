@@ -13,22 +13,18 @@
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
 #include "cloud_io/tests/s3_imposter.h"
-#include "cloud_storage/base_manifest.h"
+#include "cloud_io/tests/scoped_remote.h"
 #include "cloud_storage/materialized_resources.h"
-#include "cloud_storage/offset_translation_layer.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/partition_manifest_downloader.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_path_provider.h"
-#include "cloud_storage/remote_segment.h"
 #include "cloud_storage/segment_path_utils.h"
 #include "cloud_storage/tests/common_def.h"
 #include "cloud_storage/types.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "config/configuration.h"
-#include "config/node_config.h"
 #include "model/metadata.h"
-#include "storage/directories.h"
 #include "test_utils/async.h"
 #include "test_utils/tmp_dir.h"
 #include "utils/lazy_abort_source.h"
@@ -49,8 +45,6 @@
 #include <boost/range/irange.hpp>
 
 #include <algorithm>
-#include <chrono>
-#include <exception>
 #include <iterator>
 
 using namespace std::chrono_literals;
@@ -121,28 +115,16 @@ class remote_fixture_base
 public:
     remote_fixture_base(cloud_storage_clients::s3_url_style url_style)
       : s3_imposter_fixture(url_style) {
-        pool.start(10, ss::sharded_parameter([this] { return conf; })).get();
-        io.start(
-            std::ref(pool),
-            ss::sharded_parameter([this] { return conf; }),
-            ss::sharded_parameter([] { return config_file; }),
-            ss::sharded_parameter(
-              [] { return ss::default_scheduling_group(); }))
-          .get();
-        remote
-          .start(std::ref(io), ss::sharded_parameter([this] { return conf; }))
-          .get();
+        scoped_remote_io_ = cloud_io::scoped_remote::create(10, conf);
+        remote.start(std::ref(scoped_remote_io_->remote), conf).get();
     }
     ~remote_fixture_base() {
-        pool.local().shutdown_connections();
-        io.local().request_stop();
+        scoped_remote_io_->request_stop();
         remote.stop().get();
-        io.stop().get();
-        pool.stop().get();
+        scoped_remote_io_.reset();
     }
 
-    ss::sharded<cloud_storage_clients::client_pool> pool;
-    ss::sharded<cloud_io::remote> io;
+    std::unique_ptr<cloud_io::scoped_remote> scoped_remote_io_;
     ss::sharded<remote> remote;
 };
 

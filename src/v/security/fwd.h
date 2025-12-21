@@ -25,6 +25,7 @@ class role_store;
 
 namespace oidc {
 
+class group_claim_policy;
 class jws;
 class jwt;
 class service;

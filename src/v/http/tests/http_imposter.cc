@@ -154,8 +154,7 @@ void http_imposter_fixture::set_routes(ss::httpd::routes& r) {
           } else if (req._method == "DELETE") {
               repl.set_status(ss::http::reply::status_type::no_content);
               return "";
-          } else if (
-            req._method == "POST" && req.query_parameters.contains("delete")) {
+          } else if (req._method == "POST" && req.has_query_param("delete")) {
               // Delete objects
               content_type = "xml";
               return R"xml(<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"></DeleteResult>)xml";

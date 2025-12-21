@@ -249,3 +249,255 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
     new_log->housekeeping(conf2).get();
     exec.validate(new_log).get();
 }
+
+FIXTURE_TEST(segment_tx_flags, compaction_multinode_test) {
+    const model::topic topic{"tapioca"};
+    model::node_id id{0};
+    create_node_application(id);
+    auto* rp = instance(id);
+    wait_for_controller_leadership(id).get();
+
+    cluster::topic_properties props;
+    props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    rp->add_topic({model::kafka_namespace, topic}, 1, props).get();
+    model::partition_id pid{0};
+    auto ntp = model::ntp(model::kafka_namespace, topic, pid);
+    RPTEST_REQUIRE_EVENTUALLY(5s, [&] {
+        auto [_, prt] = get_leader(ntp);
+        return prt != nullptr;
+    });
+    auto [_, partition] = get_leader(ntp);
+    auto log = partition->log();
+    using cluster::tx_executor;
+    tx_executor exec;
+    auto make_ctx = [&](int64_t id, model::term_id term) {
+        model::producer_identity pid{id, 0};
+        return tx_executor::tx_op_ctx{
+          exec.data_gen(), partition->rm_stm(), log, pid, term};
+    };
+    // Produce transactional records.
+    tx_executor::sorted_tx_ops_t ops;
+    auto term = partition->raft()->term();
+
+    int weight = 1;
+    ops.emplace(
+      ss::make_shared(tx_executor::begin_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::data_op(make_ctx(1, term), weight++, 1)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+
+    ops.emplace(
+      ss::make_shared(tx_executor::abort_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::begin_op(make_ctx(2, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::data_op(make_ctx(2, term), weight++, 1)));
+    ops.emplace(
+      ss::make_shared(tx_executor::abort_op(make_ctx(2, term), weight++)));
+
+    exec.execute(std::move(ops)).get();
+    partition->log()->flush().get();
+    partition->log()->force_roll().get();
+
+    // Before compaction, segments should by default have these flags as `true`.
+    for (const auto& segment : log->segments()) {
+        BOOST_REQUIRE(segment->index().may_have_transaction_control_batches());
+        BOOST_REQUIRE(
+          segment->index().may_have_transaction_data_or_fence_batches());
+    }
+
+    ss::abort_source as;
+    auto collect_offset = log->stm_manager()->max_removable_local_log_offset();
+    {
+        auto conf = storage::housekeeping_config::make_config(
+          model::timestamp::min(),
+          std::nullopt,
+          collect_offset,
+          collect_offset,
+          collect_offset,
+          std::nullopt,
+          std::nullopt,
+          std::chrono::milliseconds{0},
+          as);
+        log->housekeeping(conf).get();
+    }
+
+    // After the first compaction, control batches are still present, but data
+    // batches have had their bit unset (due to being compacted twice over
+    // during self compaction -> sliding window compaction)
+    for (const auto& segment : log->segments()) {
+        if (segment->has_self_compact_timestamp()) {
+            BOOST_REQUIRE(
+              segment->index().may_have_transaction_control_batches());
+            BOOST_REQUIRE(
+              !segment->index().may_have_transaction_data_or_fence_batches());
+        }
+    }
+
+    {
+        auto conf = storage::housekeeping_config::make_config(
+          model::timestamp::min(),
+          std::nullopt,
+          collect_offset,
+          collect_offset,
+          collect_offset,
+          std::nullopt,
+          std::chrono::milliseconds{0},
+          std::chrono::milliseconds{0},
+          as);
+        log->housekeeping(conf).get();
+    }
+
+    // `may_have_transaction_data_or_fence_batches` will be false after the
+    // previous compaction, as transactional bits were unset and fences were
+    // removed. `may_have_transaction_control_batches` will also be false due to
+    // compacting with `tx_retention_ms` set.
+    for (const auto& segment : log->segments()) {
+        if (segment->has_self_compact_timestamp()) {
+            BOOST_REQUIRE(
+              !segment->index().may_have_transaction_control_batches());
+            BOOST_REQUIRE(
+              !segment->index().may_have_transaction_data_or_fence_batches());
+        }
+    }
+}
+
+FIXTURE_TEST(segment_tx_flags_compaction_disabled, compaction_multinode_test) {
+    scoped_config cfg;
+    cfg.get("log_compaction_disable_tx_batch_removal").set_value(true);
+    cfg.get("log_compaction_merge_max_segments_per_range")
+      .set_value(std::make_optional<uint32_t>(0));
+    cfg.get("log_compaction_merge_max_ranges")
+      .set_value(std::make_optional<uint32_t>(0));
+
+    const model::topic topic{"tapioca"};
+    model::node_id id{0};
+    create_node_application(id);
+    auto* rp = instance(id);
+    wait_for_controller_leadership(id).get();
+
+    cluster::topic_properties props;
+    props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    rp->add_topic({model::kafka_namespace, topic}, 1, props).get();
+    model::partition_id pid{0};
+    auto ntp = model::ntp(model::kafka_namespace, topic, pid);
+    RPTEST_REQUIRE_EVENTUALLY(5s, [&] {
+        auto [_, prt] = get_leader(ntp);
+        return prt != nullptr;
+    });
+    auto [_, partition] = get_leader(ntp);
+    auto log = partition->log();
+    using cluster::tx_executor;
+    tx_executor exec;
+    auto make_ctx = [&](int64_t id, model::term_id term) {
+        model::producer_identity pid{id, 0};
+        return tx_executor::tx_op_ctx{
+          exec.data_gen(), partition->rm_stm(), log, pid, term};
+    };
+    // Produce transactional records.
+    tx_executor::sorted_tx_ops_t ops;
+    auto term = partition->raft()->term();
+
+    auto num_segments = 3;
+    int weight = 1;
+    ops.emplace(
+      ss::make_shared(tx_executor::begin_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::data_op(make_ctx(1, term), weight++, 1)));
+    ops.emplace(
+      ss::make_shared(tx_executor::roll_op(make_ctx(1, term), weight++)));
+    ops.emplace(
+      ss::make_shared(tx_executor::commit_op(make_ctx(1, term), weight++)));
+
+    exec.execute(std::move(ops)).get();
+    partition->log()->flush().get();
+    partition->log()->force_roll().get();
+
+    // num_segments + 1 for active segment
+    BOOST_REQUIRE_EQUAL(log->segment_count(), num_segments + 1);
+    auto& segments = log->segments();
+
+    // Before compaction, segments should by default have these flags as `true`.
+    for (const auto& segment : segments) {
+        BOOST_REQUIRE(segment->index().may_have_transaction_control_batches());
+        BOOST_REQUIRE(
+          segment->index().may_have_transaction_data_or_fence_batches());
+    }
+
+    ss::abort_source as;
+    auto collect_offset = log->stm_manager()->max_removable_local_log_offset();
+    {
+        // Compact while `log_compaction_disable_tx_batch_removal` is `true`,
+        // preventing unsetting of transactional bits or removal of any control
+        // batches.
+        auto conf = storage::housekeeping_config::make_config(
+          model::timestamp::min(),
+          std::nullopt,
+          collect_offset,
+          collect_offset,
+          collect_offset,
+          std::nullopt,
+          std::nullopt,
+          std::chrono::milliseconds{0},
+          as);
+        log->housekeeping(conf).get();
+    }
+
+    BOOST_REQUIRE_EQUAL(segments.size(), num_segments + 1);
+
+    // First segment has a `tx_fence` batch.
+    BOOST_REQUIRE(
+      segments[0]->index().may_have_transaction_data_or_fence_batches());
+    BOOST_REQUIRE(segments[0]->index().may_have_transaction_control_batches());
+
+    // Second segment has a transactional raft batch.
+    BOOST_REQUIRE(
+      segments[1]->index().may_have_transaction_data_or_fence_batches());
+    BOOST_REQUIRE(!segments[1]->index().may_have_transaction_control_batches());
+
+    // Third segment has a control (commit) batch.
+    BOOST_REQUIRE(
+      !segments[2]->index().may_have_transaction_data_or_fence_batches());
+    BOOST_REQUIRE(segments[2]->index().may_have_transaction_control_batches());
+
+    {
+        cfg.get("log_compaction_disable_tx_batch_removal").set_value(false);
+        // Compact twice to remove transactional batches and unset bits.
+        auto conf = storage::housekeeping_config::make_config(
+          model::timestamp::min(),
+          std::nullopt,
+          collect_offset,
+          collect_offset,
+          collect_offset,
+          std::nullopt,
+          std::chrono::milliseconds{0},
+          std::chrono::milliseconds{0},
+          as);
+        log->housekeeping(conf).get();
+        log->housekeeping(conf).get();
+    }
+
+    BOOST_REQUIRE_EQUAL(segments.size(), num_segments + 1);
+
+    // All segments have a self compact timestamp, and no remaining
+    // transactional control batches or raft data/fence batches.
+    BOOST_REQUIRE(segments[0]->has_self_compact_timestamp());
+    BOOST_REQUIRE(!segments[0]->index().may_have_transaction_control_batches());
+    BOOST_REQUIRE(
+      !segments[0]->index().may_have_transaction_data_or_fence_batches());
+
+    BOOST_REQUIRE(segments[1]->has_self_compact_timestamp());
+    BOOST_REQUIRE(!segments[1]->index().may_have_transaction_control_batches());
+    BOOST_REQUIRE(
+      !segments[1]->index().may_have_transaction_data_or_fence_batches());
+
+    BOOST_REQUIRE(segments[2]->has_self_compact_timestamp());
+    BOOST_REQUIRE(!segments[2]->index().may_have_transaction_control_batches());
+    BOOST_REQUIRE(
+      !segments[2]->index().may_have_transaction_data_or_fence_batches());
+}

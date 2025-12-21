@@ -23,7 +23,6 @@ batch_cache_probe::batch_cache_probe(bool disable_metrics) {
 }
 
 void batch_cache_probe::setup_internal_metrics(bool disable) {
-    return;
     if (disable) {
         return;
     }

@@ -79,6 +79,6 @@ configure_make(
         "//visibility:public",
     ],
     deps = [
-        "@openssl",
+        "@openssl//:openssl_foreign_cc",
     ],
 )

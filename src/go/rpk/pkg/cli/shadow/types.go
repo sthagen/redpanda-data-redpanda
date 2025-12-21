@@ -16,6 +16,8 @@ import (
 type ShadowLinkConfig struct {
 	// Name is the name of the shadow link
 	Name string `json:"name" yaml:"name"`
+	// Configurations for Shadow Link in Redpanda Cloud
+	CloudOptions *CloudShadowLinkOptions `json:"cloud_options,omitempty" yaml:"cloud_options,omitempty"`
 	// Configuration for the internal kafka client
 	ClientOptions *ShadowLinkClientOptions `json:"client_options,omitempty" yaml:"client_options,omitempty"`
 	// Topic metadata sync options
@@ -26,6 +28,11 @@ type ShadowLinkConfig struct {
 	SecuritySyncOptions *SecuritySettingsSyncOptions `json:"security_sync_options,omitempty" yaml:"security_sync_options,omitempty"`
 	// Schema Registry sync options
 	SchemaRegistrySyncOptions *SchemaRegistrySyncOptions `json:"schema_registry_sync_options,omitempty" yaml:"schema_registry_sync_options,omitempty"`
+}
+
+type CloudShadowLinkOptions struct {
+	SourceRedpandaID string `json:"source_redpanda_id,omitempty" yaml:"source_redpanda_id,omitempty"`
+	ShadowRedpandaID string `json:"shadow_redpanda_id,omitempty" yaml:"shadow_redpanda_id,omitempty"`
 }
 
 type ShadowLinkClientOptions struct {
@@ -98,6 +105,15 @@ type TLSPEMSettings struct {
 // AuthenticationConfiguration is the union for authentication configurations.
 type AuthenticationConfiguration struct {
 	ScramConfiguration *ScramConfiguration `json:"scram_configuration,omitempty" yaml:"scram_configuration,omitempty"`
+	PlainConfiguration *PlainConfiguration `json:"plain_configuration,omitempty" yaml:"plain_configuration,omitempty"`
+}
+
+// PlainConfiguration is an authentication configuration using SASL/PLAIN.
+type PlainConfiguration struct {
+	// PLAIN username
+	Username string `json:"username,omitempty" yaml:"username,omitempty"`
+	// Password
+	Password string `json:"password,omitempty" yaml:"password,omitempty"`
 }
 
 // ScramConfiguration is an authentication configuration using SCRAM.

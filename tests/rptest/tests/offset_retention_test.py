@@ -271,6 +271,9 @@ class OffsetRetentionTest(RedpandaTest):
             desc = self.rpk.group_describe(group)
             return len(desc.partitions) > 0
 
+        # This is a fix to a flakiness where the first produce would timeout
+        self.rpk.produce(self.topic, "k", "v", timeout=20)
+
         # consume from the group for twice as long as the retention period
         # setting and verify that group offsets exist for the entire time.
         start = time.time()

@@ -11,9 +11,9 @@
 #include "cloud_storage_clients/abs_client.h"
 
 #include "base/vlog.h"
-#include "bytes/iostream.h"
 #include "bytes/streambuf.h"
 #include "cloud_storage_clients/abs_error.h"
+#include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_storage_clients/logger.h"
 #include "cloud_storage_clients/types.h"
@@ -71,6 +71,34 @@ bool is_error_retryable(
              err.http_code())
            != retryable_http_codes.end();
 }
+
+net::base_transport::configuration make_adls_transport_configuration(
+  const cloud_storage_clients::abs_configuration& conf,
+  net::base_transport::configuration transport_conf) {
+    constexpr uint16_t default_port = 443;
+
+    const auto endpoint_uri = [&]() -> ss::sstring {
+        auto adls_endpoint_override
+          = config::shard_local_cfg().cloud_storage_azure_adls_endpoint.value();
+        if (adls_endpoint_override.has_value()) {
+            return adls_endpoint_override.value();
+        }
+        return ssx::sformat(
+          "{}.dfs.core.windows.net", conf.storage_account_name());
+    }();
+
+    transport_conf.tls_sni_hostname = endpoint_uri;
+    // conf.uri = access_point_uri{endpoint_uri};
+
+    auto adls_port_override
+      = config::shard_local_cfg().cloud_storage_azure_adls_port();
+    transport_conf.server_addr = net::unresolved_address{
+      endpoint_uri,
+      adls_port_override.has_value() ? *adls_port_override : default_port};
+
+    return transport_conf;
+}
+
 } // namespace
 
 namespace cloud_storage_clients {
@@ -415,35 +443,47 @@ abs_request_creator::make_delete_file_request(
 }
 
 abs_client::abs_client(
+  ss::weak_ptr<client_pool> pool_ptr,
   const abs_configuration& conf,
+  const net::base_transport::configuration& transport_conf,
+  ss::shared_ptr<client_probe> probe,
   ss::lw_shared_ptr<const cloud_roles::apply_credentials> apply_credentials)
-  : _data_lake_v2_client_config(
-      conf.is_hns_enabled ? std::make_optional(conf.make_adls_configuration())
-                          : std::nullopt)
+  : client(std::move(pool_ptr))
+  , _data_lake_v2_client_config(
+      conf.is_hns_enabled
+        ? std::make_optional(
+            make_adls_transport_configuration(conf, transport_conf))
+        : std::nullopt)
   , _is_oauth(apply_credentials->is_oauth())
   , _requestor(conf, std::move(apply_credentials))
-  , _client(conf)
+  , _client(transport_conf, nullptr, probe)
   , _adls_client(
       conf.is_hns_enabled ? std::make_optional(*_data_lake_v2_client_config)
                           : std::nullopt)
-  , _probe(conf._probe) {
+  , _probe(std::move(probe)) {
     vlog(abs_log.trace, "Created client with config:{}", conf);
 }
 
 abs_client::abs_client(
+  ss::weak_ptr<client_pool> pool_ptr,
   const abs_configuration& conf,
+  const net::base_transport::configuration& transport_conf,
+  ss::shared_ptr<client_probe> probe,
   const ss::abort_source& as,
   ss::lw_shared_ptr<const cloud_roles::apply_credentials> apply_credentials)
-  : _data_lake_v2_client_config(
-      conf.is_hns_enabled ? std::make_optional(conf.make_adls_configuration())
-                          : std::nullopt)
+  : client(std::move(pool_ptr))
+  , _data_lake_v2_client_config(
+      conf.is_hns_enabled
+        ? std::make_optional(
+            make_adls_transport_configuration(conf, transport_conf))
+        : std::nullopt)
   , _is_oauth(apply_credentials->is_oauth())
   , _requestor(conf, std::move(apply_credentials))
-  , _client(conf, &as, conf._probe, conf.max_idle_time)
+  , _client(transport_conf, &as, probe, conf.max_idle_time)
   , _adls_client(
       conf.is_hns_enabled ? std::make_optional(*_data_lake_v2_client_config)
                           : std::nullopt)
-  , _probe(conf._probe) {
+  , _probe(std::move(probe)) {
     vlog(abs_log.trace, "Created client with config:{}", conf);
 }
 
@@ -525,6 +565,9 @@ ss::future<result<T, error_outcome>> abs_client::send_request(
                 // the expired token will trigger generic AuthenticationFailed
                 // error.
                 outcome = error_outcome::authentication_failed;
+                if (auto p = _pool_ptr.get()) {
+                    p->maybe_refresh_credentials();
+                }
             } else {
                 outcome = error_outcome::fail;
             }
@@ -636,8 +679,7 @@ ss::future<http::client::response_stream_ref> abs_client::do_get_object(
 
         const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
-        auto buf = co_await util::drain_response_stream(
-          std::move(response_stream));
+        auto buf = co_await http::drain(std::move(response_stream));
         throw parse_rest_error_response(content_type, status, std::move(buf));
     }
 
@@ -694,8 +736,7 @@ ss::future<> abs_client::do_put_object(
         status != created && !is_no_content_and_accepted) {
         const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
-        auto buf = co_await util::drain_response_stream(
-          std::move(response_stream));
+        auto buf = co_await http::drain(std::move(response_stream));
         throw parse_rest_error_response(content_type, status, std::move(buf));
     }
 }
@@ -811,8 +852,7 @@ ss::future<> abs_client::do_delete_object(
     if (status != boost::beast::http::status::accepted) {
         const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
-        auto buf = co_await util::drain_response_stream(
-          std::move(response_stream));
+        auto buf = co_await http::drain(std::move(response_stream));
         throw parse_rest_error_response(content_type, status, std::move(buf));
     }
 }
@@ -867,9 +907,14 @@ ss::future<abs_client::list_bucket_result> abs_client::do_list_objects(
   ss::lowres_clock::duration timeout,
   std::optional<char> delimiter,
   std::optional<item_filter> collect_item_if) {
+    // Don't use files_only (showonly=files) when a delimiter is specified.
+    // The showonly=files parameter excludes BlobPrefix entries from the
+    // response, but BlobPrefix entries are exactly what we want when using
+    // a delimiter to discover virtual directories.
+    const bool files_only = _adls_client.has_value() && !delimiter.has_value();
     auto header = _requestor.make_list_blobs_request(
       name,
-      _adls_client.has_value(),
+      files_only,
       std::move(prefix),
       max_results,
       std::move(marker),
@@ -892,7 +937,7 @@ ss::future<abs_client::list_bucket_result> abs_client::do_list_objects(
     if (status != boost::beast::http::status::ok) {
         const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
-        iobuf buf = co_await util::drain_response_stream(response_stream);
+        iobuf buf = co_await http::drain(response_stream);
         throw parse_rest_error_response(content_type, status, std::move(buf));
     }
 
@@ -1016,7 +1061,9 @@ ss::future<> abs_client::do_delete_file(
       "Attempt to use ADLSv2 endpoint without having created a client");
 
     auto header = _requestor.make_delete_file_request(
-      _data_lake_v2_client_config->uri, name, path);
+      access_point_uri{_data_lake_v2_client_config->server_addr.host()},
+      name,
+      path);
     if (!header) {
         vlog(
           abs_log.warn, "Failed to create request header: {}", header.error());
@@ -1037,8 +1084,7 @@ ss::future<> abs_client::do_delete_file(
       && status != boost::beast::http::status::ok) {
         const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
-        auto buf = co_await util::drain_response_stream(
-          std::move(response_stream));
+        auto buf = co_await http::drain(std::move(response_stream));
         throw parse_rest_error_response(content_type, status, std::move(buf));
     }
 }

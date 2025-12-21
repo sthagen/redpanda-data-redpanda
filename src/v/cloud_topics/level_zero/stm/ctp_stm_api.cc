@@ -59,7 +59,7 @@ ctp_stm_api::replicated_apply(
     opts.set_force_flush();
     auto res = co_await _stm->_raft->replicate(std::move(batch), opts);
 
-    if (res.has_error()) {
+    if (!res.has_value()) {
         vlog(_log.debug, "Failed to replicate batch: {}", res.error());
         if (res.error() == raft::errc::not_leader) {
             co_return std::unexpected(ctp_stm_api_errc::not_leader);

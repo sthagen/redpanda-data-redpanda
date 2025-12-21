@@ -162,21 +162,21 @@ void shard_placement_table::placement_state::set_hosted_status(
     set_current(std::move(new_current), probe);
 }
 
-std::ostream&
-operator<<(std::ostream& o, const shard_placement_table::placement_state& ps) {
-    fmt::print(
-      o,
+fmt::iterator
+shard_placement_table::placement_state::format_to(fmt::iterator it) const {
+    it = fmt::format_to(
+      it,
       "{{current: {}, assigned: {}, is_initial_for: {}, next: ",
-      ps._current,
-      ps._assigned,
-      ps._is_initial_for);
-    if (ps._next) {
-        fmt::print(
-          o, "{{s: {}, r: {}}}}}", ps._next->shard, ps._next->revision);
+      _current,
+      _assigned,
+      _is_initial_for);
+    if (_next) {
+        it = fmt::format_to(
+          it, "{{s: {}, r: {}}}}}", _next->shard, _next->revision);
     } else {
-        fmt::print(o, "{{nullopt}}}}");
+        it = fmt::format_to(it, "{{nullopt}}}}");
     }
-    return o;
+    return it;
 }
 
 namespace {

@@ -118,12 +118,18 @@ private:
 class abs_client : public client {
 public:
     abs_client(
+      ss::weak_ptr<client_pool> pool_ptr,
       const abs_configuration& conf,
+      const net::base_transport::configuration& transport_conf,
+      ss::shared_ptr<client_probe> probe,
       ss::lw_shared_ptr<const cloud_roles::apply_credentials>
         apply_credentials);
 
     abs_client(
+      ss::weak_ptr<client_pool> pool_ptr,
       const abs_configuration& conf,
+      const net::base_transport::configuration& transport_conf,
+      ss::shared_ptr<client_probe> probe,
       const ss::abort_source& as,
       ss::lw_shared_ptr<const cloud_roles::apply_credentials>
         apply_credentials);
@@ -305,7 +311,8 @@ private:
       object_key path,
       ss::lowres_clock::duration timeout);
 
-    std::optional<abs_configuration> _data_lake_v2_client_config;
+    std::optional<net::base_transport::configuration>
+      _data_lake_v2_client_config;
 
     // Currently the implementation supports Signing requests or OAuth.
     // Not all api are available for oauth, this variable is initialized at

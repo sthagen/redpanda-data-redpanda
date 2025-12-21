@@ -14,6 +14,7 @@
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record_batch_reader.h"
+#include "model/tests/random_batch.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
@@ -27,6 +28,8 @@
 #include <seastar/util/noncopyable_function.hh>
 
 #include <chrono>
+#include <iterator>
+#include <limits>
 #include <tuple>
 
 using namespace std::chrono_literals;
@@ -122,7 +125,80 @@ TEST_CORO(batcher_test, expired_write_request) {
     auto [pass_result, fail_result] = co_await ss::when_all_succeed(
       std::move(expect_pass_fut), std::move(expect_fail_fut));
 
-    ASSERT_TRUE_CORO(fail_result.has_error());
+    ASSERT_TRUE_CORO(!fail_result.has_value());
 
     ASSERT_TRUE_CORO(pass_result.has_value());
+}
+
+TEST_CORO(write_pipeline_test, stage_bytes_accounting) {
+    cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
+    cloud_topics::l0::write_pipeline_accessor accessor{
+      .pipeline = &pipeline,
+    };
+
+    auto stage = pipeline.register_write_pipeline_stage();
+
+    ASSERT_EQ_CORO(pipeline.stage_bytes(stage.id()), 0);
+
+    const auto timeout = ss::manual_clock::now() + 1s;
+    auto test_data = co_await model::test::make_random_batches(
+      {.count = 1, .records = 5});
+    chunked_vector<model::record_batch> batches;
+    std::ranges::move(std::move(test_data), std::back_inserter(batches));
+
+    auto fut = pipeline.write_and_debounce(
+      model::controller_ntp, min_epoch, std::move(batches), timeout);
+
+    co_await sleep_until(
+      10ms, [&] { return accessor.write_requests_pending(1); });
+
+    // Bytes in the stage.
+    ASSERT_GT_CORO(pipeline.stage_bytes(stage.id()), 0);
+
+    // Pull requests -- bytes leave the stage.
+    auto res = stage.pull_write_requests(std::numeric_limits<size_t>::max());
+    ASSERT_EQ_CORO(pipeline.stage_bytes(stage.id()), 0);
+
+    res.requests.front().set_value(chunked_vector<cloud_topics::extent_meta>{});
+    auto write_res = co_await std::move(fut);
+    ASSERT_TRUE_CORO(write_res.has_value());
+}
+
+TEST_CORO(write_pipeline_test, stage_bytes_accounting_on_timeout) {
+    cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
+    cloud_topics::l0::write_pipeline_accessor accessor{
+      .pipeline = &pipeline,
+    };
+
+    auto stage = pipeline.register_write_pipeline_stage();
+
+    ASSERT_EQ_CORO(pipeline.stage_bytes(stage.id()), 0);
+
+    static constexpr auto timeout_duration = 1s;
+    const auto timeout = ss::manual_clock::now() + timeout_duration;
+    auto test_data = co_await model::test::make_random_batches(
+      {.count = 1, .records = 5});
+    chunked_vector<model::record_batch> batches;
+    std::ranges::move(std::move(test_data), std::back_inserter(batches));
+
+    auto fut = pipeline.write_and_debounce(
+      model::controller_ntp, min_epoch, std::move(batches), timeout);
+
+    co_await sleep_until(
+      10ms, [&] { return accessor.write_requests_pending(1); });
+
+    // Bytes in the stage.
+    ASSERT_GT_CORO(pipeline.stage_bytes(stage.id()), 0);
+
+    // "Wait" until the requests time out.
+    ss::manual_clock::advance(timeout_duration);
+
+    // Trigger timeout detection by pulling requests.
+    auto res = stage.pull_write_requests(std::numeric_limits<size_t>::max());
+    ASSERT_EQ_CORO(res.requests.size(), 0);
+
+    // Stage bytes are released when the future resolves.
+    auto write_res = co_await std::move(fut);
+    ASSERT_FALSE_CORO(write_res.has_value());
+    ASSERT_EQ_CORO(pipeline.stage_bytes(stage.id()), 0);
 }

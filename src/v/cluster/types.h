@@ -1559,7 +1559,7 @@ struct replica_recovery_state
 };
 struct recovery_state
   : serde::
-      envelope<recovery_state, serde::version<0>, serde::compat_version<0>> {
+      envelope<recovery_state, serde::version<1>, serde::compat_version<0>> {
     model::offset local_last_offset;
     size_t local_size;
 
@@ -1570,7 +1570,9 @@ struct recovery_state
     friend bool operator==(const recovery_state&, const recovery_state&)
       = default;
 
-    auto serde_fields() { return std::tie(local_last_offset, replicas); }
+    auto serde_fields() {
+        return std::tie(local_last_offset, replicas, local_size);
+    }
 };
 
 struct backend_operation

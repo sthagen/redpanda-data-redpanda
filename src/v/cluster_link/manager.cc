@@ -523,7 +523,7 @@ ss::future<cl_result<model::metadata>> manager::update_mirror_topic_status(
 
 ss::future<cl_result<model::metadata>>
 manager::failover_link_topics(model::name_t link_name) {
-    static constexpr auto model_timeout = 30s;
+    static constexpr auto failover_command_timeout = 5s;
     auto hold = _g.hold();
     vlog(
       cllog.info,
@@ -536,7 +536,7 @@ manager::failover_link_topics(model::name_t link_name) {
           ssx::sformat("Unable to find link by name '{}'", link_name)};
     }
     auto ec = co_await _registry->failover_link_topics(
-      *link_id, ::model::timeout_clock::now() + model_timeout);
+      *link_id, failover_command_timeout);
     auto err = map_cluster_errc(ec);
     if (err != errc::success) {
         co_return err_info(

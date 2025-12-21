@@ -11,6 +11,8 @@ package(
         "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
         "//src/v/cloud_topics/level_zero/pipeline:__pkg__",
         "//src/v/cloud_topics/level_zero/pipeline/tests:__pkg__",
+        "//src/v/cloud_topics/level_zero/read_request_scheduler:__pkg__",
+        "//src/v/cloud_topics/level_zero/read_request_scheduler/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reader/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/stm:__pkg__",

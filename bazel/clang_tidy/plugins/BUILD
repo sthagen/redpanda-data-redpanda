@@ -13,6 +13,8 @@ cc_library(
 cc_binary(
     name = "plugins.so",
     srcs = [
+        "redpanda_lambda_coroutine_deduces_this_check.cc",
+        "redpanda_lambda_coroutine_deduces_this_check.h",
         "redpanda_noop_check.h",
         "redpanda_tidy_module.cc",
     ],

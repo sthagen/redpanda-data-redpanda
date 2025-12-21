@@ -16,6 +16,7 @@ from ducktape.utils.util import wait_until
 from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
+from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import (
     KgoVerifierProducer,
@@ -925,16 +926,21 @@ class LogCompactionTxRemovalUpgradeTest(LogCompactionTxRemovalTestBase):
     def setUp(self):
         self.redpanda._installer.install(self.redpanda.nodes, self.initial_version)
         self.redpanda.start()
+        self.admin = Admin(self.redpanda)
 
     def upgrade_to_version(self, version):
+        def logical_version():
+            return self.admin.get_features()["cluster_version"]
+
+        current_active = logical_version()
         self.redpanda._installer.install(self.redpanda.nodes, version)
         self.redpanda.restart_nodes(self.redpanda.nodes)
 
         wait_until(
-            self.redpanda.healthy,
+            lambda: logical_version() > current_active and self.redpanda.healthy(),
             timeout_sec=20,
             backoff_sec=2,
-            err_msg="Cluster did not become healthy after restart/upgrade",
+            err_msg=f"Cluster did not become healthy after restart/upgrade: {logical_version()}",
         )
         self.redpanda._admin.await_stable_leader(
             namespace="redpanda", topic="controller", partition=0

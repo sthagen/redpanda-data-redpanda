@@ -425,11 +425,12 @@ frontend::l0_timequery(storage::timequery_config cfg) {
       model::record_batch_type::ctp_placeholder,
     });
     auto gen = std::move(reader).generator(model::no_timeout);
-    while (auto batch = co_await gen()) {
-        if (!std::ranges::contains(type_filter, batch->header().type)) {
+    while (auto batch_opt = co_await gen()) {
+        auto& batch = batch_opt->get();
+        if (!std::ranges::contains(type_filter, batch.header().type)) {
             continue;
         }
-        if (batch->header().max_timestamp < cfg.time) {
+        if (batch.header().max_timestamp < cfg.time) {
             continue;
         }
         // NOTE: we can't just return this offset verbatim, since we don't
@@ -439,9 +440,9 @@ frontend::l0_timequery(storage::timequery_config cfg) {
         co_return coarse_grained_timequery_result{
           .time = cfg.time,
           .start_offset = model::offset_cast(
-            ot_state->from_log_offset(batch->base_offset())),
+            ot_state->from_log_offset(batch.base_offset())),
           .last_offset = model::offset_cast(
-            ot_state->from_log_offset(batch->last_offset())),
+            ot_state->from_log_offset(batch.last_offset())),
         };
     }
     co_return std::nullopt;
@@ -465,20 +466,21 @@ frontend::refine_timequery_result(
     auto query_interval = model::bounded_offset_interval::checked(
       kafka::offset_cast(input.start_offset),
       kafka::offset_cast(input.last_offset));
-    while (auto batch = co_await generator()) {
+    while (auto batch_opt = co_await generator()) {
+        auto& batch = batch_opt->get();
         auto batch_interval = model::bounded_offset_interval::checked(
-          batch->base_offset(), batch->last_offset());
+          batch.base_offset(), batch.last_offset());
         if (!query_interval.overlaps(batch_interval)) {
             if (batch_interval.min() > query_interval.max()) {
                 break;
             }
             continue;
         }
-        if (input.time > batch->header().max_timestamp) {
+        if (input.time > batch.header().max_timestamp) {
             continue;
         }
         co_return co_await storage::batch_timequery(
-          std::move(*batch),
+          std::move(batch),
           kafka::offset_cast(input.start_offset),
           input.time,
           kafka::offset_cast(input.last_offset));

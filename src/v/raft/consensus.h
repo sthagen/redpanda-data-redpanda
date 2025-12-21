@@ -905,6 +905,7 @@ private:
     event_manager _event_manager;
     std::unique_ptr<probe> _probe;
     ssx::condition_variable _commit_index_updated;
+    ssx::condition_variable _leadership_changed;
 
     std::chrono::milliseconds _replicate_append_timeout;
     std::chrono::milliseconds _recovery_append_timeout;

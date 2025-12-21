@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "cluster/cluster_link/fwd.h"
 #include "cluster/fwd.h"
 #include "cluster/plugin_table.h"
 #include "cluster/types.h"
@@ -118,6 +119,10 @@ public:
         ss::sstring host_name;
         ss::sstring domain_name;
         std::vector<ss::sstring> fqdns;
+
+        uint32_t number_of_active_shadow_links{0};
+        uint32_t number_of_shadow_topics{0};
+        bool schema_registry_shadowed{false};
     };
     static constexpr ss::shard_id shard = 0;
 
@@ -133,6 +138,7 @@ public:
       ss::sharded<plugin_table>*,
       ss::sharded<feature_manager>*,
       ss::sharded<storage::api>*,
+      ss::sharded<cluster_link::frontend>*,
       ss::sharded<ss::abort_source>&);
 
     ss::future<> start();
@@ -161,6 +167,7 @@ private:
     ss::sharded<plugin_table>* _plugin_table;
     ss::sharded<feature_manager>* _feature_manager;
     ss::sharded<storage::api>* _storage;
+    ss::sharded<cluster_link::frontend>* _clfe;
     ss::sharded<ss::abort_source>& _as;
     prefix_logger _logger;
     ss::timer<> _tick_timer;

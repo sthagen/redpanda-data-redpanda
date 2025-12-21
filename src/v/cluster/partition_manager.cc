@@ -467,8 +467,7 @@ partition_manager::shutdown(const model::ntp& ntp) {
           std::invalid_argument(
             fmt::format(
               "Can not shutdown partition. NTP {} is not present in "
-              "partition "
-              "manager",
+              "partition manager",
               ntp)));
     }
     // remove partition from ntp & raft tables

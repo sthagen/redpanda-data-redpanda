@@ -240,7 +240,7 @@ ss::future<> batcher<Clock>::bg_controller_loop() {
     while (!_as.abort_requested()) {
         if (!more_work) {
             auto wait_res = co_await _stage.wait_next(&_as);
-            if (wait_res.has_error()) {
+            if (!wait_res.has_value()) {
                 // Shutting down
                 vlog(
                   _logger.info,

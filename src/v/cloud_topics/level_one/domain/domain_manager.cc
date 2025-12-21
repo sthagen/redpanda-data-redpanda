@@ -14,6 +14,7 @@
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/logger.h"
 #include "config/configuration.h"
+#include "container/chunked_hash_map.h"
 #include "model/batch_builder.h"
 #include "ssx/future-util.h"
 #include "ssx/sleep_abortable.h"
@@ -342,6 +343,28 @@ domain_manager::get_offsets(rpc::get_offsets_request req) {
     };
 }
 
+rpc::get_compaction_info_reply domain_manager::do_get_compaction_info(
+  const state& stm_state, rpc::get_compaction_info_request req) {
+    auto get_res = simple_metastore::get_compaction_info(
+      stm_state, req.tp, req.tombstone_removal_upper_bound_ts);
+    if (!get_res.has_value()) {
+        return rpc::get_compaction_info_reply{
+          .ec = convert_metastore_errc(get_res.error()),
+        };
+    }
+    return rpc::get_compaction_info_reply{
+      .ec = rpc::errc::ok,
+      .dirty_ranges = std::move(get_res->offsets_response.dirty_ranges),
+      .removable_tombstone_ranges = std::move(
+        get_res->offsets_response.removable_tombstone_ranges),
+      .dirty_ratio = get_res->dirty_ratio,
+      .earliest_dirty_ts = get_res->earliest_dirty_ts,
+      .extents = meta_to_rpc_extent_metadata(
+        std::move(get_res->offsets_response.extents)),
+      .compaction_epoch = partition_state::compaction_epoch_t{
+        get_res->compaction_epoch()}};
+}
+
 ss::future<rpc::get_compaction_info_reply>
 domain_manager::get_compaction_info(rpc::get_compaction_info_request req) {
     auto gate = maybe_gate();
@@ -357,22 +380,8 @@ domain_manager::get_compaction_info(rpc::get_compaction_info_request req) {
         };
     }
     auto& stm_state = stm_->state();
-    auto get_res = simple_metastore::get_compaction_info(
-      stm_state, req.tp, req.tombstone_removal_upper_bound_ts);
-    if (!get_res.has_value()) {
-        co_return rpc::get_compaction_info_reply{
-          .ec = convert_metastore_errc(get_res.error()),
-        };
-    }
-    co_return rpc::get_compaction_info_reply{
-      .ec = rpc::errc::ok,
-      .dirty_ranges = std::move(get_res->offsets_response.dirty_ranges),
-      .removable_tombstone_ranges = std::move(
-        get_res->offsets_response.removable_tombstone_ranges),
-      .dirty_ratio = get_res->dirty_ratio,
-      .earliest_dirty_ts = get_res->earliest_dirty_ts,
-      .extents = meta_to_rpc_extent_metadata(
-        std::move(get_res->offsets_response.extents))};
+
+    co_return do_get_compaction_info(stm_state, std::move(req));
 }
 
 ss::future<rpc::get_term_for_offset_reply>
@@ -545,6 +554,77 @@ domain_manager::remove_topics(rpc::remove_topics_request req) {
       .ec = rpc::errc::ok,
       .not_removed = std::move(not_removed),
     };
+}
+
+ss::future<rpc::get_compaction_infos_reply>
+domain_manager::get_compaction_infos(rpc::get_compaction_infos_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::get_compaction_infos_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::get_compaction_infos_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+    auto& stm_state = stm_->state();
+
+    chunked_hash_map<model::topic_id_partition, rpc::get_compaction_info_reply>
+      compaction_infos;
+    for (auto& log_req : req.logs) {
+        auto log_info = do_get_compaction_info(stm_state, log_req);
+        compaction_infos.insert_or_assign(log_req.tp, std::move(log_info));
+    }
+    co_return rpc::get_compaction_infos_reply{
+      .responses = std::move(compaction_infos)};
+}
+
+ss::future<rpc::get_extent_metadata_reply>
+domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::get_extent_metadata_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::get_extent_metadata_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+    auto& stm_state = stm_->state();
+
+    auto get_res = [&]() {
+        switch (req.o) {
+        case rpc::get_extent_metadata_request::order::forwards:
+            return simple_metastore::get_extent_metadata_forwards(
+              stm_state,
+              req.tp,
+              req.min_offset,
+              req.max_offset,
+              req.max_num_extents);
+        case rpc::get_extent_metadata_request::order::backwards:
+            return simple_metastore::get_extent_metadata_backwards(
+              stm_state,
+              req.tp,
+              req.min_offset,
+              req.max_offset,
+              req.max_num_extents);
+        }
+    }();
+
+    if (!get_res.has_value()) {
+        co_return rpc::get_extent_metadata_reply{
+          .ec = convert_metastore_errc(get_res.error()),
+        };
+    }
+    co_return rpc::get_extent_metadata_reply{
+      .ec = rpc::errc::ok,
+      .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents))};
 }
 
 ss::lowres_clock::duration domain_manager::gc_interval() const {

@@ -70,11 +70,10 @@ public:
       model::node_id node_id,
       int32_t kafka_port,
       int32_t rpc_port,
-      int32_t proxy_port,
-      int32_t schema_reg_port,
+      std::optional<int32_t> proxy_port,
+      std::optional<int32_t> schema_reg_port,
       std::vector<config::seed_server> seed_servers,
       ss::sstring base_dir,
-      std::optional<scheduling_groups> sch_groups,
       bool remove_on_shutdown,
       std::optional<cloud_storage_clients::s3_configuration> s3_config
       = std::nullopt,
@@ -282,8 +281,8 @@ public:
       const ss::sstring& password);
 
     application app;
-    uint16_t proxy_port;
-    uint16_t schema_reg_port;
+    std::optional<uint16_t> proxy_port;
+    std::optional<uint16_t> schema_reg_port;
     uint16_t kafka_port;
     std::filesystem::path data_dir;
     ss::sharded<net::server_configuration> configs;

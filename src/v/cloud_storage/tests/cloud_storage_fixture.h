@@ -69,6 +69,10 @@ struct cloud_storage_fixture : s3_imposter_fixture {
           .get();
 
         pool.start(10, ss::sharded_parameter([this] { return conf; })).get();
+        pool
+          .invoke_on_all(
+            &cloud_storage_clients::client_pool::start, std::nullopt)
+          .get();
         cloud_io
           .start(
             std::ref(pool),

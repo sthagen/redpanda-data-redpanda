@@ -103,7 +103,7 @@ class ClusterRecoveryTest(RedpandaTest):
         roles: dict[str, set[RoleMember]] = dict()
         for _ in range(3):
             user = f"user-{random_string(6)}"
-            password = f"user-{random_string(6)}"
+            password = f"user-{random_string(9)}"
             users[user] = password
             self.redpanda._admin.create_user(user, password, algorithm)
             rpk.acl_create_allow_cluster(user, op="describe")

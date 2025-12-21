@@ -135,6 +135,7 @@ const model::ntp& ctp_stm::ntp() const noexcept { return _raft->ntp(); }
 
 ss::future<bool> ctp_stm::sync_in_term(
   model::timeout_clock::time_point deadline, ss::abort_source& as) {
+    auto holder = _gate.hold();
     auto sync_result = co_await sync(
       deadline - model::timeout_clock::now(), as);
     if (!sync_result) {
@@ -170,6 +171,7 @@ std::optional<cluster_epoch> ctp_stm::estimate_inactive_epoch() const noexcept {
 }
 
 ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
+    auto holder = _gate.hold();
     // Consume the first epoch from the partition starting from
     // start offset if nothing was reconciled yet or from the last
     // reconciled offset + 1 otherwise.
@@ -331,6 +333,7 @@ ss::future<iobuf> ctp_stm::take_raft_snapshot(model::offset snapshot_at) {
 }
 
 ss::future<cluster_epoch_fence> ctp_stm::fence_epoch(cluster_epoch e) {
+    auto holder = _gate.hold();
     if (!co_await sync(sync_timeout)) {
         vlog(_log.warn, "ctp_stm::fence_epoch sync timeout");
         throw std::runtime_error(fmt_with_ctx(fmt::format, "Sync timeout"));

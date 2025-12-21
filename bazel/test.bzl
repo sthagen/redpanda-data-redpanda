@@ -219,7 +219,7 @@ def _redpanda_cc_unit_test(cpu, memory, **kwargs):
         "--unsafe-bypass-fsync 1",
         "--default-log-level=trace",
         "--logger-log-level='io=debug'",
-        "--logger-log-level='exception=debug'",
+        "--logger-log-level='exception=info'",
     ]
 
     # TODO(bazel): What are the right defaults here?

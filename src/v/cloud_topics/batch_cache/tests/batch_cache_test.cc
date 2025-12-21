@@ -24,6 +24,11 @@ struct batch_cache_accessor {
     evict_offset(batch_cache& c, const model::ntp& ntp, model::offset o) {
         c._index[ntp]->testing_evict_from_cache(o);
     }
+    static void reclaim(batch_cache& c, const model::ntp& ntp, size_t size) {
+        // it doesn't really matter what ntp is used, all the indices point to
+        // the same cache.
+        c._index[ntp]->testing_reclaim_from_cache(size);
+    }
     static bool contains_ntp(const batch_cache& c, const model::ntp& ntp) {
         return c._index.contains(ntp);
     }
@@ -49,6 +54,10 @@ public:
 
     void evict_offset(const model::ntp& ntp, model::offset o) {
         cloud_topics::batch_cache_accessor::evict_offset(_cache, ntp, o);
+    }
+
+    void reclaim(const model::ntp& ntp, size_t size) {
+        cloud_topics::batch_cache_accessor::reclaim(_cache, ntp, size);
     }
 };
 
@@ -114,7 +123,7 @@ TEST_F(batch_cache_test_fixture, test_batch_cache_eviction) {
 
     ASSERT_TRUE(contains_ntp(test_ntp));
 
-    evict_offset(test_ntp, model::offset(42));
+    reclaim(test_ntp, 1);
 
     ASSERT_TRUE(contains_ntp(test_ntp));
 

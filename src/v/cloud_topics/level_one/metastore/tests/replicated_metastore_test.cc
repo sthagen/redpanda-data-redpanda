@@ -326,6 +326,7 @@ TEST_F(ReplicatedMetastoreTest, TestBasicAdd) {
           testing::ElementsAre(MatchesRange(o{0}, o{999})));
         EXPECT_FLOAT_EQ(cmp_info->dirty_ratio, 1.0);
         EXPECT_TRUE(cmp_info->earliest_dirty_ts.has_value());
+        EXPECT_EQ(cmp_info->compaction_epoch, metastore::compaction_epoch{0});
     }
 }
 
@@ -348,6 +349,7 @@ TEST_F(ReplicatedMetastoreTest, TestBasicCompact) {
         update.new_cleaned_ranges.push_back(
           metastore::compaction_update::cleaned_range{
             .base_offset = o{0}, .last_offset = o{999}});
+        update.expected_compaction_epoch = metastore::compaction_epoch{0};
         cmap[make_tp(i)] = std::move(update);
     }
     auto cmp_res = meta.compact_objects(*new_objs, cmap).get();
@@ -417,6 +419,7 @@ TEST_F(ReplicatedMetastoreTest, TestBasicCompact) {
           << fmt::format("{} is not cleaned", tp);
         EXPECT_FLOAT_EQ(cmp_info->dirty_ratio, 0.0);
         EXPECT_TRUE(!cmp_info->earliest_dirty_ts.has_value());
+        EXPECT_EQ(cmp_info->compaction_epoch, metastore::compaction_epoch{1});
     }
 }
 
@@ -725,8 +728,13 @@ TEST_F(ReplicatedMetastoreTest, TestBasicRemoveTopics) {
     // Sanity check that all topics exist.
     for (int i = 0; i < topics_count; ++i) {
         auto tp = make_topic_p0(i);
-        auto offsets = meta.get_offsets(tp).get();
-        ASSERT_TRUE(offsets.has_value());
+        std::expected<metastore::offsets_response, metastore::errc> offsets;
+        RPTEST_REQUIRE_EVENTUALLY(10s, [&] {
+            return meta.get_offsets(tp).then([&](auto offsets_res) {
+                offsets = std::move(offsets_res);
+                return offsets.has_value();
+            });
+        });
         ASSERT_EQ(offsets->next_offset, o{100});
     }
 
@@ -822,5 +830,59 @@ TEST_F(ReplicatedMetastoreTest, TestRemoveTopicsWithShuffleLoop) {
         auto& l1_state = l1_stm->state();
         EXPECT_TRUE(l1_state.topic_to_state.empty())
           << "Partition " << i << " still has topics";
+    }
+}
+
+TEST_F(ReplicatedMetastoreTest, TestGetCompactionInfos) {
+    auto& app = get_ct_app(model::node_id{0});
+    replicated_metastore meta(app.get_sharded_l1_metastore_router()->local());
+
+    constexpr auto partitions_count = 100;
+    ASSERT_NO_FATAL_FAILURE(
+      add_initial_objects(meta, partitions_count, 999).get());
+    chunked_vector<metastore::compaction_info_spec> info_specs;
+    info_specs.reserve(partitions_count);
+    for (int i = 0; i < partitions_count; ++i) {
+        auto tp = make_tp(i);
+        info_specs.emplace_back(tp, model::timestamp::max());
+    }
+
+    {
+        auto compaction_infos_res = meta.get_compaction_infos(info_specs).get();
+        ASSERT_TRUE(compaction_infos_res.has_value());
+        ASSERT_EQ(compaction_infos_res->size(), partitions_count);
+        for (const auto& [log, info] : compaction_infos_res.value()) {
+            ASSERT_TRUE(info.has_value());
+            ASSERT_DOUBLE_EQ(info->dirty_ratio, 1.0);
+            ASSERT_EQ(info->compaction_epoch, metastore::compaction_epoch{0});
+        }
+    }
+
+    // Compact every partition.
+    std::unique_ptr<metastore::object_metadata_builder> new_objs;
+    ASSERT_NO_FATAL_FAILURE(
+      create_initial_objects(meta, partitions_count, 999, &new_objs));
+    metastore::compaction_map_t cmap;
+    for (int i = 0; i < partitions_count; ++i) {
+        metastore::compaction_update update;
+        update.cleaned_at = model::timestamp::now();
+        update.new_cleaned_ranges.push_back(
+          metastore::compaction_update::cleaned_range{
+            .base_offset = o{0}, .last_offset = o{999}});
+        update.expected_compaction_epoch = metastore::compaction_epoch{0};
+        cmap[make_tp(i)] = std::move(update);
+    }
+    auto cmp_res = meta.compact_objects(*new_objs, cmap).get();
+    ASSERT_TRUE(cmp_res.has_value()) << fmt::to_string(cmp_res.error());
+
+    {
+        auto compaction_infos_res = meta.get_compaction_infos(info_specs).get();
+        ASSERT_TRUE(compaction_infos_res.has_value());
+        ASSERT_EQ(compaction_infos_res->size(), partitions_count);
+        for (const auto& [log, info] : compaction_infos_res.value()) {
+            ASSERT_TRUE(info.has_value());
+            ASSERT_DOUBLE_EQ(info->dirty_ratio, 0.0);
+            ASSERT_EQ(info->compaction_epoch, metastore::compaction_epoch{1});
+        }
     }
 }

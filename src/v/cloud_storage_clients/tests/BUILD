@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_cc_gtest(
     name = "backend_detection_test",
@@ -21,6 +21,7 @@ redpanda_cc_btest(
         "client_pool_test.cc",
     ],
     deps = [
+        ":client_pool_builder",
         "//src/v/base",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage_clients",
@@ -38,6 +39,7 @@ redpanda_cc_btest(
         "s3_client_test.cc",
     ],
     deps = [
+        ":client_pool_builder",
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
@@ -112,6 +114,17 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "client_pool_builder",
+    hdrs = [
+        "client_pool_builder.h",
+    ],
+    deps = [
+        "//src/v/cloud_storage_clients",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_btest(
     name = "client_pool_mt_test",
     timeout = "short",
@@ -120,6 +133,7 @@ redpanda_cc_btest(
     ],
     cpu = 2,
     deps = [
+        ":client_pool_builder",
         "//src/v/base",
         "//src/v/cloud_storage_clients",
         "//src/v/test_utils:seastar_boost",

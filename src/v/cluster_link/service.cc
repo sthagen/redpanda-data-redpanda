@@ -216,7 +216,7 @@ public:
     }
 
     ss::future<::cluster::cluster_link::errc> failover_link_topics(
-      model::id_t id, ::model::timeout_clock::time_point timeout) override {
+      model::id_t id, ::model::timeout_clock::duration timeout) override {
         return _plf->failover_link_topics(id, timeout);
     }
 

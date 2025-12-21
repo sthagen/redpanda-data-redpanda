@@ -78,7 +78,7 @@ public:
       model::timeout_clock::time_point);
 
     ss::future<errc> failover_link_topics(
-      ::cluster_link::model::id_t, model::timeout_clock::time_point);
+      ::cluster_link::model::id_t, model::timeout_clock::duration);
 
     bool cluster_link_active() const;
 

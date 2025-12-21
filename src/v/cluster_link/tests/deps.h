@@ -206,7 +206,7 @@ public:
     }
 
     ss::future<::cluster::cluster_link::errc> failover_link_topics(
-      model::id_t id, ::model::timeout_clock::time_point timeout) override {
+      model::id_t id, ::model::timeout_clock::duration timeout) override {
         auto link = _table->find_link_by_id(id);
         if (!link) {
             co_return ::cluster::cluster_link::errc::does_not_exist;
@@ -222,7 +222,7 @@ public:
             auto err = co_await update_mirror_topic_state(
               id,
               {.topic = t, .status = model::mirror_topic_status::failing_over},
-              timeout);
+              ::model::timeout_clock::now() + timeout);
             if (err != ::cluster::cluster_link::errc::success) {
                 co_return err;
             }

@@ -125,6 +125,12 @@ public:
         // get_or_create_object_for() will not return the finished object ID.
         virtual std::expected<void, error>
         finish(object_id, size_t footer_pos, size_t object_size) = 0;
+
+        // Returns `true` if this builder has no finalized objects in it, and
+        // `false` if it does. Intended to be called after all pending objects
+        // have been either removed or finished, but before this builder is
+        // passed to a metastore interface.
+        virtual bool is_empty() const = 0;
     };
 
     struct offsets_response {
@@ -233,6 +239,9 @@ public:
     virtual ss::future<std::expected<model::term_id, errc>>
     get_term_for_offset(const model::topic_id_partition&, kafka::offset) = 0;
 
+    using compaction_epoch
+      = named_type<int64_t, struct metastore_compaction_epoch>;
+
     // Compaction metadata updates per partition
     //
     // Kafka compaction works by taking "dirty" ranges of data, collecting the
@@ -281,14 +290,19 @@ public:
         // Timestamp at which the compaction operation happened.
         model::timestamp cleaned_at;
 
+        // The expected compaction epoch of the log at time of update
+        // application.
+        compaction_epoch expected_compaction_epoch;
+
         fmt::iterator format_to(fmt::iterator it) const {
             return fmt::format_to(
               it,
               "{{new_cleaned_ranges:{}, removed_tombstone_ranges:{}, "
-              "cleaned_at:{}}}",
+              "cleaned_at:{}, expected_compaction_epoch: {}}}",
               new_cleaned_ranges,
               removed_tombstones_ranges,
-              cleaned_at);
+              cleaned_at,
+              expected_compaction_epoch);
         }
     };
     using compaction_map_t
@@ -355,14 +369,18 @@ public:
         std::optional<model::timestamp> earliest_dirty_ts;
         // Dirty ranges & removable tombstone ranges.
         compaction_offsets_response offsets_response;
+        // The log's current compaction epoch.
+        compaction_epoch compaction_epoch;
 
         fmt::iterator format_to(fmt::iterator it) const {
             return fmt::format_to(
               it,
-              "{{dirty_ratio:{}, earliest_dirty_ts:{}, offsets_response:{}}}",
+              "{{dirty_ratio:{}, earliest_dirty_ts:{}, offsets_response:{}, "
+              "compaction_epoch:{}}}",
               dirty_ratio,
               earliest_dirty_ts,
-              offsets_response);
+              offsets_response,
+              compaction_epoch);
         }
     };
 
@@ -413,14 +431,34 @@ public:
       std::expected<compaction_info_response, errc>>;
 
     // Vectorized RPC for obtaining compaction state for a number of partitions.
-    virtual ss::future<compaction_info_map> get_compaction_infos(
-      const chunked_vector<compaction_info_spec>& to_collect) {
-        compaction_info_map ret;
-        for (const auto& log : to_collect) {
-            ret.emplace(log.tidp, co_await get_compaction_info(log));
-        }
-        co_return ret;
-    }
+    virtual ss::future<std::expected<compaction_info_map, errc>>
+    get_compaction_infos(const chunked_vector<compaction_info_spec>&) = 0;
+
+    struct extent_metadata_response {
+        extent_metadata_vec extents{};
+    };
+
+    // Returns a number of extents in the offset range `[start, end]`
+    // inclusively, and in ascending offset order. Useful for forward
+    // iteration over an extent-aligned offset range- that is, for an extent
+    // metastore state of `[[0, 9],[10,19],[20,29]]`, and a request like
+    // `get_extent_metadata_ge([0, 15])`, the returned extents will be `[[0, 9],
+    // [10, 19]]`.
+    virtual ss::future<std::expected<extent_metadata_response, errc>>
+    get_extent_metadata_forwards(
+      const model::topic_id_partition&, kafka::offset, kafka::offset, size_t)
+      = 0;
+
+    // Returns a number of extents in the offset range `[start, end]`
+    // inclusively, and in descending offset order. Useful for backward
+    // iteration over an extent-aligned offset range- that is, for an extent
+    // metastore state of `[[0, 9],[10,19],[20,29]]`, and a request like
+    // `get_extent_metadata_le([0, 15])`, the returned extents will be `[[10,
+    // 19], [0, 9]]`.
+    virtual ss::future<std::expected<extent_metadata_response, errc>>
+    get_extent_metadata_backwards(
+      const model::topic_id_partition&, kafka::offset, kafka::offset, size_t)
+      = 0;
 };
 
 } // namespace cloud_topics::l1

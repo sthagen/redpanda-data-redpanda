@@ -608,8 +608,8 @@ void parse_and_set_tristate(
         using config_t
           = std::conditional_t<std::is_floating_point_v<T>, T, int64_t>;
         auto parsed = boost::lexical_cast<config_t>(*value);
-        if (parsed <= 0) {
-            property.value = tristate<T>{};
+        if (parsed < 0) {
+            property.value = tristate<T>{disable_tristate};
         } else {
             property.value = tristate<T>(std::make_optional<T>(parsed));
         }

@@ -79,8 +79,17 @@ ss::future<> log_info_collector::collect_info_for_logs(
 
     auto to_collect = get_logs_to_collect(logs_list, logs_set.size(), now);
 
-    auto compaction_infos = co_await _metastore->get_compaction_infos(
+    auto compaction_infos_res = co_await _metastore->get_compaction_infos(
       to_collect);
+    if (!compaction_infos_res.has_value()) {
+        vlog(
+          compaction_log.warn,
+          "Failed to retrieve compaction info from metastore: {}",
+          compaction_infos_res.error());
+        co_return;
+    }
+
+    auto compaction_infos = std::move(compaction_infos_res).value();
 
     populate_log_infos(
       compaction_infos, logs_set, logs_list, compaction_queue, now);
@@ -100,7 +109,7 @@ log_info_collector::get_logs_to_collect(
             continue;
         }
 
-        if (log.inflight) {
+        if (log.state == log_compaction_meta::log_state::inflight) {
             // No need to sample inflight logs
             vlog(
               compaction_log.debug,
@@ -153,9 +162,13 @@ log_info_collector::get_logs_to_collect(
             return delete_retention_ms.has_value()
                      ? collection_timestamp
                          - model::timestamp(delete_retention_ms->count())
-                     : model::timestamp::max();
+                     : model::timestamp::min();
         }();
-        vlog(compaction_log.debug, "Sampling CTP {}", log.ntp);
+        vlog(
+          compaction_log.debug,
+          "Sampling CTP {} with tombstone removal upper bound timestamp {}",
+          log.ntp,
+          tombstone_removal_ts);
 
         to_collect.emplace_back(log.tidp, tombstone_removal_ts);
     }
@@ -175,7 +188,7 @@ void log_info_collector::populate_log_infos(
             continue;
         }
 
-        if (log.inflight) {
+        if (log.state == log_compaction_meta::log_state::inflight) {
             // Don't step on compaction info that is actively being used.
             continue;
         }
@@ -207,7 +220,12 @@ void log_info_collector::populate_log_infos(
           compaction_log.debug,
           "Compaction info for CTP {} returned {}",
           log.ntp,
-          log.info_and_ts->info.dirty_ratio);
+          log.info_and_ts->info);
+
+        if (log.state != log_compaction_meta::log_state::idle) {
+            // We don't need to queue an already queued log.
+            continue;
+        }
 
         auto topic_cfg_opt = _topic_metadata_provider->get_topic_cfg(
           model::topic_namespace_view(log.ntp));
@@ -221,6 +239,7 @@ void log_info_collector::populate_log_infos(
         if (needs_compaction(log, topic_cfg)) {
             auto ptr_it = logs_set.find(log.tidp);
             if (ptr_it != logs_set.end()) {
+                log.state = log_compaction_meta::log_state::queued;
                 compaction_queue.push(*ptr_it);
             }
         }

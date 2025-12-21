@@ -4766,8 +4766,8 @@ class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
         )
 
         superuser = self.redpanda.SUPERUSER_CREDENTIALS
-        self.user = SaslCredentials("user", "panda", superuser.mechanism)
-        public_user = SaslCredentials("red", "panda", superuser.mechanism)
+        self.user = SaslCredentials("user", "panda012345678", superuser.mechanism)
+        public_user = SaslCredentials("red", "panda012345678", superuser.mechanism)
 
         self.super_auth = (superuser.username, superuser.password)
         self.user_auth = (self.user.username, self.user.password)
@@ -7511,7 +7511,7 @@ class SchemaRegistryAclAuthzTest(SchemaRegistryEndpoints):
         )
 
         superuser = self.redpanda.SUPERUSER_CREDENTIALS
-        self.user = SaslCredentials("user", "panda", superuser.mechanism)
+        self.user = SaslCredentials("user", "panda012345678", superuser.mechanism)
 
         self.super_auth = (superuser.username, superuser.password)
         self.user_auth = (self.user.username, self.user.password)

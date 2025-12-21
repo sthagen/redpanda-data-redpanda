@@ -2,6 +2,12 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load(":packaging.bzl", "native_package", "redpanda_package")
 
+# this is the real binary. the rpk alias at the root //:rpk is a wrapper.
+alias(
+    name = "rpk",
+    actual = "//src/go/rpk/cmd/rpk:rpk",
+)
+
 redpanda_package(
     name = "redpanda_tar",
     out = "redpanda.tar.gz",
@@ -9,7 +15,7 @@ redpanda_package(
     include_sysroot_libs = True,
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
-    rpk_binary = "//:rpk",
+    rpk_binary = ":rpk",
 )
 
 redpanda_package(
@@ -24,7 +30,7 @@ redpanda_package(
     openssl = "@openssl//:openssl_binary",
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
-    rpk_binary = "//:rpk",
+    rpk_binary = ":rpk",
 )
 
 # This is "bazel-dir" packaging mode used for local DT tests.
@@ -37,7 +43,7 @@ redpanda_package(
     install_path = "/opt/redpanda_installs/redpanda",
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
-    rpk_binary = "//:rpk",
+    rpk_binary = ":rpk",
 )
 
 # This is the ID for the nonroot user in the distroless containers.
@@ -50,7 +56,7 @@ redpanda_package(
     owner = NONROOT_USER,
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
-    rpk_binary = "//:rpk",
+    rpk_binary = ":rpk",
 )
 
 native_package(

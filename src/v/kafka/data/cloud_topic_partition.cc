@@ -167,12 +167,6 @@ ss::future<result<model::offset>> cloud_topic_partition::replicate(
     co_return kafka::offset_cast(res.value());
 }
 
-ss::future<result<model::offset>> cloud_topic_partition::replicate(
-  model::record_batch batch, raft::replicate_options opts) {
-    return replicate(
-      chunked_vector<model::record_batch>::single(std::move(batch)), opts);
-}
-
 raft::replicate_stages cloud_topic_partition::replicate(
   model::batch_identity batch_id,
   model::record_batch batch,

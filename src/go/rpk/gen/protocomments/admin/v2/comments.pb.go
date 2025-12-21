@@ -79,6 +79,7 @@ var Comments = map[string]string{
 	"redpanda.core.admin.v2.NameFilter.pattern_type":  "Literal or prefix",
 	"redpanda.core.admin.v2.PATTERN_TYPE_LITERAL":     "Must match the filter exactly",
 	"redpanda.core.admin.v2.PATTERN_TYPE_PREFIX":      "Will match anything that starts with filter",
+	"redpanda.core.admin.v2.PATTERN_TYPE_PREFIXED":    "Will match anything that starts with filter",
 	"redpanda.core.admin.v2.PatternType":              "The matching pattern type",
 	"redpanda.core.admin.v2.PlainConfig":              "PLAIN settings",
 	"redpanda.core.admin.v2.PlainConfig.password":     "Password",

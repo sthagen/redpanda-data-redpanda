@@ -244,8 +244,8 @@ public:
 
     ss::gate& gate() { return _gate; }
 
-    ss::future<> start() override;
-
+    // Async functions below don't hold STM gate, but their callers in
+    // tx_gateway_frontend do
     ss::future<checked<tx_metadata, tm_stm::op_status>>
       get_tx(kafka::transactional_id);
     ss::future<checked<tx_metadata, tm_stm::op_status>> finish_transaction(
@@ -282,11 +282,13 @@ public:
         return sync(_sync_timeout);
     }
 
+    // Caller must keep the STM alive until it destructs the returned holder.
     ss::future<ss::basic_rwlock<>::holder> read_lock() {
         return _state_lock.hold_read_lock();
     }
     uint8_t active_snapshot_version();
 
+    // Caller must keep the STM alive until it destructs the returned holder.
     ss::future<ss::basic_rwlock<>::holder> prepare_transfer_leadership();
 
     ss::future<checked<tx_metadata, tm_stm::op_status>>
@@ -309,6 +311,7 @@ public:
 
     bool is_expired(const tx_metadata&);
 
+    // Caller must keep the STM alive until it destructs the returned holder.
     ss::future<txlock_unit> lock_tx(kafka::transactional_id, std::string_view);
 
     std::optional<txlock_unit>
@@ -325,9 +328,6 @@ public:
       model::term_id term,
       kafka::transactional_id tid,
       tx_metadata::tx_partition ntp);
-
-    ss::future<checked<tx_metadata, tm_stm::op_status>>
-      update_tx(tx_metadata, model::term_id);
 
     model::partition_id get_partition() const {
         return _raft->ntp().tp.partition;
@@ -373,14 +373,11 @@ private:
     ss::future<checked<model::term_id, tm_stm::op_status>>
       do_sync(model::timeout_clock::duration);
     ss::future<checked<tx_metadata, tm_stm::op_status>>
+      update_tx(tx_metadata, model::term_id);
+    ss::future<checked<tx_metadata, tm_stm::op_status>>
       do_update_tx(tx_metadata, model::term_id);
     ss::future<tm_stm::op_status>
       replicate_tx_update(tx_metadata, model::term_id);
-    ss::future<tm_stm::op_status> do_register_new_producer(
-      model::term_id,
-      kafka::transactional_id,
-      std::chrono::milliseconds,
-      model::producer_identity);
 
     ss::future<result<raft::replicate_result>>
       quorum_write_empty_batch(model::timeout_clock::time_point);

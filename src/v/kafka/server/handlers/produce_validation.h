@@ -40,6 +40,8 @@ struct validation_args {
     std::chrono::milliseconds message_timestamp_before_max_ms;
     std::chrono::milliseconds message_timestamp_after_max_ms;
     kafka::kafka_probe& probe;
+    const model::ntp& ntp;
+    std::optional<std::string_view> client_id;
 };
 
 // Entry point for batch validation.

@@ -24,6 +24,8 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/util/file.hh>
 
+#include <memory>
+
 using namespace std::chrono_literals;
 
 namespace cluster {
@@ -250,14 +252,18 @@ private:
             expected_log_revision = it->second.log_revision;
         }
 
+        auto action = placement.get_reconciliation_action(
+          expected_log_revision);
         vlog(
           _logger.trace,
-          "[{}] placement state on this shard: {}, expected_log_revision: {}",
+          "[{}] placement state on this shard: {}, expected_log_revision: {}, "
+          "reconciliation_action: {}",
           ntp,
           placement,
-          expected_log_revision);
+          expected_log_revision,
+          action);
 
-        switch (placement.get_reconciliation_action(expected_log_revision)) {
+        switch (action) {
         case shard_placement_table::reconciliation_action::remove_partition: {
             auto cmd_revision = expected_log_revision.value_or(_ntpt.revision);
             auto ec = co_await delete_partition(ntp, placement, cmd_revision);
@@ -317,8 +323,19 @@ private:
       const model::ntp& ntp,
       model::revision_id log_revision,
       bool state_expected) {
+        vlog(
+          _logger.trace,
+          "[{}] create_partition log_revision: {}, state_expected: {}",
+          ntp,
+          log_revision,
+          state_expected);
         auto ec = co_await _shard_placement.prepare_create(ntp, log_revision);
-        vlog(_logger.trace, "[{}] creating partition: {}", ntp, ec);
+        vlog(
+          _logger.trace,
+          "[{}] prepare_create log_revision: {}, ec: {}",
+          ntp,
+          log_revision,
+          ec);
         if (ec) {
             co_return ec;
         }
@@ -329,6 +346,7 @@ private:
           "[{}] started partition log_revision: {}",
           ntp,
           log_revision);
+
         co_await ss::sleep(1ms * random_generators::get_int(30));
 
         co_await _ntp2shards.invoke_on(
@@ -381,13 +399,22 @@ private:
       const model::ntp& ntp,
       shard_placement_table::placement_state placement,
       model::revision_id cmd_revision) {
+        vlog(
+          _logger.trace,
+          "[{}] delete partition placement: {}, cmd_revision: {}",
+          ntp,
+          placement,
+          cmd_revision);
+
         auto ec = co_await _shard_placement.prepare_delete(ntp, cmd_revision);
+
         vlog(
           _logger.trace,
           "[{}] deleting partition at cmd_revision: {}, ec: {}",
           ntp,
           cmd_revision,
           ec);
+
         if (ec) {
             co_return ec;
         }
@@ -473,8 +500,22 @@ private:
               }
           });
 
+        vlog(
+          _logger.trace,
+          "[{}] starting finish_delete placement: {}, cmd_revision: {}",
+          ntp,
+          placement,
+          cmd_revision);
+
         co_await _shard_placement.finish_delete(
           ntp, placement.current()->log_revision);
+
+        vlog(
+          _logger.trace,
+          "[{}] finishing finish_delete placement: {}, cmd_revision: {}",
+          ntp,
+          placement,
+          cmd_revision);
         co_return ec;
     }
 
@@ -506,14 +547,23 @@ private:
       const model::ntp& ntp,
       model::revision_id log_revision,
       bool state_expected) {
+        vlog(
+          _logger.trace,
+          "[{}] transfer_partition log_revision: {}, state_expected {}",
+          ntp,
+          log_revision,
+          state_expected);
+
         auto transfer_info = co_await _shard_placement.prepare_transfer(
           ntp, log_revision, _shard_placement.container());
+
+        vlog(
+          _logger.trace,
+          "[{}] prepare_transfer source error: {}",
+          ntp,
+          transfer_info.source_error);
+
         if (transfer_info.source_error != errc::success) {
-            vlog(
-              _logger.trace,
-              "[{}] preparing transfer source error: {}",
-              ntp,
-              transfer_info.source_error);
             co_return transfer_info.source_error;
         }
 
@@ -524,6 +574,7 @@ private:
           ntp,
           destination,
           transfer_info.dest_error);
+
         if (transfer_info.dest_error != errc::success) {
             co_return transfer_info.dest_error;
         }
@@ -638,9 +689,22 @@ private:
             }
         };
 
+        vlog(
+          _logger.trace,
+          "[{}] starting finish_transfer log_revision: {}",
+          ntp,
+          log_revision);
+
         co_await _shard_placement.finish_transfer(
           ntp, log_revision, _shard_placement.container(), shard_callback);
         vlog(_logger.trace, "[{}] transferred", ntp);
+
+        vlog(
+          _logger.trace,
+          "[{}] finished finish_transfer log_revision: {}",
+          ntp,
+          log_revision);
+
         co_return errc::success;
     }
 
@@ -996,6 +1060,8 @@ public:
     }
 
     ss::future<> start() {
+        _heartbeat.set_callback([] { vlog(clusterlog.info, "heartbeat"); });
+        _heartbeat.arm_periodic(10s);
         co_await ft.start();
         co_await ft.invoke_on_all(
           [](features::feature_table& ft) { ft.testing_activate_all(); });
@@ -1023,6 +1089,7 @@ public:
         co_await _ntp2shards.stop();
         co_await ntpt.stop();
         co_await ft.stop();
+        _heartbeat.cancel();
     }
 
     ss::future<> restart_node(bool first_start) {
@@ -1110,6 +1177,9 @@ public:
     std::unique_ptr<ss::sharded<shard_placement_table>> spt;
     std::unique_ptr<ss::sharded<reconciliation_backend>> rb;
     std::unique_ptr<shard_assigner> _shard_assigner;
+
+    // chirp periodically, part of an ongoing deadlock investigation
+    ss::timer<ss::lowres_clock> _heartbeat{};
 };
 
 TEST_F_CORO(shard_placement_test_fixture, StressTest) {

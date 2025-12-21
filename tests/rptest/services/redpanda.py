@@ -2731,7 +2731,7 @@ class RedpandaService(Service, RedpandaServiceABC):
             self._log_config = LoggingConfig(
                 self._log_level,
                 {
-                    "exception": "debug",
+                    "exception": "info",
                     "io": "debug",
                     "seastar_memory": "debug",
                     "dns_resolver": "info",

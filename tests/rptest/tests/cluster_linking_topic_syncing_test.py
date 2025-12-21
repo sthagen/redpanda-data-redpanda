@@ -431,6 +431,35 @@ class ClusterLinkingTopicSyncingWithScram(ClusterLinkingTopicSyncingTestBase):
             }
         )
 
+    @cluster(num_nodes=6)
+    def test_set_same_password(self):
+        shadow_link_req = self.create_default_link_request("test-link")
+        created_link = self.create_link_with_request(req=shadow_link_req)
+
+        orig_timestamp = created_link.configurations.client_options.authentication_configuration.scram_configuration.password_set_at
+        self.logger.debug(f"Original password set at: {orig_timestamp}")
+
+        # Update with the exact same password
+        shadow_link_update = shadow_link_req.shadow_link
+
+        update_mask: google.protobuf.field_mask_pb2.FieldMask = (
+            google.protobuf.field_mask_pb2.FieldMask(
+                paths=["configurations.client_options"]
+            )
+        )
+
+        updated_link = self.update_link(
+            shadow_link=shadow_link_update, update_mask=update_mask
+        )
+
+        new_timestamp = updated_link.configurations.client_options.authentication_configuration.scram_configuration.password_set_at
+
+        self.logger.debug(f"New timestamp: {new_timestamp}")
+
+        assert new_timestamp == orig_timestamp, (
+            f"Password set timestamp should not have changed: {new_timestamp} != {orig_timestamp}"
+        )
+
 
 class ClusterLinkingTopicSyncingWithPlain(ClusterLinkingTopicSyncingTestBase):
     """

@@ -167,11 +167,6 @@ public:
         throw std::runtime_error("unimplemented");
     }
 
-    ss::future<result<model::offset>>
-    replicate(model::record_batch, raft::replicate_options) final {
-        throw std::runtime_error("unimplemented");
-    }
-
     result<kafka::partition_info> get_partition_info() const override {
         throw std::runtime_error("unimplemented");
     }

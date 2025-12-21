@@ -87,7 +87,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         self,
         test_context: TestContext,
         *args: Any,
-        is_smoke_test: bool = False,
+        is_smoke_test: bool,
         **kwargs: Any,
     ):
         super().__init__(
@@ -110,21 +110,6 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             node_prealloc_count=3,
             schema_registry_config=SchemaRegistryConfig(),
             pandaproxy_config=PandaproxyConfig(),
-            log_config=LoggingConfig(
-                "info",
-                {
-                    "storage-resources": "warn",
-                    "storage-gc": "debug",
-                    "raft": "debug",
-                    "cluster": "debug",
-                    "datalake": "trace",
-                    "cloud_storage": "debug",
-                    "cloud_io": "debug",
-                    "kafka": "debug",
-                    "reconciler": "debug",
-                    "cloud_topics": "debug",
-                },
-            ),
             *args,
             **kwargs,
         )
@@ -820,7 +805,26 @@ class RedpandaNodeOperationsSmokeTest(RandomNodeOperationsBase):
     """
 
     def __init__(self, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs, is_smoke_test=True)
+        super().__init__(
+            *args,
+            **kwargs,
+            is_smoke_test=True,
+            log_config=LoggingConfig(
+                "info",
+                {
+                    "storage-resources": "warn",
+                    "storage-gc": "trace",
+                    "raft": "trace",
+                    "cluster": "debug",
+                    "datalake": "trace",
+                    "cloud_storage": "debug",
+                    "cloud_io": "debug",
+                    "kafka": "debug",
+                    "reconciler": "debug",
+                    "cloud_topics": "debug",
+                },
+            ),
+        )
 
     @cluster(num_nodes=9, log_allow_list=RNOT_ALLOW_LIST)
     @matrix(

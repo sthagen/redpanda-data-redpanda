@@ -53,7 +53,7 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
         } else {
             auto res = co_await materialize(
               &back, bucket, api, cache, rtc, probe);
-            if (res.has_error()) {
+            if (!res.has_value()) {
                 co_return res.error();
             }
             hydrated.insert(
@@ -76,7 +76,7 @@ ss::future<materialize_result> materialize_placeholders(
     micro_probe probe;
     auto extents = co_await materialize_sorted_run(
       std::move(query), bucket, &api, &cache, &rtc, &probe);
-    if (extents.has_error()) {
+    if (!extents.has_value()) {
         vlog(
           logger.warn,
           "Failed to materialize sorted run: {}",

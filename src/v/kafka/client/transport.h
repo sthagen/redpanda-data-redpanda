@@ -249,10 +249,10 @@ private:
           std::make_unique<request_entry>(
             this, correlation, is_flexible, timeout));
         auto response_future = it->second->response_promise.get_future();
-        co_await _out.write(iobuf_as_scattered(std::move(buf)));
+        co_await out().write(iobuf_as_scattered(std::move(buf)));
         // return all units to the semaphore before flushing the output
         u.return_all();
-        co_await _out.flush();
+        co_await out().flush();
         auto response_data = co_await std::move(response_future);
         if (response_data.has_error()) {
             co_return ret_t(response_data.error());

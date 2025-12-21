@@ -32,7 +32,6 @@ shadow_link_service_impl::shadow_link_service_impl(
 ss::future<proto::admin::create_shadow_link_response>
 shadow_link_service_impl::create_shadow_link(
   serde::pb::rpc::context, proto::admin::create_shadow_link_request req) {
-    vlog(sllog.trace, "create_shadow_link: {}", req);
     auto redirect_node = redirect_to(model::controller_ntp);
     if (redirect_node) {
         vlog(
@@ -45,7 +44,7 @@ shadow_link_service_impl::create_shadow_link(
             *redirect_node)
           .create_shadow_link(serde::pb::rpc::context{}, std::move(req));
     }
-
+    vlog(sllog.info, "create_shadow_link: {}", req);
     auto md = convert_create_to_metadata(std::move(req));
     auto get_resp = _service->local().get_cluster_link(md.name);
     if (get_resp.has_value()) {
@@ -65,7 +64,6 @@ shadow_link_service_impl::create_shadow_link(
 ss::future<proto::admin::delete_shadow_link_response>
 shadow_link_service_impl::delete_shadow_link(
   serde::pb::rpc::context ctx, proto::admin::delete_shadow_link_request req) {
-    vlog(sllog.trace, "delete_shadow_link: {}", req);
     auto redirect_node = redirect_to(model::controller_ntp);
     if (redirect_node) {
         vlog(
@@ -78,7 +76,7 @@ shadow_link_service_impl::delete_shadow_link(
             *redirect_node)
           .delete_shadow_link(ctx, std::move(req));
     }
-
+    vlog(sllog.info, "delete_shadow_link: {}", req);
     handle_error(
       co_await _service->local().delete_cluster_link(
         cluster_link::model::name_t{req.get_name()}, req.get_force()));
@@ -147,7 +145,6 @@ shadow_link_service_impl::list_shadow_links(
 ss::future<proto::admin::update_shadow_link_response>
 shadow_link_service_impl::update_shadow_link(
   serde::pb::rpc::context ctx, proto::admin::update_shadow_link_request req) {
-    vlog(sllog.trace, "update_shadow_link: {}", req);
     auto redirect_node = redirect_to(model::controller_ntp);
     if (redirect_node) {
         vlog(
@@ -161,6 +158,7 @@ shadow_link_service_impl::update_shadow_link(
           .update_shadow_link(ctx, std::move(req));
     }
 
+    vlog(sllog.info, "update_shadow_link: {}", req);
     auto link_name = cluster_link::model::name_t{
       req.get_shadow_link().get_name()};
 
@@ -187,7 +185,6 @@ shadow_link_service_impl::update_shadow_link(
 ss::future<proto::admin::fail_over_response>
 shadow_link_service_impl::fail_over(
   serde::pb::rpc::context ctx, proto::admin::fail_over_request req) {
-    vlog(sllog.trace, "fail_over_request: {}", req);
     auto redirect_node = redirect_to(model::controller_ntp);
     if (redirect_node) {
         vlog(
@@ -200,6 +197,7 @@ shadow_link_service_impl::fail_over(
             *redirect_node)
           .fail_over(ctx, std::move(req));
     }
+    vlog(sllog.info, "fail_over_request: {}", req);
     auto link_name = cluster_link::model::name_t{req.get_name()};
     auto current_link = handle_error(
       _service->local().get_cluster_link(link_name));

@@ -263,6 +263,19 @@ protected:
     model::term_id _insync_term;
     raft::consensus* _raft;
     prefix_logger _log;
+    /*
+     * Despite having a gate, STM implementations do not use it for the
+     * following operations. The component specified in brackets is responsible
+     * for keeping STM alive.
+     * - apply_raft_snapshot (state_machine_manager)
+     * - take_raft_snapshot (state_machine_manager)
+     * - take_local_snapshot (persisted_stm)
+     * - apply_local_snapshot (persisted_stm)
+     * - do_apply (batch_applicator)
+     * Externally called async functions such as replicate*() or sync() must
+     * hold the gate unless a code comment describes how STM lifetime is
+     * maintained.
+     */
     ss::gate _gate;
 
 private:

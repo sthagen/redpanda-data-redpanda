@@ -39,7 +39,7 @@ from rptest.util import expect_exception, expect_http_error, wait_until_result
 from rptest.utils.log_utils import wait_until_nag_is_set
 from rptest.utils.mode_checks import skip_fips_mode
 
-ALICE = SaslCredentials("alice", "itsMeH0nest", "SCRAM-SHA-256")
+ALICE = SaslCredentials("alice", "itsMeH0nest012", "SCRAM-SHA-256")
 
 
 def expect_role_error(status_code: RoleErrorCode):
@@ -49,7 +49,7 @@ def expect_role_error(status_code: RoleErrorCode):
 
 
 class RBACTestBase(RedpandaTest):
-    password = "password"
+    password = "password012345"
     algorithm = "SCRAM-SHA-256"
     role_name0 = "foo"
     role_name1 = "bar"

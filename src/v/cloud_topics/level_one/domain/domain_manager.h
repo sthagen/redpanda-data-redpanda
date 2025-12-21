@@ -61,10 +61,19 @@ public:
     ss::future<rpc::remove_topics_reply>
       remove_topics(rpc::remove_topics_request);
 
+    ss::future<rpc::get_compaction_infos_reply>
+      get_compaction_infos(rpc::get_compaction_infos_request);
+
+    ss::future<rpc::get_extent_metadata_reply>
+      get_extent_metadata(rpc::get_extent_metadata_request);
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
     ss::future<> gc_loop();
     ss::lowres_clock::duration gc_interval() const;
+
+    rpc::get_compaction_info_reply
+    do_get_compaction_info(const state&, rpc::get_compaction_info_request);
 
     ss::gate gate_;
     ss::abort_source as_;

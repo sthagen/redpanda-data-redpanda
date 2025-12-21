@@ -346,6 +346,12 @@ admin_server::admin_server(
       ss::engine().get_blocked_reactor_notify_ms())
   , _memory_semaphore(_cfg.max_memory_usage_bytes, "admin/server-mem") {
     _server.set_content_streaming(true);
+    _server.set_keepalive_parameters(
+      ss::net::tcp_keepalive_params{
+        .idle = std::chrono::seconds{120},
+        .interval = std::chrono::seconds{60},
+        .count = 3,
+      });
 }
 
 namespace {
@@ -381,7 +387,7 @@ public:
                   return write_iobuf_to_output_stream(
                     payload.share(0, payload.size_bytes()), writer);
               });
-            rep->set_mime_type(
+            rep->set_content_type(
               is_proto ? "application/proto" : "application/json");
         } catch (const serde::pb::rpc::base_exception& e) {
             rep = e.handle(std::move(rep));
@@ -673,38 +679,34 @@ namespace {
  * an integer.
  */
 std::optional<uint64_t>
-get_integer_query_param(const ss::http::request& req, std::string_view name) {
-    auto key = ss::sstring(name);
-    if (!req.query_parameters.contains(key)) {
+get_integer_query_param(const ss::http::request& req, std::string_view key) {
+    if (!req.has_query_param(key)) {
         return std::nullopt;
     }
 
-    const ss::sstring& str_param = req.query_parameters.at(key);
+    const ss::sstring& str_param = req.get_query_param(key);
     try {
         return std::stoull(str_param);
     } catch (const std::invalid_argument&) {
         throw ss::httpd::bad_request_exception(
-          fmt::format("Parameter {} must be an integer", name));
+          fmt::format("Parameter {} must be an integer", key));
     }
 }
 
 } // namespace
 
 void admin_server::configure_metrics_route() {
-    ss::prometheus::add_prometheus_routes(
-      _server,
-      {.metric_help = "redpanda metrics",
-       .prefix = "vectorized",
-       .handle = ss::metrics::default_handle(),
-       .route = "/metrics"})
-      .get();
-    ss::prometheus::add_prometheus_routes(
-      _server,
-      {.metric_help = "redpanda metrics",
-       .prefix = "redpanda",
-       .handle = metrics::public_metrics_handle,
-       .route = "/public_metrics"})
-      .get();
+    ss::prometheus::config private_config;
+    private_config.prefix = "vectorized";
+    private_config.handle = ss::metrics::default_handle();
+    private_config.route = "/metrics";
+    ss::prometheus::add_prometheus_routes(_server, private_config).get();
+
+    ss::prometheus::config public_config;
+    public_config.prefix = "redpanda";
+    public_config.handle = metrics::public_metrics_handle;
+    public_config.route = "/public_metrics";
+    ss::prometheus::add_prometheus_routes(_server, public_config).get();
 }
 
 ss::future<> admin_server::configure_listeners() {
@@ -1090,7 +1092,7 @@ ss::future<ss::httpd::redirect_exception> admin_server::redirect_to_leader(
     // next request being made, it may result in a valid redirect to the
     // new leader, and no backoff should be added. This leads to adding
     // client backoff every other redirect.
-    req.query_parameters[redirect_str] = ss::to_sstring(num_redirects);
+    req.set_query_param(redirect_str, ss::to_sstring(num_redirects));
     if (num_redirects % 2 == 0) {
         retry_after = retry_after_seconds;
         vlog(
@@ -3904,7 +3906,7 @@ ss::future<ss::json::json_return_type>
 admin_server::get_cluster_partitions_handler(
   std::unique_ptr<ss::http::request> req) {
     std::optional<bool> disabled_filter;
-    if (req->query_parameters.contains("disabled")) {
+    if (req->has_query_param("disabled")) {
         disabled_filter = get_boolean_query_param(*req, "disabled");
     }
 
@@ -3995,7 +3997,7 @@ admin_server::get_cluster_partitions_topic_handler(
       model::topic{req->get_path_param("topic")}};
 
     std::optional<bool> disabled_filter;
-    if (req->query_parameters.contains("disabled")) {
+    if (req->has_query_param("disabled")) {
         disabled_filter = get_boolean_query_param(*req, "disabled");
     }
 

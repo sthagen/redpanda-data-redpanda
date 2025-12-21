@@ -167,9 +167,7 @@ future<size_t> run_latency_test(latency_test_case tc) {
       shard < ss::smp::count, "Not enough cores available for the benchmark");
 
     co_await ss::smp::submit_to(
-      shard,
-      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-      seastar::coroutine::lambda([&sqm, &quota_store, tc]() -> ss::future<> {
+      shard, [&sqm, &quota_store, tc](this auto) -> ss::future<> {
           auto& qm = sqm.local();
 
           // Try to create a realistic setup
@@ -227,7 +225,7 @@ future<size_t> run_latency_test(latency_test_case tc) {
           }
 
           perf_tests::stop_measuring_time();
-      }));
+      });
 
     co_await sqm.stop();
     co_await quota_store.stop();

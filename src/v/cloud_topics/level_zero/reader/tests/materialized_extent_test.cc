@@ -40,7 +40,7 @@ TEST_F_CORO(materialized_extent_fixture, materialize_from_cache) {
       &rtc,
       &probe);
 
-    ASSERT_FALSE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(res.has_value());
 
     chunked_vector<model::record_batch> actual;
     actual.emplace_back(make_raft_data_batch(std::move(extent)));
@@ -72,7 +72,7 @@ TEST_F_CORO(materialized_extent_fixture, cache_get_fails) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
     ASSERT_EQ_CORO(probe.num_cache_reads, 1);
 }
@@ -99,7 +99,7 @@ TEST_F_CORO(materialized_extent_fixture, cache_get_throws) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
     ASSERT_EQ_CORO(probe.num_cache_reads, 1);
 }
@@ -127,7 +127,7 @@ TEST_F_CORO(materialized_extent_fixture, cache_get_shutdown) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
     ASSERT_EQ_CORO(probe.num_cache_reads, 1);
 }
@@ -155,7 +155,7 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_throws) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -183,7 +183,7 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_throws_shutdown) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -210,7 +210,7 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_stall_then_success) {
       &rtc,
       &probe);
 
-    ASSERT_FALSE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(res.has_value());
 
     chunked_vector<model::record_batch> actual;
     actual.emplace_back(
@@ -245,7 +245,7 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_stall_then_timeout) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::timeout);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -268,7 +268,7 @@ TEST_F_CORO(materialized_extent_fixture, materialize_from_cloud) {
       &rtc,
       &probe);
 
-    ASSERT_FALSE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(res.has_value());
 
     chunked_vector<model::record_batch> actual;
     actual.emplace_back(
@@ -306,7 +306,7 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_return_failure) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::download_failure);
 }
 
@@ -332,7 +332,7 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_throw_shutdown) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -359,7 +359,7 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_return_notfound) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::download_not_found);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -386,7 +386,7 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_return_timeout) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::timeout);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -413,7 +413,7 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_throw_error) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::unexpected_failure);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -442,7 +442,7 @@ TEST_F_CORO(materialized_extent_fixture, cache_reserve_space_throws) {
       &rtc,
       &probe);
 
-    ASSERT_FALSE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(res.has_value());
 
     chunked_vector<model::record_batch> actual;
     actual.emplace_back(
@@ -477,7 +477,7 @@ TEST_F_CORO(materialized_extent_fixture, cache_reserve_space_throws_shutdown) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
     ASSERT_EQ_CORO(probe.num_cache_reads, 0);
 }
@@ -505,7 +505,7 @@ TEST_F_CORO(materialized_extent_fixture, cache_put_throws) {
       &rtc,
       &probe);
 
-    ASSERT_FALSE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(res.has_value());
 
     chunked_vector<model::record_batch> actual;
     actual.emplace_back(
@@ -539,6 +539,6 @@ TEST_F_CORO(materialized_extent_fixture, cache_put_throws_shutdown) {
       &rtc,
       &probe);
 
-    ASSERT_TRUE_CORO(res.has_error());
+    ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
 }

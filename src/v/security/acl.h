@@ -233,6 +233,7 @@ enum class principal_type : int8_t {
     user = 0,
     ephemeral_user = 1,
     role = 2,
+    group = 3,
 };
 
 constexpr std::string_view to_string_view(principal_type type) {
@@ -243,6 +244,8 @@ constexpr std::string_view to_string_view(principal_type type) {
         return "ephemeral user";
     case principal_type::role:
         return "role";
+    case principal_type::group:
+        return "group";
     }
     __builtin_unreachable();
 }
@@ -328,6 +331,7 @@ public:
         case principal_type::ephemeral_user:
             return _name == "*";
         case principal_type::role:
+        case principal_type::group:
             return false;
         }
     }
@@ -379,6 +383,8 @@ struct fmt::formatter<security::acl_principal_base> {
             case security::principal_type::role:
                 return fmt::format_to(
                   ctx.out(), "RedpandaRole:{}", p.name_view());
+            case security::principal_type::group:
+                return fmt::format_to(ctx.out(), "Group:{}", p.name_view());
             }
         case 'l': // type {user} name {Alice}
         default:

@@ -365,7 +365,7 @@ class AuditLogTestSecurityConfig(SecurityConfig):
     @staticmethod
     def default_credentials():
         username = "username"
-        password = "password"
+        password = "password012345"
         algorithm = "SCRAM-SHA-256"
         return AuditLogTestSecurityConfig(user_creds=(username, password, algorithm))
 
@@ -1078,11 +1078,11 @@ class AuditLogTestAdminAuthApi(AuditLogTestBase):
     """
 
     username = "test"
-    password = "test12345"
+    password = "test1234567890"
     algorithm = "SCRAM-SHA-256"
 
     ignored_user = "ignored-test"
-    ignored_pass = "ignored-test"
+    ignored_pass = "ignored-test-0"
 
     def __init__(self, test_context):
         super(AuditLogTestAdminAuthApi, self).__init__(
@@ -1667,7 +1667,7 @@ class AuditLogTestKafkaAuthnApi(AuditLogTestBase):
     """Validates SASL/SCRAM authentication messages"""
 
     username = "test"
-    password = "test12345"
+    password = "test1234567890"
     algorithm = "SCRAM-SHA-256"
 
     def __init__(self, test_context):
@@ -1754,7 +1754,7 @@ class AuditLogTestKafkaAuthnApi(AuditLogTestBase):
         """
         self.setup_cluster()
         user2 = "ignored_user"
-        user2_pw = "ignored_user"
+        user2_pw = "ignored_user01"
         user2_alg = "SCRAM-SHA-256"
 
         self.modify_audit_excluded_principals([user2])
@@ -1879,7 +1879,7 @@ class AuditLogTestKafkaAuthnApi(AuditLogTestBase):
         self.setup_cluster()
 
         user_rpk = self.get_rpk_credentials(
-            username=self.username, password="WRONG", mechanism=self.algorithm
+            username=self.username, password="WRONG_PASSWORD", mechanism=self.algorithm
         )
 
         try:
@@ -1942,7 +1942,7 @@ class AuditLogTestKafkaAuthnApi(AuditLogTestBase):
 
 class AuditLogTestInvalidConfigBase(AuditLogTestBase):
     username = "test"
-    password = "test12345"
+    password = "test1234567890"
     algorithm = "SCRAM-SHA-256"
     """
     Tests situations where audit log client is not properly configured
@@ -2108,7 +2108,7 @@ class AuditLogTestKafkaTlsApi(AuditLogTestBase):
     """
 
     username = "test"
-    password = "test12345"
+    password = "test1234567890"
     algorithm = "SCRAM-SHA-256"
 
     def __init__(self, test_context):
@@ -2456,7 +2456,7 @@ class AuditLogTestSchemaRegistryBase(AuditLogTestBase):
     """
 
     username = "test"
-    password = "test"
+    password = "test1234567890"
     algorithm = "SCRAM-SHA-256"
 
     def __init__(self, test_context, **kwargs):

@@ -27,6 +27,8 @@ from ducktape.services.service import Service
 from ducktape.utils.util import wait_until
 from requests.exceptions import HTTPError
 
+from rptest.util import expect_exception
+from rptest.utils.mode_checks import in_fips_environment
 from rptest.clients.kafka_cli_tools import KafkaCliTools, KafkaCliToolsError
 from rptest.clients.kcl import RawKCL
 from rptest.clients.python_librdkafka import PythonLibrdkafka
@@ -57,13 +59,21 @@ class BaseScramTest(RedpandaTest):
     def __init__(self, test_context, **kwargs):
         super(BaseScramTest, self).__init__(test_context, **kwargs)
 
-    def update_user(self, username, quote: bool = True):
+    def update_user(
+        self,
+        username,
+        quote: bool = True,
+        password=None,
+        expected_status_code=200,
+        err_msg=None,
+    ):
         def gen(length):
             return "".join(random.choice(string.ascii_letters) for _ in range(length))
 
         if quote:
             username = urllib.parse.quote(username, safe="")
-        password = gen(20)
+        if password is None:
+            password = gen(20)
 
         controller = self.redpanda.nodes[0]
         url = f"http://{controller.account.hostname}:9644/v1/security/users/{username}"
@@ -74,7 +84,15 @@ class BaseScramTest(RedpandaTest):
         )
         res = requests.put(url, json=data)
 
-        assert res.status_code == 200
+        assert res.status_code == expected_status_code, (
+            f"Expected {expected_status_code}, got {res.status_code}: {res.content}"
+        )
+
+        if err_msg is not None:
+            assert res.json()["message"] == err_msg, (
+                f"{res.json()['message']} != {err_msg}"
+            )
+
         return password
 
     def delete_user(self, username, quote: bool = True):
@@ -197,7 +215,7 @@ class ScramTest(BaseScramTest):
                 f"http://{hostname}:{port}/v1/security/users",
                 json={
                     "username": f"user_a_{i}",
-                    "password": "password",
+                    "password": "password012345",
                     "algorithm": "SCRAM-SHA-256",
                 },
                 allow_redirects=False,
@@ -223,7 +241,7 @@ class ScramTest(BaseScramTest):
                     f"http://{hostname}:{port}/v1/security/users",
                     json={
                         "username": f"user_a_{i}",
-                        "password": "password",
+                        "password": "password012345",
                         "algorithm": "SCRAM-SHA-256",
                     },
                     allow_redirects=True,
@@ -323,7 +341,7 @@ class ScramTest(BaseScramTest):
         This test validates the KIP-554 implementation of Redpanda
         """
         test_username = "test-user"
-        test_password = "test-password"
+        test_password = "test-password0"
         test_algorithm = scram_algo
 
         self.create_user(
@@ -339,7 +357,7 @@ class ScramTest(BaseScramTest):
     @cluster(num_nodes=3)
     def test_scram_kafka_api_create_user(self):
         test_username = "test-user"
-        test_password = "test-password"
+        test_password = "test-password0"
         test_algorithm = "SCRAM-SHA-256"
         iteration_count = 8192
 
@@ -376,7 +394,7 @@ class ScramTest(BaseScramTest):
     @cluster(num_nodes=3)
     def test_scram_kafka_api_modify_user(self):
         test_username = "test-user"
-        orig_password = "test-password"
+        orig_password = "test-password0"
         new_password = "new-password"
         orig_algorithm = "SCRAM-SHA-256"
         new_algorithm = "SCRAM-SHA-512"
@@ -401,7 +419,7 @@ class ScramTest(BaseScramTest):
     @cluster(num_nodes=3)
     def test_scram_kafka_api_delete_user(self):
         test_username = "test-user"
-        test_password = "test-password"
+        test_password = "test-password0"
         test_algorithm = "SCRAM-SHA-256"
 
         self.create_user(
@@ -607,7 +625,7 @@ class SaslPlainTest(BaseScramTest):
         and SCRAM-SHA-512 users.
         """
         username = "test-user"
-        password = "test-password"
+        password = "test-password0"
         RpkTool(
             self.redpanda,
             username=self.redpanda.SUPERUSER_CREDENTIALS.username,
@@ -633,6 +651,52 @@ class SaslPlainTest(BaseScramTest):
             self.SaslPlainConfig.OVERRIDE_ON,
         ]
         self._make_topic(client, sasl_plain_enabled)
+
+    @cluster(num_nodes=3)
+    def test_plain_authn_short_password(self):
+        """
+        This test validates that SASL/PLAIN in fips mode fails gracefully when the user
+        provides a short password.
+        """
+        username = "test-user"
+        good_password = "sufficiently_long_password"
+        bad_password = "short-pwd"
+        RpkTool(
+            self.redpanda,
+            username=self.redpanda.SUPERUSER_CREDENTIALS.username,
+            password=self.redpanda.SUPERUSER_CREDENTIALS.password,
+            sasl_mechanism=self.redpanda.SUPERUSER_CREDENTIALS.algorithm,
+        ).sasl_allow_principal(
+            principal=username, operations=["all"], resource="topic", resource_name="*"
+        )
+        self.create_user(
+            username=username,
+            algorithm=str(self.ScramType.SCRAM_SHA_256),
+            password=good_password,
+        )
+
+        self._config_plain_authn(self.SaslPlainConfig.ON)
+
+        # We create the user with a good password to not have to worry about short password error
+        # there. This test simulates a user created before an update to a fips 140-3 version, that
+        # might have a short password. The length of the password check is done early, before checking
+        # the validity of the password. Since the password is wrong, this create_topic request will
+        # fail. We are interested to see how it will fail
+        client = RpkTool(
+            self.redpanda,
+            username=username,
+            password=bad_password,
+            sasl_mechanism="PLAIN",
+        )
+        with expect_exception(RpkException, lambda e: True):
+            client.create_topic("test-topic")
+        warn_in_logs = self.redpanda.search_log_any("password less than 14 characters")
+        if in_fips_environment():
+            assert warn_in_logs, "request should have failed because of password length"
+        else:
+            assert not warn_in_logs, (
+                "warning about password length should not be present"
+            )
 
 
 class SaslPlainTLSProvider(TLSProvider):
@@ -955,6 +1019,50 @@ class InvalidNewUserStrings(BaseScramTest):
             err_msg="Parameter 'password' contained invalid control characters",
         )
 
+    @cluster(num_nodes=3)
+    def test_short_password(self):
+        """
+        Validate that in fips mode, short scram passwords (<14 chars) are rejected with a clean error.
+        In non-fips mode, they should be accepted.
+        """
+        password = "short_pwd"
+        if in_fips_environment():
+            expected_status_code = 400
+            err_msg = "Password length less than 14 characters"
+        else:
+            expected_status_code = 200
+            err_msg = None
+
+        # Validate failure in fips mode and success in non-fips
+        self.create_user(
+            username="test-user",
+            algorithm="SCRAM-SHA-256",
+            password=password,
+            expected_status_code=expected_status_code,
+            err_msg=err_msg,
+        )
+
+        # Validate success in both - password is long enough
+        self.create_user(
+            username="test-user-2",
+            algorithm="SCRAM-SHA-256",
+            password="sufficiently_long_password",
+        )
+
+        # Validate failure in fips mode and success in non-fips
+        self.update_user(
+            username="test-user-2",
+            password=password,
+            expected_status_code=expected_status_code,
+            err_msg=err_msg,
+        )
+
+        # Validate success in both - password is long enough
+        self.update_user(
+            username="test-user-2",
+            password="other_sufficiently_long_password",
+        )
+
 
 class EscapedNewUserStrings(BaseScramTest):
     # All of the non-control characters that need escaping
@@ -1005,7 +1113,7 @@ class EscapedNewUserStrings(BaseScramTest):
             self.create_user(
                 username=username,
                 algorithm="SCRAM-SHA-256",
-                password="passwd",
+                password="passwd01234567",
                 expected_status_code=200,
             )
             users.append(username)

@@ -11,6 +11,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
+        "//src/v/model/tests:random",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",

@@ -493,7 +493,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         Test validates that when cluster linking is active, that topics can only be created by superusers
         """
         username = "test-user"
-        password = "test-password"
+        password = "test-password0"
         topic_name_prefix = "test-topic"
 
         superuser_rpk = RpkTool(
@@ -1787,7 +1787,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
 
         self.source_default_client().create_topic(topic)
-        shadow_link = self.create_link("test-link")
+        self.create_link("test-link")
 
         self.target_cluster.service.wait_until(
             lambda: self.topic_partitions_exists_in_target(topic),
@@ -1806,22 +1806,34 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         ):
             target_client.delete_topic(topic.name)
 
-        shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
-            [
-                shadow_link_pb2.NameFilter(
-                    pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
-                    filter_type=shadow_link_pb2.FILTER_TYPE_EXCLUDE,
-                    name=topic.name,
-                ),
-            ]
-        )
-        update_mask: google.protobuf.field_mask_pb2.FieldMask = google.protobuf.field_mask_pb2.FieldMask(
-            paths=[
-                "configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters"
-            ]
-        )
-        self.update_link(shadow_link=shadow_link, update_mask=update_mask)
+        def update_link_config(include: bool) -> None:
+            shadow_link = self.get_link("test-link")
+            shadow_link.configurations.topic_metadata_sync_options.ClearField(
+                "auto_create_shadow_topic_filters"
+            )
+            filter_type = (
+                shadow_link_pb2.FILTER_TYPE_INCLUDE
+                if include
+                else shadow_link_pb2.FILTER_TYPE_EXCLUDE
+            )
+            shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
+                [
+                    shadow_link_pb2.NameFilter(
+                        pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                        filter_type=filter_type,
+                        name=topic.name,
+                    ),
+                ]
+            )
+            update_mask: google.protobuf.field_mask_pb2.FieldMask = (
+                google.protobuf.field_mask_pb2.FieldMask(
+                    paths=["configurations.topic_metadata_sync_options"]
+                )
+            )
+            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
 
+        # Update the link to exclude the topic from autocreation filters
+        update_link_config(include=False)
         # Now the topic should be deletable, as it is not in the autocreate filters
         target_client.delete_topic(topic.name)
         link_state = self.get_link("test-link")
@@ -1829,6 +1841,19 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             "Expected empty shadow_topic list. "
             f"Instead got {link_state.status.shadow_topics}"
         )
+        # Re-add the topic to the autocreation filters
+        update_link_config(include=True)
+        # Verify that the shadow topic is re-created
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_partitions_exists_in_target(topic),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster after re-adding to autocreation filters",
+        )
+
+        # Replicate more data to ensure replication still works
+        with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=200000):
+            self.verify()
 
     @cluster(num_nodes=7)
     def test_replication_with_transactions(self):

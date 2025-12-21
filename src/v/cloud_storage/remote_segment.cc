@@ -298,25 +298,25 @@ remote_segment::offset_data_stream(
     options.read_ahead
       = config::shard_local_cfg().storage_read_readahead_count();
 
-    ss::input_stream<char> data_stream;
-    if (is_legacy_mode_engaged()) {
-        data_stream = ss::make_file_input_stream(
-          _data_file, pos.file_pos, std::move(options));
-    } else {
-        auto chunk_ds = std::make_unique<chunk_data_source_impl>(
-          _chunks_api.value(),
-          *this,
-          pos.kaf_offset,
-          end,
-          pos.file_pos,
-          std::move(options),
-          prefetch_override);
-        data_stream = ss::input_stream<char>{
-          ss::data_source{std::move(chunk_ds)}};
-    }
+    auto make_stream = [&]() -> ss::input_stream<char> {
+        if (is_legacy_mode_engaged()) {
+            return ss::make_file_input_stream(
+              _data_file, pos.file_pos, std::move(options));
+        } else {
+            auto chunk_ds = std::make_unique<chunk_data_source_impl>(
+              _chunks_api.value(),
+              *this,
+              pos.kaf_offset,
+              end,
+              pos.file_pos,
+              std::move(options),
+              prefetch_override);
+            return ss::input_stream<char>{ss::data_source{std::move(chunk_ds)}};
+        }
+    };
 
     co_return input_stream_with_offsets{
-      .stream = std::move(data_stream),
+      .stream = make_stream(),
       .rp_offset = pos.rp_offset,
       .kafka_offset = pos.kaf_offset,
     };

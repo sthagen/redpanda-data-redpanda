@@ -26,3 +26,9 @@ alias(
     }),
     visibility = ["//visibility:public"],
 )
+
+alias(
+    name = "omb_minimal",
+    actual = "@omb//:omb",
+    visibility = ["//visibility:public"],
+)

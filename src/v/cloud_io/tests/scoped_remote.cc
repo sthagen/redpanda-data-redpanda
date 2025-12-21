@@ -23,6 +23,9 @@ std::unique_ptr<scoped_remote> scoped_remote::create(
     auto ret = std::unique_ptr<scoped_remote>(new scoped_remote);
     auto sharded_config = ss::sharded_parameter([&config] { return config; });
     ret->pool.start(pool_size, config).get();
+    ret->pool
+      .invoke_on_all(&cloud_storage_clients::client_pool::start, std::nullopt)
+      .get();
     ret->remote
       .start(
         std::ref(ret->pool),

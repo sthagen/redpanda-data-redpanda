@@ -713,6 +713,10 @@ consteval std::string_view property_type_name() {
                            type,
                            model::kafka_batch_validation_mode>) {
         return "string";
+    } else if constexpr (std::is_same_v<
+                           type,
+                           security::oidc::nested_group_behavior>) {
+        return "string";
     } else {
         static_assert(
           base::unsupported_type<T>::value, "Type name not defined");

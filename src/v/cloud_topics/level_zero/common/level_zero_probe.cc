@@ -99,7 +99,7 @@ void pipeline_probe::setup_internal_metrics(bool disable, ss::sstring name) {
         sm::make_histogram(
           "request_size_bytes",
           [this] {
-              return _request_memory_histogram.public_histogram_logform();
+              return _request_memory_histogram.batch_size_histogram_logform();
           },
           sm::description("Request size histogram."),
           labels),

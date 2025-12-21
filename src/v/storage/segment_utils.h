@@ -12,6 +12,7 @@
 #pragma once
 #include "compaction/key_offset_map.h"
 #include "compaction/utils.h"
+#include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
 #include "storage/compacted_index.h"
@@ -218,6 +219,7 @@ model::record_batch_reader create_segment_full_reader(
 ss::future<storage::index_state> do_copy_segment_data(
   ss::lw_shared_ptr<storage::segment>,
   compaction::compaction_config,
+  ss::lw_shared_ptr<storage::stm_manager>,
   storage::probe&,
   ss::rwlock::holder,
   storage_resources&);
@@ -358,12 +360,17 @@ ss::future<bool> should_keep(
   bool past_tombstone_delete_horizon,
   bool& may_have_tombstone_records,
   bool past_tx_delete_horizon,
-  bool& has_tx_batches) {
+  bool& has_tx_control_batches,
+  bool& has_tx_data_or_fence_batches) {
     const auto compaction_placeholder_enabled = feature_table.local().is_active(
       features::feature::compaction_placeholder_batch);
     const auto is_compactible = compaction::is_compactible(b.header());
     const auto is_last_batch = b.last_offset() == segment_last_offset;
-    const auto is_control_batch = b.header().attrs.is_control();
+    const auto is_tx_control_batch = b.header().attrs.is_control();
+    const auto is_tx_data_batch = (b.header().type == model::record_batch_type::raft_data
+         && b.header().attrs.is_transactional());
+    const auto is_tx_fence_batch = b.header().type
+                                   == model::record_batch_type::tx_fence;
     const auto is_tombstone = r.is_tombstone();
     // once compaction placeholder feature is enabled, we are not
     // worried about empty batches as the reducer then installs a
@@ -380,8 +387,12 @@ ss::future<bool> should_keep(
             may_have_tombstone_records = true;
         }
 
-        if (is_control_batch) {
-            has_tx_batches = true;
+        if (is_tx_control_batch) {
+            has_tx_control_batches = true;
+        }
+
+        if (is_tx_data_batch || is_tx_fence_batch) {
+            has_tx_data_or_fence_batches = true;
         }
 
         co_return true;
@@ -400,15 +411,18 @@ ss::future<bool> should_keep(
         if (is_tombstone) {
             pb.add_removed_tombstone();
         }
-        if (is_control_batch) {
+        if (is_tx_control_batch) {
             pb.add_removed_control_batch();
         }
         co_return false;
     }
 
     if (!is_compactible) {
-        if (is_control_batch) {
-            has_tx_batches = true;
+        if (is_tx_control_batch) {
+            has_tx_control_batches = true;
+        }
+        if (is_tx_fence_batch) {
+            has_tx_data_or_fence_batches = true;
         }
         co_return true;
     }
@@ -417,6 +431,10 @@ ss::future<bool> should_keep(
 
     if (is_tombstone && keep) {
         may_have_tombstone_records = true;
+    }
+
+    if (is_tx_data_batch && keep) {
+        has_tx_data_or_fence_batches = true;
     }
 
     co_return keep;

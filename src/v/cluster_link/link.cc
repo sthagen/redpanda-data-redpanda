@@ -210,12 +210,18 @@ void link::update_config(
       config,
       revision);
     chunked_vector<::model::topic> new_topics_to_replicate;
+    chunked_vector<::model::topic> topics_no_longer_mirroring;
     for (const auto& [topic, m] : config.state.mirror_topics) {
         if (
           !_config.state.mirror_topics.contains(topic)
           && mirror_active_state(m.status)) {
             vlog(cllog.debug, "New topic to replicate: {}", topic);
             new_topics_to_replicate.push_back(topic);
+        }
+    }
+    for (const auto& [topic, _] : _config.state.mirror_topics) {
+        if (!config.state.mirror_topics.contains(topic)) {
+            topics_no_longer_mirroring.push_back(topic);
         }
     }
     _config = std::move(config);
@@ -244,6 +250,13 @@ void link::update_config(
           _config.name);
         _replication_mgr.stop_replicators();
     } else {
+        for (const auto& topic : topics_no_longer_mirroring) {
+            vlog(
+              cllog.debug,
+              "Topic {} is no longer mirrored, stopping its replicators",
+              topic);
+            _replication_mgr.stop_replicators(topic);
+        }
         for (const auto& [topic, _] : _config.state.mirror_topics) {
             if (requires_active_replicators(topic)) {
                 continue;

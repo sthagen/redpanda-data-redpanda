@@ -14,14 +14,27 @@ import (
 	"strings"
 	"time"
 
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	adminv2 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/admin/v2"
 	corecommonv1 "buf.build/gen/go/redpandadata/core/protocolbuffers/go/redpanda/core/common/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+)
+
+// Section header constants for describe output.
+const (
+	secOverview       = "Overview"
+	secClient         = "Client"
+	secTopicSync      = "Topic Sync"
+	secConsumerOffset = "Consumer Offset Sync"
+	secSecurity       = "Security Sync"
+	secSchemaRegistry = "Schema Registry Sync"
 )
 
 func newDescribeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
@@ -39,6 +52,10 @@ or all sections of the configuration.
 By default, the command displays the overview and client configuration sections.
 Use the flags to display additional sections such as topic synchronization,
 consumer offset synchronization, and security synchronization settings.
+
+For Redpanda Cloud, rpk will use the Redpanda ID of the cluster you are 
+currently logged into. If you wish to use a different one either login and 
+create a profile for it, or use the --redpanda-id flag to specify it directly.
 `,
 		Example: `
 Describe a Shadow Link with default sections (overview and client):
@@ -54,16 +71,32 @@ Display only the client configuration:
   rpk shadow describe my-shadow-link -c
 `,
 		Run: func(cmd *cobra.Command, args []string) {
-			p, err := p.LoadVirtualProfile(fs)
+			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "unable to load rpk config: %v", err)
-			config.CheckExitCloudAdmin(p)
+			prof := cfg.VirtualProfile()
+			config.CheckExitServerlessAdmin(prof)
 
 			opts.defaultOrAll()
 
-			cl, err := adminapi.NewClient(cmd.Context(), fs, p)
-			out.MaybeDie(err, "unable to initialize admin client: %v", err)
-
 			linkName := args[0]
+
+			if prof.CheckFromCloud() {
+				cloudClient, err := publicapi.NewValidatedCloudClientSet(
+					cfg.DevOverrides().PublicAPIURL,
+					prof.CurrentAuth().AuthToken,
+					auth0.NewClient(cfg.DevOverrides()).Audience(),
+					[]string{prof.CurrentAuth().ClientID},
+				)
+				out.MaybeDieErr(err)
+
+				link, err := cloudClient.ShadowLinkByNameAndRPID(cmd.Context(), linkName, prof.CloudCluster.ClusterID)
+				out.MaybeDie(err, "unable to find Shadow Link %q", linkName)
+
+				printCloudShadowLinkDescription(link, opts)
+				return
+			}
+			cl, err := adminapi.NewClient(cmd.Context(), fs, prof)
+			out.MaybeDie(err, "unable to initialize admin client: %v", err)
 			link, err := cl.ShadowLinkService().GetShadowLink(cmd.Context(), connect.NewRequest(&adminv2.GetShadowLinkRequest{
 				Name: linkName,
 			}))
@@ -77,6 +110,7 @@ Display only the client configuration:
 	cmd.Flags().BoolVarP(&opts.topic, "print-topic", "t", false, "Print the detailed topic configuration section")
 	cmd.Flags().BoolVarP(&opts.co, "print-consumer", "r", false, "Print the detailed consumer offset configuration section")
 	cmd.Flags().BoolVarP(&opts.sec, "print-security", "s", false, "Print the detailed security configuration section")
+	cmd.Flags().BoolVarP(&opts.sr, "print-registry", "y", false, "Print the detailed schema registry configuration section")
 	cmd.Flags().BoolVarP(&opts.all, "print-all", "a", false, "Print all sections")
 	return cmd
 }
@@ -88,28 +122,21 @@ type slDescribeOptions struct {
 	topic    bool
 	co       bool // consumer offset
 	sec      bool // security
+	sr       bool // schema registry
 }
 
 // If no flags are set, default to overview and client sections.
 func (o *slDescribeOptions) defaultOrAll() {
-	if !o.all && !o.overview && !o.client && !o.topic && !o.co && !o.sec {
+	if !o.all && !o.overview && !o.client && !o.topic && !o.co && !o.sec && !o.sr {
 		o.overview, o.client = true, true
 	}
 
 	if o.all {
-		o.overview, o.client, o.topic, o.co, o.sec = true, true, true, true, true
+		o.overview, o.client, o.topic, o.co, o.sec, o.sr = true, true, true, true, true, true
 	}
 }
 
 func printShadowLinkDescription(link *adminv2.ShadowLink, opts slDescribeOptions) {
-	const (
-		secOverview       = "Overview"
-		secClient         = "Client"
-		secTopicSync      = "Topic Sync"
-		secConsumerOffset = "Consumer Offset Sync"
-		secSecurity       = "Security Sync"
-	)
-
 	sections := out.NewSections(
 		out.ConditionalSectionHeaders(map[string]bool{
 			secOverview:       opts.overview,
@@ -117,6 +144,7 @@ func printShadowLinkDescription(link *adminv2.ShadowLink, opts slDescribeOptions
 			secTopicSync:      opts.topic,
 			secConsumerOffset: opts.co,
 			secSecurity:       opts.sec,
+			secSchemaRegistry: opts.sr,
 		})...,
 	)
 
@@ -141,6 +169,46 @@ func printShadowLinkDescription(link *adminv2.ShadowLink, opts slDescribeOptions
 	sections.Add(secSecurity, func() {
 		printSecuritySync(cfg.GetSecuritySyncOptions())
 	})
+
+	sections.Add(secSchemaRegistry, func() {
+		printSchemaRegistrySync(cfg.GetSchemaRegistrySyncOptions())
+	})
+}
+
+func printCloudShadowLinkDescription(link *controlplanev1.ShadowLink, opts slDescribeOptions) {
+	sections := out.NewSections(
+		out.ConditionalSectionHeaders(map[string]bool{
+			secOverview:       opts.overview,
+			secClient:         opts.client,
+			secTopicSync:      opts.topic,
+			secConsumerOffset: opts.co,
+			secSecurity:       opts.sec,
+		})...,
+	)
+
+	sections.Add(secOverview, func() {
+		printCloudOverview(link)
+	})
+
+	sections.Add(secClient, func() {
+		printCloudClient(link.GetClientOptions())
+	})
+
+	sections.Add(secTopicSync, func() {
+		printTopicSync(link.GetTopicMetadataSyncOptions())
+	})
+
+	sections.Add(secConsumerOffset, func() {
+		printConsumerOffsetSync(link.GetConsumerOffsetSyncOptions())
+	})
+
+	sections.Add(secSecurity, func() {
+		printSecuritySync(link.GetSecuritySyncOptions())
+	})
+
+	sections.Add(secSchemaRegistry, func() {
+		printSchemaRegistrySync(link.GetSchemaRegistrySyncOptions())
+	})
 }
 
 func printOverview(link *adminv2.ShadowLink) {
@@ -150,6 +218,24 @@ func printOverview(link *adminv2.ShadowLink) {
 	tw.Print("UID", link.GetUid())
 	if status := link.GetStatus(); status != nil {
 		tw.Print("STATE", strings.TrimPrefix(status.GetState().String(), "SHADOW_LINK_STATE_"))
+	}
+}
+
+func printCloudOverview(link *controlplanev1.ShadowLink) {
+	tw := out.NewTabWriter()
+	defer tw.Flush()
+	tw.Print("NAME", link.GetName())
+	tw.Print("ID", link.GetId())
+	tw.Print("STATE", strings.TrimPrefix(link.GetState().String(), "STATE_"))
+	if link.GetReason() != "" {
+		tw.Print("REASON", link.GetReason())
+	}
+	tw.Print("SHADOW REDPANDA ID", link.GetShadowRedpandaId())
+	if createdAt := link.GetCreatedAt(); createdAt != nil {
+		tw.Print("CREATED AT", createdAt.AsTime().Format(time.RFC3339))
+	}
+	if updatedAt := link.GetUpdatedAt(); updatedAt != nil {
+		tw.Print("UPDATED AT", updatedAt.AsTime().Format(time.RFC3339))
 	}
 }
 
@@ -215,6 +301,68 @@ func printClient(opts *adminv2.ShadowLinkClientOptions) {
 	tw.Print(strings.Repeat("-", 21), "")
 
 	// Print client config table
+	tw.Print("metadata_max_age_ms", opts.GetEffectiveMetadataMaxAgeMs())
+	tw.Print("connection_timeout_ms", opts.GetEffectiveConnectionTimeoutMs())
+	tw.Print("retry_backoff_ms", opts.GetEffectiveRetryBackoffMs())
+	tw.Print("fetch_wait_max_ms", opts.GetEffectiveFetchWaitMaxMs())
+	tw.Print("fetch_min_bytes", opts.GetEffectiveFetchMinBytes())
+	tw.Print("fetch_max_bytes", opts.GetEffectiveFetchMaxBytes())
+	tw.Print("fetch_partition_max_bytes", opts.GetEffectiveFetchPartitionMaxBytes())
+}
+
+func printCloudClient(opts *controlplanev1.ShadowLinkClientOptions) {
+	tw := out.NewTabWriter()
+	defer tw.Flush()
+	if opts == nil {
+		tw.Print("No client configuration")
+		return
+	}
+
+	if opts.GetClientId() != "" {
+		tw.Print("CLIENT ID", opts.GetClientId())
+	}
+	if opts.GetSourceClusterId() != "" {
+		tw.Print("SOURCE CLUSTER ID", opts.GetSourceClusterId())
+	}
+	tw.Print("BOOTSTRAP SERVERS:", "")
+	for _, server := range opts.GetBootstrapServers() {
+		tw.Print("", fmt.Sprintf("- %s", server))
+	}
+
+	// TLS section - Cloud only supports PEM content
+	if tls := opts.GetTlsSettings(); tls != nil {
+		tw.Print("TLS:", "")
+		tw.Print("----", "")
+		tw.Print("ENABLED", tls.GetEnabled())
+		if ca := tls.GetCa(); ca != "" {
+			tw.Print("CA", ca)
+		}
+		if key := tls.GetKey(); key != "" {
+			tw.Print("KEY", key)
+		}
+		if cert := tls.GetCert(); cert != "" {
+			tw.Print("CERT", cert)
+		}
+	}
+
+	// SASL section
+	if auth := opts.GetAuthenticationConfiguration(); auth != nil {
+		if scram := auth.GetScramConfiguration(); scram != nil {
+			tw.Print("", "")
+			tw.Print("SASL:", "")
+			tw.Print("-----", "")
+			tw.Print("USERNAME", scram.GetUsername())
+			tw.Print("MECHANISM", formatScramMechanism(scram.GetScramMechanism()))
+			if scram.GetPasswordSet() {
+				tw.Print("PASSWORD SET AT", scram.GetPasswordSetAt().AsTime().Format(time.RFC3339))
+			}
+		}
+	}
+
+	tw.Print("", "")
+	tw.Print("CLIENT CONFIGURATION:", "")
+	tw.Print(strings.Repeat("-", 21), "")
+
 	tw.Print("metadata_max_age_ms", opts.GetEffectiveMetadataMaxAgeMs())
 	tw.Print("connection_timeout_ms", opts.GetEffectiveConnectionTimeoutMs())
 	tw.Print("retry_backoff_ms", opts.GetEffectiveRetryBackoffMs())
@@ -310,6 +458,16 @@ func printSecuritySync(opts *adminv2.SecuritySettingsSyncOptions) {
 			)
 		}
 	}
+}
+
+func printSchemaRegistrySync(opts *adminv2.SchemaRegistrySyncOptions) {
+	tw := out.NewTabWriter()
+	defer tw.Flush()
+	if opts == nil {
+		tw.Print("No schema registry sync configuration")
+		return
+	}
+	tw.Print("SHADOWING MODE", strings.ReplaceAll(opts.WhichSchemaRegistryShadowingMode().String(), "_", " "))
 }
 
 func formatScramMechanism(m adminv2.ScramMechanism) string {

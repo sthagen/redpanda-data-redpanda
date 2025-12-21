@@ -642,6 +642,9 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         # Don't modify oidc_principal mapping, the value is complex and tested elsewhere.
         exclude_settings.add("oidc_principal_mapping")
 
+        # Don't modify oidc_group_claim_path, the value is complex and tested elsewhere
+        exclude_settings.add("oidc_group_claim_path")
+
         # Don't modify iceberg_default_partition_spec, it has its own syntax
         # and is tested elsewhere.
         exclude_settings.add("iceberg_default_partition_spec")
@@ -1604,11 +1607,12 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 {"log_message_timestamp_type": "CreateTime"}, incremental=False
             )
 
+    # Note: "shared_key" is base64 encoded. It is decoded and that is the password used
     ABS_STATIC_CFG = {
         "cloud_storage_enabled": "true",
         "cloud_storage_azure_storage_account": "theazureaccount",
         "cloud_storage_azure_container": "theazurecontainer",
-        "cloud_storage_azure_shared_key": "aGVsbG90aGVyZQ==",
+        "cloud_storage_azure_shared_key": "aGVsbG90aGVyZXN0cmFuZ2Vy",
         "cloud_storage_credentials_source": "config_file",
     }
     ABS_VM_INSTANCE_METADATA = {
@@ -2270,7 +2274,7 @@ class ClusterConfigNoKafkaTest(RedpandaTest):
             raise RuntimeError("Kafka API shouldn't be available")
 
         user = "alice"
-        password = "sekrit"
+        password = "sekrit01234567"
         admin.create_user(user, password, algorithm="SCRAM-SHA-256", await_exists=True)
 
         alice_admin = Admin(self.redpanda, auth=(user, password))

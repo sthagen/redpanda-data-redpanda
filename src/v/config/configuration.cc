@@ -701,23 +701,10 @@ configuration::configuration()
       "controls the number retries.",
       {.visibility = visibility::tunable},
       30)
-  , tm_sync_timeout_ms(
-      *this,
-      "tm_sync_timeout_ms",
-      "Transaction manager's synchronization timeout. Maximum time to wait for "
-      "internal state machine to catch up before rejecting a request.",
-      {.visibility = visibility::user},
-      10s)
+  , tm_sync_timeout_ms(*this, "tm_sync_timeout_ms")
   , tx_registry_sync_timeout_ms(*this, "tx_registry_sync_timeout_ms")
   , tm_violation_recovery_policy(*this, "tm_violation_recovery_policy")
-  , rm_sync_timeout_ms(
-      *this,
-      "rm_sync_timeout_ms",
-      "Resource manager's synchronization timeout. Specifies the maximum time "
-      "for this node to wait for the internal state machine to catch up with "
-      "all events written by previous leaders before rejecting a request.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::user},
-      10s)
+  , rm_sync_timeout_ms(*this, "rm_sync_timeout_ms")
   , find_coordinator_timeout_ms(*this, "find_coordinator_timeout_ms")
   , seq_table_min_size(*this, "seq_table_min_size")
   , tx_timeout_delay_ms(
@@ -763,6 +750,17 @@ configuration::configuration()
         model::fetch_read_strategy::non_polling_with_debounce,
         model::fetch_read_strategy::non_polling_with_pid,
       })
+  , fetch_max_read_concurrency(
+      *this,
+      "fetch_max_read_concurrency",
+      "The maximum number of concurrent partition reads per fetch request on "
+      "each shard. Setting this higher than the default can lead to partition "
+      "starvation and unneeded memory usage.",
+      {.needs_restart = needs_restart::no,
+       .example = "1",
+       .visibility = visibility::tunable},
+      1,
+      {.min = 1, .max = 100})
   , fetch_pid_p_coeff(
       *this,
       "fetch_pid_p_coeff",
@@ -799,16 +797,7 @@ configuration::configuration()
       "milliseconds.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       100ms)
-  , alter_topic_cfg_timeout_ms(
-      *this,
-      "alter_topic_cfg_timeout_ms",
-      "The duration, in milliseconds, that Redpanda waits for the replication "
-      "of entries in the controller log when executing a request to alter "
-      "topic configurations. This timeout ensures that configuration changes "
-      "are replicated across the cluster before the alteration request is "
-      "considered complete.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      5s)
+  , alter_topic_cfg_timeout_ms(*this, "alter_topic_cfg_timeout_ms")
   , log_cleanup_policy(
       *this,
       "log_cleanup_policy",
@@ -916,13 +905,7 @@ configuration::configuration()
       "Use separate scheduler group to handle parsing Kafka protocol requests",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       true)
-  , metadata_status_wait_timeout_ms(
-      *this,
-      "metadata_status_wait_timeout_ms",
-      "Maximum time to wait in metadata request for cluster health to be "
-      "refreshed.",
-      {.visibility = visibility::tunable},
-      2s)
+  , metadata_status_wait_timeout_ms(*this, "metadata_status_wait_timeout_ms")
   , kafka_tcp_keepalive_idle_timeout_seconds(
       *this,
       "kafka_tcp_keepalive_timeout",
@@ -1249,18 +1232,8 @@ configuration::configuration()
       {.needs_restart = needs_restart::no,
        .visibility = visibility::deprecated},
       10s)
-  , create_topic_timeout_ms(
-      *this,
-      "create_topic_timeout_ms",
-      "Timeout, in milliseconds, to wait for new topic creation.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      2'000ms)
-  , wait_for_leader_timeout_ms(
-      *this,
-      "wait_for_leader_timeout_ms",
-      "Timeout to wait for leadership in metadata cache.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      5'000ms)
+  , create_topic_timeout_ms(*this, "create_topic_timeout_ms")
+  , wait_for_leader_timeout_ms(*this, "wait_for_leader_timeout_ms")
   , default_topic_partitions(
       *this,
       "default_topic_partitions",
@@ -1291,13 +1264,7 @@ configuration::configuration()
       "Timeout for append entry requests issued while replicating entries.",
       {.visibility = visibility::tunable},
       3s)
-  , recovery_append_timeout_ms(
-      *this,
-      "recovery_append_timeout_ms",
-      "Timeout for append entry requests issued while updating a stale "
-      "follower.",
-      {.visibility = visibility::tunable},
-      5s)
+  , recovery_append_timeout_ms(*this, "recovery_append_timeout_ms")
   , raft_replicate_batch_window_size(
       *this,
       "raft_replicate_batch_window_size",
@@ -1771,11 +1738,7 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1s)
   , node_management_operation_timeout_ms(
-      *this,
-      "node_management_operation_timeout_ms",
-      "Timeout for executing node management operations.",
-      {.visibility = visibility::tunable},
-      5s)
+      *this, "node_management_operation_timeout_ms")
   , kafka_request_max_bytes(
       *this,
       "kafka_request_max_bytes",
@@ -3924,6 +3887,25 @@ configuration::configuration()
       "access tokens.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       1h)
+  , oidc_group_claim_path(
+      *this,
+      "oidc_group_claim_path",
+      "JSON path to extract groups from the JWT payload.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      "$.groups",
+      security::oidc::validate_group_claim_path)
+  , nested_group_behavior(
+      *this,
+      "nested_group_behavior",
+      "Behavior for handling nested groups when extracting groups from "
+      "authentication tokens.  Two options are available - none and suffix.  "
+      "With none, the group is left alone (e.g. '/group/child/grandchild').  "
+      "Suffix will extract the final component from the nested group (e.g. "
+      "'/group' -> 'group' and '/group/child/grandchild' -> 'grandchild').",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      security::oidc::nested_group_behavior::none,
+      {security::oidc::nested_group_behavior::none,
+       security::oidc::nested_group_behavior::suffix})
   , http_authentication(
       *this,
       "OIDC",
@@ -4504,6 +4486,12 @@ configuration::configuration()
       "cluster for data replication.",
       meta{.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , internal_rpc_request_timeout_ms(
+      *this,
+      "internal_rpc_request_timeout_ms",
+      "Default timeout for RPC requests between Redpanda nodes.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10s)
   , cloud_topics_enabled(
       *this,
       true,
@@ -4553,6 +4541,47 @@ configuration::configuration()
       "term storage.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       5min)
+  , cloud_topics_epoch_service_epoch_increment_interval(
+      *this,
+      "cloud_topics_epoch_service_epoch_increment_interval",
+      "The interval at which the cluster epoch is incremented.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10min)
+  , cloud_topics_epoch_service_local_epoch_cache_duration(
+      *this,
+      "cloud_topics_epoch_service_local_epoch_cache_duration",
+      "The local cache duration of a cluster wide epoch.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1min)
+  , cloud_topics_short_term_gc_minimum_object_age(
+      *this,
+      "cloud_topics_short_term_gc_minimum_object_age",
+      "The minimum age of an L0 object before it becomes eligible for garbage "
+      "collection.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      12h)
+  , cloud_topics_short_term_gc_interval(
+      *this,
+      "cloud_topics_short_term_gc_interval",
+      "The interval between invocations of the L0 garbage collection work loop "
+      "when progress is being made.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10s)
+  , cloud_topics_short_term_gc_backoff_interval(
+      *this,
+      "cloud_topics_short_term_gc_backoff_interval",
+      "The interval between invocations of the L0 garbage collection work loop "
+      "when no progress is being made or errors are occurring.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1min)
+  , cloud_topics_parallel_fetch_enabled(
+      *this,
+      "cloud_topics_parallel_fetch_enabled",
+      "Enable parallel fetching in cloud topics. This mechanism improves the "
+      "throughput by allowing the broker to download data needed by the fetch "
+      "request using multiple shards.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      true)
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",
@@ -4567,7 +4596,7 @@ configuration::configuration()
       "are a concern. To enable experimental features, set the value of this "
       "configuration option to the current unix epoch expressed in seconds. "
       "The value must be within one hour of the current time on the broker."
-      "Once experimental features are enabled they cannot be disabled",
+      "Once experimental features are enabled they cannot be disabled.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       "",
       [this](const ss::sstring& v) -> std::optional<ss::sstring> {

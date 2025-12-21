@@ -113,6 +113,9 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
         enqueued_promise.set_value();
         co_return make_error_code(errc::invalid_batch_type);
     }
+
+    auto holder = _gate.hold();
+
     /**
      * We use lock to serialize the sync calls, as sync is a scheduling point
      * The units are released after the request is enqueued in raft.

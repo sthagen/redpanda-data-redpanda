@@ -59,6 +59,7 @@ simple_stm::simple_stm(
 
 ss::future<std::expected<model::term_id, simple_stm::errc>>
 simple_stm::sync(model::timeout_clock::duration timeout) {
+    auto holder = _gate.hold();
     auto sync_res = co_await ss::coroutine::as_future(
       metastore_stm_base::sync(timeout));
     if (sync_res.failed()) {
@@ -84,6 +85,7 @@ simple_stm::sync(model::timeout_clock::duration timeout) {
 ss::future<std::expected<void, simple_stm::errc>>
 simple_stm::replicate_and_wait(
   model::term_id term, model::record_batch batch, ss::abort_source& as) {
+    auto holder = _gate.hold();
     // This timeout should prevent services that depend on the metastore from
     // hanging during shutdown because they are waiting on a replicate. The OCC
     // checks in the apply fiber should prevent issues with replicates that
@@ -203,7 +205,7 @@ stm_snapshot simple_stm::make_snapshot() const {
 
 ss::future<> simple_stm::stop() {
     snapshot_timer_.cancel();
-    co_return co_await metastore_stm_base::stop();
+    co_await metastore_stm_base::stop();
 }
 
 ss::future<> simple_stm::maybe_write_snapshot() {

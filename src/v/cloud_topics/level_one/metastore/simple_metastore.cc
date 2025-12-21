@@ -92,6 +92,10 @@ simple_object_builder::finish(
     return {};
 }
 
+bool simple_object_builder::is_empty() const {
+    return finished_objects_.empty();
+}
+
 std::expected<
   chunked_vector<metastore::object_metadata>,
   metastore::object_metadata_builder::error>
@@ -483,6 +487,8 @@ simple_metastore::compact_objects(
         }
         p_update.removed_tombstones_ranges = cm.removed_tombstones_ranges;
         p_update.cleaned_at = cm.cleaned_at;
+        p_update.expected_compaction_epoch
+          = partition_state::compaction_epoch_t{cm.expected_compaction_epoch()};
         compaction_updates[tp] = std::move(p_update);
     }
 
@@ -586,6 +592,7 @@ std::expected<double, metastore::errc> simple_metastore::get_dirty_ratio(
     auto prt_ref = state.partition_state(tp);
 
     if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tp);
         return std::unexpected(errc::missing_ntp);
     }
 
@@ -604,6 +611,10 @@ std::expected<double, metastore::errc> simple_metastore::get_dirty_ratio(
     for (const auto& extent : prt.extents) {
         total_size += extent.len;
         auto b = extent.base_offset;
+        if (unlikely(b < prt.start_offset)) {
+            // The extent is partially truncated
+            b = prt.start_offset;
+        }
         auto e = extent.last_offset;
         if (!cleaned_ranges.covers(b, e)) {
             dirty_size += extent.len;
@@ -621,6 +632,7 @@ simple_metastore::get_earliest_dirty_ts(
     auto prt_ref = state.partition_state(tp);
 
     if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tp);
         return std::unexpected(errc::missing_ntp);
     }
 
@@ -655,6 +667,20 @@ simple_metastore::get_earliest_dirty_ts(
     return std::nullopt;
 }
 
+std::expected<metastore::compaction_epoch, metastore::errc>
+simple_metastore::get_compaction_epoch(
+  const state& state, const model::topic_id_partition& tp) {
+    auto prt_ref = state.partition_state(tp);
+
+    if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tp);
+        return std::unexpected(errc::missing_ntp);
+    }
+
+    const auto& prt = prt_ref->get();
+    return metastore::compaction_epoch{prt.compaction_epoch()};
+}
+
 ss::future<std::expected<metastore::compaction_info_response, metastore::errc>>
 simple_metastore::get_compaction_info(const compaction_info_spec& log) {
     co_return get_compaction_info(
@@ -681,10 +707,135 @@ simple_metastore::get_compaction_info(
         return std::unexpected(offsets.error());
     }
 
+    auto compaction_epoch = get_compaction_epoch(state, tidp);
+    if (!compaction_epoch.has_value()) {
+        return std::unexpected(compaction_epoch.error());
+    }
+
     return compaction_info_response{
       .dirty_ratio = dirty_ratio.value(),
       .earliest_dirty_ts = earliest_dirty_ts.value(),
-      .offsets_response = std::move(offsets).value()};
+      .offsets_response = std::move(offsets).value(),
+      .compaction_epoch = compaction_epoch.value()};
+}
+
+ss::future<std::expected<metastore::compaction_info_map, metastore::errc>>
+simple_metastore::get_compaction_infos(
+  const chunked_vector<compaction_info_spec>& logs) {
+    compaction_info_map infos;
+    for (const auto& log : logs) {
+        infos.emplace(log.tidp, co_await get_compaction_info(log));
+    }
+    co_return infos;
+}
+
+ss::future<std::expected<metastore::extent_metadata_response, metastore::errc>>
+simple_metastore::get_extent_metadata_forwards(
+  const model::topic_id_partition& tp,
+  kafka::offset min_offset,
+  kafka::offset max_offset,
+  size_t max_num_extents) {
+    co_return get_extent_metadata_forwards(
+      state_, tp, min_offset, max_offset, max_num_extents);
+}
+
+std::expected<metastore::extent_metadata_response, metastore::errc>
+simple_metastore::get_extent_metadata_forwards(
+  const state& state,
+  const model::topic_id_partition& tp,
+  kafka::offset min_offset,
+  kafka::offset max_offset,
+  size_t max_num_extents) {
+    auto prt_ref = state.partition_state(tp);
+
+    if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tp);
+        return std::unexpected(errc::missing_ntp);
+    }
+
+    const auto& prt = prt_ref->get();
+
+    extent_metadata_vec extents;
+
+    auto min_it = std::ranges::lower_bound(
+      prt.extents, min_offset, std::less<>{}, &extent::last_offset);
+    for (auto it = min_it; it != prt.extents.end(); ++it) {
+        auto& extent = *it;
+        if (extent.base_offset > max_offset) {
+            break;
+        }
+
+        if (extents.size() >= max_num_extents) {
+            break;
+        }
+
+        extents.push_back(
+          {.base_offset = extent.base_offset,
+           .last_offset = extent.last_offset,
+           .max_timestamp = extent.max_timestamp});
+    }
+
+    return extent_metadata_response{.extents = std::move(extents)};
+}
+
+ss::future<std::expected<metastore::extent_metadata_response, metastore::errc>>
+simple_metastore::get_extent_metadata_backwards(
+  const model::topic_id_partition& tp,
+  kafka::offset min_offset,
+  kafka::offset max_offset,
+  size_t max_num_extents) {
+    co_return get_extent_metadata_backwards(
+      state_, tp, min_offset, max_offset, max_num_extents);
+}
+
+std::expected<metastore::extent_metadata_response, metastore::errc>
+simple_metastore::get_extent_metadata_backwards(
+  const state& state,
+  const model::topic_id_partition& tp,
+  kafka::offset min_offset,
+  kafka::offset max_offset,
+  size_t max_num_extents) {
+    auto prt_ref = state.partition_state(tp);
+
+    if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tp);
+        return std::unexpected(errc::missing_ntp);
+    }
+
+    const auto& prt = prt_ref->get();
+
+    extent_metadata_vec extents;
+
+    auto max_it = std::ranges::lower_bound(
+      prt.extents, max_offset, std::less<>{}, &extent::last_offset);
+    if (max_it != prt.extents.end() && max_it->base_offset > max_offset) {
+        if (max_it != prt.extents.begin()) {
+            --max_it;
+        } else {
+            // No extents.
+            return extent_metadata_response{};
+        }
+    }
+    auto max_rit = max_it == prt.extents.end()
+                     ? std::make_reverse_iterator(prt.extents.end())
+                     : std::make_reverse_iterator(std::next(max_it));
+    for (auto it = max_rit; it != prt.extents.rend(); ++it) {
+        auto& extent = *it;
+        if (extent.last_offset < min_offset) {
+            break;
+        }
+
+        if (extents.size() >= max_num_extents) {
+            break;
+        }
+
+        extents.push_back(
+          {.base_offset = extent.base_offset,
+           .last_offset = extent.last_offset,
+           .max_timestamp = extent.max_timestamp});
+    }
+
+    return extent_metadata_response{.extents = std::move(extents)};
 }
 
 } // namespace cloud_topics::l1

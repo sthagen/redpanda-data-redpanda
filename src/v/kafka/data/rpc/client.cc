@@ -113,6 +113,7 @@ cluster::errc map_errc(std::error_code ec) {
         case ::rpc::errc::disconnected_endpoint:
         case ::rpc::errc::exponential_backoff:
         case ::rpc::errc::shutting_down:
+        case ::rpc::errc::service_unavailable:
             return cluster::errc::timeout;
         default:
             vlog(

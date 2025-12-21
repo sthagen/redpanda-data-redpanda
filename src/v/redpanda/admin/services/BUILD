@@ -46,3 +46,22 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "security",
+    srcs = ["security.cc"],
+    hdrs = ["security.h"],
+    implementation_deps = [
+        "//src/v/redpanda/admin/proxy:context",
+        "//src/v/security",
+        "//src/v/security:request_auth",
+    ],
+    deps = [
+        "//proto/redpanda/core/admin/v2:security_redpanda_proto",
+        "//src/v/cluster",
+        "//src/v/kafka/server",
+        "//src/v/redpanda/admin/proxy:client",
+        "//src/v/serde/protobuf:rpc",
+        "@seastar",
+    ],
+)

@@ -71,8 +71,8 @@ ss::future<> coordinated_recovery_throttle::token_bucket::throttle(
 }
 
 void coordinated_recovery_throttle::token_bucket::renew_capacity(
-  size_t granted_capacity) {
-    _available_units += granted_capacity;
+  ssize_t added_capacity) {
+    _available_units += added_capacity;
     _last_reset_capacity = _available_units;
     _admitted_bytes_since_last_reset = 0;
     vlog(
@@ -182,19 +182,19 @@ coordinated_recovery_throttle::required_capacity() const {
                                      + _throttler.admitted_bytes()};
 }
 
-ss::future<>
-coordinated_recovery_throttle::renew_capacity_all_shards(size_t new_capacity) {
+ss::future<> coordinated_recovery_throttle::renew_capacity_all_shards(
+  ssize_t added_capacity) {
     co_await container().invoke_on_all(
-      [new_capacity](coordinated_recovery_throttle& local) {
-          local._throttler.renew_capacity(new_capacity);
+      [added_capacity](coordinated_recovery_throttle& local) {
+          local._throttler.renew_capacity(added_capacity);
       });
 }
 
 ss::future<> coordinated_recovery_throttle::renew_capacity_on_shard(
-  ss::shard_id shard, size_t new_capacity) {
+  ss::shard_id shard, ssize_t added_capacity) {
     co_await container().invoke_on(
-      shard, [new_capacity](coordinated_recovery_throttle& local) {
-          local._throttler.renew_capacity(new_capacity);
+      shard, [added_capacity](coordinated_recovery_throttle& local) {
+          local._throttler.renew_capacity(added_capacity);
       });
 }
 
@@ -338,8 +338,8 @@ ss::future<> coordinated_recovery_throttle::renew_capacity_on_shards(
                    | std::views::transform(
                      [this, &added_capacity_calculator, shard(ss::shard_id{0})](
                        const shard_capacity_request& req) mutable {
-                         size_t capacity = added_capacity_calculator(req);
-                         return renew_capacity_on_shard(shard++, capacity);
+                         return renew_capacity_on_shard(
+                           shard++, added_capacity_calculator(req));
                      });
     co_await ss::when_all(futures.begin(), futures.end());
 }

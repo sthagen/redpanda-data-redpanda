@@ -11,6 +11,8 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     cluster_pb2,
     cluster_pb2_connect,
     kafka_connections_pb2,
+    security_pb2,
+    security_pb2_connect,
     shadow_link_pb2,
     shadow_link_pb2_connect,
 )
@@ -43,6 +45,7 @@ class RedpandaServiceProto(Protocol):
 broker_pb = broker_pb2
 cluster_pb = cluster_pb2
 datalake_pb = datalake_pb2
+security_pb2 = security_pb2
 shadow_link_pb = shadow_link_pb2
 shadow_link_internal_pb = shadow_link_internal_pb2
 debug_pb = debug_pb2
@@ -123,6 +126,9 @@ class Admin:
 
     def debug(self, **kwargs: Any) -> debug_pb2_connect.DebugServiceClient:
         return self._make_service(debug_pb2_connect.DebugServiceClient, **kwargs)
+
+    def security(self, **kwargs: Any) -> security_pb2_connect.SecurityServiceClient:
+        return self._make_service(security_pb2_connect.SecurityServiceClient, **kwargs)
 
     def shadow_link(
         self, **kwargs: Any

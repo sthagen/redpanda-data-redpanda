@@ -40,6 +40,7 @@ class interval_set {
 
 public:
     using const_iterator = set_t::const_iterator;
+    using const_reverse_iterator = set_t::const_reverse_iterator;
     using iterator = set_t::iterator;
     struct interval {
         T start;
@@ -75,6 +76,18 @@ public:
      * Return an iterator to the end of the set.
      */
     [[nodiscard]] const_iterator end() const;
+
+    /**
+     * Return an reverse iterator to the last entry in the set.
+     *
+     * If the set is empty then rend() is returned.
+     */
+    [[nodiscard]] const_reverse_iterator rbegin() const;
+
+    /**
+     * Return an reverse iterator to the end of the set.
+     */
+    [[nodiscard]] const_reverse_iterator rend() const;
 
     /**
      * Return true if the set contains no intervals.
@@ -236,6 +249,16 @@ interval_set<T>::const_iterator interval_set<T>::begin() const {
 template<std::integral T>
 interval_set<T>::const_iterator interval_set<T>::end() const {
     return set_.cend();
+}
+
+template<std::integral T>
+interval_set<T>::const_reverse_iterator interval_set<T>::rbegin() const {
+    return set_.crbegin();
+}
+
+template<std::integral T>
+interval_set<T>::const_reverse_iterator interval_set<T>::rend() const {
+    return set_.crend();
 }
 
 template<std::integral T>

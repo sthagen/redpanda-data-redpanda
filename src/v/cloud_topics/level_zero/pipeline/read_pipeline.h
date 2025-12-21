@@ -27,6 +27,8 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 
+#include <expected>
+
 namespace cloud_topics::l0 {
 
 struct read_pipeline_accessor;
@@ -45,7 +47,7 @@ public:
     /// that should be materialized.
     /// The result of the query is a reader that contains the
     /// actual raft_data batches.
-    ss::future<result<dataplane_query_result>>
+    ss::future<std::expected<dataplane_query_result, std::error_code>>
     make_reader(model::ntp ntp, dataplane_query query, timestamp_t timeout);
 
     using read_requests_list
@@ -69,7 +71,7 @@ public:
         /// Wait until fetch requests are available in the pipeline
         /// stage and return them (the requests are pulled out of
         /// the pipeline).
-        ss::future<checked<read_requests_list, errc>>
+        ss::future<std::expected<read_requests_list, errc>>
         pull_fetch_requests(size_t max_bytes) {
             l0::event_filter<Clock> filter(
               l0::event_type::new_read_request, _ps);
@@ -77,9 +79,9 @@ public:
               filter, _parent->get_abort_source());
             switch (event.type) {
             case l0::event_type::shutting_down:
-                co_return errc::shutting_down;
+                co_return std::unexpected(errc::shutting_down);
             case l0::event_type::err_timedout:
-                co_return errc::timeout;
+                co_return std::unexpected(errc::timeout);
             case l0::event_type::new_write_request:
             case l0::event_type::none:
                 vunreachable("Unexpected event type in the read_pipeline");
@@ -113,6 +115,8 @@ public:
         void register_micro_probe(const micro_probe& p) {
             _parent->_probe.register_micro_probe(p);
         }
+
+        pipeline_stage id() const noexcept { return _ps; }
 
     private:
         pipeline_stage _ps;

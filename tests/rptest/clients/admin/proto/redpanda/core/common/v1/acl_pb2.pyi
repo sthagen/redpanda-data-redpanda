@@ -84,6 +84,8 @@ class _ACLPatternEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._Enu
     'Match a literal string'
     ACL_PATTERN_PREFIXED: _ACLPattern.ValueType
     'Match a prefix'
+    ACL_PATTERN_PREFIX: _ACLPattern.ValueType
+    'Match a prefix'
     ACL_PATTERN_MATCH: _ACLPattern.ValueType
     'Match serves as a catch-all for all the names of a topic\n    the principal is authorized to access\n    '
 
@@ -95,6 +97,8 @@ ACL_PATTERN_ANY: ACLPattern.ValueType
 ACL_PATTERN_LITERAL: ACLPattern.ValueType
 'Match a literal string'
 ACL_PATTERN_PREFIXED: ACLPattern.ValueType
+'Match a prefix'
+ACL_PATTERN_PREFIX: ACLPattern.ValueType
 'Match a prefix'
 ACL_PATTERN_MATCH: ACLPattern.ValueType
 'Match serves as a catch-all for all the names of a topic\nthe principal is authorized to access\n'

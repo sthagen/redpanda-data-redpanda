@@ -91,6 +91,8 @@ class _PatternTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._En
     'Must match the filter exactly'
     PATTERN_TYPE_PREFIX: _PatternType.ValueType
     'Will match anything that starts with filter'
+    PATTERN_TYPE_PREFIXED: _PatternType.ValueType
+    'Will match anything that starts with filter'
 
 class PatternType(_PatternType, metaclass=_PatternTypeEnumTypeWrapper):
     """The matching pattern type"""
@@ -98,6 +100,8 @@ PATTERN_TYPE_UNSPECIFIED: PatternType.ValueType
 PATTERN_TYPE_LITERAL: PatternType.ValueType
 'Must match the filter exactly'
 PATTERN_TYPE_PREFIX: PatternType.ValueType
+'Will match anything that starts with filter'
+PATTERN_TYPE_PREFIXED: PatternType.ValueType
 'Will match anything that starts with filter'
 Global___PatternType: typing_extensions.TypeAlias = PatternType
 

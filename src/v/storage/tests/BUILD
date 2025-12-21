@@ -1022,6 +1022,7 @@ redpanda_cc_bench(
 
 redpanda_cc_bench(
     name = "segment_appender_rpbench",
+    timeout = "moderate",
     srcs = ["segment_appender_bench.cc"],
     deps = [
         "//src/v/model",

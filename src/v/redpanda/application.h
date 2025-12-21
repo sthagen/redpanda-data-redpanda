@@ -36,40 +36,29 @@
 #include "features/fwd.h"
 #include "finjector/stress_fiber.h"
 #include "kafka/client/configuration.h"
-#include "kafka/client/fwd.h"
 #include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/service.h"
 #include "kafka/server/app.h"
 #include "kafka/server/data_migration_group_proxy_impl.h"
-#include "kafka/server/fwd.h"
-#include "kafka/server/group_initializer.h"
 #include "kafka/server/snc_quota_manager.h"
 #include "metrics/aggregate_metrics_watcher.h"
 #include "metrics/host_metrics_watcher.h"
 #include "metrics/metrics.h"
 #include "net/conn_quota.h"
-#include "net/fwd.h"
 #include "pandaproxy/rest/configuration.h"
 #include "pandaproxy/rest/fwd.h"
 #include "pandaproxy/schema_registry/configuration.h"
 #include "pandaproxy/schema_registry/fwd.h"
-#include "raft/fwd.h"
 #include "redpanda/admin/kafka_connections_service.h"
 #include "redpanda/monitor_unsafe.h"
 #include "resource_mgmt/cpu_profiler.h"
-#include "resource_mgmt/cpu_scheduling.h"
-#include "resource_mgmt/memory_groups.h"
 #include "resource_mgmt/memory_sampling.h"
 #include "resource_mgmt/scheduling_groups_probe.h"
 #include "resource_mgmt/smp_groups.h"
 #include "resource_mgmt/storage.h"
-#include "rpc/fwd.h"
 #include "rpc/rpc_server.h"
-#include "security/fwd.h"
 #include "ssx/sharded_service_container.h"
-#include "ssx/watchdog.h"
 #include "storage/api.h"
-#include "storage/fwd.h"
 #include "transform/fwd.h"
 #include "utils/stop_signal.h"
 #include "wasm/fwd.h"
@@ -101,8 +90,7 @@ public:
       std::optional<YAML::Node> proxy_client_cfg = std::nullopt,
       std::optional<YAML::Node> schema_reg_cfg = std::nullopt,
       std::optional<YAML::Node> schema_reg_client_cfg = std::nullopt,
-      std::optional<YAML::Node> audit_log_client_cfg = std::nullopt,
-      std::optional<scheduling_groups> = std::nullopt);
+      std::optional<YAML::Node> audit_log_client_cfg = std::nullopt);
     void check_environment();
     void wire_up_and_start(::stop_signal&, bool test_mode = false);
     void post_start_tasks();
@@ -119,7 +107,6 @@ public:
     ss::future<> set_proxy_client_config(ss::sstring name, std::any val);
 
     smp_groups smp_service_groups;
-    scheduling_groups sched_groups;
     ss::sharded<stress_fiber_manager> stress_fiber_manager;
 
     // Sorted list of services (public members)
@@ -247,6 +234,7 @@ private:
     // having constructed the subsystems via the corresponding `wire_up` calls.
     void start_runtime_services(cluster::cluster_discovery&, ::stop_signal&);
     void start_kafka(const model::node_id&, ::stop_signal&);
+    void add_runtime_rpc_services(rpc::rpc_server&, bool start_raft_rpc_early);
 
     // All methods are calleds from Seastar thread
     ss::app_template::config setup_app_config();

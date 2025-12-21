@@ -219,6 +219,16 @@ struct partition_state
     // TODO: should we remove this if cleanup policy is switched?
     std::optional<compaction_state> compaction_state;
 
+    using compaction_epoch_t
+      = named_type<int64_t, struct state_compaction_epoch>;
+    // The current epoch of this partition's compacted log. Effectively
+    // describes the number of logical changes made to the log's underlying
+    // data. Incremented when a compaction or partial compaction has been
+    // applied to this partition.
+    // This is a useful field for optimistic concurrency control, preventing a
+    // compaction job based on stale data from overwriting an updated log.
+    compaction_epoch_t compaction_epoch{0};
+
     // A mapping of terms (used instead of Kafka epochs) to the starting Kafka
     // offset for that term. Both the term and offsets are maintained to be
     // monotonically strictly increasing.

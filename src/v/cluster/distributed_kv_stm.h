@@ -99,9 +99,6 @@ public:
       , _default_max_partitions(max_partitions)
       , _is_routing_partition(_raft->ntp().tp.partition == routing_partition) {}
 
-    ss::future<> start() override { co_await raft::persisted_stm<>::start(); }
-    ss::future<> stop() override { co_await _gate.close(); }
-
     ss::future<> do_apply(const model::record_batch& record_batch) override {
         if (record_batch.header().type != model::record_batch_type::raft_data) {
             co_return;

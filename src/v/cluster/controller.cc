@@ -215,6 +215,12 @@ ss::future<> controller::wire_up() {
             ss::sharded_parameter([] {
                 return config::shard_local_cfg()
                   .oidc_keys_refresh_interval.bind();
+            }),
+            ss::sharded_parameter([] {
+                return config::shard_local_cfg().oidc_group_claim_path.bind();
+            }),
+            ss::sharded_parameter([] {
+                return config::shard_local_cfg().nested_group_behavior.bind();
             }));
       })
       .then([this] {
@@ -683,6 +689,7 @@ ss::future<> controller::start(
       std::ref(_members_table),
       std::ref(_partition_balancer),
       std::ref(_partition_manager),
+      std::ref(_partition_leaders),
       std::ref(_as));
 
     co_await _members_backend.invoke_on(
@@ -774,6 +781,7 @@ ss::future<> controller::start(
       std::addressof(_plugin_table),
       std::addressof(_feature_manager),
       std::addressof(_storage),
+      std::addressof(_cluster_link_frontend),
       std::ref(_as));
     co_await _metrics_reporter.invoke_on(0, &metrics_reporter::start);
 

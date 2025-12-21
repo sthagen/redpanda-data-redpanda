@@ -384,11 +384,6 @@ ss::future<result<model::offset>> replicated_partition::replicate(
           return ret_t(model::offset(r.value().last_offset()));
       });
 }
-ss::future<result<model::offset>> replicated_partition::replicate(
-  model::record_batch batch, raft::replicate_options opts) {
-    return replicate(
-      chunked_vector<model::record_batch>::single(std::move(batch)), opts);
-}
 
 raft::replicate_stages replicated_partition::replicate(
   model::batch_identity batch_id,

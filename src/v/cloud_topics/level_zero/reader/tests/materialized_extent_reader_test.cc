@@ -137,6 +137,6 @@ TEST_F_CORO(materialized_extent_fixture, timeout_test) {
       rtc,
       logger);
 
-    ASSERT_TRUE_CORO(actual.has_error());
+    ASSERT_TRUE_CORO(!actual.has_value());
     ASSERT_TRUE_CORO(actual.error() == cloud_topics::errc::timeout);
 }

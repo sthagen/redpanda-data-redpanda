@@ -1672,6 +1672,7 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
           seg,
           *appender,
           *compacted_idx_writer,
+          _stm_manager,
           *_probe,
           storage::internal::should_apply_delta_time_offset(_feature_table),
           _feature_table);

@@ -11,7 +11,6 @@
 #include "cloud_io/remote.h"
 
 #include "bytes/iostream.h"
-#include "cloud_io/auth_refresh_bg_op.h"
 #include "cloud_io/logger.h"
 #include "cloud_io/provider.h"
 #include "cloud_io/transfer_details.h"
@@ -113,10 +112,7 @@ remote::remote(
   model::cloud_credentials_source cloud_credentials_source,
   ss::scheduling_group sg)
   : _pool(clients)
-  , _auth_refresh_bg_op{_gate, _as, conf, cloud_credentials_source}
   , _resources(std::make_unique<io_resources>(sg))
-  , _azure_shared_key_binding(
-      config::shard_local_cfg().cloud_storage_azure_shared_key.bind())
   , _cloud_storage_backend{cloud_storage_clients::
                              infer_backend_from_configuration(
                                conf, cloud_credentials_source)}
@@ -125,48 +121,6 @@ remote::remote(
       config::shard_local_cfg().cloud_storage_client_lease_timeout_ms.bind()) {
     vlog(
       log.info, "remote initialized with backend {}", _cloud_storage_backend);
-    // If the credentials source is from config file, bypass the background
-    // op to refresh credentials periodically, and load pool with static
-    // credentials right now.
-    if (_auth_refresh_bg_op.is_static_config()) {
-        _pool.local().load_credentials(
-          _auth_refresh_bg_op.build_static_credentials());
-    }
-
-    _azure_shared_key_binding.watch([this] {
-        auto current_config = _auth_refresh_bg_op.get_client_config();
-        if (!std::holds_alternative<cloud_storage_clients::abs_configuration>(
-              current_config)) {
-            vlog(
-              log.warn,
-              "Attempt to set cloud_storage_azure_shared_key for cluster using "
-              "S3 detected");
-            return;
-        }
-
-        vlog(
-          log.info,
-          "cloud_storage_azure_shared_key was updated. Refreshing "
-          "credentials.");
-
-        auto new_shared_key = _azure_shared_key_binding();
-        if (!new_shared_key) {
-            vlog(
-              log.info,
-              "cloud_storage_azure_shared_key was unset. Will continue "
-              "using the previous value until restart.");
-
-            return;
-        }
-
-        auto& abs_config = std::get<cloud_storage_clients::abs_configuration>(
-          current_config);
-        abs_config.shared_key = cloud_roles::private_key_str{*new_shared_key};
-        _auth_refresh_bg_op.set_client_config(std::move(current_config));
-
-        _pool.local().load_credentials(
-          _auth_refresh_bg_op.build_static_credentials());
-    });
 }
 
 remote::~remote() {
@@ -174,20 +128,7 @@ remote::~remote() {
     // link with destructors for unique_ptr wrapped members
 }
 
-ss::future<> remote::start() {
-    if (!_auth_refresh_bg_op.is_static_config()) {
-        // Launch background operation to fetch credentials on
-        // auth_refresh_shard_id, and copy them to other shards. We do not wait
-        // for this operation here, the wait is done in client_pool::acquire to
-        // avoid delaying application startup.
-        _auth_refresh_bg_op.maybe_start_auth_refresh_op(
-          [this](auto credentials) {
-              return propagate_credentials(credentials);
-          });
-    }
-
-    co_await _resources->start();
-}
+ss::future<> remote::start() { co_await _resources->start(); }
 
 void remote::request_stop() {
     vlog(log.debug, "Requesting stop of remote...");
@@ -200,15 +141,10 @@ ss::future<> remote::stop() {
     }
     co_await _resources->stop();
     co_await _gate.close();
-    co_await _auth_refresh_bg_op.stop();
     vlog(log.debug, "Stopped remote...");
 }
 
 size_t remote::concurrency() const { return _pool.local().max_size(); }
-
-model::cloud_storage_backend remote::backend() const {
-    return _cloud_storage_backend;
-}
 
 const provider& remote::provider() const { return _provider; }
 
@@ -332,8 +268,6 @@ ss::future<upload_result> remote::upload_stream(
             result = upload_result::failed;
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = upload_result::failed;
             break;
         }
@@ -467,8 +401,6 @@ ss::future<download_result> remote::download_stream(
             result = download_result::notfound;
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = download_result::failed;
             break;
         }
@@ -527,9 +459,7 @@ remote::download_object(download_request download_request) {
         if (resp) {
             vlog(ctxlog.debug, "Receive OK response from {}", path);
             try {
-                auto buffer
-                  = co_await cloud_storage_clients::util::drain_response_stream(
-                    resp.value());
+                auto buffer = co_await http::drain(resp.value());
                 download_request.payload.append_fragments(std::move(buffer));
                 transfer_details.on_success();
                 co_return download_result::success;
@@ -564,8 +494,6 @@ remote::download_object(download_request download_request) {
             result = download_result::notfound;
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = download_result::failed;
             break;
         }
@@ -649,8 +577,6 @@ ss::future<download_result> remote::object_exists(
             result = download_result::notfound;
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = download_result::failed;
             break;
         }
@@ -736,8 +662,6 @@ remote::delete_object(transfer_details transfer_details) {
               bucket);
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = upload_result::failed;
             break;
         }
@@ -907,8 +831,6 @@ ss::future<upload_result> remote::delete_object_batch(
               bucket);
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = upload_result::failed;
             break;
         }
@@ -1146,8 +1068,6 @@ ss::future<list_result> remote::list_objects(
               "{}",
               bucket);
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = cloud_storage_clients::error_outcome::fail;
             break;
         }
@@ -1234,8 +1154,6 @@ ss::future<upload_result> remote::upload_object(upload_request upload_request) {
             result = upload_result::failed;
             break;
         case cloud_storage_clients::error_outcome::authentication_failed:
-            vlog(ctxlog.info, "Token expired, refreshing credentials");
-            maybe_request_auth_refresh();
             result = upload_result::failed;
             break;
         }
@@ -1263,30 +1181,6 @@ ss::future<upload_result> remote::upload_object(upload_request upload_request) {
           upload_type);
     }
     co_return *result;
-}
-
-ss::future<>
-remote::propagate_credentials(cloud_roles::credentials credentials) {
-    return container().invoke_on_all(
-      [c = std::move(credentials)](remote& svc) mutable {
-          svc._pool.local().load_credentials(std::move(c));
-      });
-}
-
-void remote::maybe_request_auth_refresh() {
-    if (ss::this_shard_id() == auth_refresh_shard_id) {
-        _auth_refresh_bg_op.maybe_refresh_credentials();
-    } else {
-        ssx::spawn_with_gate(_gate, [this] {
-            return container().invoke_on(auth_refresh_shard_id, [](remote& r) {
-                r._auth_refresh_bg_op.maybe_refresh_credentials();
-            });
-        });
-    }
-}
-
-uint64_t remote::token_refresh_count() const noexcept {
-    return _auth_refresh_bg_op.token_refresh_count();
 }
 
 } // namespace cloud_io

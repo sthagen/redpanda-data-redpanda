@@ -15,7 +15,7 @@
 #include "cluster_link/logger.h"
 #include "ssx/future-util.h"
 
-static constexpr auto reconciliation_interval = std::chrono::seconds{5};
+static constexpr auto reconciliation_interval = std::chrono::seconds{1};
 static constexpr auto mutation_timeout = std::chrono::seconds{5};
 
 namespace cluster_link {

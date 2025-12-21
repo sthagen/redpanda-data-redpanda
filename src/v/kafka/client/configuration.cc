@@ -280,6 +280,8 @@ connection_configuration::from_config_store(const configuration& cfg) {
         };
     }
     ret.broker_tls = tls_configuration::from_tls_config(cfg.broker_tls.value());
+    ret.include_authorized_operations
+      = connection_configuration::include_authorized_ops_t::no;
 
     return ret;
 }

@@ -13,6 +13,7 @@
 #include "cloud_roles/apply_credentials.h"
 #include "cloud_storage_clients/client.h"
 #include "cloud_storage_clients/client_probe.h"
+#include "cloud_storage_clients/credential_manager.h"
 #include "container/intrusive_list_helpers.h"
 #include "ssx/watchdog.h"
 #include "utils/stop_signal.h"
@@ -108,15 +109,19 @@ public:
       size_t size,
       client_configuration conf,
       client_pool_overdraft_policy policy
-      = client_pool_overdraft_policy::wait_if_empty,
+      = client_pool_overdraft_policy::wait_if_empty);
+
+    ss::future<> start(
       std::optional<std::reference_wrapper<stop_signal>> application_stop_signal
       = std::nullopt);
-
     ss::future<> stop();
 
     void shutdown_connections();
 
     bool shutdown_initiated();
+
+    void maybe_refresh_credentials();
+    uint64_t token_refresh_count() const noexcept;
 
     /// Performs the dual functions of loading refreshed credentials into
     /// apply_credentials object, as well as initializing the client pool
@@ -166,7 +171,9 @@ public:
         return _bg_gate.get_count() > 0;
     }
 
-    bool has_waiters() const noexcept { return _cvar.has_waiters(); }
+    bool has_waiters() const noexcept {
+        return _cvar.has_waiters() || _pool_ready_barrier.waiters() > 0;
+    }
 
 private:
     ss::future<> client_self_configure(
@@ -179,7 +186,7 @@ private:
       std::optional<client_self_configuration_output> result);
 
     void populate_client_pool();
-    http_client_ptr make_client() const noexcept;
+    http_client_ptr make_client() noexcept;
     void release(http_client_ptr leased);
 
     /// Return number of clients which wasn't utilized
@@ -195,9 +202,13 @@ private:
 
     /// Configured capacity per shard
     const size_t _capacity;
+
     client_configuration _config;
+    net::base_transport::configuration _transport_config;
+
     ss::shared_ptr<client_probe> _probe;
     client_pool_overdraft_policy _policy;
+
     ss::circular_buffer<http_client_ptr> _pool;
     // List of all connections currently used by clients
     intrusive_list<client_lease, &client_lease::_hook> _leased;
@@ -215,6 +226,9 @@ private:
     ss::condition_variable _credentials_var;
 
     ssx::semaphore _self_config_barrier{0, "self_config_barrier"};
+    ssx::semaphore _pool_ready_barrier{0, "pool_barrier"};
+
+    credential_manager _credential_manager;
 };
 
 } // namespace cloud_storage_clients

@@ -32,6 +32,8 @@
 
 #include <fmt/ostream.h>
 
+#include <exception>
+
 namespace cluster::data_migrations {
 
 frontend::frontend(
@@ -313,8 +315,19 @@ ss::future<result<id>> frontend::do_create_migration(data_migration migration) {
     co_return result<data_migrations::id>(id);
 }
 
-ss::future<chunked_vector<migration_metadata>> frontend::list_migrations() {
-    return _table.invoke_on_instance(&migrations_table::list_migrations);
+ss::future<result<chunked_vector<migration_metadata>>>
+frontend::list_migrations() {
+    try {
+        co_return co_await _table.invoke_on_instance(
+          &migrations_table::list_migrations);
+    } catch (...) {
+        auto eptr = std::current_exception();
+        if (ssx::is_shutdown_exception(eptr)) {
+            co_return cluster::errc::shutting_down;
+        }
+        vlog(dm_log.error, "unexpected exception on list_migrations {}", eptr);
+        throw;
+    }
 }
 
 ss::future<result<migration_metadata>>

@@ -61,7 +61,8 @@ read_pipeline<Clock>::read_pipeline()
       config::shard_local_cfg().disable_public_metrics()) {}
 
 template<class Clock>
-ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
+ss::future<std::expected<dataplane_query_result, std::error_code>>
+read_pipeline<Clock>::make_reader(
   model::ntp ntp, dataplane_query query, timestamp_t timeout) {
     auto h = this->hold_gate();
     auto& as = this->get_root_rtc().root_abort_source();
@@ -91,7 +92,7 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
     case circuit_breaker_state::closed:
         err_fallback.cancel();
         _probe.register_request_timeout();
-        co_return errc::timeout;
+        co_return std::unexpected(errc::timeout);
     }
 
     // TODO: add timeout
@@ -128,16 +129,16 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
 
     if (this->stopped()) {
         err_fallback.cancel();
-        co_return errc::shutting_down;
+        co_return std::unexpected(errc::shutting_down);
     }
     auto res = co_await std::move(fut);
 
-    if (res.has_error()) {
+    if (!res.has_value()) {
         if (res.error() == errc::timeout) {
             err_fallback.cancel();
             _probe.register_request_timeout();
         }
-        co_return res.error();
+        co_return std::unexpected(make_error_code(res.error()));
     }
     err_fallback.cancel();
     _probe.register_request_completed();

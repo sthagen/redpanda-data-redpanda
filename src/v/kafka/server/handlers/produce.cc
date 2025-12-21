@@ -214,13 +214,14 @@ ss::future<produce_response::partition> do_produce_topic_partition(
   ntp_produce_request req,
   std::unique_ptr<ss::promise<>> dispatched) {
     auto start = std::chrono::steady_clock::now();
-    auto validate_batch_res = co_await validate_batch({
-      .batch = *req.batch,
-      .timestamp_type = req.timestamp_type,
-      .message_timestamp_before_max_ms = req.message_timestamp_before_max_ms,
-      .message_timestamp_after_max_ms = req.message_timestamp_after_max_ms,
-      .probe = octx.rctx.probe(),
-    });
+    auto validate_batch_res = co_await validate_batch(
+      {.batch = *req.batch,
+       .timestamp_type = req.timestamp_type,
+       .message_timestamp_before_max_ms = req.message_timestamp_before_max_ms,
+       .message_timestamp_after_max_ms = req.message_timestamp_after_max_ms,
+       .probe = octx.rctx.probe(),
+       .ntp = req.ntp,
+       .client_id = octx.rctx.header().client_id});
 
     if (validate_batch_res.has_value()) {
         co_return finalize_request_with_error_code(

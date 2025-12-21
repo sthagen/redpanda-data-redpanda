@@ -1,6 +1,21 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "level_zero_gc_probe",
+    srcs = [
+        "level_zero_gc_probe.cc",
+    ],
+    hdrs = [
+        "level_zero_gc_probe.h",
+    ],
+    deps = [
+        "//src/v/metrics",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "level_zero_gc",
     srcs = [
         "level_zero_gc.cc",
@@ -17,9 +32,11 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":level_zero_gc_probe",
         "//src/v/cloud_io:io_result",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics:types",
+        "//src/v/container:chunked_hash_map",
         "//src/v/model",
         "@seastar",
     ],

@@ -234,6 +234,8 @@ auth_result authorizer::do_authorized(
             return auth_result::acl_match(
               user, host, operation, resource_name, is_allow, *entry);
         case principal_type::role:
+        // TODO(GBAC) - CORE-14896
+        case principal_type::group:
             return auth_result::role_acl_match(
               user,
               security::role_name{to_check.name_view()},
@@ -269,6 +271,8 @@ auth_result authorizer::do_authorized(
         }
         case security::principal_type::ephemeral_user:
         case security::principal_type::role:
+        // TODO(GBAC) - CORE-14895
+        case security::principal_type::group:
             return std::nullopt;
         }
         __builtin_unreachable();

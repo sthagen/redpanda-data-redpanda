@@ -62,9 +62,6 @@ public:
     ss::future<std::optional<storage::timequery_result>>
     timequery(storage::timequery_config cfg) final;
 
-    ss::future<result<model::offset>>
-      replicate(model::record_batch, raft::replicate_options) final;
-
     ss::future<result<model::offset>> replicate(
       chunked_vector<model::record_batch>, raft::replicate_options) final;
     raft::replicate_stages replicate(
