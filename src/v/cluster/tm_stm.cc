@@ -753,7 +753,7 @@ ss::future<txlock_unit>
 tm_stm::lock_tx(kafka::transactional_id tx_id, std::string_view lock_name) {
     auto [lock_it, inserted] = _tx_locks.try_emplace(tx_id, nullptr);
     if (inserted) {
-        lock_it->second = ss::make_lw_shared<mutex>("lock_tx");
+        lock_it->second = ss::make_lw_shared<ssx::mutex>("lock_tx");
     }
     auto units = co_await lock_it->second->get_units();
     co_return txlock_unit(this, std::move(units), tx_id, lock_name);
@@ -763,7 +763,7 @@ std::optional<txlock_unit> tm_stm::try_lock_tx(
   const kafka::transactional_id& tx_id, std::string_view lock_name) {
     auto [lock_it, inserted] = _tx_locks.try_emplace(tx_id, nullptr);
     if (inserted) {
-        lock_it->second = ss::make_lw_shared<mutex>("tm_stm::tx_lock");
+        lock_it->second = ss::make_lw_shared<ssx::mutex>("tm_stm::tx_lock");
     }
     auto units = lock_it->second->try_get_units();
     if (units) {

@@ -30,10 +30,12 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/log.hh>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <expected>
 #include <iterator>
+#include <random>
 
 using namespace std::chrono_literals;
 
@@ -257,41 +259,48 @@ ss::future<> reconciler::reconcile() {
         oid_to_sources[oid.value()].push_back(src);
     }
 
-    // Process sources by their object. This should be easier to
-    // improve than processing source-by-source.
+    // Process sources by their object in parallel.
+    chunked_vector<l1::object_id> oids;
+    chunked_vector<
+      ss::future<std::expected<built_object_metadata, reconcile_error>>>
+      futures;
+    oids.reserve(oid_to_sources.size());
+    futures.reserve(oid_to_sources.size());
+    for (const auto& [oid, sources] : oid_to_sources) {
+        oids.push_back(oid);
+        futures.push_back(reconcile_sources(oid, sources));
+    }
+    // Unbounded concurrency because #futures = #domains, which is small (3).
+    auto results = co_await ss::when_all(futures.begin(), futures.end());
+
+    // Process results.
     chunked_vector<built_object_metadata> successful_objects;
     chunked_vector<l1::object_id> failed_objects;
-    for (const auto& [oid, sources] : oid_to_sources) {
-        if (_as.abort_requested()) {
-            co_return;
-        }
-        auto object_fut = co_await ss::coroutine::as_future(
-          reconcile_sources(oid, sources));
+    for (size_t i = 0; i < results.size(); ++i) {
+        auto& oid = oids[i];
+        auto& object_fut = results[i];
+
         if (object_fut.failed()) {
             auto ex = object_fut.get_exception();
             const auto is_shutdown = ssx::is_shutdown_exception(ex);
             vlogl(
               lg,
               is_shutdown ? ss::log_level::debug : ss::log_level::error,
-              "Exception reconciling {} partitions into object {}: {}",
-              sources.size(),
+              "Exception reconciling object {}: {}",
               oid,
               ex);
             if (is_shutdown) {
                 co_return;
             }
             failed_objects.push_back(oid);
-            continue; // Skip this object and move to the next
+            continue;
         }
 
         auto result = object_fut.get();
         if (!result.has_value()) {
             failed_objects.push_back(oid);
-            log_error(result.error().with_context(
-              "Exception reconciling {} partitions into object {}",
-              sources.size(),
-              oid));
-            continue; // Skip this object and move to the next
+            log_error(result.error());
+            continue;
         }
 
         auto obj_metadata = std::move(result).value();
@@ -300,10 +309,8 @@ ss::future<> reconciler::reconcile() {
         if (!add_result.has_value()) {
             failed_objects.push_back(oid);
             log_error(add_result.error().with_context(
-              "Exception reconciling {} partitions into object {}",
-              sources.size(),
-              oid));
-            continue; // Skip this object and move to the next
+              "adding metadata for object {}", oid));
+            continue;
         }
 
         // Success - collect the metadata for final processing.
@@ -342,7 +349,8 @@ reconciler::reconcile_sources(
   const chunked_vector<ss::shared_ptr<source>>& sources) {
     auto ctx_result = co_await make_context();
     if (!ctx_result.has_value()) {
-        co_return std::unexpected(ctx_result.error());
+        co_return std::unexpected(ctx_result.error().with_context(
+          "reconciling {} sources into object {}", sources.size(), oid));
     }
     auto ctx = std::move(ctx_result.value());
 
@@ -376,11 +384,20 @@ reconciler::reconcile_sources(
         auto ex = fut.get_exception();
         co_return std::unexpected(
           reconcile_error(
-            "Exception building and putting object {}: {}", oid, ex)
+            "reconciling {} sources into object {}: {}",
+            sources.size(),
+            oid,
+            ex)
             .mark_benign(ssx::is_shutdown_exception(ex)));
     }
 
-    co_return fut.get();
+    auto result = fut.get();
+    if (!result.has_value()) {
+        co_return std::unexpected(result.error().with_context(
+          "reconciling {} sources into object {}", sources.size(), oid));
+    }
+
+    co_return result;
 }
 
 ss::future<std::expected<reconciler::built_object_metadata, reconcile_error>>

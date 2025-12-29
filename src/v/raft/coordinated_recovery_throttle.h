@@ -14,7 +14,7 @@
 #include "config/property.h"
 #include "metrics/metrics.h"
 #include "ssx/condition_variable.h"
-#include "utils/mutex.h"
+#include "ssx/mutex.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
@@ -92,7 +92,7 @@ private:
     private:
         ssize_t _available_units{0};
         ssx::condition_variable _cv;
-        mutex _mutex{"recovery_throttle"};
+        ssx::mutex _mutex{"recovery_throttle"};
         /// Counter tracking the total bytes throttled.
         size_t _waiting_bytes{0};
         /// Counter tracking the total bytes admitted since the capacity

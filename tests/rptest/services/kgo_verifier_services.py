@@ -1283,6 +1283,15 @@ class KgoVerifierMultiService(Service):
         self._topics: Sequence[Topic] = [t.topic for t in topics]
         self._services: Sequence[KgoVerifierService] = services
 
+    def _assign_node(
+        self, t: KgoVerifierParams, i: int, nodes: list[ClusterNode] | None
+    ) -> list[ClusterNode] | None:
+        if t.node is not None:
+            return [t.node]
+        elif nodes is None:
+            return None
+        return [nodes[i % len(nodes)]]
+
     def _assigned_services(self, node: ClusterNode) -> Sequence[KgoVerifierService]:
         return [
             svc for svc in self._services if node.name in [n.name for n in svc.nodes]
@@ -1292,7 +1301,9 @@ class KgoVerifierMultiService(Service):
         if clean:
             self.clean_node(node, **kwargs)
         for s in self._assigned_services(node):
-            print(f"start {s._topic}")
+            self._redpanda.logger.info(
+                f"Starting kgo-verifier service for '{s._topic}' on {node.name}"
+            )
             s.start_node(node, clean=False, **kwargs)
 
     def wait_node(self, node: ClusterNode, timeout_sec: float | None = None) -> Any:
@@ -1334,7 +1345,7 @@ class KgoVerifierMultiProducer(KgoVerifierMultiService):
                 topic.topic,
                 topic.msg_size,
                 topic.msg_count,
-                custom_node=[topic.node] if topic.node is not None else custom_node,
+                custom_node=self._assign_node(topic, i, custom_node),
                 batch_max_bytes=topic.batch_max_bytes,
                 fake_timestamp_ms=topic.fake_timestamp_ms,
                 fake_timestamp_step_ms=topic.fake_timestamp_step_ms,
@@ -1357,7 +1368,7 @@ class KgoVerifierMultiProducer(KgoVerifierMultiService):
                 debug_logs=debug_logs,
                 trace_logs=trace_logs,
             )
-            for topic in topics
+            for i, topic in enumerate(topics)
         ]
         super().__init__(context, redpanda, topics, producers, custom_node)
 
@@ -1412,8 +1423,8 @@ class KgoVerifierMultiSeqConsumer(KgoVerifierMultiService):
                 redpanda,
                 topic.topic,
                 max_msgs=topic.seq_max_msgs,
-                nodes=[topic.node] if topic.node is not None else custom_node,
-                producer=producer,
+                nodes=self._assign_node(topic, i, custom_node),
+                producer=producer.producers[i],
                 max_throughput_mb=topic.consume_throughput_mb,
                 loop=loop,
                 continuous=continuous,
@@ -1427,7 +1438,7 @@ class KgoVerifierMultiSeqConsumer(KgoVerifierMultiService):
                 debug_logs=debug_logs,
                 trace_logs=trace_logs,
             )
-            for topic, producer in zip(topics, producer.producers)
+            for i, topic in enumerate(topics)
         ]
 
         super().__init__(context, redpanda, topics, consumers, custom_node=custom_node)
@@ -1457,14 +1468,14 @@ class KgoVerifierMultiRandomConsumer(KgoVerifierMultiService):
                 rand_read_msgs,
                 parallel,
                 use_transactions=topic.use_transactions,
-                nodes=[topic.node] if topic.node is not None else custom_node,
+                nodes=self._assign_node(topic, i, custom_node),
                 username=username,
                 password=password,
                 enable_tls=enable_tls,
                 debug_logs=debug_logs,
                 trace_logs=trace_logs,
             )
-            for topic in topics
+            for i, topic in enumerate(topics)
         ]
 
         super().__init__(context, redpanda, topics, consumers, custom_node=custom_node)
@@ -1504,14 +1515,14 @@ class KgoVerifierMultiConsumerGroupConsumer(KgoVerifierMultiService):
                 use_transactions=topic.use_transactions,
                 compacted=topic.compacted,
                 validate_latest_values=validate_latest_values,
-                nodes=[topic.node] if topic.node is not None else custom_node,
+                nodes=self._assign_node(topic, i, custom_node),
                 username=username,
                 password=password,
                 enable_tls=enable_tls,
                 debug_logs=debug_logs,
                 trace_logs=trace_logs,
             )
-            for topic in topics
+            for i, topic in enumerate(topics)
         ]
 
         super().__init__(context, redpanda, topics, consumers, custom_node=custom_node)

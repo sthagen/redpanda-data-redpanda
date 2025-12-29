@@ -99,8 +99,7 @@ ss::future<> compaction_committer::compaction_job::finalize(
 void compaction_committer::compaction_job::cancel_job() {
     _as.request_abort();
     _upload_sem.broken();
-    _upload_cv.broken();
-    _metadata_builder_mutex.broken();
+    _last_upload_scheduled.broken();
 }
 
 ss::future<> compaction_committer::compaction_job::remove_staging_files() {
@@ -135,7 +134,7 @@ ss::future<> compaction_committer::compaction_job::upload_loop() {
         }
     }
 
-    _upload_cv.signal();
+    _last_upload_scheduled.signal();
 }
 
 void compaction_committer::compaction_job::start_upload_loop() {
@@ -157,19 +156,8 @@ compaction_committer::compaction_job::do_upload(
   staging_file* file,
   object_builder::object_info info,
   metastore::object_metadata::ntp_metadata ntp_md) {
-    auto holder_res = co_await ss::coroutine::as_future(
-      _metadata_builder_mutex.get_units());
-    if (holder_res.failed()) {
-        auto e = holder_res.get_exception();
-        co_return std::unexpected(
-          error{
-            .t = error::type::shutdown_failure, .msg = fmt::format("{}", e)});
-    }
-
-    auto holder = std::move(holder_res).get();
-
     auto& metadata_builder = _metadata_builder;
-    auto oid_res = metadata_builder->get_or_create_object_for(_tp);
+    auto oid_res = metadata_builder->create_object_for(_tp);
     if (!oid_res.has_value()) {
         co_return std::unexpected(
           error{
@@ -246,7 +234,7 @@ void compaction_committer::compaction_job::upload_some() {
 
 ss::future<std::optional<ss::sstring>>
 compaction_committer::compaction_job::await_inflight_uploads() {
-    co_await _upload_cv.wait();
+    co_await _last_upload_scheduled.wait();
 
     auto inflight_uploads = std::exchange(_inflight_uploads, {});
 
@@ -283,9 +271,17 @@ compaction_committer::compaction_job::do_compact_objects(
 }
 
 ss::future<>
-compaction_committer::compaction_job::compact_objects_without_update() {
-    auto replace_res = co_await do_compact_objects(
-      metastore::compaction_map_t{});
+compaction_committer::compaction_job::compact_objects_without_update(
+  metastore::compaction_epoch expected_compaction_epoch) {
+    auto compaction_update = metastore::compaction_update{
+      .new_cleaned_ranges = {},
+      .removed_tombstones_ranges = {},
+      .cleaned_at = model::timestamp::missing(),
+      .expected_compaction_epoch = expected_compaction_epoch};
+
+    metastore::compaction_map_t compact_map;
+    compact_map.emplace(_tp, std::move(compaction_update));
+    auto replace_res = co_await do_compact_objects(std::move(compact_map));
     if (replace_res.has_value()) {
         vlog(
           compaction_log.info,
@@ -339,7 +335,8 @@ ss::future<> compaction_committer::compaction_job::compact_objects_with_update(
           commit_res.error());
         // We couldn't commit the metastore update, but we should at least try
         // to replace the objects so as not to discard our hard IO work.
-        co_return co_await compact_objects_without_update();
+        co_return co_await compact_objects_without_update(
+          expected_compaction_epoch);
     }
 }
 
@@ -392,7 +389,8 @@ ss::future<> compaction_committer::compaction_job::do_finalize(
         // If an error was encountered during committing, don't attempt to
         // make a compaction update for `compact_objects` with the
         // `metastore`- just replace the objects.
-        co_return co_await compact_objects_without_update();
+        co_return co_await compact_objects_without_update(
+          expected_compaction_epoch);
     }
 
     auto res = std::move(fut).get();
@@ -403,7 +401,8 @@ ss::future<> compaction_committer::compaction_job::do_finalize(
           "storage: {}",
           _id,
           res.value());
-        co_return co_await compact_objects_without_update();
+        co_return co_await compact_objects_without_update(
+          expected_compaction_epoch);
     }
 
     co_return co_await compact_objects_with_update(

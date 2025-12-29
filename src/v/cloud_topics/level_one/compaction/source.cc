@@ -14,6 +14,7 @@
 #include "cloud_topics/level_one/compaction/logger.h"
 #include "cloud_topics/level_one/compaction/sink.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
+#include "cloud_topics/level_one/metastore/extent_metadata_reader.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "cloud_topics/log_reader_config.h"
 #include "compaction/key.h"
@@ -99,32 +100,18 @@ private:
     std::optional<model::offset> _max_indexed_offset{std::nullopt};
 };
 
-// Returns extent regions that bound the provided `dirty_range`.
-// For example, if the passed `dirty_range` is `[10,100]` and the provided
+// Aligns the passed extent to the provided dirty range.
+// For example, if the passed `dirty_range` is `[10,100]`, and some example
 // `extents` are `[[0, 20], [21, 39], [40, 71], [72, 93], [94, 110]]`, the
-// container returned would be expected to hold `[[10, 20], [21, 39], [40, 71],
-// [72, 93], [94, 100]]`.
-chunked_vector<offset_interval_set::interval> intervals_for_dirty_range(
+// return value would be expected to be `[[10, 20], [21, 39], [40, 71], [72,
+// 93], [94, 100]]` (respectively).
+void align_extent_to_dirty_range(
   const offset_interval_set::interval& dirty_range,
-  const metastore::extent_metadata_vec& extents) {
-    chunked_vector<offset_interval_set::interval> result;
-    for (const auto& extent : extents) {
-        if (extent.base_offset > dirty_range.last_offset) {
-            break;
-        }
-
-        auto base = kafka::offset{
-          std::max(dirty_range.base_offset(), extent.base_offset())};
-        auto last = kafka::offset{
-          std::min(dirty_range.last_offset(), extent.last_offset())};
-
-        if (base <= last) {
-            result.push_back({.base_offset = base, .last_offset = last});
-        }
-    }
-
-    result.shrink_to_fit();
-    return result;
+  metastore::extent_metadata& extent) {
+    extent.base_offset = kafka::offset{
+      std::max(dirty_range.base_offset(), extent.base_offset())};
+    extent.last_offset = kafka::offset{
+      std::min(dirty_range.last_offset(), extent.last_offset())};
 }
 
 bool should_compact_extent(
@@ -145,7 +132,7 @@ compaction_source::compaction_source(
   model::topic_id_partition tp,
   const chunked_vector<offset_interval_set::interval>& dirty_range_intervals,
   const offset_interval_set& removable_tombstone_ranges,
-  metastore::extent_metadata_vec extents,
+  kafka::offset start_offset,
   compaction::key_offset_map* map,
   std::chrono::milliseconds min_compaction_lag_ms,
   metastore* metastore,
@@ -156,7 +143,16 @@ compaction_source::compaction_source(
   , _tp(tp)
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
-  , _extents(std::move(extents))
+  , _start_offset(start_offset)
+  , _dirty_range_it(_dirty_range_intervals.crbegin())
+  , _extent_reader(
+      metastore,
+      tp,
+      _start_offset,
+      kafka::offset::max(),
+      extent_metadata_reader::iteration_direction::forwards,
+      as)
+  , _extent_iterator(_extent_reader.generator())
   , _map(map)
   , _min_compaction_lag_ms(min_compaction_lag_ms)
   , _metastore(metastore)
@@ -164,12 +160,7 @@ compaction_source::compaction_source(
   , _as(as)
   , _state(state) {}
 
-ss::future<> compaction_source::initialize() {
-    _dirty_range_it = _dirty_range_intervals.crbegin();
-    _extents_it = _extents.cbegin();
-    _extents_end_it = _extents.cend();
-    co_return;
-}
+ss::future<> compaction_source::initialize() { co_return; }
 
 ss::future<ss::stop_iteration> compaction_source::map_building_iteration() {
     if (preempted()) {
@@ -182,18 +173,35 @@ ss::future<ss::stop_iteration> compaction_source::map_building_iteration() {
 
     const auto& dirty_range = *_dirty_range_it;
 
-    auto extent_aligned_ranges = intervals_for_dirty_range(
-      dirty_range, _extents);
+    auto dirty_range_extent_reader = extent_metadata_reader(
+      _metastore,
+      _tp,
+      dirty_range.base_offset,
+      dirty_range.last_offset,
+      extent_metadata_reader::iteration_direction::backwards,
+      _as);
+    auto gen = dirty_range_extent_reader.generator();
     bool map_is_full = false;
     // Worth noting that iteration over these extent aligned intervals is not
     // necessary for correctness- however, it provides a natural chunking of the
     // offset ranges for our reads, and also provides fine-grained intervals
     // over which we can indicate `has_tombstones` for the ranges.
-    for (auto it = extent_aligned_ranges.crbegin();
-         it != extent_aligned_ranges.crend();
-         ++it) {
-        const auto& start_offset = it->base_offset;
-        const auto& max_offset = it->last_offset;
+    while (auto extent_res_opt = co_await gen()) {
+        auto& extent_res = extent_res_opt->get();
+        if (!extent_res.has_value()) {
+            vlog(
+              compaction_log.warn,
+              "Error fetching extent metadata during map building iteration: "
+              "{}",
+              extent_res.error());
+            co_return ss::stop_iteration::yes;
+        }
+
+        auto extent = std::move(extent_res).value();
+
+        align_extent_to_dirty_range(dirty_range, extent);
+        const auto& start_offset = extent.base_offset;
+        const auto& max_offset = extent.last_offset;
 
         cloud_topic_log_reader_config config(start_offset, max_offset, _as);
         auto rdr = model::record_batch_reader(
@@ -221,12 +229,8 @@ ss::future<ss::stop_iteration> compaction_source::map_building_iteration() {
         }
 
         if (map_is_full) {
-            break;
+            co_return ss::stop_iteration::yes;
         }
-    }
-
-    if (map_is_full) {
-        co_return ss::stop_iteration::yes;
     }
 
     ++_dirty_range_it;
@@ -240,11 +244,25 @@ ss::future<ss::stop_iteration> compaction_source::deduplication_iteration(
         co_return ss::stop_iteration::yes;
     }
 
-    if (_extents_it == _extents_end_it) {
+    auto extent_res_opt = co_await _extent_iterator();
+    if (!extent_res_opt.has_value()) {
+        // We finished iterating.
         co_return ss::stop_iteration::yes;
     }
 
-    auto& extent = *_extents_it;
+    auto& extent_res = extent_res_opt->get();
+
+    if (!extent_res.has_value()) {
+        // We received an error from the metastore.
+        vlog(
+          compaction_log.warn,
+          "Error fetching extent metadata during deduplication iteration: {}",
+          extent_res.error());
+        co_return ss::stop_iteration::yes;
+    }
+
+    auto extent = std::move(extent_res).value();
+
     if (should_compact_extent(extent, _min_compaction_lag_ms)) {
         kafka::offset start_offset{extent.base_offset};
         kafka::offset last_offset{extent.last_offset};
@@ -278,8 +296,6 @@ ss::future<ss::stop_iteration> compaction_source::deduplication_iteration(
               stats);
         }
     }
-
-    ++_extents_it;
 
     co_return ss::stop_iteration::no;
 }

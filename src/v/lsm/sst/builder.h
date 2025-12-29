@@ -20,18 +20,20 @@
 #include "lsm/core/internal/options.h"
 #include "lsm/io/persistence.h"
 
-#include <seastar/core/iostream.hh>
-
 namespace lsm::sst {
 
 // builder provides the interface used to build a Sorted String Table (SST),
 // which is an immutable and sorted map from keys to values.
 class builder {
 public:
+    struct options {
+        size_t block_size = internal::options::default_sst_block_size;
+        size_t filter_period = internal::options::default_sst_filter_period;
+        compression_type compression = compression_type::none;
+    };
+
     // Construct a new builder that will write to the given file.
-    builder(
-      std::unique_ptr<io::sequential_file_writer>,
-      ss::lw_shared_ptr<internal::options> o);
+    builder(std::unique_ptr<io::sequential_file_writer>, options);
 
     // Add key, value to the table being constructed.
     // REQUIRES: key is after any previously added key according to comparator.
@@ -63,7 +65,7 @@ private:
     block::handle _pending_handle;
     internal::key _last_key;
     std::unique_ptr<io::sequential_file_writer> _writer;
-    ss::lw_shared_ptr<internal::options> _opts;
+    options _opts;
     std::optional<block::filter_builder> _filter;
     bool _pending_index_entry = false;
 };

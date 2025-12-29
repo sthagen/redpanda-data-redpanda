@@ -376,9 +376,9 @@ ss::future<size_t> group_manager::delete_offsets(
     }
 
     /*
-     * replicate tombstone records to the group's partition. avoid acks=all
-     * because the process is largely best-effort and the in-memory state was
-     * already cleaned up.
+     * replicate tombstone records to the group's partition. It is fine to use
+     * quorum_ack as even though this operation is not critical it is
+     * interleaved with quorum ack replicate calls.
      */
     auto batch = std::move(builder).build();
 
@@ -386,7 +386,7 @@ ss::future<size_t> group_manager::delete_offsets(
         auto result = co_await group->partition()->raft()->replicate(
           std::move(batch),
           raft::replicate_options(
-            raft::consistency_level::leader_ack, group->term()));
+            raft::consistency_level::quorum_ack, group->term()));
 
         if (result) {
             vlog(

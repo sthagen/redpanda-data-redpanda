@@ -18,9 +18,9 @@
 #include "features/feature_table.h"
 #include "model/metadata.h"
 #include "rpc/fwd.h"
+#include "ssx/mutex.h"
 #include "ssx/semaphore.h"
 #include "storage/disk.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
@@ -246,7 +246,7 @@ private:
     std::optional<size_t> _bytes_in_cloud_storage;
 
     ss::gate _gate;
-    mutex _refresh_mutex{"health_monitor_backend::refresh"};
+    ssx::mutex _refresh_mutex{"health_monitor_backend::refresh"};
     ss::sharded<node::local_monitor>& _local_monitor;
     model::node_id _self;
 
@@ -254,7 +254,7 @@ private:
       _node_callbacks;
     cluster::notification_id_type _next_callback_id{0};
 
-    mutex _report_collection_mutex{"health_report_collection"};
+    ssx::mutex _report_collection_mutex{"health_report_collection"};
 
     friend struct health_report_accessor;
 };

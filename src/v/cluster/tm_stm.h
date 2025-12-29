@@ -24,8 +24,8 @@
 #include "model/timestamp.h"
 #include "raft/fwd.h"
 #include "raft/persisted_stm.h"
+#include "ssx/mutex.h"
 #include "storage/ntp_config.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/sharded.hh>
 
@@ -333,7 +333,7 @@ public:
         return _raft->ntp().tp.partition;
     }
 
-    mutex& get_tx_thrashing_lock() { return _tx_thrashing_lock; }
+    ssx::mutex& get_tx_thrashing_lock() { return _tx_thrashing_lock; }
 
     size_t tx_cache_size() const;
 
@@ -396,7 +396,7 @@ private:
     config::binding<std::chrono::milliseconds> _transactional_id_expiration;
     chunked_hash_map<model::producer_identity, kafka::transactional_id>
       _pid_tx_id;
-    chunked_hash_map<kafka::transactional_id, ss::lw_shared_ptr<mutex>>
+    chunked_hash_map<kafka::transactional_id, ss::lw_shared_ptr<ssx::mutex>>
       _tx_locks;
 
     struct tx_wrapper {
@@ -437,7 +437,7 @@ private:
 
     chunked_hash_map<kafka::transactional_id, tx_wrapper> _transactions;
 
-    mutex _tx_thrashing_lock{"tm_stm::tx_thrashing_lock"};
+    ssx::mutex _tx_thrashing_lock{"tm_stm::tx_thrashing_lock"};
     prefix_logger _ctx_log;
 };
 

@@ -323,10 +323,10 @@ struct compaction_state {
     ss::future<> open_current_builder(
       internal::file_handle h,
       io::data_persistence* p,
-      ss::lw_shared_ptr<internal::options> opts) {
+      sst::builder::options opts) {
         outputs.emplace_back(h);
         auto w = co_await p->open_sequential_writer(h);
-        builder.emplace(std::move(w), std::move(opts));
+        builder.emplace(std::move(w), opts);
     }
     ss::future<> finish_current_builder() {
         auto b = std::exchange(builder, std::nullopt);
@@ -394,6 +394,11 @@ ss::future<> impl::run_background_compaction() {
     };
     auto output_level = compaction.level() + 1_level;
     auto max_file_size = _opts->levels[output_level].max_file_size;
+    sst::builder::options sst_options{
+      .block_size = _opts->sst_block_size,
+      .filter_period = _opts->sst_filter_period,
+      .compression = _opts->levels[output_level].compression,
+    };
     try {
         auto input = co_await _versions->make_input_iterator(&compaction);
         std::optional<internal::key> current_key;
@@ -443,7 +448,7 @@ ss::future<> impl::run_background_compaction() {
                         .epoch = _opts->database_epoch,
                       },
                       _persistence.data.get(),
-                      _opts);
+                      sst_options);
                 }
                 auto& current = state.current_output();
                 if (state.builder->num_entries() == 0) {
@@ -498,11 +503,16 @@ ss::future<> impl::flush_memtable() {
                    ? 0_level
                    : v->pick_level_for_memtable_output(
                        imm->min_key().user_key(), imm->max_key().user_key());
+    sst::builder::options sst_options{
+      .block_size = _opts->sst_block_size,
+      .filter_period = _opts->sst_filter_period,
+      .compression = _opts->levels[level].compression,
+    };
     auto result = co_await build_table(
       _persistence.data.get(),
       {.id = id, .epoch = _opts->database_epoch},
       imm->create_iterator(),
-      _opts,
+      sst_options,
       &_as);
     if (!result) {
         _versions->reuse_file_id(id);

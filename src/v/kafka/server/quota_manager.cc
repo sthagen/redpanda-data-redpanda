@@ -166,7 +166,7 @@ quota_manager::quota_manager(
         _global_map = global_map_t{};
 
         _gc_timer.set_callback([this]() { gc(); });
-        _global_map_mutex = mutex{"quota_manager/global_map"};
+        _global_map_mutex = ssx::mutex{"quota_manager/global_map"};
     }
 }
 

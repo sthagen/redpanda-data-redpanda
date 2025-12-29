@@ -19,8 +19,8 @@
 #include "lsm/core/internal/iterator.h"
 #include "lsm/core/internal/logger.h"
 #include "lsm/sst/reader.h"
+#include "ssx/mutex.h"
 #include "ssx/work_queue.h"
-#include "utils/mutex.h"
 #include "utils/s3_fifo.h"
 
 #include <seastar/core/coroutine.hh>
@@ -44,19 +44,19 @@ public:
     reader_lock_guard& operator=(reader_lock_guard&&) noexcept = default;
 
     static ss::future<reader_lock_guard> acquire(
-      chunked_hash_map<internal::file_id, std::unique_ptr<mutex>>* mu_map,
+      chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>>* mu_map,
       internal::file_id id) {
         auto it = mu_map->find(id);
-        mutex* mu = nullptr;
+        ssx::mutex* mu = nullptr;
         if (it == mu_map->end()) {
             auto inserted = mu_map->emplace(
-              id, std::make_unique<mutex>("lsm::db::reader_lock_guard"));
+              id, std::make_unique<ssx::mutex>("lsm::db::reader_lock_guard"));
             vassert(inserted.second, "expected mutex to be inserted");
             mu = inserted.first->second.get();
         } else {
             mu = it->second.get();
         }
-        mutex::units units = co_await mu->get_units();
+        ssx::mutex::units units = co_await mu->get_units();
         co_return reader_lock_guard(id, mu_map, mu, std::move(units));
     }
 
@@ -72,17 +72,17 @@ public:
 private:
     reader_lock_guard(
       internal::file_id id,
-      chunked_hash_map<internal::file_id, std::unique_ptr<mutex>>* mu_map,
-      mutex* mu,
-      mutex::units underlying)
+      chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>>* mu_map,
+      ssx::mutex* mu,
+      ssx::mutex::units underlying)
       : _id(id)
       , _mu_map(mu_map)
       , _mu(mu)
       , _underlying(std::move(underlying)) {}
     internal::file_id _id;
-    chunked_hash_map<internal::file_id, std::unique_ptr<mutex>>* _mu_map;
-    mutex* _mu;
-    mutex::units _underlying;
+    chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>>* _mu_map;
+    ssx::mutex* _mu;
+    ssx::mutex::units _underlying;
 };
 } // namespace
 
@@ -323,7 +323,7 @@ private:
     }
 
     io::data_persistence* _persistence;
-    chunked_hash_map<internal::file_id, std::unique_ptr<mutex>> _mu_map;
+    chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>> _mu_map;
     chunked_hash_map<internal::file_id, entry_t> _map;
     cache_t _cache;
     // Entries that have been "soft evicted" from the cache. We keep them around

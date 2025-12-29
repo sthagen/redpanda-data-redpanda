@@ -614,36 +614,38 @@ struct get_compaction_mcco_request
 struct get_compaction_mcco_reply
   : serde::envelope<
       get_compaction_mcco_reply,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     using is_success = ss::bool_class<struct get_compaction_mcco_tag>;
 
     fmt::iterator format_to(fmt::iterator it) const {
-        return fmt::format_to(it, "mcco: {}", mcco);
+        return fmt::format_to(it, "mcco: {}, mxfo: {}", mcco, mxfo);
     }
 
-    auto serde_fields() { return std::tie(mcco); }
+    auto serde_fields() { return std::tie(mcco, mxfo); }
 
     std::optional<model::offset> mcco{};
+    std::optional<model::offset> mxfo{};
 };
 
 struct distribute_compaction_mtro_request
   : serde::envelope<
       distribute_compaction_mtro_request,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     fmt::iterator format_to(fmt::iterator it) const {
         return fmt::format_to(
           it,
-          "{{node_id: {}, target_node_id: {}, group: {}, mtro: {}}}",
+          "{{node_id: {}, target_node_id: {}, group: {}, mtro: {}, mxro: {}}}",
           node_id,
           target_node_id,
           group,
-          mtro);
+          mtro,
+          mxro);
     }
 
     auto serde_fields() {
-        return std::tie(node_id, target_node_id, group, mtro);
+        return std::tie(node_id, target_node_id, group, mtro, mxro);
     }
 
     raft::group_id target_group() const { return group; }
@@ -654,6 +656,7 @@ struct distribute_compaction_mtro_request
     vnode target_node_id;
     raft::group_id group;
     model::offset mtro{};
+    model::offset mxro{};
 };
 
 struct distribute_compaction_mtro_reply

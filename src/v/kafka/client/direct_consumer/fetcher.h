@@ -21,7 +21,7 @@
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "model/record.h"
-#include "utils/mutex.h"
+#include "ssx/mutex.h"
 #include "utils/prefix_logger.h"
 
 #include <seastar/core/condition-variable.hh>
@@ -363,7 +363,7 @@ private:
     topic_partition_map<model::partition_id> _partitions_to_forget;
     ss::condition_variable _partitions_updated;
     ss::gate _gate;
-    mutex _state_lock;
+    ssx::mutex _state_lock;
     /**
      * A fetcher epoch will be incremented and assigned to every assigned
      * partition. This allows for different assignment instances of a tp to be

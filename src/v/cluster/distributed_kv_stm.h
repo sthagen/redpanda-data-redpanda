@@ -442,7 +442,7 @@ private:
     size_t _default_max_partitions;
     const bool _is_routing_partition;
     ss::gate _gate;
-    mutex _repartitioning_lock{"distributed_kv_stm::repartitioning_lock"};
+    ssx::mutex _repartitioning_lock{"distributed_kv_stm::repartitioning_lock"};
 };
 
 } // namespace cluster

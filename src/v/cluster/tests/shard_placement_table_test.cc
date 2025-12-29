@@ -805,7 +805,8 @@ private:
         }
     }
 
-    ss::future<> assign_ntp(const model::ntp& ntp, mutex::units& /*lock*/) {
+    ss::future<>
+    assign_ntp(const model::ntp& ntp, ssx::mutex::units& /*lock*/) {
         std::optional<shard_placement_target> target;
         if (auto it = _ntpt.ntp2meta.find(ntp); it != _ntpt.ntp2meta.end()) {
             target = shard_placement_target(
@@ -842,7 +843,7 @@ private:
     bool _enable_persistence = false;
     chunked_hash_set<model::ntp> _to_assign;
     ssx::event _wakeup_event{"shard_assigner"};
-    mutex _mtx{"shard_assigner"};
+    ssx::mutex _mtx{"shard_assigner"};
     ss::gate _gate;
 };
 

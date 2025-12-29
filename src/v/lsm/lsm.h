@@ -127,10 +127,14 @@ struct options {
     };
     // The compression to use for SST blocks.
     //
-    // This value may be changed between different opens of the database.
+    // This value may be changed between different opens of the database (old
+    // data is left as is).
     //
-    // TODO: support different compression types per level
-    compression_type compression = compression_type::none;
+    // More elements in this vector are ignored, and if there are more levels
+    // than elements, the last element is repeated for the rest of the levels.
+    //
+    // If empty all levels are uncompressed.
+    std::vector<compression_type> compression_by_level;
 };
 
 class write_batch;

@@ -349,6 +349,10 @@ class KgoVerifierMultiNodeSelfTest(PreallocNodesTest):
     @skip_debug_mode
     @cluster(num_nodes=5)
     def test_kgo_verifier_multi_node(self) -> None:
+        """
+        Test KgoVerifierMulti* with multiple preallocated nodes, including an explicit
+        node assignment with each KgoVerifierParams.
+        """
         topics = [
             KgoVerifierParams(
                 TopicSpec(
@@ -369,6 +373,65 @@ class KgoVerifierMultiNodeSelfTest(PreallocNodesTest):
                 ],
                 self.preallocated_nodes,
             )
+        ]
+
+        for topic in topics:
+            self.client().create_topic(cast(TopicSpec, topic.topic))
+
+        producer = KgoVerifierMultiProducer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+        )
+        producer.start()
+        producer.wait_for_acks(
+            [t.msg_count for t in topics],
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+        producer.wait_for_offset_map()
+
+        seq_consumer = KgoVerifierMultiSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            topics,
+            producer=producer,
+            custom_node=self.preallocated_nodes,
+            debug_logs=True,
+            trace_logs=True,
+        )
+        seq_consumer.start(clean=False)
+
+        producer.wait(timeout_sec=60)
+        seq_consumer.wait(timeout_sec=60)
+
+    @skip_debug_mode
+    @cluster(num_nodes=5)
+    def test_kgo_verifier_multi_node_autoassign(self) -> None:
+        """
+        Test KgoVerifierMulti* with multiple preallocated nodes, omitting the explicit
+        node assignments. KgoVerifierMultiService should assign each producer or consumer
+        to exactly one of the preallocated nodes in a round robin fashion.
+        """
+        topics = [
+            KgoVerifierParams(
+                TopicSpec(
+                    name=t,
+                    partition_count=16,
+                    retention_bytes=16 * 1024 * 1024,
+                    segment_bytes=1024 * 1024,
+                ),
+                msg_size=random.randint(2**13, 2**14),
+                msg_count=random.randint(800, 1200),
+                group_name=f"group-{t}",
+            )
+            for t in [
+                "test-1",
+                "test-2",
+                "test-3",
+            ]
         ]
 
         for topic in topics:

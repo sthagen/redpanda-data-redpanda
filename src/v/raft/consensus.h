@@ -41,11 +41,11 @@
 #include "raft/types.h"
 #include "raft/voter_priority_tracker.h"
 #include "ssx/condition_variable.h"
+#include "ssx/mutex.h"
 #include "ssx/semaphore.h"
 #include "storage/log.h"
 #include "storage/snapshot.h"
 #include "storage/types.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/sharded.hh>
@@ -892,14 +892,14 @@ private:
      * reverse order.
      */
     /// guards from concurrent election where this instance is a candidate
-    mutex _election_lock{"consensus::election_lock"};
+    ssx::mutex _election_lock{"consensus::election_lock"};
     /// all raft operations must happen exclusively since the common case
     /// is for the operation to touch the disk
-    mutex _op_lock{"consensus::op_lock"};
+    ssx::mutex _op_lock{"consensus::op_lock"};
     /// since snapshot state is orthogonal to raft state when writing snapshot
     /// it is enough to grab the snapshot mutex, there is no need to keep
     /// oplock
-    mutex _snapshot_lock{"consensus::snapshot_lock"};
+    ssx::mutex _snapshot_lock{"consensus::snapshot_lock"};
 
     /// used for notifying when commits happened to log
     event_manager _event_manager;

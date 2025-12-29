@@ -66,10 +66,10 @@ ss::future<std::optional<build_table_result>> build_table(
   io::data_persistence* persistence,
   internal::file_handle handle,
   std::unique_ptr<internal::iterator> iter,
-  ss::lw_shared_ptr<internal::options> opts,
+  sst::builder::options opts,
   ss::abort_source* as) {
     auto writer = co_await persistence->open_sequential_writer(handle);
-    sst::builder builder{std::move(writer), std::move(opts)};
+    sst::builder builder{std::move(writer), opts};
     auto result = co_await write_sst_file(std::move(iter), &builder, as)
                     .finally([&builder] { return builder.close(); });
     if (!result) {

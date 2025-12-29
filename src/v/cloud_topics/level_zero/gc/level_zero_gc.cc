@@ -478,6 +478,7 @@ level_zero_gc::try_to_collect() {
     // used to detect unsorted object listings
     seastar::sstring last_key;
     std::optional<cluster_epoch> last_epoch;
+    object_id::prefix_t last_prefix{0};
 
     for (const auto& object : candidate_objects.value().contents) {
         const auto object_epoch = object_path_factory::level_zero_path_to_epoch(
@@ -492,15 +493,30 @@ level_zero_gc::try_to_collect() {
             co_return std::unexpected(collection_error::invalid_object_name);
         }
 
-        // detect non-lexicographic ordering. this may indicate that GC will not
-        // operate efficiently with the underlying storage system. see the class
-        // comment for more details about what this means in practice.
+        const auto object_pfx = object_path_factory::level_zero_path_to_prefix(
+          object.key);
+
+        if (!object_pfx.has_value()) {
+            vlog(
+              cd_log.error,
+              "Unable to parse prefix during L0 GC: {}",
+              object_pfx.error());
+            co_return std::unexpected(collection_error::invalid_object_name);
+        }
+
+        // detect non-lexicographic ordering. this may indicate that GC will
+        // not operate efficiently with the underlying storage system. see
+        // the class comment for more details about what this means in
+        // practice.
         if (!last_epoch.has_value()) {
             last_key = object.key;
             last_epoch = object_epoch.value();
+            last_prefix = object_pfx.value();
         }
 
-        if (object_epoch.value() < last_epoch) {
+        if (
+          object_pfx.value() < last_prefix
+          || (object_pfx.value() == last_prefix && object_epoch.value() < last_epoch)) {
             constexpr std::chrono::minutes rate_limit{1};
             static seastar::logger::rate_limit rate(rate_limit);
             vloglr(
@@ -514,6 +530,7 @@ level_zero_gc::try_to_collect() {
 
         last_key = object.key;
         last_epoch = object_epoch.value();
+        last_prefix = object_pfx.value();
 
         // object's epoch is not yet eligible
         if (object_epoch.value() > max_gc_epoch.value()) {

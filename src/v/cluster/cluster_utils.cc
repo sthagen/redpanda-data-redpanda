@@ -271,7 +271,7 @@ partition_state get_partition_state(ss::lw_shared_ptr<partition> partition) {
     state.log_size_bytes = partition->size_bytes();
     state.non_log_disk_size_bytes = partition->non_log_disk_size_bytes();
     state.max_tombstone_removable_offset
-      = partition->log()->stm_manager()->max_removable_local_log_offset();
+      = partition->log()->stm_manager()->max_tombstone_remove_offset();
     state.is_read_replica_mode_enabled
       = partition->is_read_replica_mode_enabled();
     state.is_remote_fetch_enabled = partition->is_remote_fetch_enabled();

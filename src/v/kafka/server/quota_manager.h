@@ -15,8 +15,8 @@
 #include "container/chunked_hash_map.h"
 #include "kafka/server/atomic_token_bucket.h"
 #include "kafka/server/client_quota_translator.h"
+#include "ssx/mutex.h"
 #include "ssx/sharded_value.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -158,7 +158,7 @@ private:
     config::binding<std::chrono::milliseconds> _gc_freq;
     config::binding<std::chrono::milliseconds> _max_delay;
     ss::gate _gate;
-    std::optional<mutex> _global_map_mutex; // Only on shard 0
+    std::optional<ssx::mutex> _global_map_mutex; // Only on shard 0
 };
 
 } // namespace kafka

@@ -359,10 +359,9 @@ rpc::get_compaction_info_reply domain_manager::do_get_compaction_info(
         get_res->offsets_response.removable_tombstone_ranges),
       .dirty_ratio = get_res->dirty_ratio,
       .earliest_dirty_ts = get_res->earliest_dirty_ts,
-      .extents = meta_to_rpc_extent_metadata(
-        std::move(get_res->offsets_response.extents)),
-      .compaction_epoch = partition_state::compaction_epoch_t{
-        get_res->compaction_epoch()}};
+      .compaction_epoch
+      = partition_state::compaction_epoch_t{get_res->compaction_epoch()},
+      .start_offset = get_res->start_offset};
 }
 
 ss::future<rpc::get_compaction_info_reply>

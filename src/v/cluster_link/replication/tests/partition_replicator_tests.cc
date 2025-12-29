@@ -16,10 +16,10 @@
 #include "model/fundamental.h"
 #include "model/tests/random_batch.h"
 #include "ssx/future-util.h"
+#include "ssx/mutex.h"
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
 #include "test_utils/test.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/sleep.hh>
 
@@ -143,7 +143,7 @@ public:
 
     void notify_replicator_failure(model::term_id) final {}
 
-    ss::future<mutex::units> block_replication() {
+    ss::future<ssx::mutex::units> block_replication() {
         co_return co_await _replication_mu.get_units();
     }
 
@@ -175,7 +175,7 @@ public:
 
 private:
     model::ntp _ntp{"kafka", "test", model::partition_id(0)};
-    mutex _replication_mu{"test_replication"};
+    ssx::mutex _replication_mu{"test_replication"};
     bool _fail_replication = false;
     kafka::offset _start_offset{0};
     kafka::offset _last_replicated_offset;

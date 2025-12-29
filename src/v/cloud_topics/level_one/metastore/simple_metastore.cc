@@ -49,6 +49,13 @@ simple_object_builder::get_or_create_object_for(
     return pending_objects_.begin()->first;
 }
 
+std::expected<object_id, simple_object_builder::error>
+simple_object_builder::create_object_for(const model::topic_id_partition&) {
+    auto oid = create_object_id();
+    pending_objects_[oid] = {};
+    return oid;
+}
+
 std::expected<void, simple_object_builder::error>
 simple_object_builder::remove_pending_object(object_id oid) {
     auto it = pending_objects_.find(oid);
@@ -540,14 +547,6 @@ simple_metastore::get_compaction_offsets(
     auto& prt = prt_ref->get();
     compaction_offsets_response resp;
 
-    resp.extents.reserve(prt.extents.size());
-    for (const auto& extent : prt.extents) {
-        resp.extents.push_back(
-          {.base_offset = extent.base_offset,
-           .last_offset = extent.last_offset,
-           .max_timestamp = extent.max_timestamp});
-    }
-
     if (prt.start_offset >= prt.next_offset) {
         // The log is empty, nothing to compact.
         return resp;
@@ -702,9 +701,9 @@ simple_metastore::get_compaction_info(
         return std::unexpected(earliest_dirty_ts.error());
     }
 
-    auto offsets = get_compaction_offsets(state, tidp, ts);
-    if (!offsets.has_value()) {
-        return std::unexpected(offsets.error());
+    auto compact_offsets = get_compaction_offsets(state, tidp, ts);
+    if (!compact_offsets.has_value()) {
+        return std::unexpected(compact_offsets.error());
     }
 
     auto compaction_epoch = get_compaction_epoch(state, tidp);
@@ -712,11 +711,17 @@ simple_metastore::get_compaction_info(
         return std::unexpected(compaction_epoch.error());
     }
 
+    auto log_offsets = get_offsets(state, tidp);
+    if (!log_offsets.has_value()) {
+        return std::unexpected(log_offsets.error());
+    }
+
     return compaction_info_response{
       .dirty_ratio = dirty_ratio.value(),
       .earliest_dirty_ts = earliest_dirty_ts.value(),
-      .offsets_response = std::move(offsets).value(),
-      .compaction_epoch = compaction_epoch.value()};
+      .offsets_response = std::move(compact_offsets).value(),
+      .compaction_epoch = compaction_epoch.value(),
+      .start_offset = log_offsets.value().start_offset};
 }
 
 ss::future<std::expected<metastore::compaction_info_map, metastore::errc>>

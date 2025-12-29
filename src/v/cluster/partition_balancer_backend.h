@@ -19,7 +19,7 @@
 #include "features/enterprise_features.h"
 #include "model/fundamental.h"
 #include "raft/consensus.h"
-#include "utils/mutex.h"
+#include "ssx/mutex.h"
 
 #include <seastar/core/sharded.hh>
 
@@ -112,7 +112,7 @@ private:
     config::binding<size_t> _raft_learner_recovery_rate;
     config::binding<bool> _topic_aware;
 
-    mutex _lock{"partition_balancer_backend::lock"};
+    ssx::mutex _lock{"partition_balancer_backend::lock"};
     ss::gate _gate;
     ss::timer<clock_t> _timer;
     notification_id_type _topic_table_updates;

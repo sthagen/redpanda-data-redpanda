@@ -18,15 +18,13 @@
 
 namespace lsm::sst {
 
-builder::builder(
-  std::unique_ptr<io::sequential_file_writer> w,
-  ss::lw_shared_ptr<internal::options> opts)
+builder::builder(std::unique_ptr<io::sequential_file_writer> w, options opts)
   : _writer(std::move(w))
-  , _opts(std::move(opts)) {
-    if (_opts->sst_filter_period > 0) {
+  , _opts(opts) {
+    if (_opts.filter_period > 0) {
         _filter.emplace(
           block::filter_builder::options{
-            .filter_period = _opts->sst_filter_period,
+            .filter_period = _opts.filter_period,
           });
     }
 }
@@ -52,7 +50,7 @@ ss::future<> builder::add(internal::key key, iobuf value) {
     _last_key = key;
     _data_block.add(std::move(key), std::move(value));
     ++_added_entries;
-    if (_data_block.current_size_estimate() > _opts->sst_block_size) {
+    if (_data_block.current_size_estimate() > _opts.block_size) {
         co_await flush();
     }
 }
@@ -63,7 +61,7 @@ ss::future<> builder::flush() {
     }
     auto buf = _data_block.finish();
     _pending_handle = co_await write_raw_block(
-      std::move(buf), _opts->compression);
+      std::move(buf), _opts.compression);
     _pending_index_entry = true;
     if (_filter) {
         _filter->start_block(_written_bytes);
@@ -113,7 +111,7 @@ ss::future<> builder::finish() {
         meta_index_block.add(std::move(key), filter_block_handle.as_iobuf());
     }
     metaindex_block_handle = co_await write_raw_block(
-      meta_index_block.finish(), _opts->compression);
+      meta_index_block.finish(), _opts.compression);
 
     if (_pending_index_entry) {
         // TODO(lsm): See the TODO in builder::add

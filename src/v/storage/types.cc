@@ -62,6 +62,14 @@ void stm_manager::set_max_tombstone_remove_offset(model::offset o) {
     _max_tombstone_remove_offset = o;
 }
 
+model::offset stm_manager::max_tx_end_remove_offset() const {
+    return _max_tx_end_remove_offset;
+}
+
+void stm_manager::set_max_tx_end_remove_offset(model::offset o) {
+    _max_tx_end_remove_offset = o;
+}
+
 bool stm_manager::is_last_batch_for_idempotent_producer(
   const model::record_batch_header& hdr) const {
     if (!_tx_stm) {

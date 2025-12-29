@@ -1059,6 +1059,7 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
     compaction::compaction_config cfg(
       model::offset::max(),
       model::offset::max(),
+      model::offset::max(),
       std::nullopt,
       std::nullopt,
       as);

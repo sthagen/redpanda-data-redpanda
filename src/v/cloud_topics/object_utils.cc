@@ -25,6 +25,8 @@ constexpr auto level_zero_data_dir_str = "level_zero/data/";
 constexpr size_t epoch_digits = 18;
 static_assert(std::numeric_limits<int64_t>::digits10 == epoch_digits);
 
+constexpr size_t prefix_digits = 3;
+
 namespace cloud_topics {
 
 cloud_storage_clients::object_key
@@ -32,11 +34,13 @@ object_path_factory::level_zero_path(object_id id) {
     vassert(id.epoch() >= 0, "level zero object has negative epoch: {}", id);
     return cloud_storage_clients::object_key(
       ssx::sformat(
-        "{0}{2:0{1}}/{3}",
+        "{0}{5:0{4}}/{2:0{1}}/{3}",
         level_zero_data_dir_str,
         epoch_digits,
         id.epoch(),
-        id.name));
+        id.name,
+        prefix_digits,
+        id.prefix));
 }
 
 cloud_storage_clients::object_key object_path_factory::level_zero_data_dir() {
@@ -53,6 +57,13 @@ object_path_factory::level_zero_path_to_epoch(std::string_view key) {
           fmt::format("L0 object name missing prefix: {}", key));
     }
     name.remove_prefix(it + std::strlen(level_zero_data_dir_str));
+
+    if (name.size() < prefix_digits + 1) {
+        return std::unexpected(
+          fmt::format("L0 object name is too short: {}", key));
+    }
+    name.remove_prefix(prefix_digits + 1);
+
     if (name.size() < epoch_digits) {
         return std::unexpected(
           fmt::format("L0 object name is too short: {}", key));
@@ -70,6 +81,34 @@ object_path_factory::level_zero_path_to_epoch(std::string_view key) {
     }
 
     return cluster_epoch(epoch);
+}
+
+std::expected<object_id::prefix_t, std::string>
+object_path_factory::level_zero_path_to_prefix(std::string_view key) {
+    // find the level zero prefix and chop it off
+    auto name = key;
+    auto it = name.find(level_zero_data_dir_str);
+    if (it == std::string_view::npos) {
+        return std::unexpected(
+          fmt::format("L0 object name missing prefix: {}", key));
+    }
+    name.remove_prefix(it + std::strlen(level_zero_data_dir_str));
+
+    if (name.size() < prefix_digits + 1) {
+        return std::unexpected(
+          fmt::format("L0 object name is too short: {}", key));
+    }
+    name.remove_suffix(name.size() - prefix_digits);
+
+    // parse the prefix into a uint16_t
+    object_id::prefix_t pfx{0};
+    auto res = std::from_chars(name.data(), name.data() + name.size(), pfx);
+    if (res.ptr != name.data() + name.size() || res.ec != std::errc{}) {
+        return std::unexpected(
+          fmt::format("L0 object name has invalid prefix: {}", key));
+    }
+
+    return pfx;
 }
 
 } // namespace cloud_topics

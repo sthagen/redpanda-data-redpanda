@@ -191,6 +191,6 @@ private:
     cluster::controller_stm* _controller;
     features::feature_table* _features;
 
-    mutex _mu{"panda-link::frontend::mu"};
+    ssx::mutex _mu{"panda-link::frontend::mu"};
 };
 } // namespace cluster::cluster_link

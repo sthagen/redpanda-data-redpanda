@@ -28,6 +28,7 @@ public:
       const chunked_vector<offset_interval_set::interval>&,
       const offset_interval_set&,
       metastore::compaction_epoch,
+      kafka::offset,
       l1::io*,
       compaction_committer*,
       object_builder::options = {});
@@ -76,7 +77,12 @@ private:
     using interval_vec = chunked_vector<offset_interval_set::interval>;
     const interval_vec& _dirty_range_intervals;
     const offset_interval_set& _removable_tombstone_ranges;
+
+    // The expected compaction epoch for the log.
     const metastore::compaction_epoch _expected_compaction_epoch;
+
+    // The start offset of the log.
+    kafka::offset _start_offset;
 
     // The compaction job, if initialized, as returned by the `_committer`.
     compaction_committer::compaction_job* _job{nullptr};
@@ -96,9 +102,6 @@ private:
     };
 
     std::unique_ptr<compacted_object> _inflight_object{nullptr};
-
-    // The start offset of the log.
-    kafka::offset _start_offset{0};
 
     // The interval set that is populated by extents which have been read by the
     // `source` and written by the `sink`. This is important to know in order to

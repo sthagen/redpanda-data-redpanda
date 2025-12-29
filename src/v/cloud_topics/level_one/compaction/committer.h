@@ -19,7 +19,6 @@
 #include "container/chunked_circular_buffer.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
-#include "utils/mutex.h"
 #include "utils/uuid.h"
 
 class ReducerTestFixture;
@@ -138,7 +137,8 @@ public:
         // Essentially a call to `metastore->replace_objects()`. Used when we
         // were unable to put all the compaction updates in object storage, or
         // when the formed compaction update was rejected.
-        ss::future<> compact_objects_without_update();
+        ss::future<>
+          compact_objects_without_update(metastore::compaction_epoch);
 
         // Finalizes the compaction job through a request to
         // `metastore->compact_objects()`, using the provided cleaned ranges and
@@ -157,9 +157,6 @@ public:
 
         compaction_job_id _id;
         model::topic_id_partition _tp;
-        // TODO: remove when we have better primitives around "one tidp,
-        // multiple objects" for the `metadata_builder`.
-        mutex _metadata_builder_mutex{"metadata_builder_mutex"};
         // The `metadata_builder` that is receiving a stream of L1 objects
         // as they are pushed to the `committer` and continually building up
         // an update for the `metastore`.
@@ -168,7 +165,9 @@ public:
         // or when the job is marked as `finalized`.
         ssx::semaphore _upload_sem;
         ss::abort_source _as;
-        ss::condition_variable _upload_cv;
+        // Condition variable that is signalled when the last L1 object has been
+        // uploaded, and awaited upon within `await_inflight_uploads()`.
+        ss::condition_variable _last_upload_scheduled;
 
         compaction_committer* _committer;
         io* _io;

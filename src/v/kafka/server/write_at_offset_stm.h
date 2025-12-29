@@ -178,7 +178,7 @@ private:
     friend std::ostream& operator<<(std::ostream&, const term_offset&);
 
     std::optional<term_offset> _inflight_last_offset;
-    mutex _sync_lock;
+    ssx::mutex _sync_lock;
 };
 
 class write_at_offset_stm_factory : public cluster::state_machine_factory {

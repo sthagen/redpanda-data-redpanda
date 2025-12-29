@@ -81,6 +81,7 @@ compaction_sink::compaction_sink(
   const chunked_vector<offset_interval_set::interval>& dirty_range_intervals,
   const offset_interval_set& removable_tombstone_ranges,
   metastore::compaction_epoch expected_compaction_epoch,
+  kafka::offset start_offset,
   io* io,
   compaction_committer* committer,
   object_builder::options opts)
@@ -88,6 +89,7 @@ compaction_sink::compaction_sink(
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
   , _expected_compaction_epoch(expected_compaction_epoch)
+  , _start_offset(start_offset)
   , _io(io)
   , _committer(committer)
   , _opts(opts) {}
@@ -98,14 +100,11 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
 
     bool has_removable_tombstones = !_removable_tombstone_ranges.empty();
     bool has_dirty_ranges = !_dirty_range_intervals.empty();
-    bool should_compact = !ct_src._extents.empty()
-                          && (has_removable_tombstones || has_dirty_ranges);
+    bool should_compact = has_removable_tombstones || has_dirty_ranges;
 
     if (!should_compact) {
         co_return false;
     }
-
-    _start_offset = ct_src._extents.front().base_offset;
 
     _job = co_await _committer->begin_compaction_job(_tp);
 

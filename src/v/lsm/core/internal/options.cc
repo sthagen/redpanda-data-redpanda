@@ -11,15 +11,18 @@
 
 #include "lsm/core/internal/options.h"
 
+#include <utility>
+
 namespace lsm::internal {
 
 fmt::iterator options::level_config::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it,
-      "{{number:{},max_total_bytes:{},max_file_size:{}}}",
+      "{{number:{},max_total_bytes:{},max_file_size:{},compression:{}}}",
       number,
       max_total_bytes,
-      max_file_size);
+      max_file_size,
+      std::to_underlying(compression));
 }
 
 fmt::iterator options::format_to(fmt::iterator it) const {

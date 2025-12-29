@@ -17,8 +17,8 @@
 #include "cluster/shard_placement_table_probe.h"
 #include "cluster/types.h"
 #include "container/chunked_hash_map.h"
+#include "ssx/mutex.h"
 #include "storage/fwd.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/rwlock.hh>
 #include <seastar/core/sharded.hh>
@@ -309,7 +309,7 @@ private:
     // only on shard 0, _ntp2entry will hold targets for all ntps on this node.
     struct entry_t {
         std::optional<shard_placement_target> target;
-        mutex mtx;
+        ssx::mutex mtx;
 
         entry_t()
           : mtx("shard_placement_table") {}

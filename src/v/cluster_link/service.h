@@ -22,8 +22,8 @@
 #include "kafka/server/fwd.h"
 #include "model/fundamental.h"
 #include "rpc/fwd.h"
+#include "ssx/mutex.h"
 #include "ssx/work_queue.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
@@ -236,7 +236,7 @@ private:
     ssx::work_queue _queue;
 
     ss::abort_source _as;
-    mutex _shadow_link_config_mutex{"shadow_link/config"};
+    ssx::mutex _shadow_link_config_mutex{"shadow_link/config"};
 };
 
 std::unique_ptr<replication::data_source> make_default_data_source(

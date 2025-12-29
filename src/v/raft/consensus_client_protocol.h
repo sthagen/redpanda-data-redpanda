@@ -129,7 +129,7 @@ public:
     }
 
     /// For coordinating compaction leader requests its max cleanly compacted
-    /// offset from a follower
+    /// offset and max transaction-free offset from a follower
     ss::future<result<get_compaction_mcco_reply>> get_compaction_mcco(
       model::node_id target_node,
       get_compaction_mcco_request r,
@@ -139,7 +139,7 @@ public:
     }
 
     /// For coordinating compaction leader lets follower know the calculated max
-    /// tombstone removal offset
+    /// tombstone removal offset and max transaction removal offset
     ss::future<result<distribute_compaction_mtro_reply>>
     distribute_compaction_mtro(
       model::node_id target_node,

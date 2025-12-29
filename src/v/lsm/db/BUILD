@@ -112,8 +112,8 @@ redpanda_cc_library(
         "//src/v/lsm/core:exceptions",
         "//src/v/lsm/core/internal:logger",
         "//src/v/lsm/sst:reader",
+        "//src/v/ssx:mutex",
         "//src/v/ssx:work_queue",
-        "//src/v/utils:mutex",
         "//src/v/utils:s3_fifo",
     ],
     deps = [

@@ -1,4 +1,16 @@
-load("//bazel:test.bzl", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
+
+redpanda_test_cc_library(
+    name = "builders",
+    hdrs = [
+        "builders.h",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/cloud_topics/level_one/metastore",
+        "@seastar",
+    ],
+)
 
 redpanda_cc_gtest(
     name = "simple_metastore_test",
@@ -7,6 +19,7 @@ redpanda_cc_gtest(
         "simple_metastore_test.cc",
     ],
     deps = [
+        ":builders",
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/metastore:simple",
         "//src/v/test_utils:gtest",
@@ -121,6 +134,22 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/bytes:iobuf",
         "//src/v/cloud_topics/level_one/metastore:offset_interval_set",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "extent_metadata_reader_test",
+    timeout = "short",
+    srcs = [
+        "extent_metadata_reader_test.cc",
+    ],
+    deps = [
+        ":builders",
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/cloud_topics/level_one/metastore:extent_metadata_reader",
+        "//src/v/cloud_topics/level_one/metastore:simple",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
     ],

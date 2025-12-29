@@ -205,8 +205,8 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":mutex",
         "//src/v/base",
-        "//src/v/utils:mutex",
         "@seastar",
     ],
 )
@@ -285,5 +285,17 @@ redpanda_cc_library(
         ":future_util",
         "//src/v/utils:retry_chain_node",
         "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "mutex",
+    hdrs = [
+        "mutex.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":semaphore",
+        "//src/v/base",
     ],
 )

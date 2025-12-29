@@ -425,9 +425,9 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/raft",
+        "//src/v/ssx:mutex",
         "//src/v/ssx:sformat",
         "//src/v/test_utils:seastar_boost",
-        "//src/v/utils:mutex",
         "@boost//:test",
         "@fmt",
         "@seastar",
@@ -509,6 +509,7 @@ redpanda_cc_gtest(
         "//src/v/raft",
         "//src/v/raft/tests:raft_fixture",
         "//src/v/raft/tests:raft_fixture_retry_policy",
+        "//src/v/storage",
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:gtest",
         "@fmt",

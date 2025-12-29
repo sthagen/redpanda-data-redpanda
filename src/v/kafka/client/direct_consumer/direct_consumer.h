@@ -167,7 +167,7 @@ private:
 
     ss::future<> handle_metadata_update();
     ss::future<> update_fetchers(
-      mutex::units lock_holder,
+      ssx::mutex::units lock_holder,
       topic_partition_map<subscription> removals = {});
 
     fetcher& get_fetcher(model::node_id id);
@@ -204,7 +204,7 @@ private:
     configuration _config;
 
     // serialize updates to _subscriptions
-    mutex _subscriptions_lock{"direct_consumer::_subscriptions_lock"};
+    ssx::mutex _subscriptions_lock{"direct_consumer::_subscriptions_lock"};
     topic_partition_map<subscription> _subscriptions;
     chunked_hash_map<model::node_id, std::unique_ptr<fetcher>> _broker_fetchers;
     std::unique_ptr<data_queue> _fetched_data_queue;

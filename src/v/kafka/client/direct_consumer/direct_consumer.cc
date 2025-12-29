@@ -247,7 +247,7 @@ direct_consumer::get_source_offsets(model::topic_partition_view tp) const {
 }
 
 ss::future<> direct_consumer::update_fetchers(
-  [[maybe_unused]] mutex::units lock_holder,
+  [[maybe_unused]] ssx::mutex::units lock_holder,
   topic_partition_map<subscription> removals) {
     // do not update fetchers before the consumer is started
     if (!_started) {

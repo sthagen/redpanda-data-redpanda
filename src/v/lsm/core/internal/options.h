@@ -52,6 +52,12 @@ struct options {
         // longer compactions and longer latency/performance hiccups.
         size_t max_file_size;
 
+        // The compression type for SST blocks created in this level. In some
+        // cases this setting may be ignored, for example if there is a trivial
+        // compaction move and a file moves between levels without needing to be
+        // rewritten.
+        compression_type compression = compression_type::none;
+
         fmt::iterator format_to(fmt::iterator) const;
     };
 
@@ -168,9 +174,6 @@ struct options {
     // REQUIRED: this value must be a power of two
     constexpr static size_t default_sst_filter_period = 2_KiB;
     size_t sst_filter_period = default_sst_filter_period;
-
-    // The compression to use for SST blocks.
-    compression_type compression = compression_type::none;
 
     // We arrange to automatically compact after a file after a certain
     // number of seeks. Let's assume:

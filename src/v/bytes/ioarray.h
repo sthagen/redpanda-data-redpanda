@@ -75,7 +75,13 @@ public:
         std::array<std::string_view, 2> _views;
     };
 
-    // Create an uninitialized iovector where all the chunks are aligned.
+    // Create an ioarray by sharing the passed in to be buffers into
+    // a new ioarray.
+    //
+    // REQUIRES: All but the last buffer must be `max_chunk_size` in length.
+    static ioarray from_sized_buffers(std::span<ss::temporary_buffer<char>>);
+
+    // Create an uninitialized ioarray where all the chunks are aligned.
     // It's assumed that the alignment is a power of two less than
     // `max_chunk_size` and that size is a multiple of alignment.
     static ioarray aligned(size_t alignment, size_t size);

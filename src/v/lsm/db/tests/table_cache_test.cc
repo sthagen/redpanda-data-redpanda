@@ -11,7 +11,6 @@
 
 #include "base/seastarx.h"
 #include "lsm/core/internal/files.h"
-#include "lsm/core/internal/options.h"
 #include "lsm/db/table_cache.h"
 #include "lsm/io/memory_persistence.h"
 #include "lsm/sst/builder.h"
@@ -32,8 +31,7 @@ public:
     std::pair<lsm::internal::file_handle, size_t> make_sst() {
         auto filename = file_handle{.id = ++_latest_id, .epoch = 0_db_epoch};
         auto file = _persistence->open_sequential_writer(filename).get();
-        lsm::sst::builder builder(
-          std::move(file), ss::make_lw_shared<lsm::internal::options>());
+        lsm::sst::builder builder(std::move(file), {});
         // Just make empty SST files - the cache doesn't care about the contents
         builder.finish().get();
         builder.close().get();

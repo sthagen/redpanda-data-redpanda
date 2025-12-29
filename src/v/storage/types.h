@@ -156,6 +156,8 @@ public:
     std::optional<kafka::offset> lowest_pinned_data_offset() const;
     model::offset max_tombstone_remove_offset() const;
     void set_max_tombstone_remove_offset(model::offset);
+    model::offset max_tx_end_remove_offset() const;
+    void set_max_tx_end_remove_offset(model::offset);
 
     ss::future<chunked_vector<model::tx_range>>
     aborted_tx_ranges(model::offset to, model::offset from) {
@@ -202,6 +204,7 @@ private:
     ss::shared_ptr<snapshotable_stm> _tx_stm;
     std::vector<ss::shared_ptr<snapshotable_stm>> _stms;
     model::offset _max_tombstone_remove_offset{};
+    model::offset _max_tx_end_remove_offset{};
 };
 
 /// returns base_offset's from batches. Not max_offsets
@@ -468,6 +471,7 @@ struct housekeeping_config {
       std::optional<size_t> max_bytes_in_log,
       model::offset max_collect_offset,
       model::offset max_tombstone_remove_offset,
+      model::offset max_tx_end_remove_offset,
       std::optional<std::chrono::milliseconds> tombstone_retention_ms,
       std::optional<std::chrono::milliseconds> tx_retention_ms,
       std::chrono::milliseconds min_lag_ms,
@@ -477,6 +481,7 @@ struct housekeeping_config {
       : compact(
           max_collect_offset,
           max_tombstone_remove_offset,
+          max_tx_end_remove_offset,
           tombstone_retention_ms,
           tx_retention_ms,
           as,
@@ -494,7 +499,7 @@ struct housekeeping_config {
       std::optional<size_t> max_bytes_in_log,
       model::offset max_collect_offset,
       model::offset max_tombstone_remove_offset,
-      model::offset max_tx_remove_offset,
+      model::offset max_tx_end_remove_offset,
       std::optional<std::chrono::milliseconds> tombstone_retention_ms,
       std::optional<std::chrono::milliseconds> tx_retention_ms,
       std::chrono::milliseconds min_lag_ms,
@@ -506,13 +511,13 @@ struct housekeeping_config {
           max_bytes_in_log,
           max_collect_offset,
           max_tombstone_remove_offset,
+          max_tx_end_remove_offset,
           tombstone_retention_ms,
           tx_retention_ms,
           min_lag_ms,
           as,
           san_cfg,
           key_map);
-        cfg.compact.max_tx_remove_offset = max_tx_remove_offset;
         return cfg;
     }
 

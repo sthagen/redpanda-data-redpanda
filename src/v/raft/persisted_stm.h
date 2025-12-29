@@ -15,10 +15,10 @@
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "raft/state_machine_base.h"
+#include "ssx/mutex.h"
 #include "storage/snapshot.h"
 #include "storage/types.h"
 #include "utils/expiring_promise.h"
-#include "utils/mutex.h"
 #include "utils/prefix_logger.h"
 
 #include <seastar/core/condition-variable.hh>
@@ -293,7 +293,7 @@ private:
     ss::future<> wait_for_snapshot_hydrated();
 
     ss::future<> do_write_local_snapshot();
-    mutex _op_lock{"persisted_stm::op_lock"};
+    ssx::mutex _op_lock{"persisted_stm::op_lock"};
     std::vector<ss::lw_shared_ptr<expiring_promise<bool>>> _sync_waiters;
     ss::condition_variable _on_snapshot_hydrated;
     bool _snapshot_hydrated{false};

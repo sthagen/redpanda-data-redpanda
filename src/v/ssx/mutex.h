@@ -10,6 +10,7 @@
  */
 
 #pragma once
+
 #include "base/seastarx.h"
 #include "ssx/semaphore.h"
 
@@ -23,11 +24,14 @@
  * =====
  *
  *    ```
- *    mutex m;
+ *    ssx::mutex m;
  *    return m.with([] { ... });
  *    ```
  *
  */
+
+namespace ssx {
+
 class mutex {
 public:
     using duration = typename ss::semaphore::duration;
@@ -78,3 +82,5 @@ public:
 private:
     ssx::semaphore _sem;
 };
+
+} // namespace ssx

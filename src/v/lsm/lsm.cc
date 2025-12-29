@@ -11,6 +11,7 @@
 
 #include "lsm/lsm.h"
 
+#include "base/vassert.h"
 #include "lsm/core/internal/iterator.h"
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/options.h"
@@ -20,10 +21,21 @@
 #include <seastar/core/coroutine.hh>
 
 #include <stdexcept>
+#include <utility>
 
 namespace lsm {
 
 namespace {
+
+compression_type translate_compression(options::compression_type type) {
+    switch (type) {
+    case options::compression_type::none:
+        return compression_type::none;
+    case options::compression_type::zstd:
+        return compression_type::zstd;
+    }
+    vunreachable("unknown compression type {}", std::to_underlying(type));
+}
 
 ss::lw_shared_ptr<internal::options> translate_options(options opts) {
     if (opts.num_levels < 2) {
@@ -82,6 +94,14 @@ ss::lw_shared_ptr<internal::options> translate_options(options opts) {
       },
       internal::options::default_level_multipler,
       max_level);
+    compression_type c = compression_type::none;
+    for (uint8_t i = 0; i < opts.num_levels; ++i) {
+        if (i < opts.compression_by_level.size()) {
+            c = translate_compression(opts.compression_by_level[i]);
+        }
+        internal_opts->levels[i].compression = c;
+    }
+
     internal_opts->readonly = opts.readonly;
     internal_opts->compaction_scheduling_group
       = opts.compaction_scheduling_group.value_or(
@@ -98,15 +118,6 @@ ss::lw_shared_ptr<internal::options> translate_options(options opts) {
     internal_opts->block_cache_size = opts.block_cache_size;
     internal_opts->sst_block_size = opts.sst_block_size;
     internal_opts->sst_filter_period = opts.sst_filter_period;
-
-    switch (opts.compression) {
-    case options::compression_type::none:
-        internal_opts->compression = compression_type::none;
-        break;
-    case options::compression_type::zstd:
-        internal_opts->compression = compression_type::zstd;
-        break;
-    }
 
     return internal_opts;
 }

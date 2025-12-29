@@ -21,6 +21,7 @@
 
 #include <cstring>
 #include <iterator>
+#include <stdexcept>
 
 ioarray::ioarray(size_t size)
   : ioarray(uninitialized_t{}, size) {
@@ -260,4 +261,28 @@ void ioarray::trim_back(size_t n) {
     auto* buffers_ptr = &_buffers;
     buffers_ptr->~FixedArray();
     new (buffers_ptr) absl::FixedArray(std::move(replacement));
+}
+
+ioarray
+ioarray::from_sized_buffers(std::span<ss::temporary_buffer<char>> bufs) {
+    if (bufs.empty()) {
+        return {};
+    }
+    ioarray out(uninitialized_t{}, bufs.size() * max_chunk_size);
+    size_t i = 0, size = 0;
+    for (auto& buf : bufs.subspan(0, bufs.size() - 1)) {
+        if (buf.size() != max_chunk_size) {
+            throw std::invalid_argument(
+              fmt::format(
+                "inner chunk size must be {}, got {}",
+                max_chunk_size,
+                buf.size()));
+        }
+        size += buf.size();
+        out._buffers[i++] = buf.share();
+    }
+    size += bufs.back().size();
+    out._buffers[i] = bufs.back().share();
+    out._size = size;
+    return out;
 }

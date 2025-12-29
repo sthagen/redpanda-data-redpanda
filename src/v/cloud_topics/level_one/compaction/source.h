@@ -13,6 +13,7 @@
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/compaction/filter.h"
 #include "cloud_topics/level_one/compaction/meta.h"
+#include "cloud_topics/level_one/metastore/extent_metadata_reader.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "compaction/key_offset_map.h"
@@ -29,7 +30,7 @@ public:
       model::topic_id_partition,
       const chunked_vector<offset_interval_set::interval>&,
       const offset_interval_set&,
-      metastore::extent_metadata_vec,
+      kafka::offset,
       compaction::key_offset_map*,
       std::chrono::milliseconds,
       metastore*,
@@ -57,19 +58,25 @@ private:
     const interval_vec& _dirty_range_intervals;
     const offset_interval_set& _removable_tombstone_ranges;
 
+    // The start offset of the CTP.
+    kafka::offset _start_offset;
+
     // Iterator used during `map_building_iteration()` which points into the
     // above vector `_dirty_range_intervals`. Iterating backwards over extents
     // to fill the key-offset map used for de-duplication can allow for more
     // efficient compaction runs when compacting the log.
     interval_vec::const_reverse_iterator _dirty_range_it;
 
-    // The extents of the CTP, as returned from the `metastore`. The
-    // de-duplication pass _must_ be extent aligned as part of a requirement of
-    // the `metastore`'s internal state and rules around replacing or compacting
-    // existing extents.
-    metastore::extent_metadata_vec _extents;
-    metastore::extent_metadata_vec::const_iterator _extents_it;
-    metastore::extent_metadata_vec::const_iterator _extents_end_it;
+    // The extent metadata reader, which is constructed and immediately used to
+    // produce the `_extent_iterator` generator. This object must be kept alive
+    // while `_extent_iterator` is in use, but it should not be used directly.
+    extent_metadata_reader _extent_reader;
+
+    // The generated constructed from the forward reader for extents of
+    // the CTP during `deduplication_iteration()`. The de-duplication pass
+    // _must_ be extent aligned as part of a requirement of the `metastore`'s
+    // internal state and rules around replacing or compacting existing extents.
+    extent_metadata_reader::extent_metadata_generator _extent_iterator;
 
     // The key-offset map for this run of compaction. Built up from existing
     // data during `map_building_iteration()` by iterating over `_dirty_ranges`

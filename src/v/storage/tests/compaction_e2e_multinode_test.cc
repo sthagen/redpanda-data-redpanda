@@ -148,6 +148,8 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
 }
 
 FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
+    scoped_config cfg;
+    cfg.get("log_compaction_tx_batch_removal_enabled").set_value(true);
     const model::topic topic{"mocha"};
     model::node_id id{0};
     auto* app = create_node_application(id);
@@ -251,6 +253,8 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
 }
 
 FIXTURE_TEST(segment_tx_flags, compaction_multinode_test) {
+    scoped_config cfg;
+    cfg.get("log_compaction_tx_batch_removal_enabled").set_value(true);
     const model::topic topic{"tapioca"};
     model::node_id id{0};
     create_node_application(id);
@@ -367,7 +371,6 @@ FIXTURE_TEST(segment_tx_flags, compaction_multinode_test) {
 
 FIXTURE_TEST(segment_tx_flags_compaction_disabled, compaction_multinode_test) {
     scoped_config cfg;
-    cfg.get("log_compaction_disable_tx_batch_removal").set_value(true);
     cfg.get("log_compaction_merge_max_segments_per_range")
       .set_value(std::make_optional<uint32_t>(0));
     cfg.get("log_compaction_merge_max_ranges")
@@ -432,7 +435,7 @@ FIXTURE_TEST(segment_tx_flags_compaction_disabled, compaction_multinode_test) {
     ss::abort_source as;
     auto collect_offset = log->stm_manager()->max_removable_local_log_offset();
     {
-        // Compact while `log_compaction_disable_tx_batch_removal` is `true`,
+        // Compact while `log_compaction_tx_batch_removal_enabled` is `false`,
         // preventing unsetting of transactional bits or removal of any control
         // batches.
         auto conf = storage::housekeeping_config::make_config(
@@ -466,7 +469,7 @@ FIXTURE_TEST(segment_tx_flags_compaction_disabled, compaction_multinode_test) {
     BOOST_REQUIRE(segments[2]->index().may_have_transaction_control_batches());
 
     {
-        cfg.get("log_compaction_disable_tx_batch_removal").set_value(false);
+        cfg.get("log_compaction_tx_batch_removal_enabled").set_value(true);
         // Compact twice to remove transactional batches and unset bits.
         auto conf = storage::housekeeping_config::make_config(
           model::timestamp::min(),

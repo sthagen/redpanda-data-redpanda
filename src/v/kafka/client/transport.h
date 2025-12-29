@@ -19,7 +19,7 @@
 #include "kafka/protocol/fwd.h"
 #include "kafka/protocol/wire.h"
 #include "net/transport.h"
-#include "utils/mutex.h"
+#include "ssx/mutex.h"
 #include "utils/prefix_logger.h"
 
 #include <seastar/core/future.hh>
@@ -279,7 +279,7 @@ private:
         co_return ret_t(std::move(resp));
     }
 
-    mutex _dispatch_mutex{"kafka::client::transport::dispatch_mutex"};
+    ssx::mutex _dispatch_mutex{"kafka::client::transport::dispatch_mutex"};
     bool _needs_stop = false;
     correlation_id _correlation{0};
     // We keep the entries sorted by correlation_id, as we are going to

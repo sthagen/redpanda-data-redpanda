@@ -327,6 +327,7 @@ TEST_F(ReplicatedMetastoreTest, TestBasicAdd) {
         EXPECT_FLOAT_EQ(cmp_info->dirty_ratio, 1.0);
         EXPECT_TRUE(cmp_info->earliest_dirty_ts.has_value());
         EXPECT_EQ(cmp_info->compaction_epoch, metastore::compaction_epoch{0});
+        EXPECT_EQ(cmp_info->start_offset, o{0});
     }
 }
 
@@ -420,6 +421,7 @@ TEST_F(ReplicatedMetastoreTest, TestBasicCompact) {
         EXPECT_FLOAT_EQ(cmp_info->dirty_ratio, 0.0);
         EXPECT_TRUE(!cmp_info->earliest_dirty_ts.has_value());
         EXPECT_EQ(cmp_info->compaction_epoch, metastore::compaction_epoch{1});
+        EXPECT_EQ(cmp_info->start_offset, o{0});
     }
 }
 
@@ -684,6 +686,15 @@ TEST_F(ReplicatedMetastoreTest, TestSetStartOffset) {
           ASSERT_TRUE(offsets.has_value());
           ASSERT_EQ(expected_start, offsets->start_offset);
           ASSERT_EQ(expected_next, offsets->next_offset);
+
+          // Sanity check the start offset returned by get_compaction_info() as
+          // well.
+          auto spec = metastore::compaction_info_spec{
+            .tidp = tp,
+            .tombstone_removal_upper_bound_ts = model::timestamp::now()};
+          auto cmp_info = meta.get_compaction_info(spec).get();
+          ASSERT_TRUE(cmp_info.has_value());
+          ASSERT_EQ(cmp_info->start_offset, expected_start);
       };
 
     // Get initial offsets
@@ -855,6 +866,7 @@ TEST_F(ReplicatedMetastoreTest, TestGetCompactionInfos) {
             ASSERT_TRUE(info.has_value());
             ASSERT_DOUBLE_EQ(info->dirty_ratio, 1.0);
             ASSERT_EQ(info->compaction_epoch, metastore::compaction_epoch{0});
+            ASSERT_EQ(info->start_offset, o{0});
         }
     }
 
@@ -883,6 +895,7 @@ TEST_F(ReplicatedMetastoreTest, TestGetCompactionInfos) {
             ASSERT_TRUE(info.has_value());
             ASSERT_DOUBLE_EQ(info->dirty_ratio, 0.0);
             ASSERT_EQ(info->compaction_epoch, metastore::compaction_epoch{1});
+            ASSERT_EQ(info->start_offset, o{0});
         }
     }
 }

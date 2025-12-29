@@ -355,4 +355,113 @@ TEST(IOArray, ReadFixed32) {
     EXPECT_EQ(0x04030201, contents2.read_fixed32(1));
 }
 
+TEST(IOArray, FromSizedBuffers) {
+    // Test empty input
+    {
+        std::vector<ss::temporary_buffer<char>> bufs;
+        auto arr = ioarray::from_sized_buffers(bufs);
+        EXPECT_TRUE(arr.empty());
+        EXPECT_EQ(0, arr.size());
+    }
+
+    // Test single buffer (can be any size since it's the last one)
+    {
+        std::vector<ss::temporary_buffer<char>> bufs;
+        bufs.emplace_back(1024);
+        for (size_t i = 0; i < 1024; ++i) {
+            bufs[0].get_write()[i] = 'A' + (i % 26);
+        }
+
+        auto arr = ioarray::from_sized_buffers(bufs);
+        EXPECT_EQ(1024, arr.size());
+        for (size_t i = 0; i < 1024; ++i) {
+            EXPECT_EQ('A' + (i % 26), arr[i]);
+        }
+    }
+
+    // Test multiple buffers with correct sizes
+    {
+        std::vector<ss::temporary_buffer<char>> bufs;
+        // Two full chunks
+        bufs.emplace_back(128_KiB);
+        bufs.emplace_back(128_KiB);
+        // Last chunk can be smaller
+        bufs.emplace_back(64_KiB);
+
+        // Fill with pattern
+        for (size_t buf_idx = 0; buf_idx < bufs.size(); ++buf_idx) {
+            for (size_t i = 0; i < bufs[buf_idx].size(); ++i) {
+                bufs[buf_idx].get_write()[i] = static_cast<char>(
+                  (buf_idx * 128_KiB + i) & 0xFF);
+            }
+        }
+
+        auto arr = ioarray::from_sized_buffers(bufs);
+        EXPECT_EQ(128_KiB + 128_KiB + 64_KiB, arr.size());
+
+        // Verify data is accessible
+        for (size_t i = 0; i < arr.size(); ++i) {
+            EXPECT_EQ(static_cast<char>(i & 0xFF), arr[i])
+              << "Mismatch at index " << i;
+        }
+    }
+
+    // Test that buffers are shared (not copied)
+    {
+        std::vector<ss::temporary_buffer<char>> bufs;
+        bufs.emplace_back(128_KiB);
+        bufs.emplace_back(100);
+
+        // Fill with initial pattern
+        std::memset(bufs[0].get_write(), 'X', 128_KiB);
+        std::memset(bufs[1].get_write(), 'Y', 100);
+
+        auto arr = ioarray::from_sized_buffers(bufs);
+
+        // Modify original buffer
+        bufs[0].get_write()[0] = 'Z';
+
+        // Verify array sees the change (proving sharing)
+        EXPECT_EQ('Z', arr[0]);
+        EXPECT_EQ('X', arr[1]);
+        EXPECT_EQ('Y', arr[128_KiB]);
+    }
+
+    // Test conversion to iobuf
+    {
+        std::vector<ss::temporary_buffer<char>> bufs;
+        bufs.emplace_back(128_KiB);
+        bufs.emplace_back(50_KiB);
+
+        for (size_t buf_idx = 0; buf_idx < bufs.size(); ++buf_idx) {
+            for (size_t i = 0; i < bufs[buf_idx].size(); ++i) {
+                bufs[buf_idx].get_write()[i] = static_cast<char>(
+                  (buf_idx * 128_KiB + i) & 0xFF);
+            }
+        }
+
+        auto arr = ioarray::from_sized_buffers(bufs);
+
+        EXPECT_EQ(128_KiB + 50_KiB, arr.size());
+
+        // Verify contents
+        char expected = 0;
+        for (char c : arr.as_range()) {
+            EXPECT_EQ(expected++, c);
+        }
+    }
+
+    // Test invalid case: middle buffer not max_chunk_size
+    {
+        std::vector<ss::temporary_buffer<char>> bufs;
+        bufs.emplace_back(128_KiB);
+        bufs.emplace_back(64_KiB); // Wrong size!
+        bufs.emplace_back(100);
+
+        EXPECT_THROW(
+          { auto arr = ioarray::from_sized_buffers(bufs); },
+          std::invalid_argument);
+    }
+}
+
 // NOLINTEND(*magic-numbers*)

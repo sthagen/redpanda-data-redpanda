@@ -19,7 +19,7 @@
 #include "cluster_link/types.h"
 #include "kafka/client/cluster.h"
 #include "kafka/data/rpc/deps.h"
-#include "utils/mutex.h"
+#include "ssx/mutex.h"
 #include "utils/notification_list.h"
 
 namespace cluster_link {
@@ -150,7 +150,7 @@ private:
     notification_list<task_state_change_cb, task_state_notification_id>
       _task_state_change_notifications;
     ss::lowres_clock::duration _task_reconciler_interval;
-    mutex _task_reconciler_mutex{"cluster_link::link::task_reconciler"};
+    ssx::mutex _task_reconciler_mutex{"cluster_link::link::task_reconciler"};
     ss::timer<ss::lowres_clock> _task_reconciler;
     std::unique_ptr<link_probe> _probe;
     ss::gate _gate;

@@ -42,8 +42,7 @@ TEST_P(SSTTest, CanCreateAndReadFile) {
     size_t file_size = 0;
     {
         auto file = _persistence->open_sequential_writer({}).get();
-        auto opts = ss::make_lw_shared<lsm::internal::options>();
-        lsm::sst::builder builder(std::move(file), opts);
+        lsm::sst::builder builder(std::move(file), {});
         builder.add("abc"_key, iobuf::from("value1")).get();
         builder.add("abcd"_key, iobuf::from("value2")).get();
         builder.add("abc123"_key, iobuf::from("value3")).get();

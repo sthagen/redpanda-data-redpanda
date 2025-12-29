@@ -177,9 +177,12 @@ public:
               lsm::internal::options::default_level_multipler,
               lsm::internal::options::default_max_level),
             .write_buffer_size = _cfg.write_buffer_size,
-            .compression = _cfg.compression ? lsm::compression_type::zstd
-                                            : lsm::compression_type::none,
           });
+        if (_cfg.compression) {
+            for (auto& level : opts->levels) {
+                level.compression = lsm::compression_type::zstd;
+            }
+        }
 
         std::unique_ptr<lsm::io::data_persistence> data;
         std::unique_ptr<lsm::io::metadata_persistence> metadata;

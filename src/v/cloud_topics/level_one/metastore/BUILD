@@ -267,3 +267,20 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "extent_metadata_reader",
+    srcs = [
+        "extent_metadata_reader.cc",
+    ],
+    hdrs = [
+        "extent_metadata_reader.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":metastore",
+        ":retry",
+        "//src/v/model",
+        "@seastar",
+    ],
+)

@@ -11,11 +11,13 @@
 
 #include "lsm/core/compression.h"
 
+#include "compression/async_stream_zstd.h"
 #include "compression/compression.h"
 #include "lsm/core/exceptions.h"
 
 #include <seastar/core/coroutine.hh>
 
+#include <exception>
 #include <utility>
 
 namespace lsm {
@@ -40,10 +42,20 @@ ss::future<iobuf> compress(iobuf buf, compression_type type) {
 }
 
 ss::future<ioarray> uncompress(ioarray array, compression_type type) {
-    // TODO(lsm): support uncompression directly into ioarray?
-    auto iobuf = co_await compression::stream_compressor::uncompress(
-      array.as_iobuf(), convert_type(type));
-    co_return ioarray::copy_from(iobuf);
+    switch (type) {
+    case compression_type::none:
+        throw invalid_argument_exception(
+          "attempted to compress with type none");
+    case compression_type::zstd: {
+        try {
+            co_return co_await compression::async_stream_zstd_instance()
+              .uncompress(std::move(array));
+        } catch (const std::exception& ex) {
+            throw invalid_argument_exception(
+              "failed to uncompress: {}", ex.what());
+        }
+    }
+    }
 }
 
 compression_type compression_type_from_raw(uint8_t v) {

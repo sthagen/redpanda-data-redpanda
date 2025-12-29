@@ -30,6 +30,7 @@
 #include "raft/types.h"
 #include "ssx/sformat.h"
 #include "storage/api.h"
+#include "storage/log.h"
 #include "test_utils/random_bytes.h"
 #include "utils/prefix_logger.h"
 
@@ -304,6 +305,8 @@ public:
 
     ss::shared_ptr<failure_injectable_log> f_injectable_log() { return _f_log; }
 
+    ss::shared_ptr<storage::log> underlying_log() { return _underlying_log; }
+
     service_t& get_service() { return _service; }
 
     void set_default_recovery_read_size(size_t bytes) {
@@ -337,6 +340,7 @@ private:
     ss::sharded<fixture_group_manager> _group_manager;
     fixture_shard_manager _shard_manager{};
     service_t _service;
+    ss::shared_ptr<storage::log> _underlying_log;
     ss::shared_ptr<raft::failure_injectable_log> _f_log;
 };
 

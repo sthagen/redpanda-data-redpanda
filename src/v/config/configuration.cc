@@ -1130,11 +1130,14 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt)
   , log_compaction_disable_tx_batch_removal(
+      *this, "log_compaction_disable_tx_batch_removal")
+  , log_compaction_tx_batch_removal_enabled(
       *this,
-      "log_compaction_disable_tx_batch_removal",
-      "Disable removal of transactional control batches. This should only be "
-      "toggled to `true` in extreme cases of proven instability due to issues "
-      "with transactional control batch removal.",
+      "log_compaction_tx_batch_removal_enabled",
+      "Enables removal of transactional control batches during compaction. "
+      "These batches are removed according to a topic's configured "
+      "delete.retention.ms, and only if the topic's cleanup.policy "
+      "allows compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
   , retention_bytes(
@@ -4580,6 +4583,14 @@ configuration::configuration()
       "Enable parallel fetching in cloud topics. This mechanism improves the "
       "throughput by allowing the broker to download data needed by the fetch "
       "request using multiple shards.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      true)
+  , cloud_topics_fetch_debounce_enabled(
+      *this,
+      "cloud_topics_fetch_debounce_enabled",
+      "Enables fetch debouncing in cloud topics. This mechanism guarantees "
+      "that the broker fetches every object only once improving the "
+      "performance and lowering the cost.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::user},
       true)
   , development_feature_property_testing_only(

@@ -110,6 +110,17 @@ public:
         virtual std::expected<object_id, error>
         get_or_create_object_for(const model::topic_id_partition&) = 0;
 
+        // Creates a new object for the given partition. It is guaranteed that
+        // this object is brand new/unused. It is not guaranteed, however, that
+        // it cannot be accessed concurrently by other users of this
+        // `object_metadata_builder` who call `get_or_create_object_for()`. If
+        // complete isolation of objects is required, ensure that all users of
+        // this particular `object_metadata_builder` only invoke
+        // `create_object_for()` and `finish()` for the provided `object_id`
+        // within a tightly bounded scope.
+        virtual std::expected<object_id, error>
+        create_object_for(const model::topic_id_partition&) = 0;
+
         // Removes a pending object from the builder. The object must be in the
         // pending state. Further calls to get_or_create_object_for() will not
         // return the object id. Any other call that references the object id
@@ -308,22 +319,6 @@ public:
     using compaction_map_t
       = chunked_hash_map<model::topic_id_partition, compaction_update>;
 
-    struct extent_metadata {
-        kafka::offset base_offset;
-        kafka::offset last_offset;
-        model::timestamp max_timestamp;
-
-        fmt::iterator format_to(fmt::iterator it) const {
-            return fmt::format_to(
-              it,
-              "{{offsets:({}~{}), max_timestamp:{}}}",
-              base_offset,
-              last_offset,
-              max_timestamp);
-        }
-    };
-    using extent_metadata_vec = chunked_vector<extent_metadata>;
-
     struct compaction_offsets_response {
         // Offset ranges whose keys have not been fully deduplicated from the
         // start of the log.
@@ -336,15 +331,12 @@ public:
         // consult this to determine if the tombstone should be removed.
         offset_interval_set removable_tombstone_ranges;
 
-        extent_metadata_vec extents;
-
         fmt::iterator format_to(fmt::iterator it) const {
             return fmt::format_to(
               it,
-              "{{dirty_ranges:{}, removable_tombstone_ranges:{}, extents:{}}}",
+              "{{dirty_ranges:{}, removable_tombstone_ranges:{}}}",
               dirty_ranges,
-              removable_tombstone_ranges,
-              extents);
+              removable_tombstone_ranges);
         }
     };
     // Similar to replace_objects(), but with additional constraints based on
@@ -371,16 +363,20 @@ public:
         compaction_offsets_response offsets_response;
         // The log's current compaction epoch.
         compaction_epoch compaction_epoch;
+        // The log's current start_offset. Can be expected to be == 0 for
+        // `compact` only topics, might be > 0 for `compact,delete` topics.
+        kafka::offset start_offset;
 
         fmt::iterator format_to(fmt::iterator it) const {
             return fmt::format_to(
               it,
               "{{dirty_ratio:{}, earliest_dirty_ts:{}, offsets_response:{}, "
-              "compaction_epoch:{}}}",
+              "compaction_epoch:{}, start_offset:{}}}",
               dirty_ratio,
               earliest_dirty_ts,
               offsets_response,
-              compaction_epoch);
+              compaction_epoch,
+              start_offset);
         }
     };
 
@@ -433,6 +429,23 @@ public:
     // Vectorized RPC for obtaining compaction state for a number of partitions.
     virtual ss::future<std::expected<compaction_info_map, errc>>
     get_compaction_infos(const chunked_vector<compaction_info_spec>&) = 0;
+
+    struct extent_metadata {
+        kafka::offset base_offset;
+        kafka::offset last_offset;
+        model::timestamp max_timestamp;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{offsets:({}~{}), max_timestamp:{}}}",
+              base_offset,
+              last_offset,
+              max_timestamp);
+        }
+    };
+
+    using extent_metadata_vec = chunked_vector<extent_metadata>;
 
     struct extent_metadata_response {
         extent_metadata_vec extents{};

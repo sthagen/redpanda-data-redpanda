@@ -131,6 +131,7 @@ public:
           cloud_topics::object_id{
             .epoch = cloud_topics::cluster_epoch(epoch),
             .name = uuid_t::create(),
+            .prefix = 0,
           });
         cloud_storage_clients::client::list_bucket_item item{
           .key = key().string(),

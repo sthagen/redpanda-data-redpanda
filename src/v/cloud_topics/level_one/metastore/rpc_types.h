@@ -213,8 +213,8 @@ struct get_compaction_info_reply
           removable_tombstone_ranges,
           dirty_ratio,
           earliest_dirty_ts,
-          extents,
-          compaction_epoch);
+          compaction_epoch,
+          start_offset);
     }
 
     errc ec;
@@ -222,8 +222,8 @@ struct get_compaction_info_reply
     offset_interval_set removable_tombstone_ranges;
     double dirty_ratio;
     std::optional<model::timestamp> earliest_dirty_ts;
-    chunked_vector<extent_metadata> extents;
     partition_state::compaction_epoch_t compaction_epoch;
+    kafka::offset start_offset;
 };
 struct get_compaction_info_request
   : serde::envelope<

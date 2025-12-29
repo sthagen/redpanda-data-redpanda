@@ -296,6 +296,10 @@ public:
         return _state.may_have_transaction_data_or_fence_batches;
     }
 
+    bool has_no_transaction_data_or_fence_batches() const {
+        return !_state.may_have_transaction_data_or_fence_batches;
+    }
+
     ss::future<bool> materialize_index();
     ss::future<> flush();
     ss::future<> truncate(model::offset, model::timestamp);

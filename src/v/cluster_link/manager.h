@@ -24,8 +24,8 @@
 #include "kafka/data/rpc/deps.h"
 #include "kafka/data/rpc/fwd.h"
 #include "model/fundamental.h"
+#include "ssx/mutex.h"
 #include "ssx/work_queue.h"
-#include "utils/mutex.h"
 
 namespace cluster_link {
 
@@ -249,7 +249,7 @@ private:
       _cfg_change_notifications;
 
     ss::lowres_clock::duration _task_reconciler_interval;
-    mutex _link_task_reconciler_mutex{
+    ssx::mutex _link_task_reconciler_mutex{
       "cluster_link::manager::link_task_reconciler"};
     ss::timer<ss::lowres_clock> _link_task_reconciler_timer;
     config::binding<int16_t> _default_topic_replication;

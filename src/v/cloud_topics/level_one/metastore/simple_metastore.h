@@ -31,6 +31,8 @@ public:
 
     std::expected<object_id, error>
     get_or_create_object_for(const model::topic_id_partition&) override;
+    std::expected<object_id, error>
+    create_object_for(const model::topic_id_partition&) override;
     std::expected<void, error> remove_pending_object(object_id) override;
     std::expected<void, error>
       add(object_id, metastore::object_metadata::ntp_metadata) override;

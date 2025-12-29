@@ -36,6 +36,9 @@ public:
      */
     static std::expected<cluster_epoch, std::string>
       level_zero_path_to_epoch(std::string_view);
+
+    static std::expected<object_id::prefix_t, std::string>
+      level_zero_path_to_prefix(std::string_view);
 };
 
 } // namespace cloud_topics

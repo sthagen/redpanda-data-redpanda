@@ -13,6 +13,7 @@
 #include "base/oncore.h"
 #include "base/type_traits.h"
 #include "config/base_property.h"
+#include "config/logger.h"
 #include "config/rjson_serialization.h"
 #include "config/tls_config.h"
 #include "config/types.h"
@@ -877,7 +878,21 @@ public:
     deprecated_property(config_store& conf, std::string_view name)
       : property(conf, name, "", {.visibility = visibility::deprecated}) {}
 
-    void set_value(std::any) override { return; }
+    ss::sstring deprecated_property_log_line() const {
+        return fmt::format(
+          "{} is a deprecated property and will be ignored. It is recommended "
+          "that you update your configurations to avoid setting it.",
+          name());
+    }
+    void set_value(std::any) override {
+        vlog(configlog.warn, "{}", deprecated_property_log_line());
+        return;
+    }
+
+    bool set_value(YAML::Node) override {
+        vlog(configlog.warn, "{}", deprecated_property_log_line());
+        return false;
+    }
 };
 
 template<typename T>

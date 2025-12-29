@@ -33,7 +33,7 @@ rm -rf "$OUT_DIR/proto"/**/*.py{,i}
 echo "Generating protobuf Python files..."
 uv run --python 3.11 --no-project \
   --with 'grpcio-tools==1.71' \
-  --with 'mypy-protobuf' \
+  --with 'mypy-protobuf==3.7.0' \
   --with 'connect-python[compiler]==0.4.2' \
   -m grpc_tools.protoc \
   --python_out="$OUT_DIR" \

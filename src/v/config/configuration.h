@@ -274,7 +274,8 @@ struct configuration final : public config_store {
     property<std::optional<uint32_t>>
       log_compaction_merge_max_segments_per_range;
     property<std::optional<uint32_t>> log_compaction_merge_max_ranges;
-    property<bool> log_compaction_disable_tx_batch_removal;
+    deprecated_property log_compaction_disable_tx_batch_removal;
+    property<bool> log_compaction_tx_batch_removal_enabled;
     // same as retention.size in kafka - TODO: size not implemented
     property<std::optional<size_t>> retention_bytes;
     property<int32_t> group_topic_partitions;
@@ -836,6 +837,8 @@ public:
 
     property<bool> cloud_topics_parallel_fetch_enabled;
 
+    property<bool> cloud_topics_fetch_debounce_enabled;
+
     development_feature_property<int> development_feature_property_testing_only;
 
 private:
@@ -864,6 +867,8 @@ private:
         return !enable_developmental_unrecoverable_data_corrupting_features()
                   .empty();
     }
+
+    ss::sstring store_name() const override { return "cluster"; }
 };
 
 template<typename T>

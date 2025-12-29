@@ -460,12 +460,12 @@ raft_node_instance::initialise(std::vector<raft::vnode> initial_nodes) {
     co_await _storage.invoke_on_all(&storage::api::start);
     storage::ntp_config ntp_cfg(ntp(), _base_directory);
 
-    auto log = co_await _storage.local().log_mgr().manage(
+    _underlying_log = co_await _storage.local().log_mgr().manage(
       std::move(ntp_cfg),
       test_group,
       _with_offset_translation ? model::offset_translator_batch_types()
                                : std::vector<model::record_batch_type>{});
-    _f_log = ss::make_shared<raft::failure_injectable_log>(std::move(log));
+    _f_log = ss::make_shared<raft::failure_injectable_log>(_underlying_log);
     _raft = ss::make_lw_shared<consensus>(
       _id,
       test_group,
@@ -507,7 +507,8 @@ ss::future<> raft_node_instance::stop() {
         vlog(_logger.debug, "stopping protocol");
         co_await _buffered_protocol->stop();
         co_await _protocol->stop();
-        // release f_log pointer before stopping raft
+        // release log pointers before stopping raft
+        _underlying_log = nullptr;
         _f_log = nullptr;
         vlog(_logger.debug, "stopping raft");
         co_await _raft->stop();

@@ -27,9 +27,9 @@
 #include "security/mtls.h"
 #include "security/sasl_authentication.h"
 #include "ssx/abort_source.h"
+#include "ssx/mutex.h"
 #include "ssx/semaphore.h"
 #include "utils/log_hist.h"
-#include "utils/mutex.h"
 #include "utils/named_type.h"
 #include "utils/windowed_sum_tracker.h"
 
@@ -531,7 +531,7 @@ private:
         /**
          * Mutex is used to control concurrency per virtual connection.
          */
-        mutex _lock{"virtual_connection_state::lock"};
+        ssx::mutex _lock{"virtual_connection_state::lock"};
         ss::lowres_clock::time_point _last_request_timestamp;
     };
 

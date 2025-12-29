@@ -70,8 +70,7 @@ public:
     void add_sst(sst_spec spec) {
         auto writer
           = _data_persistence->open_sequential_writer({.id = spec.id}).get();
-        lsm::sst::builder builder(
-          std::move(writer), ss::make_lw_shared<lsm::internal::options>());
+        lsm::sst::builder builder(std::move(writer), {});
         std::ranges::sort(spec.keys);
         for (const auto& key : spec.keys) {
             builder

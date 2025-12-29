@@ -205,8 +205,8 @@ public:
                 &service::make_failed_get_compaction_mcco_reply,
                 [](get_compaction_mcco_request&& r, consensus_ptr c) {
                     return ssx::now(
-                      c->get_compaction_coordinator().do_get_compaction_mcco(
-                        std::move(r)));
+                      c->get_compaction_coordinator()
+                        .do_get_local_replica_offsets(std::move(r)));
                 });
           });
     }
@@ -222,7 +222,7 @@ public:
                 [](distribute_compaction_mtro_request&& r, consensus_ptr c) {
                     return ssx::now(
                       c->get_compaction_coordinator()
-                        .do_distribute_compaction_mtro(std::move(r)));
+                        .do_distribute_group_offsets(std::move(r)));
                 });
           });
     }
