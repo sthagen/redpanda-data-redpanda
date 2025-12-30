@@ -3491,7 +3491,7 @@ configuration::configuration()
       "Additionally, Redpanda will periodically log the top-n allocation "
       "sites.",
       {// Enabling/Disabling this dynamically doesn't make much sense as for the
-       // memory profile to be meaning full you'll want to have this on from the
+       // memory profile to be meaningful you'll want to have this on from the
        // beginning. However, we still provide the option to be able to disable
        // it dynamically in case something goes wrong
        .needs_restart = needs_restart::no,
