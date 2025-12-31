@@ -63,3 +63,11 @@ filegroup(
     srcs = ["ubsan_suppressions.txt"],
     visibility = ["//visibility:public"],
 )
+
+exports_files(
+    [
+        "MODULE.bazel",
+        "buf.gen.yaml",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -57,6 +57,11 @@ go_test(
         "types_test.go",
         "update_test.go",
     ],
+    data = [
+        "//:MODULE.bazel",
+        "//:buf.gen.yaml",
+        "//src/go/rpk:go.mod",
+    ],
     embed = [":shadow"],
     deps = [
         "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",

@@ -31,7 +31,10 @@ type ShadowLinkConfig struct {
 }
 
 type CloudShadowLinkOptions struct {
+	// Source Redpanda cluster ID. This field is optional. If provided, fetches
+	// bootstrap server information.
 	SourceRedpandaID string `json:"source_redpanda_id,omitempty" yaml:"source_redpanda_id,omitempty"`
+	// Shadow Redpanda cluster ID where the shadow link will be created.
 	ShadowRedpandaID string `json:"shadow_redpanda_id,omitempty" yaml:"shadow_redpanda_id,omitempty"`
 }
 

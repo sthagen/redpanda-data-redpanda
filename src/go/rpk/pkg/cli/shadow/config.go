@@ -84,7 +84,7 @@ Save the template with documentation to a file:
 		Run: func(_ *cobra.Command, _ []string) {
 			var outputData, successMsg string
 			if printTemplate {
-				template := generateConfigTemplate()
+				template := generateConfigTemplate(cloud)
 				outputData = template
 				successMsg = "Template file generated successfully: %s\n"
 			} else {
@@ -225,10 +225,28 @@ func generateSampleConfig(cloud bool) *ShadowLinkConfig {
 	return slCfg
 }
 
-func generateConfigTemplate() string {
+func generateConfigTemplate(cloud bool) string {
 	var sb strings.Builder
 
-	sb.WriteString("# Shadow Link Configuration Template\n")
+	if cloud {
+		sb.WriteString("# Shadow Link Configuration Template for Redpanda Cloud\n")
+	} else {
+		sb.WriteString("# Shadow Link Configuration Template\n")
+	}
+
+	// Manually add name field (not in ShadowLinkConfigurations proto, but in ShadowLink)
+	sb.WriteString("# The name of the shadow link\n")
+	sb.WriteString("name: \"\"\n")
+
+	// Inject cloud_options manually (not in admin/v2 proto)
+	if cloud {
+		sb.WriteString("# Configurations for Shadow Link in Redpanda Cloud\n")
+		sb.WriteString("cloud_options:\n")
+		sb.WriteString("  # The ID of the source Redpanda Cloud cluster (optional)\n")
+		sb.WriteString("  source_redpanda_id: \"\"\n")
+		sb.WriteString("  # The ID of the shadow Redpanda Cloud cluster\n")
+		sb.WriteString("  shadow_redpanda_id: \"\"\n\n")
+	}
 
 	// Get the message descriptor from the global registry
 	cfg := &v2.ShadowLinkConfigurations{}
@@ -252,7 +270,7 @@ func generateConfigTemplate() string {
 			continue
 		}
 
-		writeFieldTemplate(&sb, field, 0)
+		writeFieldTemplate(&sb, field, 0, cloud)
 	}
 
 	return sb.String()
@@ -331,7 +349,12 @@ func toScreamingSnakeCase(s string) string {
 	return strings.ToUpper(result.String())
 }
 
-func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor, indent int) {
+func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor, indent int, cloud bool) {
+	// Skip tls_file_settings for Cloud (only tls_pem_settings is valid)
+	if cloud && string(field.Name()) == "tls_file_settings" {
+		return
+	}
+
 	indentStr := strings.Repeat("  ", indent)
 
 	// Get field comment using the appropriate package registry
@@ -373,7 +396,7 @@ func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor,
 					continue
 				}
 
-				writeFieldTemplate(sb, nestedField, indent+2)
+				writeFieldTemplate(sb, nestedField, indent+2, cloud)
 			}
 		} else {
 			// List of scalars
@@ -409,7 +432,7 @@ func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor,
 					continue
 				}
 
-				writeFieldTemplate(sb, nestedField, indent+1)
+				writeFieldTemplate(sb, nestedField, indent+1, cloud)
 			}
 		}
 	} else {

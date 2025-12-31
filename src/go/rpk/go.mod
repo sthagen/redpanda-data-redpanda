@@ -9,7 +9,7 @@ require (
 	buf.build/gen/go/redpandadata/cloud/connectrpc/go v1.19.1-20251208213618-d95eb1f5bf36.2
 	buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.10-20251209175915-c155e3b17438.1
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.10-20251106193941-bb850a944663.1
-	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251204205609-c0c7c0a68f89.1
+	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.11-20251218215858-19149a4a2435.1
 	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.19.1-20251209134521-106822fddcf0.2
 	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.10-20251209134521-106822fddcf0.1
 	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.19.1-20251022210437-a5dd600d04b6.2
@@ -76,7 +76,7 @@ require (
 	golang.org/x/term v0.36.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20251103181224-f26f9409b101
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.33.3
