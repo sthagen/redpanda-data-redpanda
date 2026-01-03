@@ -1492,7 +1492,7 @@ TEST(AUTHORIZER_TEST, role_authz_simple_allow) {
     EXPECT_EQ(r.value(), the_dietrichsons);
     auto r1_members = std::move(r.value()).members();
     r1_members.insert(role_member::from_principal(user3));
-    roles.put(role_name1, std::move(r1_members));
+    roles.put(role_name1, r1_members);
 
     // user3 should now have read permissions
     result = auth.authorized(

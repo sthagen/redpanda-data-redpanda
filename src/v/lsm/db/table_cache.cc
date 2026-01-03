@@ -134,10 +134,7 @@ public:
       , _cache(compute_cache_config(max_entries), eviction(this))
       , _block_cache(std::move(block_cache))
       , _cleanup_queue([](const std::exception_ptr& ex) {
-          vlog(
-            log.error,
-            "expected exception on table cache cleanup queue: {}",
-            ex);
+          vlog(log.error, "table_cache_cleanup_error error=\"{}\"", ex);
       }) {}
 
     ss::future<std::unique_ptr<internal::iterator>>

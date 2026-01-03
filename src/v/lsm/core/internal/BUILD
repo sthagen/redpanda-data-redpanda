@@ -92,6 +92,7 @@ redpanda_cc_library(
         ":files",
         "//src/v/base",
         "//src/v/lsm/core:compression",
+        "@abseil-cpp//absl/time",
         "@seastar",
     ],
 )

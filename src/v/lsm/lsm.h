@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/time/time.h"
 #include "base/seastarx.h"
 #include "lsm/io/persistence.h"
 #include "utils/named_type.h"
@@ -107,7 +108,7 @@ struct options {
     size_t block_cache_size = default_block_cache_size;
 
     // The size of a single block within an SST file.
-    constexpr static size_t default_sst_block_size = 4_KiB;
+    constexpr static size_t default_sst_block_size = 8_KiB;
     size_t sst_block_size = default_sst_block_size;
 
     // The frequency at which to generate a new bloom filter.
@@ -135,6 +136,12 @@ struct options {
     //
     // If empty all levels are uncompressed.
     std::vector<compression_type> compression_by_level;
+
+    // The delay at which to wait until actually deleting files.
+    //
+    // If set to zero, then files are immediately GC'd after new manifest files
+    // are written.
+    absl::Duration file_deletion_delay;
 };
 
 class write_batch;

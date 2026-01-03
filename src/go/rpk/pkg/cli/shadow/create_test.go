@@ -283,6 +283,25 @@ func TestValidateParsedShadowLinkConfig(t *testing.T) {
 			expectedErr: "cloud shadow links don't support plain passwords",
 		},
 		{
+			name: "cloud config - plain tls key not allowed",
+			config: &ShadowLinkConfig{
+				Name: "test-link",
+				CloudOptions: &CloudShadowLinkOptions{
+					ShadowRedpandaID: "shadow-cluster",
+				},
+				ClientOptions: &ShadowLinkClientOptions{
+					BootstrapServers: []string{"broker1:9092"},
+					TLSSettings: &TLSSettings{
+						Enabled: true,
+						TLSPEMSettings: &TLSPEMSettings{
+							Key: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+						},
+					},
+				},
+			},
+			expectedErr: "cloud shadow links don't support plain TLS keys",
+		},
+		{
 			name: "valid cloud config - with secrets store password",
 			config: &ShadowLinkConfig{
 				Name: "test-link",
@@ -315,7 +334,7 @@ func TestValidateParsedShadowLinkConfig(t *testing.T) {
 						Enabled: true,
 						TLSPEMSettings: &TLSPEMSettings{
 							CA:   "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
-							Key:  "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+							Key:  "${secrets.MY_TLS_KEY}",
 							Cert: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
 						},
 					},

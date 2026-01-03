@@ -330,7 +330,7 @@ class DucktapeRunner:
         globals_dict = {
             "rp_install_path_root": str(self.rp_install_dir),
             "direct_consumer_verifier_root": str(self.dcv_install_dir),
-            "redpanda_log_level": "info",
+            "redpanda_log_level": self.args.log_level,
             "scale": "local",
             "enable_cov": "OFF",
             "use_xfs_partitions": False,
@@ -827,6 +827,11 @@ def main():
         default=False,
         help="Enable redpanda log trimming",
     )
+    run_parser.add_argument(
+        "--log-level",
+        default="info",
+        help="Set the Redpanda log level",
+    )
 
 
     # 'start' subcommand
@@ -902,6 +907,11 @@ def main():
         default=False,
         help="Enable redpanda log trimming",
     )
+    test_parser.add_argument(
+        "--log-level",
+        default="info",
+        help="Set the Redpanda log level",
+    )
 
     # 'stop' subcommand
     _ = subparsers.add_parser(
@@ -970,6 +980,11 @@ def main():
         action="store_true",
         default=False,
         help="Enable redpanda log trimming",
+    )
+    repl_parser.add_argument(
+        "--log-level",
+        default="info",
+        help="Set the Redpanda log level",
     )
 
     args = parser.parse_args()

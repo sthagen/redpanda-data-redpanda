@@ -66,7 +66,7 @@ role_store make_store(
                 role_mems.insert(m);
             }
         }
-        store.put(std::move(n), std::move(role_mems));
+        store.put(std::move(n), role_mems);
     }
     return store;
 }
@@ -151,7 +151,7 @@ PERF_TEST(role_store_bench, update_role) {
     auto mems = std::move(r).members();
     store.remove(n);
     mems.erase(m);
-    store.put(n, std::move(mems));
+    store.put(n, mems);
     perf_tests::stop_measuring_time();
 }
 
@@ -162,7 +162,7 @@ PERF_TEST(role_store_bench, put_role) {
     all_members.reserve(N_MEMBERS);
     std::ranges::copy(members_data, std::back_inserter(all_members));
     perf_tests::start_measuring_time();
-    store.put(std::move(name), std::move(all_members));
+    store.put(std::move(name), all_members);
     perf_tests::stop_measuring_time();
 }
 

@@ -53,7 +53,7 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 					NameContains: nameContains,
 				},
 			}
-			response, err := cl.Secrets.ListSecrets(cmd.Context(), connect.NewRequest(request))
+			response, err := cl.Secret.ListSecrets(cmd.Context(), connect.NewRequest(request))
 			out.MaybeDie(err, "unable to list secrets: %v", err)
 
 			tw := out.NewTable("NAME", "SCOPES")

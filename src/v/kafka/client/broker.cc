@@ -425,8 +425,7 @@ remote_broker::send_scram_client_final(
           client_last_resp.data.error_message.value_or("<no error message>")};
     }
 
-    co_return security::server_final_message(
-      std::move(client_last_resp.data.auth_bytes));
+    co_return security::server_final_message(client_last_resp.data.auth_bytes);
 }
 
 template<typename ScramAlgo>

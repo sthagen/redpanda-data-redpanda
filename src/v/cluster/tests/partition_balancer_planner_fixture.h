@@ -314,7 +314,7 @@ struct partition_balancer_planner_fixture {
               model::broker_shard{
                 n, random_generators::get_int<uint32_t>(0, 3)});
         }
-        move_partition_replicas(std::move(ntp), std::move(new_replicas));
+        move_partition_replicas(ntp, new_replicas);
     }
 
     void move_partition_replicas(cluster::ntp_reassignment& reassignment) {

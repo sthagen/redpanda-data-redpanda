@@ -51,7 +51,7 @@ ss::future<> partition_leader_log_collector::start_collecting_logs() {
     _leader_notify_handle
       = _leaders->local().register_leadership_change_notification(
         [this](const model::ntp& ntp, model::term_id, model::node_id leader) {
-            on_leadership_change(std::move(ntp), leader);
+            on_leadership_change(ntp, leader);
         });
     co_return;
 }
@@ -118,7 +118,7 @@ void partition_leader_log_collector::on_ntp_change(
 }
 
 void partition_leader_log_collector::on_leadership_change(
-  model::ntp ntp, model::node_id leader) {
+  const model::ntp& ntp, model::node_id leader) {
     auto topic_cfg_opt = _topic_table->local().get_topic_cfg(
       model::topic_namespace_view{ntp});
     if (!topic_cfg_opt.has_value()) {
@@ -146,7 +146,7 @@ void partition_leader_log_collector::on_leadership_change(
     }
 
     if (!is_leader && is_managed) {
-        _unmanage_cb(std::move(ntp), "Stepped down as leader");
+        _unmanage_cb(ntp, "Stepped down as leader");
     }
 }
 

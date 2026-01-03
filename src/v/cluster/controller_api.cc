@@ -528,7 +528,7 @@ controller_api::get_node_decommission_progress(
     // node but their metadata is update, add them explicitly
     ret.replicas_left += moving_from_node.size();
     auto states = co_await get_partitions_leader_reconfiguration_state(
-      std::move(moving_from_node), timeout);
+      moving_from_node, timeout);
 
     if (states) {
         ret.current_reconfigurations = std::move(states.value());

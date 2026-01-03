@@ -61,7 +61,7 @@ BOOST_AUTO_TEST_CASE(role_store_test) {
 
     role_store store;
     BOOST_CHECK(store.put(copied, role0));
-    store.put(moved, std::move(role0_copy));
+    store.put(moved, role0_copy);
 
     BOOST_REQUIRE(store.get(copied).has_value());
     BOOST_CHECK_EQUAL(store.get(copied).value(), role0);
@@ -73,7 +73,7 @@ BOOST_AUTO_TEST_CASE(role_store_test) {
     BOOST_CHECK(store.remove(copied));
     BOOST_CHECK(store.remove(moved));
     BOOST_CHECK(store.put(copied, role1));
-    store.put(moved, std::move(role1_copy));
+    store.put(moved, role1_copy);
 
     BOOST_REQUIRE(store.get(copied).has_value());
     BOOST_CHECK_EQUAL(store.get(copied).value(), role1);
@@ -310,7 +310,7 @@ BOOST_AUTO_TEST_CASE(role_store_big_store) {
                       role_mems.insert(m);
                   }
               }
-              store.put(std::move(n), std::move(role_mems));
+              store.put(std::move(n), role_mems);
           }
           return store;
       }();

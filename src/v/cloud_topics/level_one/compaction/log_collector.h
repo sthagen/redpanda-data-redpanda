@@ -72,7 +72,7 @@ public:
     using manage_cb_t = ss::noncopyable_function<void(
       const model::ntp&, const model::topic_id_partition&, std::string_view)>;
     using unmanage_cb_t
-      = ss::noncopyable_function<void(const model::ntp&, std::string_view)>;
+      = ss::noncopyable_function<void(model::ntp, std::string_view)>;
     using is_managed_cb_t = ss::noncopyable_function<bool(const model::ntp&)>;
 
     partition_leader_log_collector(
@@ -115,7 +115,7 @@ private:
     // Register operations can be performed synchronously while unregister
     // operations are performed in a backgrounded fiber (see
     // `compaction_scheduler::unmanage_partition()`).
-    void on_leadership_change(model::ntp, model::node_id);
+    void on_leadership_change(const model::ntp&, model::node_id);
 
     // Callback to register a partition with the `compaction_scheduler`.
     manage_cb_t _manage_cb;

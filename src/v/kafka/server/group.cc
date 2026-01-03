@@ -3665,12 +3665,12 @@ group::delete_offsets(const chunked_vector<model::topic_partition>& offsets) {
      * Delete the requested offsets, unless there is at least one active
      * subscription for an offset.
      */
-    for (auto& offset : offsets) {
+    for (const auto& offset : offsets) {
         if (!subscribed(offset.topic)) {
             vlog(_ctxlog.debug, "Deleting group offset {}", offset);
             _offsets.erase(offset);
             _pending_offset_commits.erase(offset);
-            deleted_offsets.push_back(std::move(offset));
+            deleted_offsets.push_back(offset);
         }
     }
 

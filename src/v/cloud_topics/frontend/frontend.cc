@@ -614,8 +614,7 @@ ss::future<> bg_upload_and_replicate(
 
     chunked_vector<model::record_batch_header> headers;
     headers.push_back(header);
-    auto placeholders = co_await convert_to_placeholders(
-      res.value(), std::move(headers));
+    auto placeholders = co_await convert_to_placeholders(res.value(), headers);
 
     vassert(
       placeholders.batches.size() == 1,

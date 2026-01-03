@@ -178,3 +178,24 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "gc_actor_test",
+    timeout = "short",
+    srcs = [
+        "gc_actor_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/lsm/core/internal:files",
+        "//src/v/lsm/core/internal:options",
+        "//src/v/lsm/db:gc_actor",
+        "//src/v/lsm/db:table_cache",
+        "//src/v/lsm/io:memory_persistence",
+        "//src/v/lsm/sst:block_cache",
+        "//src/v/lsm/sst:builder",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

@@ -1184,6 +1184,63 @@ fill_maintenance_status(const cluster::broker_state& b_state) {
     return ret;
 }
 
+ss::httpd::broker_json::broker get_broker_info(
+  model::node_id node_id,
+  const cluster::node_metadata& node_metadata,
+  const cluster::health_monitor_frontend& health_monitor,
+  const cluster::members_table& members_table,
+  const cluster::cluster_health_report& health_report) {
+    ss::httpd::broker_json::broker b;
+
+    // Populate basic fields from node metadata
+    b.node_id = node_id;
+    b.num_cores = node_metadata.broker.properties().cores;
+    if (node_metadata.broker.rack()) {
+        b.rack = *node_metadata.broker.rack();
+    }
+    b.membership_status = fmt::format(
+      "{}", node_metadata.state.get_membership_state());
+    b.is_alive = health_monitor.is_alive(node_id) == cluster::alive::yes;
+    b.maintenance_status = fill_maintenance_status(node_metadata.state);
+    b.internal_rpc_address = node_metadata.broker.rpc_address().host();
+    b.internal_rpc_port = node_metadata.broker.rpc_address().port();
+    b.in_fips_mode = fmt::format(
+      "{}", node_metadata.broker.properties().in_fips_mode);
+
+    // Enrich with data from health report
+    auto node_report_it = std::ranges::find_if(
+      health_report.node_reports.begin(),
+      health_report.node_reports.end(),
+      [node_id](const auto& report) { return report->id == node_id; });
+
+    if (node_report_it != health_report.node_reports.end()) {
+        const auto& node_report = *node_report_it;
+        b.version = node_report->local_state.redpanda_version;
+        b.recovery_mode_enabled
+          = node_report->local_state.recovery_mode_enabled;
+
+        auto nm = members_table.get_node_metadata_ref(node_id);
+        if (nm && node_report->drain_status) {
+            b.maintenance_status = fill_maintenance_status(
+              nm.value().get().state, node_report->drain_status.value());
+        }
+
+        auto add_disk = [&ds_list = b.disk_space](const storage::disk& ds) {
+            ss::httpd::broker_json::disk_space_info dsi;
+            dsi.path = ds.path;
+            dsi.free = ds.free;
+            dsi.total = ds.total;
+            ds_list.push(dsi);
+        };
+        add_disk(node_report->local_state.data_disk);
+        if (!node_report->local_state.shared_disk()) {
+            add_disk(node_report->local_state.get_cache_disk());
+        }
+    }
+
+    return b;
+}
+
 // Fetch brokers from the members table and enrich with
 // metadata from the health monitor.
 ss::future<std::vector<ss::httpd::broker_json::broker>>
@@ -1208,71 +1265,18 @@ get_brokers(cluster::controller* const controller) {
                 ss::http::reply::status_type::service_unavailable);
           }
 
-          std::map<model::node_id, ss::httpd::broker_json::broker> broker_map;
-
-          // Collect broker information from the members table.
-          auto& members_table = controller->get_members_table().local();
-          for (auto& [id, nm] : members_table.nodes()) {
-              ss::httpd::broker_json::broker b;
-              b.node_id = id;
-              b.num_cores = nm.broker.properties().cores;
-              if (nm.broker.rack()) {
-                  b.rack = *nm.broker.rack();
-              }
-              b.membership_status = fmt::format(
-                "{}", nm.state.get_membership_state());
-              b.is_alive = controller->get_health_monitor().local().is_alive(id)
-                           == cluster::alive::yes;
-
-              // These fields are defaults that will be overwritten with
-              // data from the health report.
-              b.maintenance_status = fill_maintenance_status(nm.state);
-              b.internal_rpc_address = nm.broker.rpc_address().host();
-              b.internal_rpc_port = nm.broker.rpc_address().port();
-              b.in_fips_mode = fmt::format(
-                "{}", nm.broker.properties().in_fips_mode);
-
-              broker_map[id] = b;
-          }
-
-          // Enrich the broker information with data from the health report.
-          for (auto& node_report : h_report.value().node_reports) {
-              auto it = broker_map.find(node_report->id);
-              if (it == broker_map.end()) {
-                  continue;
-              }
-
-              it->second.version = node_report->local_state.redpanda_version;
-              it->second.recovery_mode_enabled
-                = node_report->local_state.recovery_mode_enabled;
-              auto nm = members_table.get_node_metadata_ref(node_report->id);
-              if (nm && node_report->drain_status) {
-                  it->second.maintenance_status = fill_maintenance_status(
-                    nm.value().get().state, node_report->drain_status.value());
-              }
-
-              auto add_disk =
-                [&ds_list = it->second.disk_space](const storage::disk& ds) {
-                    ss::httpd::broker_json::disk_space_info dsi;
-                    dsi.path = ds.path;
-                    dsi.free = ds.free;
-                    dsi.total = ds.total;
-                    ds_list.push(dsi);
-                };
-              add_disk(node_report->local_state.data_disk);
-              if (!node_report->local_state.shared_disk()) {
-                  add_disk(node_report->local_state.get_cache_disk());
-              }
-          }
-
           std::vector<ss::httpd::broker_json::broker> brokers;
-          brokers.reserve(broker_map.size());
+          auto& members_table = controller->get_members_table().local();
+          auto& health_monitor = controller->get_health_monitor().local();
 
-          for (auto&& broker : broker_map) {
-              brokers.push_back(std::move(broker.second));
+          brokers.reserve(members_table.nodes().size());
+
+          for (auto& [id, nm] : members_table.nodes()) {
+              brokers.push_back(get_broker_info(
+                id, nm, health_monitor, members_table, h_report.value()));
           }
 
-          return ss::make_ready_future<decltype(brokers)>(std::move(brokers));
+          return ssx::now(std::move(brokers));
       });
 };
 
@@ -2076,7 +2080,7 @@ void admin_server::register_cluster_config_routes() {
                     rs.unknown = s.second.unknown;
                 }
 
-                return ss::json::json_return_type(std::move(res));
+                return ss::json::json_return_type(res);
             });
       });
 
@@ -2310,7 +2314,7 @@ admin_server::patch_cluster_config_handler(
         // normal write.
         ss::httpd::cluster_config_json::cluster_config_write_result result;
         result.config_version = current_version;
-        co_return ss::json::json_return_type(std::move(result));
+        co_return ss::json::json_return_type(result);
     }
 
     if (
@@ -2327,7 +2331,7 @@ admin_server::patch_cluster_config_handler(
             [](cluster::config_manager& cm) { return cm.get_version(); });
         ss::httpd::cluster_config_json::cluster_config_write_result result;
         result.config_version = current_version;
-        co_return ss::json::json_return_type(std::move(result));
+        co_return ss::json::json_return_type(result);
     }
 
     vlog(
@@ -2355,7 +2359,7 @@ admin_server::patch_cluster_config_handler(
 
     ss::httpd::cluster_config_json::cluster_config_write_result result;
     result.config_version = patch_result.version;
-    co_return ss::json::json_return_type(std::move(result));
+    co_return ss::json::json_return_type(result);
 }
 
 ss::future<ss::json::json_return_type>
@@ -2798,30 +2802,29 @@ admin_server::get_broker_handler(std::unique_ptr<ss::http::request> req) {
           fmt::format("broker with id: {} not found", id));
     }
 
-    auto maybe_drain_status = co_await _controller->get_health_monitor()
-                                .local()
-                                .get_node_drain_status(
-                                  id, model::time_from_now(5s));
+    cluster::node_report_filter filter;
+    filter.include_partitions = cluster::include_partitions_info::no;
 
-    ss::httpd::broker_json::broker ret;
-    ret.node_id = node_meta->broker.id();
-    ret.internal_rpc_address = node_meta->broker.rpc_address().host();
-    ret.internal_rpc_port = node_meta->broker.rpc_address().port();
-    ret.num_cores = node_meta->broker.properties().cores;
-    if (node_meta->broker.rack()) {
-        ret.rack = node_meta->broker.rack().value();
-    }
-    ret.membership_status = fmt::format(
-      "{}", node_meta->state.get_membership_state());
-    ret.maintenance_status = fill_maintenance_status(node_meta->state);
-    if (
-      !maybe_drain_status.has_error()
-      && maybe_drain_status.value().has_value()) {
-        ret.maintenance_status = fill_maintenance_status(
-          node_meta->state, *maybe_drain_status.value());
+    auto h_report
+      = co_await _controller->get_health_monitor().local().get_cluster_health(
+        cluster::cluster_report_filter{
+          .node_report_filter = std::move(filter),
+        },
+        cluster::force_refresh::no,
+        model::time_from_now(5s));
+
+    if (h_report.has_error()) {
+        throw ss::httpd::base_exception(
+          fmt::format(
+            "Unable to get cluster health: {}", h_report.error().message()),
+          ss::http::reply::status_type::internal_server_error);
     }
 
-    co_return ret;
+    const auto& members_table = _controller->get_members_table().local();
+    const auto& health_monitor = _controller->get_health_monitor().local();
+
+    co_return get_broker_info(
+      id, *node_meta, health_monitor, members_table, h_report.value());
 }
 
 ss::future<ss::json::json_return_type>
@@ -2839,7 +2842,7 @@ admin_server::get_broker_uuids_handler() {
           }
           return ret;
       });
-    co_return ss::json::json_return_type(std::move(mappings));
+    co_return ss::json::json_return_type(mappings);
 }
 
 ss::future<ss::json::json_return_type> admin_server::decomission_broker_handler(
@@ -3056,9 +3059,9 @@ void admin_server::register_broker_routes() {
 
                 ss::httpd::broker_json::cluster_view ret;
                 ret.version = members_table.version();
-                ret.brokers = std::move(brokers);
+                ret.brokers = brokers;
 
-                return ss::json::json_return_type(std::move(ret));
+                return ss::json::json_return_type(ret);
             });
       });
 
@@ -3067,7 +3070,7 @@ void admin_server::register_broker_routes() {
       [this](std::unique_ptr<ss::http::request>) {
           return get_brokers(_controller)
             .then([](std::vector<ss::httpd::broker_json::broker> brokers) {
-                return ss::json::json_return_type(std::move(brokers));
+                return ss::json::json_return_type(brokers);
             });
       });
     register_route<user>(
@@ -3684,7 +3687,7 @@ admin_server::get_metrics_uuid(std::unique_ptr<ss::http::request>) {
       0, ([](cluster::controller_stm& s) {
           return s.get_metrics_reporter_cluster_info().uuid;
       }));
-    co_return ss::json::json_return_type(std::move(ret));
+    co_return ss::json::json_return_type(ret);
 }
 
 static json::validator make_post_cluster_partitions_validator() {
@@ -4124,7 +4127,7 @@ void admin_server::register_cluster_routes() {
           if (cluster_uuid) {
               ss::httpd::cluster_json::uuid ret;
               ret.cluster_uuid = ssx::sformat("{}", cluster_uuid.value());
-              return ss::json::json_return_type(std::move(ret));
+              return ss::json::json_return_type(ret);
           }
           return ss::json::json_return_type(ss::json::json_void());
       });

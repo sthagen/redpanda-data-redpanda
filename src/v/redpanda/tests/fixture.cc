@@ -913,8 +913,7 @@ security::server_final_message redpanda_thread_fixture::send_scram_client_final(
             "failed to send scram client final: {}",
             client_last_resp.data.error_code));
     }
-    return security::server_final_message(
-      std::move(client_last_resp.data.auth_bytes));
+    return security::server_final_message(client_last_resp.data.auth_bytes);
 }
 
 template<typename Authenticator>

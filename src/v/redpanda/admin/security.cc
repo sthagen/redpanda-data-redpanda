@@ -1201,7 +1201,7 @@ generate_kafka_interface_report(
                   kface.name));
             }
 
-            report.supported_sasl_mechanisms = std::move(sasl_mechs);
+            report.supported_sasl_mechanisms = sasl_mechs;
         }
 
         report.authorization_enabled = config::kafka_authz_enabled();
@@ -1514,7 +1514,7 @@ admin_server::get_security_report(std::unique_ptr<ss::http::request>) {
             _audit_mgr.local().get_client_config(),
             ephemeral_credentials::yes);
     }
-    report.interfaces = std::move(interfaces_report);
+    report.interfaces = interfaces_report;
 
     const auto min_secure_tls = config::tls_version::v1_2;
     if (config::shard_local_cfg().tls_min_version < min_secure_tls) {
@@ -1537,7 +1537,7 @@ admin_server::get_security_report(std::unique_ptr<ss::http::request>) {
         alerts.push_back(std::move(alert));
     }
 
-    report.alerts = std::move(alerts);
+    report.alerts = alerts;
 
     return ss::make_ready_future<ss::json::json_return_type>(std::move(report));
 }

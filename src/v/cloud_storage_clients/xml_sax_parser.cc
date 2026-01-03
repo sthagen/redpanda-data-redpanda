@@ -140,7 +140,7 @@ void aws_parse_impl::consume_characters() {
     switch (_current_tag) {
     case xml_tag::key:
         if (_current_item) {
-            _current_item->key = std::move(characters);
+            _current_item->key = characters;
         } else {
             throw xml_parse_exception{
               "Invalid state: parsing Key when not in Contents tag"};
@@ -164,23 +164,23 @@ void aws_parse_impl::consume_characters() {
         break;
     case xml_tag::etag:
         if (_current_item) {
-            _current_item->etag = std::move(characters);
+            _current_item->etag = characters;
         } else {
             throw xml_parse_exception{
               "Invalid state: parsing ETag when not in Contents tag"};
         }
         break;
     case xml_tag::next_continuation_token:
-        _items.next_continuation_token = std::move(characters);
+        _items.next_continuation_token = characters;
         break;
     case xml_tag::prefix:
         // Parsing prefix at the top level: ListBucketResult -> Prefix
         if (_tags.size() == 2) {
-            _items.prefix = std::move(characters);
+            _items.prefix = characters;
             // Parsing common prefixes: ListBucketResult -> CommonPrefixes ->
             // Prefix
         } else if (_tags.size() == 3 && _tags[1] == aws_tags::common_prefixes) {
-            _items.common_prefixes.push_back(std::move(characters));
+            _items.common_prefixes.push_back(characters);
         }
         break;
     case xml_tag::is_truncated:
@@ -284,11 +284,11 @@ void abs_parse_impl::handle_characters(std::string_view characters) {
 }
 
 void abs_parse_impl::consume_characters() {
-    auto characters = std::exchange(_current_chars, {});
+    std::string characters = std::exchange(_current_chars, {});
     switch (_current_tag) {
     case xml_tag::key:
         if (_current_item) {
-            _current_item->key = std::move(characters);
+            _current_item->key = characters;
         } else {
             throw xml_parse_exception{
               "Invalid state: parsing Name when not in Blob tag"};
@@ -312,24 +312,24 @@ void abs_parse_impl::consume_characters() {
         break;
     case xml_tag::etag:
         if (_current_item) {
-            _current_item->etag = std::move(characters);
+            _current_item->etag = characters;
         } else {
             throw xml_parse_exception{
               "Invalid state: parsing ETag when not in Blob tag"};
         }
         break;
     case xml_tag::next_continuation_token:
-        _items.next_continuation_token = std::move(characters);
+        _items.next_continuation_token = characters;
         _items.is_truncated = true;
         break;
     case xml_tag::prefix:
         // Parsing prefix at the top level: ListBucketResult -> Prefix
         if (_tags.size() == 2) {
-            _items.prefix = std::move(characters);
+            _items.prefix = characters;
             // Parsing common prefixes: EnumerationResults -> Blobs ->
             // BlobPrefix -> Name
         } else if (_tags.size() == 4) {
-            _items.common_prefixes.push_back(std::move(characters));
+            _items.common_prefixes.push_back(characters);
         }
         break;
     case xml_tag::is_truncated:

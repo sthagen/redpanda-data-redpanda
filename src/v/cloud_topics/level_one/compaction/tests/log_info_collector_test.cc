@@ -71,7 +71,7 @@ TEST_F(LogInfoCollectorTestFixture, TestInfoCollector) {
       .get();
     ASSERT_EQ(cached_metadata.size(), num_topics);
     while (!cached_metadata.empty()) {
-        auto sample = std::move(cached_metadata.top());
+        auto sample = cached_metadata.top();
         cached_metadata.pop();
         ASSERT_TRUE(sample->info_and_ts.has_value());
         ASSERT_FLOAT_EQ(sample->info_and_ts->info.dirty_ratio, 1.0);

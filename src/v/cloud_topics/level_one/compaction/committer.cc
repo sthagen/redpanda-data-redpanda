@@ -171,12 +171,13 @@ compaction_committer::compaction_job::do_upload(
 
     if (!put_res.has_value()) {
         std::ignore = metadata_builder->remove_pending_object(oid);
-        auto err = fmt::format(
-          "Failed to put object {}: {}",
-          oid,
-          static_cast<int>(put_res.error()));
         co_return std::unexpected(
-          error{.t = error::type::io_failure, .msg = std::move(err)});
+          error{
+            .t = error::type::io_failure,
+            .msg = fmt::format(
+              "Failed to put object {}: {}",
+              oid,
+              static_cast<int>(put_res.error()))});
     }
 
     vlog(
@@ -262,10 +263,9 @@ compaction_committer::compaction_job::await_inflight_uploads() {
 ss::future<std::expected<void, metastore::errc>>
 compaction_committer::compaction_job::do_compact_objects(
   metastore::compaction_map_t compact_map) {
-    return l1::retry_metastore_op_with_default_rtc(
-      [this, compact_map = std::move(compact_map)]() {
-          return _metastore->compact_objects(
-            *_metadata_builder, std::move(compact_map));
+    co_return co_await l1::retry_metastore_op_with_default_rtc(
+      [this, &compact_map]() {
+          return _metastore->compact_objects(*_metadata_builder, compact_map);
       },
       _as);
 }

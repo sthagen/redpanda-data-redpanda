@@ -160,18 +160,19 @@ public:
     void shutdown() {
         _as.request_abort_ex(
           std::make_exception_ptr(pipeline_abort_requested()));
+        remove_requests_for_shutdown();
     }
 
     ss::future<> stop() {
         if (!_as.abort_requested()) {
             _as.request_abort_ex(
               std::make_exception_ptr(pipeline_abort_requested()));
+            remove_requests_for_shutdown();
         }
         auto fut = _gate.close();
         for (auto& f : _filters) {
             f.cancel();
         }
-        remove_requests_for_shutdown();
         co_await std::move(fut);
     }
 

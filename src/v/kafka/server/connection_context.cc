@@ -687,8 +687,8 @@ connection_context::record_tp_and_calculate_throttle(
     co_return delay_t{.request = delay_request, .enforce = delay_enforce};
 }
 
-ss::future<request_resources> connection_context::throttle_request(
-  const request_data r_data, size_t request_size) {
+ss::future<request_resources>
+connection_context::throttle_request(request_data r_data, size_t request_size) {
     // note that when throttling is first determined, the request is
     // allowed to pass through, and only subsequent requests are
     // delayed. this is a similar strategy used by kafka 2.0: the

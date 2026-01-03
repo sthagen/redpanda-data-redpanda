@@ -1192,8 +1192,7 @@ partition_balancer_planner::request_context::for_each_replica_random_order(
         auto part_visitor = [&visitor, node = repl.node](partition& part) {
             return visitor(part, node);
         };
-        auto stop = do_with_partition(
-          std::move(ntp), *(repl.assignment), part_visitor);
+        auto stop = do_with_partition(ntp, *(repl.assignment), part_visitor);
         if (stop == ss::stop_iteration::yes) {
             co_return;
         }

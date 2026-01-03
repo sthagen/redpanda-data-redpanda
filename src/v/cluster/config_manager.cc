@@ -359,7 +359,7 @@ static void preload_local(
             return;
         }
 
-        return preload_local(key, ss::sstring(std::move(raw_value)), result);
+        return preload_local(key, ss::sstring(raw_value), result);
     } else {
         if (result.has_value()) {
             vlog(clusterlog.info, "Ignoring unknown property: {}", key);

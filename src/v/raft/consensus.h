@@ -631,7 +631,7 @@ private:
       model::offset);
 
     void successfull_append_entries_reply(
-      follower_index_metadata&, append_entries_reply);
+      follower_index_metadata&, const append_entries_reply&);
 
     size_t estimate_recovering_followers() const;
     bool needs_recovery(const follower_index_metadata&, model::offset);

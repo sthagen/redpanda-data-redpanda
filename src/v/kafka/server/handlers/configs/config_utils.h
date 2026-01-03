@@ -563,7 +563,7 @@ inline void parse_and_set_bool(
     if (op == config_resource_operation::set && value) {
         try {
             // Ignore case.
-            auto str_value = std::move(*value);
+            auto str_value = *value;
             std::transform(
               str_value.begin(),
               str_value.end(),

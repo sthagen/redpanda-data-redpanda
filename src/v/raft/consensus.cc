@@ -480,7 +480,7 @@ consensus::success_reply consensus::update_follower_index(
     }
 
     if (reply.result == reply_result::success) {
-        successfull_append_entries_reply(idx, std::move(reply));
+        successfull_append_entries_reply(idx, reply);
         return success_reply::yes;
     } else {
         idx.expected_log_end_offset = model::offset{};
@@ -595,7 +595,7 @@ void consensus::process_append_entries_reply(
 }
 
 void consensus::successfull_append_entries_reply(
-  follower_index_metadata& idx, append_entries_reply reply) {
+  follower_index_metadata& idx, const append_entries_reply& reply) {
     // follower and leader logs matches
     idx.last_dirty_log_index = reply.last_dirty_log_index;
     idx.last_flushed_log_index = reply.last_flushed_log_index;

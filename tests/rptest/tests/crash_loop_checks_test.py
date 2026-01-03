@@ -14,6 +14,7 @@ from ducktape.utils.util import wait_until
 
 from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.services.cluster import cluster
+from rptest.utils.mode_checks import skip_fips_mode
 from rptest.services.redpanda import LoggingConfig, RedpandaService, ResourceSettings
 from rptest.tests.redpanda_test import RedpandaTest
 
@@ -347,6 +348,7 @@ class CrashLoopChecksTest(RedpandaTest):
             f"Unexpected crash message: {report['crash_message']}"
         )
 
+    @skip_fips_mode
     @cluster(num_nodes=1, log_allow_list=CLOUD_STORAGE_CLIENT_CONFIG_ERRORS)
     def test_cloud_storage_client_misconfiguration(self):
         """

@@ -62,12 +62,14 @@ redpanda_cc_library(
         "//src/v/lsm/sst:builder",
     ],
     deps = [
+        ":gc_actor",
         ":memtable",
         ":snapshot",
         ":table_cache",
         ":version_set",
         "//src/v/base",
         "//src/v/bytes:iobuf",
+        "//src/v/container:chunked_hash_map",
         "//src/v/lsm/core:exceptions",
         "//src/v/lsm/core/internal:files",
         "//src/v/lsm/core/internal:iterator",
@@ -223,6 +225,29 @@ redpanda_cc_library(
     hdrs = ["weak_intrusive_list.h"],
     deps = [
         "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "gc_actor",
+    srcs = [
+        "gc_actor.cc",
+    ],
+    hdrs = [
+        "gc_actor.h",
+    ],
+    implementation_deps = [
+        "//src/v/lsm/core/internal:logger",
+    ],
+    deps = [
+        ":table_cache",
+        "//src/v/base",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/lsm/core/internal:files",
+        "//src/v/lsm/core/internal:options",
+        "//src/v/lsm/io:persistence",
+        "//src/v/ssx:actor",
         "@seastar",
     ],
 )

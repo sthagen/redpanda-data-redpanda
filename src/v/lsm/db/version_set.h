@@ -144,6 +144,13 @@ public:
     // Allocate a new file ID
     internal::file_id new_file_id() { return _next_file_id++; }
 
+    // The highest allocated file ID.
+    internal::file_id highest_used_file_id() {
+        auto fid = _next_file_id;
+        fid--;
+        return fid;
+    }
+
     // Reuse a file ID (for example because a write failed or operation was
     // cancelled).
     void reuse_file_id(internal::file_id id);

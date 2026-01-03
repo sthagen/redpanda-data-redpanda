@@ -72,7 +72,7 @@ overwrite its scopes. Available scope options are: redpanda_connect, redpanda_cl
 				Scopes:     scopeRequest,
 			}
 
-			response, err := cl.Secrets.UpdateSecret(cmd.Context(), connect.NewRequest(request))
+			response, err := cl.Secret.UpdateSecret(cmd.Context(), connect.NewRequest(request))
 			if err != nil {
 				var connectErr *connect.Error
 				if errors.As(err, &connectErr) {

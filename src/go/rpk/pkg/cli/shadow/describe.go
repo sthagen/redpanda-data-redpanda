@@ -37,6 +37,74 @@ const (
 	secSchemaRegistry = "Schema Registry Sync"
 )
 
+// shadowLinkDescription is the unified output for both cloud and self-hosted.
+type shadowLinkDescription struct {
+	// Overview fields (flattened to top level)
+	Name             string `json:"name" yaml:"name"`
+	ID               string `json:"id" yaml:"id"`
+	State            string `json:"state,omitempty" yaml:"state,omitempty"`
+	Reason           string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	ShadowRedpandaID string `json:"shadow_redpanda_id,omitempty" yaml:"shadow_redpanda_id,omitempty"`
+	CreatedAt        string `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+	UpdatedAt        string `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
+
+	// Configuration sections
+	ClientOptions             *describeClientOptions             `json:"client_options,omitempty" yaml:"client_options,omitempty"`
+	TopicMetadataSyncOptions  *describeTopicMetadataSyncOptions  `json:"topic_metadata_sync_options,omitempty" yaml:"topic_metadata_sync_options,omitempty"`
+	ConsumerOffsetSyncOptions *describeConsumerOffsetSyncOptions `json:"consumer_offset_sync_options,omitempty" yaml:"consumer_offset_sync_options,omitempty"`
+	SecuritySyncOptions       *describeSecuritySyncOptions       `json:"security_sync_options,omitempty" yaml:"security_sync_options,omitempty"`
+	SchemaRegistrySyncOptions *describeSchemaRegistrySyncOptions `json:"schema_registry_sync_options,omitempty" yaml:"schema_registry_sync_options,omitempty"`
+}
+
+// describeClientOptions uses effective values and auth metadata (not password).
+type describeClientOptions struct {
+	ClientID               string                        `json:"client_id,omitempty" yaml:"client_id,omitempty"`
+	SourceClusterID        string                        `json:"source_cluster_id,omitempty" yaml:"source_cluster_id,omitempty"`
+	BootstrapServers       []string                      `json:"bootstrap_servers" yaml:"bootstrap_servers"`
+	TLSSettings            *TLSSettings                  `json:"tls_settings,omitempty" yaml:"tls_settings,omitempty"`
+	AuthenticationConfig   *describeAuthenticationConfig `json:"authentication_configuration,omitempty" yaml:"authentication_configuration,omitempty"`
+	MetadataMaxAgeMs       int32                         `json:"metadata_max_age_ms" yaml:"metadata_max_age_ms"`
+	ConnectionTimeoutMs    int32                         `json:"connection_timeout_ms" yaml:"connection_timeout_ms"`
+	RetryBackoffMs         int32                         `json:"retry_backoff_ms" yaml:"retry_backoff_ms"`
+	FetchWaitMaxMs         int32                         `json:"fetch_wait_max_ms" yaml:"fetch_wait_max_ms"`
+	FetchMinBytes          int32                         `json:"fetch_min_bytes" yaml:"fetch_min_bytes"`
+	FetchMaxBytes          int32                         `json:"fetch_max_bytes" yaml:"fetch_max_bytes"`
+	FetchPartitionMaxBytes int32                         `json:"fetch_partition_max_bytes" yaml:"fetch_partition_max_bytes"`
+}
+
+// describeAuthenticationConfig shows metadata, not the actual password.
+type describeAuthenticationConfig struct {
+	Username      string `json:"username,omitempty" yaml:"username,omitempty"`
+	Mechanism     string `json:"mechanism,omitempty" yaml:"mechanism,omitempty"`
+	PasswordSet   bool   `json:"password_set,omitempty" yaml:"password_set,omitempty"`
+	PasswordSetAt string `json:"password_set_at,omitempty" yaml:"password_set_at,omitempty"`
+}
+
+// describeTopicMetadataSyncOptions uses string intervals (not time.Duration).
+type describeTopicMetadataSyncOptions struct {
+	Interval                     string        `json:"interval" yaml:"interval"`
+	Paused                       bool          `json:"paused" yaml:"paused"`
+	StartOffset                  string        `json:"start_offset,omitempty" yaml:"start_offset,omitempty"`
+	AutoCreateShadowTopicFilters []*NameFilter `json:"auto_create_shadow_topic_filters,omitempty" yaml:"auto_create_shadow_topic_filters,omitempty"`
+	SyncedShadowTopicProperties  []string      `json:"synced_shadow_topic_properties,omitempty" yaml:"synced_shadow_topic_properties,omitempty"`
+}
+
+type describeConsumerOffsetSyncOptions struct {
+	Interval     string        `json:"interval" yaml:"interval"`
+	Paused       bool          `json:"paused" yaml:"paused"`
+	GroupFilters []*NameFilter `json:"group_filters,omitempty" yaml:"group_filters,omitempty"`
+}
+
+type describeSecuritySyncOptions struct {
+	Interval   string       `json:"interval" yaml:"interval"`
+	Paused     bool         `json:"paused" yaml:"paused"`
+	ACLFilters []*ACLFilter `json:"acl_filters,omitempty" yaml:"acl_filters,omitempty"`
+}
+
+type describeSchemaRegistrySyncOptions struct {
+	ShadowingMode string `json:"shadowing_mode" yaml:"shadowing_mode"`
+}
+
 func newDescribeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var opts slDescribeOptions
 	cmd := &cobra.Command{
@@ -56,6 +124,9 @@ consumer offset synchronization, and security synchronization settings.
 For Redpanda Cloud, rpk will use the Redpanda ID of the cluster you are 
 currently logged into. If you wish to use a different one either login and 
 create a profile for it, or use the --redpanda-id flag to specify it directly.
+
+Using the --format flag with JSON or YAML will output the full configuration in 
+the specified format, ignoring section flags.
 `,
 		Example: `
 Describe a Shadow Link with default sections (overview and client):
@@ -69,8 +140,16 @@ Display specific sections:
 
 Display only the client configuration:
   rpk shadow describe my-shadow-link -c
+
+Display output as JSON:
+  rpk shadow describe my-shadow-link --format json
 `,
 		Run: func(cmd *cobra.Command, args []string) {
+			f := p.Formatter
+			if h, ok := f.Help(shadowLinkDescription{}); ok {
+				out.Exit(h)
+			}
+
 			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "unable to load rpk config: %v", err)
 			prof := cfg.VirtualProfile()
@@ -92,7 +171,7 @@ Display only the client configuration:
 				link, err := cloudClient.ShadowLinkByNameAndRPID(cmd.Context(), linkName, prof.CloudCluster.ClusterID)
 				out.MaybeDie(err, "unable to find Shadow Link %q", linkName)
 
-				printCloudShadowLinkDescription(link, opts)
+				printCloudShadowLinkDescription(f, link, opts)
 				return
 			}
 			cl, err := adminapi.NewClient(cmd.Context(), fs, prof)
@@ -102,7 +181,7 @@ Display only the client configuration:
 			}))
 			out.MaybeDie(err, "unable to get Redpanda Shadow Link %q: %v", linkName, handleConnectError(err, "get", linkName))
 
-			printShadowLinkDescription(link.Msg.GetShadowLink(), opts)
+			printShadowLinkDescription(f, link.Msg.GetShadowLink(), opts)
 		},
 	}
 	cmd.Flags().BoolVarP(&opts.overview, "print-overview", "o", false, "Print the overview section")
@@ -112,6 +191,7 @@ Display only the client configuration:
 	cmd.Flags().BoolVarP(&opts.sec, "print-security", "s", false, "Print the detailed security configuration section")
 	cmd.Flags().BoolVarP(&opts.sr, "print-registry", "y", false, "Print the detailed schema registry configuration section")
 	cmd.Flags().BoolVarP(&opts.all, "print-all", "a", false, "Print all sections")
+	p.InstallFormatFlag(cmd)
 	return cmd
 }
 
@@ -136,7 +216,13 @@ func (o *slDescribeOptions) defaultOrAll() {
 	}
 }
 
-func printShadowLinkDescription(link *adminv2.ShadowLink, opts slDescribeOptions) {
+func printShadowLinkDescription(f config.OutFormatter, link *adminv2.ShadowLink, opts slDescribeOptions) {
+	if isText, _, s, err := f.Format(fromAdminV2ShadowLinkDescription(link)); !isText {
+		out.MaybeDie(err, "unable to print in the required format %q: %v", f.Kind, err)
+		fmt.Println(s)
+		return
+	}
+
 	sections := out.NewSections(
 		out.ConditionalSectionHeaders(map[string]bool{
 			secOverview:       opts.overview,
@@ -175,7 +261,13 @@ func printShadowLinkDescription(link *adminv2.ShadowLink, opts slDescribeOptions
 	})
 }
 
-func printCloudShadowLinkDescription(link *controlplanev1.ShadowLink, opts slDescribeOptions) {
+func printCloudShadowLinkDescription(f config.OutFormatter, link *controlplanev1.ShadowLink, opts slDescribeOptions) {
+	if isText, _, s, err := f.Format(fromCloudShadowLinkDescription(link)); !isText {
+		out.MaybeDie(err, "unable to print in the required format %q: %v", f.Kind, err)
+		fmt.Println(s)
+		return
+	}
+
 	sections := out.NewSections(
 		out.ConditionalSectionHeaders(map[string]bool{
 			secOverview:       opts.overview,
@@ -517,4 +609,185 @@ func formatACLOperation(o corecommonv1.ACLOperation) string {
 
 func formatACLPermissionType(p corecommonv1.ACLPermissionType) string {
 	return strings.ToUpper(strings.TrimPrefix(p.String(), "ACL_PERMISSION_TYPE_"))
+}
+
+// fromAdminV2ShadowLinkDescription converts adminv2.ShadowLink to shadowLinkDescription.
+func fromAdminV2ShadowLinkDescription(link *adminv2.ShadowLink) shadowLinkDescription {
+	cfg := link.GetConfigurations()
+	var state string
+	if status := link.GetStatus(); status != nil {
+		state = strings.TrimPrefix(status.GetState().String(), "SHADOW_LINK_STATE_")
+	}
+	return shadowLinkDescription{
+		Name:                      link.GetName(),
+		ID:                        link.GetUid(),
+		State:                     state,
+		ClientOptions:             buildDescribeClientOptions(cfg.GetClientOptions()),
+		TopicMetadataSyncOptions:  buildDescribeTopicSyncOptions(cfg.GetTopicMetadataSyncOptions()),
+		ConsumerOffsetSyncOptions: buildDescribeConsumerOffsetOptions(cfg.GetConsumerOffsetSyncOptions()),
+		SecuritySyncOptions:       buildDescribeSecurityOptions(cfg.GetSecuritySyncOptions()),
+		SchemaRegistrySyncOptions: buildDescribeSchemaRegistryOptions(cfg.GetSchemaRegistrySyncOptions()),
+	}
+}
+
+// fromCloudShadowLinkDescription converts controlplanev1.ShadowLink to shadowLinkDescription.
+func fromCloudShadowLinkDescription(link *controlplanev1.ShadowLink) shadowLinkDescription {
+	var createdAt, updatedAt string
+	if t := link.GetCreatedAt(); t != nil {
+		createdAt = t.AsTime().Format(time.RFC3339)
+	}
+	if t := link.GetUpdatedAt(); t != nil {
+		updatedAt = t.AsTime().Format(time.RFC3339)
+	}
+	return shadowLinkDescription{
+		Name:                      link.GetName(),
+		ID:                        link.GetId(),
+		State:                     strings.TrimPrefix(link.GetState().String(), "STATE_"),
+		Reason:                    link.GetReason(),
+		ShadowRedpandaID:          link.GetShadowRedpandaId(),
+		CreatedAt:                 createdAt,
+		UpdatedAt:                 updatedAt,
+		ClientOptions:             buildDescribeCloudClientOptions(link.GetClientOptions()),
+		TopicMetadataSyncOptions:  buildDescribeTopicSyncOptions(link.GetTopicMetadataSyncOptions()),
+		ConsumerOffsetSyncOptions: buildDescribeConsumerOffsetOptions(link.GetConsumerOffsetSyncOptions()),
+		SecuritySyncOptions:       buildDescribeSecurityOptions(link.GetSecuritySyncOptions()),
+		SchemaRegistrySyncOptions: buildDescribeSchemaRegistryOptions(link.GetSchemaRegistrySyncOptions()),
+	}
+}
+
+func buildDescribeClientOptions(opts *adminv2.ShadowLinkClientOptions) *describeClientOptions {
+	if opts == nil {
+		return nil
+	}
+	return &describeClientOptions{
+		ClientID:               opts.GetClientId(),
+		SourceClusterID:        opts.GetSourceClusterId(),
+		BootstrapServers:       opts.GetBootstrapServers(),
+		TLSSettings:            adminTLSToCfg(opts.GetTlsSettings()),
+		AuthenticationConfig:   buildDescribeAuthConfig(opts.GetAuthenticationConfiguration()),
+		MetadataMaxAgeMs:       opts.GetEffectiveMetadataMaxAgeMs(),
+		ConnectionTimeoutMs:    opts.GetEffectiveConnectionTimeoutMs(),
+		RetryBackoffMs:         opts.GetEffectiveRetryBackoffMs(),
+		FetchWaitMaxMs:         opts.GetEffectiveFetchWaitMaxMs(),
+		FetchMinBytes:          opts.GetEffectiveFetchMinBytes(),
+		FetchMaxBytes:          opts.GetEffectiveFetchMaxBytes(),
+		FetchPartitionMaxBytes: opts.GetEffectiveFetchPartitionMaxBytes(),
+	}
+}
+
+func buildDescribeCloudClientOptions(opts *controlplanev1.ShadowLinkClientOptions) *describeClientOptions {
+	if opts == nil {
+		return nil
+	}
+	return &describeClientOptions{
+		ClientID:               opts.GetClientId(),
+		SourceClusterID:        opts.GetSourceClusterId(),
+		BootstrapServers:       opts.GetBootstrapServers(),
+		TLSSettings:            cloudTLSToCfg(opts.GetTlsSettings()),
+		AuthenticationConfig:   buildDescribeAuthConfig(opts.GetAuthenticationConfiguration()),
+		MetadataMaxAgeMs:       opts.GetEffectiveMetadataMaxAgeMs(),
+		ConnectionTimeoutMs:    opts.GetEffectiveConnectionTimeoutMs(),
+		RetryBackoffMs:         opts.GetEffectiveRetryBackoffMs(),
+		FetchWaitMaxMs:         opts.GetEffectiveFetchWaitMaxMs(),
+		FetchMinBytes:          opts.GetEffectiveFetchMinBytes(),
+		FetchMaxBytes:          opts.GetEffectiveFetchMaxBytes(),
+		FetchPartitionMaxBytes: opts.GetEffectiveFetchPartitionMaxBytes(),
+	}
+}
+
+func buildDescribeAuthConfig(auth *adminv2.AuthenticationConfiguration) *describeAuthenticationConfig {
+	if auth == nil {
+		return nil
+	}
+	if scram := auth.GetScramConfiguration(); scram != nil {
+		var passwordSetAt string
+		if scram.GetPasswordSet() && scram.GetPasswordSetAt() != nil {
+			passwordSetAt = scram.GetPasswordSetAt().AsTime().Format(time.RFC3339)
+		}
+		return &describeAuthenticationConfig{
+			Username:      scram.GetUsername(),
+			Mechanism:     formatScramMechanism(scram.GetScramMechanism()),
+			PasswordSet:   scram.GetPasswordSet(),
+			PasswordSetAt: passwordSetAt,
+		}
+	}
+	if plain := auth.GetPlainConfiguration(); plain != nil {
+		var passwordSetAt string
+		if plain.GetPasswordSet() && plain.GetPasswordSetAt() != nil {
+			passwordSetAt = plain.GetPasswordSetAt().AsTime().Format(time.RFC3339)
+		}
+		return &describeAuthenticationConfig{
+			Username:      plain.GetUsername(),
+			Mechanism:     "PLAIN",
+			PasswordSet:   plain.GetPasswordSet(),
+			PasswordSetAt: passwordSetAt,
+		}
+	}
+	return nil
+}
+
+func buildDescribeTopicSyncOptions(opts *adminv2.TopicMetadataSyncOptions) *describeTopicMetadataSyncOptions {
+	if opts == nil {
+		return nil
+	}
+	var startOffset string
+	if opts.HasStartOffset() {
+		if opts.GetStartAtEarliest() != nil {
+			startOffset = "EARLIEST"
+		} else if opts.GetStartAtLatest() != nil {
+			startOffset = "LATEST"
+		} else if ts := opts.GetStartAtTimestamp(); ts != nil {
+			startOffset = ts.AsTime().Format(time.RFC3339)
+		}
+	}
+	var filters []*NameFilter
+	for _, f := range opts.GetAutoCreateShadowTopicFilters() {
+		filters = append(filters, adminMapFilterToCfg(f))
+	}
+	return &describeTopicMetadataSyncOptions{
+		Interval:                     opts.GetEffectiveInterval().AsDuration().String(),
+		Paused:                       opts.GetPaused(),
+		StartOffset:                  startOffset,
+		AutoCreateShadowTopicFilters: filters,
+		SyncedShadowTopicProperties:  opts.GetSyncedShadowTopicProperties(),
+	}
+}
+
+func buildDescribeConsumerOffsetOptions(opts *adminv2.ConsumerOffsetSyncOptions) *describeConsumerOffsetSyncOptions {
+	if opts == nil {
+		return nil
+	}
+	var filters []*NameFilter
+	for _, f := range opts.GetGroupFilters() {
+		filters = append(filters, adminMapFilterToCfg(f))
+	}
+	return &describeConsumerOffsetSyncOptions{
+		Interval:     opts.GetEffectiveInterval().AsDuration().String(),
+		Paused:       opts.GetPaused(),
+		GroupFilters: filters,
+	}
+}
+
+func buildDescribeSecurityOptions(opts *adminv2.SecuritySettingsSyncOptions) *describeSecuritySyncOptions {
+	if opts == nil {
+		return nil
+	}
+	var filters []*ACLFilter
+	for _, f := range opts.GetAclFilters() {
+		filters = append(filters, adminACLFilterToCfg(f))
+	}
+	return &describeSecuritySyncOptions{
+		Interval:   opts.GetEffectiveInterval().AsDuration().String(),
+		Paused:     opts.GetPaused(),
+		ACLFilters: filters,
+	}
+}
+
+func buildDescribeSchemaRegistryOptions(opts *adminv2.SchemaRegistrySyncOptions) *describeSchemaRegistrySyncOptions {
+	if opts == nil {
+		return nil
+	}
+	return &describeSchemaRegistrySyncOptions{
+		ShadowingMode: strings.ReplaceAll(opts.WhichSchemaRegistryShadowingMode().String(), "_", " "),
+	}
 }

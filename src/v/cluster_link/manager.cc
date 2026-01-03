@@ -322,7 +322,7 @@ ss::future<err_info> manager::link_preflight_checks(const model::metadata& md) {
                     // Handle any incompatible API versions or unexpected
                     // errors.
                     if (err.code() != errc::success) {
-                        broker_errors.push_back(std::move(err.message()));
+                        broker_errors.push_back(err.message());
                     }
                 });
           });

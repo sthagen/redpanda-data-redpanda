@@ -299,3 +299,48 @@ redpanda_cc_library(
         "//src/v/base",
     ],
 )
+
+redpanda_cc_library(
+    name = "actor",
+    hdrs = [
+        "actor.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":future_util",
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "time",
+    srcs = [
+        "time.cc",
+    ],
+    hdrs = [
+        "time.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@abseil-cpp//absl/time",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "clock",
+    srcs = [
+        "clock.cc",
+    ],
+    hdrs = [
+        "clock.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":time",
+        "@seastar",
+    ],
+)

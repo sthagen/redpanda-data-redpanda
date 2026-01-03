@@ -70,7 +70,7 @@ redpanda_connect, redpanda_cluster`,
 				SecretData: []byte(secretValue),
 				Scopes:     scopeRequest,
 			}
-			response, err := cl.Secrets.CreateSecret(cmd.Context(), connect.NewRequest(request))
+			response, err := cl.Secret.CreateSecret(cmd.Context(), connect.NewRequest(request))
 			if err != nil {
 				var connectErr *connect.Error
 				if errors.As(err, &connectErr) {

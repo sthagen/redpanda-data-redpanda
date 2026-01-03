@@ -1834,7 +1834,7 @@ ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
     // the read path will create the index on the fly while downloading the
     // segment, so it is okay to ignore the index upload failure, we still
     // want to advance the offsets because the segment did get uploaded.
-    co_await upload_index(std::move(index_path), std::move(index));
+    co_await upload_index(index_path, std::move(index));
 
     co_return ntp_archiver_upload_result(index_stats);
 

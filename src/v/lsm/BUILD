@@ -21,6 +21,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/lsm/io:persistence",
         "//src/v/utils:named_type",
+        "@abseil-cpp//absl/time",
         "@seastar",
     ],
 )

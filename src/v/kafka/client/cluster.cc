@@ -377,7 +377,7 @@ void cluster::set_sasl_configuration(std::optional<sasl_configuration> creds) {
 }
 
 void cluster::update_configuration(connection_configuration config) {
-    _update_config_queue.submit([this, config = std::move(config)] {
+    _update_config_queue.submit([this, config = std::move(config)] mutable {
         return do_update_configuration(std::move(config))
           .handle_exception([this](std::exception_ptr ex) {
               vlog(_logger.warn, "Failed to update broker config: {}", ex);

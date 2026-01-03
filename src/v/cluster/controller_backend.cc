@@ -405,7 +405,9 @@ ss::future<> controller_backend::start() {
                 auto snapshot = create_topic_table_snapshot(_topics, _self);
                 ssx::spawn_with_gate(
                   _gate,
-                  [this, bootstrap_revision, snapshot = std::move(snapshot)] {
+                  [this,
+                   bootstrap_revision,
+                   snapshot = std::move(snapshot)] mutable {
                       return clear_orphan_topic_files(
                                bootstrap_revision, std::move(snapshot))
                         .handle_exception([](const std::exception_ptr& err) {

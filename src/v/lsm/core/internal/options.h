@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/time/time.h"
 #include "base/format_to.h"
 #include "base/units.h"
 #include "base/vassert.h"
@@ -164,7 +165,7 @@ struct options {
     size_t block_cache_size = default_block_cache_size;
 
     // The size of a single block within an SST file.
-    constexpr static size_t default_sst_block_size = 4_KiB;
+    constexpr static size_t default_sst_block_size = 8_KiB;
     size_t sst_block_size = default_sst_block_size;
 
     // The frequency at which to generate a new bloom filter.
@@ -194,6 +195,12 @@ struct options {
     // Approximate gap in bytes between samples of data read during iteration.
     constexpr static size_t default_read_bytes_period = 10_MiB;
     size_t read_bytes_period = default_read_bytes_period;
+
+    // The delay at which to wait until actually deleting files.
+    //
+    // If set to zero, then files are immediately GC'd after new manifest files
+    // are written.
+    absl::Duration file_deletion_delay;
 
     fmt::iterator format_to(fmt::iterator) const;
 };

@@ -54,7 +54,7 @@ fetch_response
 make_fetch_response(const model::topic_partition& tp, std::exception_ptr ex) {
     error_code error;
     try {
-        std::rethrow_exception(std::move(ex));
+        std::rethrow_exception(ex);
     } catch (const partition_error& ex) {
         vlog(kclog.debug, "handling partition_error {}", ex);
         error = ex.error;

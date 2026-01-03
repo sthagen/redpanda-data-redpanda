@@ -141,8 +141,7 @@ void link_probe::setup_status_metrics() {
 
     std::ranges::copy(statuses | status_to_metric, std::back_inserter(defs));
 
-    _public_status_metrics.emplace().add_group(
-      shadow_link_group, std::move(defs));
+    _public_status_metrics.emplace().add_group(shadow_link_group, defs);
 }
 
 } // namespace cluster_link

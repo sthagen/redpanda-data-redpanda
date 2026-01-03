@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
+	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 )
 
@@ -154,12 +155,14 @@ func (s *Spinner) Stop() {
 
 // Success stops the spinner and displays a success message with a ✓ checkmark.
 func (s *Spinner) Success(message string) {
-	s.stopWith(fmt.Sprintf("\u2713 %s\n", message))
+	green := color.New(color.FgGreen).SprintFunc()
+	s.stopWith(fmt.Sprintf("%s %s\n", green("\u2713"), message))
 }
 
 // Fail stops the spinner and displays an error message with an ✗.
 func (s *Spinner) Fail(message string) {
-	s.stopWith(fmt.Sprintf("\u2717 %s\n", message))
+	red := color.New(color.FgRed).SprintFunc()
+	s.stopWith(fmt.Sprintf("%s %s\n", red("\u2717"), message))
 }
 
 // UpdateMessage updates the spinner's message while it's running.
