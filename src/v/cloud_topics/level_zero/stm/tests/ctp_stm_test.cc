@@ -158,20 +158,20 @@ TEST_F_CORO(ctp_stm_fixture, test_fencing) {
     {
         auto fence
           = co_await api(node(*get_leader())).fence_epoch(ct::cluster_epoch{2});
-        ASSERT_TRUE_CORO(fence.unit.has_value());
+        ASSERT_TRUE_CORO(fence.has_value());
     }
 
     // Acquire the fence for epoch 1 (should fail)
     {
         auto fence
           = co_await api(node(*get_leader())).fence_epoch(ct::cluster_epoch{1});
-        ASSERT_FALSE_CORO(fence.unit.has_value());
+        ASSERT_FALSE_CORO(fence.has_value());
     }
 
     // Advance max_seen_epoch to 3.
     auto write_fence
       = co_await api(node(*get_leader())).fence_epoch(ct::cluster_epoch{3});
-    ASSERT_TRUE_CORO(write_fence.unit.has_value());
+    ASSERT_TRUE_CORO(write_fence.has_value());
 
     // Out of order fence for epoch 2 (should be waiting for the fence to be
     // released)
@@ -182,7 +182,7 @@ TEST_F_CORO(ctp_stm_fixture, test_fencing) {
     write_fence = {};
 
     auto read_fence = co_await std::move(fut);
-    ASSERT_FALSE_CORO(read_fence.unit.has_value());
+    ASSERT_FALSE_CORO(read_fence.has_value());
 }
 
 TEST_F_CORO(ctp_stm_fixture, test_last_reconciled_offset) {
@@ -457,6 +457,6 @@ TEST_F_CORO(ctp_stm_fixture, test_snapshot) {
     // Acquire the fence for epoch 1 (should fail)
     {
         auto fence = co_await api(leader).fence_epoch(ct::cluster_epoch{1});
-        ASSERT_FALSE_CORO(fence.unit.has_value());
+        ASSERT_FALSE_CORO(fence.has_value());
     }
 }

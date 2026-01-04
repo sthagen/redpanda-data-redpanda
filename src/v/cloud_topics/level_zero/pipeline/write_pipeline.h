@@ -62,6 +62,21 @@ public:
       chunked_vector<model::record_batch> batches,
       Clock::time_point timeout);
 
+    struct prepared_data {
+        serialized_chunk data_chunk;
+        ss::semaphore_units<ss::named_semaphore_exception_factory, Clock> units;
+    };
+
+    ss::future<std::expected<prepared_data, std::error_code>>
+    prepare_write(chunked_vector<model::record_batch> batches);
+
+    ss::future<std::expected<chunked_vector<extent_meta>, std::error_code>>
+    execute_write(
+      model::ntp ntp,
+      cluster_epoch min_epoch,
+      prepared_data prepped,
+      Clock::time_point timeout);
+
     using write_requests_list
       = requests_list<write_pipeline<Clock>, write_request<Clock>>;
 

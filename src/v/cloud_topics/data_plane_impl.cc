@@ -36,6 +36,10 @@
 
 namespace cloud_topics {
 
+struct staged_pipeline_write : public staged_write::batch_data {
+    l0::write_pipeline<>::prepared_data data;
+};
+
 class impl
   : public data_plane_api
   , public ssx::sharded_service_container {
@@ -132,17 +136,28 @@ public:
         co_return;
     }
 
-    ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
+    ss::future<std::expected<staged_write, std::error_code>>
+    stage_write(chunked_vector<model::record_batch> batches) override {
+        auto reservation = co_await _write_pipeline.local().prepare_write(
+          std::move(batches));
+        if (!reservation.has_value()) {
+            co_return std::unexpected(reservation.error());
+        }
+        auto staged = std::make_unique<staged_pipeline_write>();
+        staged->data = std::move(reservation.value());
+        co_return staged_write{.staged = std::move(staged)};
+    }
+
+    ss::future<std::expected<chunked_vector<extent_meta>, std::error_code>>
+    execute_write(
       model::ntp ntp,
       cluster_epoch min_epoch,
-      chunked_vector<model::record_batch> r,
-      model::timeout_clock::time_point timeout) override {
-        auto res = co_await _write_pipeline.local().write_and_debounce(
-          std::move(ntp), min_epoch, std::move(r), timeout);
-        if (res.has_value()) {
-            co_return std::move(res.value());
-        }
-        co_return res.error();
+      staged_write reservation,
+      model::timeout_clock::time_point deadline) override {
+        auto staged = std::unique_ptr<staged_pipeline_write>(
+          static_cast<staged_pipeline_write*>(reservation.staged.release()));
+        co_return co_await _write_pipeline.local().execute_write(
+          std::move(ntp), min_epoch, std::move(staged->data), deadline);
     }
 
     ss::future<result<chunked_vector<model::record_batch>>> materialize(

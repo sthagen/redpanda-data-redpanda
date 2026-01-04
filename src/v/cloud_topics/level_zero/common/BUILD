@@ -8,6 +8,7 @@ package(
         "//src/v/cloud_topics/frontend/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/batcher:__pkg__",
         "//src/v/cloud_topics/level_zero/batcher/tests:__pkg__",
+        "//src/v/cloud_topics/level_zero/common/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
         "//src/v/cloud_topics/level_zero/pipeline:__pkg__",
         "//src/v/cloud_topics/level_zero/pipeline/tests:__pkg__",
@@ -54,6 +55,24 @@ redpanda_cc_library(
         "//src/v/utils:hdr_hist",
         "//src/v/utils:log_hist",
         "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "producer_queue",
+    srcs = [
+        "producer_queue.cc",
+    ],
+    hdrs = [
+        "producer_queue.h",
+    ],
+    implementation_deps = [
+        "//src/v/container:chunked_hash_map",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/model",
         "@seastar",
     ],
 )

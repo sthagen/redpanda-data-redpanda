@@ -15,6 +15,7 @@ from typing import List, Tuple
 
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
+from ducktape.cluster.cluster import ClusterNode
 import ducktape.errors
 
 from rptest.clients.offline_log_viewer import OfflineLogViewer
@@ -951,6 +952,8 @@ class LogCompactionTxRemovalTestBase(
             f"Running test case {test_case_name} with topic {self.topic_spec.name}"
         )
 
+        self.check_all_offsets(lambda offset: offset <= 0)
+
         self.start_partition_movement()
         self.produce(test_case)
 
@@ -975,6 +978,31 @@ class LogCompactionTxRemovalTestBase(
             )
 
         self.wait_for_all_tx_batches_removed(produce_func)
+
+        self.check_all_offsets(lambda offset: offset > 0)
+
+    def get_partition_state(self, node: ClusterNode | None = None):
+        state = self.redpanda._admin.get_partition_state(
+            namespace="kafka",
+            topic=self.topic_spec.name,
+            partition=0,
+            node=node,
+        )["replicas"]
+        self.redpanda.logger.debug(f"partition state: {state}")
+        return state
+
+    def check_all_offsets(self, predicate):
+        states = self.get_partition_state()
+        for state in states:
+            for offset_name in (
+                "max_tombstone_removable_offset",
+                "max_transaction_removable_offset",
+                "max_cleanly_compacted_offset",
+                "max_transaction_free_offset",
+            ):
+                if not predicate(state[offset_name]):
+                    return False
+        return True
 
 
 class LogCompactionTxRemovalTest(LogCompactionTxRemovalTestBase):
@@ -1184,13 +1212,7 @@ class LogCompactionTxRemovalUpgradeTestBase(LogCompactionTxRemovalTestBase):
 
         # make sure it sets MTRO beyond the segment with the commit batch
         def get_mtro():
-            state = self.redpanda._admin.get_partition_state(
-                namespace="kafka",
-                topic=self.topic_spec.name,
-                partition=0,
-                node=self.redpanda.get_node_by_id(leader_node),
-            )["replicas"]
-            self.redpanda.logger.debug(f"partition state: {state}")
+            state = self.get_partition_state(self.redpanda.get_node_by_id(leader_node))
             assert len(state) == 1
             return state[0]["max_tombstone_removable_offset"]
 

@@ -1396,7 +1396,19 @@
                 },
                 "max_tombstone_removable_offset": {
                     "type": "long",
-                    "description": "Maximum offset up to which tombstones/transaction end markers can be removed."
+                    "description": "Maximum offset up to which tombstones can be removed (MTRO)."
+                },
+                "max_transaction_removable_offset": {
+                    "type": "long",
+                    "description": "Maximum offset up to which transaction end markers can be removed (MXRO)."
+                },
+                "max_cleanly_compacted_offset": {
+                    "type": "long",
+                    "description": "Maximum offset up to which this replica is cleanly compacted (MCCO)."
+                },
+                "max_transaction_free_offset": {
+                    "type": "long",
+                    "description": "Maximum offset up to which this replica is free of transaction fence batches and data (MXFO)."
                 },
                 "raft_state": {
                     "type": "raft_replica_state",

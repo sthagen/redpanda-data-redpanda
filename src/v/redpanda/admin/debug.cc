@@ -925,6 +925,11 @@ admin_server::get_partition_state_handler(
         replica.non_log_disk_size_bytes = state.non_log_disk_size_bytes;
         replica.max_tombstone_removable_offset
           = state.max_tombstone_removable_offset;
+        replica.max_transaction_removable_offset
+          = state.max_transaction_removable_offset;
+        replica.max_cleanly_compacted_offset
+          = state.max_cleanly_compacted_offset;
+        replica.max_transaction_free_offset = state.max_transaction_free_offset;
         replica.is_read_replica_mode_enabled
           = state.is_read_replica_mode_enabled;
         replica.read_replica_bucket = state.read_replica_bucket;

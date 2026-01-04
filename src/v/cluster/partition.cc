@@ -594,6 +594,7 @@ ss::future<> partition::stop() {
     }
 
     _probe.clear_metrics();
+    _cloud_storage_probe->clear_metrics();
     vlog(clusterlog.debug, "Stopped partition {}", partition_ntp);
 }
 

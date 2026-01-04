@@ -21,7 +21,26 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 
+#include <expected>
+#include <system_error>
+
 namespace cloud_topics {
+
+// staged_write is a write operation that has been reserved in the pipeline.
+// it is decoupled from uploading so that we can provide backpressure before
+// accepting more batches into the pipeline
+struct staged_write {
+    struct batch_data {
+        batch_data() = default;
+        batch_data(const batch_data&) = default;
+        batch_data(batch_data&&) = delete;
+        batch_data& operator=(const batch_data&) = default;
+        batch_data& operator=(batch_data&&) = delete;
+        virtual ~batch_data() = default;
+    };
+
+    std::unique_ptr<batch_data> staged;
+};
 
 /// Dataplane API
 class data_plane_api {
@@ -37,11 +56,17 @@ public:
     virtual ss::future<> start() = 0;
     virtual ss::future<> stop() = 0;
 
-    /// Write data batches and get back placeholder batches
-    virtual ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
+    // Reserve the space needed for this write.
+    virtual ss::future<std::expected<staged_write, std::error_code>>
+    stage_write(chunked_vector<model::record_batch> batches) = 0;
+
+    // Execute this write using the reservation.
+    virtual ss::future<
+      std::expected<chunked_vector<extent_meta>, std::error_code>>
+    execute_write(
       model::ntp ntp,
       cluster_epoch min_epoch,
-      chunked_vector<model::record_batch> batches,
+      staged_write reservation,
       model::timeout_clock::time_point deadline)
       = 0;
 

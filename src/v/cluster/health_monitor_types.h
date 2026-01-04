@@ -421,6 +421,10 @@ struct cluster_health_overview {
     // A list of known nodes which are down from the point of view of the health
     // subsystem.
     std::vector<model::node_id> nodes_down;
+    // A list of nodes that exceed disk usage alerts defined by
+    // storage_space_alert_free_threshold_percent and
+    // storage_space_alert_free_threshold_bytes
+    std::vector<model::node_id> high_disk_usage_nodes;
     // A list of nodes that have been booted up in recovery mode.
     std::vector<model::node_id> nodes_in_recovery_mode;
     std::vector<model::ntp> leaderless_partitions;

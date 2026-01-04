@@ -1194,17 +1194,28 @@ health_monitor_backend::get_cluster_health_overview(
             }
         }
         auto report_it = reports().find(id);
-        if (
-          report_it != reports().end()
-          && report_it->second->local_state.recovery_mode_enabled) {
+        if (report_it == reports().end()) {
+            continue;
+        }
+        const auto& report = report_it->second;
+        if (report->local_state.recovery_mode_enabled) {
             ret.nodes_in_recovery_mode.push_back(id);
+        }
+        auto disk_usage_alert = report->local_state.get_disk_alert();
+        switch (disk_usage_alert) {
+        case storage::disk_space_alert::ok:
+            break;
+        case storage::disk_space_alert::low_space:
+        case storage::disk_space_alert::degraded:
+            ret.high_disk_usage_nodes.push_back(id);
+            break;
         }
     }
 
-    std::sort(ret.all_nodes.begin(), ret.all_nodes.end());
-    std::sort(ret.nodes_down.begin(), ret.nodes_down.end());
-    std::sort(
-      ret.nodes_in_recovery_mode.begin(), ret.nodes_in_recovery_mode.end());
+    std::ranges::sort(ret.all_nodes);
+    std::ranges::sort(ret.nodes_down);
+    std::ranges::sort(ret.nodes_in_recovery_mode);
+    std::ranges::sort(ret.high_disk_usage_nodes);
 
     auto aggr_report = aggregate_reports(reports());
     co_await fill_aggregate_with_offline_partitions(
@@ -1226,6 +1237,12 @@ health_monitor_backend::get_cluster_health_overview(
     // cluster is not healthy if some nodes are down
     if (!ret.nodes_down.empty()) {
         ret.unhealthy_reasons.emplace_back("nodes_down");
+    }
+
+    // disk usage on a subset of nodes exceeds configured storage
+    // alert thresholds
+    if (!ret.high_disk_usage_nodes.empty()) {
+        ret.unhealthy_reasons.emplace_back("high_disk_usage_nodes");
     }
 
     // cluster is not healthy if some partitions do not have leaders

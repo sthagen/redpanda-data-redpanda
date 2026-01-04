@@ -10,11 +10,14 @@
 
 #pragma once
 
+#include "cloud_topics/level_zero/common/producer_queue.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "cloud_topics/level_zero/stm/types.h"
 #include "raft/persisted_stm.h"
 
-#include <seastar/core/rwlock.hh>
+#include <seastar/core/semaphore.hh>
+
+#include <expected>
 
 namespace cloud_topics {
 
@@ -53,7 +56,8 @@ public:
         _state.advance_max_seen_epoch(epoch);
     }
 
-    ss::future<cluster_epoch_fence> fence_epoch(cluster_epoch e);
+    ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
+    fence_epoch(cluster_epoch e);
 
     /// Return inactive epoch of the CTP
     ///
@@ -80,6 +84,11 @@ public:
     ss::future<bool> sync_in_term(
       model::timeout_clock::time_point deadline, ss::abort_source& as);
 
+    // The producer queue for this CTP.
+    //
+    // This is used to preserve ordering of concurrently uploading requests.
+    l0::producer_queue& producer_queue();
+
 private:
     ss::future<> do_apply(const model::record_batch&) override;
     void apply_placeholder(const model::record_batch&);
@@ -101,10 +110,11 @@ private:
     ss::future<> prefix_truncate_below_lro();
 
 private:
+    l0::producer_queue _producer_queue;
     /// Lock to protect the state from concurrent access.
     /// When the new epoch is applied we need to acquire a write lock.
     /// Otherwise, we need to acquire a read lock.
-    ss::rwlock _lock;
+    ss::semaphore _lock;
     /// Current in-memory state of the STM
     ctp_stm_state _state;
 

@@ -4061,12 +4061,15 @@ void admin_server::register_cluster_routes() {
                 ret.unhealthy_reasons._set = true;
                 ret.all_nodes._set = true;
                 ret.nodes_down._set = true;
+                ret.high_disk_usage_nodes._set = true;
                 ret.leaderless_partitions._set = true;
                 ret.under_replicated_partitions._set = true;
 
                 ret.unhealthy_reasons = health_overview.unhealthy_reasons;
                 ret.all_nodes = health_overview.all_nodes;
                 ret.nodes_down = health_overview.nodes_down;
+                ret.high_disk_usage_nodes
+                  = health_overview.high_disk_usage_nodes;
                 ret.nodes_in_recovery_mode
                   = health_overview.nodes_in_recovery_mode;
 

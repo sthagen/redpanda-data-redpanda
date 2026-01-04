@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
+#include "cloud_topics/level_zero/common/producer_queue.h"
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
@@ -507,49 +508,19 @@ raft::replicate_options update_replicate_options(
     return opts;
 }
 
-struct upload_and_replicate_stages {
-    model::ntp ntp;
-    ss::lw_shared_ptr<cluster::partition> partition;
-    ss::lw_shared_ptr<cloud_topics::ctp_stm_api> ctp_stm_api;
-    chunked_vector<model::record_batch> batches;
-    model::batch_identity batch_id;
-    raft::replicate_options opts;
-    std::chrono::milliseconds timeout;
-
-    upload_and_replicate_stages(
-      ss::lw_shared_ptr<cluster::partition> partition,
-      chunked_vector<model::record_batch> batches,
-      model::batch_identity batch_id,
-      raft::replicate_options opts,
-      std::chrono::milliseconds timeout)
-      : ntp(partition->ntp())
-      , partition(std::move(partition))
-      , ctp_stm_api(make_ctp_stm_api(this->partition))
-      , batches(std::move(batches))
-      , batch_id(batch_id)
-      , opts(opts)
-      , timeout(timeout) {}
-
-    ss::promise<> request_enqueued;
-    ss::promise<result<raft::replicate_result>> replicate_finished;
-};
-
-ss::future<> bg_upload_and_replicate(
+ss::future<result<raft::replicate_result>> do_upload_and_replicate(
   data_plane_api* api,
   ss::lw_shared_ptr<cluster::partition> partition,
+  ss::lw_shared_ptr<cloud_topics::ctp_stm_api> ctp_stm_api,
+  l0::producer_ticket ticket,
+  model::batch_identity batch_id,
   model::record_batch_header header,
-  ss::lw_shared_ptr<upload_and_replicate_stages> op,
-  bool cache_enabled) {
-    vassert(api != nullptr, "cloud topics api is not initialized");
-
-    auto fallback = ss::defer([op] {
-        // This guarantees that the promises are set.
-        // The error code used here does not represent the
-        // actual error.
-        op->request_enqueued.set_value();
-        op->replicate_finished.set_value(raft::errc::timeout);
-    });
-
+  staged_write staged,
+  chunked_vector<model::record_batch> cache_batches,
+  raft::replicate_options opts) {
+    const auto& ntp = partition->ntp();
+    // The default errc that will cause the client to retry the operation
+    constexpr auto default_errc = raft::errc::timeout;
     /*
      * L0 GC relies on a minimum epoch associated with each NTP for calculating
      * the name of an L0 object. The minimum is based on the topic revision, but
@@ -562,126 +533,137 @@ ss::future<> bg_upload_and_replicate(
       min_epoch() > 0L,
       "Unexpected invalid min epoch {} for {}",
       min_epoch,
-      op->ntp);
+      ntp);
 
-    chunked_vector<model::record_batch> rb_copy;
-    if (cache_enabled) {
-        rb_copy = clone_batches(op->batches);
+    auto timeout = opts.timeout.value_or(0ms);
+    if (timeout == 0ms) {
+        timeout = L0_upload_default_timeout;
     }
-    auto timeout = op->timeout == 0ms ? L0_upload_default_timeout : op->timeout;
-    auto res = co_await api->write_and_debounce(
-      op->ntp,
+    auto upload_fut = co_await ss::coroutine::as_future(api->execute_write(
+      ntp,
       min_epoch,
-      std::move(op->batches),
-      model::timeout_clock::now() + timeout);
+      std::move(staged),
+      model::timeout_clock::now() + timeout));
 
-    if (res.has_error()) {
+    if (upload_fut.failed()) {
+        auto ex = upload_fut.get_exception();
+        vlog(cd_log.debug, "LO object upload has failed: {}", ex);
+        co_return default_errc;
+    }
+
+    auto upload_res = upload_fut.get();
+
+    if (!upload_res.has_value()) {
         vlog(
           cd_log.debug,
-          "LO object upload has failed: {}",
-          res.error().message());
-        co_return;
+          "LO object upload has errored: {}",
+          upload_res.error().message());
+        co_return default_errc;
     }
-
-    if (res.value().empty()) {
+    if (upload_res.value().empty()) {
         vlog(
           cd_log.warn,
           "LO object upload returned empty result, nothing to replicate");
-        co_return;
+        co_return default_errc;
     }
 
     auto fence_fut = co_await ss::coroutine::as_future(
-      op->ctp_stm_api->fence_epoch(res.value().front().id.epoch));
+      ctp_stm_api->fence_epoch(upload_res.value().front().id.epoch));
     if (fence_fut.failed()) {
         auto e = fence_fut.get_exception();
         vlog(
           cd_log.warn,
           "Failed to fence epoch {} for ntp {}, error: {}",
-          res.value().front().id.epoch,
-          op->ntp,
+          upload_res.value().front().id.epoch,
+          ntp,
           e);
-        co_return;
+        co_return default_errc;
     }
     auto fence = std::move(fence_fut.get());
-    if (!fence.unit.has_value()) {
+    if (!fence.has_value()) {
         vlog(
           cd_log.warn,
-          "Failed to fence epoch {} for ntp {}, fence unit is empty",
-          res.value().front().id.epoch,
-          op->ntp);
-        co_return;
+          "Failed to fence epoch {} for ntp {}, ctp latest seen epoch is {}",
+          upload_res.value().front().id.epoch,
+          ntp,
+          fence.error().latest_seen);
+        co_return default_errc;
     }
 
     chunked_vector<model::record_batch_header> headers;
     headers.push_back(header);
-    auto placeholders = co_await convert_to_placeholders(res.value(), headers);
+    auto placeholders = co_await convert_to_placeholders(
+      upload_res.value(), headers);
 
     vassert(
       placeholders.batches.size() == 1,
       "Expected single batch, got {}",
       placeholders.batches.size());
-
-    // Replicate
-    op->opts = update_replicate_options(op->opts, fence.term);
+    // Wait for all previous requests from this producer to be processed
+    if (opts.as) {
+        co_await ticket.redeem(opts.as->get());
+    } else {
+        co_await ticket.redeem();
+    }
+    // Replicate now that our ticket is redeemed
+    opts = update_replicate_options(opts, fence->term);
     auto replicate_stages = partition->replicate_in_stages(
-      op->batch_id, std::move(placeholders.batches.front()), op->opts);
+      batch_id, std::move(placeholders.batches.front()), opts);
+    // Once the request is enqueued in raft and our order is guaranteed we can
+    // release our ticket and further requests can be enqueued into the raft
+    // layer.
+    auto enqueued_fut = co_await ss::coroutine::as_future(
+      std::move(replicate_stages.request_enqueued));
 
-    fallback.cancel();
+    ticket.release(); // always release the ticket
 
-    // Forward future result to the 'op'. The expectation is that at this point
-    // the target promises (inside 'op') are used to generate futures and these
-    // futures are awaited.
-    replicate_stages.request_enqueued.forward_to(
-      std::move(op->request_enqueued));
+    if (enqueued_fut.failed()) {
+        auto ex = enqueued_fut.get_exception();
+        vlog(
+          cd_log.trace,
+          "failed to enqueue replicate request into raft ({}): {}",
+          ntp,
+          ex);
+        // fallthrough - we expect the finish command to throw if this one did
+        // and we don't want to abandon the replicate_finished future
+    }
 
-    auto replicate_fut
-      = std::move(replicate_stages.replicate_finished)
-          .then(
-            [api,
-             cache_enabled,
-             inp = std::move(rb_copy),
-             ntp = partition->ntp(),
-             fence_unit = std::move(fence.unit)](
-              result<cluster::kafka_result> res) mutable
-              -> result<raft::replicate_result> {
-                if (res.has_error()) {
-                    return res.error();
-                }
-                if (cache_enabled) {
-                    // The term_id is not guaranteed to be set if the request
-                    // was served from the list of finished requests. This might
-                    // happen if the request is coming from the snapshot (in
-                    // which case it's not stored) or from the log replay. The
-                    // simplest solution in this case is to skip caching.
-                    if (res.value().last_term >= model::term_id{0}) {
-                        update_batches(
-                          inp,
-                          kafka::offset_cast(res.value().last_offset),
-                          res.value().last_term);
-                        for (const auto& b : inp) {
-                            vlog(
-                              cd_log.trace,
-                              "Putting batch to cache: {}, term: {}",
-                              b.base_offset(),
-                              b.term());
-                            api->cache_put(ntp, b);
-                        }
-                    } else {
-                        vlog(
-                          cd_log.debug,
-                          "Skipping cache put for ntp {} at offset {} with "
-                          "unset term",
-                          ntp,
-                          res.value().last_offset);
-                    }
-                }
-                return raft::replicate_result{
-                  .last_offset = kafka::offset_cast(res.value().last_offset),
-                  .last_term = res.value().last_term,
-                };
-            });
-
-    replicate_fut.forward_to(std::move(op->replicate_finished));
+    auto res = co_await std::move(replicate_stages.replicate_finished);
+    if (res.has_error()) {
+        co_return res.error();
+    }
+    if (!cache_batches.empty()) {
+        // The term_id is not guaranteed to be set if the request
+        // was served from the list of finished requests. This might
+        // happen if the request is coming from the snapshot (in
+        // which case it's not stored) or from the log replay. The
+        // simplest solution in this case is to skip caching.
+        if (res.value().last_term >= model::term_id{0}) {
+            update_batches(
+              cache_batches,
+              kafka::offset_cast(res.value().last_offset),
+              res.value().last_term);
+            for (const auto& b : cache_batches) {
+                vlog(
+                  cd_log.trace,
+                  "Putting batch to cache: {}, term: {}",
+                  b.base_offset(),
+                  b.term());
+                api->cache_put(ntp, b);
+            }
+        } else {
+            vlog(
+              cd_log.debug,
+              "Skipping cache put for ntp {} at offset {} with "
+              "unset term",
+              ntp,
+              res.value().last_offset);
+        }
+    }
+    co_return raft::replicate_result{
+      .last_offset = kafka::offset_cast(res.value().last_offset),
+      .last_term = res.value().last_term,
+    };
 }
 } // namespace
 
@@ -712,15 +694,18 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
       min_epoch,
       ntp());
 
-    // Dataplane.
-    auto res = co_await _data_plane->write_and_debounce(
+    auto staged = co_await _data_plane->stage_write(std::move(batches));
+    if (!staged.has_value()) {
+        co_return std::unexpected(staged.error());
+    }
+    auto res = co_await _data_plane->execute_write(
       ntp(),
       min_epoch,
-      std::move(batches),
+      std::move(staged.value()),
       model::timeout_clock::now()
         + opts.timeout.value_or(L0_replicate_default_timeout));
 
-    if (res.has_error()) {
+    if (!res.has_value()) {
         co_return std::unexpected(res.error());
     }
 
@@ -738,14 +723,13 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
         std::rethrow_exception(e);
     }
     auto fence = std::move(fence_fut.get());
-    if (!fence.unit.has_value()) {
+    if (!fence.has_value()) {
         vlog(
           cd_log.warn,
-          "Failed to fence epoch {} for ntp {}, fence unit is empty",
+          "Failed to fence epoch {} for ntp {}, ctp latest seen epoch is {}",
           res.value().front().id.epoch,
-          ntp());
-
-        /// TODO: Maybe return different error code here?
+          ntp(),
+          fence.error().latest_seen);
         co_return std::unexpected(
           kafka::make_error_code(kafka::error_code::request_timed_out));
     }
@@ -757,7 +741,7 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
         placeholder_batches.push_back(std::move(batch));
     }
 
-    opts = update_replicate_options(opts, fence.term);
+    opts = update_replicate_options(opts, fence->term);
     auto result = co_await _partition->replicate(
       std::move(placeholder_batches), opts);
 
@@ -784,21 +768,48 @@ raft::replicate_stages frontend::replicate(
   model::batch_identity batch_id,
   model::record_batch batch,
   raft::replicate_options opts) {
+    auto ctp_stm_api = make_ctp_stm_api(_partition);
     auto header = batch.header();
-    chunked_vector<model::record_batch> batch_vec;
+    chunked_vector<model::record_batch> batch_vec, to_cache;
     batch_vec.push_back(std::move(batch));
-    auto op_state = ss::make_lw_shared<upload_and_replicate_stages>(
-      _partition,
-      std::move(batch_vec),
-      batch_id,
-      opts,
-      opts.timeout.value_or(L0_replicate_default_timeout));
-
+    if (cache_enabled()) {
+        to_cache = clone_batches(batch_vec);
+    }
     raft::replicate_stages out(raft::errc::success);
-    out.request_enqueued = op_state->request_enqueued.get_future();
-    out.replicate_finished = op_state->replicate_finished.get_future();
-    ssx::background = bg_upload_and_replicate(
-      _data_plane, _partition, header, op_state, cache_enabled());
+    ss::promise<result<raft::replicate_result>> result;
+    out.replicate_finished = result.get_future();
+    out.request_enqueued = _data_plane->stage_write(std::move(batch_vec))
+                             .then_wrapped([this,
+                                            p = std::move(result),
+                                            cloned = std::move(to_cache),
+                                            batch_id,
+                                            header,
+                                            opts](auto fut) mutable {
+                                 if (fut.failed()) {
+                                     p.set_exception(fut.get_exception());
+                                     return;
+                                 }
+                                 auto reserve_result = std::move(fut.get());
+                                 if (!reserve_result.has_value()) {
+                                     p.set_value(raft::errc::timeout);
+                                     return;
+                                 }
+                                 auto ctp_stm = make_ctp_stm_api(_partition);
+                                 auto ticket
+                                   = ctp_stm->producer_queue().reserve(
+                                     batch_id.pid.get_id());
+                                 do_upload_and_replicate(
+                                   _data_plane,
+                                   _partition,
+                                   ctp_stm,
+                                   std::move(ticket),
+                                   batch_id,
+                                   header,
+                                   std::move(reserve_result.value()),
+                                   std::move(cloned),
+                                   opts)
+                                   .forward_to(std::move(p));
+                             });
     return out;
 }
 
