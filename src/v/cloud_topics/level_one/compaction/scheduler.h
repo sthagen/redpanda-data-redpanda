@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/compaction/log_collector.h"
 #include "cloud_topics/level_one/compaction/log_info_collector.h"
 #include "cloud_topics/level_one/compaction/meta.h"
+#include "cloud_topics/level_one/compaction/scheduler_probe.h"
 #include "cloud_topics/level_one/compaction/scheduling_policies.h"
 #include "cloud_topics/level_one/compaction/worker_manager.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
@@ -47,7 +48,6 @@ class compaction_scheduler {
 public:
     compaction_scheduler(
       compaction_cluster_state,
-      std::unique_ptr<scheduling_policy>,
       ss::sharded<file_io>*,
       ss::sharded<l1::replicated_metastore>*);
 
@@ -73,9 +73,9 @@ public:
 
     // Removes the `tidp` from the list of managed partitions. No-ops if the
     // provided `tidp` is not managed by this scheduler. Because the `tidp`
-    // may be undergoing an inflight compaction, this function will block until
-    // it is complete (an early stop is requested by this function).
-    ss::future<> unmanage_partition(model::ntp, std::string_view);
+    // may be undergoing an inflight compaction, an early stop is requested by
+    // the `_worker_manager`.
+    void unmanage_partition(const model::ntp&, std::string_view);
 
 private:
     // Starts the backgrounded scheduling loop.
@@ -141,16 +141,12 @@ private:
     chunked_hash_map<model::ntp, model::topic_id_partition> _ntp_to_tidp;
 
 private:
+    compaction_scheduler_probe _probe;
+
     friend class ::SchedulerTestFixture;
 
     // Testing c-tor
-    compaction_scheduler(
-      log_info_collector, std::unique_ptr<scheduling_policy>);
+    compaction_scheduler(log_info_collector);
 };
-
-std::unique_ptr<compaction_scheduler> make_default_compaction_scheduler(
-  compaction_cluster_state,
-  ss::sharded<file_io>*,
-  ss::sharded<replicated_metastore>*);
 
 } // namespace cloud_topics::l1

@@ -1,6 +1,21 @@
 load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest")
 
 redpanda_cc_gtest(
+    name = "read_pipeline_test",
+    timeout = "short",
+    srcs = [
+        "read_pipeline_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "write_pipeline_test",
     timeout = "short",
     srcs = [

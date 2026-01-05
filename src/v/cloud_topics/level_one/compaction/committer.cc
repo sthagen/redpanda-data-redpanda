@@ -364,8 +364,14 @@ ss::future<> compaction_committer::compaction_job::do_finalize(
       ssx::with_timeout_abortable(std::move(f), model::no_timeout, _as));
 
     if (_metadata_builder->is_empty()) {
-        fut.ignore_ready_future();
         // There is no update to push.
+        vlog(
+          compaction_log.debug,
+          "No built or uploaded objects for job {}, tidp {}.",
+          _id,
+          _tp);
+
+        fut.ignore_ready_future();
         co_return;
     }
 

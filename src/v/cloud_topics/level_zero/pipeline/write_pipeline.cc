@@ -195,35 +195,33 @@ write_pipeline<Clock>::get_write_requests(
     size_t acc_size = 0;
     size_t acc_req = 0;
 
-    // The elements in the list are in the insertion order.
     auto it = pending.begin();
-    for (; it != pending.end(); it++) {
+    for (; it != pending.end();) {
         if (it->stage != stage) {
+            it++;
             continue;
         }
         auto sz = it->data_chunk.payload.size_bytes();
         acc_size += sz;
         acc_req++;
-        if (acc_size >= max_bytes || acc_req >= max_requests) {
-            // Include last element
-            it++;
+        // Always include the first request even if it exceeds limits
+        // to avoid stalling the pipeline with oversized requests
+        if (
+          (acc_size >= max_bytes || acc_req >= max_requests)
+          && !result.requests.empty()) {
             break;
         }
-    }
-    // There are three steps to sever the connection between the requests
-    // and their original pipeline:
-    // 1. Splice them out of the pending list.
-    // 2. Decrement their bytes from their stage.
-    // 3. Set the stage to unassigned.
-    result.requests.splice(result.requests.end(), pending, pending.begin(), it);
-    result.complete = pending.empty();
-    for (auto& req : result.requests) {
-        if (req.stage != unassigned_pipeline_stage) {
-            auto idx = static_cast<size_t>(req.stage()->get_numeric_id());
-            _stage_bytes[idx] -= req.size_bytes();
-            req.stage = unassigned_pipeline_stage;
+        auto& el = *it;
+        it++;
+        el._hook.unlink();
+        if (el.stage != unassigned_pipeline_stage) {
+            auto idx = static_cast<size_t>(el.stage()->get_numeric_id());
+            _stage_bytes[idx] -= el.size_bytes();
+            el.stage = unassigned_pipeline_stage;
         }
+        result.requests.push_back(el);
     }
+    result.complete = pending.empty();
     vlog(
       cd_log.trace,
       "get_write_requests returned {} elements, containing {} ({}B)",

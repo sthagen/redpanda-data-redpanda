@@ -47,12 +47,13 @@ func (v Version) Less(b Version) bool {
 
 // IsAtLeast returns true if the version is greater than or equal to the passed version.
 func (v Version) IsAtLeast(b Version) bool {
-	if v.Major >= b.Major {
-		if v.Feature >= b.Feature {
-			return v.Patch >= b.Patch
-		}
+	if v.Major != b.Major {
+		return v.Major > b.Major
 	}
-	return false
+	if v.Feature != b.Feature {
+		return v.Feature > b.Feature
+	}
+	return v.Patch >= b.Patch
 }
 
 func (v Version) String() string {

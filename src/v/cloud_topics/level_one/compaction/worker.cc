@@ -45,6 +45,7 @@ compaction_worker::compaction_worker(
   , _metadata_cache(metadata_cache) {}
 
 ss::future<> compaction_worker::start() {
+    _probe.setup_metrics();
     start_work_loop();
     co_return;
 }
@@ -207,7 +208,8 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       _metastore,
       _io,
       _as,
-      _job_state);
+      _job_state,
+      _probe);
     auto sink = std::make_unique<compaction_sink>(
       tidp,
       dirty_range_intervals,
@@ -218,6 +220,9 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       _committer);
     auto reducer = compaction::sliding_window_reducer(
       std::move(src), std::move(sink));
+
+    // Start measuring time-to-compact here.
+    auto m = _probe.auto_compaction_measurement();
 
     auto compact_fut = co_await ss::coroutine::as_future(
       std::move(reducer).run());
@@ -232,6 +237,9 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
           "Caught exception {} while compacting CTP {}.",
           eptr,
           tidp);
+
+        // Don't let failed compaction runs contribute to the histogram.
+        m->cancel();
     } else {
         vlog(compaction_log.info, "Finished compacting CTP {}", tidp);
     }

@@ -138,7 +138,8 @@ compaction_source::compaction_source(
   metastore* metastore,
   io* io,
   ss::abort_source& as,
-  compaction_job_state& state)
+  compaction_job_state& state,
+  compaction_worker_probe& probe)
   : _ntp(std::move(ntp))
   , _tp(tp)
   , _dirty_range_intervals(dirty_range_intervals)
@@ -158,7 +159,8 @@ compaction_source::compaction_source(
   , _metastore(metastore)
   , _io(io)
   , _as(as)
-  , _state(state) {}
+  , _state(state)
+  , _probe(probe) {}
 
 ss::future<> compaction_source::initialize() { co_return; }
 
@@ -295,6 +297,8 @@ ss::future<ss::stop_iteration> compaction_source::deduplication_iteration(
               last_offset,
               stats);
         }
+
+        _probe.add_stats(stats);
     }
 
     co_return ss::stop_iteration::no;

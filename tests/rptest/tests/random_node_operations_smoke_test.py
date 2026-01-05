@@ -279,6 +279,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                 auto_assign_node_id=True,
                 omit_seeds_on_idx_one=False,
             )
+            admin = Admin(self.redpanda)
+            admin.set_log_level("cloud_topics-compaction", "trace")
 
     def _alter_local_topic_retention_bytes(self, topic: str, retention_bytes: int):
         rpk = RpkTool(self.redpanda)
@@ -604,10 +606,10 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         )
         fast_producer_consumer.start(clean=True)
 
-        cloud_topics_consumer = RandomNodeOperationsBase.producer_consumer(
+        cloud_topics_delete_consumer = RandomNodeOperationsBase.producer_consumer(
             test_context=self.test_context,
             logger=self.logger,
-            topic_name="tp-workload-ct",
+            topic_name="tp-workload-ct-delete",
             redpanda=self.redpanda,
             nodes=[self.preallocated_nodes[2]],
             msg_size=self.msg_size,
@@ -616,10 +618,24 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             consumers_count=self.consumers_count,
             compaction_enabled=False,
         )
+
+        cloud_topics_compact_consumer = RandomNodeOperationsBase.producer_consumer(
+            test_context=self.test_context,
+            logger=self.logger,
+            topic_name="tp-workload-ct-compact",
+            redpanda=self.redpanda,
+            nodes=[self.preallocated_nodes[2]],
+            msg_size=self.msg_size,
+            rate_limit_bps=self.rate_limit,
+            msg_count=self.msg_count,
+            consumers_count=self.consumers_count,
+            compaction_enabled=True,
+        )
+
         if with_cloud_topics:
             rpk = RpkTool(self.redpanda)
             rpk.create_topic(
-                topic=cloud_topics_consumer.topic,
+                topic=cloud_topics_delete_consumer.topic,
                 partitions=self.max_partitions,
                 replicas=3,
                 config={
@@ -630,7 +646,21 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "redpanda.cloud_topic.enabled": "true",
                 },
             )
-            cloud_topics_consumer.start(clean=False)
+            cloud_topics_delete_consumer.start(clean=False)
+
+            rpk.create_topic(
+                topic=cloud_topics_compact_consumer.topic,
+                partitions=self.max_partitions,
+                replicas=3,
+                config={
+                    "segment.bytes": default_segment_size,
+                    "cleanup.policy": "compact",
+                    "redpanda.remote.read": "false",
+                    "redpanda.remote.write": "false",
+                    "redpanda.cloud_topic.enabled": "true",
+                },
+            )
+            cloud_topics_compact_consumer.start(clean=False)
 
         write_caching_enabled = enable_write_caching_testing()
         write_caching_producer_consumer = None
@@ -727,7 +757,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         fast_producer_consumer.verify()
 
         if with_cloud_topics:
-            cloud_topics_consumer.verify()
+            cloud_topics_delete_consumer.verify()
+            cloud_topics_compact_consumer.verify()
 
         if mixed_versions:
             self.logger.info("Upgrading cluster with current Redpanda version")

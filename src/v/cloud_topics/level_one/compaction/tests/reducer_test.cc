@@ -20,6 +20,7 @@
 #include "cloud_topics/level_one/compaction/sink.h"
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/compaction/tests/in_memory_sink.h"
+#include "cloud_topics/level_one/compaction/worker_probe.h"
 #include "cloud_topics/level_one/frontend_reader/tests/l1_reader_fixture.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
@@ -104,6 +105,7 @@ ss::future<> do_compact(
     auto state = l1::compaction_job_state::running;
     auto map = compaction::simple_key_offset_map();
     auto dirty_range_intervals = offsets_response.dirty_ranges.to_vec();
+    l1::compaction_worker_probe probe;
     auto src = std::make_unique<l1::compaction_source>(
       ntp,
       tidp,
@@ -115,7 +117,8 @@ ss::future<> do_compact(
       metastore,
       io,
       as,
-      state);
+      state,
+      probe);
     auto sink = std::make_unique<l1::compaction_sink>(
       tidp,
       dirty_range_intervals,

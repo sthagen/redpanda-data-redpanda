@@ -14,6 +14,7 @@
 #include "cloud_topics/level_one/compaction/committer.h"
 #include "cloud_topics/level_one/compaction/logger.h"
 #include "cloud_topics/level_one/compaction/meta.h"
+#include "cloud_topics/level_one/compaction/scheduler_probe.h"
 #include "cloud_topics/level_one/compaction/worker.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 #include "cluster/metadata_cache.h"
@@ -44,7 +45,8 @@ public:
       ss::sharded<file_io>*,
       ss::sharded<replicated_metastore>*,
       ss::sharded<compaction_committer>*,
-      ss::sharded<cluster::metadata_cache>*);
+      ss::sharded<cluster::metadata_cache>*,
+      compaction_scheduler_probe&);
 
     // Starts the pool of workers, making them available for compaction jobs.
     ss::future<> start();
@@ -75,7 +77,7 @@ public:
     // compaction jobs to be ran. This function is ideally used when e.g. a
     // partition is removed or the `cleanup.policy` for a topic is changed and a
     // single compaction job must be stopped.
-    ss::future<> request_stop_compaction(log_compaction_meta_ptr);
+    void request_stop_compaction(log_compaction_meta_ptr);
 
     // Alert all workers that new jobs have become available in the
     // `_work_queue`.
@@ -105,8 +107,13 @@ private:
 
     ss::sharded<cluster::metadata_cache>* _metadata_cache;
 
+    // Owned by `scheduler`.
+    compaction_scheduler_probe& _probe;
+
     // A sharded pool of compaction workers.
     ss::sharded<compaction_worker> _workers;
+
+    ss::gate _gate;
 };
 
 } // namespace cloud_topics::l1

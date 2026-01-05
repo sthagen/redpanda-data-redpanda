@@ -3374,7 +3374,11 @@ class AuditLogUpgradeTest(AuditLogTestBase):
         return len(self.read_all_from_audit_log(filter_fn, stop_cond))
 
     @skip_fips_mode
-    @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    @cluster(
+        num_nodes=5,
+        log_allow_list=RESTART_LOG_ALLOW_LIST
+        + [re.compile("kafka/data/rpc - .*rpc::errc::service_unavailable.*")],
+    )
     def test_audit_log_upgrade_all_nodes(self):
         """
         Test that audit logging works on all nodes during rolling upgrade

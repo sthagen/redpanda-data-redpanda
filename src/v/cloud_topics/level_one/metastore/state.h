@@ -18,6 +18,7 @@
 #include "model/timestamp.h"
 #include "serde/envelope.h"
 #include "serde/rw/envelope.h"
+#include "serde/rw/optional.h"
 #include "serde/rw/set.h"
 
 #include <seastar/core/future.hh>
@@ -190,7 +191,15 @@ struct partition_state
       envelope<partition_state, serde::version<0>, serde::compat_version<0>> {
     friend bool operator==(const partition_state&, const partition_state&)
       = default;
-    auto serde_fields() { return std::tie(extents, start_offset, next_offset); }
+    auto serde_fields() {
+        return std::tie(
+          extents,
+          start_offset,
+          next_offset,
+          compaction_state,
+          compaction_epoch,
+          term_starts);
+    }
 
     partition_state copy() const;
 

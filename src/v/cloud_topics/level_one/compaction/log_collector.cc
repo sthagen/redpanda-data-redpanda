@@ -66,7 +66,7 @@ ss::future<> partition_leader_log_collector::stop_collecting_logs() {
 }
 
 void partition_leader_log_collector::on_ntp_change(
-  cluster::topic_table::ntp_delta delta) {
+  const cluster::topic_table::ntp_delta& delta) {
     auto& ntp = delta.ntp;
     auto is_managed = _is_managed_cb(ntp);
 
@@ -75,7 +75,7 @@ void partition_leader_log_collector::on_ntp_change(
     case delta_type::removed: {
         // Partition/possibly topic was removed. Unmanage it if necessary.
         if (is_managed) {
-            _unmanage_cb(std::move(ntp), "Partition removed");
+            _unmanage_cb(ntp, "Partition removed");
         }
         return;
     }
@@ -104,7 +104,7 @@ void partition_leader_log_collector::on_ntp_change(
         if (!is_compacted_cloud_topic && is_managed) {
             // This is likely an existing cloud topic which is no longer
             // `compact` enabled.
-            _unmanage_cb(std::move(ntp), "Disabled compaction");
+            _unmanage_cb(ntp, "Disabled compaction");
         }
         return;
     }

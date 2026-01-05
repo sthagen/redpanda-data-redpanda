@@ -262,15 +262,17 @@ leader_router::process(req_t req, bool local_only) {
     } else if (leader.has_value() && !local_only) {
         vlog(
           cd_log.debug,
-          "Sending remote request for {} as leader of {}",
+          "Sending remote request for {} to broker {} as leader of {}",
           req_name,
+          leader.value(),
           l1_ntp);
         auto ret = co_await remote_dispatch<RemoteFunc>(
           std::move(req), leader.value());
         vlog(
           cd_log.debug,
-          "Sent remote request for {} as leader of {}",
+          "Sent remote request for {} to broker {} as leader of {}",
           req_name,
+          leader.value(),
           l1_ntp);
         co_return ret;
     }

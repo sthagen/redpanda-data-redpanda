@@ -256,17 +256,23 @@ ss::future<> compaction_sink::finalize() {
         co_return;
     }
 
-    if (!_processed_extents.empty()) {
-        auto last_offset
-          = _processed_extents.make_reverse_stream().next().last_offset;
-        co_await flush(last_offset);
+    if (_inflight_object) {
+        if (!_processed_extents.empty()) {
+            auto last_offset
+              = _processed_extents.make_reverse_stream().next().last_offset;
+            co_await flush(last_offset);
+        } else {
+            // We started an object but didn't process any extents, which means
+            // no meaningful work has been performed. Discard the inflight
+            // object.
+            auto inflight_object = std::exchange(_inflight_object, nullptr);
+            auto active_staging_file = std::exchange(
+              inflight_object->active_staging_file, nullptr);
+            auto builder = std::exchange(inflight_object->builder, nullptr);
+            co_await active_staging_file->remove();
+            co_await builder->close();
+        }
     }
-
-    // It shouldn't ever be the case that the `_inflight_object` has a value
-    // when `_processed_extents.empty()`, but assert on it here just in case.
-    vassert(
-      !_inflight_object,
-      "Should have called flush() before proceeding to finalize job");
 
     auto removed_tombstone_ranges = get_removed_tombstone_ranges(
       _removable_tombstone_ranges, _processed_extents);

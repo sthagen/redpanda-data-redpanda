@@ -49,11 +49,9 @@ public:
     ss::future<> start_scheduler() {
         auto info_collector = l1::log_info_collector(
           &_metastore, std::make_unique<fake_topic_metadata_provider>());
-        auto policy = l1::make_default_scheduling_policy();
         // not `std::make_unique` because private `compaction_scheduler` c-tor.
         scheduler = std::unique_ptr<l1::compaction_scheduler>(
-          new l1::compaction_scheduler(
-            std::move(info_collector), std::move(policy)));
+          new l1::compaction_scheduler(std::move(info_collector)));
         co_await scheduler->_committer.start(
           ss::sharded_parameter(
             [] { return l1::make_default_committing_policy(); }),

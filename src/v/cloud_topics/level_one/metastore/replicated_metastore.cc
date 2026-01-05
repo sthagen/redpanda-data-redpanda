@@ -759,7 +759,8 @@ replicated_metastore::get_compaction_infos(
             auto& request = partition_and_request.second;
             auto logs = request.logs.copy();
             return fe_.get_compaction_infos(std::move(request))
-              .then([&resp, &logs](rpc::get_compaction_infos_reply reply) {
+              .then([&resp, logs = std::move(logs)](
+                      rpc::get_compaction_infos_reply reply) {
                   if (reply.ec != rpc::errc::ok) {
                       for (const auto& l : logs) {
                           resp[l.tp] = std::unexpected(

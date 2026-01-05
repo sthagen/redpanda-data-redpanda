@@ -195,6 +195,7 @@ redpanda_cc_library(
         "//src/v/serde",
         "//src/v/serde:map",
         "//src/v/serde:named_type",
+        "//src/v/serde:optional",
         "//src/v/serde:set",
         "//src/v/serde:uuid",
         "//src/v/serde:vector",

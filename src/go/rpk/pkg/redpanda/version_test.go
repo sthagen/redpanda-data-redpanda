@@ -79,6 +79,7 @@ func TestVersion_IsAtLeast(t *testing.T) {
 		{"lower year", Version{23, 1, 1}, Version{22, 1, 1}, true},
 		{"lower feature", Version{22, 3, 23}, Version{22, 2, 23}, true},
 		{"lower patch", Version{23, 4, 23}, Version{23, 4, 22}, true},
+		{"next major with lower minor and patch", Version{26, 1, 1}, Version{25, 3, 2}, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.a.IsAtLeast(test.b), test.exp)

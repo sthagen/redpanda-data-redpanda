@@ -163,13 +163,12 @@ read_pipeline<Clock>::get_fetch_requests(
     read_requests_list result(this, stage);
     size_t acc_size = 0;
 
-    // The elements in the list are in the insertion order.
     auto it = pending.begin();
-    for (; it != pending.end(); it++) {
+    for (; it != pending.end();) {
         if (it->stage != stage) {
+            it++;
             continue;
         }
-        // TODO: avoid copy
         auto sz = it->query.output_size_estimate;
         acc_size += sz;
         vlog(
@@ -177,13 +176,16 @@ read_pipeline<Clock>::get_fetch_requests(
           "get_fetch_requests processing req for {}, size estimate: {}",
           it->ntp,
           acc_size);
-        if (acc_size >= max_bytes) {
-            // Include last element
-            it++;
+        // Always include the first request even if it exceeds max_bytes
+        // to avoid stalling the pipeline with oversized requests
+        if (acc_size >= max_bytes && !result.requests.empty()) {
             break;
         }
+        auto& el = *it;
+        it++;
+        el._hook.unlink();
+        result.requests.push_back(el);
     }
-    result.requests.splice(result.requests.end(), pending, pending.begin(), it);
     result.complete = pending.empty();
     vlog(
       logger.debug,

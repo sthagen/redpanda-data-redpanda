@@ -102,7 +102,7 @@ private:
     // Register operations can be performed synchronously while unregister
     // operations are performed in a backgrounded fiber (see
     // `compaction_scheduler::unmanage_partition()`).
-    void on_ntp_change(cluster::topic_table::ntp_delta);
+    void on_ntp_change(const cluster::topic_table::ntp_delta&);
 
     // Registers/unregisters `ntp`s with the `compaction_scheduler` using
     // leadership notifications from the `partition_leaders_table`. The
