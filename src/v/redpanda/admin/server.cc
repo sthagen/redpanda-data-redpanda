@@ -2036,6 +2036,15 @@ void config_multi_property_validation(
           updated_config.iceberg_rest_catalog_authentication_mode.name()}]
           = opt_err.value();
     }
+
+    // Validate cloud topics reconciliation intervals
+    auto interval_err = config::validate_cloud_topics_reconciliation_intervals(
+      updated_config);
+    if (interval_err.has_value()) {
+        errors[ss::sstring{
+          updated_config.cloud_topics_reconciliation_min_interval.name()}]
+          = interval_err.value();
+    }
 }
 } // namespace
 

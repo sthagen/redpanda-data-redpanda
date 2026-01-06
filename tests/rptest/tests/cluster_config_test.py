@@ -775,6 +775,15 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 # Do this instead.
                 valid_value = 10000
 
+            if name in (
+                "cloud_topics_reconciliation_target_fill_ratio",
+                "cloud_topics_reconciliation_speedup_blend",
+                "cloud_topics_reconciliation_slowdown_blend",
+            ):
+                # Doubling the default puts it out of the valid range.
+                # Do this instead.
+                valid_value = 0.5
+
             if name == "tls_v1_2_cipher_suites":
                 valid_value = ":".join(
                     random.sample(

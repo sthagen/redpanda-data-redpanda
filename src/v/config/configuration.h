@@ -821,7 +821,14 @@ public:
     property<std::chrono::milliseconds> cloud_topics_produce_upload_interval;
     property<size_t> cloud_topics_produce_cardinality_threshold;
     property<bool> cloud_topics_disable_reconciliation_loop;
-    property<std::chrono::milliseconds> cloud_topics_reconciliation_interval;
+    property<std::chrono::milliseconds>
+      cloud_topics_reconciliation_min_interval;
+    property<std::chrono::milliseconds>
+      cloud_topics_reconciliation_max_interval;
+    property<double> cloud_topics_reconciliation_target_fill_ratio;
+    property<double> cloud_topics_reconciliation_speedup_blend;
+    property<double> cloud_topics_reconciliation_slowdown_blend;
+    property<size_t> cloud_topics_reconciliation_max_object_size;
     property<std::chrono::milliseconds>
       cloud_topics_long_term_garbage_collection_interval;
     property<std::chrono::milliseconds>

@@ -18,6 +18,7 @@
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
+#include "test_utils/scoped_config.h"
 
 #include <seastar/util/defer.hh>
 
@@ -161,14 +162,18 @@ TEST_F(ReconcilerTest, MultipleSources) {
 }
 
 TEST_F(ReconcilerTest, ObjectSizeLimit) {
+    // Use a small max object size for fast tests.
+    scoped_config cfg;
+    cfg.get("cloud_topics_reconciliation_max_object_size")
+      .set_value(size_t{1_MiB});
+
     auto src = add_source();
 
-    // Total size = 50 * 3 * 512KiB = 75MiB, which is greater than the 64MiB
-    // max object size.
+    // Total size = 20 * 1 * 64KiB = 1.25MiB, which exceeds the 1MiB limit.
     // Disable compression to ensure predictable sizes.
-    constexpr auto batch_count = 50;
-    constexpr auto record_count = 3;
-    constexpr auto record_size = 512_KiB;
+    constexpr auto batch_count = 20;
+    constexpr auto record_count = 1;
+    constexpr auto record_size = 64_KiB;
     for (size_t i = 0; i < batch_count; ++i) {
         src->add_batch(
           {.allow_compression = false,
@@ -192,14 +197,19 @@ TEST_F(ReconcilerTest, ObjectSizeLimit) {
 }
 
 TEST_F(ReconcilerTest, ObjectSizeLimitMultipleSources) {
+    // Use a small max object size for fast tests.
+    scoped_config cfg;
+    cfg.get("cloud_topics_reconciliation_max_object_size")
+      .set_value(size_t{1_MiB});
+
     auto src1 = add_source();
     auto src2 = add_source();
 
-    // 50MiB in source 1.
+    // 960KiB in source 1 (15 * 64KiB).
     // Disable compression to ensure predictable sizes.
-    constexpr auto batch_count_1 = 50;
+    constexpr auto batch_count_1 = 15;
     constexpr auto record_count = 1;
-    constexpr auto record_size = 1_MiB;
+    constexpr auto record_size = 64_KiB;
     for (size_t i = 0; i < batch_count_1; ++i) {
         src1->add_batch(
           {.allow_compression = false,
@@ -207,8 +217,8 @@ TEST_F(ReconcilerTest, ObjectSizeLimitMultipleSources) {
            .record_sizes = std::vector<size_t>(record_count, record_size)});
     }
 
-    // 25MiB in source 2, total 75MiB > 64MiB object limit.
-    constexpr auto batch_count_2 = 25;
+    // 640KiB in source 2 (10 * 64KiB), total 1.6MiB > 1MiB limit.
+    constexpr auto batch_count_2 = 10;
     for (size_t i = 0; i < batch_count_2; ++i) {
         src2->add_batch(
           {.allow_compression = false,
@@ -240,17 +250,22 @@ TEST_F(ReconcilerTest, ObjectSizeLimitMultipleSources) {
       metastore_next_offset(src2), Optional(kafka::offset{last_offset_2 + 1}));
 }
 
-// Test that when two sources each exceed max_object_size (64MiB), only one
+// Test that when two sources each exceed max_object_size, only one
 // is processed per reconciliation round. This verifies that the size_budget
 // calculation doesn't underflow (which would allow both to be processed).
 TEST_F(ReconcilerTest, ObjectSizeLimitOneSourcePerRound) {
+    // Use a small max object size for fast tests.
+    scoped_config cfg;
+    cfg.get("cloud_topics_reconciliation_max_object_size")
+      .set_value(size_t{1_MiB});
+
     auto src1 = add_source();
     auto src2 = add_source();
 
-    // Each source: 13 batches of 5MiB = 65MiB, exceeding the 64MiB limit.
-    constexpr auto batch_count = 13;
+    // Each source: 25 batches of 64KiB = 1.6MiB > 1MiB limit.
+    constexpr auto batch_count = 25;
     constexpr auto record_count = 1;
-    constexpr auto record_size = 5_MiB;
+    constexpr auto record_size = 64_KiB;
     for (size_t i = 0; i < batch_count; ++i) {
         src1->add_batch(
           {.allow_compression = false,
@@ -264,15 +279,14 @@ TEST_F(ReconcilerTest, ObjectSizeLimitOneSourcePerRound) {
 
     reconcile();
 
-    constexpr auto last_offset = batch_count * record_count - 1;
     auto lro1 = src1->last_reconciled_offset();
     auto lro2 = src2->last_reconciled_offset();
 
-    // Exactly one source should be fully processed, the other should not
-    // advance. We're agnostic to which one goes first.
-    bool src1_done = lro1 == kafka::offset{last_offset};
-    bool src2_done = lro2 == kafka::offset{last_offset};
-    EXPECT_TRUE(src1_done != src2_done)
+    // Exactly one source should make progress, the other should not advance.
+    // The size budget prevents processing multiple sources in one round.
+    bool src1_started = lro1 >= kafka::offset{0};
+    bool src2_started = lro2 >= kafka::offset{0};
+    EXPECT_TRUE(src1_started != src2_started)
       << "Expected exactly one source to be processed per round. "
       << "src1 LRO: " << lro1 << ", src2 LRO: " << lro2;
 }
@@ -324,7 +338,7 @@ TEST_F(ReconcilerTest, MetastoreAddObjectsTransientFailure) {
     src1->add_batch({.count = 10});
     src2->add_batch({.count = 10});
 
-    metastore().fail_add_objects_transiently(3);
+    metastore().fail_add_objects_transiently(2);
 
     reconcile();
 

@@ -4592,9 +4592,11 @@ class RedpandaService(Service, RedpandaServiceABC):
                 max_node = node
             diff = result.observed_total - result.reported_total
             for file, size in result.observed:
-                self.logger.debug(f"Observed file [{node_name}]: {size:7} {file}")
+                self.logger.debug(f"Observed file [{node_name}]: {size:12} {file}")
+            for key, value in result.reported.items():
+                self.logger.debug(f"Reported [{node_name}]: {key}={value:12}")
             self.logger.warning(
-                f"Storage usage [{node_name}]: obs {result.observed_total:7} rep {result.reported_total:7} diff {diff:7} pct {result.diff_ratio} reclaimable_pct {result.reclaimable_ratio}"
+                f"Storage usage [{node_name}]: obs {result.observed_total:12} rep {result.reported_total:12} diff {diff:12} pct {result.diff_ratio} reclaimable_pct {result.reclaimable_ratio}"
             )
 
         max_node_name = f"{self.idx(max_node)}:{max_node.account.hostname}"

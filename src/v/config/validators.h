@@ -78,4 +78,7 @@ validate_consumer_group_metrics(const std::vector<ss::sstring>& metrics);
 std::optional<ss::sstring>
 validate_cloud_storage_cluster_name(const std::optional<ss::sstring>&);
 
+std::optional<ss::sstring>
+validate_cloud_topics_reconciliation_intervals(const configuration& config);
+
 }; // namespace config

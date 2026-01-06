@@ -423,4 +423,20 @@ validate_cloud_storage_cluster_name(const std::optional<ss::sstring>& input) {
     return std::nullopt;
 }
 
+std::optional<ss::sstring>
+validate_cloud_topics_reconciliation_intervals(const configuration& config) {
+    auto min_interval = config.cloud_topics_reconciliation_min_interval();
+    auto max_interval = config.cloud_topics_reconciliation_max_interval();
+
+    if (min_interval > max_interval) {
+        return fmt::format(
+          "cloud_topics_reconciliation_min_interval ({}) must be less than or "
+          "equal to cloud_topics_reconciliation_max_interval ({})",
+          min_interval.count(),
+          max_interval.count());
+    }
+
+    return std::nullopt;
+}
+
 }; // namespace config
