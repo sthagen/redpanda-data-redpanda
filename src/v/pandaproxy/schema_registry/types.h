@@ -11,10 +11,10 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
-#include "json/iobuf_writer.h"
 #include "kafka/protocol/errors.h"
 #include "model/metadata.h"
 #include "strings/string_switch.h"
@@ -154,6 +154,16 @@ struct schema_reference {
     schema_version version{invalid_schema_version};
 };
 
+struct schema_metadata {
+    std::optional<absl::btree_map<ss::sstring, ss::sstring>> properties;
+
+    friend bool
+    operator==(const schema_metadata& lhs, const schema_metadata& rhs)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator it) const;
+};
+
 ///\brief Definition of a schema and its type.
 class schema_definition {
     using schema_definition_iobuf
@@ -180,13 +190,19 @@ public:
     schema_definition(T&& def, schema_type type)
       : _def{std::forward<T>(def)}
       , _type{type}
-      , _refs{} {}
+      , _refs{}
+      , _meta{} {}
 
     template<typename T>
-    schema_definition(T&& def, schema_type type, references refs)
+    schema_definition(
+      T&& def,
+      schema_type type,
+      references refs,
+      std::optional<schema_metadata> meta)
       : _def{std::forward<T>(def)}
       , _type{type}
-      , _refs{std::move(refs)} {}
+      , _refs{std::move(refs)}
+      , _meta{std::move(meta)} {}
 
     friend bool
     operator==(const schema_definition& lhs, const schema_definition& rhs)
@@ -196,42 +212,47 @@ public:
 
     schema_type type() const { return _type; }
 
-    const raw_string& raw() const& { return _def; }
-    raw_string raw() && { return std::move(_def); }
+    const raw_string& raw() const { return _def; }
     raw_string shared_raw() const {
         auto& buf = const_cast<iobuf&>(_def());
         return raw_string{buf.share(0, buf.size_bytes())};
     }
 
-    const references& refs() const& { return _refs; }
-    references refs() && { return std::move(_refs); }
+    const references& refs() const { return _refs; }
+
+    const std::optional<schema_metadata>& meta() const { return _meta; }
 
     schema_definition share() const {
-        return {shared_raw(), type(), refs().copy()};
+        return {shared_raw(), type(), refs().copy(), meta()};
     }
 
     schema_definition copy() const {
-        return {raw_string{_def().copy()}, type(), refs().copy()};
+        return {_def().copy(), type(), refs().copy(), meta()};
     }
 
     auto destructure() && {
-        return std::make_tuple(std::move(_def), _type, std::move(_refs));
+        return std::make_tuple(
+          std::move(_def), _type, std::move(_refs), std::move(_meta));
     }
 
 private:
     raw_string _def;
     schema_type _type{schema_type::avro};
     references _refs;
+    std::optional<schema_metadata> _meta;
 };
 
 ///\brief The definition of an avro schema.
 class avro_schema_definition {
 public:
     explicit avro_schema_definition(
-      avro::ValidSchema vs, schema_definition::references refs);
+      avro::ValidSchema vs,
+      schema_definition::references refs,
+      std::optional<schema_metadata> meta);
 
     schema_definition::raw_string raw() const;
     const schema_definition::references& refs() const { return _refs; };
+    const std::optional<schema_metadata>& meta() const { return _meta; };
 
     const avro::ValidSchema& operator()() const;
 
@@ -244,7 +265,7 @@ public:
     constexpr schema_type type() const { return schema_type::avro; }
 
     explicit operator schema_definition() const {
-        return {raw(), type(), refs().copy()};
+        return {raw(), type(), refs().copy(), meta()};
     }
 
     ss::sstring name() const;
@@ -252,6 +273,7 @@ public:
 private:
     avro::ValidSchema _impl;
     schema_definition::references _refs;
+    std::optional<schema_metadata> _meta;
 };
 
 class protobuf_schema_definition {
@@ -260,13 +282,17 @@ public:
     using pimpl = ss::shared_ptr<const impl>;
 
     explicit protobuf_schema_definition(
-      pimpl p, schema_definition::references refs)
+      pimpl p,
+      schema_definition::references refs,
+      std::optional<schema_metadata> meta)
       : _impl{std::move(p)}
-      , _refs(std::move(refs)) {}
+      , _refs(std::move(refs))
+      , _meta(std::move(meta)) {}
 
     schema_definition::raw_string
     raw(output_format format = output_format::none) const;
     const schema_definition::references& refs() const { return _refs; };
+    const std::optional<schema_metadata>& meta() const { return _meta; };
 
     const impl& operator()() const { return *_impl; }
 
@@ -280,7 +306,7 @@ public:
     constexpr schema_type type() const { return schema_type::protobuf; }
 
     protobuf_schema_definition copy() const {
-        return protobuf_schema_definition{_impl, _refs.copy()};
+        return protobuf_schema_definition{_impl, _refs.copy(), _meta};
     }
 
     ::result<ss::sstring, kafka::error_code>
@@ -289,6 +315,7 @@ public:
 private:
     pimpl _impl;
     schema_definition::references _refs;
+    std::optional<schema_metadata> _meta;
 };
 
 class json_schema_definition {
@@ -301,6 +328,7 @@ public:
 
     schema_definition::raw_string raw() const;
     const schema_definition::references& refs() const;
+    const std::optional<schema_metadata>& meta() const;
 
     const impl& operator()() const { return *_impl; }
 
@@ -313,7 +341,7 @@ public:
     constexpr schema_type type() const { return schema_type::json; }
 
     explicit operator schema_definition() const {
-        return {raw(), type(), refs().copy()};
+        return {raw(), type(), refs().copy(), meta()};
     }
 
     ss::sstring name() const;
@@ -365,7 +393,7 @@ public:
         return visit([](const auto& def) { return def.type(); });
     }
 
-    schema_definition::raw_string raw() const& {
+    schema_definition::raw_string raw() const {
         return visit([](auto&& def) {
             return schema_definition::raw_string{def.raw()()};
         });
@@ -455,13 +483,9 @@ public:
     friend std::ostream&
     operator<<(std::ostream& os, const subject_schema& schema);
 
-    const subject& sub() const& { return _sub; }
-    subject sub() && { return std::move(_sub); }
-
+    const subject& sub() const { return _sub; }
     schema_type type() const { return _def.type(); }
-
-    const schema_definition& def() const& { return _def; }
-    schema_definition def() && { return std::move(_def); }
+    const schema_definition& def() const { return _def; }
 
     subject_schema share() const { return {sub(), def().share()}; }
     subject_schema copy() const { return {sub(), def().copy()}; }
@@ -472,7 +496,7 @@ public:
 
 private:
     subject _sub{invalid_subject};
-    schema_definition _def{"", schema_type::avro};
+    schema_definition _def{"", schema_type::avro, {}, {}};
 };
 
 ///\brief Complete description of a subject and schema for a version, as stored
@@ -607,14 +631,3 @@ struct fmt::formatter<pandaproxy::schema_registry::schema_reference> {
     // e : format for error_reporting
     char presentation{'l'};
 };
-
-namespace json {
-
-template<typename Buffer>
-void rjson_serialize(
-  json::iobuf_writer<Buffer>& w,
-  const pandaproxy::schema_registry::schema_definition::raw_string& def) {
-    w.String(def());
-}
-
-} // namespace json

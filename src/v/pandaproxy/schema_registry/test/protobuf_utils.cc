@@ -30,18 +30,18 @@ ss::sstring make_proto_schema(const pps::subject& sub, int n_fields) {
 std::string sanitize(
   std::string_view raw_proto, pps::normalize norm, pps::output_format format) {
     store_fixture s;
-    iobuf buf = pps::make_canonical_protobuf_schema(
+    auto psch = pps::make_canonical_protobuf_schema(
                   s.store(),
                   pps::subject_schema{
                     pps::subject{"foo"},
                     pps::schema_definition{
-                      raw_proto, pps::schema_type::protobuf, {}}},
+                      raw_proto, pps::schema_type::protobuf, {}, {}}},
                   norm,
                   format)
-                  .get()
-                  .def()
-                  .raw()();
-    iobuf_parser parser{std::move(buf)};
+                  .get();
+    auto [_, schema] = std::move(psch).destructure();
+    auto [def, type, refs, meta] = std::move(schema).destructure();
+    iobuf_parser parser{std::move(def)};
     return parser.read_string(parser.bytes_left());
 }
 

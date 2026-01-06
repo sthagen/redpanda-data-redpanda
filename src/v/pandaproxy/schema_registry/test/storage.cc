@@ -9,14 +9,13 @@
 
 #include "pandaproxy/schema_registry/storage.h"
 
-#include "pandaproxy/json/rjson_parse.h"
 #include "pandaproxy/json/rjson_util.h"
-#include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/types.h"
-#include "pandaproxy/schema_registry/util.h"
 
 #include <boost/test/unit_test.hpp>
 #include <fmt/format.h>
+
+#include <optional>
 
 namespace ppj = pandaproxy::json;
 namespace pps = pandaproxy::schema_registry;
@@ -54,7 +53,8 @@ const pps::schema_value avro_schema_value{
     pps::schema_definition{
       R"({"type":"string"})",
       pps::schema_type::avro,
-      {{{"name"}, pps::subject{"subject"}, pps::schema_version{1}}}}},
+      {{{"name"}, pps::subject{"subject"}, pps::schema_version{1}}},
+      {}}},
   .version{pps::schema_version{1}},
   .id{pps::schema_id{1}},
   .deleted = pps::is_deleted::yes};
@@ -196,5 +196,83 @@ BOOST_AUTO_TEST_CASE(test_storage_serde) {
 
         auto str = ppj::rjson_serialize_str(delete_subject_value);
         BOOST_CHECK_EQUAL(str, ::json::minify(delete_subject_value_sv));
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_storage_serde_metadata) {
+    const auto make_schema = [](std::optional<std::string_view> metadata) {
+        constexpr std::string_view fmt_schema{
+          R"({{
+  "subject": "my-kafka-value",
+  "version": 1,
+  "id": 1,
+  {}
+  "schema": "{{\"type\":\"string\"}}",
+  "deleted": true
+}})"};
+        return fmt::format(
+          fmt::runtime(fmt_schema),
+          metadata.has_value() ? fmt::format(R"(  "metadata": {},)", *metadata)
+                               : "");
+    };
+    {
+        auto no_metadata = make_schema(std::nullopt);
+        auto val = ppj::impl::rjson_parse(
+          no_metadata.data(), pps::schema_value_handler<>{});
+        BOOST_CHECK_EQUAL(
+          ppj::rjson_serialize_str(val), ::json::minify(no_metadata));
+        BOOST_CHECK(!val.schema.def().meta().has_value());
+    }
+    {
+        auto null_metadata = make_schema("null");
+        auto val = ppj::impl::rjson_parse(
+          null_metadata.data(), pps::schema_value_handler<>{});
+        BOOST_CHECK(!val.schema.def().meta().has_value());
+    }
+    {
+        auto empty_metadata = make_schema("{}");
+        auto val = ppj::impl::rjson_parse(
+          empty_metadata.data(), pps::schema_value_handler<>{});
+        BOOST_CHECK_EQUAL(
+          ppj::rjson_serialize_str(val), ::json::minify(empty_metadata));
+        BOOST_CHECK(val.schema.def().meta().has_value());
+        BOOST_CHECK(!val.schema.def().meta()->properties.has_value());
+    }
+    {
+        auto null_metadata_properties = make_schema(R"({
+    "properties": null
+  })");
+        auto val = ppj::impl::rjson_parse(
+          null_metadata_properties.data(), pps::schema_value_handler<>{});
+        BOOST_CHECK(val.schema.def().meta().has_value());
+        BOOST_CHECK(!val.schema.def().meta()->properties.has_value());
+    }
+    {
+        auto empty_metadata_properties = make_schema(R"({
+    "properties": {}
+  })");
+        auto val = ppj::impl::rjson_parse(
+          empty_metadata_properties.data(), pps::schema_value_handler<>{});
+        BOOST_CHECK_EQUAL(
+          ppj::rjson_serialize_str(val),
+          ::json::minify(empty_metadata_properties));
+        BOOST_CHECK(val.schema.def().meta().has_value());
+        BOOST_CHECK(val.schema.def().meta()->properties.has_value());
+        BOOST_CHECK(val.schema.def().meta()->properties->empty());
+    }
+    {
+        auto metadata_properties = make_schema(R"({
+    "properties": {
+      "key1": "value1",
+      "key2": "value2"
+    }
+  })");
+        auto val = ppj::impl::rjson_parse(
+          metadata_properties.data(), pps::schema_value_handler<>{});
+        BOOST_CHECK_EQUAL(
+          ppj::rjson_serialize_str(val), ::json::minify(metadata_properties));
+        BOOST_CHECK(val.schema.def().meta().has_value());
+        BOOST_CHECK(val.schema.def().meta()->properties.has_value());
+        BOOST_CHECK_EQUAL(val.schema.def().meta()->properties->size(), 2);
     }
 }

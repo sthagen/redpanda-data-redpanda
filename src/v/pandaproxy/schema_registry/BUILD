@@ -10,6 +10,24 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "rjson",
+    hdrs = [
+        "rjson.h",
+    ],
+    implementation_deps = [
+        "@rapidjson",
+    ],
+    visibility = [":__subpackages__"],
+    deps = [
+        ":types",
+        "//src/v/base",
+        "//src/v/container:json",
+        "//src/v/json",
+        "//src/v/pandaproxy:json",
+    ],
+)
+
+redpanda_cc_library(
     name = "types",
     srcs = [
         "error.cc",
@@ -30,6 +48,7 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/pandaproxy:error",
         "//src/v/strings:string_switch",
+        "//src/v/utils:to_string",
         "@fmt",
         "@rapidjson",
         "@seastar",
@@ -40,6 +59,7 @@ redpanda_cc_library(
         "//src/v/json",
         "//src/v/kafka/protocol",
         "//src/v/utils:named_type",
+        "@abseil-cpp//absl/container:btree",
         "@avro",
         "@boost//:outcome",
     ],
@@ -101,6 +121,7 @@ redpanda_cc_library(
         "//src/v/utils:base64",
         "//src/v/utils:named_type",
         "//src/v/utils:retry",
+        "//src/v/utils:to_string",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -127,6 +148,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":config",
+        ":rjson",
         ":subject_name_strategy",
         ":types",
         "//src/v/base",
@@ -203,12 +225,14 @@ redpanda_cc_library(
         "//src/v/security/audit",
         "//src/v/security/audit:types",
         "//src/v/ssx:semaphore",
+        "//src/v/ssx:sformat",
         "//src/v/strings:string_switch",
         "//src/v/strings:utf8",
         "//src/v/utils:adjustable_semaphore",
         "//src/v/utils:named_type",
         "//src/v/utils:tristate",
         "@abseil-cpp//absl/algorithm:container",
+        "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/strings",
         "@avro",
         "@boost//:algorithm",
@@ -217,6 +241,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":config",
+        ":rjson",
         ":subject_name_strategy",
         ":types",
         "//src/v/kafka/client",

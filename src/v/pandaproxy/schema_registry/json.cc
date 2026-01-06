@@ -26,6 +26,7 @@
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "re2/re2.h"
+#include "utils/to_string.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -178,14 +179,17 @@ struct json_schema_definition::impl {
     impl(
       document_context ctx,
       std::string_view name,
-      schema_definition::references refs)
+      schema_definition::references refs,
+      std::optional<schema_metadata> meta)
       : ctx{std::move(ctx)}
       , name{name}
-      , refs(std::move(refs)) {}
+      , refs(std::move(refs))
+      , meta(std::move(meta)) {}
 
     document_context ctx;
     ss::sstring name;
     schema_definition::references refs;
+    std::optional<schema_metadata> meta;
 };
 
 const json::Document& document(const json_schema_definition::impl& impl) {
@@ -200,9 +204,11 @@ bool operator==(
 std::ostream& operator<<(std::ostream& os, const json_schema_definition& def) {
     fmt::print(
       os,
-      "type: {}, definition: {}",
+      "type: {}, definition: {}, references: {}, metadata: {}",
       to_string_view(def.type()),
-      def().to_json());
+      def().to_json(),
+      def.refs(),
+      def.meta());
     return os;
 }
 
@@ -212,6 +218,10 @@ schema_definition::raw_string json_schema_definition::raw() const {
 
 const schema_definition::references& json_schema_definition::refs() const {
     return _impl->refs;
+}
+
+const std::optional<schema_metadata>& json_schema_definition::meta() const {
+    return _impl->meta;
 }
 
 ss::sstring json_schema_definition::name() const { return {_impl->name}; };
@@ -2377,19 +2387,19 @@ result<id_to_schema_pointer> collect_bundled_schema_and_fix_refs(
 
 ss::future<json_schema_definition>
 make_json_schema_definition(schema_getter&, subject_schema schema) {
-    auto doc
-      = parse_json(schema.def().shared_raw()()).value(); // throws on error
-    std::string_view name = schema.sub()();
-    auto refs = std::move(schema).def().refs();
+    auto [sub, unparsed] = std::move(schema).destructure();
+    auto [def, type, refs, meta] = std::move(unparsed).destructure();
+    auto doc = parse_json(std::move(def)).value(); // throws on error
+    std::string_view name = sub();
     co_return json_schema_definition{
       ss::make_shared<json_schema_definition::impl>(
-        std::move(doc), name, std::move(refs))};
+        std::move(doc), name, std::move(refs), std::move(meta))};
 }
 
 ss::future<subject_schema> make_canonical_json_schema(
   sharded_store& store, subject_schema unparsed_schema, normalize norm) {
     auto [sub, unparsed] = std::move(unparsed_schema).destructure();
-    auto [def, type, refs] = std::move(unparsed).destructure();
+    auto [def, type, refs, meta] = std::move(unparsed).destructure();
 
     auto ctx = parse_json(std::move(def)).value(); // throws on error
     if (norm) {
@@ -2406,7 +2416,8 @@ ss::future<subject_schema> make_canonical_json_schema(
       schema_definition{
         schema_definition::raw_string{std::move(out).as_iobuf()},
         type,
-        std::move(refs)}};
+        std::move(refs),
+        std::move(meta)}};
 
     // Ensure all references exist
     co_await check_references(store, schema.share());

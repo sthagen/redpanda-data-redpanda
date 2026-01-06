@@ -65,7 +65,8 @@ public:
     // API for readers: notify us when they have read and applied an offset
     ss::future<> advance_offset(model::offset offset);
 
-    ss::future<schema_id> write_subject_version(stored_schema schema);
+    ss::future<sharded_store::insert_result>
+    write_subject_version(stored_schema schema);
 
     ss::future<bool>
     write_config(std::optional<subject> sub, compatibility_level compat);
@@ -95,7 +96,7 @@ private:
 
     void advance_offset_inner(model::offset offset);
 
-    ss::future<std::optional<schema_id>>
+    ss::future<std::optional<sharded_store::insert_result>>
     do_write_subject_version(stored_schema schema, model::offset write_at);
 
     ss::future<std::optional<bool>> do_write_config(

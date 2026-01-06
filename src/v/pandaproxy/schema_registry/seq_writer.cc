@@ -223,7 +223,8 @@ void seq_writer::advance_offset_inner(model::offset offset) {
     }
 }
 
-ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
+ss::future<std::optional<sharded_store::insert_result>>
+seq_writer::do_write_subject_version(
   stored_schema schema, model::offset write_at) {
     const auto& sub = schema.schema.sub();
     co_await check_mutable(sub);
@@ -242,7 +243,7 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
 
     if (!projected.inserted) {
         vlog(srlog.debug, "write_subject_version: no-op");
-        co_return projected.id;
+        co_return projected;
     } else {
         auto canonical = std::move(schema.schema);
         auto sub = canonical.sub();
@@ -272,7 +273,7 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
         rb(std::move(key), std::move(value));
 
         if (co_await produce_and_apply(write_at, std::move(rb).build())) {
-            co_return projected.id;
+            co_return projected;
         } else {
             // Pass up a None, our caller's cue to retry
             co_return std::nullopt;
@@ -280,7 +281,8 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
     }
 }
 
-ss::future<schema_id> seq_writer::write_subject_version(stored_schema schema) {
+ss::future<sharded_store::insert_result>
+seq_writer::write_subject_version(stored_schema schema) {
     co_return co_await sequenced_write(
       [&schema](model::offset write_at, seq_writer& seq) {
           return seq.do_write_subject_version(schema.share(), write_at);

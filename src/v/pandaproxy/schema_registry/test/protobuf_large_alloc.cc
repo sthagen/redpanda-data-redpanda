@@ -94,7 +94,7 @@ TEST(ProtoLargeAlloc, test_protobuf_memory_stuff) {
               pps::subject_schema{
                 sub,
                 pps::schema_definition{
-                  large_schema, pps::schema_type::protobuf, {}}})
+                  large_schema, pps::schema_type::protobuf, {}, {}}})
               .get();
         const ss::memory::statistics post_stats = ss::memory::stats();
 

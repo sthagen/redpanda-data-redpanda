@@ -12,6 +12,7 @@
 #include "types.h"
 
 #include "util.h"
+#include "utils/to_string.h"
 
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -49,11 +50,12 @@ std::ostream& operator<<(std::ostream& os, const seq_marker& v) {
 std::ostream& operator<<(std::ostream& os, const schema_definition& def) {
     fmt::print(
       os,
-      "type: {}, definition: {}, references: {}",
+      "type: {}, definition: {}, references: {}, metadata: {}",
       to_string_view(def.type()),
       // TODO BP: Prevent this linearization
       to_string(def.shared_raw()),
-      def.refs());
+      def.refs(),
+      def.meta());
     return os;
 }
 
@@ -75,6 +77,10 @@ std::ostream& operator<<(std::ostream& os, const subject_schema& schema) {
 std::ostream& operator<<(std::ostream& os, const compatibility_result& res) {
     fmt::print(os, "is_compat: {}, messages: {}", res.is_compat, res.messages);
     return os;
+}
+
+fmt::iterator schema_metadata::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{ properties: {{ {} }} }}", properties);
 }
 
 } // namespace pandaproxy::schema_registry

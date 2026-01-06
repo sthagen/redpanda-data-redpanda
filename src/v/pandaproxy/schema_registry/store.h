@@ -611,13 +611,8 @@ public:
         bool inserted;
     };
     insert_schema_result insert_schema(schema_definition def) {
-        const auto s_it = std::find_if(
-          _schemas.begin(), _schemas.end(), [&](const auto& s) {
-              const auto& entry = s.second;
-              return def == entry.definition;
-          });
-        if (s_it != _schemas.end()) {
-            return {s_it->first, false};
+        if (auto id = get_schema_id(def); id.has_value()) {
+            return {*id, false};
         }
 
         const auto id = _schemas.empty() ? schema_id{1}

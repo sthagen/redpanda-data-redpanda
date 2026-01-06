@@ -48,7 +48,8 @@ const pps::schema_definition string_def0{
   pps::sanitize_avro_schema_definition(
     {R"({"type":"string"})",
      pps::schema_type::avro,
-     {{.name{"ref"}, .sub{subject0}, .version{version0}}}})
+     {{.name{"ref"}, .sub{subject0}, .version{version0}}},
+     {}})
     .value()};
 const pps::schema_definition int_def0{
   pps::sanitize_avro_schema_definition(

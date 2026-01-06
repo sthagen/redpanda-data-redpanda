@@ -16,6 +16,7 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
+#include <seastar/util/log.hh>
 
 namespace {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables,cert-err58-cpp)

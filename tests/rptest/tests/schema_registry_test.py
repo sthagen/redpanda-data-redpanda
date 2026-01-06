@@ -1702,7 +1702,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             assert result_raw.json()["id"] == 1
 
     @cluster(num_nodes=3)
-    def test_post_subjects_subject_versions_metadata_ruleset(self):
+    def test_post_subjects_subject_versions_null_metadata_ruleset(self):
         """
         Verify posting a schema with metatada and ruleSet
         These are not supported, but if they're null, we let it pass.
@@ -1728,6 +1728,170 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         )
         self.logger.debug(result_raw)
         assert result_raw.status_code == requests.codes.ok
+
+    @cluster(num_nodes=1)
+    @matrix(schema_type=[SchemaType.AVRO, SchemaType.PROTOBUF, SchemaType.JSON])
+    def test_post_subjects_subject_versions_metadata_properties(self, schema_type):
+        """
+        Verify posting a schema with metatada.properties.
+        """
+
+        def as_java_str(v: str | bool | int | float) -> str:
+            if isinstance(v, bool):
+                return str(v).lower()
+            return str(v)
+
+        topic = create_topic_names(1)[0]
+
+        self.logger.debug("Dump the schema with metadata properties")
+        metadata_properties = {
+            "string": "string",
+            "zero": 0,
+            "one": 1,
+            "neg": -1,
+            "float": 3.14,
+            "bool": False,
+        }
+        expected_properties = {
+            k: as_java_str(v) for k, v in metadata_properties.items()
+        }
+
+        schema = {
+            SchemaType.AVRO: schema1_def,
+            SchemaType.PROTOBUF: simple_proto_def,
+            SchemaType.JSON: r'{"type": "number"}',
+        }[schema_type]
+
+        schema_data = json.dumps(
+            {
+                "schema": schema,
+                "schemaType": schema_type.name,
+                "metadata": {"properties": metadata_properties},
+            }
+        )
+
+        schema_data_no_meta = json.dumps(
+            {
+                "schema": schema,
+                "schemaType": schema_type.name,
+            }
+        )
+
+        schema_data_null_meta = json.dumps(
+            {
+                "schema": schema,
+                "schemaType": schema_type.name,
+                "metadata": None,
+            }
+        )
+
+        self.logger.debug("Posting schema as a subject key")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=f"{topic}-key", data=schema_data
+        )
+        self.logger.debug(result_raw.content)
+        assert result_raw.status_code == requests.codes.ok
+        schema_id = result_raw.json()["id"]
+        version = result_raw.json()["version"]
+
+        self.logger.debug("Reposting should return same id and properties")
+        for payload in [schema_data, schema_data_no_meta, schema_data_null_meta]:
+            result_raw = self.sr_client.post_subjects_subject_versions(
+                subject=f"{topic}-key", data=payload
+            )
+            self.logger.debug(result_raw.content)
+            assert result_raw.status_code == requests.codes.ok
+            assert result_raw.json()["id"] == schema_id
+            assert result_raw.json()["version"] == version, (
+                f"Expected version: {version}, got: {result_raw.json()['version']}"
+            )
+            assert result_raw.json()["metadata"]["properties"] == expected_properties, (
+                f"Expected: {expected_properties}, got: {result_raw.json()['metadata']['properties']}"
+            )
+
+        self.logger.debug(
+            "Retrieving schema by schema should return same id and properties"
+        )
+        for payload in [schema_data, schema_data_no_meta, schema_data_null_meta]:
+            result_raw = self.sr_client.post_subjects_subject(
+                subject=f"{topic}-key", data=payload
+            )
+            self.logger.debug(result_raw.content)
+            assert result_raw.status_code == requests.codes.ok
+            assert result_raw.json()["id"] == schema_id, (
+                f"Expected id: {schema_id}, got: {result_raw.json()['id']}"
+            )
+            assert result_raw.json()["version"] == version, (
+                f"Expected version: {version}, got: {result_raw.json()['version']}"
+            )
+            assert result_raw.json()["metadata"]["properties"] == expected_properties, (
+                f"Expected: {expected_properties}, got: {result_raw.json()['metadata']['properties']}"
+            )
+
+        self.logger.debug("Retrieving schema by subject,version")
+        result_raw = self.sr_client.get_subjects_subject_versions_version(
+            subject=f"{topic}-key", version=version
+        )
+        self.logger.debug(result_raw.content)
+        assert result_raw.status_code == requests.codes.ok
+        assert result_raw.json()["id"] == schema_id, (
+            f"Expected id: {schema_id}, got: {result_raw.json()['id']}"
+        )
+        assert result_raw.json()["version"] == version, (
+            f"Expected version: {version}, got: {result_raw.json()['version']}"
+        )
+
+        assert result_raw.json()["metadata"]["properties"] == expected_properties, (
+            f"Expected: {expected_properties}, got: {result_raw.json()['metadata']['properties']}"
+        )
+
+        self.logger.debug("Retrieving schema by id")
+        result_raw = self.sr_client.get_schemas_ids_id(id=schema_id)
+        self.logger.debug(result_raw.content)
+        assert result_raw.status_code == requests.codes.ok
+
+        assert result_raw.json()["metadata"]["properties"] == expected_properties, (
+            f"Expected: {expected_properties}, got: {result_raw.json()['metadata']['properties']}"
+        )
+
+        metadata_properties.update({"new_prop": "new_val"})
+        expected_properties.update({"new_prop": "new_val"})
+
+        schema_data_v2 = json.dumps(
+            {
+                "schema": schema,
+                "schemaType": schema_type.name,
+                "metadata": {"properties": metadata_properties},
+            }
+        )
+
+        self.logger.debug("Posting schema with different properties is compatible")
+        result_raw = self.sr_client.post_compatibility_subject_version(
+            subject=f"{topic}-key", version=version, data=schema_data_v2
+        )
+        self.logger.debug(result_raw.content)
+        assert result_raw.status_code == requests.codes.ok
+        assert result_raw.json()["is_compatible"] is True, (
+            f"Expected is_compatible: True, got: {result_raw.content}"
+        )
+
+        self.logger.debug(
+            "Posting schema with different properties creates a new version"
+        )
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=f"{topic}-key", data=schema_data_v2
+        )
+        self.logger.debug(result_raw.content)
+        assert result_raw.status_code == requests.codes.ok
+        assert result_raw.json()["id"] == schema_id + 1, (
+            f"Expected id: {schema_id + 1}, got: {result_raw.json()['id']}"
+        )
+        assert result_raw.json()["version"] == version + 1, (
+            f"Expected version: {version + 1}, got: {result_raw.json()['version']}"
+        )
+        assert result_raw.json()["metadata"]["properties"] == expected_properties, (
+            f"Expected: {expected_properties}, got: {result_raw.json()['metadata']['properties']}"
+        )
 
     @cluster(num_nodes=3)
     def test_post_subjects_subject(self):
@@ -2493,13 +2657,13 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             subject=subject, data=schema_1_data
         )
         assert result_raw.status_code == requests.codes.ok
-        assert result_raw.json() == {"id": 1}
+        assert result_raw.json()["id"] == 1
 
         result_raw = self.sr_client.post_subjects_subject_versions(
             subject=subject, data=schema_2_data
         )
         assert result_raw.status_code == requests.codes.ok
-        assert result_raw.json() == {"id": 2}
+        assert result_raw.json()["id"] == 2
 
         # A 'latest' hard deletion will always fail because it tries
         # to delete the latest non-soft-deleted version
@@ -2851,10 +3015,8 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             f"{topic}-value", "latest"
         )
         self.logger.info(schema.json())
-        if protocol == SchemaType.AVRO:
-            assert schema.json().get("schemaType") is None
-        else:
-            assert schema.json()["schemaType"] == protocol.name
+        assert schema.json()["schemaType"] == protocol.name
+        assert schema.json()["deleted"] is False
 
     @cluster(num_nodes=4)
     @matrix(
@@ -4135,6 +4297,59 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
         got_ver_to_id = {int(elem["version"]): elem["id"] for elem in resp}
         self.assert_equal(expected_ver_to_id, got_ver_to_id)
 
+    @cluster(num_nodes=1)
+    def test_import_with_metadata_properties(self):
+        """
+        Verify importing a schema with metatada.properties.
+        """
+
+        subject = f"{create_topic_names(1)[0]}-key"
+        result_raw = self.sr_client.set_mode_subject(
+            subject=subject, data=json.dumps({"mode": "IMPORT"})
+        )
+        self.assert_equal(result_raw.status_code, 200)
+
+        metadata_properties = {
+            "string": "string",
+        }
+
+        schemas = [
+            {
+                "schema": schema1_def,
+                "schemaType": str(SchemaType.AVRO),
+                "metadata": {"properties": metadata_properties},
+                "id": 1,
+                "version": 1,
+            },
+            {
+                "schema": schema1_def,
+                "schemaType": str(SchemaType.AVRO),
+                "id": 2,
+                "version": 2,
+            },
+        ]
+
+        self.logger.debug("Importing schemas")
+        for schema in schemas:
+            result_raw = self.sr_client.post_subjects_subject_versions(
+                subject=subject, data=json.dumps(schema)
+            )
+            self.logger.debug(result_raw.content)
+            assert result_raw.status_code == requests.codes.ok
+
+        self.logger.debug("Retrieving schemas")
+        for schema in schemas:
+            v = schema["version"]
+            result_raw = self.sr_client.get_subjects_subject_versions_version(
+                subject=subject, version=v
+            )
+            self.logger.debug(result_raw.content)
+            assert result_raw.status_code == requests.codes.ok
+            for f in ["schema", "schemaType", "id", "version", "metadata"]:
+                assert result_raw.json().get(f) == schema.get(f), (
+                    f"Expected: {schema.get(f)}, got: {result_raw.json().get(f)}"
+                )
+
     @cluster(num_nodes=3)
     def test_schema_id_smaller_than_one(self):
         sub = "test-subject-1"
@@ -5392,7 +5607,7 @@ class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
         )
         self.logger.debug(result_raw)
         assert result_raw.status_code == requests.codes.ok
-        assert result_raw.json() == {"id": 1}, f"Json: {result_raw.json()}"
+        assert result_raw.json()["id"] == 1, f"Json: {result_raw.json()}"
 
         self.logger.debug("Get subject versions")
         result_raw = self.sr_client.get_subjects_subject_versions(
@@ -5409,7 +5624,7 @@ class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
         )
         self.logger.debug(result_raw)
         assert result_raw.status_code == requests.codes.ok
-        assert result_raw.json() == {"id": 2}, f"Json: {result_raw.json()}"
+        assert result_raw.json()["id"] == 2, f"Json: {result_raw.json()}"
 
         self.logger.debug("Get subject versions")
         result_raw = self.sr_client.get_subjects_subject_versions(
@@ -5501,7 +5716,7 @@ class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
         assert result_raw.status_code == requests.codes.ok, (
             f"Code: {result_raw.status_code}"
         )
-        assert result_raw.json() == {"id": 1}, f"Json: {result_raw.json()}"
+        assert result_raw.json()["id"] == 1, f"Json: {result_raw.json()}"
 
         self.logger.debug("Soft delete subject")
         result_raw = self.sr_client.delete_subject(

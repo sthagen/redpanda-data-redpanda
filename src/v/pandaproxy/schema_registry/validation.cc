@@ -102,11 +102,11 @@ ss::future<std::optional<ss::sstring>> get_record_name(
         co_return "";
     }
 
-    auto schema_type = schema.type();
-    switch (schema_type) {
+    subject_schema sub_schema{subject("r"), std::move(schema)};
+    switch (sub_schema.type()) {
     case schema_type::avro: {
         auto s = co_await make_avro_schema_definition(
-          store, {subject("r"), {std::move(schema).raw(), schema_type}});
+          store, std::move(sub_schema));
         co_return s().root()->name().fullname();
     } break;
     case schema_type::protobuf: {
@@ -114,7 +114,7 @@ ss::future<std::optional<ss::sstring>> get_record_name(
             co_return std::nullopt;
         }
         auto s = co_await make_protobuf_schema_definition(
-          store, {subject("r"), {std::move(schema).raw(), schema_type}});
+          store, std::move(sub_schema));
         auto r = s.name(*offsets);
         if (!r) {
             co_return std::nullopt;
@@ -123,7 +123,7 @@ ss::future<std::optional<ss::sstring>> get_record_name(
     } break;
     case schema_type::json: {
         auto s = co_await make_json_schema_definition(
-          store, {subject("r"), {std::move(schema).raw(), schema_type}});
+          store, std::move(sub_schema));
         co_return s.title();
     } break;
     }

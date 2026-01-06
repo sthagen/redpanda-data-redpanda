@@ -462,7 +462,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "$ref": "#/definitions/schema_def"
+              "$ref": "#/definitions/schema_def_response"
             }
           },
           "404": {
@@ -665,7 +665,7 @@
             "name": "schema_def",
             "in": "body",
             "schema": {
-              "$ref": "#/definitions/schema_def"
+              "$ref": "#/definitions/schema_def_request"
             }
           }
         ],
@@ -678,7 +678,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "$ref": "#/definitions/stored_schema"
+              "$ref": "#/definitions/stored_schema_response"
             }
           },
           "404": {
@@ -787,10 +787,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "type": "array",
-              "items": {
-                "type": "integer"
-              }
+              "$ref": "#/definitions/post_subject_versions_response"
             }
           },
           "404": {
@@ -829,10 +826,10 @@
             "type": "boolean"
           },
           {
-            "name": "schema_def",
+            "name": "request",
             "in": "body",
             "schema": {
-              "$ref": "#/definitions/stored_schema"
+              "$ref": "#/definitions/stored_schema_request"
             }
           }
         ],
@@ -845,12 +842,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "integer"
-                }
-              }
+              "$ref": "#/definitions/post_subject_versions_response"
             }
           },
           "409": {
@@ -915,7 +907,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "$ref": "#/definitions/stored_schema"
+              "$ref": "#/definitions/get_subject_versions_version_response"
             }
           },
           "404": {
@@ -1211,7 +1203,7 @@
             "name": "schema_def",
             "in": "body",
             "schema": {
-              "$ref": "#/definitions/schema_def"
+              "$ref": "#/definitions/schema_def_request"
             }
           },
           {

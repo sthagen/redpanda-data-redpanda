@@ -373,6 +373,7 @@ redpanda_cc_btest(
         "//src/v/pandaproxy:error",
         "//src/v/pandaproxy:json",
         "//src/v/pandaproxy/schema_registry:core",
+        "//src/v/pandaproxy/schema_registry:rjson",
         "//src/v/pandaproxy/test:fixture",
         "//src/v/pandaproxy/test:utils",
         "//src/v/test_utils:seastar_boost",

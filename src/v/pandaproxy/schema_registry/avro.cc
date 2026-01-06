@@ -13,6 +13,7 @@
 
 #include "bytes/streambuf.h"
 #include "json/allocator.h"
+#include "json/chunked_buffer.h"
 #include "json/chunked_input_stream.h"
 #include "json/document.h"
 #include "json/json.h"
@@ -22,9 +23,9 @@
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/schema_getter.h"
-#include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "strings/string_switch.h"
+#include "utils/to_string.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/coroutine/exception.hh>
@@ -497,9 +498,12 @@ result<void> sanitize(json::Value::Array& a, sanitize_context& ctx) {
 } // namespace
 
 avro_schema_definition::avro_schema_definition(
-  avro::ValidSchema vs, schema_definition::references refs)
+  avro::ValidSchema vs,
+  schema_definition::references refs,
+  std::optional<schema_metadata> meta)
   : _impl(std::move(vs))
-  , _refs(std::move(refs)) {}
+  , _refs(std::move(refs))
+  , _meta(std::move(meta)) {}
 
 const avro::ValidSchema& avro_schema_definition::operator()() const {
     return _impl;
@@ -513,9 +517,11 @@ bool operator==(
 std::ostream& operator<<(std::ostream& os, const avro_schema_definition& def) {
     fmt::print(
       os,
-      "type: {}, definition: {}",
+      "type: {}, definition: {}, references: {}, metadata: {}",
       to_string_view(def.type()),
-      def().toJson(false));
+      def().toJson(false),
+      def.refs(),
+      def.meta());
     return os;
 }
 
@@ -659,9 +665,9 @@ make_avro_schema_definition(schema_getter& store, subject_schema schema) {
         auto named_refs = collected.as_named_references();
         auto compiled_schema = compile_avro_schema(schema.def(), named_refs);
         auto [sub, unparsed] = std::move(schema).destructure();
-        auto [def, type, refs] = std::move(unparsed).destructure();
+        auto [def, type, refs, meta] = std::move(unparsed).destructure();
         co_return avro_schema_definition{
-          std::move(compiled_schema), std::move(refs)};
+          std::move(compiled_schema), std::move(refs), std::move(meta)};
     } catch (const avro::Exception& e) {
         ex = e;
     }
@@ -691,11 +697,12 @@ sanitize_avro_schema_definition(schema_definition def) {
             rapidjson::GetParseError_En(doc.GetParseError()),
             doc.GetErrorOffset())};
     }
+    auto [raw, type, refs, meta] = std::move(def).destructure();
     sanitize_context ctx{.alloc = doc.GetAllocator()};
     auto res = sanitize(doc, ctx);
     if (res.has_error()) {
         // TODO BP: Prevent this linearizaton
-        iobuf_parser p(std::move(def).raw()());
+        iobuf_parser p(std::move(raw)());
         return error_info{
           res.assume_error().code(),
           fmt::format(
@@ -714,18 +721,20 @@ sanitize_avro_schema_definition(schema_definition def) {
     return schema_definition{
       schema_definition::raw_string{std::move(buf).as_iobuf()},
       schema_type::avro,
-      std::move(def).refs()};
+      std::move(refs),
+      std::move(meta)};
 }
 
 ss::future<subject_schema> make_canonical_avro_schema(
   schema_getter&, subject_schema unparsed_schema, normalize norm) {
     auto [sub, unparsed] = std::move(unparsed_schema).destructure();
-    auto [def, type, refs] = std::move(unparsed).destructure();
+    auto [def, type, refs, meta] = std::move(unparsed).destructure();
     if (norm) {
         std::sort(refs.begin(), refs.end());
         refs.erase_to_end(std::unique(refs.begin(), refs.end()));
     }
-    schema_definition schema{std::move(def), type, std::move(refs)};
+    schema_definition schema{
+      std::move(def), type, std::move(refs), std::move(meta)};
     // TODO: Check references
     // co_await collect_schema(store, {}, sub, {sub, schema.share()});
     co_return subject_schema{

@@ -24,6 +24,7 @@
 #include "pandaproxy/schema_registry/types.h"
 #include "ssx/sformat.h"
 #include "utils/base64.h"
+#include "utils/to_string.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/memory.hh>
@@ -441,12 +442,13 @@ ss::future<pb::FileDescriptorProto> build_file_with_refs(
             continue;
         }
         try {
-            auto dep = co_await store.get_subject_schema(
+            auto dep_ss = co_await store.get_subject_schema(
               ref.sub, ref.version, include_deleted::yes);
+            auto [_, dep] = std::move(dep_ss.schema).destructure();
             co_await build_file_with_refs(
               dp,
               store,
-              subject_schema{subject{ref.name}, std::move(dep.schema).def()},
+              subject_schema{subject{ref.name}, std::move(dep)},
               normalize::no);
         } catch (const exception& e) {
             if (failed_subject_schema_lookup(e.code())) {
@@ -625,13 +627,19 @@ bool operator==(
 std::ostream&
 operator<<(std::ostream& os, const protobuf_schema_definition& def) {
     fmt::print(
-      os, "type: {}, definition: {}", to_string_view(def.type()), def.raw()());
+      os,
+      "type: {}, definition: {}, references: {}, metadata: {}",
+      to_string_view(def.type()),
+      def.raw(),
+      def.refs(),
+      def.meta());
     return os;
 }
 
 ss::future<protobuf_schema_definition> make_protobuf_schema_definition(
   schema_getter& store, subject_schema schema, normalize norm) {
     auto refs = schema.def().refs().copy();
+    auto meta = schema.def().meta();
     auto impl = ss::make_shared<protobuf_schema_definition::impl>();
     impl->fdp = co_await import_schema(
       impl->_dp, store, std::move(schema), normalize(norm));
@@ -642,7 +650,8 @@ ss::future<protobuf_schema_definition> make_protobuf_schema_definition(
         refs.erase_to_end(uniq.begin());
     }
     impl->fd = impl->_dp.FindFileByName(impl->fdp.name());
-    co_return protobuf_schema_definition{std::move(impl), std::move(refs)};
+    co_return protobuf_schema_definition{
+      std::move(impl), std::move(refs), std::move(meta)};
 }
 
 ss::future<schema_definition> validate_protobuf_schema(
@@ -652,7 +661,8 @@ ss::future<schema_definition> validate_protobuf_schema(
   output_format format) {
     auto res = co_await make_protobuf_schema_definition(
       store, std::move(schema), norm);
-    co_return schema_definition{res.raw(format), res.type(), res.refs().copy()};
+    co_return schema_definition{
+      res.raw(format), res.type(), res.refs().copy(), res.meta()};
 }
 
 ss::future<subject_schema> make_canonical_protobuf_schema(
@@ -675,7 +685,8 @@ ss::future<schema_definition> format_protobuf_schema_definition(
     case output_format::serialized: {
         auto serialized = co_await make_canonical_protobuf_schema(
           store, {{}, std::move(schema)}, normalize::no, format);
-        co_return std::move(serialized).def();
+        auto [_, def] = std::move(serialized).destructure();
+        co_return std::move(def);
     }
     default:
         co_return std::move(schema);

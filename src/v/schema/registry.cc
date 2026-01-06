@@ -83,8 +83,9 @@ public:
         co_await writer->read_sync();
         _last_sync_time = ss::lowres_clock::now();
         auto parsed = co_await reader->make_canonical_schema(std::move(schema));
-        co_return co_await writer->write_subject_version(
+        auto result = co_await writer->write_subject_version(
           {.schema = std::move(parsed)});
+        co_return result.id;
     }
 
 private:

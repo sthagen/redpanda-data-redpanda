@@ -315,6 +315,7 @@ const auto referenced = pps::subject_schema{
   }
 })",
     pps::schema_type::json,
+    {},
     {}}};
 
 const auto referencer = pps::subject_schema{
@@ -333,7 +334,8 @@ const auto referencer = pps::subject_schema{
     {pps::schema_reference{
       .name = "example.com/referenced.json",
       .sub{referenced.sub()},
-      .version = pps::schema_version{1}}}}};
+      .version = pps::schema_version{1}}},
+    {}}};
 
 const auto referencer_wrong_sub = pps::subject_schema{
   referencer.sub(),
@@ -343,7 +345,8 @@ const auto referencer_wrong_sub = pps::subject_schema{
     {pps::schema_reference{
       .name = "example.com/referenced.json",
       .sub{"wrong_sub"},
-      .version = pps::schema_version{1}}}}};
+      .version = pps::schema_version{1}}},
+    {}}};
 
 const std::array test_reference_cases = {
   // Referece correct subject

@@ -226,8 +226,8 @@ ss::future<> sharded_store::process_marked_schemas() {
                     .then([id, &store](auto canonical) {
                         // Update the stored form of this schema to its
                         // canonical form
-                        store.upsert_schema(
-                          id, std::move(canonical).def(), false);
+                        auto [sub, schema] = std::move(canonical).destructure();
+                        store.upsert_schema(id, std::move(schema), false);
                     })
                     .handle_exception([](const std::exception_ptr&) {
                         // processing attempt failed on marked schema. This is
@@ -253,7 +253,7 @@ ss::future<> sharded_store::delete_schema(schema_id id) {
 
 ss::future<stored_schema>
 sharded_store::has_schema(subject_schema schema, include_deleted inc_del) {
-    auto versions = co_await get_versions(schema.sub(), inc_del);
+    auto versions = co_await get_subject_versions(schema.sub(), inc_del);
 
     try {
         co_await validate_schema(schema.share());
@@ -262,23 +262,21 @@ sharded_store::has_schema(subject_schema schema, include_deleted inc_del) {
     }
 
     // Find the maximal id schema with the given definition
-    struct match {
-        stored_schema sub_schema;
-        schema_id id;
-    };
-    std::optional<match> found;
-    for (auto ver : std::views::reverse(versions)) {
+    std::ranges::sort(versions, std::greater<>{}, [](const auto& v) {
+        return std::tie(v.id, v.version);
+    });
+    for (auto entry : versions) {
         try {
-            auto res = co_await get_subject_schema(schema.sub(), ver, inc_del);
-            if (
-              (!found || res.id > found->id)
-              && schema.def() == res.schema.def()) {
-                auto id = res.id;
-                found.emplace(match{.sub_schema = std::move(res), .id = id});
+            auto def = co_await get_schema_definition(entry.id);
+            if (schema.def() == def) {
+                co_return stored_schema{
+                  .schema = {schema.sub(), std::move(def)},
+                  .version = entry.version,
+                  .id = entry.id,
+                  .deleted = entry.deleted};
             }
         } catch (const exception& e) {
-            if (failed_subject_schema_lookup(e.code())) {
-            } else if (
+            if (
               // Stored schemas might be invalid if imported improperly
               e.code() == error_code::schema_invalid) {
                 vlog(
@@ -286,17 +284,14 @@ sharded_store::has_schema(subject_schema schema, include_deleted inc_del) {
                   "Failed to parse stored schema, subject '{}', version {}. "
                   "Error: {}",
                   schema.sub(),
-                  ver,
+                  entry.version,
                   e.what());
             } else {
                 throw;
             }
         }
     }
-    if (!found.has_value()) {
-        throw as_exception(schema_not_found());
-    }
-    co_return std::move(found->sub_schema);
+    throw as_exception(schema_not_found());
 }
 
 ss::future<std::optional<schema_definition>>

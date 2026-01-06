@@ -17,6 +17,7 @@
 
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/util/log.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <avro/Encoder.hh>

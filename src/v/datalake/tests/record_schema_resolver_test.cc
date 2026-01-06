@@ -271,7 +271,8 @@ message NestedMessage {
                            {schema_reference{
                              .name = "simple.proto",
                              .sub = subject{"simple_schema"},
-                             .version = schema_version{0}}}}})
+                             .version = schema_version{0}}},
+                           std::optional<schema_metadata>{}}})
                      .get();
     ASSERT_EQ(8, pb_schema_id());
     std::vector<int32_t> pb_offsets{};

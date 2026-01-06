@@ -78,7 +78,8 @@ TEST_F(AvroSchemaReferencesTest, RegisterWithReferences) {
 })",
       schema_type::avro,
       {schema_reference{
-        .name = ref_name, .sub = ref_sub, .version = schema_version(1)}}};
+        .name = ref_name, .sub = ref_sub, .version = schema_version(1)}},
+      {}};
 
     // Register the referenced schema (should not throw)
     auto ref_valid = register_schema(
@@ -116,7 +117,8 @@ TEST_F(AvroSchemaReferencesTest, DiamondDependencies) {
         {schema_reference{
           .name = "com.example.Base",
           .sub = subject("BaseSubject"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     // Right also references Base
@@ -129,7 +131,8 @@ TEST_F(AvroSchemaReferencesTest, DiamondDependencies) {
         {schema_reference{
           .name = "com.example.Base",
           .sub = subject("BaseSubject"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     // Top references both
@@ -149,7 +152,8 @@ TEST_F(AvroSchemaReferencesTest, DiamondDependencies) {
          schema_reference{
            .name = "com.example.Right",
            .sub = subject("RightSubject"),
-           .version = schema_version(1)}}},
+           .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     ASSERT_EQ(top_valid.name(), "com.example.Top");
@@ -178,7 +182,8 @@ TEST_F(AvroSchemaReferencesTest, TransitiveReferences) {
         {schema_reference{
           .name = "com.example.Country",
           .sub = subject("CountrySubject"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     // Root: Person references Address (should transitively fetch Country)
@@ -191,7 +196,8 @@ TEST_F(AvroSchemaReferencesTest, TransitiveReferences) {
         {schema_reference{
           .name = "com.example.Address",
           .sub = subject("AddressSubject"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     ASSERT_EQ(person_valid.name(), "com.example.Person");
@@ -215,7 +221,8 @@ TEST_F(AvroSchemaReferencesTest, PrimitiveTypeReference) {
         {schema_reference{
           .name = "com.example.CustomString",
           .sub = subject("StringSubject"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     ASSERT_EQ(person_valid.name(), "com.example.Person");
@@ -276,7 +283,8 @@ TEST_F(AvroSchemaReferencesTest, SameNameDifferentSubjectsInIsolation) {
         {schema_reference{
           .name = "com.example.Shared",
           .sub = subject("SubjectD"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     // Register C - uses Shared from SubjectE
@@ -289,7 +297,8 @@ TEST_F(AvroSchemaReferencesTest, SameNameDifferentSubjectsInIsolation) {
         {schema_reference{
           .name = "com.example.Shared",
           .sub = subject("SubjectE"),
-          .version = schema_version(1)}}},
+          .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     // Register A which depends on both B and C
@@ -310,7 +319,8 @@ TEST_F(AvroSchemaReferencesTest, SameNameDifferentSubjectsInIsolation) {
          schema_reference{
            .name = "com.example.C",
            .sub = subject("SubjectC"),
-           .version = schema_version(1)}}},
+           .version = schema_version(1)}},
+        {}},
       schema_version{1});
 
     // Show the structure of the resulting schema A, which has inlined the
