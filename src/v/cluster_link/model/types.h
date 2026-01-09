@@ -1109,7 +1109,7 @@ struct shadow_topic_partition_leader_report
     ::model::partition_id partition;
     kafka::offset source_partition_start_offset{-1};
     kafka::offset source_partition_high_watermark{-1};
-    kafka::offset source_partition_last_stable_offset{-1};
+    kafka::offset source_partition_last_stable_offset{::model::invalid_lso};
     std::chrono::milliseconds last_update_time{0};
     kafka::offset shadow_partition_high_watermark{-1};
 

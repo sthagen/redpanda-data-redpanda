@@ -374,7 +374,8 @@ make_nhr(int nid, const std::vector<topic_status>& statuses) {
       node_id(nid),
       node::local_state{},
       chunked_vector<topic_status>(statuses.begin(), statuses.end()),
-      std::nullopt};
+      /* drain_status */ std::nullopt,
+      node_liveness_report{}};
 };
 
 struct node_and_status {
@@ -441,7 +442,8 @@ FIXTURE_TEST(test_aggregate, health_report_unit) {
          model::node_id(0),
          node::local_state{},
          chunked_vector<topic_status>{},
-         std::nullopt)}};
+         /* drain_status */ std::nullopt,
+         node_liveness_report{})}};
 
     {
         // empty input, empty report

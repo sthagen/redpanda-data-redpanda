@@ -273,6 +273,19 @@ std::optional<ss::sstring> validate_iceberg_topic_name_dot_replacement(
 }
 
 std::optional<ss::sstring>
+validate_iceberg_default_catalog_namespace(const std::vector<ss::sstring>& ns) {
+    if (ns.empty()) {
+        return "Iceberg namespace must contain at least one element";
+    }
+    for (const auto& s : ns) {
+        if (s.empty()) {
+            return "Iceberg namespace elements cannot be empty strings";
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<ss::sstring>
 validate_iceberg_rest_catalog_auth_mode(const config::configuration& config) {
     auto auth_mode = config.iceberg_rest_catalog_authentication_mode();
     switch (auth_mode) {

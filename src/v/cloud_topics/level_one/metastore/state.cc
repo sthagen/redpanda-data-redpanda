@@ -173,6 +173,7 @@ compaction_state::get_contiguous_range_with_tombstones(
         }
         cur_tombstone_range_last = std::max(
           it->last_offset, cur_tombstone_range_last);
+        contiguous_next_offset = kafka::next_offset(it->last_offset);
         if (cur_tombstone_range_last >= last) {
             return tombstone_range_iters{
               .begin = last_le_base,

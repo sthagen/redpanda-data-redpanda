@@ -766,18 +766,25 @@ replicated_metastore::get_compaction_infos(
                           resp[l.tp] = std::unexpected(
                             rpc_to_meta_errc(reply.ec));
                       }
+                      return;
                   }
 
                   for (auto& [log, log_reply] : reply.responses) {
-                      metastore::compaction_info_response log_resp{
-                        .dirty_ratio = log_reply.dirty_ratio,
-                        .earliest_dirty_ts = log_reply.earliest_dirty_ts,
-                        .offsets_response = {
-                          .dirty_ranges = std::move(log_reply.dirty_ranges),
-                          .removable_tombstone_ranges = std::move(log_reply.removable_tombstone_ranges)},
-                        .compaction_epoch = metastore::compaction_epoch{log_reply.compaction_epoch()},
-                        .start_offset = log_reply.start_offset};
-                      resp.insert_or_assign(log, std::move(log_resp));
+                      if (log_reply.ec == rpc::errc::ok) {
+                          metastore::compaction_info_response log_resp{
+                            .dirty_ratio = log_reply.dirty_ratio,
+                            .earliest_dirty_ts = log_reply.earliest_dirty_ts,
+                            .offsets_response = {
+                              .dirty_ranges = std::move(log_reply.dirty_ranges),
+                              .removable_tombstone_ranges = std::move(log_reply.removable_tombstone_ranges)},
+                            .compaction_epoch = metastore::compaction_epoch{log_reply.compaction_epoch()},
+                            .start_offset = log_reply.start_offset};
+                          resp.insert_or_assign(log, std::move(log_resp));
+                      } else {
+                          resp.insert_or_assign(
+                            log,
+                            std::unexpected(rpc_to_meta_errc(log_reply.ec)));
+                      }
                   }
               });
         }));

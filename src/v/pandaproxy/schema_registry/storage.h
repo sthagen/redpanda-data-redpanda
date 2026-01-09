@@ -1631,7 +1631,7 @@ struct consume_to_store {
                       val->compat);
                 }
             } else if (val.has_value()) {
-                co_await _store.set_compatibility(val->compat);
+                co_await _store.set_compatibility(default_context, val->compat);
             } else {
                 vlog(
                   srlog.warn,
@@ -1686,7 +1686,8 @@ struct consume_to_store {
                       force::yes);
                 }
             } else if (val.has_value()) {
-                co_await _store.set_mode(val->mode, force::yes);
+                co_await _store.set_mode(
+                  default_context, val->mode, force::yes);
             } else {
                 vlog(
                   srlog.warn,

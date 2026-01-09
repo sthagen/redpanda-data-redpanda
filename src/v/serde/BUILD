@@ -24,8 +24,6 @@ redpanda_cc_library(
     deps = [
         "//src/v/bytes:iobuf_parser",
         "//src/v/hashing:crc32c",
-        "//src/v/reflection:arity",
-        "//src/v/reflection:to_tuple",
         "//src/v/ssx:sformat",
     ],
 )

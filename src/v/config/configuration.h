@@ -606,6 +606,10 @@ struct configuration final : public config_store {
       partition_autobalancing_mode;
     property<std::chrono::seconds>
       partition_autobalancing_node_availability_timeout_sec;
+
+    property<std::optional<std::chrono::seconds>>
+      partition_autobalancing_node_autodecommission_timeout_sec;
+
     bounded_property<unsigned> partition_autobalancing_max_disk_usage_percent;
     property<std::chrono::milliseconds>
       partition_autobalancing_tick_interval_ms;
@@ -791,6 +795,7 @@ struct configuration final : public config_store {
     property<bool> iceberg_disable_automatic_snapshot_expiry;
     property<std::optional<ss::sstring>> iceberg_topic_name_dot_replacement;
     property<ss::sstring> iceberg_dlq_table_suffix;
+    property<std::vector<ss::sstring>> iceberg_default_catalog_namespace;
 
     property<bool> enable_host_metrics;
 

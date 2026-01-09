@@ -64,7 +64,7 @@ struct fetched_partition_data {
     kafka::leader_epoch leader_epoch{-1};
     kafka::offset start_offset{-1};
     kafka::offset high_watermark{-1};
-    kafka::offset last_stable_offset{-1};
+    kafka::offset last_stable_offset{model::invalid_lso};
 
     // the following have reasonable defaults
     chunked_vector<model::record_batch> data{};
@@ -92,7 +92,7 @@ struct source_partition_offsets {
     // The source partition's log high watermark
     kafka::offset high_watermark{-1};
     // The source partition's log last stable offset
-    kafka::offset last_stable_offset{-1};
+    kafka::offset last_stable_offset{model::offset_cast(model::invalid_lso)};
     // The timestamp that the fetch response was received by the client
     ss::lowres_clock::time_point last_offset_update_timestamp{};
 

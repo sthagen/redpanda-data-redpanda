@@ -219,6 +219,23 @@ redpanda_cc_bench(
     ],
 )
 
+redpanda_cc_bench(
+    name = "oidc_authenticator_bench_rpbench",
+    srcs = [
+        "oidc_authenticator_bench.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/container:chunked_vector",
+        "//src/v/json",
+        "//src/v/security",
+        "//src/v/security:config",
+        "@boost//:algorithm",
+        "@seastar",
+        "@seastar//:benchmark",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "acl_serde_test",
     timeout = "short",

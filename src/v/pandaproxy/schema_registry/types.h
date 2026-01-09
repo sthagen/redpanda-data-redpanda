@@ -16,7 +16,7 @@
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
-#include "model/metadata.h"
+#include "model/fundamental.h"
 #include "strings/string_switch.h"
 #include "utils/named_type.h"
 
@@ -129,14 +129,88 @@ using registry_resource = named_type<ss::sstring, struct registry_resource_tag>;
 ///
 /// Typically it will be "<topic>-key" or "<topic>-value".
 using subject = named_type<ss::sstring, struct subject_tag>;
-static const subject invalid_subject{};
+inline const subject invalid_subject{};
+
+/// \brief A schema context, used for namespacing schemas and schema ids. Can be
+/// used to implement multi-tenancy, environment (e.g., dev, staging, prod)
+/// separation, and so on. By default, schemas are stored under the "." context.
+using context = named_type<ss::sstring, struct context_tag>;
+inline const context default_context{"."};
+
+// A subject bound to a context
+struct context_subject {
+    constexpr context_subject() = default;
+
+    context_subject(context c, subject s)
+      : ctx{std::move(c)}
+      , sub{std::move(s)} {}
+
+    // TODO: remove this, it is only for gradual commit-by-commit source code
+    // migration
+    context_subject(subject sub)
+      : ctx{default_context}
+      , sub{std::move(sub)} {}
+
+    // TODO: remove this, it is only for gradual commit-by-commit source code
+    // migration
+    context_subject(ss::sstring sub)
+      : ctx{default_context}
+      , sub{std::move(sub)} {}
+
+    friend auto
+    operator<=>(const context_subject& lhs, const context_subject& rhs)
+      = default;
+
+    template<typename H>
+    friend H AbslHashValue(H h, const context_subject& ctx_sub) {
+        return H::combine(std::move(h), ctx_sub.ctx, ctx_sub.sub);
+    }
+
+    /// Parse from qualified subject ":.context:subject" or unqualified
+    /// "subject" (which uses the default context)
+    static context_subject from_string(std::string_view input) {
+        // Check for qualified syntax: starts with ":."
+        if (input.starts_with(":.")) {
+            // Find the second colon that separates context from subject
+            auto second_colon = input.find(':', 2);
+
+            if (second_colon != std::string_view::npos) {
+                auto ctx_str = input.substr(1, second_colon - 1);
+                auto sub_str = input.substr(second_colon + 1);
+
+                return context_subject{context{ctx_str}, subject{sub_str}};
+            }
+        }
+
+        // Default case: unqualified subject or invalid qualified syntax
+        return context_subject{default_context, subject{input}};
+    }
+
+    /// Format as qualified subject ":.context:subject" or "subject" if in the
+    /// default context
+    ss::sstring to_string() const { return ssx::sformat("{}", *this); }
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        if (ctx == pandaproxy::schema_registry::default_context) {
+            return fmt::format_to(it, "{}", sub);
+        }
+        return fmt::format_to(it, ":{}:{}", ctx, sub);
+    }
+
+    bool starts_with(const ss::sstring& prefix) const {
+        return to_string().starts_with(prefix);
+    }
+
+    context ctx;
+    subject sub;
+};
 
 ///\brief The version of the schema registered with a subject.
 ///
 /// A subject may evolve its schema over time. Each version is associated with a
 /// schema_id.
 using schema_version = named_type<int32_t, struct schema_version_tag>;
-static constexpr schema_version invalid_schema_version{-1};
+inline constexpr schema_version invalid_schema_version{-1};
 
 struct schema_reference {
     friend bool
@@ -416,7 +490,32 @@ private:
 
 ///\brief Globally unique identifier for a schema.
 using schema_id = named_type<int32_t, struct schema_id_tag>;
-static constexpr schema_id invalid_schema_id{-1};
+inline constexpr schema_id invalid_schema_id{-1};
+
+// A schema id that is valid within a context.
+struct context_schema_id {
+    // TODO: remove this, it is only for gradual commit-by-commit source code
+    // migration
+    context_schema_id(schema_id id)
+      : ctx{default_context}
+      , id{id} {}
+
+    context_schema_id(context c, schema_id s)
+      : ctx{std::move(c)}
+      , id{s} {}
+
+    friend auto
+    operator<=>(const context_schema_id& lhs, const context_schema_id& rhs)
+      = default;
+
+    template<typename H>
+    friend H AbslHashValue(H h, const context_schema_id& ctx_id) {
+        return H::combine(std::move(h), ctx_id.ctx, ctx_id.id);
+    }
+
+    context ctx;
+    schema_id id;
+};
 
 struct subject_version {
     subject_version(subject s, schema_version v)
@@ -514,13 +613,13 @@ struct stored_schema {
 ///\brief A mapping of version and schema id for a subject.
 struct subject_version_entry {
     subject_version_entry(
-      schema_version version, schema_id id, is_deleted deleted)
+      schema_version version, context_schema_id id, is_deleted deleted)
       : version{version}
-      , id{id}
+      , id{std::move(id)}
       , deleted(deleted) {}
 
     schema_version version;
-    schema_id id;
+    context_schema_id id;
     is_deleted deleted{is_deleted::no};
 };
 

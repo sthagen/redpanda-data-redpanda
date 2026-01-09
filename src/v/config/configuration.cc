@@ -3274,9 +3274,18 @@ configuration::configuration()
       "When a node is unavailable for at least this timeout duration, it "
       "triggers Redpanda to move partitions off of the node. This property "
       "applies only when `partition_autobalancing_mode` is set to "
-      "`continuous`.      ",
+      "`continuous`.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       15min)
+  , partition_autobalancing_node_autodecommission_timeout_sec(
+      *this,
+      "partition_autobalancing_node_autodecommission_time",
+      "When a node is unavailable for at least this timeout duration, it "
+      "triggers Redpanda to decommission the node. This property "
+      "applies only when `partition_autobalancing_mode` is set to "
+      "`continuous`.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      std::nullopt)
   , partition_autobalancing_max_disk_usage_percent(
       *this,
       "partition_autobalancing_max_disk_usage_percent",
@@ -4383,6 +4392,18 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       "~dlq",
       &validate_non_empty_string_opt)
+  , iceberg_default_catalog_namespace(
+      *this,
+      "iceberg_default_catalog_namespace",
+      "The default namespace (database name) for Iceberg tables. All tables "
+      "created by Redpanda will be placed in this namespace within the Iceberg "
+      "catalog. Supports nested namespaces as an array of strings. IMPORTANT: "
+      "This value must be configured before enabling Iceberg and must not be "
+      "changed afterward. Changing it will cause Redpanda to lose track of "
+      "existing tables.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {"redpanda"},
+      &validate_iceberg_default_catalog_namespace)
   , enable_host_metrics(
       *this,
       "enable_host_metrics",

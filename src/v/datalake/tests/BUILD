@@ -203,6 +203,7 @@ redpanda_cc_gtest(
         "//src/v/schema/tests:fake_registry",
         "//src/v/test_utils:gtest",
         "//src/v/utils:vint",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@googletest//:gtest",
     ],
 )

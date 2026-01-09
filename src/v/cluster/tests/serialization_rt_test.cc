@@ -767,7 +767,8 @@ cluster::cluster_health_report random_cluster_health_report() {
           tests::random_named_int<model::node_id>(),
           random_local_state(),
           std::move(topics),
-          random_drain_status());
+          random_drain_status(),
+          cluster::node_liveness_report{});
 
         // Reduce to an ADL-encodable state
         report.local_state.cache_disk = std::nullopt;
@@ -1659,7 +1660,8 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
           tests::random_named_int<model::node_id>(),
           random_local_state(),
           std::move(topics),
-          random_drain_status());
+          random_drain_status(),
+          cluster::node_liveness_report{});
 
         // Squash local_state to a form that ADL represents, since we will
         // test ADL roundtrip.
@@ -1676,7 +1678,8 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
           tests::random_named_int<model::node_id>(),
           random_local_state(),
           std::move(topics),
-          random_drain_status());
+          random_drain_status(),
+          cluster::node_liveness_report{});
 
         // Squash to ADL-understood disk state
         report.local_state.cache_disk = report.local_state.data_disk;

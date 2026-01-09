@@ -50,6 +50,8 @@ namespace pandaproxy::schema_registry {
 
 using server = ctx_server<service>;
 
+namespace {
+
 void parse_accept_header(const server::request_t& rq, server::reply_t& rp) {
     static const std::vector<ppj::serialization_format> headers{
       ppj::serialization_format::schema_registry_v1_json,
@@ -142,6 +144,26 @@ ss::future<subject_schema> make_canonical_schema_with_metadata(
     co_return schema;
 }
 
+chunked_vector<subject>
+to_non_context_subjects(chunked_vector<context_subject> subjects) {
+    // TODO: use context_subject's for authz later, for now, use this
+    // inefficient mapping to help with gradual source migration
+    return std::move(subjects) | std::views::as_rvalue
+           | std::ranges::views::transform(
+             [](context_subject&& ctx_sub) { return std::move(ctx_sub).sub; })
+           | std::ranges::to<chunked_vector<subject>>();
+}
+
+chunked_vector<schema_id>
+to_non_context_schema_ids(const chunked_vector<context_schema_id>& ids) {
+    return ids
+           | std::ranges::views::transform(
+             [](const context_schema_id& ctx_id) { return ctx_id.id; })
+           | std::ranges::to<chunked_vector<schema_id>>();
+}
+
+} // namespace
+
 ss::future<server::reply_t>
 get_config(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
@@ -149,7 +171,8 @@ get_config(server::request_t rq, server::reply_t rp) {
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto res = co_await rq.service().schema_store().get_compatibility();
+    auto res = co_await rq.service().schema_store().get_compatibility(
+      default_context);
 
     auto resp = ppj::rjson_serialize_iobuf(get_config_req_rep{.compat = res});
     log_response(*rq.req, resp);
@@ -274,7 +297,7 @@ ss::future<server::reply_t> get_mode(server::request_t rq, server::reply_t rp) {
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto res = co_await rq.service().schema_store().get_mode();
+    auto res = co_await rq.service().schema_store().get_mode(default_context);
 
     auto resp = ppj::rjson_serialize_iobuf(mode_req_rep{.mode = res});
     log_response(*rq.req, resp);
@@ -385,8 +408,9 @@ ss::future<server::reply_t> get_schemas_ids_id(
     const auto format = parse_output_format(*rq.req);
 
     co_await rq.service().writer().read_sync();
-    auto subjects = co_await rq.service().schema_store().get_schema_subjects(
-      id, include_deleted::yes);
+    auto subjects = to_non_context_subjects(
+      co_await rq.service().schema_store().get_schema_subjects(
+        id, include_deleted::yes));
 
     enterprise::handle_get_schemas_ids_id_authz(rq, auth_result, subjects);
 
@@ -441,8 +465,10 @@ ss::future<ctx_server<service>::reply_t> get_schemas_ids_id_subjects(
     // Force early 40403 if the schema id isn't found
     co_await rq.service().schema_store().get_schema_definition(id);
 
-    auto resp = ppj::rjson_serialize_iobuf(
+    auto subjects = to_non_context_subjects(
       co_await rq.service().schema_store().get_schema_subjects(id, incl_del));
+
+    auto resp = ppj::rjson_serialize_iobuf(std::move(subjects));
     log_response(*rq.req, resp);
     rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
@@ -462,8 +488,9 @@ ss::future<server::reply_t> get_subjects(
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto res = co_await rq.service().schema_store().get_subjects(
-      inc_del, subject_prefix);
+    auto res = to_non_context_subjects(
+      co_await rq.service().schema_store().get_subjects(
+        inc_del, subject_prefix));
 
     // Handle AuthZ - Filters res for the subjects the user is allowed to see
     enterprise::handle_get_subjects_authz(rq, auth_result, res);
@@ -599,7 +626,8 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
     co_await st.validate_schema(schema.schema.share());
 
     // Determine if the definition already exists
-    auto s_id = co_await st.get_schema_id(schema.schema.def().share());
+    auto s_id = co_await st.get_schema_id(
+      default_context, schema.schema.def().share());
 
     vlog(
       srlog.debug, "post_subject_versions: ID for schema definition: {}", s_id);
@@ -767,8 +795,8 @@ get_subject_versions_version_referenced_by(
 
     auto version = parse_schema_version(ver).value();
 
-    auto references = ppj::rjson_serialize_iobuf(
-      co_await rq.service().schema_store().referenced_by(sub, version));
+    auto references = ppj::rjson_serialize_iobuf(to_non_context_schema_ids(
+      co_await rq.service().schema_store().referenced_by(sub, version)));
 
     log_response(*rq.req, references);
     rp.rep->write_body("json", ppj::as_body_writer(std::move(references)));

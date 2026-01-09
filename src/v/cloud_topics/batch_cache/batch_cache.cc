@@ -47,6 +47,10 @@ ss::future<> batch_cache::stop() {
 }
 
 void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
+    vassert(
+      b.term() > model::term_id{-1},
+      "Batch without term in the cache: {}",
+      b.header());
     if (_lm == nullptr) {
         return;
     }
@@ -81,6 +85,17 @@ batch_cache::get(const model::ntp& ntp, model::offset o) {
     if (auto it = _index.find(ntp); it != _index.end()) {
         auto rb = it->second->get(o);
         if (rb.has_value()) {
+            vassert(
+              rb->term() > model::term_id{-1},
+              "Batch without term in the cache: {}",
+              rb->header());
+            vassert(
+              rb->base_offset() <= o && o <= rb->last_offset(),
+              "Unexpected batch for {}, got range: [{},{}] for offset {}",
+              ntp,
+              rb->base_offset(),
+              rb->last_offset(),
+              o);
             _probe.register_get(rb->size_bytes());
         } else {
             _probe.register_miss();

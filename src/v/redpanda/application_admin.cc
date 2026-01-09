@@ -108,7 +108,10 @@ void application::configure_admin_server(model::node_id node_id) {
               create_client(), &_cluster_link_service, &metadata_cache));
           s.add_service(
             std::make_unique<admin::security_service_impl>(
-              create_client(), controller.get(), _kafka_server.ref()));
+              create_client(),
+              controller.get(),
+              _kafka_server.ref(),
+              std::ref(metadata_cache)));
       })
       .get();
 }

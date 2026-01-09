@@ -379,6 +379,8 @@ public:
         co_return std::nullopt;
     }
 
+    size_t num_files() const noexcept { return icb_files_.size(); }
+
 private:
     table_commit_builder(
       const model::cluster_uuid& cluster,
@@ -576,6 +578,14 @@ iceberg_file_committer::commit_topic_files_to_catalog(
         updates.emplace_back(std::move(update_res.value()));
     }
 
+    const size_t dlq_table_files = dlq_table_commit_builder
+                                     ? dlq_table_commit_builder->num_files()
+                                     : 0;
+
+    const size_t main_table_files = main_table_commit_builder
+                                      ? main_table_commit_builder->num_files()
+                                      : 0;
+
     if (dlq_table_commit_builder) {
         auto dlq_commit_res = co_await std::move(*dlq_table_commit_builder)
                                 .commit(topic, topic_revision, catalog_, io_);
@@ -592,6 +602,15 @@ iceberg_file_committer::commit_topic_files_to_catalog(
             co_return main_table_commit_res.error();
         }
     }
+
+    vlog(
+      datalake_log.debug,
+      "Committed files to Iceberg catalog for topic {} revision {}. Files for "
+      "main table: {}, files for DLQ: {}",
+      topic,
+      topic_revision,
+      main_table_files,
+      dlq_table_files);
 
     co_return updates;
 }

@@ -198,8 +198,9 @@ ss::future<int32_t> schema_registry_module::create_subject_schema(
     ffi::reader r(buf);
     using namespace pandaproxy::schema_registry;
     try {
-        *out_schema_id = co_await _sr->create_schema(
+        auto ctx_id = co_await _sr->create_schema(
           subject_schema(sub, read_encoded_schema_def(&r)));
+        *out_schema_id = ctx_id.id;
     } catch (const std::exception& ex) {
         vlog(wasm_log.warn, "error registering subject schema: {}", ex);
         co_return SCHEMA_REGISTRY_ERROR;

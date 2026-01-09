@@ -162,12 +162,15 @@ public:
         virtual seastar::future<std::expected<
           cloud_storage_clients::client::list_bucket_result,
           cloud_storage_clients::error_outcome>>
-        list_objects(seastar::abort_source*) = 0;
+        list_objects(
+          seastar::abort_source*,
+          std::optional<ss::sstring> continuation_token = std::nullopt)
+          = 0;
 
         virtual seastar::future<std::expected<void, cloud_io::upload_result>>
         delete_objects(
           seastar::abort_source*,
-          std::vector<cloud_storage_clients::client::list_bucket_item>)
+          chunked_vector<cloud_storage_clients::client::list_bucket_item>)
           = 0;
     };
 
@@ -244,6 +247,8 @@ public:
       seastar::sharded<cluster::controller_stm>*,
       seastar::sharded<cluster::topic_table>*);
 
+    ~level_zero_gc();
+
     /*
      * Request that GC be started or paused. These can be called multiple times
      * and in any order. The last invocation will eventually take effect.
@@ -259,7 +264,6 @@ public:
 
 private:
     level_zero_gc_config config_;
-    std::unique_ptr<object_storage> storage_;
     std::unique_ptr<epoch_source> epoch_source_;
 
     bool should_run_;
@@ -271,8 +275,13 @@ private:
     seastar::future<> worker();
     enum class collection_error : int8_t;
     seastar::future<std::expected<size_t, collection_error>> try_to_collect();
+    seastar::future<std::expected<size_t, collection_error>>
+    do_try_to_collect(std::optional<cluster_epoch>&);
 
     level_zero_gc_probe probe_;
+
+    class list_delete_worker;
+    std::unique_ptr<list_delete_worker> delete_worker_{};
 };
 
 } // namespace cloud_topics

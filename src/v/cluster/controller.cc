@@ -733,7 +733,8 @@ ss::future<> controller::start(
       std::ref(_drain_manager),
       std::ref(_feature_table),
       std::ref(_partition_leaders),
-      std::ref(_tp_state));
+      std::ref(_tp_state),
+      std::ref(_node_status_table));
 
     _leader_balancer = std::make_unique<leader_balancer>(
       _tp_state.local(),
@@ -804,6 +805,8 @@ ss::future<> controller::start(
       std::ref(_members_frontend),
       config::shard_local_cfg()
         .partition_autobalancing_node_availability_timeout_sec.bind(),
+      config::shard_local_cfg()
+        .partition_autobalancing_node_autodecommission_timeout_sec.bind(),
       config::shard_local_cfg()
         .partition_autobalancing_max_disk_usage_percent.bind(),
       config::shard_local_cfg().partition_autobalancing_tick_interval_ms.bind(),

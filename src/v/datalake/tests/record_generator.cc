@@ -31,8 +31,9 @@
 
 namespace datalake::tests {
 
-ss::future<
-  checked<pandaproxy::schema_registry::schema_id, record_generator::error>>
+ss::future<checked<
+  pandaproxy::schema_registry::context_schema_id,
+  record_generator::error>>
 record_generator::register_avro_schema(
   std::string_view name, std::string_view schema) {
     using namespace pandaproxy::schema_registry;
@@ -100,11 +101,11 @@ record_generator::add_random_protobuf_record(
     if (it == _id_by_name.end()) {
         co_return error{fmt::format("Schema {} is missing", name)};
     }
-    auto schema_id = it->second;
-    auto schema_def = co_await _sr->get_valid_schema(schema_id);
+    auto ctx_schema_id = it->second;
+    auto schema_def = co_await _sr->get_valid_schema(ctx_schema_id);
     if (!schema_def) {
-        co_return error{
-          fmt::format("Unable to find schema def for id: {}", schema_id)};
+        co_return error{fmt::format(
+          "Unable to find schema def for id: {}", ctx_schema_id.id)};
     }
     if (schema_def->type() != schema_type::protobuf) {
         co_return error{fmt::format(
@@ -132,12 +133,12 @@ record_generator::add_random_protobuf_record(
     if (md_res.has_error()) {
         co_return error{fmt::format(
           "Wasn't able to get descriptor for protobuf def with id: {}",
-          schema_id)};
+          ctx_schema_id.id)};
     }
 
     iobuf val;
     val.append("\0", 1);
-    int32_t encoded_id = ss::cpu_to_be(schema_id());
+    int32_t encoded_id = ss::cpu_to_be(ctx_schema_id.id());
     val.append((const uint8_t*)(&encoded_id), 4);
 
     testing::protobuf_generator pb_gen(config);
@@ -161,10 +162,11 @@ record_generator::add_random_avro_record(
     if (it == _id_by_name.end()) {
         co_return error{fmt::format("Schema {} is missing", name)};
     }
-    auto schema_id = it->second;
-    auto schema_def_res = co_await _sr->get_valid_schema(schema_id);
+    auto ctx_schema_id = it->second;
+    auto schema_def_res = co_await _sr->get_valid_schema(ctx_schema_id);
     if (!schema_def_res.has_value()) {
-        co_return error{fmt::format("Schema {} not in store", schema_id)};
+        co_return error{
+          fmt::format("Schema {} not in store", ctx_schema_id.id)};
     }
     auto& schema_def = schema_def_res.value();
     if (schema_def.type() != schema_type::avro) {
@@ -173,7 +175,7 @@ record_generator::add_random_avro_record(
     }
     iobuf val;
     val.append("\0", 1);
-    int32_t encoded_id = ss::cpu_to_be(schema_id());
+    int32_t encoded_id = ss::cpu_to_be(ctx_schema_id.id());
     val.append((const uint8_t*)(&encoded_id), 4);
 
     avro::NodePtr node_ptr;

@@ -104,6 +104,8 @@ proto_library(
     deps = [
         "//proto/redpanda/core/pbgen:options_proto",
         "//proto/redpanda/core/pbgen:rpc_proto",
+        "@googleapis//google/api:field_behavior_proto",
+        "@googleapis//google/api:resource_proto",
         "@protobuf//:timestamp_proto",
     ],
 )

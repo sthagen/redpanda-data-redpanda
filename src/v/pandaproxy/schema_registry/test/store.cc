@@ -454,15 +454,20 @@ BOOST_AUTO_TEST_CASE(test_store_global_compat) {
 
     pps::compatibility_level expected{pps::compatibility_level::backward};
     pps::store s;
-    BOOST_REQUIRE(s.get_compatibility().value() == expected);
+    BOOST_REQUIRE(
+      s.get_compatibility(pps::default_context).value() == expected);
 
     // duplicate should return false
-    BOOST_REQUIRE(s.set_compatibility(expected).value() == false);
-    BOOST_REQUIRE(s.get_compatibility().value() == expected);
+    BOOST_REQUIRE(
+      s.set_compatibility(pps::default_context, expected).value() == false);
+    BOOST_REQUIRE(
+      s.get_compatibility(pps::default_context).value() == expected);
 
     expected = pps::compatibility_level::full_transitive;
-    BOOST_REQUIRE(s.set_compatibility(expected).value() == true);
-    BOOST_REQUIRE(s.get_compatibility().value() == expected);
+    BOOST_REQUIRE(
+      s.set_compatibility(pps::default_context, expected).value() == true);
+    BOOST_REQUIRE(
+      s.get_compatibility(pps::default_context).value() == expected);
 }
 
 BOOST_AUTO_TEST_CASE(test_store_subject_compat) {
@@ -475,7 +480,8 @@ BOOST_AUTO_TEST_CASE(test_store_subject_compat) {
     pps::compatibility_level global_expected{
       pps::compatibility_level::backward};
     pps::store s;
-    BOOST_REQUIRE(s.get_compatibility().value() == global_expected);
+    BOOST_REQUIRE(
+      s.get_compatibility(pps::default_context).value() == global_expected);
     s.insert({subject0, string_def0.share()});
 
     auto sub_expected = pps::compatibility_level::backward;
@@ -499,7 +505,8 @@ BOOST_AUTO_TEST_CASE(test_store_subject_compat) {
       == true);
     BOOST_REQUIRE(
       s.get_compatibility(subject0, fallback).value() == sub_expected);
-    BOOST_REQUIRE(s.get_compatibility().value() == global_expected);
+    BOOST_REQUIRE(
+      s.get_compatibility(pps::default_context).value() == global_expected);
 
     // Clearing compatibility should fallback to global
     BOOST_REQUIRE(
@@ -518,7 +525,8 @@ BOOST_AUTO_TEST_CASE(test_store_subject_compat_fallback) {
     BOOST_REQUIRE(s.get_compatibility(subject0, fallback).value() == expected);
 
     expected = pps::compatibility_level::forward;
-    BOOST_REQUIRE(s.set_compatibility(expected).value() == true);
+    BOOST_REQUIRE(
+      s.set_compatibility(pps::default_context, expected).value() == true);
     BOOST_REQUIRE(s.get_compatibility(subject0, fallback).value() == expected);
 }
 
@@ -545,7 +553,8 @@ BOOST_AUTO_TEST_CASE(test_store_delete_subject) {
       {pps::schema_version{1}, pps::schema_version{2}}};
 
     pps::store s;
-    s.set_compatibility(pps::compatibility_level::none).value();
+    s.set_compatibility(pps::default_context, pps::compatibility_level::none)
+      .value();
 
     pps::seq_marker dummy_marker;
 
@@ -664,7 +673,8 @@ BOOST_AUTO_TEST_CASE(test_store_delete_subject_version) {
 
     pps::seq_marker dummy_marker;
     pps::store s;
-    s.set_compatibility(pps::compatibility_level::none).value();
+    s.set_compatibility(pps::default_context, pps::compatibility_level::none)
+      .value();
 
     // Test unknown subject
     BOOST_REQUIRE_EQUAL(
@@ -740,7 +750,8 @@ BOOST_AUTO_TEST_CASE(test_store_delete_subject_version) {
 BOOST_AUTO_TEST_CASE(test_store_subject_version_latest) {
     pps::seq_marker dummy_marker;
     pps::store s;
-    s.set_compatibility(pps::compatibility_level::none).value();
+    s.set_compatibility(pps::default_context, pps::compatibility_level::none)
+      .value();
 
     // First insert, expect id{1}, version{1}
     s.insert({subject0, string_def0.share()});
@@ -786,7 +797,8 @@ BOOST_AUTO_TEST_CASE(test_store_delete_subject_after_delete_version) {
     std::vector<pps::schema_version> expected_vers{{pps::schema_version{2}}};
 
     pps::store s;
-    s.set_compatibility(pps::compatibility_level::none).value();
+    s.set_compatibility(pps::default_context, pps::compatibility_level::none)
+      .value();
 
     pps::seq_marker dummy_marker;
 

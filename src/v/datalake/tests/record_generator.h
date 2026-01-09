@@ -35,7 +35,7 @@ public:
     using error = named_type<ss::sstring, struct error_tag>;
 
     // Registers the given schema with the given name.
-    ss::future<checked<pandaproxy::schema_registry::schema_id, error>>
+    ss::future<checked<pandaproxy::schema_registry::context_schema_id, error>>
     register_avro_schema(std::string_view name, std::string_view schema);
 
     // Registers the given schema with the given name.
@@ -60,7 +60,7 @@ public:
 private:
     chunked_hash_map<
       ss::sstring,
-      pandaproxy::schema_registry::schema_id,
+      pandaproxy::schema_registry::context_schema_id,
       sstring_hash,
       sstring_eq>
       _id_by_name;

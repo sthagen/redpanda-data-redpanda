@@ -138,12 +138,14 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
       c(make_record_batch(schema_key_0, std::nullopt, base_offset++)).get());
 
     // Test mode default
-    BOOST_REQUIRE_EQUAL(c._store.get_mode().get(), pps::mode::read_write);
+    BOOST_REQUIRE_EQUAL(
+      c._store.get_mode(pps::default_context).get(), pps::mode::read_write);
 
     // Test mode READONLY
     BOOST_REQUIRE_NO_THROW(
       c(make_record_batch(mode_key_0, mode_value_ro, base_offset++)).get());
-    BOOST_REQUIRE_EQUAL(c._store.get_mode().get(), pps::mode::read_only);
+    BOOST_REQUIRE_EQUAL(
+      c._store.get_mode(pps::default_context).get(), pps::mode::read_only);
 
     // Test mode no subject, no fallback
     BOOST_REQUIRE_EXCEPTION(
@@ -163,7 +165,8 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
     // test mode READWRITE
     BOOST_REQUIRE_NO_THROW(
       c(make_record_batch(mode_key_0, mode_value_rw, base_offset++)).get());
-    BOOST_REQUIRE_EQUAL(c._store.get_mode().get(), pps::mode::read_write);
+    BOOST_REQUIRE_EQUAL(
+      c._store.get_mode(pps::default_context).get(), pps::mode::read_write);
 
     // test mode subject override
     BOOST_REQUIRE_NO_THROW(

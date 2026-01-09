@@ -572,7 +572,7 @@ simple_metastore::get_compaction_offsets(
         dirty_base_candidate = kafka::next_offset(cleaned_range.last_offset);
     }
     auto prt_last_offset = kafka::prev_offset(prt.next_offset);
-    if (dirty_base_candidate < prt_last_offset) {
+    if (dirty_base_candidate <= prt_last_offset) {
         resp.dirty_ranges.insert(dirty_base_candidate, prt_last_offset);
     }
 

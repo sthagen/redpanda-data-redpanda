@@ -132,7 +132,8 @@ void handle_authz(
             op,
             params.principal,
             params.host,
-            security::superuser_required::no);
+            security::superuser_required::no,
+            auth_result.get_groups());
       },
       [&](const detail::no_auth auto&) {
           return security::auth_result::authz_disabled(
@@ -187,7 +188,8 @@ void handle_get_schemas_ids_id_authz(
           op,
           params.principal,
           params.host,
-          security::superuser_required::no);
+          security::superuser_required::no,
+          auth_result.value().get_groups());
 
         if (res.is_authorized()) {
             authorizing_result = std::move(res);
@@ -237,7 +239,8 @@ void handle_get_subjects_authz(
           op,
           params.principal,
           params.host,
-          security::superuser_required::no);
+          security::superuser_required::no,
+          auth_result.value().get_groups());
         if (res.is_authorized()) {
             passing_results.emplace_back(subject(), subject_resource_type);
             return false; // keep

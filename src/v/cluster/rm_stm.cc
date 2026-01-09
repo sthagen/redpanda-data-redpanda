@@ -1339,7 +1339,7 @@ model::offset rm_stm::last_stable_offset() {
     }
 
     auto synced_leader = _raft->is_leader() && _raft->term() == _insync_term;
-    model::offset lso{-1};
+    model::offset lso{model::invalid_lso};
     auto last_visible_index = _raft->last_visible_index();
     auto next_to_apply = model::next_offset(last_applied);
     if (first_tx_start <= last_visible_index) {
@@ -1464,7 +1464,7 @@ ss::future<bool> rm_stm::sync(model::timeout_clock::duration timeout) {
     auto ready = co_await raft::persisted_stm<>::sync(timeout);
     if (ready) {
         if (current_insync_term != _insync_term) {
-            _last_known_lso = model::offset{-1};
+            _last_known_lso = model::invalid_lso;
             vlog(
               _ctx_log.trace,
               "garbage collecting requests from terms < {}",

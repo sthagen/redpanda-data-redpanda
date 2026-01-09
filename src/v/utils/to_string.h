@@ -14,6 +14,7 @@
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 
@@ -61,6 +62,12 @@ struct fmt::formatter<ss::chunked_fifo<T, chunk_size>> {
 };
 
 namespace absl {
+
+template<typename E>
+std::ostream& operator<<(std::ostream& o, const absl::flat_hash_set<E>& s) {
+    return o << fmt::format("{{{}}}", fmt::join(s, ","));
+}
+
 template<typename K, typename V>
 std::ostream& operator<<(std::ostream& o, const absl::flat_hash_map<K, V>& r) {
     o << "{";

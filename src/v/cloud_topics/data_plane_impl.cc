@@ -168,6 +168,15 @@ public:
         if (metadata.empty()) {
             co_return chunked_vector<model::record_batch>{};
         }
+        // Callers must respect materialize_max_bytes() to avoid blocking
+        // forever on the read pipeline's memory semaphore.
+        auto max_bytes = materialize_max_bytes();
+        vassert(
+          output_size_estimate <= max_bytes,
+          "materialize request size {} exceeds limit {}; caller must "
+          "respect materialize_max_bytes()",
+          output_size_estimate,
+          max_bytes);
         auto res = co_await _read_pipeline.local().make_reader(
           ntp,
           {
@@ -188,6 +197,10 @@ public:
     std::optional<model::record_batch>
     cache_get(const model::ntp& ntp, model::offset o) final {
         return _batch_cache.local().get(ntp, o);
+    }
+
+    size_t materialize_max_bytes() const final {
+        return _read_pipeline.local().memory_quota_capacity();
     }
 
 private:

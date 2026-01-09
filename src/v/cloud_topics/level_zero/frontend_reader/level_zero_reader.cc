@@ -17,6 +17,8 @@
 #include "config/configuration.h"
 #include "model/timeout_clock.h"
 
+#include <seastar/coroutine/maybe_yield.hh>
+
 #include <chrono>
 #include <exception>
 #include <iterator>
@@ -30,9 +32,15 @@ level_zero_log_reader_impl::level_zero_log_reader_impl(
   ss::lw_shared_ptr<cluster::partition> ctp,
   data_plane_api* ct_api)
   : _config(cfg)
+  , _next_offset(_config.start_offset)
   , _ctp(std::move(ctp))
   , _ct_api(ct_api)
-  , _log(cd_log, fmt::format("[{}/{}]", fmt::ptr(this), _ctp->ntp())) {}
+  , _log(cd_log, fmt::format("[{}/{}]", fmt::ptr(this), _ctp->ntp())) {
+    // Cap the reader's max_bytes at the read pipeline's memory quota to prevent
+    // a single materialize call from exceeding what the pipeline can handle.
+    _config.max_bytes = std::min(
+      _config.max_bytes, _ct_api->materialize_max_bytes());
+}
 
 ss::future<model::record_batch_reader::storage_t>
 level_zero_log_reader_impl::do_load_slice(
@@ -45,10 +53,8 @@ level_zero_log_reader_impl::do_load_slice(
     // the 'empty' state. It doesn't make any difference if the reader is in
     // the 'materialized' state. If we're in 'ready' state we risk to go out
     // of sync with cached metadata so it's safer to hydrate.
-    if (cache_enabled()) {
-        if (auto cached = maybe_load_slices_from_cache()) {
-            co_return std::move(cached.value());
-        }
+    if (auto cached = maybe_read_batches_from_cache(); !cached.empty()) {
+        co_return cached;
     }
 
     chunked_circular_buffer<model::record_batch> res;
@@ -81,63 +87,54 @@ level_zero_log_reader_impl::do_load_slice(
     co_return res;
 }
 
-std::optional<chunked_circular_buffer<model::record_batch>>
-level_zero_log_reader_impl::maybe_load_slices_from_cache() {
+chunked_circular_buffer<model::record_batch>
+level_zero_log_reader_impl::maybe_read_batches_from_cache() {
     chunked_circular_buffer<model::record_batch> ret;
-    auto current = _config.start_offset;
-    while (current <= _config.max_offset) {
+    if (!cache_enabled()) {
+        return ret;
+    }
+
+    /*
+     * Fetch batches from the cache starting at `_next_offset` until we hit a
+     * gap or a control batch and must then fetch the data from object storage.
+     */
+    while (_next_offset <= _config.max_offset) {
         auto batch = _ct_api->cache_get(
-          _ctp->ntp(), kafka::offset_cast(current));
+          _ctp->ntp(), kafka::offset_cast(_next_offset));
         if (!batch.has_value()) {
-            // We hit a gap in the cache and have to download objects
-            // from S3.
-            //
-            // NOTE: this can also happen when transactions are used and
-            // we would encounter reading a control batch from the local log.
             break;
         }
+
         vlog(
           _log.trace,
           "Loaded batch from cache for {}: {} @ term {}",
-          current,
+          _next_offset,
           batch.value().base_offset(),
           batch.value().term());
-        vassert(
-          batch.value().term() > model::term_id{-1},
-          "Batch without term in the cache: {}",
-          batch.value().header());
+
         auto batch_size = batch.value().size_bytes();
         if (is_over_limit(batch_size)) {
             break;
         }
-        vassert(
-          batch->base_offset() <= kafka::offset_cast(current)
-            && kafka::offset_cast(current) <= batch->last_offset(),
-          "Unexpected batch for {}, got range: [{},{}] for offset {}",
-          _ctp->ntp(),
-          batch->base_offset(),
-          batch->last_offset(),
-          current);
+
         ret.push_back(std::move(batch.value()));
-        _config.bytes_consumed += batch_size;
-        current = model::offset_cast(
+        _bytes_consumed += batch_size;
+        _next_offset = model::offset_cast(
           model::next_offset(ret.back().last_offset()));
     }
-    _config.start_offset = current;
-    if (_config.start_offset > _config.max_offset) {
+
+    if (_next_offset > _config.max_offset) {
         vlog(
           _log.debug,
           "reached end of stream, start offset: {}, max offset: {}, "
-          "current: {}",
+          "next offset: {}",
           _config.start_offset,
           _config.max_offset,
-          current);
+          _next_offset);
         _current = state::end_of_stream_state;
     }
-    if (!ret.empty()) {
-        return ret;
-    }
-    return std::nullopt;
+
+    return ret;
 }
 
 storage::local_log_reader_config level_zero_log_reader_impl::ctp_read_config() {
@@ -148,7 +145,7 @@ storage::local_log_reader_config level_zero_log_reader_impl::ctp_read_config() {
      */
     auto ot_state = _ctp->get_offset_translator_state();
     auto start_offset = ot_state->to_log_offset(
-      kafka::offset_cast(_config.start_offset));
+      kafka::offset_cast(_next_offset));
     auto max_offset = ot_state->to_log_offset(
       kafka::offset_cast(_config.max_offset));
 
@@ -317,7 +314,7 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
                   hydrated_batch_size);
                 break;
             }
-            _config.bytes_consumed += hydrated_batch_size;
+            _bytes_consumed += hydrated_batch_size;
             if (
               auto* meta = std::get_if<cloud_topics::extent_meta>(
                 &unhydrated_it->data)) {
@@ -386,7 +383,7 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
                         _ctp->ntp(),
                         batch.base_offset(),
                         batch.term());
-                      _ct_api->cache_put(_ctp->ntp(), batch.copy());
+                      _ct_api->cache_put(_ctp->ntp(), batch);
                   }
                   return batch;
               },
@@ -397,6 +394,7 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
                     model::record_batch::tag_ctor_ng{});
               });
             hydrated.push_back(std::move(batch));
+            co_await ss::coroutine::maybe_yield();
         }
         vassert(
           batches_it == batches.end(),
@@ -445,7 +443,7 @@ void level_zero_log_reader_impl::consume_materialized_batches(
       _hydrated.size(),
       _unhydrated.size());
     *dest = std::exchange(_hydrated, {});
-    _config.start_offset = model::offset_cast(
+    _next_offset = model::offset_cast(
       model::next_offset(dest->back().last_offset()));
     _current = _unhydrated.empty() ? state::empty_state : state::ready_state;
 }
@@ -459,7 +457,7 @@ bool level_zero_log_reader_impl::is_end_of_stream() const {
 }
 
 bool level_zero_log_reader_impl::is_over_limit(size_t size) const {
-    return (_config.strict_max_bytes || _config.bytes_consumed > 0)
-           && (_config.bytes_consumed + size) > _config.max_bytes;
+    return (_config.strict_max_bytes || _bytes_consumed > 0)
+           && (_bytes_consumed + size) > _config.max_bytes;
 }
 } // namespace cloud_topics

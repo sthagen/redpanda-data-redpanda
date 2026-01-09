@@ -8,6 +8,7 @@
 # by the Apache License, Version 2.0
 
 import datetime
+from enum import Enum
 import json
 import socket
 import threading
@@ -17,7 +18,7 @@ from urllib.parse import urlparse
 import requests
 from connectrpc.errors import ConnectError, ConnectErrorCode
 from ducktape.cluster.cluster import ClusterNode
-from ducktape.mark import parametrize
+from ducktape.mark import matrix, parametrize
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
 from keycloak import KeycloakOpenID
@@ -65,8 +66,31 @@ log_config = LoggingConfig(
         "kafka/client": "trace",
         "kafka": "debug",
         "http": "trace",
+        "request_auth": "trace",
     },
 )
+
+
+class NestedGroupType(str, Enum):
+    """
+    How nested identity provider group names are mapped to Redpanda principals.
+    The enum values are used directly as string configuration values.
+    NONE
+        No special handling for nested groups. The full group name as provided
+        by the identity provider (including any nesting or path components) is
+        used when deriving principals.
+    SUFFIX
+        Use only the leaf (suffix) component of a nested group name when
+        deriving principals. For example, a group like ``/team/platform/admins``
+        is treated as ``admins``.
+    """
+
+    NONE = "none"
+    SUFFIX = "suffix"
+
+
+def get_nested_group_types() -> list[NestedGroupType]:
+    return [NestedGroupType.NONE, NestedGroupType.SUFFIX]
 
 
 class RedpandaOIDCTestBase(Test):
@@ -179,7 +203,7 @@ class RedpandaOIDCTestBase(Test):
         self.keycloak.admin.update_user(service_user, email="myapp@customer.com")
         return self.keycloak.admin_ll.get_user_id(service_user)
 
-    def get_client_credentials_token(self, cfg):
+    def get_client_credentials_token(self, cfg) -> dict:
         token_endpoint_url = urlparse(cfg.token_endpoint)
         openid = KeycloakOpenID(
             server_url=f"{token_endpoint_url.scheme}://{token_endpoint_url.netloc}",
@@ -798,6 +822,269 @@ class RedpandaOIDCTestMethods(RedpandaOIDCTestBase):
         )
 
         consumer.close()
+
+    @cluster(num_nodes=4)
+    @matrix(
+        full_group=[True, False],
+        nested_group_mode=get_nested_group_types(),
+    )
+    def test_group_claim(self, full_group: bool, nested_group_mode: NestedGroupType):
+        """
+        Test that group claim mapping works as expected for topic authorization.
+
+        This test verifies that OIDC group claims from the identity provider (Keycloak)
+        are correctly mapped to Redpanda ACL principals, allowing group-based authorization.
+
+        Parameters:
+            full_group: When True, Keycloak includes the full group path (e.g., "/test-group")
+                       in the token. When False, only the group name is included.
+            nested_group_mode: Controls how Redpanda handles nested group paths:
+                              - NONE: Group paths are used as-is
+                              - SUFFIX: Only the leaf group name is used
+
+        Test flow:
+        1. Configure Redpanda's nested_group_behavior setting
+        2. Create a service user in Keycloak with a group mapper
+        3. Create a group and add the service user to it
+        4. Create a topic and grant access via a Group:* ACL principal
+        5. Authenticate using OIDC and verify the user can access the topic
+        6. Verify the resolved OIDC identity includes the expected group
+        """
+        kc_node = self.keycloak.nodes[0]
+
+        # Determine the qualified group name based on test parameters.
+        # When full_group=True and nested_group_mode=NONE, Keycloak returns "/test-group"
+        # Otherwise, just "test-group" is used.
+        group_name = "test-group"
+        qualified_group_name = f"{'/' if full_group and nested_group_mode == NestedGroupType.NONE else ''}{group_name}"
+        group_acl = f"Group:{qualified_group_name}"
+
+        self.logger.debug(f'Qualified group name: "{qualified_group_name}"')
+        self.logger.debug(f'Group ACL: "{group_acl}"')
+
+        # Configure how Redpanda handles nested group paths from OIDC tokens
+        self.redpanda.set_cluster_config(
+            {"nested_group_behavior": nested_group_mode.value}
+        )
+
+        # Set up the OIDC client and service user in Keycloak
+        client_id = CLIENT_ID
+        self.create_service_user()
+
+        # Create a group mapper that includes group membership in the access token.
+        # use_full_path determines whether the full path ("/group") or just name ("group") is included.
+        self.keycloak.admin.create_group_mapper(client_id, full_group)
+
+        # Create the group and add the service account to it
+        self.keycloak.admin.create_group(group_name)
+        self.keycloak.admin.add_service_user_to_group(client_id, group_name)
+
+        # Create a topic and grant access to it via the group ACL principal.
+        # This allows any user with the matching group claim to access the topic.
+        self.rpk.create_topic(EXAMPLE_TOPIC)
+        self.rpk.sasl_allow_principal(
+            group_acl,
+            ["all"],
+            "topic",
+            EXAMPLE_TOPIC,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+
+        # Create a Kafka client that authenticates using OIDC
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+        token = self.get_client_credentials_token(cfg)
+        assert cfg.client_secret is not None
+        assert cfg.token_endpoint is not None
+        k_client = PythonLibrdkafka(
+            self.redpanda,
+            algorithm="OAUTHBEARER",
+            oauth_config=cfg,
+            tls_cert=self.client_cert,
+        )
+        producer = k_client.get_producer()
+
+        # Explicit poll triggers OIDC token flow. Required for librdkafka
+        # metadata requests to behave nicely.
+        producer.poll(0.0)
+
+        # Verify the user can see the topic (proving group-based authorization works)
+        expected_topics = set([EXAMPLE_TOPIC])
+        self.logger.debug(f"expected_topics: {expected_topics}")
+
+        wait_until(
+            lambda: set(producer.list_topics(timeout=5).topics.keys())
+            == expected_topics,
+            timeout_sec=5,
+            err_msg="Failed to list topics using group claim for authorization",
+        )
+
+        # Verify the resolved OIDC identity includes the expected group claim
+        def resolve_oidc_identity(
+            token: dict,
+        ) -> security_pb2.ResolveOidcIdentityResponse:
+            admin_v2 = AdminV2(self.redpanda)
+            req = security_pb2.ResolveOidcIdentityRequest()
+            self.logger.debug(f'Using access token "{token["access_token"]}"')
+            return admin_v2.security().resolve_oidc_identity(
+                req,
+                extra_headers={"Authorization": f"Bearer {token['access_token']}"},
+            )
+
+        resp = resolve_oidc_identity(token=token)
+        assert resp.groups == [qualified_group_name], (
+            f"Unexpected groups: {resp.groups}, did not match {[qualified_group_name]}"
+        )
+
+    @cluster(num_nodes=4)
+    def test_group_membership_change(self):
+        """
+        Test that changing group membership dynamically changes topic access permissions.
+
+        This test:
+        1. Creates two topics (topic1 and topic2) and three groups (group1, group2, group3)
+        2. Sets up ACLs so group1 can access topic1 and group2 can access topic2 (group3 has no permissions)
+        3. Adds service user to group1, verifies it can see topic1 but not topic2
+        4. Removes service user from group1, adds to group2
+        5. Verifies service user can now see topic2 but not topic1
+        6. Removes service user from group2, adds to group3 (no permissions)
+        7. Verifies service user cannot see any topics
+        8. Adds service user to all groups, verifies it can see both topics
+        """
+        kc_node = self.keycloak.nodes[0]
+
+        topic1 = "topic1"
+        topic2 = "topic2"
+        group1 = "group1"
+        group2 = "group2"
+        group3 = "group3"
+
+        client_id = CLIENT_ID
+        self.create_service_user()
+
+        # Create group mapper (use full path = False for simpler group names)
+        self.keycloak.admin.create_group_mapper(client_id, use_full_path=False)
+
+        # Create all groups in Keycloak
+        self.keycloak.admin.create_group(group1)
+        self.keycloak.admin.create_group(group2)
+        self.keycloak.admin.create_group(group3)
+
+        # Create both topics
+        self.rpk.create_topic(topic1)
+        self.rpk.create_topic(topic2)
+
+        # Set up ACLs: group1 can describe topic1, group2 can describe topic2
+        # group3 has no permissions
+        self.rpk.sasl_allow_principal(
+            f"Group:{group1}",
+            ["describe"],
+            "topic",
+            topic1,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+        self.rpk.sasl_allow_principal(
+            f"Group:{group2}",
+            ["describe"],
+            "topic",
+            topic2,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+        assert cfg.client_secret is not None
+        assert cfg.token_endpoint is not None
+
+        def get_visible_topics() -> set[str]:
+            """Get a fresh token and list visible topics."""
+            k_client = PythonLibrdkafka(
+                self.redpanda,
+                algorithm="OAUTHBEARER",
+                oauth_config=cfg,
+                tls_cert=self.client_cert,
+            )
+            producer = k_client.get_producer()
+            producer.poll(0.0)
+            return set(producer.list_topics(timeout=5).topics.keys())
+
+        # Phase 1: Add service user to group1
+        self.logger.info("Phase 1: Adding service user to group1")
+        self.keycloak.admin.add_service_user_to_group(client_id, group1)
+
+        # Verify service user can see topic1 but not topic2
+        wait_until(
+            lambda: get_visible_topics() == {topic1},
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"Expected to see only {topic1} when in group1, got: {get_visible_topics()}",
+        )
+        self.logger.info("Verified: service user in group1 can see topic1 only")
+
+        # Phase 2: Remove from group1, add to group2
+        self.logger.info("Phase 2: Removing service user from group1, adding to group2")
+        self.keycloak.admin.remove_service_user_from_group(client_id, group1)
+        self.keycloak.admin.add_service_user_to_group(client_id, group2)
+
+        # Verify service user can now see topic2 but not topic1
+        wait_until(
+            lambda: get_visible_topics() == {topic2},
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"Expected to see only {topic2} when in group2, got: {get_visible_topics()}",
+        )
+        self.logger.info("Verified: service user in group2 can see topic2 only")
+
+        # Phase 3: Remove from group2, add to group3 (no permissions)
+        self.logger.info(
+            "Phase 3: Removing service user from group2, adding to group3 (no permissions)"
+        )
+        self.keycloak.admin.remove_service_user_from_group(client_id, group2)
+        self.keycloak.admin.add_service_user_to_group(client_id, group3)
+
+        # Verify service user cannot see any topics
+        wait_until(
+            lambda: get_visible_topics() == set(),
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"Expected to see no topics when in group3, got: {get_visible_topics()}",
+        )
+        self.logger.info(
+            "Verified: service user in group3 (no permissions) cannot see any topics"
+        )
+
+        # Phase 4: Add service user to all groups
+        self.logger.info("Phase 4: Adding service user to all groups")
+        self.keycloak.admin.add_service_user_to_group(client_id, group1)
+        self.keycloak.admin.add_service_user_to_group(client_id, group2)
+
+        # Verify service user can see both topics
+        wait_until(
+            lambda: get_visible_topics() == {topic1, topic2},
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"Expected to see both topics when in all groups, got: {get_visible_topics()}",
+        )
+        self.logger.info("Verified: service user in all groups can see both topics")
+
+        # Verify the resolved OIDC identity includes all three groups
+        token = self.get_client_credentials_token(cfg)
+        admin_v2 = AdminV2(self.redpanda)
+        req = security_pb2.ResolveOidcIdentityRequest()
+        resp = admin_v2.security().resolve_oidc_identity(
+            req,
+            extra_headers={"Authorization": f"Bearer {token['access_token']}"},
+        )
+        assert set(resp.groups) == {group1, group2, group3}, (
+            f"Expected groups {[group1, group2, group3]}, got {resp.groups}"
+        )
+        self.logger.info(
+            f"Verified: resolved OIDC identity includes all three groups: {resp.groups}"
+        )
 
 
 class RedpandaOIDCTest(RedpandaOIDCTestMethods):

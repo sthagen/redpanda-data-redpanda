@@ -727,7 +727,9 @@ ss::future<result<model::offset>> group_manager::set_blocked_for_groups(
     // in case we return early with an exception or another error
     auto revert_blocking = ss::defer([p, &affected_gids, to_block] {
         if (to_block) {
-            p->blocked_groups.erase(affected_gids.begin(), affected_gids.end());
+            for (const auto& gid : affected_gids) {
+                p->blocked_groups.erase(gid);
+            }
         }
     });
     if (to_block) {
@@ -771,7 +773,9 @@ ss::future<result<model::offset>> group_manager::set_blocked_for_groups(
 
     // unblock only when replicated
     if (!to_block) {
-        p->blocked_groups.erase(affected_gids.cbegin(), affected_gids.cend());
+        for (const auto& gid : affected_gids) {
+            p->blocked_groups.erase(gid);
+        }
     }
 
     revert_blocking.cancel();

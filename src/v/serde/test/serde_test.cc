@@ -117,23 +117,9 @@ struct test_msg1_new
     auto serde_fields() { return std::tie(_a, _m, _b, _c); }
 };
 
-struct test_msg1_new_manual {
-    using value_t = test_msg1_new_manual;
-    static constexpr auto redpanda_serde_version = serde::version_t{10};
-    static constexpr auto redpanda_serde_compat_version = serde::version_t{5};
-
-    bool operator==(const test_msg1_new_manual&) const = default;
-
-    int _a;
-    test_msg0 _m;
-    int _b, _c;
-};
-
 struct not_an_envelope {};
 static_assert(!serde::is_envelope<not_an_envelope>);
 static_assert(serde::is_envelope<test_msg1>);
-static_assert(serde::inherits_from_envelope<test_msg1_new>);
-static_assert(!serde::inherits_from_envelope<test_msg1_new_manual>);
 static_assert(test_msg1::redpanda_serde_version == 4);
 static_assert(test_msg1::redpanda_serde_compat_version == 0);
 
@@ -141,16 +127,6 @@ SEASTAR_THREAD_TEST_CASE(incompatible_version_throws) {
     BOOST_CHECK_THROW(
       serde::from_iobuf<test_msg1_imcompatible>(serde::to_iobuf(test_msg1{})),
       serde::serde_exception);
-}
-
-SEASTAR_THREAD_TEST_CASE(manual_and_envelope_equal) {
-    const auto roundtrip = serde::from_iobuf<test_msg1_new_manual>(
-      serde::to_iobuf(
-        test_msg1_new{
-          ._a = 77, ._m = test_msg0{._i = 2, ._j = 3}, ._b = 88, ._c = 99}));
-    const auto check = test_msg1_new_manual{
-      ._a = 77, ._m = test_msg0{._i = 2, ._j = 3}, ._b = 88, ._c = 99};
-    BOOST_CHECK(roundtrip == check);
 }
 
 SEASTAR_THREAD_TEST_CASE(reserve_test) {
@@ -648,17 +624,17 @@ SEASTAR_THREAD_TEST_CASE(serde_checksum_envelope_test) {
           serde::compat_version<2>> {
         bool operator==(const checksummed&) const = default;
 
-        std::vector<test_msg1_new_manual> data_;
+        std::vector<test_msg1_new> data_;
         auto serde_fields() { return std::tie(data_); }
     };
 
     const auto obj = checksummed{
       .data_ = {
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 1, ._m = test_msg0{._i = 33, ._j = 44}, ._b = 2, ._c = 3},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 4, ._m = test_msg0{._i = 55, ._j = 66}, ._b = 5, ._c = 6},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 7, ._m = test_msg0{._i = 77, ._j = 88}, ._b = 8, ._c = 9}}};
     const auto vec = std::vector<checksummed>{obj, obj};
     BOOST_CHECK(
@@ -670,7 +646,7 @@ struct old_no_cs
       envelope<old_no_cs, serde::version<3>, serde::compat_version<2>> {
     bool operator==(const old_no_cs&) const = default;
 
-    std::vector<test_msg1_new_manual> data_;
+    std::vector<test_msg1_new> data_;
     auto serde_fields() { return std::tie(data_); }
 };
 struct new_cs
@@ -696,27 +672,27 @@ struct new_cs
 
     bool operator==(const new_cs&) const = default;
 
-    std::vector<test_msg1_new_manual> data_;
+    std::vector<test_msg1_new> data_;
     auto serde_fields() { return std::tie(data_); }
 };
 
 SEASTAR_THREAD_TEST_CASE(serde_checksum_update) {
     const auto old_obj = old_no_cs{
       .data_ = {
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 1, ._m = test_msg0{._i = 33, ._j = 44}, ._b = 2, ._c = 3},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 4, ._m = test_msg0{._i = 55, ._j = 66}, ._b = 5, ._c = 6},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 7, ._m = test_msg0{._i = 77, ._j = 88}, ._b = 8, ._c = 9}}};
 
     const auto new_obj = new_cs{
       .data_ = {
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 1, ._m = test_msg0{._i = 33, ._j = 44}, ._b = 2, ._c = 3},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 4, ._m = test_msg0{._i = 55, ._j = 66}, ._b = 5, ._c = 6},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 7, ._m = test_msg0{._i = 77, ._j = 88}, ._b = 8, ._c = 9}}};
 
     const auto old_vec = std::vector<old_no_cs>{old_obj, old_obj};
@@ -731,7 +707,7 @@ struct old_cs
       checksum_envelope<old_cs, serde::version<3>, serde::compat_version<2>> {
     bool operator==(const old_cs&) const = default;
 
-    std::vector<test_msg1_new_manual> data_;
+    std::vector<test_msg1_new> data_;
     auto serde_fields() { return std::tie(data_); }
 };
 struct new_no_cs
@@ -742,7 +718,7 @@ struct new_no_cs
     }
 
     serde::checksum_t unchecked_dummy_checksum_{0U};
-    std::vector<test_msg1_new_manual> data_;
+    std::vector<test_msg1_new> data_;
 
     auto serde_fields() { return std::tie(unchecked_dummy_checksum_, data_); }
 };
@@ -750,20 +726,20 @@ struct new_no_cs
 SEASTAR_THREAD_TEST_CASE(serde_checksum_update_1) {
     const auto old_obj = old_cs{
       .data_ = {
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 1, ._m = test_msg0{._i = 33, ._j = 44}, ._b = 2, ._c = 3},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 4, ._m = test_msg0{._i = 55, ._j = 66}, ._b = 5, ._c = 6},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 7, ._m = test_msg0{._i = 77, ._j = 88}, ._b = 8, ._c = 9}}};
 
     const auto new_obj = new_no_cs{
       .data_ = {
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 1, ._m = test_msg0{._i = 33, ._j = 44}, ._b = 2, ._c = 3},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 4, ._m = test_msg0{._i = 55, ._j = 66}, ._b = 5, ._c = 6},
-        test_msg1_new_manual{
+        test_msg1_new{
           ._a = 7, ._m = test_msg0{._i = 77, ._j = 88}, ._b = 8, ._c = 9}}};
 
     const auto old_vec = std::vector<old_cs>{old_obj, old_obj};

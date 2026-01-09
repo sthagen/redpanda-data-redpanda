@@ -29,6 +29,8 @@ redpanda_cc_library(
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:object_utils",
         "//src/v/cluster",
+        "//src/v/ssx:semaphore",
+        "//src/v/ssx:work_queue",
     ],
     visibility = ["//visibility:public"],
     deps = [

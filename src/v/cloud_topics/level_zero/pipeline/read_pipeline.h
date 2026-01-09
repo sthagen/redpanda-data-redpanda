@@ -133,6 +133,11 @@ public:
 
     event trigger_event(pipeline_stage stage);
 
+    /// Return the memory quota capacity for the read pipeline.
+    size_t memory_quota_capacity() const noexcept {
+        return _mem_quota_capacity;
+    }
+
 private:
     ss::abort_source& get_abort_source() {
         return this->get_root_rtc().root_abort_source();
@@ -160,6 +165,7 @@ private:
     // Total bytes went through the pipeline
     size_t _bytes_total{0};
 
+    size_t _mem_quota_capacity;
     ssx::named_semaphore<Clock> _mem_quota;
 
     circuit_breaker<Clock> _breaker;

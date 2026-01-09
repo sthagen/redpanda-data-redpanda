@@ -9,6 +9,18 @@ redpanda_cc_rpc_library(
 )
 
 redpanda_cc_library(
+    name = "domain_uuid",
+    hdrs = [
+        "domain_uuid.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/utils:named_type",
+        "//src/v/utils:uuid",
+    ],
+)
+
+redpanda_cc_library(
     name = "garbage_collector",
     srcs = [
         "garbage_collector.cc",

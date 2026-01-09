@@ -102,7 +102,11 @@ struct health_bench : health_report_accessor {
         for (auto& [node_id, topics] : node_topics) {
             reports[node_id]
               = ss::make_lw_shared<const cluster::node_health_report>(
-                node_id, node::local_state{}, std::move(topics), std::nullopt);
+                node_id,
+                node::local_state{},
+                std::move(topics),
+                /* drain_status */ std::nullopt,
+                node_liveness_report{});
         }
 
         perf_tests::start_measuring_time();

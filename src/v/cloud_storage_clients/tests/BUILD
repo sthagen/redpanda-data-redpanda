@@ -88,16 +88,18 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "util_test",
     timeout = "short",
     srcs = [
         "util_test.cc",
     ],
     deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
         "//src/v/cloud_storage_clients",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 

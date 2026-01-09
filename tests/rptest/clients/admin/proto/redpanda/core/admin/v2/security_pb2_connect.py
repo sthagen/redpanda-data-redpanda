@@ -34,6 +34,111 @@ class SecurityServiceClient:
         self.base_url = base_url
         self._connect_client = ConnectClient(http_client, protocol)
 
+    def call_create_role(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse]:
+        """Low-level method to call CreateRole, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/CreateRole'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse, extra_headers, timeout_seconds)
+
+    def create_role(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse:
+        response = self.call_create_role(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_get_role(self, req: proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse]:
+        """Low-level method to call GetRole, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/GetRole'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse, extra_headers, timeout_seconds)
+
+    def get_role(self, req: proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse:
+        response = self.call_get_role(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_list_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse]:
+        """Low-level method to call ListRoles, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ListRoles'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse, extra_headers, timeout_seconds)
+
+    def list_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse:
+        response = self.call_list_roles(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_add_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse]:
+        """Low-level method to call AddRoleMembers, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/AddRoleMembers'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse, extra_headers, timeout_seconds)
+
+    def add_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse:
+        response = self.call_add_role_members(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_remove_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse]:
+        """Low-level method to call RemoveRoleMembers, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/RemoveRoleMembers'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse, extra_headers, timeout_seconds)
+
+    def remove_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse:
+        response = self.call_remove_role_members(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_delete_role(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse]:
+        """Low-level method to call DeleteRole, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/DeleteRole'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse, extra_headers, timeout_seconds)
+
+    def delete_role(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse:
+        response = self.call_delete_role(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_list_current_user_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse]:
+        """Low-level method to call ListCurrentUserRoles, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ListCurrentUserRoles'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse, extra_headers, timeout_seconds)
+
+    def list_current_user_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse:
+        response = self.call_list_current_user_roles(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     def call_resolve_oidc_identity(self, req: proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityResponse]:
         """Low-level method to call ResolveOidcIdentity, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ResolveOidcIdentity'
@@ -85,6 +190,111 @@ class AsyncSecurityServiceClient:
         self.base_url = base_url
         self._connect_client = AsyncConnectClient(http_client, protocol)
 
+    async def call_create_role(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse]:
+        """Low-level method to call CreateRole, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/CreateRole'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse, extra_headers, timeout_seconds)
+
+    async def create_role(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse:
+        response = await self.call_create_role(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_get_role(self, req: proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse]:
+        """Low-level method to call GetRole, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/GetRole'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse, extra_headers, timeout_seconds)
+
+    async def get_role(self, req: proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse:
+        response = await self.call_get_role(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_list_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse]:
+        """Low-level method to call ListRoles, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ListRoles'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse, extra_headers, timeout_seconds)
+
+    async def list_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse:
+        response = await self.call_list_roles(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_add_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse]:
+        """Low-level method to call AddRoleMembers, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/AddRoleMembers'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse, extra_headers, timeout_seconds)
+
+    async def add_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse:
+        response = await self.call_add_role_members(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_remove_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse]:
+        """Low-level method to call RemoveRoleMembers, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/RemoveRoleMembers'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse, extra_headers, timeout_seconds)
+
+    async def remove_role_members(self, req: proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse:
+        response = await self.call_remove_role_members(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_delete_role(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse]:
+        """Low-level method to call DeleteRole, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/DeleteRole'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse, extra_headers, timeout_seconds)
+
+    async def delete_role(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse:
+        response = await self.call_delete_role(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_list_current_user_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse]:
+        """Low-level method to call ListCurrentUserRoles, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ListCurrentUserRoles'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse, extra_headers, timeout_seconds)
+
+    async def list_current_user_roles(self, req: proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse:
+        response = await self.call_list_current_user_roles(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     async def call_resolve_oidc_identity(self, req: proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityResponse]:
         """Low-level method to call ResolveOidcIdentity, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ResolveOidcIdentity'
@@ -133,6 +343,27 @@ class AsyncSecurityServiceClient:
 @typing.runtime_checkable
 class SecurityServiceProtocol(typing.Protocol):
 
+    def create_role(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse]:
+        ...
+
+    def get_role(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.GetRoleResponse]:
+        ...
+
+    def list_roles(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.ListRolesResponse]:
+        ...
+
+    def add_role_members(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersResponse]:
+        ...
+
+    def remove_role_members(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersResponse]:
+        ...
+
+    def delete_role(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.DeleteRoleRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.DeleteRoleResponse]:
+        ...
+
+    def list_current_user_roles(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesResponse]:
+        ...
+
     def resolve_oidc_identity(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityResponse]:
         ...
 
@@ -145,6 +376,13 @@ SECURITY_SERVICE_PATH_PREFIX = '/redpanda.core.admin.v2.SecurityService'
 
 def wsgi_security_service(implementation: SecurityServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/CreateRole', implementation.create_role, proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/GetRole', implementation.get_role, proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/ListRoles', implementation.list_roles, proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/AddRoleMembers', implementation.add_role_members, proto.redpanda.core.admin.v2.security_pb2.AddRoleMembersRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/RemoveRoleMembers', implementation.remove_role_members, proto.redpanda.core.admin.v2.security_pb2.RemoveRoleMembersRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/DeleteRole', implementation.delete_role, proto.redpanda.core.admin.v2.security_pb2.DeleteRoleRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/ListCurrentUserRoles', implementation.list_current_user_roles, proto.redpanda.core.admin.v2.security_pb2.ListCurrentUserRolesRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/ResolveOidcIdentity', implementation.resolve_oidc_identity, proto.redpanda.core.admin.v2.security_pb2.ResolveOidcIdentityRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/RefreshOidcKeys', implementation.refresh_oidc_keys, proto.redpanda.core.admin.v2.security_pb2.RefreshOidcKeysRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/RevokeOidcSessions', implementation.revoke_oidc_sessions, proto.redpanda.core.admin.v2.security_pb2.RevokeOidcSessionsRequest)

@@ -215,10 +215,9 @@ class DucktapeRunner:
                     dest_file = out_dir / source_file.name
 
                     if use_hardlink:
-                        # Create hardlink
                         if dest_file.exists():
                             dest_file.unlink()
-                        dest_file.hardlink_to(source_file)
+                        os.link(source_file, dest_file)
                     else:
                         # Copy file
                         shutil.copy2(source_file, dest_file)

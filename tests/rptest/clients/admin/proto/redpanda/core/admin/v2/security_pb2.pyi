@@ -16,7 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.message
 import google.protobuf.timestamp_pb2
 import sys
@@ -28,11 +30,276 @@ else:
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 @typing.final
-class ResolveOidcIdentityRequest(google.protobuf.message.Message):
+class Role(google.protobuf.message.Message):
     """=============================================
 
-    ResolveOidcIdentityRequest is the request for the ResolveOidcIdentity RPC.
+    The Role resource represents a security role with associated members.
     """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NAME_FIELD_NUMBER: builtins.int
+    MEMBERS_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    'The name of the Role.'
+
+    @property
+    def members(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___RoleMember]:
+        """The members of the Role."""
+
+    def __init__(self, *, name: builtins.str=..., members: collections.abc.Iterable[Global___RoleMember] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['members', b'members', 'name', b'name']) -> None:
+        ...
+Global___Role: typing_extensions.TypeAlias = Role
+
+@typing.final
+class CreateRoleRequest(google.protobuf.message.Message):
+    """=============================================
+
+    CreateRoleRequest is the request for the CreateRole RPC.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_FIELD_NUMBER: builtins.int
+
+    @property
+    def role(self) -> Global___Role:
+        """The Role to create."""
+
+    def __init__(self, *, role: Global___Role | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['role', b'role']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['role', b'role']) -> None:
+        ...
+Global___CreateRoleRequest: typing_extensions.TypeAlias = CreateRoleRequest
+
+@typing.final
+class CreateRoleResponse(google.protobuf.message.Message):
+    """CreateRoleResponse is the response from the CreateRole RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_FIELD_NUMBER: builtins.int
+
+    @property
+    def role(self) -> Global___Role:
+        """The created Role."""
+
+    def __init__(self, *, role: Global___Role | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['role', b'role']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['role', b'role']) -> None:
+        ...
+Global___CreateRoleResponse: typing_extensions.TypeAlias = CreateRoleResponse
+
+@typing.final
+class GetRoleRequest(google.protobuf.message.Message):
+    """GetRoleRequest is the request for the GetRole RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NAME_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    'The name of the Role to retrieve.'
+
+    def __init__(self, *, name: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['name', b'name']) -> None:
+        ...
+Global___GetRoleRequest: typing_extensions.TypeAlias = GetRoleRequest
+
+@typing.final
+class GetRoleResponse(google.protobuf.message.Message):
+    """GetRoleResponse is the response from the GetRole RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_FIELD_NUMBER: builtins.int
+
+    @property
+    def role(self) -> Global___Role:
+        """The requested Role."""
+
+    def __init__(self, *, role: Global___Role | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['role', b'role']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['role', b'role']) -> None:
+        ...
+Global___GetRoleResponse: typing_extensions.TypeAlias = GetRoleResponse
+
+@typing.final
+class ListRolesRequest(google.protobuf.message.Message):
+    """ListRolesRequest is the request for the ListRoles RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+Global___ListRolesRequest: typing_extensions.TypeAlias = ListRolesRequest
+
+@typing.final
+class ListRolesResponse(google.protobuf.message.Message):
+    """ListRolesResponse is the response from the ListRoles RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLES_FIELD_NUMBER: builtins.int
+
+    @property
+    def roles(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___Role]:
+        """The list of Roles."""
+
+    def __init__(self, *, roles: collections.abc.Iterable[Global___Role] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['roles', b'roles']) -> None:
+        ...
+Global___ListRolesResponse: typing_extensions.TypeAlias = ListRolesResponse
+
+@typing.final
+class AddRoleMembersRequest(google.protobuf.message.Message):
+    """AddRoleMembersRequest is the request for the AddRoleMembers RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_NAME_FIELD_NUMBER: builtins.int
+    MEMBERS_FIELD_NUMBER: builtins.int
+    role_name: builtins.str
+    'The name of the Role to add members to.'
+
+    @property
+    def members(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___RoleMember]:
+        """The members to add to the Role. If any members are already part of the
+        role, they are ignored.
+        """
+
+    def __init__(self, *, role_name: builtins.str=..., members: collections.abc.Iterable[Global___RoleMember] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['members', b'members', 'role_name', b'role_name']) -> None:
+        ...
+Global___AddRoleMembersRequest: typing_extensions.TypeAlias = AddRoleMembersRequest
+
+@typing.final
+class AddRoleMembersResponse(google.protobuf.message.Message):
+    """AddRoleMembersResponse is the response from the AddRoleMembers RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_FIELD_NUMBER: builtins.int
+
+    @property
+    def role(self) -> Global___Role:
+        """The updated Role."""
+
+    def __init__(self, *, role: Global___Role | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['role', b'role']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['role', b'role']) -> None:
+        ...
+Global___AddRoleMembersResponse: typing_extensions.TypeAlias = AddRoleMembersResponse
+
+@typing.final
+class RemoveRoleMembersRequest(google.protobuf.message.Message):
+    """RemoveRoleMembersRequest is the request for the RemoveRoleMembers RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_NAME_FIELD_NUMBER: builtins.int
+    MEMBERS_FIELD_NUMBER: builtins.int
+    role_name: builtins.str
+    'The name of the Role to remove members from.'
+
+    @property
+    def members(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___RoleMember]:
+        """The members to remove from the Role. If any members are already not part
+        of the role, they are ignored.
+        """
+
+    def __init__(self, *, role_name: builtins.str=..., members: collections.abc.Iterable[Global___RoleMember] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['members', b'members', 'role_name', b'role_name']) -> None:
+        ...
+Global___RemoveRoleMembersRequest: typing_extensions.TypeAlias = RemoveRoleMembersRequest
+
+@typing.final
+class RemoveRoleMembersResponse(google.protobuf.message.Message):
+    """RemoveRoleMembersResponse is the response from the RemoveRoleMembers RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLE_FIELD_NUMBER: builtins.int
+
+    @property
+    def role(self) -> Global___Role:
+        """The updated Role."""
+
+    def __init__(self, *, role: Global___Role | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['role', b'role']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['role', b'role']) -> None:
+        ...
+Global___RemoveRoleMembersResponse: typing_extensions.TypeAlias = RemoveRoleMembersResponse
+
+@typing.final
+class DeleteRoleRequest(google.protobuf.message.Message):
+    """DeleteRoleRequest is the request for the DeleteRole RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NAME_FIELD_NUMBER: builtins.int
+    DELETE_ACLS_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    'The name of the Role to delete.'
+    delete_acls: builtins.bool
+    'Whether to also delete any ACLs associated with this role.'
+
+    def __init__(self, *, name: builtins.str=..., delete_acls: builtins.bool=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['delete_acls', b'delete_acls', 'name', b'name']) -> None:
+        ...
+Global___DeleteRoleRequest: typing_extensions.TypeAlias = DeleteRoleRequest
+
+@typing.final
+class DeleteRoleResponse(google.protobuf.message.Message):
+    """DeleteRoleResponse is the response from the DeleteRole RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+Global___DeleteRoleResponse: typing_extensions.TypeAlias = DeleteRoleResponse
+
+@typing.final
+class ListCurrentUserRolesRequest(google.protobuf.message.Message):
+    """ListCurrentUserRolesRequest is the request for the ListCurrentUserRoles RPC."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+Global___ListCurrentUserRolesRequest: typing_extensions.TypeAlias = ListCurrentUserRolesRequest
+
+@typing.final
+class ListCurrentUserRolesResponse(google.protobuf.message.Message):
+    """ListCurrentUserRolesResponse is the response from the ListCurrentUserRoles
+    RPC.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ROLES_FIELD_NUMBER: builtins.int
+
+    @property
+    def roles(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """The list of Role names that the current authenticated user is a member
+        of.
+        """
+
+    def __init__(self, *, roles: collections.abc.Iterable[builtins.str] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['roles', b'roles']) -> None:
+        ...
+Global___ListCurrentUserRolesResponse: typing_extensions.TypeAlias = ListCurrentUserRolesResponse
+
+@typing.final
+class ResolveOidcIdentityRequest(google.protobuf.message.Message):
+    """ResolveOidcIdentityRequest is the request for the ResolveOidcIdentity RPC."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(self) -> None:
@@ -45,6 +312,7 @@ class ResolveOidcIdentityResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     PRINCIPAL_FIELD_NUMBER: builtins.int
     EXPIRE_FIELD_NUMBER: builtins.int
+    GROUPS_FIELD_NUMBER: builtins.int
     principal: builtins.str
     'The principal resolved from the OIDC token.'
 
@@ -52,13 +320,17 @@ class ResolveOidcIdentityResponse(google.protobuf.message.Message):
     def expire(self) -> google.protobuf.timestamp_pb2.Timestamp:
         """The timestamp of the token's expiry."""
 
-    def __init__(self, *, principal: builtins.str=..., expire: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
+    @property
+    def groups(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """The groups resolved from the OIDC token."""
+
+    def __init__(self, *, principal: builtins.str=..., expire: google.protobuf.timestamp_pb2.Timestamp | None=..., groups: collections.abc.Iterable[builtins.str] | None=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['expire', b'expire']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['expire', b'expire', 'principal', b'principal']) -> None:
+    def ClearField(self, field_name: typing.Literal['expire', b'expire', 'groups', b'groups', 'principal', b'principal']) -> None:
         ...
 Global___ResolveOidcIdentityResponse: typing_extensions.TypeAlias = ResolveOidcIdentityResponse
 
@@ -97,3 +369,44 @@ class RevokeOidcSessionsResponse(google.protobuf.message.Message):
     def __init__(self) -> None:
         ...
 Global___RevokeOidcSessionsResponse: typing_extensions.TypeAlias = RevokeOidcSessionsResponse
+
+@typing.final
+class RoleUser(google.protobuf.message.Message):
+    """=============================================
+
+    RoleUser represents a user member of a Role.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NAME_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    'The name of the user.'
+
+    def __init__(self, *, name: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['name', b'name']) -> None:
+        ...
+Global___RoleUser: typing_extensions.TypeAlias = RoleUser
+
+@typing.final
+class RoleMember(google.protobuf.message.Message):
+    """RoleMember represents a member of a Role."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    USER_FIELD_NUMBER: builtins.int
+
+    @property
+    def user(self) -> Global___RoleUser:
+        ...
+
+    def __init__(self, *, user: Global___RoleUser | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['member', b'member', 'user', b'user']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['member', b'member', 'user', b'user']) -> None:
+        ...
+
+    def WhichOneof(self, oneof_group: typing.Literal['member', b'member']) -> typing.Literal['user'] | None:
+        ...
+Global___RoleMember: typing_extensions.TypeAlias = RoleMember

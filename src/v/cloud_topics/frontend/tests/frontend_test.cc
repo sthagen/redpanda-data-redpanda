@@ -77,6 +77,8 @@ public:
       (const model::ntp&, model::offset o),
       (override));
 
+    MOCK_METHOD(size_t, materialize_max_bytes, (), (const, override));
+
     MOCK_METHOD(ss::future<>, start, (), (override));
 
     MOCK_METHOD(ss::future<>, stop, (), (override));

@@ -1573,6 +1573,48 @@ TEST(SimpleMetastoreTest, TestDirtyRatio) {
     ASSERT_EQ(compaction_info->start_offset, 0_o);
 }
 
+TEST(SimpleMetastoreTest, TestCompactionOffsetsSingleDirtyAtEnd) {
+    simple_metastore m;
+    om_list_t os;
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Create a log with offsets [0, 100] (next_offset = 101).
+    os.emplace_back(om_builder(oid1, 100, 1010)
+                      .add(tid_a, 0_o, 100_o, 1000_t, 0, 1009)
+                      .build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Clean all offsets except the last one: clean [0, 99].
+    // This leaves only offset 100 dirty.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid2, 100, 1010)
+                              .add(tid_a, 0_o, 100_o, 1000_t, 0, 1009)
+                              .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 0_o, 99_o, 3000_t);
+        cmb.set_expected_epoch(tid_a, metastore::compaction_epoch{0});
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    auto to_collect = metastore::compaction_info_spec{
+      .tidp = tp, .tombstone_removal_upper_bound_ts = 3000_t};
+    auto compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+
+    // The dirty ratio should be non-zero
+    EXPECT_GT(compaction_info->dirty_ratio, 0.0);
+
+    // The dirty_ranges should contain [100, 100]
+    EXPECT_THAT(
+      compaction_info->offsets_response.dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(100_o, 100_o)));
+}
+
 TEST(SimpleMetastoreTest, TestAddGetOffsetAfterBytes) {
     simple_metastore m;
     om_list_t os;

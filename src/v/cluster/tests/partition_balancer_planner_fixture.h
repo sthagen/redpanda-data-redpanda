@@ -203,6 +203,7 @@ struct partition_balancer_planner_fixture {
             .segment_fallocation_step = 16,
             .node_responsiveness_timeout = std::chrono::seconds(10),
             .topic_aware = true,
+            .node_autodecommission_timeout = {},
           },
           workers.state.local(),
           workers.allocator.local());
@@ -410,7 +411,8 @@ struct partition_balancer_planner_fixture {
                 model::node_id(i),
                 local_state,
                 std::move(node_topics),
-                std::nullopt));
+                /* drain status */ std::nullopt,
+                cluster::node_liveness_report{}));
         }
 
         return health_report;

@@ -9,6 +9,7 @@
  */
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
 #include "cloud_topics/object_utils.h"
+#include "ssx/mutex.h"
 
 #include <seastar/core/sleep.hh>
 
@@ -16,14 +17,24 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+struct gc_test_config {
+    size_t list_page_size{std::numeric_limits<int>::max()};
+    std::chrono::milliseconds list_cost{0ms};
+    std::chrono::milliseconds delete_cost{0ms};
+};
+} // namespace
+
 class object_storage_test_impl
   : public cloud_topics::level_zero_gc::object_storage {
 public:
     object_storage_test_impl(
-      std::vector<cloud_storage_clients::client::list_bucket_item>* listed,
-      std::vector<cloud_storage_clients::client::list_bucket_item>* deleted)
+      chunked_vector<cloud_storage_clients::client::list_bucket_item>* listed,
+      std::unordered_set<ss::sstring>* deleted,
+      gc_test_config* cfg)
       : listed_(listed)
-      , deleted_(deleted) {}
+      , deleted_(deleted)
+      , cfg_(cfg) {}
 
     /*
      * Returns objects in `listed_` that aren't in `deleted_`.
@@ -31,22 +42,36 @@ public:
     seastar::future<std::expected<
       cloud_storage_clients::client::list_bucket_result,
       cloud_storage_clients::error_outcome>>
-    list_objects(seastar::abort_source*) override {
+    list_objects(
+      seastar::abort_source* as,
+      std::optional<ss::sstring> continuation_token) override {
         chunked_vector<cloud_storage_clients::client::list_bucket_item> keep;
+        co_await seastar::sleep(cfg_->list_cost);
+        auto lu = co_await list_mtx_.get_units(*as);
         for (const auto& object : *listed_) {
-            auto not_deleted = true;
-            for (const auto& deleted : *deleted_) {
-                if (object.key == deleted.key) {
-                    not_deleted = false;
-                    break;
+            if (continuation_token.has_value()) {
+                if (object.key == continuation_token) {
+                    continuation_token.reset();
                 }
+                continue;
+            }
+            auto not_deleted = true;
+            {
+                auto du = co_await delete_mtx_.get_units(*as);
+                not_deleted = !deleted_->contains(object.key);
             }
             if (not_deleted) {
                 keep.push_back(object);
             }
+            if (keep.size() >= cfg_->list_page_size) {
+                break;
+            }
         }
 
+        auto continuation = keep.empty() ? ss::sstring{} : keep.back().key;
+
         co_return cloud_storage_clients::client::list_bucket_result{
+          .next_continuation_token = std::move(continuation),
           .contents = std::move(keep),
         };
     }
@@ -56,15 +81,23 @@ public:
      */
     seastar::future<std::expected<void, cloud_io::upload_result>>
     delete_objects(
-      seastar::abort_source*,
-      std::vector<cloud_storage_clients::client::list_bucket_item> objects)
+      seastar::abort_source* as,
+      chunked_vector<cloud_storage_clients::client::list_bucket_item> objects)
       override {
-        deleted_->append_range(objects);
+        co_await seastar::sleep(cfg_->delete_cost);
+        auto u = co_await delete_mtx_.get_units(*as);
+        deleted_->insert_range(
+          std::move(objects)
+          | std::views::transform([](auto& s) { return std::move(s.key); }));
         co_return std::expected<void, cloud_io::upload_result>();
     }
 
-    std::vector<cloud_storage_clients::client::list_bucket_item>* listed_;
-    std::vector<cloud_storage_clients::client::list_bucket_item>* deleted_;
+    chunked_vector<cloud_storage_clients::client::list_bucket_item>* listed_;
+    std::unordered_set<ss::sstring>* deleted_;
+    gc_test_config* cfg_;
+
+    ssx::mutex list_mtx_{"object-store-impl-list"};
+    ssx::mutex delete_mtx_{"object-store-impl-delete"};
 };
 
 class epoch_source_test_impl
@@ -107,17 +140,21 @@ private:
 
 class LevelZeroGCTest : public testing::Test {
 public:
-    LevelZeroGCTest()
+    LevelZeroGCTest(
+      std::chrono::milliseconds throttle_progress = 10ms,
+      std::chrono::milliseconds throttle_no_progress = 10ms)
       : gc(
           cloud_topics::level_zero_gc_config{
             .deletion_grace_period
             = config::mock_binding<std::chrono::milliseconds>(12h),
             .throttle_progress
-            = config::mock_binding<std::chrono::milliseconds>(10ms),
+            = config::mock_binding<std::chrono::milliseconds>(
+              throttle_progress),
             .throttle_no_progress
-            = config::mock_binding<std::chrono::milliseconds>(10ms),
+            = config::mock_binding<std::chrono::milliseconds>(
+              throttle_no_progress),
           },
-          std::make_unique<object_storage_test_impl>(&listed, &deleted),
+          std::make_unique<object_storage_test_impl>(&listed, &deleted, &cfg),
           std::make_unique<epoch_source_test_impl>(&max_epoch)) {}
 
     void TearDown() override { gc.stop().get(); }
@@ -140,15 +177,15 @@ public:
         listed.push_back(item);
     }
 
-    std::vector<cloud_storage_clients::client::list_bucket_item> listed;
-    std::vector<cloud_storage_clients::client::list_bucket_item> deleted;
+    chunked_vector<cloud_storage_clients::client::list_bucket_item> listed;
+    std::unordered_set<ss::sstring> deleted;
     std::optional<int64_t> max_epoch;
     cloud_topics::level_zero_gc gc;
+    gc_test_config cfg{};
 };
 
 template<typename Func>
-::testing::AssertionResult Eventually(Func func) {
-    int retries = 50;
+::testing::AssertionResult Eventually(Func func, int retries = 50) {
     while (retries-- > 0) {
         if (func()) {
             return ::testing::AssertionSuccess();
@@ -317,4 +354,70 @@ TEST_F(LevelZeroGCMaxEpochTest, EmptySnapshotNonEmptyReport) {
       = cloud_topics::cluster_epoch(200);
     ASSERT_TRUE(max_gc().has_value());
     ASSERT_FALSE(max_gc().value().has_value());
+}
+
+class LevelZeroGCScaleOutTest : public LevelZeroGCTest {
+public:
+    LevelZeroGCScaleOutTest()
+      : LevelZeroGCTest(1s, 2s) {}
+};
+
+TEST_F(LevelZeroGCScaleOutTest, MultiPageDelete) {
+    static constexpr size_t list_page_size{100};
+    int n = list_page_size * 4;
+    for (int i = 0; i < n; i++) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = n;
+    this->cfg.list_page_size = list_page_size;
+    gc.start();
+    EXPECT_TRUE(Eventually(
+      [this, expected = (size_t)n] { return deleted.size() == expected; }));
+}
+
+TEST_F(LevelZeroGCScaleOutTest, CleanShutdown) {
+    static constexpr size_t list_page_size{10};
+    int n = list_page_size * 10;
+    for (int i = 0; i < n; i++) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = n;
+    this->cfg.list_page_size = list_page_size;
+    this->cfg.delete_cost = 200ms;
+    gc.start();
+    // wait until we process one page
+    EXPECT_TRUE(Eventually([this] { return !deleted.empty(); }));
+    // then immediately shutdown gc
+    gc.stop().get();
+}
+
+TEST_F(LevelZeroGCScaleOutTest, ConcurrentDeletes) {
+    static constexpr size_t list_page_size{20};
+    int n = list_page_size * 20;
+    for (int i = 0; i < n; i++) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = n;
+    this->cfg.list_page_size = list_page_size;
+    this->cfg.delete_cost = 100ms;
+    gc.start();
+    EXPECT_TRUE(Eventually(
+      [this, expected = (size_t)n] { return deleted.size() == expected; }));
+}
+
+// make sure we make progress when the total size of eligible keys exceeds the
+// in-flight limit
+// i.e. 50 * 500 * len(key)=72 ~= 1.5MiB > 1MiB
+TEST_F(LevelZeroGCScaleOutTest, ConcurrentDeletesPipelineSaturation) {
+    static constexpr size_t list_page_size{500};
+    int n = list_page_size * 50;
+    for (int i = 0; i < n; i++) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = n;
+    this->cfg.list_page_size = list_page_size;
+    this->cfg.delete_cost = 50ms;
+    gc.start();
+    EXPECT_TRUE(Eventually(
+      [this, expected = (size_t)n] { return deleted.size() == expected; }));
 }

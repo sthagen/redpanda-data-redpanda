@@ -154,7 +154,8 @@ request_auth_result request_authenticator::do_authenticate(
                   std::move(username),
                   std::move(password),
                   ss::sstring{*sasl_mechanism},
-                  request_auth_result::superuser(superuser));
+                  request_auth_result::superuser(superuser),
+                  {});
             }
         }
     } else if (supports("OIDC") && auth_hdr.starts_with(authz_bearer_prefix)) {
@@ -176,11 +177,13 @@ request_auth_result request_authenticator::do_authenticate(
         auto found = std::find(superusers.begin(), superusers.end(), principal);
         bool superuser = (found != superusers.end()) || (!require_auth);
         vlog(logger.trace, "Authenticated principal {}", principal);
+        vlog(logger.trace, "OIDC groups: {}", res.assume_value().groups);
         return request_auth_result{
           security::credential_user{principal},
           security::credential_password{auth_hdr},
           security::oidc::sasl_authenticator::name,
-          request_auth_result::superuser{superuser}};
+          request_auth_result::superuser{superuser},
+          std::move(res.assume_value()).groups};
     } else if (!auth_hdr.empty()) {
         throw ss::httpd::bad_request_exception(
           "Unsupported Authorization method");
@@ -231,6 +234,7 @@ request_auth_result::request_auth_result(request_auth_result&& other) noexcept
   : _username{std::move(other._username)}
   , _password{std::move(other._password)}
   , _sasl_mechanism{std::move(other._sasl_mechanism)}
+  , _groups{std::move(other._groups)}
   , _authenticated{other._authenticated}
   , _superuser{other._superuser}
   , _auth_required{other._auth_required}

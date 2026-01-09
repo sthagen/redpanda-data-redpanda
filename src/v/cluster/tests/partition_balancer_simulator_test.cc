@@ -533,7 +533,7 @@ private:
             .segment_fallocation_step = 16_MiB,
             .node_responsiveness_timeout = node_responsiveness_timeout,
             .topic_aware = true,
-          },
+            .node_autodecommission_timeout = {}},
           _workers.state.local(),
           _workers.allocator.local());
     }
@@ -740,7 +740,11 @@ private:
 
             return ss::make_foreign(
               ss::make_lw_shared<const cluster::node_health_report>(
-                id, local_state, std::move(topics), std::nullopt));
+                id,
+                local_state,
+                std::move(topics),
+                /* drain_status */ std::nullopt,
+                cluster::node_liveness_report{}));
         }
     };
 

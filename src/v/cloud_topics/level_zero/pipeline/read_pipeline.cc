@@ -52,7 +52,8 @@ void read_pipeline<Clock>::stage::push_next_stage(
 
 template<class Clock>
 read_pipeline<Clock>::read_pipeline()
-  : _mem_quota(get_cloud_topics_l0_read_path_memory(), "read-pipeline")
+  : _mem_quota_capacity(get_cloud_topics_l0_read_path_memory())
+  , _mem_quota(_mem_quota_capacity, "read-pipeline")
   // TODO: use config parameter
   , _breaker(10, std::chrono::seconds(1))
   , _probe(

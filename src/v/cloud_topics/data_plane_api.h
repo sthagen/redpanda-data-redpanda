@@ -70,12 +70,20 @@ public:
       model::timeout_clock::time_point deadline)
       = 0;
 
+    // Materialize extents from the L0 read pipeline.
+    // `output_size_estimate` must not exceed `materialize_max_bytes()`.
     virtual ss::future<result<chunked_vector<model::record_batch>>> materialize(
       model::ntp ntp,
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout)
       = 0;
+
+    /// Return the maximum bytes that may be requested in a single
+    /// materialize() call. This reflects the read pipeline's memory quota.
+    /// Callers of `materialize` must limit their requests to stay within this
+    /// bound.
+    virtual size_t materialize_max_bytes() const = 0;
 
     /// Cache materialized record batch
     virtual void cache_put(const model::ntp&, const model::record_batch& b) = 0;

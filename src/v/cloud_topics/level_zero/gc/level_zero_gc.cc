@@ -15,12 +15,167 @@
 #include "cloud_topics/object_utils.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/topic_table.h"
+#include "ssx/semaphore.h"
+#include "ssx/work_queue.h"
 
 #include <seastar/core/coroutine.hh>
+#include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
 
 namespace cloud_topics {
+
+class level_zero_gc::list_delete_worker {
+public:
+    explicit list_delete_worker(
+      std::unique_ptr<object_storage> storage, level_zero_gc_probe& probe)
+      : storage_(std::move(storage))
+      , probe_(&probe)
+      , worker_([](std::exception_ptr eptr) {
+          vlog(cd_log.warn, "Exception from delete worker: {}", eptr);
+      }) {}
+    void start() {
+        vlog(cd_log.info, "Starting cloud topics list/delete worker");
+        if (as_.abort_requested()) {
+            as_ = {};
+        }
+        if (gate_.is_closed()) {
+            gate_ = {};
+        }
+    }
+    void pause() {
+        as_.request_abort();
+        continuation_token_.reset();
+    }
+    seastar::future<> stop() {
+        if (gate_.is_closed()) {
+            co_return;
+        }
+        vlog(cd_log.info, "Stopping cloud topics list/delete worker");
+        as_.request_abort();
+        delete_sem_.broken();
+        page_sem_.broken();
+        co_await worker_.shutdown();
+        co_await gate_.close();
+        vlog(cd_log.info, "Stopped cloud topics list/delete worker");
+    }
+
+    seastar::future<std::expected<size_t, level_zero_gc::collection_error>>
+    collect() {
+        throw std::runtime_error("not implemented");
+    }
+
+    bool has_capacity() const { return page_sem_.available_units() > 0; }
+
+    seastar::future<std::expected<
+      cloud_storage_clients::client::list_bucket_result,
+      cloud_storage_clients::error_outcome>>
+    next_page() {
+        // cached continuation is single use. pass it to list_objects and null
+        // it out immediately.
+        auto objects = co_await storage_->list_objects(
+          &as_, std::exchange(continuation_token_, std::nullopt));
+
+        // fairly naive approach to caching the token. if the list request
+        // failed, we leave the cached token empty, but if some other error
+        // occurs while processing a page, we keep the token and "skip" that
+        // page. with lexicographically ordered list results and monotonic
+        // epochs, any eligible keys in a skipped page are guaranteed to appear
+        // in a subsequent round. given the volume of L0 objects at higher
+        // throughput rates, we're going to err on the side of making progress
+        // (vs performing a perfect sweep of outstanding objects).
+        if (
+          objects.has_value()
+          && !objects.value().next_continuation_token.empty()) {
+            continuation_token_.emplace(
+              std::move(objects.value().next_continuation_token));
+        }
+        co_return objects;
+    }
+
+    size_t delete_objects(
+      chunked_vector<cloud_storage_clients::client::list_bucket_item> objects,
+      size_t keys_total_bytes) {
+        auto n_objects = objects.size();
+        if (n_objects > 0) {
+            auto u = seastar::try_get_units(page_sem_, keys_total_bytes);
+            if (!u.has_value()) {
+                vlog(cd_log.trace, "Delete pipeline saturated");
+                // take the units unsafely. we don't really care about the
+                // memory limit in particular, just don't want to grow
+                // unbounded.
+                u.emplace(seastar::consume_units(page_sem_, keys_total_bytes));
+            }
+            worker_.submit([this,
+                            o = std::move(objects),
+                            u = std::move(u).value()]() mutable {
+                return do_delete_objects(std::move(o), std::move(u));
+            });
+        }
+        return n_objects;
+    }
+
+    seastar::future<> do_delete_objects(
+      chunked_vector<cloud_storage_clients::client::list_bucket_item>
+        eligible_objects,
+      ssx::semaphore_units page_u) noexcept {
+        auto u_fut = co_await ss::coroutine::as_future(
+          seastar::get_units(delete_sem_, 1, as_));
+        if (u_fut.failed()) {
+            vlog(
+              cd_log.debug,
+              "Failed to get units in delete worker: {}",
+              u_fut.get_exception());
+            co_return;
+        }
+        if (gate_.is_closed()) {
+            vlog(cd_log.trace, "Gate closed");
+            co_return;
+        }
+        ssx::spawn_with_gate(
+          gate_,
+          [this,
+           u = std::move(u_fut.get()),
+           pu = std::move(page_u),
+           eo = std::move(eligible_objects)]() mutable {
+              const auto num_eligible = eo.size();
+              return storage_->delete_objects(&as_, std::move(eo))
+                .then([this, num_eligible](
+                        std::expected<void, cloud_io::upload_result> res) {
+                    if (!res.has_value()) {
+                        vlog(
+                          cd_log.info,
+                          "Received an error deleting L0 data objects: {}",
+                          res.error());
+                    } else {
+                        probe_->objects_deleted(num_eligible);
+                        vlog(
+                          cd_log.debug,
+                          "Deleted {} L0 data objects eligible for GC",
+                          num_eligible);
+                    }
+                })
+                .finally([u = std::move(u), pu = std::move(pu)] {})
+                .handle_exception([](std::exception_ptr eptr) {
+                    vlog(cd_log.debug, "Delete objects failed: {}", eptr);
+                });
+          });
+    }
+
+private:
+    std::unique_ptr<object_storage> storage_;
+    level_zero_gc_probe* probe_;
+    ssx::work_queue worker_;
+    // TODO: configurable limits?
+    // max number of in-flight delete ops
+    ssx::semaphore delete_sem_{5, "ct/gc/delete"};
+    // control (approximate) total memory held by gc-eligible list pages in
+    // flight (these may be queued depending on delete concurrency)
+    ssx::semaphore page_sem_{1_MiB, "ct/gc/page"};
+    seastar::abort_source as_{};
+    seastar::gate gate_{};
+    std::optional<ss::sstring> continuation_token_{};
+};
 
 class object_storage_remote_impl : public level_zero_gc::object_storage {
 public:
@@ -37,10 +192,18 @@ public:
     seastar::future<std::expected<
       cloud_storage_clients::client::list_bucket_result,
       cloud_storage_clients::error_outcome>>
-    list_objects(seastar::abort_source* asrc) override {
+    list_objects(
+      seastar::abort_source* asrc,
+      std::optional<ss::sstring> continuation_token) override {
         retry_chain_node rtc(*asrc, timeout, backoff);
         auto res = co_await remote_->list_objects(
-          bucket_, rtc, object_path_factory::level_zero_data_dir());
+          bucket_,
+          rtc,
+          object_path_factory::level_zero_data_dir(),
+          std::nullopt /*delimiter*/,
+          std::nullopt /*item_filter*/,
+          std::nullopt /*max_keys*/,
+          std::move(continuation_token));
         if (res.has_value()) {
             co_return std::move(res).assume_value();
         }
@@ -50,14 +213,15 @@ public:
     seastar::future<std::expected<void, cloud_io::upload_result>>
     delete_objects(
       seastar::abort_source* asrc,
-      std::vector<cloud_storage_clients::client::list_bucket_item> objects)
+      chunked_vector<cloud_storage_clients::client::list_bucket_item> objects)
       override {
         retry_chain_node rtc(*asrc, timeout, backoff);
-        auto keys
-          = objects | std::views::transform([](auto& obj) { return obj.key; })
-            | std::ranges::to<std::vector<cloud_storage_clients::object_key>>();
+        auto keys = objects
+                    | std::views::transform([](auto& obj) { return obj.key; })
+                    | std::ranges::to<
+                      chunked_vector<cloud_storage_clients::object_key>>();
         auto res = co_await remote_->delete_objects(
-          bucket_, keys, rtc, [](auto) {});
+          bucket_, std::move(keys), rtc, [](auto) {});
         if (res == cloud_io::upload_result::success) {
             co_return std::expected<void, cloud_io::upload_result>();
         }
@@ -325,12 +489,13 @@ level_zero_gc::level_zero_gc(
   std::unique_ptr<object_storage> storage,
   std::unique_ptr<epoch_source> epoch_source)
   : config_(std::move(config))
-  , storage_(std::move(storage))
   , epoch_source_(std::move(epoch_source))
   , should_run_(false) // begin in a stopped state
   , should_shutdown_(false)
   , worker_(worker())
-  , probe_(config::shard_local_cfg().disable_metrics()) {}
+  , probe_(config::shard_local_cfg().disable_metrics())
+  , delete_worker_(
+      std::make_unique<list_delete_worker>(std::move(storage), probe_)) {}
 
 level_zero_gc::level_zero_gc(
   cloud_io::remote* remote,
@@ -353,8 +518,11 @@ level_zero_gc::level_zero_gc(
       std::make_unique<epoch_source_impl>(
         health_monitor, controller_stm, topic_table)) {}
 
+level_zero_gc::~level_zero_gc() = default;
+
 void level_zero_gc::start() {
     vlog(cd_log.info, "Starting cloud topics L0 GC worker");
+    delete_worker_->start();
     should_run_ = true;
     worker_cv_.signal();
 }
@@ -363,6 +531,7 @@ void level_zero_gc::pause() {
     vlog(cd_log.info, "Pausing cloud topics L0 GC worker");
     should_run_ = false;
     asrc_.request_abort();
+    delete_worker_->pause();
 }
 
 seastar::future<> level_zero_gc::stop() {
@@ -370,7 +539,9 @@ seastar::future<> level_zero_gc::stop() {
     should_shutdown_ = true;
     asrc_.request_abort();
     worker_cv_.signal();
+    co_await delete_worker_->stop();
     co_await std::exchange(worker_, seastar::make_ready_future<>());
+    vlog(cd_log.info, "Stopped cloud_topics L0 GC worker");
 }
 
 // internal error codes used between the worker fiber and the main GC function
@@ -437,7 +608,28 @@ seastar::future<> level_zero_gc::worker() {
 
 seastar::future<std::expected<size_t, level_zero_gc::collection_error>>
 level_zero_gc::try_to_collect() {
-    const auto candidate_objects = co_await storage_->list_objects(&asrc_);
+    // Ultra-temporary cache to avoid repeatedly querying for max gc-able epoch.
+    // Since the result will always be valid clusterwide, compute exactly once
+    // per collection loop.
+    std::optional<cluster_epoch> max_gc_epoch;
+    size_t total_eligible{0};
+    while (delete_worker_->has_capacity()) {
+        auto res = co_await do_try_to_collect(std::ref(max_gc_epoch));
+        if (!res.has_value()) {
+            co_return res;
+        }
+        if (res.value() == 0) {
+            break;
+        }
+        total_eligible += res.value();
+    }
+
+    co_return total_eligible;
+}
+
+seastar::future<std::expected<size_t, level_zero_gc::collection_error>>
+level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
+    auto candidate_objects = co_await delete_worker_->next_page();
     if (!candidate_objects.has_value()) {
         vlog(
           cd_log.debug,
@@ -446,17 +638,19 @@ level_zero_gc::try_to_collect() {
         co_return std::unexpected(collection_error::service_error);
     }
 
-    const auto maybe_max_gc_epoch
-      = co_await epoch_source_->max_gc_eligible_epoch(&asrc_);
-    if (!maybe_max_gc_epoch.has_value()) {
-        vlog(
-          cd_log.debug,
-          "Received error retrieving GC eligible epoch: {}",
-          maybe_max_gc_epoch.error());
-        co_return std::unexpected(collection_error::service_error);
+    if (!max_gc_epoch.has_value()) {
+        const auto maybe_max_gc_epoch
+          = co_await epoch_source_->max_gc_eligible_epoch(&asrc_);
+        if (!maybe_max_gc_epoch.has_value()) {
+            vlog(
+              cd_log.debug,
+              "Received error retrieving GC eligible epoch: {}",
+              maybe_max_gc_epoch.error());
+            co_return std::unexpected(collection_error::service_error);
+        }
+        max_gc_epoch = maybe_max_gc_epoch.value();
     }
 
-    const auto max_gc_epoch = maybe_max_gc_epoch.value();
     if (!max_gc_epoch.has_value()) {
         vlog(cd_log.info, "No GC eligible epoch currently exists");
         co_return std::unexpected(collection_error::no_collectible_epoch);
@@ -472,8 +666,10 @@ level_zero_gc::try_to_collect() {
       max_gc_birthday);
 
     // objects that can be safely deleted
-    std::vector<cloud_storage_clients::client::list_bucket_item>
+    chunked_vector<cloud_storage_clients::client::list_bucket_item>
       eligible_objects;
+    // total size of eligible keys
+    size_t object_keys_total_bytes = 0;
 
     // used to detect unsorted object listings
     seastar::sstring last_key;
@@ -523,7 +719,8 @@ level_zero_gc::try_to_collect() {
               cd_log,
               seastar::log_level::error,
               rate,
-              "Non-lexicographic object listing detected during L0 GC {} < {}",
+              "Non-lexicographic object listing detected during L0 GC {} < "
+              "{}",
               object.key,
               last_key);
         }
@@ -553,27 +750,12 @@ level_zero_gc::try_to_collect() {
             continue;
         }
 
+        object_keys_total_bytes += object.key.size();
         eligible_objects.push_back(object);
     }
 
-    const auto num_eligible = eligible_objects.size();
-
-    auto res = co_await storage_->delete_objects(
-      &asrc_, std::move(eligible_objects));
-    if (!res.has_value()) {
-        vlog(
-          cd_log.info,
-          "Received an error deleting L0 data objects: {}",
-          res.error());
-        co_return std::unexpected(collection_error::service_error);
-    }
-
-    probe_.objects_deleted(num_eligible);
-
-    vlog(
-      cd_log.debug, "Deleted {} L0 data objects eligible for GC", num_eligible);
-
-    co_return num_eligible;
+    co_return delete_worker_->delete_objects(
+      std::move(eligible_objects), object_keys_total_bytes);
 }
 
 } // namespace cloud_topics

@@ -321,6 +321,19 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "context_subject_test",
+    timeout = "short",
+    srcs = [
+        "context_subject.cc",
+    ],
+    deps = [
+        "//src/v/pandaproxy/schema_registry:types",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_btest(
     name = "test_json_schema",
     timeout = "short",

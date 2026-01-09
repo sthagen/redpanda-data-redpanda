@@ -271,7 +271,12 @@ security::auth_result connection_context::authorized(
     }
 
     return authorized_user(
-      get_principal(), operation, name, quiet, superuser_required);
+      get_principal(),
+      operation,
+      name,
+      quiet,
+      superuser_required,
+      get_groups());
 }
 
 template security::auth_result connection_context::authorized<model::topic>(
@@ -306,7 +311,8 @@ security::auth_result connection_context::authorized_user(
   security::acl_operation operation,
   const T& name,
   authz_quiet quiet,
-  superuser_required superuser_required) {
+  superuser_required superuser_required,
+  const chunked_vector<security::acl_principal>& groups) {
     auto authorized = _server.authorizer().authorized(
       name,
       operation,
@@ -314,7 +320,8 @@ security::auth_result connection_context::authorized_user(
       security::acl_host(_client_addr),
       security::superuser_required{
         superuser_required ? security::superuser_required::yes
-                           : security::superuser_required::no});
+                           : security::superuser_required::no},
+      groups);
 
     if (!authorized) {
         if (_sasl) {
@@ -369,7 +376,8 @@ connection_context::authorized_user<model::topic>(
   security::acl_operation operation,
   const model::topic& name,
   authz_quiet quiet,
-  superuser_required);
+  superuser_required,
+  const chunked_vector<security::acl_principal>& groups);
 
 template security::auth_result
 connection_context::authorized_user<kafka::group_id>(
@@ -377,7 +385,8 @@ connection_context::authorized_user<kafka::group_id>(
   security::acl_operation operation,
   const kafka::group_id& name,
   authz_quiet quiet,
-  superuser_required);
+  superuser_required,
+  const chunked_vector<security::acl_principal>& groups);
 
 template security::auth_result
 connection_context::authorized_user<kafka::transactional_id>(
@@ -385,7 +394,8 @@ connection_context::authorized_user<kafka::transactional_id>(
   security::acl_operation operation,
   const kafka::transactional_id& name,
   authz_quiet quiet,
-  superuser_required);
+  superuser_required,
+  const chunked_vector<security::acl_principal>& groups);
 
 template security::auth_result
 connection_context::authorized_user<security::acl_cluster_name>(
@@ -393,7 +403,8 @@ connection_context::authorized_user<security::acl_cluster_name>(
   security::acl_operation operation,
   const security::acl_cluster_name& name,
   authz_quiet quiet,
-  superuser_required);
+  superuser_required,
+  const chunked_vector<security::acl_principal>& groups);
 
 ss::future<> connection_context::revoke_credentials(std::string_view name) {
     if (
@@ -604,6 +615,15 @@ ss::future<> connection_context::handle_auth_v0(const size_t size) {
     writer.write(response.data.auth_bytes);
     auto msg = iobuf_as_scattered(std::move(data));
     co_await conn->write(std::move(msg));
+}
+
+const chunked_vector<security::acl_principal>&
+connection_context::get_groups() const {
+    if (_sasl && _sasl->has_mechanism()) {
+        return _sasl->mechanism().groups();
+    }
+    static const chunked_vector<security::acl_principal> empty;
+    return empty;
 }
 
 bool connection_context::is_finished_parsing() const {

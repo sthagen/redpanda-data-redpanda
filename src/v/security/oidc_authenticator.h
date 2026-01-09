@@ -90,6 +90,10 @@ public:
 
     const char* mechanism_name() const override { return name; }
 
+    const chunked_vector<acl_principal>& groups() const override {
+        return _auth_data.groups;
+    }
+
 private:
     friend std::ostream&
     operator<<(std::ostream& os, const sasl_authenticator::state s);

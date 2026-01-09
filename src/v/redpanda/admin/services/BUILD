@@ -52,8 +52,8 @@ redpanda_cc_library(
     srcs = ["security.cc"],
     hdrs = ["security.h"],
     implementation_deps = [
+        ":utils",
         "//src/v/redpanda/admin/proxy:context",
-        "//src/v/security",
         "//src/v/security:request_auth",
     ],
     deps = [
@@ -61,6 +61,7 @@ redpanda_cc_library(
         "//src/v/cluster",
         "//src/v/kafka/server",
         "//src/v/redpanda/admin/proxy:client",
+        "//src/v/security",
         "//src/v/serde/protobuf:rpc",
         "@seastar",
     ],

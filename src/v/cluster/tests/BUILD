@@ -1314,3 +1314,22 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "partition_balancer_autodecom_test",
+    timeout = "short",
+    srcs = [
+        "partition_balancer_autodecom_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/container:chunked_vector",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:to_string",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

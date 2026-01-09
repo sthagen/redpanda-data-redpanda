@@ -67,6 +67,9 @@ std::optional<ss::sstring> validate_iceberg_topic_name_dot_replacement(
   const std::optional<ss::sstring>& value);
 
 std::optional<ss::sstring>
+validate_iceberg_default_catalog_namespace(const std::vector<ss::sstring>& ns);
+
+std::optional<ss::sstring>
 validate_iceberg_rest_catalog_auth_mode(const configuration& config);
 
 std::optional<ss::sstring>
