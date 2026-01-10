@@ -88,6 +88,10 @@ const (
 
 const currentRpkYAMLVersion = 7
 
+// ProfileEnvVar is the environment variable used to set the current profile.
+// This can't be a dev override as it is loaded before overrides are applied.
+const ProfileEnvVar = "RPK_PROFILE"
+
 type xflag struct {
 	path        string
 	testExample string
@@ -645,6 +649,11 @@ func ParamsHelp() string {
 	return `The -X flag can be used to override any rpk specific configuration option.
 As an example, -X brokers.tls.enabled=true enables TLS for the Kafka API.
 
+All -X flags can also be set via environment variables. The corresponding
+environment variable is the flag name uppercased, with dots replaced by
+underscores, and prefixed with RPK_. For example, -X brokers becomes
+RPK_BROKERS, and -X tls.enabled becomes RPK_TLS_ENABLED.
+
 The following options are available, with an example value for each option:
 
 brokers=127.0.0.1:9092,localhost:9094
@@ -1186,13 +1195,20 @@ func (p *Params) readRpkConfig(fs afero.Fs, c *Config) error {
 	yaml.Unmarshal(file, &c.rpkYamlActual)
 	c.rpkYamlActual.Version = c.rpkYaml.Version
 
+	overrideProfile := os.Getenv(ProfileEnvVar)
+	overrideSource := ProfileEnvVar + " environment variable"
 	if p.Profile != "" {
-		if c.rpkYaml.Profile(p.Profile) == nil {
-			return fmt.Errorf("selected profile %q does not exist", p.Profile)
-		}
-		c.rpkYaml.CurrentProfile = p.Profile
-		c.rpkYamlActual.CurrentProfile = p.Profile
+		overrideProfile = p.Profile
+		overrideSource = "--profile flag"
 	}
+	if overrideProfile != "" {
+		if c.rpkYaml.Profile(overrideProfile) == nil {
+			return fmt.Errorf("selected profile %q does not exist; check your %s and select an existing profile", overrideProfile, overrideSource)
+		}
+		c.rpkYaml.CurrentProfile = overrideProfile
+		c.rpkYamlActual.CurrentProfile = overrideProfile
+	}
+
 	c.rpkYamlExists = true
 	c.rpkYaml.fileLocation = abs
 	c.rpkYamlActual.fileLocation = abs

@@ -157,6 +157,7 @@ redpanda_cc_library(
         ":serializer",
         "//src/v/cloud_topics:logger",
         "//src/v/resource_mgmt:memory_groups",
+        "//src/v/ssx:abort_source",
         "//src/v/ssx:sformat",
         "//src/v/utils:human",
     ],

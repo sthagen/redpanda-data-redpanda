@@ -17,6 +17,7 @@
 #include "cloud_topics/logger.h"
 #include "config/configuration.h"
 #include "resource_mgmt/memory_groups.h"
+#include "ssx/abort_source.h"
 #include "utils/human.h"
 
 #include <seastar/core/abort_source.hh>
@@ -64,9 +65,25 @@ read_pipeline<Clock>::read_pipeline()
 template<class Clock>
 ss::future<std::expected<dataplane_query_result, std::error_code>>
 read_pipeline<Clock>::make_reader(
-  model::ntp ntp, dataplane_query query, timestamp_t timeout) {
+  model::ntp ntp,
+  dataplane_query query,
+  timestamp_t timeout,
+  model::opt_abort_source_t caller_as) {
     auto h = this->hold_gate();
-    auto& as = this->get_root_rtc().root_abort_source();
+
+    /*
+     * if caller provides an abort source, combine it with rtc
+     */
+    std::optional<ssx::composite_abort_source> combined_as;
+    auto& as = [this, &caller_as, &combined_as] -> ss::abort_source& {
+        auto& rtc_as = this->get_root_rtc().root_abort_source();
+        if (caller_as.has_value()) {
+            combined_as.emplace(caller_as->get(), rtc_as);
+            return combined_as.value().as();
+        }
+        return rtc_as;
+    }();
+
     auto size_estimate = query.output_size_estimate;
     _probe.register_request();
     _probe.set_memory_usage_gauge(_current_size + size_estimate);

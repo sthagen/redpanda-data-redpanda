@@ -48,7 +48,11 @@ public:
     /// The result of the query is a reader that contains the
     /// actual raft_data batches.
     ss::future<std::expected<dataplane_query_result, std::error_code>>
-    make_reader(model::ntp ntp, dataplane_query query, timestamp_t timeout);
+    make_reader(
+      model::ntp ntp,
+      dataplane_query query,
+      timestamp_t timeout,
+      model::opt_abort_source_t as = std::nullopt);
 
     using read_requests_list
       = requests_list<read_pipeline<Clock>, read_request<Clock>>;

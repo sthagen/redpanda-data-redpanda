@@ -76,7 +76,8 @@ public:
       model::ntp ntp,
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
-      model::timeout_clock::time_point timeout)
+      model::timeout_clock::time_point timeout,
+      model::opt_abort_source_t)
       = 0;
 
     /// Return the maximum bytes that may be requested in a single

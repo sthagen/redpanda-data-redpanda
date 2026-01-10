@@ -264,6 +264,7 @@ func CreateFlow(
 		// well.
 		fmt.Printf("Created and switch to profile %q.\n", container.ContainerProfileName)
 		fmt.Println("rpk will now talk to your locally running Redpanda container cluster.")
+		config.MaybePrintProfileEnvOverrideWarning(container.ContainerProfileName)
 		return nil
 
 	case fromCloud != "":
@@ -407,6 +408,7 @@ func CreateFlow(
 		fmt.Println(msg)
 	}
 
+	config.MaybePrintProfileEnvOverrideWarning(p.Name)
 	return nil
 }
 

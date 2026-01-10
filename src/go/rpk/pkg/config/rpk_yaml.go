@@ -19,6 +19,7 @@ import (
 	"time"
 
 	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
+	"github.com/fatih/color"
 	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
@@ -508,6 +509,15 @@ func (g *RpkGlobals) GetCommandTimeout() time.Duration {
 //////////
 // MISC //
 //////////
+
+// MaybePrintProfileEnvOverrideWarning prints a warning if RPK_PROFILE
+// environment variable is set, which will override the saved profile.
+func MaybePrintProfileEnvOverrideWarning(profileName string) {
+	if os.Getenv(ProfileEnvVar) != "" {
+		yellow := color.New(color.FgHiYellow).SprintFunc()
+		fmt.Fprintf(os.Stderr, "%s environment variable %s is set; it will override the saved profile. Unset it to use %q.\n", yellow("WARNING:"), ProfileEnvVar, profileName)
+	}
+}
 
 // MaybePrintAuthSwitchMessage prints a message if the prior and current
 // auths are different.

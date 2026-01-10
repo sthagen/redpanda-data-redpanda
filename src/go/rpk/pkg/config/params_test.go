@@ -1587,6 +1587,126 @@ func TestConfig_fixSchemePorts(t *testing.T) {
 	}
 }
 
+func TestProfileEnvVar(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		rpkYaml     string
+		envProfile  string
+		flagProfile string
+		expProfile  string
+		expErr      string
+	}{
+		{
+			name: "env var sets current profile",
+			rpkYaml: `version: 7
+current_profile: default
+profiles:
+    - name: default
+      kafka_api:
+        brokers:
+            - 127.0.0.1:9092
+    - name: myprofile
+      kafka_api:
+        brokers:
+            - 192.168.1.1:9092
+`,
+			envProfile: "myprofile",
+			expProfile: "myprofile",
+		},
+		{
+			name: "flag takes precedence over env var",
+			rpkYaml: `version: 7
+current_profile: default
+profiles:
+    - name: default
+      kafka_api:
+        brokers:
+            - 127.0.0.1:9092
+    - name: envprofile
+      kafka_api:
+        brokers:
+            - 192.168.1.1:9092
+    - name: flagprofile
+      kafka_api:
+        brokers:
+            - 10.0.0.1:9092
+`,
+			envProfile:  "envprofile",
+			flagProfile: "flagprofile",
+			expProfile:  "flagprofile",
+		},
+		{
+			name: "error when env profile does not exist",
+			rpkYaml: `version: 7
+current_profile: default
+profiles:
+    - name: default
+      kafka_api:
+        brokers:
+            - 127.0.0.1:9092
+`,
+			envProfile: "nonexistent",
+			expErr:     `selected profile "nonexistent" does not exist`,
+		},
+		{
+			name: "error when flag profile does not exist",
+			rpkYaml: `version: 7
+current_profile: default
+profiles:
+    - name: default
+      kafka_api:
+        brokers:
+            - 127.0.0.1:9092
+`,
+			flagProfile: "nonexistent",
+			expErr:      `selected profile "nonexistent" does not exist`,
+		},
+		{
+			name: "no env var uses saved current profile",
+			rpkYaml: `version: 7
+current_profile: saved
+profiles:
+    - name: default
+      kafka_api:
+        brokers:
+            - 127.0.0.1:9092
+    - name: saved
+      kafka_api:
+        brokers:
+            - 192.168.1.1:9092
+`,
+			expProfile: "saved",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envProfile != "" {
+				t.Setenv(ProfileEnvVar, tt.envProfile)
+			}
+
+			defaultRpkPath := "/rpk/rpk.yaml"
+			m := make(map[string]testfs.Fmode)
+			m[defaultRpkPath] = testfs.RFile(tt.rpkYaml)
+			fs := testfs.FromMap(m)
+
+			p := &Params{
+				Profile:    tt.flagProfile,
+				ConfigFlag: defaultRpkPath,
+			}
+			cfg, err := p.Load(fs)
+
+			if tt.expErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expErr)
+				return
+			}
+			require.NoError(t, err)
+
+			y := cfg.VirtualRpkYaml()
+			require.Equal(t, tt.expProfile, y.CurrentProfile)
+		})
+	}
+}
+
 func TestProcessOverrides(t *testing.T) {
 	tests := []struct {
 		name          string
