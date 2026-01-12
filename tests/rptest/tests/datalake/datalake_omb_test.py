@@ -17,10 +17,8 @@ from ducktape.mark import matrix
 
 import rptest.tests.datalake.schemas.linear_pb2 as linear_pb2
 from rptest.services.cluster import cluster
-from rptest.services.openmessaging_benchmark import (
-    LocalPayloadDirectory,
-    OpenMessagingBenchmark,
-)
+from rptest.services.utils import LocalPayloadDirectory
+from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.openmessaging_benchmark_configs import OMBSampleConfigurations
 from rptest.services.redpanda import PandaproxyConfig, SISettings, SchemaRegistryConfig
 from rptest.tests.datalake.catalog_service_factory import filesystem_catalog_type

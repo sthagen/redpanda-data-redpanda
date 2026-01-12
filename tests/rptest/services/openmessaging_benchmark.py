@@ -10,8 +10,6 @@
 import collections
 import json
 import os
-import shutil
-from pathlib import Path
 from typing import Any, Optional
 
 from ducktape.cluster.cluster import ClusterNode
@@ -26,7 +24,12 @@ from rptest.services.redpanda import (
     RedpandaService,
     RedpandaServiceCloud,
 )
-from rptest.services.utils import BadLogLines, NodeToLines, VersionAndLines
+from rptest.services.utils import (
+    BadLogLines,
+    NodeToLines,
+    VersionAndLines,
+    LocalPayloadDirectory,
+)
 
 from ducktape.tests.test import TestContext
 
@@ -35,40 +38,6 @@ LOG_ALLOW_LIST = [
     "cannot be started once stopped",
     "has passed since batch creation",
 ]
-
-
-class LocalPayloadDirectory:
-    def __init__(self, path: Path = Path("/tmp/custom_payloads")):
-        """
-        Used to enable the use of a set of custom payloads in OMB.
-        Note that each payload needs to be the same size.
-
-        :param path: used to specify the path on the localhost where custom
-                     payload files are stored before being transferred to the remote
-                     OMB coordinator.
-        """
-        if path.exists():
-            shutil.rmtree(path)
-        path.mkdir(parents=False, exist_ok=False)
-        self.path = path
-        self.payload_size: None | int = None
-
-    def __del__(self):
-        shutil.rmtree(self.path)
-
-    def add_payload(self, payload_name: str, payload: bytes):
-        if self.payload_size is None:
-            self.payload_size = len(payload)
-
-        assert len(payload) == self.payload_size, (
-            "all custom payloads must be the same size"
-        )
-
-        with open(self.path / f"{payload_name}.data", "wb") as f:
-            f.write(payload)
-
-    def has_payloads(self) -> bool:
-        return self.payload_size is not None
 
 
 # Benchmark worker that is used by benchmark process to run consumers and producers
@@ -314,31 +283,6 @@ class OpenMessagingBenchmark(Service):
         )
         self.workers.start()
 
-    def _copy_custom_payload_dir_to_node(self, node: ClusterNode):
-        assert self._local_payload_dir is not None
-        local_payload_dir = self._local_payload_dir.path
-
-        payload_file_list: list[str] = []
-        for file in os.listdir(local_payload_dir):
-            file_path = os.path.join(local_payload_dir, file)
-            if file.endswith("data") and not os.path.isdir(file_path):
-                payload_file_list.append(file_path)
-
-        self.logger.info(
-            f"Copying {len(payload_file_list)} custom payloads to OMB coordinator."
-        )
-
-        na = node.account
-
-        assert not na.exists(self.CUSTOM_PAYLOAD_DIR), (
-            f"Custom payload dir {self.CUSTOM_PAYLOAD_DIR} already exists on OMB workers."
-        )
-
-        na.mkdirs(self.CUSTOM_PAYLOAD_DIR)
-
-        for payload_file in payload_file_list:
-            na.copy_to(payload_file, self.CUSTOM_PAYLOAD_DIR)
-
     @property
     def metrics(self):
         """Metrics from the results of an OMB run."""
@@ -360,7 +304,8 @@ class OpenMessagingBenchmark(Service):
         self._create_benchmark_driver_file(node)
 
         if self._local_payload_dir is not None:
-            self._copy_custom_payload_dir_to_node(node)
+            self.logger.debug("Copying custom payloads to OMB coordinator.")
+            self._local_payload_dir.copy_to_node(node, self.CUSTOM_PAYLOAD_DIR)
 
         assert self.workers
         worker_nodes = self.workers.get_adresses()

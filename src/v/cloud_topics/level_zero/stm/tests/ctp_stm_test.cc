@@ -17,6 +17,7 @@
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "raft/tests/raft_fixture.h"
+#include "ssx/when_all.h"
 #include "test_utils/async.h"
 
 #include <optional>
@@ -40,6 +41,10 @@ struct ctp_stm_accessor {
     auto install_snapshot(ctp_stm& stm, raft::stm_snapshot snapshot) {
         return stm.apply_local_snapshot(
           snapshot.header, std::move(snapshot.data));
+    }
+
+    bool epoch_cv_has_waiters(ctp_stm& stm) {
+        return stm._epoch_updated_cv.has_waiters();
     }
 };
 } // namespace cloud_topics
@@ -459,4 +464,79 @@ TEST_F_CORO(ctp_stm_fixture, test_snapshot) {
         auto fence = co_await api(leader).fence_epoch(ct::cluster_epoch{1});
         ASSERT_FALSE_CORO(fence.has_value());
     }
+}
+
+TEST_F_CORO(ctp_stm_fixture, test_fence_epoch_concurrent_new_epoch) {
+    // This test verifies the optimization in fence_epoch() where multiple
+    // concurrent requests for a new epoch only require one write lock.
+    // The first request acquires the epoch_update_lock and write lock, updates
+    // the epoch, then signals waiters. The remaining requests wake up and take
+    // the read-lock path since the epoch has been updated.
+    co_await start();
+    co_await wait_for_leader(raft::default_timeout());
+
+    auto& leader = node(*get_leader());
+    auto stm = get_stm<0>(leader);
+    ct::ctp_stm_accessor accessor;
+
+    // First, establish epoch 1 by replicating a batch
+    auto b1 = make_record_batch(ct::cluster_epoch{1}, model::offset{0}, 0);
+    auto res = co_await replicate_record_batch(leader, std::move(b1));
+    ASSERT_TRUE_CORO(res.has_value());
+
+    // Verify epoch 1 is established
+    auto max_epoch = api(leader).get_max_epoch();
+    ASSERT_TRUE_CORO(max_epoch.has_value());
+    ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{1});
+
+    // Launch multiple concurrent fence_epoch calls for epoch 2 (a new epoch).
+    // All of these will initially see max_seen_epoch=1 and need to bump to 2.
+    // With the optimization:
+    // - One request acquires _epoch_update_lock, gets write lock, updates epoch
+    // - Others wait on condition variable, then take read-lock path
+    constexpr size_t num_concurrent_requests = 10;
+    using expected_t
+      = std::expected<ct::cluster_epoch_fence, ct::stale_cluster_epoch>;
+    std::vector<ss::future<expected_t>> futures;
+    futures.reserve(num_concurrent_requests);
+
+    {
+        auto leader_api = api(leader);
+        // Make a single request which fences the current epoch (thus holding a
+        // read lock)
+        auto initial_fence = co_await leader_api.fence_epoch(
+          ct::cluster_epoch{1});
+        ASSERT_TRUE_CORO(initial_fence.has_value());
+        // Push back a number of futures which will not yet be able to be
+        // resolved since a read lock is outstanding, forcing a number of
+        // requests to become waiters while a single request waits for a
+        // write lock- previously, this would have resulted in all requests
+        // waiting on a write lock sequentially.
+        for (size_t i = 0; i < num_concurrent_requests; ++i) {
+            futures.push_back(leader_api.fence_epoch(ct::cluster_epoch{2}));
+        }
+        // All requests but one should be waiting on cv.
+        RPTEST_REQUIRE_EVENTUALLY_CORO(
+          10s, [&] { return accessor.epoch_cv_has_waiters(*stm); });
+        // Let `initial_fence` go out of scope.
+    }
+
+    // Wait for all fences to be acquired - they should all be able to succeed
+    // without hanging because only one request (the first request) had to
+    // obtain a write lock, which then downgraded to a read lock, and the rest
+    // of the requests could obtain read locks for the current epoch.
+    auto fences = co_await ssx::when_all_succeed<std::vector<expected_t>>(
+      std::move(futures));
+    for (auto& fence : fences) {
+        ASSERT_TRUE_CORO(fence.has_value())
+          << "All fence requests should succeed";
+        ASSERT_EQ_CORO(fence->unit.count(), 1);
+    }
+
+    ASSERT_FALSE_CORO(accessor.epoch_cv_has_waiters(*stm));
+
+    // Verify epoch 2 is now established
+    auto max_seen = api(leader).get_max_seen_epoch();
+    ASSERT_TRUE_CORO(max_seen.has_value());
+    ASSERT_EQ_CORO(max_seen.value(), ct::cluster_epoch{2});
 }

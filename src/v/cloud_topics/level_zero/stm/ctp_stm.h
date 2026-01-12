@@ -14,6 +14,7 @@
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "cloud_topics/level_zero/stm/types.h"
 #include "raft/persisted_stm.h"
+#include "ssx/mutex.h"
 
 #include <seastar/core/semaphore.hh>
 
@@ -115,6 +116,16 @@ private:
     /// When the new epoch is applied we need to acquire a write lock.
     /// Otherwise, we need to acquire a read lock.
     ss::semaphore _lock;
+    // We only need one updater for the state's epoch at a time - the updater
+    // still needs to obtain write lock units from `_lock`, but we can prevent
+    // pessimizing with multiple waiters on write lock units by having a
+    // separate lock for this purpose.
+    ssx::mutex _epoch_update_lock{"ctp_stm::epoch_update_lock"};
+    // Used to signal to waiters that the state's epoch has potentially been
+    // updated by the holder of `_epoch_update_lock` (it is possible that the
+    // lock holder may fail to update the epoch).
+    ss::condition_variable _epoch_updated_cv;
+
     /// Current in-memory state of the STM
     ctp_stm_state _state;
 

@@ -73,6 +73,8 @@ ss::future<> ctp_stm::start() {
 ss::future<> ctp_stm::stop() {
     _lro_advanced.broken();
     _as.request_abort();
+    _epoch_update_lock.broken();
+    _epoch_updated_cv.broken();
     // We can't break the lock because that could cause UAF
     // as the units are held outside of this class.
     // however lock acquisition uses the above abort_source so
@@ -366,34 +368,58 @@ ctp_stm::fence_epoch(cluster_epoch e) {
     // because it represents in-flight batches. If this epoch is nullopt we
     // should take max_applied_epoch into account.
     auto get_applied_epoch = [this] { return _state.get_max_epoch(); };
-    auto fence_epoch = _state.get_max_seen_epoch().or_else(get_applied_epoch);
-    if (fence_epoch.has_value() && fence_epoch.value() == e) {
-        // Case 1. Same epoch, need to acquire read-lock.
-        auto unit = co_await ss::get_units(_lock, 1, _as);
-        if (_state.get_max_seen_epoch().or_else(get_applied_epoch) == e) {
-            // The max_seen_epoch didn't advance after the scheduling point
-            co_return cluster_epoch_fence{
-              .unit = std::move(unit), .term = term};
-        }
-    } else {
-        // Case 2. New epoch, need to acquire write-lock.
-        auto unit = co_await ss::get_units(
-          _lock, ss::semaphore::max_counter(), _as);
-        auto current_epoch = _state.get_max_seen_epoch().or_else(
+
+    while (true) {
+        auto fence_epoch = _state.get_max_seen_epoch().or_else(
           get_applied_epoch);
-        if (!current_epoch.has_value() || current_epoch.value() <= e) {
-            _state.advance_max_seen_epoch(e);
-            // Demote to reader lock after max_seen_epoch is updated.
-            unit.return_units(unit.count() - 1);
-            co_return cluster_epoch_fence{
-              .unit = std::move(unit), .term = term};
+        if (fence_epoch.has_value() && fence_epoch.value() == e) {
+            // Case 1. Same epoch, need to acquire read-lock.
+            auto unit = co_await ss::get_units(_lock, 1, _as);
+            if (_state.get_max_seen_epoch().or_else(get_applied_epoch) == e) {
+                // The max_seen_epoch didn't advance after the scheduling point
+                co_return cluster_epoch_fence{
+                  .unit = std::move(unit), .term = term};
+            }
+        } else if (!fence_epoch.has_value() || fence_epoch.value() < e) {
+            // Case 2. New epoch, need to acquire write-lock.
+            auto epoch_update_lock = _epoch_update_lock.try_get_units();
+            if (!epoch_update_lock) {
+                // Someone else is updating the epoch - wait for the update and
+                // then re-check.
+                co_await _epoch_updated_cv.wait();
+                continue;
+            }
+
+            // We're the epoch updater, get a write-lock
+            auto unit = co_await ss::get_units(
+              _lock, ss::semaphore::max_counter(), _as);
+
+            auto current_epoch = _state.get_max_seen_epoch().or_else(
+              get_applied_epoch);
+            std::optional<cluster_epoch_fence> epoch_fence_opt;
+            if (!current_epoch.has_value() || current_epoch.value() <= e) {
+                _state.advance_max_seen_epoch(e);
+                // Demote to reader lock after max_seen_epoch is updated.
+                unit.return_units(unit.count() - 1);
+                epoch_fence_opt.emplace(std::move(unit), term);
+            }
+
+            // Clear units and broadcast to any waiters on success or failure to
+            // update the epoch.
+            epoch_update_lock.reset();
+            _epoch_updated_cv.broadcast();
+
+            if (epoch_fence_opt.has_value()) {
+                co_return std::move(epoch_fence_opt).value();
+            }
         }
+
+        // If we reach here, it means that we need to discard the batch.
+        co_return std::unexpected(
+          stale_cluster_epoch(_state.get_max_seen_epoch()
+                                .or_else(get_applied_epoch)
+                                .value_or(cluster_epoch{-1})));
     }
-    // If we reach here, it means that we need to discard the batch.
-    co_return std::unexpected(
-      stale_cluster_epoch(_state.get_max_seen_epoch()
-                            .or_else(get_applied_epoch)
-                            .value_or(cluster_epoch{-1})));
 }
 
 model::offset ctp_stm::max_removable_local_log_offset() {

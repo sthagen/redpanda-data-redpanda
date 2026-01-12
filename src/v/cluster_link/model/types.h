@@ -34,6 +34,7 @@
 #include "utils/unresolved_address.h"
 #include "utils/uuid.h"
 
+#include <seastar/core/future.hh>
 #include <seastar/util/bool_class.hh>
 
 #include <expected>
@@ -838,9 +839,9 @@ struct link_state
 
     auto serde_fields() { return std::tie(status, mirror_topics); }
 
-    link_state copy() const;
-
     friend std::ostream& operator<<(std::ostream& os, const link_state& ls);
+
+    ss::future<link_state> copy() const;
 };
 struct metadata
   : serde::envelope<metadata, serde::version<0>, serde::compat_version<0>> {
@@ -861,10 +862,12 @@ struct metadata
         return std::tie(name, uuid, connection, state, configuration);
     }
 
-    metadata copy() const;
-
     friend std::ostream& operator<<(std::ostream& os, const metadata& md);
+
+    ss::future<metadata> copy() const;
 };
+
+using metadata_ptr = ss::lw_shared_ptr<const metadata>;
 
 /// \brief Command used to add a mirror topic to a cluster link
 ///

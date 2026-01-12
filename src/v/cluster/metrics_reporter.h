@@ -87,6 +87,15 @@ public:
         std::vector<net::unresolved_address> advertised_listeners;
     };
 
+    struct kubernetes_metrics {
+        std::optional<ss::sstring> deployment_type;
+        std::optional<ss::sstring> chart_version;
+        std::optional<ss::sstring> operator_image_version;
+        std::optional<ss::sstring> k8s_version;
+        std::optional<ss::sstring> k8s_environment;
+        std::optional<ss::sstring> k8s_cluster_id;
+    };
+
     struct metrics_snapshot {
         ss::sstring cluster_uuid;
         ss::sstring storage_uuid;
@@ -123,6 +132,8 @@ public:
         uint32_t number_of_active_shadow_links{0};
         uint32_t number_of_shadow_topics{0};
         bool schema_registry_shadowed{false};
+
+        std::optional<kubernetes_metrics> kubernetes;
     };
     static constexpr ss::shard_id shard = 0;
 
@@ -177,6 +188,9 @@ private:
     ss::lowres_clock::time_point _last_success
       = ss::lowres_clock::time_point::min();
 };
+
+std::optional<metrics_reporter::kubernetes_metrics> get_kubernetes_metrics();
+
 } // namespace cluster
 namespace json {
 void rjson_serialize(
@@ -188,4 +202,7 @@ void rjson_serialize(
 void rjson_serialize(
   json::Writer<json::StringBuffer>& w,
   const cluster::metrics_reporter::node_metrics& v);
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w,
+  const cluster::metrics_reporter::kubernetes_metrics& v);
 } // namespace json

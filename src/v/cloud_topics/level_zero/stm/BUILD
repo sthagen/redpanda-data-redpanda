@@ -115,6 +115,7 @@ redpanda_cc_library(
         ":types",
         "//src/v/cloud_topics/level_zero/common:producer_queue",
         "//src/v/raft",
+        "//src/v/ssx:mutex",
         "@seastar",
     ],
 )

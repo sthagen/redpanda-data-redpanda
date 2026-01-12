@@ -91,6 +91,41 @@ ss::future<std::vector<ss::sstring>> get_fqdns(std::string_view hostname) {
 } // namespace
 
 namespace cluster {
+std::optional<metrics_reporter::kubernetes_metrics> get_kubernetes_metrics() {
+    cluster::metrics_reporter::kubernetes_metrics km;
+    bool any = false;
+
+    if (auto v = std::getenv("REDPANDA_METRICS_K8S_DEPLOYMENT_TYPE"); v && *v) {
+        km.deployment_type.emplace(v);
+        any = true;
+    }
+    if (auto v = std::getenv("REDPANDA_METRICS_K8S_CHART_VERSION"); v && *v) {
+        km.chart_version.emplace(v);
+        any = true;
+    }
+    if (auto v = std::getenv("REDPANDA_METRICS_K8S_OPERATOR_IMAGE_VERSION");
+        v && *v) {
+        km.operator_image_version.emplace(v);
+        any = true;
+    }
+    if (auto v = std::getenv("REDPANDA_METRICS_K8S_VERSION"); v && *v) {
+        km.k8s_version.emplace(v);
+        any = true;
+    }
+    if (auto v = std::getenv("REDPANDA_METRICS_K8S_ENVIRONMENT"); v && *v) {
+        km.k8s_environment.emplace(v);
+        any = true;
+    }
+    if (auto v = std::getenv("REDPANDA_METRICS_K8S_CLUSTER_ID"); v && *v) {
+        km.k8s_cluster_id.emplace(v);
+        any = true;
+    }
+
+    if (any) {
+        return km;
+    }
+    return std::nullopt;
+}
 
 namespace details {
 address parse_url(const ss::sstring& url) {
@@ -375,6 +410,10 @@ metrics_reporter::build_metrics_snapshot() {
     // Check if schema registry is shadowed
     snapshot.schema_registry_shadowed
       = _clfe->local().schema_registry_shadowing_active();
+
+    if (auto km = get_kubernetes_metrics(); km) {
+        snapshot.kubernetes.emplace(std::move(*km));
+    }
 
     co_return snapshot;
 }
@@ -686,6 +725,11 @@ void rjson_serialize(
     w.Key("fqdns");
     rjson_serialize(w, snapshot.fqdns);
 
+    if (snapshot.kubernetes.has_value()) {
+        w.Key("kubernetes");
+        rjson_serialize(w, snapshot.kubernetes.value());
+    }
+
     w.Key("number_of_active_shadow_links");
     w.Uint64(snapshot.number_of_active_shadow_links);
 
@@ -706,6 +750,37 @@ void rjson_serialize(
     w.Uint64(ds.free);
     w.Key("total");
     w.Uint64(ds.total);
+    w.EndObject();
+}
+
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w,
+  const cluster::metrics_reporter::kubernetes_metrics& km) {
+    w.StartObject();
+    if (km.deployment_type.has_value()) {
+        w.Key("deployment_type");
+        w.String(km.deployment_type.value());
+    }
+    if (km.chart_version.has_value()) {
+        w.Key("chart");
+        w.String(km.chart_version.value());
+    }
+    if (km.operator_image_version.has_value()) {
+        w.Key("operator_image");
+        w.String(km.operator_image_version.value());
+    }
+    if (km.k8s_version.has_value()) {
+        w.Key("version");
+        w.String(km.k8s_version.value());
+    }
+    if (km.k8s_environment.has_value()) {
+        w.Key("environment");
+        w.String(km.k8s_environment.value());
+    }
+    if (km.k8s_cluster_id.has_value()) {
+        w.Key("cluster_id");
+        w.String(km.k8s_cluster_id.value());
+    }
     w.EndObject();
 }
 

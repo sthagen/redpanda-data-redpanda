@@ -22,10 +22,10 @@ role_member_type member_type_for_principal_type(security::principal_type p) {
     switch (p) {
     case security::principal_type::user:
         return role_member_type::user;
+    case security::principal_type::group:
+        return role_member_type::group;
     case security::principal_type::ephemeral_user:
     case security::principal_type::role:
-    // TODO(GBAC) - CORE-14895
-    case security::principal_type::group:
         vunreachable("Invalid principal_type {{{}}} for role membership", p);
     }
     __builtin_unreachable();
@@ -36,6 +36,8 @@ std::ostream& operator<<(std::ostream& os, role_member_type t) {
     switch (t) {
     case role_member_type::user:
         return os << "User";
+    case role_member_type::group:
+        return os << "Group";
     }
     __builtin_unreachable();
 }

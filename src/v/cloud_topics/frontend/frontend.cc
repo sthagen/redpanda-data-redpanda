@@ -65,6 +65,13 @@ struct placeholder_batches_with_size {
 static constexpr auto L0_upload_default_timeout = 1s;
 static constexpr auto L0_replicate_default_timeout = 1s;
 
+// The default `async_algo_traits::interval` value of `100` seems a bit too high
+// to reliably prevent reactor stalls in the `convert_to_placeholders()` loop.
+// Use this lower value instead.
+struct convert_to_placeholders_loop_traits : ssx::async_algo_traits {
+    static constexpr ssize_t interval = 10;
+};
+
 // Utility function to convert array of extent_meta structs to
 // array of placeholder batches.
 static ss::future<placeholder_batches_with_size> convert_to_placeholders(
@@ -72,7 +79,7 @@ static ss::future<placeholder_batches_with_size> convert_to_placeholders(
   const chunked_vector<model::record_batch_header>& headers) {
     placeholder_batches_with_size result;
     result.batches.reserve(extents.size());
-    co_await ssx::async_for_each(
+    co_await ssx::async_for_each<convert_to_placeholders_loop_traits>(
       std::views::zip(extents, headers), [&result](const auto& pair) {
           const auto& [extent, header] = pair;
           vassert(
@@ -568,6 +575,18 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
         co_return default_errc;
     }
 
+    // Wait for all previous requests from this producer to be processed
+    if (opts.as) {
+        co_await ticket.redeem(opts.as->get());
+    } else {
+        co_await ticket.redeem();
+    }
+    // Now that our producer order is resolved, we can fence epochs
+    // we must resolve producer order first to prevent races where a
+    // request waits on a previous request in the producer queue, but
+    // that previous request is waiting on the other request to finish
+    // (because it needs to drain current requests as the epoch is being
+    // bumped).
     auto fence_fut = co_await ss::coroutine::as_future(
       ctp_stm_api->fence_epoch(upload_res.value().front().id.epoch));
     if (fence_fut.failed()) {
@@ -600,13 +619,6 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
       placeholders.batches.size() == 1,
       "Expected single batch, got {}",
       placeholders.batches.size());
-    // Wait for all previous requests from this producer to be processed
-    if (opts.as) {
-        co_await ticket.redeem(opts.as->get());
-    } else {
-        co_await ticket.redeem();
-    }
-    // Replicate now that our ticket is redeemed
     opts = update_replicate_options(opts, fence->term);
     auto replicate_stages = partition->replicate_in_stages(
       batch_id, std::move(placeholders.batches.front()), opts);

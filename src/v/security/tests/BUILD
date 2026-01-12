@@ -170,6 +170,20 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_btest(
+    name = "role_test",
+    timeout = "short",
+    srcs = [
+        "role_test.cc",
+    ],
+    deps = [
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@fmt",
+    ],
+)
+
+redpanda_cc_btest(
     name = "role_store_test",
     timeout = "short",
     srcs = [
@@ -180,10 +194,8 @@ redpanda_cc_btest(
         "//src/v/security",
         "//src/v/test_utils:seastar_boost",
         "@abseil-cpp//absl/container:node_hash_set",
-        "@boost//:algorithm",
         "@boost//:range",
         "@boost//:test",
-        "@fmt",
     ],
 )
 

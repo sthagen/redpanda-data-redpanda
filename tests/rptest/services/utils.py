@@ -1,6 +1,9 @@
 from logging import Logger
+from pathlib import Path
 import re
+import shutil
 import time
+import os
 from abc import ABC, abstractmethod
 from typing import Any, Generator, Iterable, TypedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -425,3 +428,68 @@ class LogSearchCloud(LogSearch):
 
     def _get_hostname(self, host: CloudBroker) -> str:
         return host.hostname
+
+
+class LocalPayloadDirectory:
+    def __init__(self, path: Path = Path("/tmp/custom_payloads")):
+        """
+        Used to create/maintain a local directory of payloads on the ducktape runner node.
+        Note that each payload needs to be the same size.
+
+        :param path: used to specify the path on the localhost where custom
+                     payload files are stored.
+        """
+        if path.exists():
+            shutil.rmtree(path)
+        path.mkdir(parents=False, exist_ok=False)
+        self.path = path
+        self.payload_size: None | int = None
+
+    def __del__(self):
+        shutil.rmtree(self.path)
+
+    def add_payload(self, payload_name: str, payload: bytes):
+        """
+        Creates and populates a file in the local payload dir.
+
+        :param payload_name: Name of file to be created.
+        :param payload: Contents of file to be created.
+        """
+        if self.payload_size is None:
+            self.payload_size = len(payload)
+
+        assert len(payload) == self.payload_size, (
+            "all custom payloads must be the same size"
+        )
+
+        with open(self.path / f"{payload_name}.data", "wb") as f:
+            f.write(payload)
+
+    def has_payloads(self) -> bool:
+        return self.payload_size is not None
+
+    def copy_to_node(self, node: ClusterNode, dst: str):
+        """
+        Copies local payload dir to a remote node.
+
+        :param node: The remote node the local dir will be copied to.
+        :param dst: Location in the remote node that the local dir will be copied to.
+                    Note that there must not be a dir already in the remote node at
+                    this location already.
+        """
+        local_payload_dir = self.path
+
+        payload_file_list: list[str] = []
+        for file in os.listdir(local_payload_dir):
+            file_path = os.path.join(local_payload_dir, file)
+            if file.endswith("data") and not os.path.isdir(file_path):
+                payload_file_list.append(file_path)
+
+        na = node.account
+        assert not na.exists(dst), (
+            f"Custom payload dir {dst} already exists on node {node}."
+        )
+
+        na.mkdirs(dst)
+        for payload_file in payload_file_list:
+            na.copy_to(payload_file, dst)
