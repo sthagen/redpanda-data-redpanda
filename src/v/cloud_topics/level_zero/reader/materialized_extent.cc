@@ -119,6 +119,8 @@ model::record_batch make_raft_data_batch(materialized_extent ext) {
 
 ss::future<result<iobuf>> materialize_from_cache(
   std::filesystem::path cache_file_name,
+  uint64_t offset,
+  uint64_t length,
   cloud_io::basic_cache_service_api<>* cache,
   micro_probe* probe);
 
@@ -186,11 +188,18 @@ ss::future<result<bool>> materialize(
 
     if (status.value() == cloud_io::cache_element_status::available) {
         auto res = co_await materialize_from_cache(
-          cache_file_name, cache, probe);
+          cache_file_name,
+          ext->meta.first_byte_offset(),
+          ext->meta.byte_range_size(),
+          cache,
+          probe);
         if (!res.has_value()) {
             co_return res.error();
         }
         ext->object = std::move(res.value());
+        // Object now contains just the extent range, so reset offset to 0
+        ext->meta.first_byte_offset = cloud_topics::first_byte_offset_t{0};
+        hydrated = true; // Indicates range read from cache
     } else {
         auto res = co_await materialize_from_cloud_storage(
           cache_file_name, bucket, api, cache, rtc, probe);
@@ -204,14 +213,18 @@ ss::future<result<bool>> materialize(
 
 ss::future<result<iobuf>> materialize_from_cache(
   std::filesystem::path cache_file_name,
+  uint64_t offset,
+  uint64_t length,
   cloud_io::basic_cache_service_api<>* cache,
   micro_probe* probe) {
     iobuf result_buf;
     probe->num_cache_reads++;
     auto buffer_size = config::shard_local_cfg().storage_read_buffer_size();
-    auto read_ahead = config::shard_local_cfg().storage_read_readahead_count();
-    auto fut = co_await ss::coroutine::as_future(
-      cache->get_stream(cache_file_name, buffer_size, read_ahead));
+    // Disable readahead: we're reading a specific extent range where
+    // neighboring bytes belong to different partitions and won't be useful.
+    constexpr unsigned int read_ahead = 0;
+    auto fut = co_await ss::coroutine::as_future(cache->get_stream_range(
+      cache_file_name, offset, length, buffer_size, read_ahead));
     auto sz_stream_result = result_from_ready_future<errc::cache_read_error>(
       std::move(fut));
     if (!sz_stream_result.has_value()) {

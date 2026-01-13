@@ -512,7 +512,7 @@ multipart_subresponse::iobuf_to_constbufseq(const iobuf& buf) {
     return seq;
 };
 
-std::expected<std::string_view, std::exception_ptr>
+std::expected<ss::sstring, ss::sstring>
 find_multipart_boundary(const http::client::response_header& headers) {
     constexpr std::string_view boundary_name{"boundary"};
     constexpr std::string_view content_type_multipart{"multipart/mixed"};
@@ -521,20 +521,15 @@ find_multipart_boundary(const http::client::response_header& headers) {
       boost::beast::http::field::content_type);
     std::string_view boundary;
     if (content_type_it == headers.end()) {
-        return std::unexpected(
-          std::make_exception_ptr(
-            std::runtime_error(
-              "find_multipart_boundary: Content-Type missing")));
+        return std::unexpected("find_multipart_boundary: Content-Type missing");
     }
     std::string_view content_type{content_type_it->value()};
     if (auto pos = content_type.find(content_type_multipart);
         pos == content_type.npos) {
         return std::unexpected(
-          std::make_exception_ptr(
-            std::runtime_error(
-              fmt::format(
-                "find_multipart_boundary: Expected multipart Content-Type: {}",
-                content_type))));
+          ssx::sformat(
+            "find_multipart_boundary: Expected multipart Content-Type: {}",
+            content_type));
     }
     if (auto boundary_pos = content_type.find(boundary_name);
         boundary_pos != content_type.npos) {
@@ -564,14 +559,12 @@ find_multipart_boundary(const http::client::response_header& headers) {
     }
     if (boundary.empty()) {
         return std::unexpected(
-          std::make_exception_ptr(
-            std::runtime_error(
-              fmt::format(
-                "find_multipart_boundary: Boundary missing from multipart "
-                "response Content-Type: {}",
-                content_type))));
+          ssx::sformat(
+            "find_multipart_boundary: Boundary missing from multipart "
+            "response Content-Type: {}",
+            content_type));
     }
-    return boundary;
+    return ss::sstring{boundary};
 }
 
 } // namespace cloud_storage_clients::util

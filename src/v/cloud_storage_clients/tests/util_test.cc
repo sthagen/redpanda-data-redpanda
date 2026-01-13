@@ -862,20 +862,6 @@ TEST(FindMultipartBoundary, BoundaryWithQuotes) {
     EXPECT_EQ(result.value(), "batch_boundary_123");
 }
 
-namespace {
-ss::sstring eptr_what(std::exception_ptr eptr) {
-    if (eptr == nullptr) {
-        return {};
-    }
-    try {
-        std::rethrow_exception(eptr);
-    } catch (const std::runtime_error& e) {
-        return e.what();
-    }
-    return {};
-}
-} // namespace
-
 TEST(FindMultipartBoundary, MissingContentType) {
     using namespace cloud_storage_clients;
 
@@ -885,8 +871,7 @@ TEST(FindMultipartBoundary, MissingContentType) {
     auto result = util::find_multipart_boundary(headers);
 
     EXPECT_FALSE(result.has_value()) << result.value();
-    EXPECT_THAT(
-      eptr_what(result.error()), testing::HasSubstr("Content-Type missing"));
+    EXPECT_THAT(result.error(), testing::HasSubstr("Content-Type missing"));
 }
 
 TEST(FindMultipartBoundary, NotMultipartContentType) {
@@ -899,8 +884,7 @@ TEST(FindMultipartBoundary, NotMultipartContentType) {
 
     EXPECT_FALSE(result.has_value()) << result.value();
     EXPECT_THAT(
-      eptr_what(result.error()),
-      testing::HasSubstr("Expected multipart Content-Type"));
+      result.error(), testing::HasSubstr("Expected multipart Content-Type"));
 }
 
 TEST(FindMultipartBoundary, MissingBoundaryParameter) {
@@ -913,8 +897,7 @@ TEST(FindMultipartBoundary, MissingBoundaryParameter) {
 
     EXPECT_FALSE(result.has_value()) << result.value();
     EXPECT_THAT(
-      eptr_what(result.error()),
-      testing::HasSubstr("Boundary missing from multipart"));
+      result.error(), testing::HasSubstr("Boundary missing from multipart"));
 }
 
 TEST(FindMultipartBoundary, MissingBoundaryEqualSign) {
@@ -929,8 +912,7 @@ TEST(FindMultipartBoundary, MissingBoundaryEqualSign) {
 
     EXPECT_FALSE(result.has_value()) << result.value();
     EXPECT_THAT(
-      eptr_what(result.error()),
-      testing::HasSubstr("Boundary missing from multipart"));
+      result.error(), testing::HasSubstr("Boundary missing from multipart"));
 }
 
 TEST(FindMultipartBoundary, EmptyBoundaryParameter) {
@@ -944,6 +926,5 @@ TEST(FindMultipartBoundary, EmptyBoundaryParameter) {
 
     EXPECT_FALSE(result.has_value()) << result.value();
     EXPECT_THAT(
-      eptr_what(result.error()),
-      testing::HasSubstr("Boundary missing from multipart"));
+      result.error(), testing::HasSubstr("Boundary missing from multipart"));
 }

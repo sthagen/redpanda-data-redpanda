@@ -65,6 +65,19 @@ public:
     result<http::client::request_header> make_delete_blob_request(
       const plain_bucket_name& name, const object_key& key);
 
+    /// \brief Create a 'Batch Delete' request header and body
+    ///
+    /// Uses the Azure Blob Storage Batch API to delete multiple blobs
+    /// in a single request. The request uses multipart/mixed encoding.
+    ///
+    /// \param name is a container
+    /// \param keys is a vector of blob names to delete
+    /// \return initialized and signed http header and body as input_stream or
+    /// error
+    result<std::pair<http::client::request_header, ss::input_stream<char>>>
+    make_batch_delete_request(
+      const plain_bucket_name& name, const chunked_vector<object_key>& keys);
+
     // clang-format off
     /// \brief Initialize http header for 'List Blobs' request
     ///
@@ -107,10 +120,20 @@ public:
       const object_key& path);
 
 private:
+    /// \brief Applies credentials to http requests by adding headers and
+    /// signing request payload.
+    ///
+    /// Blob batch (i.e. multipart MIME) sub-requests must
+    /// not include the x-ms-version header, but that decision needs to be made
+    /// strictly before signing so the string-to-sign matches on the backend.
+    ///
+    /// \param omit_version whether to omit x-ms-version header
+    std::error_code add_auth(
+      http::client::request_header& header, bool omit_version = false) const;
+
     access_point_uri _ap;
-    /// Applies credentials to http requests by adding headers and signing
-    /// request payload. Shared pointer so that the credentials can be
-    /// rotated through the client pool.
+    /// Shared pointer so that the credentials can be rotated through the client
+    /// pool.
     ss::lw_shared_ptr<const cloud_roles::apply_credentials> _apply_credentials;
 };
 
@@ -280,6 +303,11 @@ private:
     ss::future<> do_delete_object(
       const plain_bucket_name& name,
       const object_key& key,
+      ss::lowres_clock::duration timeout);
+
+    ss::future<delete_objects_result> do_batch_delete_objects(
+      const plain_bucket_name& bucket,
+      const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout);
 
     ss::future<list_bucket_result> do_list_objects(

@@ -204,7 +204,7 @@ private:
     iobuf _body;
 };
 
-std::expected<std::string_view, std::exception_ptr>
+std::expected<ss::sstring, ss::sstring>
 find_multipart_boundary(const http::client::response_header&);
 
 } // namespace cloud_storage_clients::util

@@ -435,10 +435,16 @@ public:
 
         bool operator==(const iter& o) const {
             check_generation();
+            dassert(
+              _vec == o._vec,
+              "iterator compared with different chunked_vector");
             return std::tie(_index, _vec) == std::tie(o._index, o._vec);
         };
         auto operator<=>(const iter& o) const {
             check_generation();
+            dassert(
+              _vec == o._vec,
+              "iterator compared with different chunked_vector");
             return std::tie(_index, _vec) <=> std::tie(o._index, o._vec);
         };
 
@@ -463,13 +469,11 @@ public:
         }
 
         inline void check_generation() const {
-#ifndef NDEBUG
-            vassert(
+            dassert(
               _vec->_generation == _my_generation,
               "Attempting to use an invalidated iterator. The corresponding "
               "chunked_vector container has been mutated since this "
               "iterator was constructed.");
-#endif
         }
 
         size_t _index{};
