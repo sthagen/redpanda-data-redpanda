@@ -41,8 +41,10 @@ public:
     // leaders that they are up-to-date.
     //
     // Returns the current term.
-    ss::future<std::expected<model::term_id, errc>>
-    sync(model::timeout_clock::duration timeout);
+    ss::future<std::expected<model::term_id, errc>> sync(
+      model::timeout_clock::duration timeout,
+      std::optional<std::reference_wrapper<ss::abort_source>> as
+      = std::nullopt);
 
     // Replicates the given batch and waits for it to finish replicating.
     // Success here does not guarantee that the replicated operation succeeded
@@ -51,6 +53,7 @@ public:
       model::term_id, model::record_batch batch, ss::abort_source&);
 
     const lsm_state& state() const { return state_; }
+    lsm_state& mutable_state() { return state_; }
 
     raft::stm_initial_recovery_policy
     get_initial_recovery_policy() const final {
@@ -60,7 +63,7 @@ public:
 protected:
     ss::future<> stop() override;
 
-    ss::future<lsm_stm_snapshot> make_snapshot() const;
+    ss::future<lsm_stm_snapshot> make_snapshot();
 
     ss::future<> do_apply(const model::record_batch&) override;
 

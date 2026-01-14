@@ -23,7 +23,6 @@
 #include <fmt/core.h>
 
 #include <optional>
-#include <ranges>
 
 namespace {
 
@@ -185,9 +184,7 @@ auth_result authorizer::do_authorized(
   const acl_host& host,
   superuser_required superuser_required,
   const chunked_vector<acl_principal>& groups) const {
-    auto type = get_resource_type<T>();
-    auto acls = store().find(type, resource_name());
-
+    // Check superuser FIRST, before any ACL lookups
     if (_superusers.contains(principal)) {
         return auth_result::superuser_authorized(
           principal, host, operation, resource_name);
@@ -198,6 +195,10 @@ auth_result authorizer::do_authorized(
           principal, host, operation, resource_name);
     }
 
+    // Now do the expensive ACL lookup
+    auto type = get_resource_type<T>();
+    auto acls = store().find(type, resource_name());
+
     if (acls.empty()) {
         return auth_result::empty_match_result(
           principal,
@@ -207,64 +208,27 @@ auth_result authorizer::do_authorized(
           bool(_allow_empty_matches));
     }
 
-    chunked_vector<acl_principal_view> effective_principals;
-
-    const auto append_roles = [&effective_principals,
-                               this](const acl_principal& p) {
-        std::ranges::copy(
-          _role_store->roles_for_member(role_member_view::from_principal(p))
-            | std::views::transform(
-              [](const auto& r) { return role::to_principal_view(r); }),
-          std::back_inserter(effective_principals));
-    };
-
-    effective_principals.emplace_back(principal);
-
-    // Only users can be a member of roles, not ephemeral_users
-    if (principal.type() == principal_type::user) {
-        append_roles(principal);
-    }
-
-    std::ranges::for_each(groups, [&effective_principals](const auto& g) {
-        effective_principals.emplace_back(g);
-        // TODO(gbac) Call append_roles for groups
-    });
-
-    auto check_access =
-      [this, &acls, &operation, &host, &resource_name](
-        acl_permission perm,
-        const acl_principal& user,
-        acl_principal_view check_principal) -> std::optional<auth_result> {
-        bool is_allow = perm == acl_permission::allow;
-        std::optional<security::acl_match> entry;
-        if (is_allow) {
-            entry = acl_any_implied_ops_allowed(
-              acls, check_principal, host, operation);
-        } else {
-            entry = acls.find(operation, check_principal, host, perm);
-        }
-
-        if (!entry) {
-            return std::nullopt;
-        }
-
+    auto make_result = [&](
+                         const acl_principal_view& check_principal,
+                         bool is_allow,
+                         const security::acl_match& entry) -> auth_result {
         switch (check_principal.type()) {
         case principal_type::user:
         case principal_type::ephemeral_user:
             return auth_result::acl_match(
-              user, host, operation, resource_name, is_allow, *entry);
+              principal, host, operation, resource_name, is_allow, entry);
         case principal_type::role:
             return auth_result::role_acl_match(
-              user,
+              principal,
               security::role_name{check_principal.name_view()},
               host,
               operation,
               resource_name,
               is_allow,
-              *entry);
+              entry);
         case principal_type::group:
             return auth_result::group_acl_match(
-              user,
+              principal,
               acl_principal{
                 check_principal.type(),
                 ss::sstring{check_principal.name_view()}},
@@ -272,24 +236,69 @@ auth_result authorizer::do_authorized(
               operation,
               resource_name,
               is_allow,
-              *entry);
+              entry);
         }
         std::unreachable();
     };
 
-    for (const auto& p : effective_principals) {
-        if (auto r = check_access(acl_permission::deny, principal, p);
-            r.has_value()) {
+    auto check_deny = [&](acl_principal_view p) -> std::optional<auth_result> {
+        if (auto entry = acls.find(operation, p, host, acl_permission::deny)) {
+            return make_result(p, false, *entry);
+        }
+        return std::nullopt;
+    };
+
+    auto check_allow = [&](acl_principal_view p) -> std::optional<auth_result> {
+        if (
+          auto entry = acl_any_implied_ops_allowed(acls, p, host, operation)) {
+            return make_result(p, true, *entry);
+        }
+        return std::nullopt;
+    };
+
+    // Check ALL denies first (principal, then roles, then groups)
+    // Deny: check principal
+    if (auto r = check_deny(acl_principal_view{principal})) {
+        return *r;
+    }
+    // Deny: check roles (only users can be a member of roles, not
+    // ephemeral_users)
+    if (principal.type() == principal_type::user) {
+        for (const auto& role : _role_store->roles_for_member(
+               role_member_view::from_principal(principal))) {
+            if (auto r = check_deny(role::to_principal_view(role))) {
+                return *r;
+            }
+        }
+    }
+    // Deny: check groups
+    for (const auto& g : groups) {
+        if (auto r = check_deny(acl_principal_view{g})) {
             return *r;
         }
     }
 
-    for (const auto& p : effective_principals) {
-        if (auto r = check_access(acl_permission::allow, principal, p);
-            r.has_value()) {
+    // Then check ALL allows (principal, then roles, then groups)
+    // Allow: check principal
+    if (auto r = check_allow(acl_principal_view{principal})) {
+        return *r;
+    }
+    // Allow: check roles
+    if (principal.type() == principal_type::user) {
+        for (const auto& role : _role_store->roles_for_member(
+               role_member_view::from_principal(principal))) {
+            if (auto r = check_allow(role::to_principal_view(role))) {
+                return *r;
+            }
+        }
+    }
+    // Allow: check groups
+    for (const auto& g : groups) {
+        if (auto r = check_allow(acl_principal_view{g})) {
             return *r;
         }
     }
+
     return auth_result::opt_acl_match(
       principal, host, operation, resource_name, std::nullopt);
 }

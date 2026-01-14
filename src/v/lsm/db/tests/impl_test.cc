@@ -15,6 +15,7 @@
 #include "lsm/db/impl.h"
 #include "lsm/io/memory_persistence.h"
 #include "random/generators.h"
+#include "ssx/clock.h"
 #include "test_utils/async.h"
 
 #include <gtest/gtest.h>
@@ -131,7 +132,8 @@ public:
           .level_one_compaction_trigger = 2,
         });
         _underlying_data_persistence = lsm::io::make_memory_data_persistence();
-        _meta_persistence = lsm::io::make_memory_metadata_persistence();
+        _meta_persistence = lsm::io::make_memory_metadata_persistence(
+          &_meta_persistence_controller);
         _tracking_data = std::make_unique<tracking_data_persistence>(
           _underlying_data_persistence.get());
         open();
@@ -250,6 +252,7 @@ protected:
     shadow_map _shadow;
     ss::lw_shared_ptr<lsm::internal::options> _options;
     std::unique_ptr<lsm::io::data_persistence> _underlying_data_persistence;
+    lsm::io::memory_persistence_controller _meta_persistence_controller;
     std::unique_ptr<lsm::io::metadata_persistence> _meta_persistence;
     std::unique_ptr<tracking_data_persistence> _tracking_data;
     std::unique_ptr<lsm::db::impl> _db;
@@ -280,6 +283,19 @@ TEST_F(ImplTest, Recovery) {
     EXPECT_EQ(max_applied_seqno(), max_persisted_seqno());
     restart();
     EXPECT_TRUE(matches_shadow());
+}
+
+TEST_F(ImplTest, FlushFailure) {
+    write_at_least(128_KiB);
+    EXPECT_TRUE(matches_shadow());
+    tests::drain_task_queue().get();
+    _meta_persistence_controller.should_fail = true;
+    EXPECT_ANY_THROW(
+      _db
+        ->flush(
+          ssx::lowres_steady_clock().now() + ssx::duration::milliseconds(100))
+        .get());
+    EXPECT_FALSE(max_persisted_seqno().has_value());
 }
 
 TEST_F(ImplTest, Randomized) {

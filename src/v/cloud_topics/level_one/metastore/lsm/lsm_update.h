@@ -52,7 +52,7 @@ struct apply_write_batch_update
     std::expected<std::monostate, lsm_update_error>
     apply(lsm_state&, model::offset);
 
-    apply_write_batch_update copy() const;
+    apply_write_batch_update share();
 
     domain_uuid expected_uuid;
     chunked_vector<write_batch_row> rows;

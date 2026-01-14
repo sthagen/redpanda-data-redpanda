@@ -57,8 +57,8 @@ constexpr auto format_by_name = std::to_array({
 
 /// Primitive data types.
 /// https://json-schema.org/draft/2020-12/json-schema-core#name-instance-data-model
-enum class json_value_type {
-    null,
+enum class json_value_type : uint8_t {
+    null = 0,
     boolean,
     object,
     array,
@@ -66,6 +66,29 @@ enum class json_value_type {
     integer,
     string,
 };
+
+constexpr auto all_json_value_types = std::to_array({
+  json_value_type::null,
+  json_value_type::boolean,
+  json_value_type::object,
+  json_value_type::array,
+  json_value_type::number,
+  json_value_type::integer,
+  json_value_type::string,
+});
+
+consteval bool json_value_types_contiguous() {
+    for (size_t i = 0; i < all_json_value_types.size(); ++i) {
+        if (static_cast<size_t>(all_json_value_types[i]) != i) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(
+  json_value_types_contiguous(),
+  "json_value_type order/values drifted from all_json_value_types");
 
 json_value_type parse_json_value_type(const std::string&);
 

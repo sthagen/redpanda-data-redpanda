@@ -1941,3 +1941,121 @@ func TestProcessOverrides(t *testing.T) {
 		})
 	}
 }
+
+func TestIgnoreProfile(t *testing.T) {
+	defaultRpkPath, err := DefaultRpkYamlPath()
+	require.NoError(t, err)
+
+	t.Run("ignores rpk.yaml and redpanda.yaml, uses defaults", func(t *testing.T) {
+		// Set up files that would normally be loaded
+		fs := testfs.FromMap(map[string]testfs.Fmode{
+			defaultRpkPath: testfs.RFile(`version: 7
+current_profile: custom
+profiles:
+    - name: custom
+      kafka_api:
+        brokers:
+            - remote-host:9092
+`),
+			DefaultRedpandaYamlPath: testfs.RFile(`redpanda:
+    kafka_api:
+        - address: 10.0.0.1
+          port: 9092
+`),
+		})
+
+		p := &Params{IgnoreProfile: true}
+		cfg, err := p.Load(fs)
+		require.NoError(t, err)
+
+		// Should use default localhost settings, not the config file values.
+		profile := cfg.VirtualProfile()
+		require.Equal(t, []string{"127.0.0.1:9092"}, profile.KafkaAPI.Brokers)
+		require.Equal(t, []string{"127.0.0.1:9644"}, profile.AdminAPI.Addresses)
+		require.Equal(t, []string{"127.0.0.1:8081"}, profile.SR.Addresses)
+	})
+
+	t.Run("allows environment variable overrides", func(t *testing.T) {
+		fs := testfs.FromMap(map[string]testfs.Fmode{
+			defaultRpkPath: testfs.RFile(`version: 7
+current_profile: custom
+profiles:
+    - name: custom
+      kafka_api:
+        brokers:
+            - remote-host:9092
+`),
+		})
+
+		t.Setenv("RPK_BROKERS", "env-host:9092")
+
+		p := &Params{IgnoreProfile: true}
+		cfg, err := p.Load(fs)
+		require.NoError(t, err)
+
+		// Should use the env var override, not defaults or config file values.
+		profile := cfg.VirtualProfile()
+		require.Equal(t, []string{"env-host:9092"}, profile.KafkaAPI.Brokers)
+	})
+
+	t.Run("allows -X overrides", func(t *testing.T) {
+		fs := testfs.FromMap(map[string]testfs.Fmode{
+			defaultRpkPath: testfs.RFile(`version: 7
+current_profile: custom
+profiles:
+    - name: custom
+      kafka_api:
+        brokers:
+            - remote-host:9092
+`),
+		})
+
+		p := &Params{
+			IgnoreProfile: true,
+			FlagOverrides: []string{"brokers=override-host:9092"},
+		}
+		cfg, err := p.Load(fs)
+		require.NoError(t, err)
+
+		// Should use the override value, not defaults or config file values.
+		profile := cfg.VirtualProfile()
+		require.Equal(t, []string{"override-host:9092"}, profile.KafkaAPI.Brokers)
+	})
+
+	t.Run("don't ignore rpk.yaml and redpanda.yaml", func(t *testing.T) {
+		fs := testfs.FromMap(map[string]testfs.Fmode{
+			defaultRpkPath: testfs.RFile(`version: 7
+current_profile: custom
+profiles:
+    - name: custom
+      kafka_api:
+        brokers:
+            - remote-host:9092
+`),
+			DefaultRedpandaYamlPath: testfs.RFile(`redpanda:
+    kafka_api:
+        - address: 10.0.0.1
+          port: 9092
+rpk:
+  kafka_api:
+    brokers: 100.100.100.1:9092
+  admin_api:
+    addresses: from-redpanda:9644
+      
+`),
+		})
+
+		p := &Params{IgnoreProfile: false} // The default
+		cfg, err := p.Load(fs)
+		require.NoError(t, err)
+
+		profile := cfg.VirtualProfile()
+		// Should use what's in the profile (not in the redpanda.yaml).
+		require.Equal(t, []string{"remote-host:9092"}, profile.KafkaAPI.Brokers)
+		// Should use what's in the redpanda.yaml as the profile doesn't have anything.
+		require.Equal(t, []string{"from-redpanda:9644"}, profile.AdminAPI.Addresses)
+		// Should 'guess' the host from kafka's host in the profile. SR is not
+		// set anywhere.
+		require.Equal(t, []string{"remote-host:8081"}, profile.SR.Addresses)
+	})
+}

@@ -173,6 +173,8 @@ redpanda_cc_gtest(
         "//src/v/lsm/io:memory_persistence",
         "//src/v/lsm/sst:builder",
         "//src/v/random:generators",
+        "//src/v/ssx:clock",
+        "//src/v/ssx:time",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",

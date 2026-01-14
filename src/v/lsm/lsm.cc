@@ -17,6 +17,7 @@
 #include "lsm/core/internal/options.h"
 #include "lsm/db/impl.h"
 #include "lsm/db/memtable.h"
+#include "ssx/time.h"
 
 #include <seastar/core/coroutine.hh>
 
@@ -179,7 +180,9 @@ std::optional<sequence_number> database::max_applied_seqno() const {
       [](auto seqno) { return from_internal_seqno(seqno); });
 }
 
-ss::future<> database::flush() { return _impl->flush(); }
+ss::future<> database::flush(ssx::instant deadline) {
+    return _impl->flush(deadline);
+}
 
 ss::future<> database::apply(write_batch batch) {
     auto b = std::move(batch._batch);

@@ -22,39 +22,55 @@
 namespace cloud_topics::l1 {
 
 namespace {
-std::deque<volatile_row> copy_rows(const std::deque<volatile_row>& rows) {
+std::deque<volatile_row> share_rows(std::deque<volatile_row>& rows) {
     std::deque<volatile_row> copy;
-    for (const auto& r : rows) {
+    for (auto& r : rows) {
         copy.push_back(
           volatile_row{
             .seqno = r.seqno,
             .row = write_batch_row{
-              .key = r.row.key, .value = r.row.value.copy()}});
+              .key = r.row.key, .value = r.row.value.share()}});
     }
     return copy;
 }
 } // namespace
 
-lsm_state::serialized_manifest lsm_state::serialized_manifest::copy() const {
+lsm_state::serialized_manifest lsm_state::serialized_manifest::share() {
     return serialized_manifest{
-      .buf = buf.copy(),
+      .buf = buf.share(),
       .last_seqno = last_seqno,
       .database_epoch = database_epoch,
     };
 }
 
-lsm_state lsm_state::copy() const {
+lsm_state lsm_state::share() {
     std::optional<serialized_manifest> manifest_copy;
     if (persisted_manifest.has_value()) {
-        manifest_copy = persisted_manifest->copy();
+        manifest_copy = persisted_manifest->share();
     }
     return lsm_state{
       .domain_uuid = domain_uuid,
       .seqno_delta = seqno_delta,
       .db_epoch_delta = db_epoch_delta,
-      .volatile_buffer = copy_rows(volatile_buffer),
+      .volatile_buffer = share_rows(volatile_buffer),
       .persisted_manifest = std::move(manifest_copy),
     };
+}
+
+model::term_id lsm_state::to_term(lsm::internal::database_epoch e) const {
+    return model::term_id(e() - db_epoch_delta);
+}
+
+lsm::internal::database_epoch lsm_state::to_epoch(model::term_id t) const {
+    return lsm::internal::database_epoch(t() + db_epoch_delta);
+}
+
+kafka::offset lsm_state::to_offset(lsm::sequence_number s) const {
+    return kafka::offset(s() - seqno_delta);
+}
+
+lsm::sequence_number lsm_state::to_seqno(kafka::offset o) const {
+    return lsm::sequence_number(o() + seqno_delta);
 }
 
 } // namespace cloud_topics::l1

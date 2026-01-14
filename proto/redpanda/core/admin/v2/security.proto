@@ -305,10 +305,17 @@ message RoleUser {
     string name = 1;
 }
 
+// RoleGroup represents a group member of a Role.
+message RoleGroup {
+    // The name of the group.
+    string name = 1;
+}
+
 // RoleMember represents a member of a Role.
 message RoleMember {
     // The member data.
     oneof member {
         RoleUser user = 1;
+        RoleGroup group = 2;
     }
 }

@@ -126,8 +126,14 @@ private:
 
 class data_impl : public data_persistence {
 public:
+    explicit data_impl(memory_persistence_controller* controller)
+      : _controller(controller) {}
+
     ss::future<optional_pointer<random_access_file_reader>>
     open_random_access_reader(internal::file_handle h) override {
+        if (_controller && _controller->should_fail) {
+            throw io_error_exception("injected error");
+        }
         auto it = _data.find(h);
         std::unique_ptr<random_access_file_reader> ptr;
         if (it != _data.end()) {
@@ -139,6 +145,9 @@ public:
 
     ss::future<std::unique_ptr<sequential_file_writer>>
     open_sequential_writer(internal::file_handle h) override {
+        if (_controller && _controller->should_fail) {
+            throw io_error_exception("injected error");
+        }
         auto it = _data.try_emplace(
           h, ss::make_lw_shared<memory_file_state>(h));
         co_return std::make_unique<memory_sequential_file_writer>(
@@ -146,6 +155,9 @@ public:
     }
 
     ss::future<> remove_file(internal::file_handle h) override {
+        if (_controller && _controller->should_fail) {
+            throw io_error_exception("injected error");
+        }
         auto it = _data.find(h);
         if (it == _data.end()) {
             co_return;
@@ -159,6 +171,9 @@ public:
 
     ss::coroutine::experimental::generator<internal::file_handle>
     list_files() override {
+        if (_controller && _controller->should_fail) {
+            throw io_error_exception("injected error");
+        }
         auto it = _data.begin();
         while (it != _data.end()) {
             auto key = it->first;
@@ -183,13 +198,15 @@ public:
     }
 
 private:
+    memory_persistence_controller* _controller;
     bool _closed = false;
     std::map<internal::file_handle, ss::lw_shared_ptr<memory_file_state>> _data;
 };
 
 class metadata_impl : public metadata_persistence {
 public:
-    explicit metadata_impl() = default;
+    explicit metadata_impl(memory_persistence_controller* controller)
+      : _controller(controller) {}
     metadata_impl(const metadata_impl&) = delete;
     metadata_impl(metadata_impl&&) = delete;
     metadata_impl& operator=(const metadata_impl&) = delete;
@@ -199,6 +216,9 @@ public:
     }
     ss::future<std::optional<iobuf>>
     read_manifest(internal::database_epoch e) override {
+        if (_controller && _controller->should_fail) {
+            throw io_error_exception("injected error");
+        }
         if (e > _epoch) {
             co_return std::nullopt;
         }
@@ -206,6 +226,9 @@ public:
     }
     ss::future<>
     write_manifest(internal::database_epoch epoch, iobuf b) override {
+        if (_controller && _controller->should_fail) {
+            throw io_error_exception("injected error");
+        }
         _epoch = epoch;
         _latest = std::move(b);
         co_return;
@@ -217,6 +240,7 @@ public:
     }
 
 private:
+    memory_persistence_controller* _controller;
     bool _closed = false;
     internal::database_epoch _epoch;
     std::optional<iobuf> _latest;
@@ -224,12 +248,14 @@ private:
 
 } // namespace
 
-std::unique_ptr<data_persistence> make_memory_data_persistence() {
-    return std::make_unique<data_impl>();
+std::unique_ptr<data_persistence>
+make_memory_data_persistence(memory_persistence_controller* controller) {
+    return std::make_unique<data_impl>(controller);
 }
 
-std::unique_ptr<metadata_persistence> make_memory_metadata_persistence() {
-    return std::make_unique<metadata_impl>();
+std::unique_ptr<metadata_persistence>
+make_memory_metadata_persistence(memory_persistence_controller* controller) {
+    return std::make_unique<metadata_impl>(controller);
 }
 
 } // namespace lsm::io

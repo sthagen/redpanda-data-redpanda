@@ -97,6 +97,23 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "log_collector_test",
+    timeout = "short",
+    srcs = [
+        "log_collector_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/compaction:log_collector",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
 redpanda_test_cc_library(
     name = "scheduler_fixture",
     hdrs = [

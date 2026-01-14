@@ -242,6 +242,16 @@ void partition_balancer_backend::on_topic_table_update() {
           current_in_progress_updates,
           last_in_progress_updates);
 
+        // without this, numerous balancing ticks can run without feedback on
+        // the new cluster balance. This lead to underdamped / oscillating
+        // behavior where the balancer would repeatedly use an old health report
+        // to move partitions, overfilling or underfilling a single node. This
+        // feedback should dampen the balancing process enough to prevent most
+        // oscillating behavior. Given that this pathway is an opportunistic
+        // optimization to sneak in additional balancer rounds in the case of
+        // large imbalances, we can afford the additional time to gather new
+        // health reports.
+        _cur_term->_force_health_report_refresh = true;
         maybe_rearm_timer(/*now=*/true);
     }
 }

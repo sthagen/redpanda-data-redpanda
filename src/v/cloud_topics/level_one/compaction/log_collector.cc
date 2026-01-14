@@ -67,7 +67,7 @@ ss::future<> partition_leader_log_collector::stop_collecting_logs() {
 
 void partition_leader_log_collector::on_ntp_change(
   const cluster::topic_table::ntp_delta& delta) {
-    auto& ntp = delta.ntp;
+    const auto& ntp = delta.ntp;
     auto is_managed = _is_managed_cb(ntp);
 
     using delta_type = cluster::topic_table_ntp_delta_type;
@@ -90,9 +90,11 @@ void partition_leader_log_collector::on_ntp_change(
 
         auto is_compacted_cloud_topic = topic_cfg.is_compacted()
                                         && topic_cfg.is_cloud_topic();
-        if (is_compacted_cloud_topic && !is_managed) {
+        auto is_leader_for = _leaders->local().get_leader(ntp) == _self;
+        if (is_compacted_cloud_topic && is_leader_for && !is_managed) {
             // This is likely an existing cloud topic which is now `compact`
-            // enabled.
+            // enabled. We should manage it iff this broker already hosts
+            // the partition leader.
             auto tp_id = topic_cfg.tp_id;
             vassert(tp_id.has_value(), "Expected tp_id to have value.");
             auto tidp = model::topic_id_partition(

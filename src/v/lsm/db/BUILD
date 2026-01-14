@@ -77,7 +77,9 @@ redpanda_cc_library(
         "//src/v/lsm/core/internal:options",
         "//src/v/lsm/io:persistence",
         "//src/v/lsm/sst:block_cache",
+        "//src/v/ssx:clock",
         "//src/v/ssx:condition_variable",
+        "//src/v/ssx:time",
         "@seastar",
     ],
 )

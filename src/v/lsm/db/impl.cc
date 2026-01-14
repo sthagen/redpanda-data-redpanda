@@ -24,6 +24,7 @@
 #include "lsm/io/persistence.h"
 #include "lsm/sst/block_cache.h"
 #include "lsm/sst/builder.h"
+#include "ssx/clock.h"
 
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
@@ -248,20 +249,32 @@ impl::create_internal_iterator() {
     co_return internal::create_merging_iterator(std::move(list));
 }
 
-ss::future<> impl::flush() {
+ss::future<> impl::flush(ssx::instant deadline) {
     if (_opts->readonly) [[unlikely]] {
         throw invalid_argument_exception(
           "attempted to flush a readonly database");
     }
     auto applied_seqno = max_applied_seqno();
     while (applied_seqno > max_persisted_seqno()) {
+        if (ssx::lowres_steady_clock().now() > deadline) {
+            throw io_error_exception(
+              "failed to persist up to seqno {} in time: current persisted "
+              "seqno {}",
+              applied_seqno.value_or(internal::sequence_number(0)),
+              max_persisted_seqno().value_or(internal::sequence_number(0)));
+        }
         if (_imm) {
-            co_await _background_work_finished_signal.wait(_as);
+            co_await _background_work_finished_signal.wait(
+              deadline.to_chrono<ss::lowres_clock>(), _as);
         } else if (!_mem->empty()) {
             _imm = std::exchange(_mem, ss::make_lw_shared<memtable>());
             maybe_schedule_compaction();
         }
     }
+}
+
+ss::future<> impl::flush() {
+    return impl::flush(ssx::instant::infinite_future());
 }
 
 ss::future<> impl::close() {

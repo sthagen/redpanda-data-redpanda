@@ -67,15 +67,15 @@ apply_write_batch_update::apply(lsm_state& state, model::offset base_offset) {
     return std::monostate{};
 }
 
-apply_write_batch_update apply_write_batch_update::copy() const {
+apply_write_batch_update apply_write_batch_update::share() {
     apply_write_batch_update ret{
       .expected_uuid = expected_uuid,
     };
-    for (const auto& r : rows) {
+    for (auto& r : rows) {
         ret.rows.push_back(
           write_batch_row{
             .key = r.key,
-            .value = r.value.copy(),
+            .value = r.value.share(),
           });
     }
     return ret;

@@ -14,6 +14,7 @@
 #include "absl/time/time.h"
 #include "base/seastarx.h"
 #include "lsm/io/persistence.h"
+#include "ssx/time.h"
 #include "utils/named_type.h"
 
 #include <seastar/core/future.hh>
@@ -175,7 +176,7 @@ public:
 
     // Flush existing buffered data such that that `max_persisted_offset()`
     // becomes >= the current `max_applied_offset()`.
-    ss::future<> flush();
+    ss::future<> flush(ssx::instant deadline);
 
     // Apply a batch of data atomically to the database.
     //

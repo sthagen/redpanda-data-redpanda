@@ -23,6 +23,7 @@
 #include "lsm/db/version_set.h"
 #include "lsm/io/persistence.h"
 #include "ssx/condition_variable.h"
+#include "ssx/time.h"
 
 #include <seastar/core/future.hh>
 
@@ -82,6 +83,9 @@ public:
     ss::optimized_optional<std::unique_ptr<snapshot>> create_snapshot();
 
     // Flush any pending state in memtables to disk.
+    ss::future<> flush(ssx::instant deadline);
+
+    // Flush with no deadline.
     ss::future<> flush();
 
     // Close the database, no more operations should happen to the database at

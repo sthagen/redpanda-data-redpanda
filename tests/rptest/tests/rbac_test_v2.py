@@ -267,6 +267,7 @@ class RBACTest(RBACTestBase):
     @cluster(num_nodes=3)
     def test_get_role(self):
         alice = security_pb2.RoleMember(user=security_pb2.RoleUser(name=ALICE.username))
+        group0 = security_pb2.RoleMember(group=security_pb2.RoleGroup(name="group0"))
 
         self.logger.debug("Test that get_role rejects an unknown role")
         with expect_role_error(ConnectErrorCode.NOT_FOUND):
@@ -278,7 +279,12 @@ class RBACTest(RBACTestBase):
         def get_role_succeeds(role_name: str, expected_members: set[str] = set()):
             try:
                 role = self.superuser_admin.get_role(role=role_name)
-                actual_members = {m.user.name for m in role.members}
+                actual_members = set()
+                for m in role.members:
+                    if m.WhichOneof("member") == "user":
+                        actual_members.add(m.user.name)
+                    elif m.WhichOneof("member") == "group":
+                        actual_members.add(m.group.name)
 
                 return role.name == role_name and actual_members == expected_members
             except ConnectError as e:
@@ -299,12 +305,12 @@ class RBACTest(RBACTestBase):
         )
         self.superuser_admin.add_role_members(
             role=self.ROLE_NAME1,
-            members=[alice],
+            members=[alice, group0],
         )
 
         wait_until(
             lambda: get_role_succeeds(
-                self.ROLE_NAME1, expected_members={alice.user.name}
+                self.ROLE_NAME1, expected_members={alice.user.name, group0.group.name}
             ),
             timeout_sec=10,
             backoff_sec=2,
@@ -332,21 +338,26 @@ class RBACTest(RBACTestBase):
     @cluster(num_nodes=3)
     def test_member_operations(self):
         alice = security_pb2.RoleMember(user=security_pb2.RoleUser(name=ALICE.username))
+        group0 = security_pb2.RoleMember(group=security_pb2.RoleGroup(name="group0"))
         bob = security_pb2.RoleMember(user=security_pb2.RoleUser(name=BOB.username))
+        group1 = security_pb2.RoleMember(group=security_pb2.RoleGroup(name="group1"))
 
         self.logger.debug("Test that create_role can create the role with members.")
         created_role = self.superuser_admin.create_role(
             role=self.ROLE_NAME0,
-            members=[alice],
+            members=[alice, group0],
         )
         assert created_role.name == self.ROLE_NAME0, (
             f"Incorrect role name: {created_role.name}"
         )
-        assert len(created_role.members) == 1, (
+        assert len(created_role.members) == 2, (
             f"Incorrect 'number of members': {created_role.members}"
         )
         assert alice in created_role.members, (
-            f"Incorrect member added: {created_role.members[0]}"
+            f'Missing member "{alice.user.name}" in {created_role.members}'
+        )
+        assert group0 in created_role.members, (
+            f'Missing member "{group0.group.name}" in {created_role.members}'
         )
 
         self.logger.debug("And check that we can query the role we created")
@@ -358,18 +369,24 @@ class RBACTest(RBACTestBase):
         )
         assert members is not None, "Failed to get members for newly created role"
 
-        assert len(members) == 1, f"Unexpected members list: {members}"
-        assert alice in members, f"Missing expected member, got: {members}"
+        assert len(members) == 2, f"Unexpected members list: {members}"
+        assert alice in members, f'Missing member "{alice.user.name}" in {members}'
+        assert group0 in members, f'Missing member "{group0.group.name}" in {members}'
 
         self.logger.debug("Now add a new member to the role")
-        res = self.superuser_admin.add_role_members(role=self.ROLE_NAME0, members=[bob])
+        res = self.superuser_admin.add_role_members(
+            role=self.ROLE_NAME0, members=[bob, group1]
+        )
 
         member_update = res.members
-        assert len(member_update) == 2, (
-            f"Updated role members should have 2 members, got: {member_update}"
+        assert len(member_update) == 4, (
+            f"Updated role members should have 4 members, got: {member_update}"
         )
         assert bob in member_update, (
-            f"Updated role members {member_update.added} should include member {bob}"
+            f"Updated role members {member_update} should include member {bob}"
+        )
+        assert group1 in member_update, (
+            f"Updated role members {member_update} should include member {group1}"
         )
 
         def until_members(
@@ -386,61 +403,69 @@ class RBACTest(RBACTestBase):
             "And verify that the members list eventually reflects that change"
         )
         members = wait_until_result(
-            lambda: until_members(self.ROLE_NAME0, expected=[alice, bob]),
+            lambda: until_members(
+                self.ROLE_NAME0, expected=[alice, bob, group0, group1]
+            ),
             timeout_sec=5,
             backoff_sec=1,
             retry_on_exc=True,
         )
 
         assert members is not None, "Failed to get members"
-        for m in [bob, alice]:
+        for m in [bob, alice, group0, group1]:
             assert m in members, f"Missing member {m}, got: {members}"
 
         self.logger.debug("Remove a member from the role")
         res = self.superuser_admin.remove_role_members(
             role=self.ROLE_NAME0,
-            members=[alice],
+            members=[alice, group0],
         )
         member_update = res.members
 
-        assert len(member_update) == 1, (
-            f"Updated role members should have 1 member, got: {member_update}"
+        assert len(member_update) == 2, (
+            f"Updated role members should have 2 members, got: {member_update}"
         )
         assert alice not in member_update, (
             f"Expected {alice} to be removed, got {member_update}"
+        )
+        assert group0 not in member_update, (
+            f"Expected {group0} to be removed, got {member_update}"
         )
 
         self.logger.debug(
             "And verify that the members list eventually reflects the removal"
         )
         members = wait_until_result(
-            lambda: until_members(self.ROLE_NAME0, expected=[bob], excluded=[alice]),
+            lambda: until_members(
+                self.ROLE_NAME0, expected=[bob, group1], excluded=[alice, group0]
+            ),
             timeout_sec=5,
             backoff_sec=1,
             retry_on_exc=True,
         )
 
         assert members is not None
-        assert len(members) == 1, f"Unexpected member: {members}"
+        assert len(members) == 2, f"Unexpected member: {members}"
         assert alice not in members, f"Unexpected member {alice}, got: {members}"
+        assert group0 not in members, f"Unexpected member {group0}, got: {members}"
 
         self.logger.debug("Test add_role_member idempotency - no-op add should succeed")
         res = self.superuser_admin.add_role_members(
             role=self.ROLE_NAME0,
-            members=[bob],
+            members=[bob, group1],
         )
         member_update = res.members
-        assert len(member_update) == 1, f"Unexpectedly members: {member_update}"
+        assert len(member_update) == 2, f"Unexpectedly members: {member_update}"
 
         self.logger.debug(
             "Test remove_role_member idempotency - no-op remove should succeed"
         )
         res = self.superuser_admin.remove_role_members(
             role=self.ROLE_NAME0,
-            members=[alice],
+            members=[alice, group0],
         )
         member_update = res.members
-        assert len(member_update) == 1, f"Unexpectedly members: {member_update}"
+        assert len(member_update) == 2, f"Unexpectedly members: {member_update}"
 
     @cluster(num_nodes=3)
     def test_member_operations_errors(self):
@@ -683,6 +708,8 @@ class RBACEndToEndTest(RBACTestBase):
         assert rec["key"] == "foo", f"Unexpected key {rec['key']}"
         assert rec["value"] == "bar", f"Unexpected value {rec['value']}"
 
+    # TODO: Add test_rbac_group once group role membership honored in authZ (CORE-15199)
+
     @cluster(num_nodes=3)
     @parametrize(delete_acls=True)
     @parametrize(delete_acls=False)
@@ -817,7 +844,16 @@ class RolePersistenceTest(RBACTestBase):
             "u6",
         ]
 
-        self.logger.debug("Submit several updates, each of which is destructive.")
+        groups = [
+            "g1",
+            "g2",
+            "g3",
+            "g4",
+        ]
+
+        self.logger.debug(
+            "Submit several updates with both users and groups, each of which is destructive."
+        )
 
         for u in users:
             admin.add_role_members(
@@ -825,11 +861,21 @@ class RolePersistenceTest(RBACTestBase):
                 members=[security_pb2.RoleMember(user=security_pb2.RoleUser(name=u))],
             )
 
-        partition = len(users) // 2
+        for g in groups:
+            admin.add_role_members(
+                role=rand_role,
+                members=[security_pb2.RoleMember(group=security_pb2.RoleGroup(name=g))],
+            )
+
+        user_partition = len(users) // 2
+        group_partition = len(groups) // 2
 
         to_remove = [
             security_pb2.RoleMember(user=security_pb2.RoleUser(name=u))
-            for u in users[partition:]
+            for u in users[user_partition:]
+        ] + [
+            security_pb2.RoleMember(group=security_pb2.RoleGroup(name=g))
+            for g in groups[group_partition:]
         ]
 
         admin.remove_role_members(role=rand_role, members=to_remove)
@@ -856,13 +902,21 @@ class RolePersistenceTest(RBACTestBase):
             )
             assert r.name == n
 
-        expected = set(users[:partition])
+        expected_users = set(users[:user_partition])
+        expected_groups = set(groups[:group_partition])
+
+        def check_members():
+            members = admin.list_role_members(role=rand_role)
+            actual_users = set(
+                m.user.name for m in members if m.WhichOneof("member") == "user"
+            )
+            actual_groups = set(
+                m.group.name for m in members if m.WhichOneof("member") == "group"
+            )
+            return actual_users == expected_users and actual_groups == expected_groups
 
         wait_until(
-            lambda: set(
-                member.user.name for member in admin.list_role_members(role=rand_role)
-            )
-            == expected,
+            check_members,
             timeout_sec=10,
             backoff_sec=1,
             retry_on_exc=True,

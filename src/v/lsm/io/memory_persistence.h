@@ -15,10 +15,16 @@
 
 namespace lsm::io {
 
+struct memory_persistence_controller {
+    bool should_fail{false};
+};
+
 // Create an in memory ephemeral data persistence layer for testing.
-std::unique_ptr<data_persistence> make_memory_data_persistence();
+std::unique_ptr<data_persistence>
+make_memory_data_persistence(memory_persistence_controller* = nullptr);
 
 // Create an in memory ephemeral metadata persistence layer for testing.
-std::unique_ptr<metadata_persistence> make_memory_metadata_persistence();
+std::unique_ptr<metadata_persistence>
+make_memory_metadata_persistence(memory_persistence_controller* = nullptr);
 
 } // namespace lsm::io

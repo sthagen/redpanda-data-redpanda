@@ -70,11 +70,20 @@ INSTANTIATE_TEST_SUITE_P(
 // Tests for validate_pb_role_member
 // =============================================
 
-TEST_F(SecurityServiceTest, ValidatePbRoleMemberValid) {
+TEST_F(SecurityServiceTest, ValidatePbRoleMemberValidUser) {
     proto::admin::role_user pb_user;
     pb_user.set_name("alice");
     proto::admin::role_member pb_member;
     pb_member.set_user(std::move(pb_user));
+
+    EXPECT_NO_THROW(validate_pb_role_member(pb_member));
+}
+
+TEST_F(SecurityServiceTest, ValidatePbRoleMemberValidGroup) {
+    proto::admin::role_group pb_group;
+    pb_group.set_name("admins");
+    proto::admin::role_member pb_member;
+    pb_member.set_group(std::move(pb_group));
 
     EXPECT_NO_THROW(validate_pb_role_member(pb_member));
 }
@@ -113,6 +122,19 @@ TEST_F(SecurityServiceTest, ConvertToSecurityRoleMemberUser) {
 
     EXPECT_EQ(security_member.type(), security::role_member_type::user);
     EXPECT_EQ(security_member.name(), "alice");
+}
+
+TEST_F(SecurityServiceTest, ConvertToSecurityRoleMemberGroup) {
+    proto::admin::role_group pb_group;
+    pb_group.set_name("admins");
+
+    proto::admin::role_member pb_member;
+    pb_member.set_group(std::move(pb_group));
+
+    auto security_member = convert_to_security_role_member(pb_member);
+
+    EXPECT_EQ(security_member.type(), security::role_member_type::group);
+    EXPECT_EQ(security_member.name(), "admins");
 }
 
 TEST_F(SecurityServiceTest, ConvertToSecurityRoleMemberEmptyMember) {
@@ -199,6 +221,36 @@ TEST_F(SecurityServiceTest, ConvertToSecurityRoleMultipleMembers) {
     EXPECT_EQ(member_names[2], "charlie");
 }
 
+TEST_F(SecurityServiceTest, ConvertToSecurityRoleMixedMembers) {
+    proto::admin::role pb_role;
+    pb_role.set_name("mixed_member_role");
+
+    auto& members = pb_role.get_members();
+
+    // Add user
+    proto::admin::role_user pb_user;
+    pb_user.set_name("alice");
+    proto::admin::role_member pb_member_user;
+    pb_member_user.set_user(std::move(pb_user));
+    members.push_back(std::move(pb_member_user));
+
+    // Add group
+    proto::admin::role_group pb_group;
+    pb_group.set_name("admins");
+    proto::admin::role_member pb_member_group;
+    pb_member_group.set_group(std::move(pb_group));
+    members.push_back(std::move(pb_member_group));
+
+    auto security_role = convert_to_security_role(pb_role);
+
+    // Verify we have exactly the expected members
+    security::role::container_type expected;
+    expected.emplace(security::role_member_type::user, "alice");
+    expected.emplace(security::role_member_type::group, "admins");
+
+    EXPECT_EQ(security_role.members(), expected);
+}
+
 // =============================================
 // Tests for convert_to_pb_role_member
 // =============================================
@@ -211,6 +263,16 @@ TEST_F(SecurityServiceTest, ConvertToPbRoleMemberUser) {
 
     EXPECT_TRUE(pb_member.has_user());
     EXPECT_EQ(pb_member.get_user().get_name(), "alice");
+}
+
+TEST_F(SecurityServiceTest, ConvertToPbRoleMemberGroup) {
+    security::role_member security_member{
+      security::role_member_type::group, "admins"};
+
+    auto pb_member = convert_to_pb_role_member(security_member);
+
+    EXPECT_TRUE(pb_member.has_group());
+    EXPECT_EQ(pb_member.get_group().get_name(), "admins");
 }
 
 TEST_F(SecurityServiceTest, ConvertToPbRoleMemberUnknownType) {
@@ -408,6 +470,36 @@ TEST_F(SecurityServiceTest, SecurityRoleDeduplicatesMembers) {
 
     EXPECT_EQ(member_names[0], "alice");
     EXPECT_EQ(member_names[1], "bob");
+}
+
+TEST_F(SecurityServiceTest, SecurityRoleDistinguishesUserAndGroupWithSameName) {
+    proto::admin::role pb_role;
+    pb_role.set_name("role_same_name");
+
+    auto& members = pb_role.get_members();
+
+    // Add user "admin"
+    proto::admin::role_user pb_user;
+    pb_user.set_name("admin");
+    proto::admin::role_member pb_member_user;
+    pb_member_user.set_user(std::move(pb_user));
+    members.push_back(std::move(pb_member_user));
+
+    // Add group "admin"
+    proto::admin::role_group pb_group;
+    pb_group.set_name("admin");
+    proto::admin::role_member pb_member_group;
+    pb_member_group.set_group(std::move(pb_group));
+    members.push_back(std::move(pb_member_group));
+
+    auto security_role = convert_to_security_role(pb_role);
+
+    // Should have 2 distinct members despite same name
+    security::role::container_type expected;
+    expected.emplace(security::role_member_type::user, "admin");
+    expected.emplace(security::role_member_type::group, "admin");
+
+    EXPECT_EQ(security_role.members(), expected);
 }
 
 } // namespace admin

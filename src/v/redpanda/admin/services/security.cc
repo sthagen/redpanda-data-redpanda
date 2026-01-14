@@ -56,16 +56,19 @@ void validate_role_name(const ss::sstring& role_name) {
 }
 
 void validate_pb_role_member(const proto::admin::role_member& pb_member) {
+    auto validate_member = [&](const auto& member) {
+        try {
+            validate_no_control(member.get_name());
+        } catch (const control_character_present_exception& e) {
+            vlog(securitylog.warn, "Role Member contains invalid characters");
+            throw serde::pb::rpc::invalid_argument_exception(
+              "Role Member contains invalid characters");
+        }
+    };
+
     pb_member.visit_member(
-      [&](const proto::admin::role_user& user) {
-          try {
-              validate_no_control(user.get_name());
-          } catch (const control_character_present_exception& e) {
-              vlog(securitylog.warn, "Role Member contains invalid characters");
-              throw serde::pb::rpc::invalid_argument_exception(
-                "Role Member contains invalid characters");
-          }
-      },
+      [&](const proto::admin::role_user& user) { validate_member(user); },
+      [&](const proto::admin::role_group& group) { validate_member(group); },
       [&](const auto&) {
           vlog(
             securitylog.warn,
@@ -82,6 +85,10 @@ convert_to_security_role_member(const proto::admin::role_member& pb_member) {
       [&](const proto::admin::role_user& user) {
           return security::role_member{
             security::role_member_type::user, user.get_name()};
+      },
+      [&](const proto::admin::role_group& group) {
+          return security::role_member{
+            security::role_member_type::group, group.get_name()};
       },
       [&](const auto&) -> security::role_member {
           vlog(
@@ -112,6 +119,12 @@ convert_to_pb_role_member(const security::role_member& role_member) {
         proto::admin::role_user pb_role_user;
         pb_role_user.set_name(ss::sstring{member_name});
         pb_role_member.set_user(std::move(pb_role_user));
+        break;
+    }
+    case security::role_member_type::group: {
+        proto::admin::role_group pb_role_group;
+        pb_role_group.set_name(ss::sstring{member_name});
+        pb_role_member.set_group(std::move(pb_role_group));
         break;
     }
     default:

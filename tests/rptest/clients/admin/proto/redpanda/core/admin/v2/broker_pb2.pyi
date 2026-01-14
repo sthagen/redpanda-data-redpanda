@@ -34,12 +34,18 @@ class GetBrokerRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     node_id: builtins.int
-    'The node ID for the broker. If set to -1, the broker handling the RPC\n    request returns information about itself.\n    '
+    'The node ID for the broker. If unset, the broker handling the RPC\n    request returns information about itself.\n    '
 
-    def __init__(self, *, node_id: builtins.int=...) -> None:
+    def __init__(self, *, node_id: builtins.int | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['node_id', b'node_id']) -> None:
+    def HasField(self, field_name: typing.Literal['_node_id', b'_node_id', 'node_id', b'node_id']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['_node_id', b'_node_id', 'node_id', b'node_id']) -> None:
+        ...
+
+    def WhichOneof(self, oneof_group: typing.Literal['_node_id', b'_node_id']) -> typing.Literal['node_id'] | None:
         ...
 Global___GetBrokerRequest: typing_extensions.TypeAlias = GetBrokerRequest
 
@@ -101,19 +107,33 @@ class Broker(google.protobuf.message.Message):
 
     @property
     def build_info(self) -> Global___BuildInfo:
-        """The build this broker is running."""
+        """The build this broker is running.
+
+        Only populated for `GetBroker` RPCs
+        """
 
     @property
     def admin_server(self) -> Global___AdminServer:
-        """The admin server information."""
+        """The admin server information.
+
+        Only populated for `GetBroker` RPCs
+        """
 
     def __init__(self, *, node_id: builtins.int=..., build_info: Global___BuildInfo | None=..., admin_server: Global___AdminServer | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['admin_server', b'admin_server', 'build_info', b'build_info']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['_admin_server', b'_admin_server', '_build_info', b'_build_info', 'admin_server', b'admin_server', 'build_info', b'build_info']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['admin_server', b'admin_server', 'build_info', b'build_info', 'node_id', b'node_id']) -> None:
+    def ClearField(self, field_name: typing.Literal['_admin_server', b'_admin_server', '_build_info', b'_build_info', 'admin_server', b'admin_server', 'build_info', b'build_info', 'node_id', b'node_id']) -> None:
+        ...
+
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal['_admin_server', b'_admin_server']) -> typing.Literal['admin_server'] | None:
+        ...
+
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal['_build_info', b'_build_info']) -> typing.Literal['build_info'] | None:
         ...
 Global___Broker: typing_extensions.TypeAlias = Broker
 

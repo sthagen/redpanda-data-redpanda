@@ -611,6 +611,10 @@ type Params struct {
 	// Profile is any flag-specified profile name.
 	Profile string
 
+	// IgnoreProfile skips loading rpk.yaml and redpanda.yaml, using default
+	// settings instead.
+	IgnoreProfile bool
+
 	// DebugLogs opts into debug logging.
 	//
 	// This field only for setting, to actually get a logger after the
@@ -1151,6 +1155,9 @@ func readFile(fs afero.Fs, path string) (string, []byte, error) {
 }
 
 func (p *Params) readRpkConfig(fs afero.Fs, c *Config) error {
+	if p.IgnoreProfile {
+		return nil // Skip reading rpk.yaml, use defaults
+	}
 	def, err := DefaultRpkYamlPath()
 	path := def
 	if p.ConfigFlag != "" {
@@ -1218,6 +1225,9 @@ func (p *Params) readRpkConfig(fs afero.Fs, c *Config) error {
 }
 
 func (p *Params) readRedpandaConfig(fs afero.Fs, c *Config) error {
+	if p.IgnoreProfile {
+		return nil // Skip reading redpanda.yaml, use defaults
+	}
 	paths := []string{p.ConfigFlag}
 	if p.ConfigFlag == "" {
 		paths = paths[:0]

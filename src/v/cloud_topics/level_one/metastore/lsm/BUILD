@@ -1,6 +1,27 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "keys",
+    srcs = [
+        "keys.cc",
+    ],
+    hdrs = [
+        "keys.h",
+    ],
+    implementation_deps = [
+        "//src/v/bytes",
+        "//src/v/utils:uuid",
+        "@boost//:algorithm",
+        "@seastar",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
     name = "write_batch_row",
     hdrs = [
         "write_batch_row.h",
@@ -95,5 +116,103 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/raft",
         "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "state_reader",
+    srcs = [
+        "state_reader.cc",
+    ],
+    hdrs = [
+        "state_reader.h",
+    ],
+    implementation_deps = [
+        ":keys",
+        "//src/v/lsm/core:exceptions",
+        "//src/v/ssx:future_util",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":values",
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/lsm",
+        "//src/v/model",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "replicated_db",
+    srcs = [
+        "replicated_db.cc",
+    ],
+    hdrs = [
+        "replicated_db.h",
+    ],
+    implementation_deps = [
+        ":replicated_persistence",
+        "//src/v/cloud_topics:logger",
+        "//src/v/lsm/io:cloud_persistence",
+        "//src/v/model:batch_builder",
+        "//src/v/serde",
+        "//src/v/ssx:clock",
+        "//src/v/ssx:time",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lsm_update",
+        ":stm",
+        ":write_batch_row",
+        "//src/v/cloud_io:remote",
+        "//src/v/cloud_storage_clients",
+        "//src/v/container:chunked_vector",
+        "//src/v/lsm",
+        "//src/v/lsm/io:persistence",
+        "//src/v/lsm/proto:manifest_redpanda_proto",
+        "//src/v/model",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "replicated_persistence",
+    srcs = [
+        "replicated_persistence.cc",
+    ],
+    hdrs = [
+        "replicated_persistence.h",
+    ],
+    implementation_deps = [
+        "//src/v/lsm",
+        "//src/v/lsm/io:cloud_persistence",
+        "//src/v/model:batch_builder",
+        "//src/v/serde",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lsm_update",
+        ":stm",
+        "//src/v/cloud_io:remote",
+        "//src/v/cloud_storage_clients",
+        "//src/v/lsm/core:exceptions",
+        "//src/v/lsm/io:persistence",
+        "//src/v/lsm/proto:manifest_redpanda_proto",
+        "//src/v/model",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "values",
+    hdrs = [
+        "values.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/cloud_topics/level_one/metastore:state",
+        "//src/v/model",
+        "//src/v/serde",
     ],
 )

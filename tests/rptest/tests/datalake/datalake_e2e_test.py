@@ -343,6 +343,30 @@ JSON_SCHEMA_TEST_CASES = {
             ("Part 0", "hours(redpanda.timestamp)", ""),
         ],
     ),
+    "array_items": JsonSchemaTestCase(
+        schema_str="""{
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "numbers": {
+                    "type": "array",
+                    "items": {"type": ["null", "integer"]}
+                }
+            },
+            "required": ["numbers"]
+        }""",
+        record_generator=lambda t: {
+            "numbers": [
+                random.choice([None, int(t) + i]) for i in range(randint(0, 10))
+            ]
+        },
+        expected_spark=[
+            ("numbers", "array<bigint>", None),
+            ("", "", ""),
+            ("# Partitioning", "", ""),
+            ("Part 0", "hours(redpanda.timestamp)", ""),
+        ],
+    ),
 }
 
 JSON_SCHEMA_DLQ_TEST_CASES = {

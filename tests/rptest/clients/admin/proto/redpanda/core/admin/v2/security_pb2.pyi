@@ -389,24 +389,44 @@ class RoleUser(google.protobuf.message.Message):
 Global___RoleUser: typing_extensions.TypeAlias = RoleUser
 
 @typing.final
+class RoleGroup(google.protobuf.message.Message):
+    """RoleGroup represents a group member of a Role."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NAME_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    'The name of the group.'
+
+    def __init__(self, *, name: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['name', b'name']) -> None:
+        ...
+Global___RoleGroup: typing_extensions.TypeAlias = RoleGroup
+
+@typing.final
 class RoleMember(google.protobuf.message.Message):
     """RoleMember represents a member of a Role."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     USER_FIELD_NUMBER: builtins.int
+    GROUP_FIELD_NUMBER: builtins.int
 
     @property
     def user(self) -> Global___RoleUser:
         ...
 
-    def __init__(self, *, user: Global___RoleUser | None=...) -> None:
+    @property
+    def group(self) -> Global___RoleGroup:
         ...
 
-    def HasField(self, field_name: typing.Literal['member', b'member', 'user', b'user']) -> builtins.bool:
+    def __init__(self, *, user: Global___RoleUser | None=..., group: Global___RoleGroup | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['member', b'member', 'user', b'user']) -> None:
+    def HasField(self, field_name: typing.Literal['group', b'group', 'member', b'member', 'user', b'user']) -> builtins.bool:
         ...
 
-    def WhichOneof(self, oneof_group: typing.Literal['member', b'member']) -> typing.Literal['user'] | None:
+    def ClearField(self, field_name: typing.Literal['group', b'group', 'member', b'member', 'user', b'user']) -> None:
+        ...
+
+    def WhichOneof(self, oneof_group: typing.Literal['member', b'member']) -> typing.Literal['user', 'group'] | None:
         ...
 Global___RoleMember: typing_extensions.TypeAlias = RoleMember
