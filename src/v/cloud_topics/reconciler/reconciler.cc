@@ -224,6 +224,49 @@ ss::future<> reconciler::reconcile() {
         co_return;
     }
 
+    auto source_sets = partition_sources_into_sets(std::move(sources));
+
+    // Adapt scheduling interval based on max object size produced.
+    // Note that we slow down if there's nothing to reconcile or if all
+    // objects failed. This is a sort of retry with backoff mechanism.
+    size_t max_bytes_produced = 0;
+    for (auto& source_set : source_sets) {
+        auto bytes = co_await reconcile_source_set(std::move(source_set));
+        max_bytes_produced = std::max(max_bytes_produced, bytes);
+    }
+
+    _scheduler.adapt(max_bytes_produced);
+}
+
+chunked_vector<chunked_vector<ss::shared_ptr<source>>>
+reconciler::partition_sources_into_sets(
+  chunked_vector<ss::shared_ptr<source>> sources) {
+    chunked_hash_map<model::topic_id, chunked_vector<ss::shared_ptr<source>>>
+      topic_id_to_sources;
+    for (auto& src : sources) {
+        auto& src_vec = topic_id_to_sources[src->topic_id_partition().topic_id];
+        src_vec.push_back(std::move(src));
+    }
+
+    vlog(
+      lg.debug,
+      "Partitioned sources into {} sets by topic_id",
+      topic_id_to_sources.size());
+
+    chunked_vector<chunked_vector<ss::shared_ptr<source>>> result;
+    result.reserve(topic_id_to_sources.size());
+    for (auto& [_, src_vec] : topic_id_to_sources) {
+        result.push_back(std::move(src_vec));
+    }
+    return result;
+}
+
+ss::future<size_t> reconciler::reconcile_source_set(
+  chunked_vector<ss::shared_ptr<source>> sources) {
+    if (sources.empty()) {
+        co_return 0;
+    }
+
     // Begin by creating the set of objects to be built.
     retry_chain_node rtc = l1::make_default_metastore_rtc(_as);
     auto metadata_builder_res = co_await l1::retry_metastore_op(
@@ -248,7 +291,7 @@ ss::future<> reconciler::reconcile() {
           "Could not create object metadata builder: {}",
           metadata_builder_res.error());
         _probe.increment_rounds_failed();
-        co_return;
+        co_return 0;
     }
     auto& metadata_builder = metadata_builder_res.value();
     chunked_hash_map<l1::object_id, chunked_vector<ss::shared_ptr<source>>>
@@ -259,7 +302,7 @@ ss::future<> reconciler::reconcile() {
         if (!oid.has_value()) {
             vlog(lg.warn, "Could not get object: {}", oid.error());
             _probe.increment_rounds_failed();
-            co_return;
+            co_return 0;
         }
         oid_to_sources[oid.value()].push_back(src);
     }
@@ -271,9 +314,9 @@ ss::future<> reconciler::reconcile() {
       futures;
     oids.reserve(oid_to_sources.size());
     futures.reserve(oid_to_sources.size());
-    for (const auto& [oid, sources] : oid_to_sources) {
+    for (const auto& [oid, srcs] : oid_to_sources) {
         oids.push_back(oid);
-        futures.push_back(reconcile_sources(oid, sources));
+        futures.push_back(reconcile_sources(oid, srcs));
     }
     // Unbounded concurrency because #futures = #domains, which is small (3).
     auto results = co_await ss::when_all(futures.begin(), futures.end());
@@ -295,7 +338,7 @@ ss::future<> reconciler::reconcile() {
               oid,
               ex);
             if (is_shutdown) {
-                co_return;
+                co_return 0;
             }
             failed_objects.push_back(oid);
             continue;
@@ -328,22 +371,19 @@ ss::future<> reconciler::reconcile() {
           rm_ret.has_value(), "Removing object {} in non-pending state", oid);
     }
 
-    // Adapt scheduling interval based on max object size produced.
-    // Note that we slow down if there's nothing to reconcile or if all
-    // objects failed. This is a sort of retry with backoff mechanism.
+    // Calculate the max object size produced for scheduling adaptation.
     size_t max_bytes_produced = 0;
     for (const auto& obj : successful_objects) {
         max_bytes_produced = std::max(
           max_bytes_produced, obj.object_info.size_bytes);
     }
-    _scheduler.adapt(max_bytes_produced);
 
     // Check if we have any successful objects to commit.
     if (successful_objects.empty()) {
         // NB: This doesn't count as failing the round because it may be that
         // all sources are fully reconciled.
         vlog(lg.debug, "No successful objects to commit to metastore");
-        co_return;
+        co_return 0;
     }
 
     // Commit all successful objects to the metastore.
@@ -354,8 +394,10 @@ ss::future<> reconciler::reconcile() {
           "Abandoning reconciliation run because the L1 metastore operation "
           "failed"));
         _probe.increment_rounds_failed();
-        co_return;
+        co_return 0;
     }
+
+    co_return max_bytes_produced;
 }
 
 ss::future<std::expected<reconciler::built_object_metadata, reconcile_error>>

@@ -129,10 +129,6 @@ private:
     /// Current in-memory state of the STM
     ctp_stm_state _state;
 
-    // The last observed epoch to be applied to the state machine. This value is
-    // used to check for violations of monotonicity in epoch order.
-    cluster_epoch _last_seen_epoch{};
-
     // An abort source to stop the prefix truncation loop on stop.
     ss::condition_variable _lro_advanced;
     ss::abort_source _as;

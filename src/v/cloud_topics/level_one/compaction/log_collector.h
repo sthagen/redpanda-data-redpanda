@@ -27,6 +27,8 @@ struct compaction_cluster_state {
     ss::sharded<cluster::partition_leaders_table>* leaders_table;
     ss::sharded<cluster::topic_table>* topic_table;
     ss::sharded<cluster::metadata_cache>* metadata_cache;
+    ss::sharded<cluster::shard_table>* shard_table;
+    ss::sharded<cluster::partition_manager>* partition_manager;
 };
 
 // Responsible for pushing CTPs/logs that require compaction to the

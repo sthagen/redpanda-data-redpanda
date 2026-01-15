@@ -21,6 +21,8 @@
 
 #include <seastar/core/sleep.hh>
 
+#include <exception>
+
 namespace cloud_topics::l1 {
 namespace {
 rpc::errc convert_stm_errc(simple_stm::errc e) {
@@ -64,8 +66,13 @@ meta_to_rpc_extent_metadata(metastore::extent_metadata_vec v) {
 } // namespace
 
 domain_manager::domain_manager(ss::shared_ptr<simple_stm> stm, io* io)
-  : stm_(std::move(stm))
-  , object_io_(io) {}
+  : gc_interval_(
+      config::shard_local_cfg()
+        .cloud_topics_long_term_garbage_collection_interval)
+  , stm_(std::move(stm))
+  , object_io_(io) {
+    gc_interval_.watch([this]() { sem_.signal(); });
+}
 
 void domain_manager::start() {
     ssx::spawn_with_gate(gate_, [this] { return gc_loop(); });
@@ -74,6 +81,7 @@ void domain_manager::start() {
 ss::future<> domain_manager::stop_and_wait() {
     vlog(cd_log.debug, "Domain manager stopping...");
     as_.request_abort();
+    sem_.broken();
     co_await gate_.close();
     vlog(cd_log.debug, "Domain manager stopped...");
 }
@@ -626,33 +634,34 @@ domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
       .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents))};
 }
 
-ss::lowres_clock::duration domain_manager::gc_interval() const {
-    return config::shard_local_cfg()
-      .cloud_topics_long_term_garbage_collection_interval();
-}
-
 ss::future<> domain_manager::gc_loop() {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return;
     }
+
     // TODO: make configurable.
     garbage_collector gc(stm_.get(), object_io_);
+    auto ntp = stm_->raft()->log()->config().ntp();
     while (!as_.abort_requested()) {
-        vlog(cd_log.debug, "Running garbage collection now...");
+        vlog(cd_log.debug, "{} - Running garbage collection now...", ntp);
         auto gc_res = co_await gc.remove_unreferenced_objects(&as_);
         if (!gc_res.has_value()) {
             vlog(cd_log.warn, "Garbage collection failed: {}", gc_res.error());
         }
-        auto sleep_interval = gc_interval();
+        auto sleep_interval = gc_interval_();
         vlog(
           cd_log.debug,
-          "Re-running garbage collection in {}...",
+          "{} - Re-running garbage collection in {}...",
+          ntp,
           sleep_interval);
-        auto sleep_res = co_await ss::coroutine::as_future(
-          ssx::sleep_abortable(sleep_interval, as_));
-        if (sleep_res.failed()) {
-            auto eptr = sleep_res.get_exception();
+        try {
+            co_await sem_.wait(
+              sleep_interval, std::max(sem_.current(), size_t(1)));
+        } catch (const ss::semaphore_timed_out&) {
+            // Fall through
+        } catch (...) {
+            auto eptr = std::current_exception();
             auto log_lvl = ssx::is_shutdown_exception(eptr)
                              ? ss::log_level::debug
                              : ss::log_level::warn;
@@ -663,7 +672,8 @@ ss::future<> domain_manager::gc_loop() {
               eptr);
         }
     }
-    vlog(cd_log.debug, "Garbage collection loop stopped...");
+
+    vlog(cd_log.debug, "{} - Garbage collection loop stopped...", ntp);
 }
 
 } // namespace cloud_topics::l1

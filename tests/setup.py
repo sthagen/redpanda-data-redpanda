@@ -53,6 +53,7 @@ setup(
         "adlfs==2024.7.0",
         "pyarrow",
         "pandas",
+        "pandas-stubs==1.2.0.58",
         "pyparsing>=3.1.0",
         "thrift==0.20.0",
         "thrift-sasl==0.4.3",

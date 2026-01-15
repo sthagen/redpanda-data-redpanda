@@ -99,8 +99,8 @@ ss::future<> do_compact(
   l1::compaction_committer& committer,
   l1::metastore* metastore,
   l1::io* io,
-  std::chrono::milliseconds min_compaction_lag_ms = std::chrono::milliseconds{
-    0}) {
+  std::chrono::milliseconds min_compaction_lag_ms = 0ms,
+  kafka::offset max_compactible_offset = kafka::offset::max()) {
     ss::abort_source as;
     auto state = l1::compaction_job_state::running;
     auto map = compaction::simple_key_offset_map();
@@ -112,6 +112,7 @@ ss::future<> do_compact(
       dirty_range_intervals,
       offsets_response.removable_tombstone_ranges,
       start_offset,
+      max_compactible_offset,
       &map,
       min_compaction_lag_ms,
       metastore,
@@ -808,4 +809,87 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerInterleavedTimestamps) {
     auto output_batches = read_all(std::move(reader));
     linear_int_kv_batch_generator::validate_post_compaction(
       std::move(output_batches));
+}
+
+TEST_F(ReducerTestFixture, MaxCompactibleOffsetReducer) {
+    // This test verifies that compaction respects the max_compactible_offset
+    // boundary. We create multiple extents and set max_compactible_offset to
+    // fall within the middle of the log, expecting only extents below that
+    // offset to be compacted.
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    int num_produce_rounds = 4;
+    int num_batches = 10;
+    int num_records = 10;
+    int records_per_extent = num_batches * num_records;
+    kafka::offset start_offset{0};
+    kafka::offset last_offset{(num_produce_rounds * records_per_extent) - 1};
+    auto gen = linear_int_kv_batch_generator();
+    auto ts = model::timestamp::now();
+
+    // Create 4 extents.
+    for (int i = 0; i < num_produce_rounds; ++i) {
+        model::test::record_batch_spec spec{
+          .allow_compression = true,
+          .count = num_records,
+          .timestamp = ts,
+          .all_records_have_same_timestamp = true};
+        auto batches = gen(spec, num_batches);
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 1.0);
+    ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
+      start_offset, last_offset));
+
+    auto committer = l1::compaction_committer(
+      l1::make_default_committing_policy(), &_io, &_metastore);
+    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
+
+    // Set max_compactible_offset to the start of the 3rd extent.
+    // This should allow compaction of extents [0] and [1], but not [2] or [3].
+    auto max_compactible_offset = kafka::offset{2 * records_per_extent};
+
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      compaction_info->compaction_epoch,
+      compaction_info->start_offset,
+      committer,
+      &_metastore,
+      &_io,
+      0ms,
+      max_compactible_offset)
+      .get();
+
+    auto reader = make_reader(ntp, tidp);
+    auto output_batches = read_all(std::move(reader));
+
+    // Extents [0] and [1] should be compacted (num_batches records each after
+    // dedup), extents [2] and [3] should remain untouched (num_batches *
+    // num_records each).
+    int output_num_records = std::accumulate(
+      output_batches.begin(),
+      output_batches.end(),
+      int{0},
+      [](int acc, model::record_batch& b) { return acc + b.record_count(); });
+
+    auto compacted_records = 2 * num_batches;          // 2 compacted extents
+    auto uncompacted_records = 2 * records_per_extent; // 2 untouched extents
+    ASSERT_EQ(output_num_records, compacted_records + uncompacted_records);
+
+    // Verify dirty ranges still include the uncompacted extents.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_GT(compaction_info->dirty_ratio, 0.0);
+    ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
+      max_compactible_offset, last_offset));
 }

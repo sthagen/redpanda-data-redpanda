@@ -10,6 +10,7 @@
 package os
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -146,8 +147,16 @@ func EditTmpYAMLFile[T any](fs afero.Fs, v T) (T, error) {
 	if len(read) == 0 || string(read) == "\n" {
 		return update, fmt.Errorf("no changes made")
 	}
-	if err := yaml.Unmarshal(read, &update); err != nil {
+	if err := decodeStrictYAML(read, &update); err != nil {
 		return update, fmt.Errorf("unable to parse edited file: %w", err)
 	}
 	return update, nil
+}
+
+// decodeStrict decodes YAML from b into v, returning an error if there are
+// unknown fields.
+func decodeStrictYAML(b []byte, v any) error {
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	return dec.Decode(v)
 }

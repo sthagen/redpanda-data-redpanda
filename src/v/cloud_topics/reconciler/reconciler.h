@@ -249,6 +249,21 @@ private:
       const chunked_vector<built_object_metadata>& objects,
       std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder);
 
+    /*
+     * Partition sources into sets for reconciliation.
+     */
+    chunked_vector<chunked_vector<ss::shared_ptr<source>>>
+    partition_sources_into_sets(chunked_vector<ss::shared_ptr<source>> sources);
+
+    /*
+     * Reconcile a set of sources. Creates a metadata builder, maps sources to
+     * objects, builds and uploads objects, and commits them to the metastore.
+     * Returns the max object size produced, or 0 if no objects were
+     * successfully committed.
+     */
+    ss::future<size_t>
+    reconcile_source_set(chunked_vector<ss::shared_ptr<source>> sources);
+
     l1::io* _l1_io;
     l1::metastore* _metastore;
     ss::gate _gate;

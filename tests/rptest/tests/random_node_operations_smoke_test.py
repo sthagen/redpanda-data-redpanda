@@ -33,6 +33,7 @@ from rptest.services.kgo_verifier_services import (
     KgoVerifierConsumerGroupConsumer,
     KgoVerifierProducer,
 )
+from rptest.services.catalog_service import CatalogService
 from rptest.services.redpanda import (
     CHAOS_LOG_ALLOW_LIST,
     PREV_VERSION_LOG_ALLOW_LIST,
@@ -318,6 +319,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             compaction_enabled: bool = False,
             key_set_cardinality: int | None = None,
             tolerate_data_loss: bool = False,
+            iceberg_enabled: bool = False,
+            catalog_service: CatalogService | None = None,
         ):
             self.test_context = test_context
             self.logger = logger
@@ -331,6 +334,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             self.compaction_enabled = compaction_enabled
             self.key_set_cardinality = key_set_cardinality
             self.tolerate_data_loss = tolerate_data_loss
+            self.iceberg_enabled = iceberg_enabled
+            self.catalog_service = catalog_service
 
         def _start_producer(self, clean: bool):
             self.producer = KgoVerifierProducer(
@@ -411,13 +416,52 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                 f"Invalid reads in topic: {self.topic}, invalid reads count: {self.consumer.consumer_status.validator.invalid_reads}"
             )
 
-    def maybe_enable_iceberg_for_topic(
-        self, topic_spec: TopicSpec, iceberg_enabled: bool
-    ):
+            if self.iceberg_enabled:
+                # Perform basic iceberg verification: ensure the table exists and has translated data
+                assert self.catalog_service, (
+                    "Expected catalog service to have a value when iceberg is enabled for verification purposes"
+                )
+                client = self.catalog_service.client()
+                namespace = "redpanda"
+
+                def verify_iceberg_table() -> bool:
+                    try:
+                        tables = client.list_tables(namespace)
+                        if (namespace, self.topic) not in tables:
+                            self.logger.debug(f"Table {self.topic} not yet in catalog")
+                            return False
+
+                        table = client.load_table(f"{namespace}.{self.topic}")
+                        df = table.scan().to_pandas()
+
+                        if df.empty:
+                            self.logger.debug(f"Table {self.topic} has no rows yet")
+                            return False
+
+                        max_offset = df["redpanda"].str["offset"].max()
+
+                        self.logger.info(
+                            f"Iceberg table {self.topic}: rows={len(df)}, max_offset={max_offset}"
+                        )
+                        return max_offset is not None and max_offset > 0
+                    except Exception as e:
+                        self.logger.debug(
+                            f"Error verifying iceberg table {self.topic}: {e}"
+                        )
+                        return False
+
+                wait_until(
+                    verify_iceberg_table,
+                    timeout_sec=120,
+                    backoff_sec=1,
+                    err_msg=f"Iceberg verification failed for topic {self.topic}",
+                )
+
+    def maybe_enable_iceberg_for_topic(self, topic_name: str, iceberg_enabled: bool):
         if iceberg_enabled:
             client = DefaultClient(self.redpanda)
             client.alter_topic_config(
-                topic_spec.name, TopicSpec.PROPERTY_ICEBERG_MODE, "key_value"
+                topic_name, TopicSpec.PROPERTY_ICEBERG_MODE, "key_value"
             )
 
     def _do_test_node_operations(
@@ -522,7 +566,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             redpanda_remote_write=False,
         )
         client.create_topic(regular_topic)
-        self.maybe_enable_iceberg_for_topic(regular_topic, with_iceberg)
+        self.maybe_enable_iceberg_for_topic(regular_topic.name, with_iceberg)
 
         # change local retention policy to make some local segments will be deleted during the test
         self._alter_local_topic_retention_bytes(
@@ -540,6 +584,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             msg_count=self.msg_count,
             consumers_count=self.consumers_count,
             compaction_enabled=False,
+            iceberg_enabled=with_iceberg,
+            catalog_service=self.catalog_service,
         )
 
         compacted_topic = TopicSpec(
@@ -551,7 +597,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             redpanda_remote_write=True,
         )
         client.create_topic(compacted_topic)
-        self.maybe_enable_iceberg_for_topic(compacted_topic, with_iceberg)
+        self.maybe_enable_iceberg_for_topic(compacted_topic.name, with_iceberg)
 
         compacted_producer_consumer = RandomNodeOperationsBase.producer_consumer(
             test_context=self.test_context,
@@ -565,6 +611,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             consumers_count=self.consumers_count,
             key_set_cardinality=500,
             compaction_enabled=True,
+            iceberg_enabled=with_iceberg,
+            catalog_service=self.catalog_service,
         )
 
         regular_producer_consumer.start(clean=True)
@@ -591,7 +639,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         self._alter_local_topic_retention_bytes(
             fast_topic.name, 8 * default_segment_size
         )
-        self.maybe_enable_iceberg_for_topic(fast_topic, with_iceberg)
+        self.maybe_enable_iceberg_for_topic(fast_topic.name, with_iceberg)
         fast_producer_consumer = RandomNodeOperationsBase.producer_consumer(
             test_context=self.test_context,
             logger=self.logger,
@@ -603,6 +651,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             msg_count=self.msg_count,
             consumers_count=self.consumers_count,
             compaction_enabled=False,
+            iceberg_enabled=with_iceberg,
+            catalog_service=self.catalog_service,
         )
         fast_producer_consumer.start(clean=True)
 
@@ -617,6 +667,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             msg_count=self.msg_count,
             consumers_count=self.consumers_count,
             compaction_enabled=False,
+            iceberg_enabled=with_iceberg,
+            catalog_service=self.catalog_service,
         )
 
         cloud_topics_compact_consumer = RandomNodeOperationsBase.producer_consumer(
@@ -630,6 +682,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             msg_count=self.msg_count,
             consumers_count=self.consumers_count,
             compaction_enabled=True,
+            iceberg_enabled=with_iceberg,
+            catalog_service=self.catalog_service,
         )
 
         if with_cloud_topics:
@@ -646,6 +700,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "redpanda.cloud_topic.enabled": "true",
                 },
             )
+            self.maybe_enable_iceberg_for_topic(
+                cloud_topics_delete_consumer.topic, with_iceberg
+            )
             cloud_topics_delete_consumer.start(clean=False)
 
             rpk.create_topic(
@@ -659,6 +716,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "redpanda.remote.write": "false",
                     "redpanda.cloud_topic.enabled": "true",
                 },
+            )
+            self.maybe_enable_iceberg_for_topic(
+                cloud_topics_compact_consumer.topic, with_iceberg
             )
             cloud_topics_compact_consumer.start(clean=False)
 
@@ -680,7 +740,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             client.alter_topic_config(
                 write_caching_topic.name, TopicSpec.PROPERTY_WRITE_CACHING, "true"
             )
-            self.maybe_enable_iceberg_for_topic(write_caching_topic, with_iceberg)
+            self.maybe_enable_iceberg_for_topic(write_caching_topic.name, with_iceberg)
             write_caching_producer_consumer = (
                 RandomNodeOperationsBase.producer_consumer(
                     test_context=self.test_context,
@@ -694,6 +754,8 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     consumers_count=self.consumers_count,
                     compaction_enabled=(cleanup_policy is not TopicSpec.CLEANUP_DELETE),
                     tolerate_data_loss=True,
+                    iceberg_enabled=with_iceberg,
+                    catalog_service=self.catalog_service,
                 )
             )
             write_caching_producer_consumer.start(clean=False)

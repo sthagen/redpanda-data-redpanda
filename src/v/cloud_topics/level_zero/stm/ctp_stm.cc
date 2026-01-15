@@ -50,8 +50,18 @@ cluster_epoch extract_epoch(model::record_batch&& batch) {
 class ctp_stm_consumer {
 public:
     ss::future<ss::stop_iteration> operator()(model::record_batch batch) {
-        _first_epoch = extract_epoch(std::move(batch));
-        co_return ss::stop_iteration::yes;
+        if (_first_epoch.has_value()) {
+            _first_epoch = std::min(
+              _first_epoch.value(), extract_epoch(std::move(batch)));
+        } else {
+            _first_epoch = extract_epoch(std::move(batch));
+        }
+        // Since we're accepting out of order epoch we have to read all
+        // placeholders. The epochs in the partition are not strictly monotonic
+        // so we need to read up until the end.
+        // This code is only used for testing so it doesn't make sense to
+        // optimize it.
+        co_return ss::stop_iteration::no;
     }
 
     std::optional<cluster_epoch> end_of_stream() { return _first_epoch; }
@@ -191,7 +201,7 @@ ss::future<bool> ctp_stm::sync_in_term(
 }
 
 std::optional<cluster_epoch> ctp_stm::estimate_inactive_epoch() const noexcept {
-    return _state.estimate_min_epoch().transform(prev_cluster_epoch);
+    return _state.estimate_inactive_epoch();
 }
 
 ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
@@ -321,11 +331,10 @@ void ctp_stm::apply_placeholder(const model::record_batch& batch) {
     // because the assertion is about the physical content of the log rather
     // than the computed state.
     vassert(
-      id.epoch >= _last_seen_epoch,
+      id.epoch >= _state.get_previous_epoch().value_or(cluster_epoch::min()),
       "Observed a non-monotonic epoch sequence {} < {}",
       id.epoch,
-      _last_seen_epoch);
-    _last_seen_epoch = id.epoch;
+      _state.get_previous_epoch());
     _state.advance_epoch(id.epoch, batch.header().base_offset);
 }
 
@@ -372,11 +381,13 @@ ctp_stm::fence_epoch(cluster_epoch e) {
     while (true) {
         auto fence_epoch = _state.get_max_seen_epoch().or_else(
           get_applied_epoch);
-        if (fence_epoch.has_value() && fence_epoch.value() == e) {
-            // Case 1. Same epoch, need to acquire read-lock.
+        if (_state.epoch_in_window(e)) {
+            // Case 1.1. Same epoch, need to acquire read-lock.
+            // Case 1.2. This epoch is out of order. We can accept it if it lies
+            //           in [previous-epoch, max-seen-epoch) range. We also need
+            //           to acquire a read fence as in 1.1.
             auto unit = co_await ss::get_units(_lock, 1, _as);
-            if (_state.get_max_seen_epoch().or_else(get_applied_epoch) == e) {
-                // The max_seen_epoch didn't advance after the scheduling point
+            if (_state.epoch_in_window(e)) {
                 co_return cluster_epoch_fence{
                   .unit = std::move(unit), .term = term};
             }

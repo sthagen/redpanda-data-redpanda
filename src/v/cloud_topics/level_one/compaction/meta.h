@@ -31,6 +31,7 @@ namespace cloud_topics::l1 {
 struct compaction_info_and_timestamp {
     metastore::compaction_info_response info;
     model::timestamp collected_at;
+    kafka::offset max_compactible_offset;
 };
 
 struct log_compaction_meta {

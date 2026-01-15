@@ -32,6 +32,7 @@ public:
       const chunked_vector<offset_interval_set::interval>&,
       const offset_interval_set&,
       kafka::offset,
+      kafka::offset,
       compaction::key_offset_map*,
       std::chrono::milliseconds,
       metastore*,
@@ -62,6 +63,9 @@ private:
 
     // The start offset of the CTP.
     kafka::offset _start_offset;
+
+    // The maximum compactible offset, as pinned by e.g. iceberg translation.
+    kafka::offset _max_compactible_offset;
 
     // Iterator used during `map_building_iteration()` which points into the
     // above vector `_dirty_range_intervals`. Iterating backwards over extents

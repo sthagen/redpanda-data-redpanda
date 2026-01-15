@@ -40,7 +40,10 @@ compaction_scheduler::compaction_scheduler(
       [this](const model::ntp& ntp) { return is_managed(ntp); },
       state))
   , _log_info_collector(make_default_log_info_collector(
-      &_metastore->local(), &state.metadata_cache->local()))
+      &_metastore->local(),
+      &state.metadata_cache->local(),
+      state.shard_table,
+      state.partition_manager))
   , _scheduling_policy(make_default_scheduling_policy())
   , _worker_manager(
       _compaction_queue,

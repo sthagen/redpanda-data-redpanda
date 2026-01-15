@@ -133,6 +133,7 @@ compaction_source::compaction_source(
   const chunked_vector<offset_interval_set::interval>& dirty_range_intervals,
   const offset_interval_set& removable_tombstone_ranges,
   kafka::offset start_offset,
+  kafka::offset max_compactible_offset,
   compaction::key_offset_map* map,
   std::chrono::milliseconds min_compaction_lag_ms,
   metastore* metastore,
@@ -145,6 +146,7 @@ compaction_source::compaction_source(
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
   , _start_offset(start_offset)
+  , _max_compactible_offset(max_compactible_offset)
   , _dirty_range_it(_dirty_range_intervals.crbegin())
   , _extent_reader(
       metastore,
@@ -264,6 +266,12 @@ ss::future<ss::stop_iteration> compaction_source::deduplication_iteration(
     }
 
     auto extent = std::move(extent_res).value();
+
+    if (extent.last_offset > _max_compactible_offset) {
+        // We have iterated to an extent we cannot compact, stop compaction
+        // here.
+        co_return ss::stop_iteration::yes;
+    }
 
     if (should_compact_extent(extent, _min_compaction_lag_ms)) {
         kafka::offset start_offset{extent.base_offset};

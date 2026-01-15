@@ -142,26 +142,12 @@ TEST_F(frontend_fixture, test_replicate_epoch) {
       .WillOnce(Return(ss::as_ready_future(stage_result{})))
       .WillOnce(Return(ss::as_ready_future(stage_result{})));
     EXPECT_CALL(*_data_plane, execute_write(_, _, _, _))
-      .WillOnce(Return(make_extent_fut(model::offset(0), cluster_epoch(0))))
-      .WillOnce(Return(make_extent_fut(model::offset(1), cluster_epoch(1))))
+      .WillOnce(Return(make_extent_fut(model::offset(0), cluster_epoch(1))))
+      .WillOnce(Return(make_extent_fut(model::offset(1), cluster_epoch(2))))
       .WillOnce(Return(make_extent_fut(model::offset(2), cluster_epoch(0))));
 
     {
-        // First batch with offset 0
-        auto batch = model::test::make_random_batch(model::offset{0}, false);
-        chunked_vector<model::record_batch> buf;
-        buf.push_back(std::move(batch));
-        auto res = frontend
-                     .replicate(
-                       std::move(buf),
-                       raft::replicate_options(
-                         raft::consistency_level::quorum_ack))
-                     .get();
-        ASSERT_TRUE(res.has_value());
-    }
-
-    {
-        // First batch with offset 1
+        // First batch with offset 0 (epoch 1)
         auto batch = model::test::make_random_batch(model::offset{1}, false);
         chunked_vector<model::record_batch> buf;
         buf.push_back(std::move(batch));
@@ -175,7 +161,21 @@ TEST_F(frontend_fixture, test_replicate_epoch) {
     }
 
     {
-        // First batch with offset 2 (breaks invariant)
+        // First batch with offset 1 (epoch 2)
+        auto batch = model::test::make_random_batch(model::offset{2}, false);
+        chunked_vector<model::record_batch> buf;
+        buf.push_back(std::move(batch));
+        auto res = frontend
+                     .replicate(
+                       std::move(buf),
+                       raft::replicate_options(
+                         raft::consistency_level::quorum_ack))
+                     .get();
+        ASSERT_TRUE(res.has_value());
+    }
+
+    {
+        // First batch with offset 2 (epoch 0, breaks invariant)
         auto batch = model::test::make_random_batch(model::offset{2}, false);
         chunked_vector<model::record_batch> buf;
         buf.push_back(std::move(batch));

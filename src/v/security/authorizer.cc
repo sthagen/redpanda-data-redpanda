@@ -276,6 +276,12 @@ auth_result authorizer::do_authorized(
         if (auto r = check_deny(acl_principal_view{g})) {
             return *r;
         }
+        for (const auto& role : _role_store->roles_for_member(
+               role_member_view::from_principal(g))) {
+            if (auto r = check_deny(role::to_principal_view(role))) {
+                return *r;
+            }
+        }
     }
 
     // Then check ALL allows (principal, then roles, then groups)
@@ -296,6 +302,13 @@ auth_result authorizer::do_authorized(
     for (const auto& g : groups) {
         if (auto r = check_allow(acl_principal_view{g})) {
             return *r;
+        }
+
+        for (const auto& role : _role_store->roles_for_member(
+               role_member_view::from_principal(g))) {
+            if (auto r = check_allow(role::to_principal_view(role))) {
+                return *r;
+            }
         }
     }
 

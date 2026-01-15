@@ -10,6 +10,7 @@
 #include "cloud_topics/level_one/metastore/state_update.h"
 
 #include "base/vlog.h"
+#include "cloud_topics/level_one/metastore/state_update_utils.h"
 #include "cloud_topics/logger.h"
 #include "model/fundamental.h"
 
@@ -49,60 +50,6 @@ std::optional<extent_range> get_range(
         return std::nullopt;
     }
     return extent_range{base_it, last_it};
-}
-
-using contiguous_intervals_by_tidp_t = chunked_hash_map<
-  model::topic_id_partition,
-  chunked_vector<offset_interval_set::interval>>;
-
-// Returns a vector of contiguous offset intervals found in
-// `sorted_extents_by_tp` or an `stm_update_error` if the offsets of the
-// provided extent are invalid. That is, the extents `[[0, 99], [100,199],
-// [200,299], [300,399]]` are combined into the single continuous interval
-// `[0,399]`, whereas the extents `[[0, 99], [100,199], [250,299], [300,399]]`
-// would return two continuous intervals `[[0,199], [250,399]]`. An example of
-// an invalid extent input would be `[[0,99], [200, 249], [239, 299]]`.
-std::expected<contiguous_intervals_by_tidp_t, stm_update_error>
-contiguous_intervals_for_extents(
-  const new_object::sorted_extents_by_tidp_t& sorted_extents_by_tp) {
-    contiguous_intervals_by_tidp_t ret;
-    for (const auto& [tidp, extents] : sorted_extents_by_tp) {
-        auto& ret_intervals = ret[tidp];
-        if (extents.empty()) {
-            continue;
-        }
-        auto current_base = extents.begin()->base_offset;
-        auto current_last = extents.begin()->last_offset;
-        // Skip the first entry when iterating over `extents`.
-        for (const auto& extent : extents | std::views::drop(1)) {
-            auto expected_next = kafka::next_offset(current_last);
-            if (extent.base_offset == expected_next) {
-                // A new extent that is contiguous with the current interval.
-                // Extend the current interval with the extent's last offset.
-                current_last = extent.last_offset;
-            } else if (extent.base_offset > expected_next) {
-                // A new extent that is non-contiguous with the current
-                // interval. Push back the current interval and start a new
-                // interval with the extent's offset range.
-                ret_intervals.push_back(
-                  {.base_offset = current_base, .last_offset = current_last});
-                current_base = extent.base_offset;
-                current_last = extent.last_offset;
-            } else {
-                return std::unexpected(stm_update_error(
-                  fmt::format(
-                    "Input object breaks partition {} offset ordering: "
-                    "previous: {}, next: {}",
-                    tidp,
-                    current_last,
-                    extent.base_offset)));
-            }
-        }
-        ret_intervals.push_back(
-          {.base_offset = current_base, .last_offset = current_last});
-    }
-
-    return ret;
 }
 
 void remove_extents_below_start_offset_for_tp(
@@ -182,7 +129,7 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
         return std::unexpected(
           stm_update_error{"Missing term info in request"});
     }
-    new_object::sorted_extents_by_tidp_t new_extents;
+    sorted_extents_by_tidp_t new_extents;
     for (const auto& o : new_objects) {
         if (state.objects.contains(o.oid)) {
             return std::unexpected(
@@ -323,7 +270,7 @@ add_objects_update::apply(state& state) {
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
     }
-    new_object::sorted_extents_by_tidp_t extents_by_tp;
+    sorted_extents_by_tidp_t extents_by_tp;
     for (const auto& o : new_objects) {
         o.collect_extents_by_tidp(&extents_by_tp);
         state.objects.emplace(
@@ -408,7 +355,7 @@ replace_objects_update::can_apply(const state& state) {
     if (new_objects.empty()) {
         return std::unexpected(stm_update_error{"No objects requested"});
     }
-    new_object::sorted_extents_by_tidp_t new_extents_by_tp;
+    sorted_extents_by_tidp_t new_extents_by_tp;
     for (const auto& o : new_objects) {
         if (state.objects.contains(o.oid)) {
             return std::unexpected(
@@ -420,7 +367,8 @@ replace_objects_update::can_apply(const state& state) {
     auto contiguous_intervals_by_tp = contiguous_intervals_for_extents(
       new_extents_by_tp);
     if (!contiguous_intervals_by_tp.has_value()) {
-        return std::unexpected(contiguous_intervals_by_tp.error());
+        return std::unexpected(
+          stm_update_error(contiguous_intervals_by_tp.error()));
     }
 
     for (const auto& [tidp, intervals] : contiguous_intervals_by_tp.value()) {
@@ -581,7 +529,7 @@ replace_objects_update::apply(state& state) {
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
     }
-    new_object::sorted_extents_by_tidp_t new_extents_by_tp;
+    sorted_extents_by_tidp_t new_extents_by_tp;
     for (const auto& o : new_objects) {
         o.collect_extents_by_tidp(&new_extents_by_tp);
         state.objects.emplace(

@@ -171,6 +171,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       = log->info_and_ts->info.offsets_response.removable_tombstone_ranges};
     auto expected_compaction_epoch = log->info_and_ts->info.compaction_epoch;
     auto start_offset = log->info_and_ts->info.start_offset;
+    auto max_compactible_offset = log->info_and_ts->max_compactible_offset;
 
     // Lazy initialization of offset map.
     if (!_map) {
@@ -203,6 +204,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       dirty_range_intervals,
       compaction_offsets.removable_tombstone_ranges,
       start_offset,
+      max_compactible_offset,
       _map.get(),
       min_lag_ms,
       _metastore,

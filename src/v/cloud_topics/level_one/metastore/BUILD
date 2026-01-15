@@ -217,6 +217,23 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "state_update_utils",
+    srcs = [
+        "state_update_utils.cc",
+    ],
+    hdrs = [
+        "state_update_utils.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":offset_interval_set",
+        ":state",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
     name = "state_update",
     srcs = [
         "state_update.cc",
@@ -230,6 +247,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":state",
+        ":state_update_utils",
         "//src/v/base",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",

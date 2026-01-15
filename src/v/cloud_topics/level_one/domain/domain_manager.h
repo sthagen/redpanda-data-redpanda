@@ -70,10 +70,15 @@ public:
 private:
     std::optional<ss::gate::holder> maybe_gate();
     ss::future<> gc_loop();
-    ss::lowres_clock::duration gc_interval() const;
 
     rpc::get_compaction_info_reply
     do_get_compaction_info(const state&, rpc::get_compaction_info_request);
+
+    config::binding<std::chrono::milliseconds> gc_interval_;
+    // This semaphore is used as a way to signal a change to
+    // `cloud_topics_long_term_garbage_collection_interval` during the `wait()`
+    // operation in the main garbage collection loop.
+    ssx::semaphore sem_{0, "domain_manager::gc_loop"};
 
     ss::gate gate_;
     ss::abort_source as_;

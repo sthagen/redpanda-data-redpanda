@@ -22,9 +22,12 @@ struct metadata_row_value
       metadata_row_value,
       serde::version<0>,
       serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(start_offset, next_offset); }
+    auto serde_fields() {
+        return std::tie(start_offset, next_offset, compaction_epoch);
+    }
     kafka::offset start_offset{};
     kafka::offset next_offset{};
+    partition_state::compaction_epoch_t compaction_epoch{0};
 };
 
 struct extent_row_value

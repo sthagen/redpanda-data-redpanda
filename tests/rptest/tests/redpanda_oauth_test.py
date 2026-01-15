@@ -1086,6 +1086,410 @@ class RedpandaOIDCTestMethods(RedpandaOIDCTestBase):
             f"Verified: resolved OIDC identity includes all three groups: {resp.groups}"
         )
 
+    @cluster(num_nodes=4)
+    def test_group_role_authorization(self):
+        """
+        Test that group-role membership is honored for authorization.
+
+        This test verifies that when a group is added as a member of a role,
+        users in that group receive the permissions granted to the role.
+
+        Test flow:
+        1. Create a service user in Keycloak and add it to a group
+        2. Create a role in Redpanda and add the group as a member
+        3. Grant topic access to the role via ACLs
+        4. Verify the user (via group -> role path) can access the topic
+        """
+        kc_node = self.keycloak.nodes[0]
+
+        role_name = "test-role"
+        group_name = "test-group"
+        topic_name = "group-role-topic"
+
+        # Set up the OIDC client and service user
+        client_id = CLIENT_ID
+        self.create_service_user()
+
+        # Create group mapper (use full path = False for simpler group names)
+        self.keycloak.admin.create_group_mapper(client_id, use_full_path=False)
+
+        # Create the group and add the service account to it
+        self.keycloak.admin.create_group(group_name)
+        self.keycloak.admin.add_service_user_to_group(client_id, group_name)
+
+        # Create a topic
+        self.rpk.create_topic(topic_name)
+
+        # Create a role and add the group as a member using the v2 Admin API
+        admin_v2 = AdminV2(
+            self.redpanda,
+            auth=(self.su_username, self.su_password),
+        )
+
+        # Create role with group as member
+        role = security_pb2.Role(
+            name=role_name,
+            members=[
+                security_pb2.RoleMember(group=security_pb2.RoleGroup(name=group_name))
+            ],
+        )
+        admin_v2.security().create_role(security_pb2.CreateRoleRequest(role=role))
+        self.logger.info(
+            f"Created role '{role_name}' with group '{group_name}' as member"
+        )
+
+        # Grant describe permission to the role via ACL
+        self.rpk.sasl_allow_role(
+            role_name,
+            ["describe"],
+            "topic",
+            topic_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+        self.logger.info(
+            f"Granted describe permission to RedpandaRole:{role_name} on {topic_name}"
+        )
+
+        # Create a Kafka client that authenticates using OIDC
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+        assert cfg.client_secret is not None
+        assert cfg.token_endpoint is not None
+
+        def get_visible_topics() -> set[str]:
+            """Get a fresh token and list visible topics."""
+            k_client = PythonLibrdkafka(
+                self.redpanda,
+                algorithm="OAUTHBEARER",
+                oauth_config=cfg,
+                tls_cert=self.client_cert,
+            )
+            producer = k_client.get_producer()
+            producer.poll(0.0)
+            return set(producer.list_topics(timeout=5).topics.keys())
+
+        # Verify user can see the topic via the group -> role authorization path
+        wait_until(
+            lambda: topic_name in get_visible_topics(),
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"Expected to see {topic_name} via group->role authorization, got: {get_visible_topics()}",
+        )
+        self.logger.info(
+            f"Verified: user in group '{group_name}' can access topic via role '{role_name}'"
+        )
+
+    @cluster(num_nodes=4)
+    def test_group_role_deny_takes_precedence(self):
+        """
+        Test that deny permissions via group-role path take precedence.
+
+        This test verifies that when a group is added as a member of a role
+        with deny permissions, the deny takes precedence over direct group allows.
+
+        Test flow:
+        1. Create a service user in Keycloak and add it to a group
+        2. Create a role with deny permission and add the group as a member
+        3. Grant allow permission directly to the group
+        4. Verify the user is denied access (deny via role takes precedence)
+        """
+        kc_node = self.keycloak.nodes[0]
+
+        role_name = "deny-role"
+        group_name = "deny-test-group"
+        topic_name = "deny-test-topic"
+
+        # Set up the OIDC client and service user
+        client_id = CLIENT_ID
+        self.create_service_user()
+
+        # Create group mapper
+        self.keycloak.admin.create_group_mapper(client_id, use_full_path=False)
+
+        # Create the group and add the service account to it
+        self.keycloak.admin.create_group(group_name)
+        self.keycloak.admin.add_service_user_to_group(client_id, group_name)
+
+        # Create a topic
+        self.rpk.create_topic(topic_name)
+
+        # Create a role with the group as a member
+        admin_v2 = AdminV2(
+            self.redpanda,
+            auth=(self.su_username, self.su_password),
+        )
+
+        role = security_pb2.Role(
+            name=role_name,
+            members=[
+                security_pb2.RoleMember(group=security_pb2.RoleGroup(name=group_name))
+            ],
+        )
+        admin_v2.security().create_role(security_pb2.CreateRoleRequest(role=role))
+        self.logger.info(
+            f"Created role '{role_name}' with group '{group_name}' as member"
+        )
+
+        # Grant allow permission directly to the group
+        group_principal = f"Group:{group_name}"
+        self.rpk.sasl_allow_principal(
+            group_principal,
+            ["describe"],
+            "topic",
+            topic_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+        self.logger.info(
+            f"Granted describe permission to {group_principal} on {topic_name}"
+        )
+
+        # Grant deny permission to the role
+        self.rpk.sasl_deny_role(
+            role_name,
+            ["describe"],
+            "topic",
+            topic_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+        self.logger.info(
+            f"Denied describe permission to RedpandaRole:{role_name} on {topic_name}"
+        )
+
+        # Create a Kafka client that authenticates using OIDC
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+
+        def get_visible_topics() -> set[str]:
+            """Get a fresh token and list visible topics."""
+            k_client = PythonLibrdkafka(
+                self.redpanda,
+                algorithm="OAUTHBEARER",
+                oauth_config=cfg,
+                tls_cert=self.client_cert,
+            )
+            producer = k_client.get_producer()
+            producer.poll(0.0)
+            return set(producer.list_topics(timeout=5).topics.keys())
+
+        # Wait a bit to ensure ACLs propagate, then verify user cannot see the topic
+        # (deny via role should take precedence over group allow)
+        time.sleep(3)
+        visible = get_visible_topics()
+        assert topic_name not in visible, (
+            f"Expected topic '{topic_name}' to NOT be visible due to role deny, "
+            f"but it was visible. Deny via group->role should take precedence."
+        )
+        self.logger.info(
+            f"Verified: deny via role '{role_name}' takes precedence over group allow"
+        )
+
+    @cluster(num_nodes=4)
+    def test_group_role_multiple_groups_in_role(self):
+        """
+        Test authorization when multiple groups are members of the same role.
+
+        This test verifies that users from different groups that are all members
+        of the same role get the permissions granted to that role.
+
+        Test flow:
+        1. Create two groups and add them both to the same role
+        2. Grant permissions to the role
+        3. Verify users in either group can access the resource
+        """
+        kc_node = self.keycloak.nodes[0]
+
+        role_name = "multi-group-role"
+        group1_name = "multi-group-1"
+        group2_name = "multi-group-2"
+        topic_name = "multi-group-topic"
+
+        # Set up the OIDC client and service user
+        client_id = CLIENT_ID
+        self.create_service_user()
+
+        # Create group mapper
+        self.keycloak.admin.create_group_mapper(client_id, use_full_path=False)
+
+        # Create both groups
+        self.keycloak.admin.create_group(group1_name)
+        self.keycloak.admin.create_group(group2_name)
+
+        # Create a topic
+        self.rpk.create_topic(topic_name)
+
+        # Create a role with both groups as members
+        admin_v2 = AdminV2(
+            self.redpanda,
+            auth=(self.su_username, self.su_password),
+        )
+
+        role = security_pb2.Role(
+            name=role_name,
+            members=[
+                security_pb2.RoleMember(group=security_pb2.RoleGroup(name=group1_name)),
+                security_pb2.RoleMember(group=security_pb2.RoleGroup(name=group2_name)),
+            ],
+        )
+        admin_v2.security().create_role(security_pb2.CreateRoleRequest(role=role))
+        self.logger.info(
+            f"Created role '{role_name}' with groups '{group1_name}' and '{group2_name}' as members"
+        )
+
+        # Grant permission to the role
+        self.rpk.sasl_allow_role(
+            role_name,
+            ["describe"],
+            "topic",
+            topic_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+
+        def get_visible_topics() -> set[str]:
+            """Get a fresh token and list visible topics."""
+            k_client = PythonLibrdkafka(
+                self.redpanda,
+                algorithm="OAUTHBEARER",
+                oauth_config=cfg,
+                tls_cert=self.client_cert,
+            )
+            producer = k_client.get_producer()
+            producer.poll(0.0)
+            return set(producer.list_topics(timeout=5).topics.keys())
+
+        # Test with user in group1
+        self.logger.info(f"Testing with user in {group1_name}")
+        self.keycloak.admin.add_service_user_to_group(client_id, group1_name)
+
+        wait_until(
+            lambda: topic_name in get_visible_topics(),
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"User in {group1_name} should see {topic_name} via role",
+        )
+        self.logger.info(f"Verified: user in {group1_name} can access topic via role")
+
+        # Remove from group1, add to group2
+        self.logger.info(f"Switching user to {group2_name}")
+        self.keycloak.admin.remove_service_user_from_group(client_id, group1_name)
+        self.keycloak.admin.add_service_user_to_group(client_id, group2_name)
+
+        wait_until(
+            lambda: topic_name in get_visible_topics(),
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"User in {group2_name} should see {topic_name} via role",
+        )
+        self.logger.info(f"Verified: user in {group2_name} can access topic via role")
+
+    @cluster(num_nodes=4)
+    def test_group_in_multiple_roles(self):
+        """
+        Test authorization when a group is a member of multiple roles.
+
+        This test verifies that when a group is added to multiple roles,
+        users in that group get permissions from all those roles.
+
+        Test flow:
+        1. Create a group and add it to two different roles
+        2. Grant different permissions to each role (role1 -> topic1, role2 -> topic2)
+        3. Verify the user can access both topics via the different roles
+        """
+        kc_node = self.keycloak.nodes[0]
+
+        role1_name = "role-for-topic1"
+        role2_name = "role-for-topic2"
+        group_name = "multi-role-group"
+        topic1_name = "multi-role-topic1"
+        topic2_name = "multi-role-topic2"
+
+        # Set up the OIDC client and service user
+        client_id = CLIENT_ID
+        self.create_service_user()
+
+        # Create group mapper
+        self.keycloak.admin.create_group_mapper(client_id, use_full_path=False)
+
+        # Create the group and add the service user to it
+        self.keycloak.admin.create_group(group_name)
+        self.keycloak.admin.add_service_user_to_group(client_id, group_name)
+
+        # Create both topics
+        self.rpk.create_topic(topic1_name)
+        self.rpk.create_topic(topic2_name)
+
+        # Create both roles with the group as a member
+        admin_v2 = AdminV2(
+            self.redpanda,
+            auth=(self.su_username, self.su_password),
+        )
+
+        group_member = security_pb2.RoleMember(
+            group=security_pb2.RoleGroup(name=group_name)
+        )
+
+        role1 = security_pb2.Role(name=role1_name, members=[group_member])
+        admin_v2.security().create_role(security_pb2.CreateRoleRequest(role=role1))
+
+        role2 = security_pb2.Role(name=role2_name, members=[group_member])
+        admin_v2.security().create_role(security_pb2.CreateRoleRequest(role=role2))
+
+        self.logger.info(
+            f"Created roles '{role1_name}' and '{role2_name}' with group '{group_name}' as member"
+        )
+
+        # Grant role1 access to topic1, role2 access to topic2
+        self.rpk.sasl_allow_role(
+            role1_name,
+            ["describe"],
+            "topic",
+            topic1_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+        self.rpk.sasl_allow_role(
+            role2_name,
+            ["describe"],
+            "topic",
+            topic2_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+
+        def get_visible_topics() -> set[str]:
+            """Get a fresh token and list visible topics."""
+            k_client = PythonLibrdkafka(
+                self.redpanda,
+                algorithm="OAUTHBEARER",
+                oauth_config=cfg,
+                tls_cert=self.client_cert,
+            )
+            producer = k_client.get_producer()
+            producer.poll(0.0)
+            return set(producer.list_topics(timeout=5).topics.keys())
+
+        # Verify user can see both topics via the different role paths
+        wait_until(
+            lambda: {topic1_name, topic2_name}.issubset(get_visible_topics()),
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=f"Expected to see both topics via different roles, got: {get_visible_topics()}",
+        )
+        self.logger.info(
+            f"Verified: user in group '{group_name}' can access both topics via different roles"
+        )
+
 
 class RedpandaOIDCTest(RedpandaOIDCTestMethods):
     def __init__(self, test_context, **kwargs):

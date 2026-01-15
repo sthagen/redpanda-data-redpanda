@@ -406,10 +406,6 @@ public:
     }
 
     model::iceberg_mode iceberg_mode() const {
-        // TODO(cloud_topics): support iceberg
-        if (cloud_topic_enabled()) {
-            return model::iceberg_mode::disabled;
-        }
         if (!config::shard_local_cfg().iceberg_enabled) {
             return model::iceberg_mode::disabled;
         }

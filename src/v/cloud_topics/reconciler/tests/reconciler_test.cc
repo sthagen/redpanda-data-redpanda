@@ -40,11 +40,19 @@ public:
     ReconcilerTest()
       : _reconciler(&_io, &_metastore) {}
 
-    ss::shared_ptr<fake_source> add_source() {
+    ss::shared_ptr<fake_source> add_source(
+      std::optional<model::topic> tp = std::nullopt,
+      std::optional<model::topic_id> tid = std::nullopt) {
+        if (!tid.has_value()) {
+            tid = model::create_topic_id();
+        }
         auto ntp = model::random_ntp();
-        auto tid = model::create_topic_id();
-        auto src = ss::make_shared<fake_source>(
-          ntp, model::topic_id_partition{tid, ntp.tp.partition});
+        if (tp.has_value()) {
+            ntp.tp.topic = tp.value();
+        }
+
+        auto tidp = model::topic_id_partition(tid.value(), ntp.tp.partition);
+        auto src = ss::make_shared<fake_source>(ntp, tidp);
         _reconciler.attach_source(src);
         return src;
     }
@@ -107,9 +115,12 @@ TEST_F(ReconcilerTest, SingleSourceWithControlBatches) {
 }
 
 TEST_F(ReconcilerTest, MultipleSources) {
-    auto src1 = add_source();
-    auto src2 = add_source();
-    auto src3 = add_source();
+    const model::topic tp{"tapioca"};
+    const model::topic_id tid = model::topic_id::create();
+
+    auto src1 = add_source(tp, tid);
+    auto src2 = add_source(tp, tid);
+    auto src3 = add_source(tp, tid);
 
     src1->add_batch({.count = 10});
     src1->add_batch({.count = 5});
@@ -202,8 +213,11 @@ TEST_F(ReconcilerTest, ObjectSizeLimitMultipleSources) {
     cfg.get("cloud_topics_reconciliation_max_object_size")
       .set_value(size_t{1_MiB});
 
-    auto src1 = add_source();
-    auto src2 = add_source();
+    const model::topic tp{"tapioca"};
+    const model::topic_id tid = model::topic_id::create();
+
+    auto src1 = add_source(tp, tid);
+    auto src2 = add_source(tp, tid);
 
     // 960KiB in source 1 (15 * 64KiB).
     // Disable compression to ensure predictable sizes.
@@ -259,8 +273,11 @@ TEST_F(ReconcilerTest, ObjectSizeLimitOneSourcePerRound) {
     cfg.get("cloud_topics_reconciliation_max_object_size")
       .set_value(size_t{1_MiB});
 
-    auto src1 = add_source();
-    auto src2 = add_source();
+    const model::topic tp{"tapioca"};
+    const model::topic_id tid = model::topic_id::create();
+
+    auto src1 = add_source(tp, tid);
+    auto src2 = add_source(tp, tid);
 
     // Each source: 25 batches of 64KiB = 1.6MiB > 1MiB limit.
     constexpr auto batch_count = 25;

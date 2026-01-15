@@ -120,7 +120,9 @@ ss::future<> app::construct(
         .self = self,
         .leaders_table = leaders_table,
         .topic_table = &controller->get_topics_state(),
-        .metadata_cache = metadata_cache},
+        .metadata_cache = metadata_cache,
+        .shard_table = &controller->get_shard_table(),
+        .partition_manager = &controller->get_partition_manager()},
       &l1_io,
       &replicated_metastore);
 
