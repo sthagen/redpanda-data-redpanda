@@ -34,6 +34,7 @@ public:
       ss::abort_source& as) override;
     void notify_replicator_failure(::model::term_id) override;
     kafka::offset high_watermark() const final;
+    bool can_prefix_truncate() const final;
     ss::future<kafka::error_code> prefix_truncate(
       kafka::offset truncation_offset,
       ss::lowres_clock::time_point deadline) final;

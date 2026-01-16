@@ -132,7 +132,7 @@ struct schema_key {
     // preceding valid writes.
     std::optional<model::node_id> node;
 
-    subject sub;
+    context_subject sub;
     schema_version version;
     topic_key_magic magic{1};
 
@@ -170,7 +170,7 @@ void rjson_serialize(
     w.Key("keytype");
     ::json::rjson_serialize(w, to_string_view(key.keytype));
     w.Key("subject");
-    ::json::rjson_serialize(w, key.sub());
+    w.String(key.sub.to_string());
     w.Key("version");
     ::json::rjson_serialize(w, key.version);
     w.Key("magic");
@@ -277,7 +277,7 @@ public:
             return kt == result.keytype;
         }
         case state::subject: {
-            result.sub = subject{ss::sstring{sv}};
+            result.sub = context_subject::from_string(sv);
             _state = state::object;
             return true;
         }
@@ -326,7 +326,7 @@ template<typename Buffer>
 void rjson_serialize(::json::iobuf_writer<Buffer>& w, const schema_value& val) {
     w.StartObject();
     w.Key("subject");
-    ::json::rjson_serialize(w, val.schema.sub());
+    w.String(val.schema.sub().to_string());
     w.Key("version");
     ::json::rjson_serialize(w, val.version);
     w.Key("id");
@@ -371,7 +371,7 @@ class schema_value_handler final : public json::base_handler<Encoding> {
     state _state = state::empty;
 
     struct mutable_schema {
-        subject sub{invalid_subject};
+        context_subject sub{invalid_subject};
         typename schema_definition::raw_string def;
         schema_type type{schema_type::avro};
         typename schema_definition::references refs;
@@ -515,7 +515,7 @@ public:
         auto sv = std::string_view{str, len};
         switch (_state) {
         case state::subject: {
-            _schema.sub = subject{ss::sstring{sv}};
+            _schema.sub = context_subject::from_string(sv);
             _state = state::object;
             return true;
         }
@@ -538,7 +538,7 @@ public:
             return true;
         }
         case state::reference_subject: {
-            _schema.refs.back().sub = subject{ss::sstring{sv}};
+            _schema.refs.back().sub = context_subject::from_string(sv);
             _state = state::reference;
             return true;
         }
@@ -1153,7 +1153,7 @@ struct delete_subject_key {
     static constexpr topic_key_type keytype{topic_key_type::delete_subject};
     std::optional<model::offset> seq;
     std::optional<model::node_id> node;
-    subject sub;
+    context_subject sub;
     topic_key_magic magic{0};
 
     friend bool operator==(const delete_subject_key&, const delete_subject_key&)
@@ -1188,7 +1188,7 @@ void rjson_serialize(::json::Writer<Buffer>& w, const delete_subject_key& key) {
     w.Key("keytype");
     ::json::rjson_serialize(w, to_string_view(key.keytype));
     w.Key("subject");
-    ::json::rjson_serialize(w, key.sub());
+    w.String(key.sub.to_string());
     w.Key("magic");
     ::json::rjson_serialize(w, key.magic);
     if (key.seq.has_value()) {
@@ -1285,7 +1285,7 @@ public:
             return kt == result.keytype;
         }
         case state::subject: {
-            result.sub = subject{ss::sstring{sv}};
+            result.sub = context_subject::from_string(sv);
             _state = state::object;
             return true;
         }
@@ -1310,7 +1310,7 @@ public:
 };
 
 struct delete_subject_value {
-    subject sub;
+    context_subject sub;
 
     friend bool
     operator==(const delete_subject_value&, const delete_subject_value&)
@@ -1328,7 +1328,7 @@ void rjson_serialize(
   ::json::Writer<Buffer>& w, const delete_subject_value& val) {
     w.StartObject();
     w.Key("subject");
-    ::json::rjson_serialize(w, val.sub);
+    w.String(val.sub.to_string());
     w.EndObject();
 }
 
@@ -1375,7 +1375,7 @@ public:
         auto sv = std::string_view{str, len};
         switch (_state) {
         case state::subject: {
-            result.sub = subject{ss::sstring{sv}};
+            result.sub = context_subject::from_string(sv);
             _state = state::object;
             return true;
         }

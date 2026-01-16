@@ -26,7 +26,7 @@ public:
     store_fixture& operator=(store_fixture&&) = delete;
 
     schema_id insert(
-      const subject& sub,
+      const context_subject& sub,
       const schema_definition& schema_def,
       schema_version version);
 

@@ -178,16 +178,13 @@ struct json_schema_definition::impl {
 
     impl(
       document_context ctx,
-      std::string_view name,
       schema_definition::references refs,
       std::optional<schema_metadata> meta)
       : ctx{std::move(ctx)}
-      , name{name}
       , refs(std::move(refs))
       , meta(std::move(meta)) {}
 
     document_context ctx;
-    ss::sstring name;
     schema_definition::references refs;
     std::optional<schema_metadata> meta;
 };
@@ -223,8 +220,6 @@ const schema_definition::references& json_schema_definition::refs() const {
 const std::optional<schema_metadata>& json_schema_definition::meta() const {
     return _impl->meta;
 }
-
-ss::sstring json_schema_definition::name() const { return {_impl->name}; };
 
 std::optional<ss::sstring> json_schema_definition::title() const {
     if (!_impl->ctx.doc.IsObject()) {
@@ -2391,10 +2386,9 @@ make_json_schema_definition(schema_getter&, subject_schema schema) {
     auto [sub, unparsed] = std::move(schema).destructure();
     auto [def, type, refs, meta] = std::move(unparsed).destructure();
     auto doc = parse_json(std::move(def)).value(); // throws on error
-    std::string_view name = sub();
     co_return json_schema_definition{
       ss::make_shared<json_schema_definition::impl>(
-        std::move(doc), name, std::move(refs), std::move(meta))};
+        std::move(doc), std::move(refs), std::move(meta))};
 }
 
 ss::future<subject_schema> make_canonical_json_schema(

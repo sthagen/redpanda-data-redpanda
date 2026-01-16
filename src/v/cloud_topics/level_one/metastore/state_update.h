@@ -63,7 +63,8 @@ struct new_object
       chunked_hash_map<model::partition_id, metadata>>
       extent_metas;
 
-    void collect_extents_by_tidp(sorted_extents_by_tidp_t*) const;
+    // Returns the sum of lengths of the extents collected.
+    size_t collect_extents_by_tidp(sorted_extents_by_tidp_t*) const;
 };
 
 using term_state_update_t

@@ -403,7 +403,7 @@ void rjson_serialize(
   const schema_registry::post_subject_response& res) {
     w.StartObject();
     w.Key("subject");
-    ::json::rjson_serialize(w, res.schema.sub());
+    w.String(res.schema.sub().to_string());
     w.Key("version");
     ::json::rjson_serialize(w, res.version);
     w.Key("id");

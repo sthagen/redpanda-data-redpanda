@@ -16,7 +16,7 @@ namespace pps = pp::schema_registry;
 
 namespace pandaproxy::schema_registry::test_utils {
 
-ss::sstring make_proto_schema(const pps::subject& sub, int n_fields);
+ss::sstring make_proto_schema(const pps::context_subject& sub, int n_fields);
 
 std::string sanitize(
   std::string_view raw_proto,

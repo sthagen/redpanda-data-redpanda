@@ -58,6 +58,8 @@ void accounting_sink::notify_replicator_failure(model::term_id) {}
 
 kafka::offset accounting_sink::high_watermark() const { return _last_offset; }
 
+bool accounting_sink::can_prefix_truncate() const { return true; }
+
 ss::future<kafka::error_code> accounting_sink::prefix_truncate(
   kafka::offset truncation_offset, ss::lowres_clock::time_point) {
     if (truncation_offset <= start_offset()) {

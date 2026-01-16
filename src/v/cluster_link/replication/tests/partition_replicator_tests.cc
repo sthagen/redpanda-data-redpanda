@@ -153,6 +153,8 @@ public:
         return kafka::next_offset(_last_replicated_offset);
     }
 
+    bool can_prefix_truncate() const final { return true; }
+
     ss::future<kafka::error_code> prefix_truncate(
       kafka::offset truncation_offset, ss::lowres_clock::time_point) final {
         if (truncation_offset <= start_offset()) {

@@ -75,10 +75,8 @@ public:
     /// return the schema_version and schema_id, and whether it's new.
     insert_result insert(subject_schema schema) {
         auto [sub, def] = std::move(schema).destructure();
-        // TODO: deduce the context from the subject
-        auto ctx_sub = context_subject{default_context, std::move(sub)};
-        auto id = insert_schema(ctx_sub.ctx, std::move(def)).id;
-        auto [version, inserted] = insert_subject(std::move(ctx_sub), id);
+        auto id = insert_schema(sub.ctx, std::move(def)).id;
+        auto [version, inserted] = insert_subject(std::move(sub), id);
         return {version, id, inserted};
     }
 
@@ -171,13 +169,13 @@ public:
         auto v_id = BOOST_OUTCOME_TRYX(
           get_subject_version_id(sub, version, inc_del));
 
-        auto def = BOOST_OUTCOME_TRYX(get_schema_definition(v_id.id));
+        auto def = BOOST_OUTCOME_TRYX(
+          get_schema_definition({sub.ctx, v_id.id}));
 
         return stored_schema{
-          // TODO: pass sub directly instead of sub.sub
-          .schema = {sub.sub, std::move(def)},
+          .schema = {sub, std::move(def)},
           .version = v_id.version,
-          .id = v_id.id.id,
+          .id = v_id.id,
           .deleted = v_id.deleted};
     }
 
@@ -440,8 +438,9 @@ public:
         schema_id_set has_ids;
         for (const auto& s : _subjects) {
             for (const auto& r : s.second.versions) {
-                if (!r.deleted && ids.contains(r.id)) {
-                    has_ids.insert(r.id);
+                auto ctx_id = context_schema_id{s.first.ctx, r.id};
+                if (!r.deleted && ids.contains(ctx_id)) {
+                    has_ids.insert(ctx_id);
                 }
             }
         }

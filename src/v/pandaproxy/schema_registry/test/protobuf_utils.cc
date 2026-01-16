@@ -17,9 +17,9 @@ namespace pps = pp::schema_registry;
 
 namespace pandaproxy::schema_registry::test_utils {
 
-ss::sstring make_proto_schema(const pps::subject& sub, int n_fields) {
+ss::sstring make_proto_schema(const pps::context_subject& sub, int n_fields) {
     ss::sstring body = ss::format(
-      "syntax = \"proto3\";\nmessage MyType{} {{\n", sub);
+      "syntax = \"proto3\";\nmessage MyType{} {{\n", sub.to_string());
     for (int32_t i = 1; i <= n_fields; ++i) {
         body += ss::format("\tint32 i{} = {};\n", i, i);
     }

@@ -86,10 +86,13 @@ void remove_extents_below_start_offset_for_tp(
 
 } // namespace
 
-void new_object::collect_extents_by_tidp(sorted_extents_by_tidp_t* ret) const {
+size_t
+new_object::collect_extents_by_tidp(sorted_extents_by_tidp_t* ret) const {
+    size_t total_data_size = 0;
     for (const auto& [tid, p_extents] : extent_metas) {
         for (const auto& [p, extent_meta] : p_extents) {
             auto& ret_extents = (*ret)[model::topic_id_partition(tid, p)];
+            total_data_size += extent_meta.len;
             ret_extents.insert(
               extent{
                 .base_offset = extent_meta.base_offset,
@@ -101,6 +104,7 @@ void new_object::collect_extents_by_tidp(sorted_extents_by_tidp_t* ret) const {
               });
         }
     }
+    return total_data_size;
 }
 
 std::expected<add_objects_update, stm_update_error> add_objects_update::build(
@@ -171,22 +175,43 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
               stm_update_error{fmt::format("Missing term info for {}", tidp)});
         }
     }
-    // Now that we've validated the offsets of our extents, validate the terms
-    // for the accepted extents.
+    // Now that we've validated the offsets of our extents, validate the terms.
     for (const auto& [tp, req_entries] : new_terms) {
         if (req_entries.empty()) {
             return std::unexpected(
               stm_update_error{
                 fmt::format("Empty terms requested for {}", tp)});
         }
-        if (corrected_next_offsets.contains(tp)) {
-            continue;
-        }
         auto extents_it = new_extents.find(tp);
         if (extents_it == new_extents.end() || extents_it->second.empty()) {
             return std::unexpected(
               stm_update_error{fmt::format(
                 "Terms provided for a partition that has no extents", tp)});
+        }
+        // Now check that the term entries are in increasing order.
+        auto max_term_so_far = model::term_id{-1};
+        auto max_offset_so_far = kafka::offset{-1};
+        for (const auto& entry : req_entries) {
+            if (
+              entry.term_id <= max_term_so_far
+              || entry.start_offset <= max_offset_so_far) {
+                return std::unexpected(
+                  stm_update_error{fmt::format(
+                    "Invalid term for {}: term={}, offset={}, "
+                    "max_term_so_far={}, max_offset_so_far={}",
+                    tp,
+                    entry.term_id,
+                    entry.start_offset,
+                    max_term_so_far,
+                    max_offset_so_far)});
+            }
+            max_term_so_far = entry.term_id;
+            max_offset_so_far = entry.start_offset;
+        }
+        if (corrected_next_offsets.contains(tp)) {
+            // Don't bother checking the terms against the extents if we
+            // already know the extent offsets are off.
+            continue;
         }
         auto new_extents_start_offset
           = extents_it->second.begin()->base_offset();
@@ -210,8 +235,8 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
                 new_terms_last_start_offset)});
         }
         auto p_state = state.partition_state(tp);
-        // First do a basic check that the incoming term entries can be
-        // appended to our state without violating ordering requirements.
+        // Check that the incoming term entries can be appended to our state
+        // without violating ordering requirements.
         if (p_state.has_value() && !p_state->get().term_starts.empty()) {
             auto p_last_entry = *p_state->get().term_starts.rbegin();
             auto req_first_entry = req_entries.begin();
@@ -235,27 +260,6 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
                     req_first_entry->start_offset,
                     p_last_entry.start_offset)});
             }
-        }
-        // Now check that the the term entries themselves (both terms and
-        // offsets) are in increasing order.
-        auto max_term_so_far = model::term_id{-1};
-        auto max_offset_so_far = kafka::offset{-1};
-        for (const auto& entry : req_entries) {
-            if (
-              entry.term_id <= max_term_so_far
-              || entry.start_offset <= max_offset_so_far) {
-                return std::unexpected(
-                  stm_update_error{fmt::format(
-                    "Invalid term for {}: term={}, offset={}, "
-                    "max_term_so_far={}, max_offset_so_far={}",
-                    tp,
-                    entry.term_id,
-                    entry.start_offset,
-                    max_term_so_far,
-                    max_offset_so_far)});
-            }
-            max_term_so_far = entry.term_id;
-            max_offset_so_far = entry.start_offset;
         }
     }
     if (corrections) {

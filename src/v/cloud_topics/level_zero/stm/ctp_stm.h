@@ -129,6 +129,16 @@ private:
     /// Current in-memory state of the STM
     ctp_stm_state _state;
 
+    // Log sliding window state, we use this to assert that the log contents
+    // never break the invariants that the epoch fencing should enforce.
+    //
+    // Note that in the state object we assign the first epoch ever observed
+    // to be the min *and* max. Here we only can assign it to the max because
+    // we don't know if we are truly at the beginning of the log or not due to
+    // this state being ephemeral.
+    cluster_epoch _epoch_window_min;
+    cluster_epoch _epoch_window_max;
+
     // An abort source to stop the prefix truncation loop on stop.
     ss::condition_variable _lro_advanced;
     ss::abort_source _as;

@@ -129,6 +129,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":keys",
+        "//src/v/cloud_topics:logger",
         "//src/v/lsm/core:exceptions",
         "//src/v/ssx:future_util",
     ],

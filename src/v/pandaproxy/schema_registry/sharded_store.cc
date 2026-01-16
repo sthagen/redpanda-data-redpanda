@@ -169,11 +169,15 @@ sharded_store::project_ids(stored_schema schema) {
     auto s_id = schema.id;
     if (s_id == invalid_schema_id) {
         // New schema, project an ID for it.
-        s_id = co_await project_schema_id(default_context);
-        vlog(srlog.debug, "project_ids: projected new ID {}", s_id);
+        s_id = co_await project_schema_id(sub.ctx);
+        vlog(
+          srlog.debug,
+          "project_ids (context: {}): projected new ID {}",
+          sub.ctx,
+          s_id);
     }
 
-    auto ctx_sub = context_subject{default_context, sub};
+    auto ctx_sub = sub;
     auto sub_shard{shard_for(ctx_sub)};
     auto v_id = co_await _store.invoke_on(
       sub_shard, _smp_opts, [ctx_sub, s_id](store& s) {
@@ -216,15 +220,9 @@ ss::future<bool> sharded_store::upsert(
     // mark schemas that failed to be processed here. They will be given
     // one more chance once we have loaded all the topic to the store.
     co_await upsert_schema(
-      context_schema_id{default_context, id},
-      std::move(def),
-      processing_failed);
+      context_schema_id{sub.ctx, id}, std::move(def), processing_failed);
     co_return co_await upsert_subject(
-      marker,
-      context_subject{default_context, std::move(sub)},
-      version,
-      id,
-      deleted);
+      marker, std::move(sub), version, id, deleted);
 }
 
 ss::future<> sharded_store::process_marked_schemas() {
@@ -285,13 +283,13 @@ sharded_store::has_schema(subject_schema schema, include_deleted inc_del) {
     });
     for (auto entry : versions) {
         try {
-            // TODO: deduce the context from the subject/entry.id
-            auto def = co_await get_schema_definition(entry.id);
+            auto def = co_await get_schema_definition(
+              {schema.sub().ctx, entry.id});
             if (schema.def() == def) {
                 co_return stored_schema{
                   .schema = {schema.sub(), std::move(def)},
                   .version = entry.version,
-                  .id = entry.id.id,
+                  .id = entry.id,
                   .deleted = entry.deleted};
             }
         } catch (const exception& e) {
@@ -397,7 +395,7 @@ ss::future<context_schema_id> sharded_store::get_id(
             .value();
       });
 
-    co_return v_id.id;
+    co_return context_schema_id{sub.ctx, v_id.id};
 }
 
 ss::future<stored_schema> sharded_store::get_subject_schema(
@@ -409,17 +407,17 @@ ss::future<stored_schema> sharded_store::get_subject_schema(
       sub_shard, _smp_opts, [sub, version, inc_del](store& s) {
           return s.get_subject_version_id(sub, version, inc_del).value();
       });
-
+    auto ctx_id = context_schema_id{sub.ctx, v_id.id};
+    auto ctx_id_shard = shard_for(ctx_id);
     auto def = co_await _store.invoke_on(
-      shard_for(v_id.id), _smp_opts, [id = v_id.id](store& s) {
-          return s.get_schema_definition(id).value();
+      ctx_id_shard, _smp_opts, [ctx_id{std::move(ctx_id)}](store& s) {
+          return s.get_schema_definition(ctx_id).value();
       });
 
     co_return stored_schema{
-      // TODO: pass sub directly instead of sub.sub
-      .schema = {sub.sub, std::move(def)},
+      .schema = {std::move(sub), std::move(def)},
       .version = v_id.version,
-      .id = v_id.id.id,
+      .id = v_id.id,
       .deleted = v_id.deleted};
 }
 
@@ -586,7 +584,7 @@ ss::future<bool> sharded_store::delete_subject_version(
                              .value()
                              .id;
           auto result = s.delete_subject_version(sub, ver, force).value();
-          return std::make_pair(schema_id, result);
+          return std::make_pair(context_schema_id{sub.ctx, schema_id}, result);
       });
 
     auto remaining_subjects_exist = co_await _store.map_reduce0(

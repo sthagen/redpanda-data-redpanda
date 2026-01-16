@@ -269,7 +269,7 @@ delete_config_subject(server::request_t rq, server::reply_t rp) {
 
     // ensure we see latest writes
     co_await rq.service().writer().read_sync();
-    co_await rq.service().writer().check_mutable(sub);
+    co_await rq.service().writer().check_mutable(default_context, sub);
 
     compatibility_level lvl{};
     try {

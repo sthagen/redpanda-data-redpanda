@@ -80,7 +80,7 @@ TEST(ProtoLargeAlloc, test_protobuf_memory_stuff) {
     // Size of these schemas is set to around half-megabyte. The exact value is
     // not important, as long as it is significantly larger than the
     // fragmentation interval introduced in fragment_memory
-    const pps::subject sub{"test_subject_01"};
+    const pps::context_subject sub{"test_subject_01"};
     const auto large_schema = pps::test_utils::make_proto_schema(sub, 25'000);
     EXPECT_EQ(large_schema.size(), 552841);
 

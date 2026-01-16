@@ -232,7 +232,7 @@ class DatalakeServices:
 
     def create_iceberg_enabled_topic(
         self,
-        name,
+        name: str,
         partitions=1,
         replicas=1,
         iceberg_mode: Literal["key_value"]
@@ -241,7 +241,7 @@ class DatalakeServices:
         | str = "key_value",
         target_lag_ms: Optional[int] = None,
         config: dict[str, Any] = dict(),
-    ):
+    ) -> None:
         config[TopicSpec.PROPERTY_ICEBERG_MODE] = iceberg_mode
         if target_lag_ms:
             config[TopicSpec.PROPERTY_ICEBERG_TARGET_LAG_MS] = target_lag_ms
@@ -307,8 +307,8 @@ class DatalakeServices:
         )
 
     def wait_for_translation_until_offset(
-        self, topic, offset, partition=0, timeout=30, backoff_sec=5
-    ):
+        self, topic: str, offset: int, partition=0, timeout=30, backoff_sec=5
+    ) -> None:
         self.wait_for_iceberg_table("redpanda", topic, timeout, backoff_sec)
 
         def translation_done():

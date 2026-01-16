@@ -60,7 +60,7 @@ void write_encoded_schema_def(
     w->append(def.refs().size());
     for (const auto& ref : def.refs()) {
         w->append_with_length(ref.name);
-        w->append_with_length(ref.sub());
+        w->append_with_length(ref.sub.to_string());
         w->append(ref.version());
     }
 }

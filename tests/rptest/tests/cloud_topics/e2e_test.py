@@ -9,7 +9,9 @@
 
 from ducktape.utils.util import wait_until
 from ducktape.mark import matrix
+from ducktape.tests.test import TestContext
 from collections.abc import Iterable
+from typing import Any
 
 from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.clients.rpk import RpkTool
@@ -45,7 +47,12 @@ class EndToEndCloudTopicsBase(EndToEndTest):
 
     rpk: RpkTool
 
-    def __init__(self, test_context, extra_rp_conf=None, environment=None):
+    def __init__(
+        self,
+        test_context: TestContext,
+        extra_rp_conf: dict[str, Any] | None = None,
+        environment: dict[str, str] | None = None,
+    ) -> None:
         super(EndToEndCloudTopicsBase, self).__init__(test_context=test_context)
 
         self.test_context = test_context

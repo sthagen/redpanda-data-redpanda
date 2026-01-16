@@ -330,11 +330,16 @@ void ctp_stm::apply_placeholder(const model::record_batch& batch) {
     // this assertion is made here rather than inside the state object itself
     // because the assertion is about the physical content of the log rather
     // than the computed state.
+    if (id.epoch > _epoch_window_max) {
+        _epoch_window_min = _epoch_window_max;
+        _epoch_window_max = id.epoch;
+    }
     vassert(
-      id.epoch >= _state.get_previous_epoch().value_or(cluster_epoch::min()),
-      "Observed a non-monotonic epoch sequence {} < {}",
+      id.epoch >= _epoch_window_min,
+      "[{}] Observed a non-monotonic epoch sequence {} < {}",
+      ntp(),
       id.epoch,
-      _state.get_previous_epoch());
+      _epoch_window_min);
     _state.advance_epoch(id.epoch, batch.header().base_offset);
 }
 

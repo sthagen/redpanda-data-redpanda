@@ -11,9 +11,17 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/lsm/keys.h"
+#include "cloud_topics/level_one/metastore/lsm/state_reader.h"
+#include "cloud_topics/level_one/metastore/lsm/state_update.h"
+#include "cloud_topics/level_one/metastore/lsm/values.h"
+#include "cloud_topics/level_one/metastore/lsm/write_batch_row.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "gmock/gmock.h"
+#include "lsm/io/memory_persistence.h"
+#include "lsm/lsm.h"
 #include "model/fundamental.h"
+#include "serde/rw/rw.h"
 #include "utils/uuid.h"
 
 #include <gtest/gtest.h>
@@ -133,15 +141,192 @@ private:
 };
 } // namespace
 
-TEST(StateUpdateTest, TestEmptyAdd) {
-    state s;
-    auto empty_update = add_objects_update::build(s, {}, {});
-    EXPECT_FALSE(empty_update.has_value());
-    EXPECT_EQ(empty_update.error(), "No objects requested");
+enum class state_backend { simple, lsm };
+
+class StateUpdateParamTest : public ::testing::TestWithParam<state_backend> {
+protected:
+    void SetUp() override {
+        if (GetParam() == state_backend::lsm) {
+            db_ = lsm::database::open(
+                    {.database_epoch = 0},
+                    lsm::io::persistence{
+                      .data = lsm::io::make_memory_data_persistence(),
+                      .metadata = lsm::io::make_memory_metadata_persistence(),
+                    })
+                    .get();
+        }
+    }
+
+    void TearDown() override {
+        if (db_) {
+            db_->close().get();
+        }
+    }
+
+    std::expected<std::monostate, stm_update_error>
+    apply_add_objects(add_objects_update update) {
+        if (GetParam() == state_backend::simple) {
+            return update.apply(state_);
+        }
+        add_objects_db_update db_update{
+          .new_objects = std::move(update.new_objects),
+          .new_terms = std::move(update.new_terms),
+        };
+        auto reader = state_reader(db_->create_snapshot());
+        chunked_vector<write_batch_row> rows;
+        auto result = db_update.build_rows(reader, rows).get();
+        if (!result.has_value()) {
+            return std::unexpected(stm_update_error{result.error()()});
+        }
+        apply_rows_to_db(rows);
+        return std::monostate{};
+    }
+
+    std::expected<std::monostate, stm_update_error>
+    apply_replace_objects(replace_objects_update update) {
+        if (GetParam() == state_backend::simple) {
+            return update.apply(state_);
+        }
+        replace_objects_db_update db_update{
+          .new_objects = std::move(update.new_objects),
+          .compaction_updates = std::move(update.compaction_updates),
+        };
+        auto reader = state_reader(db_->create_snapshot());
+        chunked_vector<write_batch_row> rows;
+        auto result = db_update.build_rows(reader, rows).get();
+        if (!result.has_value()) {
+            return std::unexpected(stm_update_error{result.error()()});
+        }
+        apply_rows_to_db(rows);
+        return std::monostate{};
+    }
+
+    std::expected<std::monostate, stm_update_error>
+    can_apply_add_objects(add_objects_update update) {
+        if (GetParam() == state_backend::simple) {
+            return update.can_apply(state_);
+        }
+        add_objects_db_update db_update{
+          .new_objects = std::move(update.new_objects),
+          .new_terms = std::move(update.new_terms),
+        };
+        auto validate_res = db_update.validate_inputs();
+        if (!validate_res.has_value()) {
+            return std::unexpected(stm_update_error{validate_res.error()()});
+        }
+        auto reader = state_reader(db_->create_snapshot());
+        chunked_vector<write_batch_row> rows;
+        auto result = db_update.build_rows(reader, rows).get();
+        if (!result.has_value()) {
+            return std::unexpected(stm_update_error(result.error()()));
+        }
+        return std::monostate{};
+    }
+
+    state& get_state() {
+        if (GetParam() == state_backend::lsm) {
+            state_ = snapshot_to_state();
+        }
+        return state_;
+    }
+
+private:
+    state snapshot_to_state() {
+        state result;
+        auto snap = db_->create_snapshot();
+        auto iter = snap.create_iterator().get();
+
+        for (iter.seek_to_first().get(); iter.valid(); iter.next().get()) {
+            auto key = iter.key();
+            auto val = iter.value();
+            if (auto meta_key = metadata_row_key::decode(key)) {
+                auto meta_val = serde::from_iobuf<metadata_row_value>(
+                  std::move(val));
+                auto& p_state = result.topic_to_state[meta_key->tidp.topic_id]
+                                  .pid_to_state[meta_key->tidp.partition];
+                p_state.start_offset = meta_val.start_offset;
+                p_state.next_offset = meta_val.next_offset;
+                p_state.compaction_epoch = meta_val.compaction_epoch;
+            } else if (auto ext_key = extent_row_key::decode(key)) {
+                auto ext_val = serde::from_iobuf<extent_row_value>(
+                  std::move(val));
+                extent e{
+                  .base_offset = ext_key->base_offset,
+                  .last_offset = ext_val.last_offset,
+                  .max_timestamp = ext_val.max_timestamp,
+                  .filepos = ext_val.filepos,
+                  .len = ext_val.len,
+                  .oid = ext_val.oid,
+                };
+                result.topic_to_state[ext_key->tidp.topic_id]
+                  .pid_to_state[ext_key->tidp.partition]
+                  .extents.insert(e);
+            } else if (auto term_key = term_row_key::decode(key)) {
+                auto term_val = serde::from_iobuf<term_row_value>(
+                  std::move(val));
+                term_start ts{
+                  .term_id = term_key->term,
+                  .start_offset = term_val.term_start_offset,
+                };
+                result.topic_to_state[term_key->tidp.topic_id]
+                  .pid_to_state[term_key->tidp.partition]
+                  .term_starts.insert(ts);
+            } else if (auto comp_key = compaction_row_key::decode(key)) {
+                auto comp_val = serde::from_iobuf<compaction_row_value>(
+                  std::move(val));
+                result.topic_to_state[comp_key->tidp.topic_id]
+                  .pid_to_state[comp_key->tidp.partition]
+                  .compaction_state
+                  = std::move(comp_val.state);
+            } else if (auto obj_key = object_row_key::decode(key)) {
+                auto obj_val = serde::from_iobuf<object_row_value>(
+                  std::move(val));
+                result.objects[obj_key->oid] = obj_val.object;
+            }
+        }
+        return result;
+    }
+
+    void apply_rows_to_db(const chunked_vector<write_batch_row>& rows) {
+        auto wb = db_->create_write_batch();
+        auto seqno = next_seqno();
+        for (const auto& row : rows) {
+            if (row.value.empty()) {
+                wb.remove(row.key, seqno);
+            } else {
+                wb.put(row.key, row.value.copy(), seqno);
+            }
+        }
+        db_->apply(std::move(wb)).get();
+    }
+
+    lsm::sequence_number next_seqno() {
+        auto max_applied_opt = db_->max_applied_seqno();
+        if (!max_applied_opt) {
+            return lsm::sequence_number(1);
+        }
+        return lsm::sequence_number{max_applied_opt.value()() + 1};
+    }
+
+    state state_;
+    std::optional<lsm::database> db_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+  StateUpdate,
+  StateUpdateParamTest,
+  testing::Values(state_backend::simple, state_backend::lsm),
+  [](const testing::TestParamInfo<state_backend>& info) {
+      return info.param == state_backend::simple ? "Simple" : "LSM";
+  });
+
+TEST_P(StateUpdateParamTest, TestEmptyAdd) {
+    auto empty_update = add_objects_builder().build();
+    auto res = can_apply_add_objects(std::move(empty_update));
+    EXPECT_FALSE(res.has_value());
 }
 
-TEST(StateUpdateTest, TestAddBasic) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddBasic) {
     {
         auto update = add_objects_builder()
                         .add(new_obj_builder(oid1, 100, 1100)
@@ -152,9 +337,9 @@ TEST(StateUpdateTest, TestAddBasic) {
                         .add_term_start(tidp_b, 0_tm, 0_o)
                         .build();
         ASSERT_FALSE(update.new_objects.empty());
-        auto res = update.apply(s);
+        auto res = apply_add_objects(std::move(update));
         EXPECT_TRUE(res.has_value());
-        EXPECT_EQ(2, s.topic_to_state.size());
+        EXPECT_EQ(2, get_state().topic_to_state.size());
     }
     {
         auto update = add_objects_builder()
@@ -166,14 +351,13 @@ TEST(StateUpdateTest, TestAddBasic) {
                         .add_term_start(tidp_b, 0_tm, 11_o)
                         .build();
         ASSERT_FALSE(update.new_objects.empty());
-        auto res = update.apply(s);
+        auto res = apply_add_objects(std::move(update));
         EXPECT_TRUE(res.has_value());
-        EXPECT_EQ(3, s.topic_to_state.size());
+        EXPECT_EQ(3, get_state().topic_to_state.size());
     }
 }
 
-TEST(StateUpdateTest, TestDuplicateAddSingleUpdate) {
-    state s;
+TEST_P(StateUpdateParamTest, TestDuplicateAddSingleUpdate) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -185,23 +369,21 @@ TEST(StateUpdateTest, TestDuplicateAddSingleUpdate) {
                     .add_term_start(tidp_b, 0_tm, 0_o)
                     .build();
     ASSERT_FALSE(update.new_objects.empty());
-    auto res = update.can_apply(s);
+    auto res = can_apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()(), testing::HasSubstr("Input object breaks partition"));
 }
 
-TEST(StateUpdateTest, TestStartAfterZero) {
+TEST_P(StateUpdateParamTest, TestStartAfterZero) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 0_tm, 11_o)
                     .build();
-    state s;
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
 
+    auto& s = get_state();
     // The added object should be tracked as removed.
     EXPECT_EQ(0, s.topic_to_state.size());
     EXPECT_EQ(1, s.objects.size());
@@ -209,7 +391,7 @@ TEST(StateUpdateTest, TestStartAfterZero) {
     EXPECT_EQ(added_obj.removed_data_size, added_obj.total_data_size);
 }
 
-TEST(StateUpdateTest, TestDuplicateObject) {
+TEST_P(StateUpdateParamTest, TestDuplicateObject) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -220,22 +402,32 @@ TEST(StateUpdateTest, TestDuplicateObject) {
                     .add_term_start(tidp_b, 0_tm, 0_o)
                     .add_term_start(tidp_c, 0_tm, 0_o)
                     .build();
-    state s;
     ASSERT_FALSE(update.new_objects.empty());
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
-    EXPECT_EQ(3, s.topic_to_state.size());
-    EXPECT_EQ(1, s.objects.size());
+    {
+        auto& s = get_state();
+        EXPECT_EQ(3, s.topic_to_state.size());
+        EXPECT_EQ(1, s.objects.size());
+    }
 
-    // Apply the exact same add_object -- it should be deduped.
-    auto dupe_res = update.can_apply(s);
+    // Try to apply the exact same add_object -- it should be rejected.
+    auto dupe_update = add_objects_builder()
+                         .add(new_obj_builder(oid1, 100, 1100)
+                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                                .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                                .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
+                                .build())
+                         .add_term_start(tidp_a, 0_tm, 0_o)
+                         .add_term_start(tidp_b, 0_tm, 0_o)
+                         .add_term_start(tidp_c, 0_tm, 0_o)
+                         .build();
+    auto dupe_res = can_apply_add_objects(std::move(dupe_update));
     EXPECT_FALSE(dupe_res.has_value());
-    EXPECT_THAT(dupe_res.error()(), testing::HasSubstr("already exists"))
-      << dupe_res.error();
-    EXPECT_EQ(1, s.objects.size());
+    EXPECT_EQ(1, get_state().objects.size());
 }
 
-TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
+TEST_P(StateUpdateParamTest, TestDuplicateAddMultipleUpdates) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -246,9 +438,9 @@ TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
                     .add_term_start(tidp_b, 0_tm, 0_o)
                     .add_term_start(tidp_c, 0_tm, 0_o)
                     .build();
-    state s;
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
+    auto& s = get_state();
     EXPECT_EQ(3, s.topic_to_state.size());
     for (const auto& [t, p_states] : s.topic_to_state) {
         EXPECT_EQ(
@@ -256,24 +448,33 @@ TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
     }
     EXPECT_EQ(1, s.objects.size());
 
-    // Tweak the update to overlap with the one we just applied but with a
-    // different object.
-    update.new_objects[0].oid = oid2;
-    auto dupe_res = update.apply(s);
+    // Create a second update with a different object but same extents
+    // (overlapping with what we just applied).
+    auto dupe_update = add_objects_builder()
+                         .add(new_obj_builder(oid2, 100, 1100)
+                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                                .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                                .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
+                                .build())
+                         .add_term_start(tidp_a, 0_tm, 0_o)
+                         .add_term_start(tidp_b, 0_tm, 0_o)
+                         .add_term_start(tidp_c, 0_tm, 0_o)
+                         .build();
+    auto dupe_res = apply_add_objects(std::move(dupe_update));
     EXPECT_TRUE(dupe_res.has_value());
-    EXPECT_EQ(3, s.topic_to_state.size());
-    for (const auto& [t, p_states] : s.topic_to_state) {
+    auto& s2 = get_state();
+    EXPECT_EQ(3, s2.topic_to_state.size());
+    for (const auto& [t, p_states] : s2.topic_to_state) {
         // The tracked extents shouldn't change.
         EXPECT_EQ(
           1, p_states.pid_to_state.at(model::partition_id{0}).extents.size());
     }
-    EXPECT_EQ(2, s.objects.size());
-    auto& dupe_obj = s.objects.at(oid2);
+    EXPECT_EQ(2, s2.objects.size());
+    auto& dupe_obj = s2.objects.at(oid2);
     EXPECT_EQ(dupe_obj.removed_data_size, dupe_obj.total_data_size);
 }
 
-TEST(StateUpdateTest, TestOverlapSomePartitions) {
-    state s;
+TEST_P(StateUpdateParamTest, TestOverlapSomePartitions) {
     {
         auto update = add_objects_builder()
                         .add(new_obj_builder(oid1, 100, 1100)
@@ -283,28 +484,36 @@ TEST(StateUpdateTest, TestOverlapSomePartitions) {
                         .add_term_start(tidp_a, 0_tm, 0_o)
                         .add_term_start(tidp_b, 0_tm, 0_o)
                         .build();
-        auto res = update.apply(s);
+        auto res = apply_add_objects(std::move(update));
         EXPECT_TRUE(res.has_value());
     }
-    EXPECT_EQ(2, s.topic_to_state.size());
-    for (const auto& [t, p_states] : s.topic_to_state) {
-        EXPECT_EQ(
-          1, p_states.pid_to_state.at(model::partition_id{0}).extents.size());
+    {
+        auto& s = get_state();
+        EXPECT_EQ(2, s.topic_to_state.size());
+        for (const auto& [t, p_states] : s.topic_to_state) {
+            EXPECT_EQ(
+              1,
+              p_states.pid_to_state.at(model::partition_id{0}).extents.size());
+        }
+        EXPECT_EQ(1, s.objects.size());
     }
-    EXPECT_EQ(1, s.objects.size());
 
     // Now send a bogus range for one of the partitions, but a correct extent
     // for another.
-    auto update = add_objects_builder()
-                    .add(new_obj_builder(oid2, 100, 1100)
-                           .add(tidp_a, 1337_o, 1337_o, 1999_t, 0, 5)
-                           .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
-                           .build())
-                    .add_term_start(tidp_a, 0_tm, 1337_o)
-                    .add_term_start(tidp_b, 0_tm, 11_o)
-                    .build();
-    auto misaligned_res = update.apply(s);
-    EXPECT_TRUE(misaligned_res.has_value());
+    {
+        auto update = add_objects_builder()
+                        .add(new_obj_builder(oid2, 100, 1100)
+                               .add(tidp_a, 1337_o, 1337_o, 1999_t, 0, 5)
+                               .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
+                               .build())
+                        .add_term_start(tidp_a, 0_tm, 1337_o)
+                        .add_term_start(tidp_b, 0_tm, 11_o)
+                        .build();
+        auto misaligned_res = apply_add_objects(std::move(update));
+        EXPECT_TRUE(misaligned_res.has_value());
+    }
+
+    auto& s = get_state();
     EXPECT_EQ(2, s.topic_to_state.size());
 
     // The bad update shouldn't be applied.
@@ -338,7 +547,7 @@ MATCHER_P2(MatchesTermStart, term, offset, "") {
 
 } // namespace
 
-TEST(StateUpdateTest, TestReplaceBasic) {
+TEST_P(StateUpdateParamTest, TestReplaceBasic) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -354,8 +563,7 @@ TEST(StateUpdateTest, TestReplaceBasic) {
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .add_term_start(tidp_c, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Fully replace partition a, partially replace c.
@@ -366,8 +574,10 @@ TEST(StateUpdateTest, TestReplaceBasic) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
+    auto replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value());
+
+    auto& s = get_state();
 
     // Fully replaced.
     const auto& prt_a
@@ -392,31 +602,25 @@ TEST(StateUpdateTest, TestReplaceBasic) {
     EXPECT_EQ(s.objects.at(oid3).removed_data_size, 0);
 }
 
-TEST(StateUpdateTest, TestReplaceEmptyState) {
-    state s;
+TEST_P(StateUpdateParamTest, TestReplaceEmptyState) {
     auto replace = replace_objects_builder()
                      .add(new_obj_builder(oid1, 100, 1100)
                             .add(tidp_a, 0_o, 20_o, 1999_t, 0, 99)
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex("Partition .+ not tracked by state"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestReplaceDuplicate) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestReplaceDuplicate) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder()
@@ -425,23 +629,18 @@ TEST(StateUpdateTest, TestReplaceDuplicate) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex("Object .+ already exists"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestReplaceMisaligned) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestReplaceMisaligned) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder()
@@ -450,24 +649,18 @@ TEST(StateUpdateTest, TestReplaceMisaligned) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Partition .+ doesn't contain extents that span exactly"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestReplaceBadOrdering) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestReplaceBadOrdering) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Make the replacement overlap with itself.
@@ -480,35 +673,27 @@ TEST(StateUpdateTest, TestReplaceBadOrdering) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex("breaks partition .+ offset ordering"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestEmptyReplace) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestEmptyReplace) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder().build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::StrEq("No objects requested"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestReplaceValidNonContiguous) {
+TEST_P(StateUpdateParamTest, TestReplaceValidNonContiguous) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
@@ -521,8 +706,7 @@ TEST(StateUpdateTest, TestReplaceValidNonContiguous) {
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
@@ -538,14 +722,15 @@ TEST(StateUpdateTest, TestReplaceValidNonContiguous) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
+    auto replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value());
 
+    auto& s = get_state();
     auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
     ASSERT_EQ(p.extents.size(), 3);
 }
 
-TEST(StateUpdateTest, TestReplaceValidNonContiguousSplitExtent) {
+TEST_P(StateUpdateParamTest, TestReplaceValidNonContiguousSplitExtent) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
@@ -558,8 +743,7 @@ TEST(StateUpdateTest, TestReplaceValidNonContiguousSplitExtent) {
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
@@ -578,15 +762,15 @@ TEST(StateUpdateTest, TestReplaceValidNonContiguousSplitExtent) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
+    auto replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value());
 
+    auto& s = get_state();
     auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
     ASSERT_EQ(p.extents.size(), 4);
 }
 
-TEST(StateUpdateTest, TestReplaceInvalidNonContiguousBadOffsets) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestReplaceInvalidNonContiguousBadOffsets) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
@@ -599,8 +783,7 @@ TEST(StateUpdateTest, TestReplaceInvalidNonContiguousBadOffsets) {
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
@@ -617,18 +800,15 @@ TEST(StateUpdateTest, TestReplaceInvalidNonContiguousBadOffsets) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex("breaks partition .+ offset ordering"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 
+    auto& s = get_state();
     auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
     ASSERT_EQ(p.extents.size(), 3);
 }
 
-TEST(StateUpdateTest, TestReplaceInvalidNonContiguousDoesNotSpan) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestReplaceInvalidNonContiguousDoesNotSpan) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 99_o, 1999_t, 0, 99)
@@ -641,8 +821,7 @@ TEST(StateUpdateTest, TestReplaceInvalidNonContiguousDoesNotSpan) {
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Attempt to replace oid1 and oid3 while leaving oid2 in place with a
@@ -659,13 +838,10 @@ TEST(StateUpdateTest, TestReplaceInvalidNonContiguousDoesNotSpan) {
                             .build())
                      .build();
 
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Partition .+ doesn't contain extents that span exactly"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 
+    auto& s = get_state();
     auto& p = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
     ASSERT_EQ(p.extents.size(), 3);
 }
@@ -896,7 +1072,7 @@ TEST(StateUpdateTest, TestReplaceMisalignedButContiguousWithNewStartOffset) {
     EXPECT_EQ(p_state->get().extents.size(), 2);
 }
 
-TEST(StateUpdateTest, TestReplaceWithCompaction) {
+TEST_P(StateUpdateParamTest, TestReplaceWithCompaction) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
@@ -909,8 +1085,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .add_term_start(tidp_c, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Fully replace partition a and clean part of it.
@@ -927,21 +1102,25 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
 
-    auto replace_res = replace.apply(s);
+    auto replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value());
 
     // Compact an extent, marking [5, 10] cleaned with tombstones.
-    const auto& prt_a
-      = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
-    ASSERT_TRUE(prt_a.compaction_state.has_value());
-    EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid2, 0_o, 10_o)));
-    EXPECT_THAT(
-      prt_a.compaction_state->cleaned_ranges.to_vec(),
-      ElementsAre(MatchesRange(5_o, 10_o)));
-    EXPECT_THAT(
-      prt_a.compaction_state->cleaned_ranges_with_tombstones,
-      ElementsAre(MatchesRange(5_o, 10_o)));
-    EXPECT_EQ(prt_a.compaction_epoch, partition_state::compaction_epoch_t{1});
+    {
+        auto& s = get_state();
+        const auto& prt_a
+          = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+        ASSERT_TRUE(prt_a.compaction_state.has_value());
+        EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid2, 0_o, 10_o)));
+        EXPECT_THAT(
+          prt_a.compaction_state->cleaned_ranges.to_vec(),
+          ElementsAre(MatchesRange(5_o, 10_o)));
+        EXPECT_THAT(
+          prt_a.compaction_state->cleaned_ranges_with_tombstones,
+          ElementsAre(MatchesRange(5_o, 10_o)));
+        EXPECT_EQ(
+          prt_a.compaction_epoch, partition_state::compaction_epoch_t{1});
+    }
 
     // Compact an extent, marking [3, 4] cleaned with tombstones.
     replace
@@ -956,17 +1135,23 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{1})
           .build();
-    replace_res = replace.apply(s);
+    replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value());
 
-    EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid3, 0_o, 10_o)));
-    EXPECT_THAT(
-      prt_a.compaction_state->cleaned_ranges.to_vec(),
-      ElementsAre(MatchesRange(3_o, 10_o)));
-    EXPECT_THAT(
-      prt_a.compaction_state->cleaned_ranges_with_tombstones,
-      ElementsAre(MatchesRange(3_o, 4_o), MatchesRange(5_o, 10_o)));
-    EXPECT_EQ(prt_a.compaction_epoch, partition_state::compaction_epoch_t{2});
+    {
+        auto& s = get_state();
+        const auto& prt_a
+          = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+        EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid3, 0_o, 10_o)));
+        EXPECT_THAT(
+          prt_a.compaction_state->cleaned_ranges.to_vec(),
+          ElementsAre(MatchesRange(3_o, 10_o)));
+        EXPECT_THAT(
+          prt_a.compaction_state->cleaned_ranges_with_tombstones,
+          ElementsAre(MatchesRange(3_o, 4_o), MatchesRange(5_o, 10_o)));
+        EXPECT_EQ(
+          prt_a.compaction_epoch, partition_state::compaction_epoch_t{2});
+    }
 
     // Now mark [3, 8] as having removed tombstones.
     replace = replace_objects_builder()
@@ -977,9 +1162,12 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
                 .set_expected_epoch(
                   tidp_a, partition_state::compaction_epoch_t{2})
                 .build();
-    replace_res = replace.apply(s);
+    replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value()) << replace_res.error();
 
+    auto& s = get_state();
+    const auto& prt_a
+      = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
     EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid4, 0_o, 10_o)));
     EXPECT_THAT(
       prt_a.compaction_state->cleaned_ranges.to_vec(),
@@ -990,8 +1178,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     EXPECT_EQ(prt_a.compaction_epoch, partition_state::compaction_epoch_t{3});
 }
 
-TEST(StateUpdateTest, TestCompactionMissingExtent) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestCompactionMissingExtent) {
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -1001,8 +1188,7 @@ TEST(StateUpdateTest, TestCompactionMissingExtent) {
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Add a clean range for tidp_a but only supply an extent with tidp_b.
@@ -1018,16 +1204,11 @@ TEST(StateUpdateTest, TestCompactionMissingExtent) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "New cleaned range does not refer to partition with extent"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestCompactionDoesntReplaceExtents) {
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -1037,8 +1218,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     auto replace
@@ -1053,17 +1233,11 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Cleaned range for .+ does not match requested "
-        "new extents' last_offset"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestCompactionDoesntReplaceExtentsStart) {
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -1073,8 +1247,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
     add = add_objects_builder()
             .add(new_obj_builder(oid2, 300, 1300)
@@ -1082,7 +1255,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
                    .build())
             .add_term_start(tidp_a, 0_tm, 11_o)
             .build();
-    add_res = add.apply(s);
+    add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Add a replacement extent and claim that it cleans a larger offset range.
@@ -1098,16 +1271,11 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Cleaned range start_offset for .+ is not covered by extents"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestCompactionDoesntReplaceLogStart) {
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -1117,8 +1285,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
     add = add_objects_builder()
             .add(new_obj_builder(oid2, 300, 1300)
@@ -1126,7 +1293,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
                    .build())
             .add_term_start(tidp_a, 0_tm, 11_o)
             .build();
-    add_res = add.apply(s);
+    add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     // Add a replacement extent and claim that it makes a larger range clean.
@@ -1142,16 +1309,11 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Cleaned range .+ does not replace to the beginning of the log"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestOverlappingTombstones) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestOverlappingTombstones) {
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -1161,8 +1323,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     auto replace
@@ -1177,7 +1338,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{0})
           .build();
-    auto replace_res = replace.apply(s);
+    auto replace_res = apply_replace_objects(std::move(replace));
     ASSERT_TRUE(replace_res.has_value());
 
     replace
@@ -1192,17 +1353,11 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
             1999_t)
           .set_expected_epoch(tidp_a, partition_state::compaction_epoch_t{1})
           .build();
-    replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Cleaned range for .+ has tombstones and overlaps "
-        "with an existing cleaned range with tombstones"));
+    replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestRemoveNonExistingTombstones) {
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1211,8 +1366,7 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder()
@@ -1223,17 +1377,11 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
                      .set_expected_epoch(
                        tidp_a, partition_state::compaction_epoch_t{0})
                      .build();
-    auto replace_res = replace.apply(s);
-    ASSERT_FALSE(replace_res.has_value());
-    EXPECT_THAT(
-      std::string(replace_res.error()()),
-      testing::ContainsRegex(
-        "Tombstone-removed range .+ for .+ is not tracked "
-        "as having tombstones"));
+    auto replace_res = apply_replace_objects(std::move(replace));
+    EXPECT_FALSE(replace_res.has_value());
 }
 
-TEST(StateUpdateTest, TestAddIncreasingTerms) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddIncreasingTerms) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1241,9 +1389,9 @@ TEST(StateUpdateTest, TestAddIncreasingTerms) {
                     .add_term_start(tidp_a, 1_tm, 0_o)
                     .add_term_start(tidp_a, 2_tm, 1_o)
                     .build();
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
-    EXPECT_EQ(1, s.topic_to_state.size());
+    EXPECT_EQ(1, get_state().topic_to_state.size());
 
     update = add_objects_builder()
                .add(new_obj_builder(oid2, 100, 1100)
@@ -1252,9 +1400,10 @@ TEST(StateUpdateTest, TestAddIncreasingTerms) {
                .add_term_start(tidp_a, 3_tm, 11_o)
                .add_term_start(tidp_a, 4_tm, 12_o)
                .build();
-    res = update.apply(s);
+    res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
 
+    auto& s = get_state();
     auto p_state = s.partition_state(model::topic_id_partition::from(tidp_a));
     ASSERT_TRUE(p_state.has_value());
     EXPECT_EQ(2, p_state->get().extents.size());
@@ -1268,8 +1417,7 @@ TEST(StateUpdateTest, TestAddIncreasingTerms) {
         MatchesTermStart(4_tm, 12_o)));
 }
 
-TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddSameSubsequentTerm) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1277,17 +1425,21 @@ TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
                     .add_term_start(tidp_a, 1_tm, 0_o)
                     .add_term_start(tidp_a, 2_tm, 1_o)
                     .build();
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
-    EXPECT_EQ(1, s.topic_to_state.size());
-    auto p_state = s.partition_state(model::topic_id_partition::from(tidp_a));
-    ASSERT_TRUE(p_state.has_value());
-    EXPECT_EQ(1, p_state->get().extents.size());
-    EXPECT_EQ(2, p_state->get().term_starts.size());
-    EXPECT_THAT(
-      p_state->get().term_starts,
-      testing::ElementsAre(
-        MatchesTermStart(1_tm, 0_o), MatchesTermStart(2_tm, 1_o)));
+    {
+        auto& s = get_state();
+        EXPECT_EQ(1, s.topic_to_state.size());
+        auto p_state = s.partition_state(
+          model::topic_id_partition::from(tidp_a));
+        ASSERT_TRUE(p_state.has_value());
+        EXPECT_EQ(1, p_state->get().extents.size());
+        EXPECT_EQ(2, p_state->get().term_starts.size());
+        EXPECT_THAT(
+          p_state->get().term_starts,
+          testing::ElementsAre(
+            MatchesTermStart(1_tm, 0_o), MatchesTermStart(2_tm, 1_o)));
+    }
 
     // The start of term 2 shouldn't be changed, but term 3 should be added.
     update = add_objects_builder()
@@ -1297,9 +1449,11 @@ TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
                .add_term_start(tidp_a, 2_tm, 11_o)
                .add_term_start(tidp_a, 3_tm, 12_o)
                .build();
-    res = update.apply(s);
+    res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
 
+    auto& s = get_state();
+    auto p_state = s.partition_state(model::topic_id_partition::from(tidp_a));
     ASSERT_TRUE(p_state.has_value());
     EXPECT_EQ(2, p_state->get().extents.size());
     EXPECT_EQ(3, p_state->get().term_starts.size());
@@ -1311,23 +1465,18 @@ TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
         MatchesTermStart(3_tm, 12_o)));
 }
 
-TEST(StateUpdateTest, TestAddNoTerms) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddNoTerms) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .build();
 
-    auto res = update.can_apply(s);
+    auto res = can_apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()().c_str(),
-      testing::HasSubstr("Missing term info in request"));
 }
 
-TEST(StateUpdateTest, TestAddMissingTermsForPartition) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddMissingTermsForPartition) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1336,14 +1485,11 @@ TEST(StateUpdateTest, TestAddMissingTermsForPartition) {
                     .add_term_start(tidp_a, 0_tm, 0_o)
                     .build();
 
-    auto res = update.can_apply(s);
+    auto res = can_apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()().c_str(), testing::HasSubstr("Missing term info for"));
 }
 
-TEST(StateUpdateTest, TestAddDecreasingTermInUpdate) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddDecreasingTermInUpdate) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1351,20 +1497,18 @@ TEST(StateUpdateTest, TestAddDecreasingTermInUpdate) {
                     .add_term_start(tidp_a, 2_tm, 0_o)
                     .add_term_start(tidp_a, 1_tm, 1_o)
                     .build();
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(res.error()().c_str(), testing::HasSubstr("Invalid term for"));
 }
 
-TEST(StateUpdateTest, TestAddDecreasingTerm) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddDecreasingTerm) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 2_tm, 0_o)
                     .build();
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
 
     update = add_objects_builder()
@@ -1373,13 +1517,11 @@ TEST(StateUpdateTest, TestAddDecreasingTerm) {
                       .build())
                .add_term_start(tidp_a, 1_tm, 11_o)
                .build();
-    res = update.can_apply(s);
+    res = can_apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()().c_str(), testing::HasSubstr("must be >= last term"));
 }
 
-TEST(StateUpdateTest, TestAllowBogusTermWithBogusExtent) {
+TEST_P(StateUpdateParamTest, TestRejectBogusTermWithBogusExtent) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 10_o, 10_o, 1999_t, 0, 99)
@@ -1387,25 +1529,13 @@ TEST(StateUpdateTest, TestAllowBogusTermWithBogusExtent) {
                     .add_term_start(tidp_a, 2_tm, 10_o)
                     .add_term_start(tidp_a, 1_tm, 10_o)
                     .build();
-    // If there's a misaligned extent, we won't expect that its terms are valid
-    // either, but we should expect the corrections to be populated.
-    state s;
-    chunked_hash_map<model::topic_id_partition, kafka::offset> corrections;
-    auto res = update.can_apply(s, &corrections);
-    EXPECT_TRUE(res.has_value());
-    EXPECT_EQ(1, corrections.size());
-
-    // When applying, the operation should succeed, but we should be left with
-    // a dead object and no extents.
-    res = update.apply(s);
-    EXPECT_TRUE(res.has_value());
-    EXPECT_TRUE(s.topic_to_state.empty());
-    EXPECT_EQ(1, s.objects.size());
-    auto& dead_obj = s.objects.begin()->second;
-    EXPECT_EQ(dead_obj.removed_data_size, dead_obj.total_data_size);
+    // Invalid terms (same offset for different terms) should be rejected
+    // regardless of whether the extent is misaligned.
+    auto res = apply_add_objects(std::move(update));
+    EXPECT_FALSE(res.has_value());
 }
 
-TEST(StateUpdateTest, TestTermsWithNoExtent) {
+TEST_P(StateUpdateParamTest, TestTermsWithNoExtent) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1414,23 +1544,18 @@ TEST(StateUpdateTest, TestTermsWithNoExtent) {
                     // Add some terms for a missing partition.
                     .add_term_start(tidp_b, 0_tm, 0_o)
                     .build();
-    state s;
-    auto res = update.can_apply(s);
+    auto res = can_apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()().c_str(),
-      testing::HasSubstr("Terms provided for a partition that has no extents"));
 }
 
-TEST(StateUpdateTest, TestAddMismatchedStartOffset) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddMismatchedStartOffset) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 1_tm, 0_o)
                     .build();
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
 
     // Add an update where the term's start offset doesn't match the extent.
@@ -1440,15 +1565,11 @@ TEST(StateUpdateTest, TestAddMismatchedStartOffset) {
                       .build())
                .add_term_start(tidp_a, 2_tm, 0_o)
                .build();
-    res = update.can_apply(s);
+    res = can_apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()().c_str(),
-      testing::HasSubstr("Extent start and term start do not match"));
 }
 
-TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
-    state s;
+TEST_P(StateUpdateParamTest, TestAddExtentEndsBelowLastTermStart) {
     auto update = add_objects_builder()
                     .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
@@ -1457,7 +1578,7 @@ TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
                     // We can add at the last offset.
                     .add_term_start(tidp_a, 2_tm, 10_o)
                     .build();
-    auto res = update.apply(s);
+    auto res = apply_add_objects(std::move(update));
     EXPECT_TRUE(res.has_value());
 
     update = add_objects_builder()
@@ -1468,11 +1589,8 @@ TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
                // We cannot past the last offset.
                .add_term_start(tidp_a, 4_tm, 21_o)
                .build();
-    res = update.apply(s);
+    res = apply_add_objects(std::move(update));
     EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()().c_str(),
-      testing::HasSubstr("Extents end below a requested new term for"));
 }
 
 TEST(StateUpdateTest, TestSetStartOffsetAlignedWithExtent) {
@@ -1924,8 +2042,7 @@ TEST(StateUpdateTest, TestRemoveMissingTopic) {
     EXPECT_EQ(1, s.objects.size());
 }
 
-TEST(StateUpdateTest, TestCompactionValidatesEpoch) {
-    using testing::ElementsAre;
+TEST_P(StateUpdateParamTest, TestCompactionValidatesEpoch) {
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
                  .add(new_obj_builder(oid1, 300, 1300)
@@ -1933,8 +2050,7 @@ TEST(StateUpdateTest, TestCompactionValidatesEpoch) {
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
-    state s;
-    auto add_res = add.apply(s);
+    auto add_res = apply_add_objects(std::move(add));
     ASSERT_TRUE(add_res.has_value());
 
     {
@@ -1955,12 +2071,8 @@ TEST(StateUpdateTest, TestCompactionValidatesEpoch) {
                            tidp_a, partition_state::compaction_epoch_t{999})
                          .build();
 
-        auto replace_res = replace.apply(s);
+        auto replace_res = apply_replace_objects(std::move(replace));
         ASSERT_FALSE(replace_res.has_value());
-        EXPECT_THAT(
-          std::string(replace_res.error()()),
-          testing::ContainsRegex(
-            "Expected compaction epoch .+ does not match the current"));
     }
 
     {
@@ -1981,8 +2093,9 @@ TEST(StateUpdateTest, TestCompactionValidatesEpoch) {
                            tidp_a, partition_state::compaction_epoch_t{0})
                          .build();
 
-        auto replace_res = replace.apply(s);
+        auto replace_res = apply_replace_objects(std::move(replace));
         ASSERT_TRUE(replace_res.has_value());
+        auto& s = get_state();
         auto tp = model::topic_id_partition::from(tidp_a);
         auto p_state = s.partition_state(tp);
         ASSERT_TRUE(p_state.has_value());

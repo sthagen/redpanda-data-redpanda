@@ -31,7 +31,7 @@ void rjson_serialize(
     w.Key("name");
     ::json::rjson_serialize(w, ref.name);
     w.Key("subject");
-    ::json::rjson_serialize(w, ref.sub);
+    w.String(ref.sub.to_string());
     w.Key("version");
     ::json::rjson_serialize(w, ref.version);
     w.EndObject();

@@ -537,8 +537,9 @@ TEST_F(StateUpdateTest, TestAddObjectsWithCorrections) {
     verify_extent_missing(tidp0, kafka::offset(50));
     verify_extent_exists(tidp0, kafka::offset(0), kafka::offset(99));
 
-    // The misaligned object should be in the metastore as empty.
-    verify_object_exists(new_oid, 0, 0);
+    // The misaligned object should be in the metastore with all data marked
+    // as removed.
+    verify_object_exists(new_oid, 1024, 1024);
 }
 
 TEST_F(StateUpdateTest, TestReplaceObjectsBasic) {
@@ -751,4 +752,40 @@ TEST_F(StateUpdateTest, TestReplaceObjectsWithCompactionAndTombstones) {
       tidp0,
       /*expected_cleaned_ranges=*/{{0, 99}, {150, 199}},
       /*expected_tombstone_ranges=*/{{50, 99, 1000}, {150, 199, 2000}});
+}
+
+TEST_F(StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeNotAtLogStart) {
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)),
+      make_object(make_oid(), tp(tidp0, 100, 199).pos(0, 1023)));
+
+    verify_metadata(tidp0, kafka::offset(0), kafka::offset(200));
+
+    // Try to replace with cleaned range [100-199], but without replacing down
+    // to offset 0. This should be rejected because cleaning requires
+    // replacing from the start of the log.
+    auto db_update = make_replace_objects_update(
+      {{compact_spec{
+        .tidp = tidp0,
+        .cleaned = {{100, 199, false}},
+      }}},
+      make_object(make_oid(), tp(tidp0, 100, 199).pos(0, 1023)));
+
+    auto reader = make_reader();
+    chunked_vector<write_batch_row> rows;
+    auto result = db_update.build_rows(reader, rows).get();
+    ASSERT_FALSE(result.has_value());
+
+    // Now validate that replacing down to 0 works.
+    replace_objects(
+      {{compact_spec{
+        .tidp = tidp0,
+        .cleaned = {{100, 199, false}},
+      }}},
+      make_object(make_oid(), tp(tidp0, 0, 199).pos(0, 1023)));
+    verify_compaction_state(
+      tidp0,
+      /*expected_cleaned_ranges=*/{{100, 199}},
+      /*expected_tombstone_ranges=*/{});
 }

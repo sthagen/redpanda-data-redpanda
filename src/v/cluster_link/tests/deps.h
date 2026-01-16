@@ -342,6 +342,16 @@ public:
           shard_id, ktp, std::move(fn), require_leader);
     }
 
+    ss::future<::result<chunked_vector<::model::record_batch>, cluster::errc>>
+    consume_from_shard(
+      ss::shard_id shard_id,
+      const ::model::ktp& ktp,
+      kafka::data::rpc::consume_fn fn,
+      kafka::data::rpc::require_leader require_leader) final {
+        return _impl->invoke_on_shard_impl(
+          shard_id, ktp, std::move(fn), require_leader);
+    }
+
     std::optional<::model::term_id> get_term(const ::model::ntp&) const final {
         return std::nullopt;
     }

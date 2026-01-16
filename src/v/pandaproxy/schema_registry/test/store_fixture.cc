@@ -26,7 +26,7 @@ store_fixture::~store_fixture() {
 }
 
 schema_id store_fixture::insert(
-  const subject& sub,
+  const context_subject& sub,
   const schema_definition& schema_def,
   schema_version version) {
     const auto id = _next_id++;

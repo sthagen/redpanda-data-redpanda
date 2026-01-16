@@ -50,6 +50,9 @@ public:
     // Returns the HWM of the partition
     virtual kafka::offset high_watermark() const = 0;
 
+    // Returns whether or not the sink support prefix truncation
+    virtual bool can_prefix_truncate() const = 0;
+
     // Performs a prefix truncation on the sink partition
     virtual ss::future<kafka::error_code> prefix_truncate(
       kafka::offset truncation_offset, ss::lowres_clock::time_point deadline)

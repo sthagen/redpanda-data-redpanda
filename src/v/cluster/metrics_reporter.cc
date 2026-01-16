@@ -38,6 +38,7 @@
 #include "net/tls_certificate_probe.h"
 #include "reflection/adl.h"
 #include "rpc/types.h"
+#include "security/authorizer.h"
 #include "security/role_store.h"
 #include "ssx/sformat.h"
 #include "utils/unresolved_address.h"
@@ -182,6 +183,7 @@ metrics_reporter::metrics_reporter(
   ss::sharded<config_frontend>& config_frontend,
   ss::sharded<features::feature_table>& feature_table,
   ss::sharded<security::role_store>& role_store,
+  ss::sharded<security::authorizer>& authorizer,
   ss::sharded<plugin_table>* pt,
   ss::sharded<feature_manager>* fm,
   ss::sharded<storage::api>* storage,
@@ -196,6 +198,7 @@ metrics_reporter::metrics_reporter(
   , _config_frontend(config_frontend)
   , _feature_table(feature_table)
   , _role_store(role_store)
+  , _authorizer(authorizer)
   , _plugin_table(pt)
   , _feature_manager(fm)
   , _storage(storage)
@@ -367,6 +370,35 @@ metrics_reporter::build_metrics_snapshot() {
       features::license_required_feature::oidc);
 
     snapshot.rbac_role_count = _role_store.local().size();
+
+    // Count unique groups from both role members and ACL principals
+    chunked_hash_set<ss::sstring> unique_groups;
+
+    // Count groups from role members
+    auto role_names = _role_store.local().range(
+      [](const auto&) { return true; });
+    for (const auto& role_name_view : role_names) {
+        auto role_opt = _role_store.local().get(
+          security::role_name{ss::sstring{role_name_view()}});
+        if (role_opt) {
+            for (const auto& member : role_opt->members()) {
+                if (member.type() == security::role_member_type::group) {
+                    unique_groups.insert(member.name());
+                }
+            }
+        }
+    }
+
+    // Count groups from ACL principals
+    auto all_bindings = co_await _authorizer.local().all_bindings();
+    for (const auto& binding : all_bindings) {
+        const auto& principal = binding.entry().principal();
+        if (principal.type() == security::principal_type::group) {
+            unique_groups.insert(ss::sstring{principal.name_view()});
+        }
+    }
+
+    snapshot.unique_group_count = unique_groups.size();
 
     snapshot.data_transforms_count = _plugin_table->local().size();
 
@@ -688,6 +720,9 @@ void rjson_serialize(
 
     w.Key("rbac_role_count");
     w.Int64(snapshot.rbac_role_count);
+
+    w.Key("unique_group_count");
+    w.Uint(snapshot.unique_group_count);
 
     w.Key("data_transforms_count");
     w.Uint(snapshot.data_transforms_count);

@@ -538,7 +538,7 @@ ss::sstring avro_schema_definition::name() const {
 class collected_schema {
     struct schema_entry {
         avro::ValidSchema schema;
-        subject source_subject;
+        context_subject source_subject;
         schema_version source_version;
     };
 
@@ -547,7 +547,7 @@ public:
         return _schemas.contains(name);
     }
 
-    std::optional<std::pair<subject, schema_version>>
+    std::optional<std::pair<context_subject, schema_version>>
     get_source(const avro::Name& name) const {
         auto it = _schemas.find(name);
         if (it == _schemas.end()) {
@@ -560,7 +560,7 @@ public:
     bool insert(
       avro::Name name,
       avro::ValidSchema schema,
-      subject source_subject,
+      context_subject source_subject,
       schema_version source_version) {
         auto [it, inserted] = _schemas.try_emplace(
           std::move(name),

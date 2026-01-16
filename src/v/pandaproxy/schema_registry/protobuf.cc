@@ -476,7 +476,7 @@ ss::future<pb::FileDescriptorProto> import_schema(
   normalize norm) {
     try {
         co_return co_await build_file_with_refs(
-          dp, store, schema.sub()(), schema.share(), norm);
+          dp, store, schema.sub().to_string(), schema.share(), norm);
     } catch (const exception& e) {
         // Rethrow if the schema is missing references
         if (e.code() == error_code::schema_missing_reference) {
@@ -667,7 +667,7 @@ ss::future<subject_schema> make_canonical_protobuf_schema(
   subject_schema schema,
   normalize norm,
   output_format format) {
-    subject sub = schema.sub();
+    auto sub = schema.sub();
     co_return subject_schema{
       std::move(sub),
       co_await validate_protobuf_schema(
@@ -681,7 +681,10 @@ ss::future<schema_definition> format_protobuf_schema_definition(
         throw as_exception(format_not_supported(format));
     case output_format::serialized: {
         auto serialized = co_await make_canonical_protobuf_schema(
-          store, {{}, std::move(schema)}, normalize::no, format);
+          store,
+          {context_subject{default_context, subject{""}}, std::move(schema)},
+          normalize::no,
+          format);
         auto [_, def] = std::move(serialized).destructure();
         co_return std::move(def);
     }

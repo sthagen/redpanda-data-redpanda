@@ -26,7 +26,7 @@ void rjson_serialize(
   const get_subject_versions_version_response& res) {
     w.StartObject();
     w.Key("subject");
-    ::json::rjson_serialize(w, res.stored_schema.schema.sub());
+    w.String(res.stored_schema.schema.sub().to_string());
     w.Key("version");
     ::json::rjson_serialize(w, res.stored_schema.version);
     w.Key("id");

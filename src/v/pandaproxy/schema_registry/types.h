@@ -224,7 +224,7 @@ struct schema_reference {
     operator<(const schema_reference& lhs, const schema_reference& rhs);
 
     ss::sstring name;
-    subject sub{invalid_subject};
+    context_subject sub{invalid_subject};
     schema_version version{invalid_schema_version};
 };
 
@@ -418,8 +418,6 @@ public:
         return {raw(), type(), refs().copy(), meta()};
     }
 
-    ss::sstring name() const;
-
     // retrieve "title" property from the schema, used to form the record name
     std::optional<ss::sstring> title() const;
 
@@ -572,7 +570,7 @@ class subject_schema {
 public:
     subject_schema() = default;
 
-    subject_schema(subject sub, schema_definition def)
+    subject_schema(context_subject sub, schema_definition def)
       : _sub{std::move(sub)}
       , _def{std::move(def)} {}
 
@@ -582,7 +580,7 @@ public:
     friend std::ostream&
     operator<<(std::ostream& os, const subject_schema& schema);
 
-    const subject& sub() const { return _sub; }
+    const context_subject& sub() const { return _sub; }
     schema_type type() const { return _def.type(); }
     const schema_definition& def() const { return _def; }
 
@@ -590,11 +588,11 @@ public:
     subject_schema copy() const { return {sub(), def().copy()}; }
 
     auto destructure() && {
-        return make_tuple(std::move(_sub), std::move(_def));
+        return std::make_tuple(std::move(_sub), std::move(_def));
     }
 
 private:
-    subject _sub{invalid_subject};
+    context_subject _sub{invalid_subject};
     schema_definition _def{"", schema_type::avro, {}, {}};
 };
 
@@ -613,13 +611,13 @@ struct stored_schema {
 ///\brief A mapping of version and schema id for a subject.
 struct subject_version_entry {
     subject_version_entry(
-      schema_version version, context_schema_id id, is_deleted deleted)
+      schema_version version, schema_id id, is_deleted deleted)
       : version{version}
-      , id{std::move(id)}
+      , id{id}
       , deleted(deleted) {}
 
     schema_version version;
-    context_schema_id id;
+    schema_id id;
     is_deleted deleted{is_deleted::no};
 };
 

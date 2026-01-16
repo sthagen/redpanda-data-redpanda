@@ -21,6 +21,7 @@ import dataclasses
 import json
 import os
 import pathlib
+from pathlib import Path
 import shutil
 import signal
 import time
@@ -33,18 +34,18 @@ import yaml
 BOOTSTRAP_YAML = ".bootstrap.yaml"
 
 
-def pathlib_path_representer(dumper, path):
+def pathlib_path_representer(dumper: yaml.SafeDumper, path: Path) -> yaml.ScalarNode:
     return dumper.represent_scalar("!Path", str(path))
 
 
-def get_config_dumper():
+def get_config_dumper() -> type[yaml.SafeDumper]:
     d = yaml.SafeDumper
     d.add_representer(pathlib.PosixPath, pathlib_path_representer)
     return d
 
 
-def yaml_dump(*args, **kwards):
-    yaml.dump(*args, **kwards, Dumper=get_config_dumper())
+def yaml_dump(*args: Any, **kwargs: Any) -> None:
+    yaml.dump(*args, **kwargs, Dumper=get_config_dumper())
 
 
 @dataclasses.dataclass
@@ -65,7 +66,7 @@ class SchemaRegistryConfig:
 
 @dataclasses.dataclass
 class RedpandaConfig:
-    data_directory: pathlib.Path
+    data_directory: Path
     rpc_server: NetworkAddress
     advertised_rpc_api: NetworkAddress
     advertised_kafka_api: NetworkAddress
@@ -112,27 +113,30 @@ class NodeMetadata:
     cluster_size: int
 
     # Dictionary of node config properties.
-    config_dict: dict
+    config_dict: dict[str, Any]
 
 
 async def stream_until_eof(
-    process: asyncio.subprocess.Process, name: str, stdout: bool, log_path: pathlib.Path
-):
+    process: asyncio.subprocess.Process, name: str, stdout: bool, log_path: Path
+) -> None:
     assert process.stdout
     with open(log_path, "w") as log_file:
         while True:
-            line = await process.stdout.readline()
-            if not line:
+            line_bytes = await process.stdout.readline()
+            if not line_bytes:
                 break
-            line = line.decode("utf8").rstrip()
+            line = line_bytes.decode("utf8").rstrip()
             if stdout:
                 print(f"{name}: {line}")
             log_file.write(f"{line}\n")
             log_file.flush()
 
 
-def send_signal(proc: asyncio.subprocess.Process, sig: signal.Signals):
+def send_signal(
+    proc: asyncio.subprocess.Process, sig: signal.Signals, name: str
+) -> None:
     try:
+        print(f"Sending signal {sig} to {name} (pid {proc.pid})")
         proc.send_signal(sig)
     except ProcessLookupError:
         # Process already exited
@@ -141,17 +145,18 @@ def send_signal(proc: asyncio.subprocess.Process, sig: signal.Signals):
 
 class Minio:
     def __init__(
-        self, binary: pathlib.Path, directory: pathlib.Path, rp_config: dict[str, Any]
+        self, binary: Path, directory: Path, rp_config: dict[str, Any]
     ) -> None:
         self.binary = binary
         self.directory = directory
         self.stopped = False
         self.rp_cfg = rp_config
+        self.process: asyncio.subprocess.Process
 
     def stop(self) -> None:
         if not self.stopped:
             self.stopped = True
-            send_signal(self.process, signal.SIGINT)
+            send_signal(self.process, signal.SIGINT, "minio")
 
     async def run(self) -> int:
         log_path = self.directory / "minio.log"
@@ -177,11 +182,9 @@ class Minio:
             f"{hostname}:{port}",
             str(data_dir),
         ]
-        args = " ".join(args)
-        cmd = f"{args}"
-        print(f"Running: {cmd}")
-        self.process = await asyncio.create_subprocess_shell(
-            cmd,
+        print(f"Running: {args}")
+        self.process = await asyncio.create_subprocess_exec(
+            *args,
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
@@ -195,8 +198,8 @@ class Minio:
 class Prometheus:
     def __init__(
         self,
-        binary: pathlib.Path,
-        directory: pathlib.Path,
+        binary: Path,
+        directory: Path,
         listen_address: str = "127.0.0.1",
         port: int = 3001,
         redpanda_admin_ports: list[int] = [],
@@ -207,13 +210,14 @@ class Prometheus:
         self.listen_address = listen_address
         self.port = port
         self.redpanda_admin_ports = redpanda_admin_ports
+        self.process: asyncio.subprocess.Process
 
-    def stop(self):
+    def stop(self) -> None:
         if not self.stopped:
             self.stopped = True
-            send_signal(self.process, signal.SIGINT)
+            send_signal(self.process, signal.SIGINT, "prometheus")
 
-    async def run(self):
+    async def run(self) -> int:
         log_path = self.directory / "prometheus.log"
         data_dir = self.directory / "data"
         config_file = self.directory / "prometheus.yml"
@@ -268,13 +272,11 @@ class Prometheus:
             f"--storage.tsdb.path={data_dir}",
             f"--web.listen-address={self.listen_address}:{self.port}",
         ]
-        args = " ".join(args)
-        cmd = f"{args}"
-        print(f"Running: {cmd}")
+        print(f"Running: {' '.join(args)}")
         print(f"Prometheus UI available at: http://{self.listen_address}:{self.port}")
 
-        self.process = await asyncio.create_subprocess_shell(
-            cmd,
+        self.process = await asyncio.create_subprocess_exec(
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -287,29 +289,30 @@ class Prometheus:
 class Grafana:
     def __init__(
         self,
-        binary,
-        directory: pathlib.Path,
-        port=3000,
-        prometheus_url=None,
-    ):
+        binary: Path,
+        directory: Path,
+        port: int = 3000,
+        prometheus_url: str | None = None,
+    ) -> None:
         self.binary = binary
         self.directory = directory
         self.stopped = False
         self.port = port
         self.prometheus_url = prometheus_url
+        self.process: asyncio.subprocess.Process
 
-    def stop(self):
+    def stop(self) -> None:
         if not self.stopped:
             self.stopped = True
-            send_signal(self.process, signal.SIGINT)
+            send_signal(self.process, signal.SIGINT, "grafana")
 
-    async def run(self):
+    async def run(self) -> int:
         log_path = self.directory / "grafana.log"
         grafana_home = self.directory / "home"
         grafana_home.mkdir(parents=True, exist_ok=True)
 
         # Copy grafana files (conf, public) into grafana_home
-        grafana_binary = pathlib.Path(self.binary).resolve()
+        grafana_binary = Path(self.binary).resolve()
         grafana_root = grafana_binary.parent.parent
 
         # Copy conf and public directories
@@ -347,7 +350,7 @@ class Grafana:
 
             redpanda_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
             if redpanda_root:
-                dashboards_dir = pathlib.Path(redpanda_root) / "tools" / "dashboards"
+                dashboards_dir = Path(redpanda_root) / "tools" / "dashboards"
                 provisioning_dir = grafana_home / "conf" / "provisioning" / "dashboards"
                 provisioning_dir.mkdir(parents=True, exist_ok=True)
 
@@ -360,6 +363,7 @@ class Grafana:
                             "type": "file",
                             "editable": True,
                             "disableDeletion": False,
+                            "updateIntervalSeconds": 1,
                             "options": {
                                 "path": dashboards_dir,
                             },
@@ -380,15 +384,14 @@ class Grafana:
         env["GF_AUTH_DISABLE_LOGIN_FORM"] = "true"
         env["GF_AUTH_ANONYMOUS_ENABLED"] = "true"
         env["GF_AUTH_ANONYMOUS_ORG_ROLE"] = "Admin"
+        env["GF_DASHBOARDS_MIN_REFRESH_INTERVAL"] = "1s"
 
         args = [str(grafana_binary), "server"]
-        args = " ".join(args)
-        cmd = f"{args}"
-        print(f"Running: {cmd}")
+        print(f"Running: {' '.join(args)}")
         print(f"Grafana UI available on port {self.port}")
 
-        self.process = await asyncio.create_subprocess_shell(
-            cmd,
+        self.process = await asyncio.create_subprocess_exec(
+            *args,
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
@@ -401,23 +404,28 @@ class Grafana:
 
 
 class Redpanda:
-    def __init__(self, binary, cores: int, node_meta: NodeMetadata, extra_args, env):
+    def __init__(
+        self,
+        binary: Path,
+        cores: int,
+        node_meta: NodeMetadata,
+        extra_args: list[str],
+        env: dict[str, str],
+    ) -> None:
         self.binary = binary
         self.cores = cores
         self.node_meta = node_meta
-        self.process = None
+        self.process: asyncio.subprocess.Process | None = None
         self.extra_args = extra_args
         self.env = env
 
-    def stop(self):
+    def stop(self) -> None:
         print(f"node-{self.node_meta.index}: dev_cluster stop requested")
         assert self.process
-        send_signal(self.process, signal.SIGINT)
+        send_signal(self.process, signal.SIGINT, f"node-{self.node_meta.index}")
 
-    async def run(self):
-        log_path = (
-            pathlib.Path(os.path.dirname(self.node_meta.config_path)) / "redpanda.log"
-        )
+    async def run(self) -> int:
+        log_path = Path(os.path.dirname(self.node_meta.config_path)) / "redpanda.log"
 
         # If user did not override cores with extra args, apply it from our internal cores setting
         if not {"-c", "--smp"} & set(self.extra_args):
@@ -453,7 +461,7 @@ class Redpanda:
         return await self.process.wait()
 
 
-async def run_command(cmd):
+async def run_command(cmd: str) -> bool:
     proc = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
@@ -469,7 +477,7 @@ async def run_command(cmd):
     return proc.returncode == 0
 
 
-async def ensure_bucket_exists(cfg: dict):
+async def ensure_bucket_exists(cfg: dict[str, Any]) -> None:
     session = aioboto3.Session()
     client = session.client(
         service_name="s3",
@@ -496,23 +504,23 @@ async def ensure_bucket_exists(cfg: dict):
                 await asyncio.sleep(1)
 
 
-async def main():
+async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-e",
         "--executable",
-        type=pathlib.Path,
+        type=Path,
         help="path to redpanda executable",
         default="redpanda",
     )
     parser.add_argument(
         "--ubsan_suppression_file",
-        type=pathlib.Path,
+        type=Path,
         help="path to ubsan_suppressions.txt",
     )
     parser.add_argument(
         "--lsan_suppression_file",
-        type=pathlib.Path,
+        type=Path,
         help="path to lsan_suppressions.txt",
     )
     parser.add_argument("--nodes", type=int, help="number of nodes", default=3)
@@ -520,7 +528,7 @@ async def main():
         "--cores", type=int, help="number of cores per node", default=None
     )
     parser.add_argument(
-        "-d", "--directory", type=pathlib.Path, help="data directory", default=None
+        "-d", "--directory", type=Path, help="data directory", default=None
     )
     parser.add_argument("--base-rpc-port", type=int, help="rpc port", default=33145)
     parser.add_argument("--base-kafka-port", type=int, help="kafka port", default=9092)
@@ -551,7 +559,7 @@ async def main():
     parser.add_argument(
         "-o",
         "--minio_executable",
-        type=pathlib.Path,
+        type=Path,
         help="path to minio executable",
         default="minio",
     )
@@ -561,12 +569,10 @@ async def main():
         help="whether to spin up an instance of minio and use Redpanda configuration presets for it",
         default=True,
     )
-    parser.add_argument(
-        "--rpk", type=pathlib.Path, help="path to rpk executable", default=None
-    )
+    parser.add_argument("--rpk", type=Path, help="path to rpk executable", default=None)
     parser.add_argument(
         "--prometheus",
-        type=pathlib.Path,
+        type=Path,
         help="path to prometheus executable",
         default=None,
     )
@@ -578,7 +584,7 @@ async def main():
     )
     parser.add_argument(
         "--grafana",
-        type=pathlib.Path,
+        type=Path,
         help="path to grafana executable",
         default=None,
     )
@@ -603,9 +609,7 @@ async def main():
         args = parser.parse_args()
 
     if args.directory is None:
-        args.directory = (
-            pathlib.Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")) / "data"
-        )
+        args.directory = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")) / "data"
 
     # Use the first 3 nodes as seed servers
     rpc_addresses = [
@@ -613,8 +617,12 @@ async def main():
         for i in range(args.nodes)
     ]
 
-    def make_node_metadata(i, data_dir, config_path, rack):
-        make_address = lambda p: NetworkAddress(args.listen_address, p + i)
+    def make_node_metadata(
+        i: int, data_dir: Path, config_path: Path, rack: str | None
+    ) -> NodeMetadata:
+        def make_address(p: int) -> NetworkAddress:
+            return NetworkAddress(args.listen_address, p + i)
+
         rpc_address = rpc_addresses[i]
         redpanda = RedpandaConfig(
             data_directory=data_dir,
@@ -638,13 +646,13 @@ async def main():
             redpanda=redpanda, pandaproxy=pandaproxy, schema_registry=schema_registry
         )
         return NodeMetadata(
-            config_path=config_path,
+            config_path=str(config_path),
             index=i,
             cluster_size=args.nodes,
             config_dict=dataclasses.asdict(node_conf),
         )
 
-    def prepare_node(i, rack):
+    def prepare_node(i: int, rack: str | None) -> NodeMetadata:
         node_dir = args.directory / f"node{i}"
         data_dir = node_dir / "data"
         conf_file = node_dir / "config.yaml"
@@ -730,7 +738,9 @@ async def main():
     if cores is None:
         # Use 75% of cores for redpanda.  e.g. 3 node cluster on a 16 node system
         # gives each node 4 cores.
-        cores = max((3 * (psutil.cpu_count(logical=False) // 4)) // args.nodes, 1)
+        cpu_count = psutil.cpu_count(logical=False)
+        assert cpu_count
+        cores = max((3 * (cpu_count // 4)) // args.nodes, 1)
     env = os.environ.copy()
     if "ASAN_OPTIONS" not in env:
         env["ASAN_OPTIONS"] = "disable_coredump=0:abort_on_error=1"
@@ -744,7 +754,7 @@ async def main():
 
     all_coros = [r.run() for r in nodes]
 
-    def stop():
+    def stop() -> None:
         for n in nodes:
             n.stop()
         if minio:
@@ -756,7 +766,7 @@ async def main():
 
     asyncio.get_event_loop().add_signal_handler(signal.SIGINT, stop)
 
-    def failed_exit_code(rc: int):
+    def failed_exit_code(rc: int) -> bool:
         # ignore -2/SIGINT, natural way to stop the dev cluster.
         return rc not in [0, -2]
 
@@ -766,26 +776,26 @@ async def main():
         print(f"Redpanda nodes exited with non-zero return codes: {return_codes}")
         failed = True
 
+    async def stop_and_wait(
+        name: str, process: Any, task: asyncio.Task[int] | None
+    ) -> None:
+        """Stop a process and wait for its task to complete, checking exit code."""
+        nonlocal failed
+        if task and process:
+            print(f"Stopping {name}...")
+            process.stop()
+            ret_code = await task
+            if failed_exit_code(ret_code):
+                print(f"{name} exited with non-zero return code: {ret_code}")
+                failed = True
+            else:
+                print(f"{name} stopped.")
+
     # Cleanup: if redpanda shuts down but we didn't request the shutdown
     # then let's go ahead and tear down other services too so we exit
-    if minio_task and minio:
-        minio.stop()
-        minio_ret_code = await minio_task
-        if failed_exit_code(minio_ret_code):
-            print(f"Minio exited with non-zero return code: {minio_ret_code}")
-            failed = True
-    if prometheus_task and prometheus:
-        prometheus.stop()
-        prom_ret_code = await prometheus_task
-        if failed_exit_code(prom_ret_code):
-            print(f"Prometheus exited with non-zero return code: {prom_ret_code}")
-            failed = True
-    if grafana_task and grafana:
-        grafana.stop()
-        grafana_ret_code = await grafana_task
-        if failed_exit_code(grafana_ret_code):
-            print(f"Grafana exited with non-zero return code: {grafana_ret_code}")
-            failed = True
+    await stop_and_wait("minio", minio, minio_task)
+    await stop_and_wait("prometheus", prometheus, prometheus_task)
+    await stop_and_wait("grafana", grafana, grafana_task)
 
     if failed:
         exit(1)

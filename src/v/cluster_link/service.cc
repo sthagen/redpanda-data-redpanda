@@ -542,6 +542,11 @@ public:
           _partition->log()->from_log_offset(_partition->high_watermark()));
     }
 
+    bool can_prefix_truncate() const final {
+        _gate.check();
+        return _partition->get_ntp_config().is_locally_collectable();
+    }
+
     ss::future<kafka::error_code> prefix_truncate(
       kafka::offset truncation_offset,
       ss::lowres_clock::time_point deadline) final {

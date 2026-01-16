@@ -114,6 +114,7 @@ public:
         bool has_kafka_gssapi{false};
         bool has_oidc{false};
         uint32_t rbac_role_count{0};
+        uint32_t unique_group_count{0};
         uint32_t data_transforms_count{0};
 
         static constexpr int64_t max_size_for_rp_env = 80;
@@ -146,6 +147,7 @@ public:
       ss::sharded<config_frontend>&,
       ss::sharded<features::feature_table>&,
       ss::sharded<security::role_store>& role_store,
+      ss::sharded<security::authorizer>& authorizer,
       ss::sharded<plugin_table>*,
       ss::sharded<feature_manager>*,
       ss::sharded<storage::api>*,
@@ -175,6 +177,7 @@ private:
     ss::sharded<config_frontend>& _config_frontend;
     ss::sharded<features::feature_table>& _feature_table;
     ss::sharded<security::role_store>& _role_store;
+    ss::sharded<security::authorizer>& _authorizer;
     ss::sharded<plugin_table>* _plugin_table;
     ss::sharded<feature_manager>* _feature_manager;
     ss::sharded<storage::api>* _storage;

@@ -98,6 +98,8 @@ public:
 
     kafka::offset high_watermark() const final { return {}; }
 
+    bool can_prefix_truncate() const final { return true; }
+
     ss::future<kafka::error_code>
     prefix_truncate(kafka::offset, ss::lowres_clock::time_point) final {
         co_return kafka::error_code::none;

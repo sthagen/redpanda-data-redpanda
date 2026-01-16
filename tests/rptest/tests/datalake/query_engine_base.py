@@ -10,7 +10,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
-
+from typing import Any
 from rptest.tests.datalake.iceberg import Identifier
 
 from ducktape.services.service import Service
@@ -68,7 +68,7 @@ class QueryEngineBase(Service, ABC):
             self.logger.debug(f"query result: {result}")
             return result
 
-    def run_query_fetch_one(self, query):
+    def run_query_fetch_one(self, query: Any) -> Any:
         with self.run_query(query) as cursor:
             return cursor.fetchone()
 

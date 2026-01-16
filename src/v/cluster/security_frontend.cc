@@ -217,7 +217,7 @@ ss::future<std::vector<errc>> security_frontend::do_create_acls(
   model::timeout_clock::duration timeout) {
     const auto num_bindings = bindings.size();
 
-    auto should_sanction
+    auto should_sanction_roles
       = _features.local().should_sanction()
         && std::ranges::any_of(bindings, [](const security::acl_binding& b) {
                auto res = b.entry().principal().type()
@@ -236,13 +236,22 @@ ss::future<std::vector<errc>> security_frontend::do_create_acls(
           });
     };
 
+    auto should_sanction_groups = _features.local().should_sanction()
+                                  && contains_group_principal();
+
     errc err{errc::success};
-    if (should_sanction) {
+    if (should_sanction_roles) {
         err = errc::feature_sanctioned;
         vlog(
           clusterlog.warn,
           "{}",
           features::enterprise_error_message::acl_with_rbac());
+    } else if (should_sanction_groups) {
+        err = errc::feature_sanctioned;
+        vlog(
+          clusterlog.warn,
+          "{}",
+          features::enterprise_error_message::acl_with_group());
     } else if (
       !_features.local().is_active(features::feature::group_based_authorization)
       && contains_group_principal()) {
