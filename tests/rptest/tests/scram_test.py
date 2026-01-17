@@ -20,6 +20,7 @@ from typing_extensions import assert_never
 
 import requests
 from confluent_kafka import KafkaError, KafkaException
+from connectrpc.errors import ConnectError, ConnectErrorCode
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.errors import TimeoutError
 from ducktape.mark import matrix, parametrize
@@ -29,6 +30,13 @@ from requests.exceptions import HTTPError
 
 from rptest.util import expect_exception
 from rptest.utils.mode_checks import in_fips_environment
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
+    security_pb2,
+)
+from rptest.clients.admin.proto.redpanda.core.common.v1 import (
+    security_types_pb2,
+)
+from rptest.clients.admin.v2 import Admin as AdminV2
 from rptest.clients.kafka_cli_tools import KafkaCliTools, KafkaCliToolsError
 from rptest.clients.kcl import RawKCL
 from rptest.clients.python_librdkafka import PythonLibrdkafka
@@ -54,10 +62,35 @@ from rptest.utils.utf8 import (
     generate_string_with_control_character,
 )
 
+SCRAM_MECHANISM_MAP = {
+    "SCRAM_MECHANISM_UNSPECIFIED": security_types_pb2.SCRAM_MECHANISM_UNSPECIFIED,
+    "SCRAM-SHA-256": security_types_pb2.SCRAM_MECHANISM_SCRAM_SHA_256,
+    "SCRAM-SHA-512": security_types_pb2.SCRAM_MECHANISM_SCRAM_SHA_512,
+}
+
+
+def scram_mechanism_from_string(
+    name: str,
+) -> security_types_pb2.ScramMechanism:
+    try:
+        return SCRAM_MECHANISM_MAP[name]
+    except KeyError:
+        return security_types_pb2.SCRAM_MECHANISM_UNSPECIFIED
+
 
 class BaseScramTest(RedpandaTest):
     def __init__(self, test_context, **kwargs):
         super(BaseScramTest, self).__init__(test_context, **kwargs)
+        self.admin = AdminV2(
+            self.redpanda,
+            auth=(
+                self.redpanda.SUPERUSER_CREDENTIALS.username,
+                self.redpanda.SUPERUSER_CREDENTIALS.password,
+            ),
+        )
+
+    def gen_random_password(self, length):
+        return "".join(random.choice(string.ascii_letters) for _ in range(length))
 
     def update_user(
         self,
@@ -67,13 +100,10 @@ class BaseScramTest(RedpandaTest):
         expected_status_code=200,
         err_msg=None,
     ):
-        def gen(length):
-            return "".join(random.choice(string.ascii_letters) for _ in range(length))
-
         if quote:
             username = urllib.parse.quote(username, safe="")
         if password is None:
-            password = gen(20)
+            password = self.gen_random_password(20)
 
         controller = self.redpanda.nodes[0]
         url = f"http://{controller.account.hostname}:9644/v1/security/users/{username}"
@@ -95,6 +125,31 @@ class BaseScramTest(RedpandaTest):
 
         return password
 
+    def update_scram_credential_v2(
+        self,
+        name: str,
+        mechanism: security_types_pb2.ScramMechanism,
+        password: str,
+        expected_error: ConnectErrorCode | None = None,
+    ) -> security_pb2.ScramCredential:
+        req = security_pb2.UpdateScramCredentialRequest(
+            scram_credential=security_pb2.ScramCredential(
+                name=name,
+                password=password,
+                mechanism=mechanism,
+            )
+        )
+
+        if expected_error is None:
+            res = self.admin.security().update_scram_credential(req)
+            return res.scram_credential
+        else:
+            with expect_exception(
+                ConnectError,
+                lambda e: e.code == expected_error,
+            ):
+                self.admin.security().update_scram_credential(req)
+
     def delete_user(self, username, quote: bool = True):
         if quote:
             username = urllib.parse.quote(username, safe="")
@@ -105,6 +160,11 @@ class BaseScramTest(RedpandaTest):
             f"Status code: {res.status_code} for DELETE user {username}"
         )
 
+    def delete_scram_credential_v2(self, name: str) -> None:
+        _ = self.admin.security().delete_scram_credential(
+            security_pb2.DeleteScramCredentialRequest(name=name)
+        )
+
     def list_users(self):
         controller = self.redpanda.nodes[0]
         url = f"http://{controller.account.hostname}:9644/v1/security/users"
@@ -112,14 +172,17 @@ class BaseScramTest(RedpandaTest):
         assert res.status_code == 200
         return res.json()
 
+    def list_scram_credentials_v2(self) -> list[security_pb2.ScramCredential]:
+        res = self.admin.security().list_scram_credentials(
+            security_pb2.ListScramCredentialsRequest()
+        )
+        return res.scram_credentials
+
     def create_user(
         self, username, algorithm, password=None, expected_status_code=200, err_msg=None
     ):
-        def gen(length):
-            return "".join(random.choice(string.ascii_letters) for _ in range(length))
-
         if password is None:
-            password = gen(15)
+            password = self.gen_random_password(15)
 
         controller = self.redpanda.nodes[0]
         url = f"http://{controller.account.hostname}:9644/v1/security/users"
@@ -141,6 +204,33 @@ class BaseScramTest(RedpandaTest):
             )
 
         return password
+
+    def create_scram_credential_v2(
+        self,
+        name: str,
+        mechanism: security_types_pb2.ScramMechanism,
+        password: str,
+        expected_error: ConnectErrorCode | None = None,
+    ) -> security_pb2.ScramCredential | None:
+        req = security_pb2.CreateScramCredentialRequest(
+            scram_credential=security_pb2.ScramCredential(
+                name=name,
+                password=password,
+                mechanism=mechanism,
+            )
+        )
+
+        if expected_error is None:
+            res = self.admin.security().create_scram_credential(req)
+            return res.scram_credential
+        else:
+            with expect_exception(
+                ConnectError,
+                lambda e: e.code == expected_error,
+            ):
+                self.admin.security().create_scram_credential(req)
+
+            return None
 
     def make_superuser_client(self, password_override=None, algorithm_override=None):
         username, password, algorithm = self.redpanda.SUPERUSER_CREDENTIALS
@@ -253,7 +343,8 @@ class ScramTest(BaseScramTest):
                 assert resp.status_code == 200
 
     @cluster(num_nodes=3)
-    def test_scram(self):
+    @matrix(use_v2_api=[False, True])
+    def test_scram(self, use_v2_api):
         topic = TopicSpec()
 
         client = self.make_superuser_client()
@@ -283,7 +374,10 @@ class ScramTest(BaseScramTest):
         assert topic.name in topics
 
         username = self.redpanda.SUPERUSER_CREDENTIALS.username
-        self.delete_user(username)
+        if use_v2_api:
+            self.delete_scram_credential_v2(username)
+        else:
+            self.delete_user(username)
 
         try:
             # now listing should fail because the user has been deleted. add
@@ -300,8 +394,18 @@ class ScramTest(BaseScramTest):
             pass
 
         # recreate user
-        algorithm = self.redpanda.SUPERUSER_CREDENTIALS.algorithm
-        password = self.create_user(username, algorithm)
+        if use_v2_api:
+            password = self.gen_random_password(15)
+            self.create_scram_credential_v2(
+                username,
+                scram_mechanism_from_string(
+                    self.redpanda.SUPERUSER_CREDENTIALS.algorithm
+                ),
+                password,
+            )
+        else:
+            algorithm = self.redpanda.SUPERUSER_CREDENTIALS.algorithm
+            password = self.create_user(username, algorithm)
 
         # works ok again
         client = self.make_superuser_client(password_override=password)
@@ -310,7 +414,15 @@ class ScramTest(BaseScramTest):
         assert topic.name in topics
 
         # update password
-        new_password = self.update_user(username)
+        if use_v2_api:
+            new_password = self.gen_random_password(15)
+            self.update_scram_credential_v2(
+                username,
+                security_types_pb2.SCRAM_MECHANISM_SCRAM_SHA_256,
+                new_password,
+            )
+        else:
+            new_password = self.update_user(username)
 
         try:
             # now listing should fail because the password is different
@@ -331,22 +443,32 @@ class ScramTest(BaseScramTest):
         print(topics)
         assert topic.name in topics
 
-        users = self.list_users()
+        if use_v2_api:
+            users = [cred.name for cred in self.list_scram_credentials_v2()]
+        else:
+            users = self.list_users()
         assert username in users
 
     @cluster(num_nodes=3)
-    @matrix(scram_algo=["SCRAM-SHA-256", "SCRAM-SHA-512"])
-    def test_scram_kafka_api_describe(self, scram_algo):
+    @matrix(scram_algo=["SCRAM-SHA-256", "SCRAM-SHA-512"], use_v2_api=[False, True])
+    def test_scram_kafka_api_describe(self, scram_algo, use_v2_api):
         """
         This test validates the KIP-554 implementation of Redpanda
         """
         test_username = "test-user"
         test_password = "test-password0"
         test_algorithm = scram_algo
+        if use_v2_api:
+            test_mechanism = scram_mechanism_from_string(scram_algo)
 
-        self.create_user(
-            username=test_username, algorithm=test_algorithm, password=test_password
-        )
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                name=test_username, mechanism=test_mechanism, password=test_password
+            )
+        else:
+            self.create_user(
+                username=test_username, algorithm=test_algorithm, password=test_password
+            )
 
         kcli = KafkaCliTools(self.redpanda)
         (username, algo, iterations) = kcli.describe_user_scram(user=test_username)
@@ -355,7 +477,8 @@ class ScramTest(BaseScramTest):
         assert iterations == 4096, f"Expected 4096, got {iterations}"
 
     @cluster(num_nodes=3)
-    def test_scram_kafka_api_create_user(self):
+    @matrix(use_v2_api=[False, True])
+    def test_scram_kafka_api_create_user(self, use_v2_api):
         test_username = "test-user"
         test_password = "test-password0"
         test_algorithm = "SCRAM-SHA-256"
@@ -380,7 +503,10 @@ class ScramTest(BaseScramTest):
             iteration_count=iteration_count,
         )
 
-        users = self.list_users()
+        if use_v2_api:
+            users = [cred.name for cred in self.list_scram_credentials_v2()]
+        else:
+            users = self.list_users()
         assert test_username in users, f"Expected {test_username} to be in {users}"
 
         # Validate that we can use RPK to list topics with the new user
@@ -392,16 +518,26 @@ class ScramTest(BaseScramTest):
         ).list_topics()
 
     @cluster(num_nodes=3)
-    def test_scram_kafka_api_modify_user(self):
+    @matrix(use_v2_api=[False, True])
+    def test_scram_kafka_api_modify_user(self, use_v2_api):
         test_username = "test-user"
         orig_password = "test-password0"
         new_password = "new-password"
         orig_algorithm = "SCRAM-SHA-256"
         new_algorithm = "SCRAM-SHA-512"
+        if use_v2_api:
+            orig_mechanism = scram_mechanism_from_string(orig_algorithm)
 
-        self.create_user(
-            username=test_username, algorithm=orig_algorithm, password=orig_password
-        )
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                test_username,
+                orig_mechanism,
+                orig_password,
+            )
+        else:
+            self.create_user(
+                username=test_username, algorithm=orig_algorithm, password=orig_password
+            )
 
         kcli = KafkaCliTools(self.redpanda)
         kcli.create_alter_scram_user(
@@ -417,14 +553,22 @@ class ScramTest(BaseScramTest):
         ).list_topics()
 
     @cluster(num_nodes=3)
-    def test_scram_kafka_api_delete_user(self):
+    @matrix(use_v2_api=[False, True])
+    def test_scram_kafka_api_delete_user(self, use_v2_api):
         test_username = "test-user"
         test_password = "test-password0"
         test_algorithm = "SCRAM-SHA-256"
+        if use_v2_api:
+            test_mechanism = scram_mechanism_from_string(test_algorithm)
 
-        self.create_user(
-            username=test_username, algorithm=test_algorithm, password=test_password
-        )
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                test_username, test_mechanism, test_password
+            )
+        else:
+            self.create_user(
+                username=test_username, algorithm=test_algorithm, password=test_password
+            )
 
         kcli = KafkaCliTools(self.redpanda)
         kcli.delete_scram_user(user=test_username, algorithm=test_algorithm)
@@ -611,8 +755,9 @@ class SaslPlainTest(BaseScramTest):
         client_type=list(ClientType),
         scram_type=list(ScramType),
         sasl_plain_config=list(SaslPlainConfig),
+        use_v2_api=[False, True],
     )
-    def test_plain_authn(self, client_type, scram_type, sasl_plain_config):
+    def test_plain_authn(self, client_type, scram_type, sasl_plain_config, use_v2_api):
         """
         This test validates that SASL/PLAIN works with common kafka client
         libraries:
@@ -634,9 +779,14 @@ class SaslPlainTest(BaseScramTest):
         ).sasl_allow_principal(
             principal=username, operations=["all"], resource="topic", resource_name="*"
         )
-        self.create_user(
-            username=username, algorithm=str(scram_type), password=password
-        )
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                username, scram_mechanism_from_string(str(scram_type)), password
+            )
+        else:
+            self.create_user(
+                username=username, algorithm=str(scram_type), password=password
+            )
 
         self._config_plain_authn(sasl_plain_config)
 
@@ -653,7 +803,8 @@ class SaslPlainTest(BaseScramTest):
         self._make_topic(client, sasl_plain_enabled)
 
     @cluster(num_nodes=3)
-    def test_plain_authn_short_password(self):
+    @matrix(use_v2_api=[False, True])
+    def test_plain_authn_short_password(self, use_v2_api):
         """
         This test validates that SASL/PLAIN in fips mode fails gracefully when the user
         provides a short password.
@@ -661,6 +812,7 @@ class SaslPlainTest(BaseScramTest):
         username = "test-user"
         good_password = "sufficiently_long_password"
         bad_password = "short-pwd"
+        algorithm = str(self.ScramType.SCRAM_SHA_256)
         RpkTool(
             self.redpanda,
             username=self.redpanda.SUPERUSER_CREDENTIALS.username,
@@ -669,12 +821,18 @@ class SaslPlainTest(BaseScramTest):
         ).sasl_allow_principal(
             principal=username, operations=["all"], resource="topic", resource_name="*"
         )
-        self.create_user(
-            username=username,
-            algorithm=str(self.ScramType.SCRAM_SHA_256),
-            password=good_password,
-        )
-
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                username,
+                scram_mechanism_from_string(algorithm),
+                good_password,
+            )
+        else:
+            self.create_user(
+                username=username,
+                algorithm=algorithm,
+                password=good_password,
+            )
         self._config_plain_authn(self.SaslPlainConfig.ON)
 
         # We create the user with a good password to not have to worry about short password error
@@ -895,6 +1053,26 @@ class ScramBootstrapUserTest(RedpandaTest):
 
         return True
 
+    def _check_connect_err_everywhere(self, expected_code: ConnectErrorCode, callable):
+        """
+        Check that the callback results in an HTTP error with the
+        given status code from all nodes in the cluster.  This enables
+        checking that auth state has propagated as expected.
+
+        :returns: true if all nodes throw an error with the expected status code
+        """
+
+        for n in self.redpanda.nodes:
+            try:
+                callable(n)
+            except ConnectError as e:
+                if e.code != expected_code:
+                    return False
+            else:
+                return False
+
+        return True
+
     @cluster(num_nodes=3)
     @parametrize(mechanism="SCRAM-SHA-512")
     @parametrize(mechanism="SCRAM-SHA-256")
@@ -938,6 +1116,82 @@ class ScramBootstrapUserTest(RedpandaTest):
         self.redpanda.restart_nodes(self.redpanda.nodes)
         admin.list_users()
 
+    @cluster(num_nodes=3)
+    @parametrize(mechanism="SCRAM-SHA-512")
+    @parametrize(mechanism="SCRAM-SHA-256")
+    def test_bootstrap_user_v2(self, mechanism):
+        # Anonymous access should be refused
+        admin = AdminV2(self.redpanda)
+        new_password = "newpassword0123456789"
+
+        with expect_exception(
+            ConnectError,
+            lambda e: e.code == ConnectErrorCode.PERMISSION_DENIED,
+        ):
+            admin.security().list_scram_credentials(
+                security_pb2.ListScramCredentialsRequest()
+            )
+
+        # Access using the bootstrap credentials should succeed
+        admin = AdminV2(
+            self.redpanda, auth=(self.BOOTSTRAP_USERNAME, self.BOOTSTRAP_PASSWORD)
+        )
+
+        users = [
+            cred.name
+            for cred in admin.security()
+            .list_scram_credentials(security_pb2.ListScramCredentialsRequest())
+            .scram_credentials
+        ]
+        assert self.BOOTSTRAP_USERNAME in users
+
+        # Modify the bootstrap user's credential
+        admin.security().update_scram_credential(
+            security_pb2.UpdateScramCredentialRequest(
+                scram_credential=security_pb2.ScramCredential(
+                    name=self.BOOTSTRAP_USERNAME,
+                    mechanism=scram_mechanism_from_string(mechanism),
+                    password=new_password,
+                )
+            )
+        )
+
+        # Getting UNAUTHENTICATED with old credentials everywhere will show that the
+        # credential update has propagated to all nodes
+        wait_until(
+            lambda: self._check_connect_err_everywhere(
+                ConnectErrorCode.UNAUTHENTICATED,
+                lambda n: admin.security(node=n).list_scram_credentials(
+                    security_pb2.ListScramCredentialsRequest()
+                ),
+            ),
+            timeout_sec=10,
+            backoff_sec=0.5,
+        )
+
+        # Using old password should fail
+        with expect_exception(
+            ConnectError,
+            lambda e: e.code == ConnectErrorCode.UNAUTHENTICATED,
+        ):
+            admin.security().list_scram_credentials(
+                security_pb2.ListScramCredentialsRequest()
+            )
+
+        # Using new credential should succeed
+        admin = AdminV2(self.redpanda, auth=(self.BOOTSTRAP_USERNAME, new_password))
+        admin.security().list_scram_credentials(
+            security_pb2.ListScramCredentialsRequest()
+        )
+
+        # Modified credential should survive a restart: this verifies that
+        # the RP_BOOTSTRAP_USER setting does not fight with changes made
+        # by other means.
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+        admin.security().list_scram_credentials(
+            security_pb2.ListScramCredentialsRequest()
+        )
+
     @cluster(
         num_nodes=1,
         log_allow_list=[re.compile(r"std::invalid_argument.*Invalid SCRAM mechanism")],
@@ -967,101 +1221,171 @@ class InvalidNewUserStrings(BaseScramTest):
         )
 
     @cluster(num_nodes=3)
-    def test_invalid_user_name(self):
+    @matrix(use_v2_api=[False, True])
+    def test_invalid_user_name(self, use_v2_api):
         """
         Validates that usernames that contain control characters and usernames which
         do not match the SCRAM regex are properly rejected
         """
         username = generate_string_with_control_character(15)
+        algorithm = "SCRAM-SHA-256"
 
-        self.create_user(
-            username=username,
-            algorithm="SCRAM-SHA-256",
-            expected_status_code=400,
-            err_msg="Parameter 'username' contained invalid control characters",
-        )
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                name=username,
+                mechanism=scram_mechanism_from_string(algorithm),
+                password=self.gen_random_password(15),
+                expected_error=ConnectErrorCode.INVALID_ARGUMENT,
+            )
+        else:
+            self.create_user(
+                username=username,
+                algorithm=algorithm,
+                expected_status_code=400,
+                err_msg="Parameter 'username' contained invalid control characters",
+            )
 
         # Two ordinals (corresponding to ',' and '=') are explicitly excluded from SASL usernames
         for ordinal in [0x2C, 0x3D]:
             username = f"john{chr(ordinal)}doe"
-            self.create_user(
-                username=username,
-                algorithm="SCRAM-SHA-256",
-                expected_status_code=400,
-                err_msg=f"Invalid SCRAM username {'{' + username + '}'}",
-            )
+            if use_v2_api:
+                self.create_scram_credential_v2(
+                    name=username,
+                    mechanism=scram_mechanism_from_string(algorithm),
+                    password=self.gen_random_password(15),
+                    expected_error=ConnectErrorCode.INVALID_ARGUMENT,
+                )
+            else:
+                self.create_user(
+                    username=username,
+                    algorithm=algorithm,
+                    expected_status_code=400,
+                    err_msg=f"Invalid SCRAM username {'{' + username + '}'}",
+                )
 
     @cluster(num_nodes=3)
     def test_invalid_alg(self):
         """
-        Validates that algorithms that contain control characters are properly rejected
+        (V1 Only) Validates that algorithms that contain control characters are properly rejected
         """
         algorithm = generate_string_with_control_character(10)
+        username = "test"
 
         self.create_user(
-            username="test",
+            username=username,
             algorithm=algorithm,
             expected_status_code=400,
             err_msg="Parameter 'algorithm' contained invalid control characters",
         )
 
     @cluster(num_nodes=3)
-    def test_invalid_password(self):
+    @matrix(use_v2_api=[False, True])
+    def test_invalid_password(self, use_v2_api):
         """
         Validates that passwords that contain control characters are properly rejected
         """
+        username = "test"
         password = generate_string_with_control_character(15)
-        self.create_user(
-            username="test",
-            algorithm="SCRAM-SHA-256",
-            password=password,
-            expected_status_code=400,
-            err_msg="Parameter 'password' contained invalid control characters",
-        )
+        algorithm = "SCRAM-SHA-256"
+
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                name=username,
+                mechanism=scram_mechanism_from_string(algorithm),
+                password=password,
+                expected_error=ConnectErrorCode.INVALID_ARGUMENT,
+            )
+        else:
+            self.create_user(
+                username=username,
+                algorithm=algorithm,
+                password=password,
+                expected_status_code=400,
+                err_msg="Parameter 'password' contained invalid control characters",
+            )
 
     @cluster(num_nodes=3)
-    def test_short_password(self):
+    @matrix(use_v2_api=[False, True])
+    def test_short_password(self, use_v2_api):
         """
         Validate that in fips mode, short scram passwords (<14 chars) are rejected with a clean error.
         In non-fips mode, they should be accepted.
         """
-        password = "short_pwd"
+        username = "test-user"
+        algorithm = "SCRAM-SHA-256"
+        short_password = "short_pwd"
+
         if in_fips_environment():
             expected_status_code = 400
+            expected_v2_error = ConnectErrorCode.INVALID_ARGUMENT
             err_msg = "Password length less than 14 characters"
         else:
             expected_status_code = 200
+            expected_v2_error = None
             err_msg = None
 
         # Validate failure in fips mode and success in non-fips
-        self.create_user(
-            username="test-user",
-            algorithm="SCRAM-SHA-256",
-            password=password,
-            expected_status_code=expected_status_code,
-            err_msg=err_msg,
-        )
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                name=username,
+                mechanism=scram_mechanism_from_string(algorithm),
+                password=short_password,
+                expected_error=expected_v2_error,
+            )
+        else:
+            self.create_user(
+                username=username,
+                algorithm=algorithm,
+                password=short_password,
+                expected_status_code=expected_status_code,
+                err_msg=err_msg,
+            )
 
         # Validate success in both - password is long enough
-        self.create_user(
-            username="test-user-2",
-            algorithm="SCRAM-SHA-256",
-            password="sufficiently_long_password",
-        )
+        username = "test-user-2"
+        long_password = "sufficiently_long_password"
+        if use_v2_api:
+            self.create_scram_credential_v2(
+                name=username,
+                mechanism=scram_mechanism_from_string(algorithm),
+                password=long_password,
+            )
+        else:
+            self.create_user(
+                username=username,
+                algorithm=algorithm,
+                password=long_password,
+            )
 
         # Validate failure in fips mode and success in non-fips
-        self.update_user(
-            username="test-user-2",
-            password=password,
-            expected_status_code=expected_status_code,
-            err_msg=err_msg,
-        )
+        if use_v2_api:
+            self.update_scram_credential_v2(
+                name=username,
+                mechanism=scram_mechanism_from_string(algorithm),
+                password=short_password,
+                expected_error=expected_v2_error,
+            )
+        else:
+            self.update_user(
+                username=username,
+                password=short_password,
+                expected_status_code=expected_status_code,
+                err_msg=err_msg,
+            )
 
         # Validate success in both - password is long enough
-        self.update_user(
-            username="test-user-2",
-            password="other_sufficiently_long_password",
-        )
+        other_long_password = "other_sufficiently_long_password"
+        if use_v2_api:
+            self.update_scram_credential_v2(
+                name=username,
+                mechanism=scram_mechanism_from_string(algorithm),
+                password=other_long_password,
+            )
+        else:
+            self.update_user(
+                username=username,
+                password=other_long_password,
+            )
 
 
 class EscapedNewUserStrings(BaseScramTest):
@@ -1096,7 +1420,8 @@ class EscapedNewUserStrings(BaseScramTest):
     ]
 
     @cluster(num_nodes=3)
-    def test_update_delete_user(self):
+    @matrix(use_v2_api=[False, True])
+    def test_update_delete_user(self, use_v2_api):
         """
         Verifies that users whose names contain characters which require URL escaping can be subsequently deleted.
         i.e. that the username included with a delete request is properly unescaped by the admin server.
@@ -1108,20 +1433,35 @@ class EscapedNewUserStrings(BaseScramTest):
 
         self.logger.debug("Create some users with names that will require URL escaping")
 
+        password = "passwd01234567"
+        algorithm = "SCRAM-SHA-256"
+
         for ch in self.NEED_ESCAPE:
             username = f"john{ch}doe"
-            self.create_user(
-                username=username,
-                algorithm="SCRAM-SHA-256",
-                password="passwd01234567",
-                expected_status_code=200,
-            )
+            if use_v2_api:
+                self.create_scram_credential_v2(
+                    name=username,
+                    mechanism=scram_mechanism_from_string(algorithm),
+                    password=password,
+                    expected_error=None,
+                )
+            else:
+                self.create_user(
+                    username=username,
+                    algorithm=algorithm,
+                    password=password,
+                    expected_status_code=200,
+                )
             users.append(username)
 
         admin = Admin(self.redpanda)
 
         def _users_match(expected: list[str]):
-            live_users = admin.list_users()
+            if use_v2_api:
+                live_users = [cred.name for cred in self.list_scram_credentials_v2()]
+            else:
+                live_users = admin.list_users()
+
             live_users.remove(su_username)
             return len(expected) == len(live_users) and set(expected) == set(live_users)
 
@@ -1131,13 +1471,24 @@ class EscapedNewUserStrings(BaseScramTest):
             "We should be able to update and delete these users without issue"
         )
         for username in users:
-            self.update_user(username=username)
-            self.delete_user(username=username)
+            if use_v2_api:
+                self.update_scram_credential_v2(
+                    name=username,
+                    mechanism=security_types_pb2.SCRAM_MECHANISM_SCRAM_SHA_256,
+                    password=self.gen_random_password(15),
+                )
+                self.delete_scram_credential_v2(name=username)
+            else:
+                self.update_user(username=username)
+                self.delete_user(username=username)
 
         try:
             wait_until(lambda: _users_match([]), timeout_sec=5, backoff_sec=0.5)
         except TimeoutError:
-            live_users = admin.list_users()
+            if use_v2_api:
+                live_users = [cred.name for cred in self.list_scram_credentials_v2()]
+            else:
+                live_users = admin.list_users()
             live_users.remove(su_username)
             assert len(live_users) == 0, (
                 f"Expected no users, got {len(live_users)}: {live_users}"

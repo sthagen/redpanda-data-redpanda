@@ -34,6 +34,81 @@ class SecurityServiceClient:
         self.base_url = base_url
         self._connect_client = ConnectClient(http_client, protocol)
 
+    def call_create_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse]:
+        """Low-level method to call CreateScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/CreateScramCredential'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse, extra_headers, timeout_seconds)
+
+    def create_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse:
+        response = self.call_create_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_get_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse]:
+        """Low-level method to call GetScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/GetScramCredential'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse, extra_headers, timeout_seconds)
+
+    def get_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse:
+        response = self.call_get_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_list_scram_credentials(self, req: proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse]:
+        """Low-level method to call ListScramCredentials, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ListScramCredentials'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse, extra_headers, timeout_seconds)
+
+    def list_scram_credentials(self, req: proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse:
+        response = self.call_list_scram_credentials(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_update_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse]:
+        """Low-level method to call UpdateScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/UpdateScramCredential'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse, extra_headers, timeout_seconds)
+
+    def update_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse:
+        response = self.call_update_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_delete_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse]:
+        """Low-level method to call DeleteScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/DeleteScramCredential'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse, extra_headers, timeout_seconds)
+
+    def delete_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse:
+        response = self.call_delete_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     def call_create_role(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse]:
         """Low-level method to call CreateRole, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.v2.SecurityService/CreateRole'
@@ -190,6 +265,81 @@ class AsyncSecurityServiceClient:
         self.base_url = base_url
         self._connect_client = AsyncConnectClient(http_client, protocol)
 
+    async def call_create_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse]:
+        """Low-level method to call CreateScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/CreateScramCredential'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse, extra_headers, timeout_seconds)
+
+    async def create_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse:
+        response = await self.call_create_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_get_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse]:
+        """Low-level method to call GetScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/GetScramCredential'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse, extra_headers, timeout_seconds)
+
+    async def get_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse:
+        response = await self.call_get_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_list_scram_credentials(self, req: proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse]:
+        """Low-level method to call ListScramCredentials, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/ListScramCredentials'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse, extra_headers, timeout_seconds)
+
+    async def list_scram_credentials(self, req: proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse:
+        response = await self.call_list_scram_credentials(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_update_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse]:
+        """Low-level method to call UpdateScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/UpdateScramCredential'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse, extra_headers, timeout_seconds)
+
+    async def update_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse:
+        response = await self.call_update_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_delete_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse]:
+        """Low-level method to call DeleteScramCredential, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.SecurityService/DeleteScramCredential'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse, extra_headers, timeout_seconds)
+
+    async def delete_scram_credential(self, req: proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse:
+        response = await self.call_delete_scram_credential(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     async def call_create_role(self, req: proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse]:
         """Low-level method to call CreateRole, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.v2.SecurityService/CreateRole'
@@ -343,6 +493,21 @@ class AsyncSecurityServiceClient:
 @typing.runtime_checkable
 class SecurityServiceProtocol(typing.Protocol):
 
+    def create_scram_credential(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialResponse]:
+        ...
+
+    def get_scram_credential(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialResponse]:
+        ...
+
+    def list_scram_credentials(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsResponse]:
+        ...
+
+    def update_scram_credential(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialResponse]:
+        ...
+
+    def delete_scram_credential(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialResponse]:
+        ...
+
     def create_role(self, req: ClientRequest[proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.security_pb2.CreateRoleResponse]:
         ...
 
@@ -376,6 +541,11 @@ SECURITY_SERVICE_PATH_PREFIX = '/redpanda.core.admin.v2.SecurityService'
 
 def wsgi_security_service(implementation: SecurityServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/CreateScramCredential', implementation.create_scram_credential, proto.redpanda.core.admin.v2.security_pb2.CreateScramCredentialRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/GetScramCredential', implementation.get_scram_credential, proto.redpanda.core.admin.v2.security_pb2.GetScramCredentialRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/ListScramCredentials', implementation.list_scram_credentials, proto.redpanda.core.admin.v2.security_pb2.ListScramCredentialsRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/UpdateScramCredential', implementation.update_scram_credential, proto.redpanda.core.admin.v2.security_pb2.UpdateScramCredentialRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/DeleteScramCredential', implementation.delete_scram_credential, proto.redpanda.core.admin.v2.security_pb2.DeleteScramCredentialRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/CreateRole', implementation.create_role, proto.redpanda.core.admin.v2.security_pb2.CreateRoleRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/GetRole', implementation.get_role, proto.redpanda.core.admin.v2.security_pb2.GetRoleRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.SecurityService/ListRoles', implementation.list_roles, proto.redpanda.core.admin.v2.security_pb2.ListRolesRequest)

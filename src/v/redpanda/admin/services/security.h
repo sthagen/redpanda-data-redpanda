@@ -24,7 +24,20 @@ namespace admin {
 // security_service_impl and its tests.
 namespace internal {
 
-void validate_role_name(const ss::sstring& role_name);
+bool match_scram_credential(
+  const proto::admin::scram_credential&, const security::scram_credential&);
+
+void validate_scram_credential_name(const ss::sstring&);
+
+void validate_pb_scram_credential(const proto::admin::scram_credential&);
+
+security::scram_credential
+convert_to_security_scram_credential(const proto::admin::scram_credential&);
+
+proto::admin::scram_credential
+convert_to_pb_scram_credential(ss::sstring, const security::scram_credential&);
+
+void validate_role_name(const ss::sstring&);
 
 void validate_pb_role_member(const proto::admin::role_member& pb_member);
 
@@ -48,6 +61,31 @@ public:
       cluster::controller* controller,
       ss::sharded<kafka::server>& kafka_server,
       ss::sharded<cluster::metadata_cache>& md_cache);
+
+    seastar::future<proto::admin::create_scram_credential_response>
+      create_scram_credential(
+        serde::pb::rpc::context,
+        proto::admin::create_scram_credential_request) override;
+
+    seastar::future<proto::admin::get_scram_credential_response>
+      get_scram_credential(
+        serde::pb::rpc::context,
+        proto::admin::get_scram_credential_request) override;
+
+    seastar::future<proto::admin::list_scram_credentials_response>
+      list_scram_credentials(
+        serde::pb::rpc::context,
+        proto::admin::list_scram_credentials_request) override;
+
+    seastar::future<proto::admin::update_scram_credential_response>
+      update_scram_credential(
+        serde::pb::rpc::context,
+        proto::admin::update_scram_credential_request) override;
+
+    seastar::future<proto::admin::delete_scram_credential_response>
+      delete_scram_credential(
+        serde::pb::rpc::context,
+        proto::admin::delete_scram_credential_request) override;
 
     seastar::future<proto::admin::create_role_response> create_role(
       serde::pb::rpc::context, proto::admin::create_role_request) override;

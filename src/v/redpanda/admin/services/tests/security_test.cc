@@ -12,6 +12,7 @@
 #include "proto/redpanda/core/admin/v2/security.proto.h"
 #include "redpanda/admin/services/security.h"
 #include "security/role.h"
+#include "security/scram_algorithm.h"
 #include "serde/protobuf/rpc.h"
 
 #include <gtest/gtest.h>
@@ -22,6 +23,337 @@ class SecurityServiceTest : public ::testing::Test {};
 
 // Bring internal namespace into scope for tests
 using namespace internal;
+
+// =============================================
+// Tests for match_scram_credential
+// =============================================
+
+TEST_F(SecurityServiceTest, MatchScramCredentialSha256Valid) {
+    ss::sstring password = "test_password";
+
+    // Create SCRAM credential using the algorithm
+    auto cred = security::scram_sha256::make_credentials(
+      password, security::scram_sha256::min_iterations);
+
+    // Create protobuf SCRAM credential with the same password
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_256);
+    pb_cred.set_password(std::move(password));
+
+    // Should match
+    EXPECT_TRUE(match_scram_credential(pb_cred, cred));
+}
+
+TEST_F(SecurityServiceTest, MatchScramCredentialSha256Invalid) {
+    ss::sstring password = "test_password";
+    ss::sstring wrong_password = "wrong_password";
+
+    // Create SCRAM credential with the correct password
+    auto cred = security::scram_sha256::make_credentials(
+      password, security::scram_sha256::min_iterations);
+
+    // Create protobuf SCRAM credential with a wrong password
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_256);
+    pb_cred.set_password(std::move(wrong_password));
+
+    // Should not match
+    EXPECT_FALSE(match_scram_credential(pb_cred, cred));
+}
+
+TEST_F(SecurityServiceTest, MatchScramCredentialSha512Valid) {
+    ss::sstring password = "test_password";
+
+    // Create SCRAM credential using the algorithm
+    auto cred = security::scram_sha512::make_credentials(
+      password, security::scram_sha512::min_iterations);
+
+    // Create protobuf SCRAM credential with the same password
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_512);
+    pb_cred.set_password(std::move(password));
+
+    // Should match
+    EXPECT_TRUE(match_scram_credential(pb_cred, cred));
+}
+
+TEST_F(SecurityServiceTest, MatchScramCredentialSha512Invalid) {
+    ss::sstring password = "test_password";
+    ss::sstring wrong_password = "wrong_password";
+
+    // Create SCRAM credential with the correct password
+    auto cred = security::scram_sha512::make_credentials(
+      password, security::scram_sha512::min_iterations);
+
+    // Create protobuf SCRAM credential with a wrong password
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_512);
+    pb_cred.set_password(std::move(wrong_password));
+
+    // Should not match
+    EXPECT_FALSE(match_scram_credential(pb_cred, cred));
+}
+
+TEST_F(SecurityServiceTest, MatchScramCredentialUnknownMechanism) {
+    ss::sstring password = "test_password";
+
+    // Create SCRAM credential
+    auto cred = security::scram_sha256::make_credentials(
+      password, security::scram_sha256::min_iterations);
+
+    // Create protobuf SCRAM credential with an unknown mechanism
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::unspecified);
+    pb_cred.set_password(std::move(password));
+
+    // Should throw invalid_argument_exception
+    EXPECT_THROW(
+      match_scram_credential(pb_cred, cred),
+      serde::pb::rpc::invalid_argument_exception);
+}
+
+TEST_F(SecurityServiceTest, MatchScramCredentialMismatchedMechanism) {
+    ss::sstring password = "test_password";
+
+    // Create SHA-256 SCRAM credential
+    auto cred = security::scram_sha256::make_credentials(
+      password, security::scram_sha256::min_iterations);
+
+    // Try to validate with SHA-512 mechanism
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_512);
+    pb_cred.set_password(std::move(password));
+
+    // Should not match because the mechanisms are different
+    EXPECT_FALSE(match_scram_credential(pb_cred, cred));
+}
+
+// =============================================
+// Tests for validate_scram_credential_name
+// =============================================
+
+TEST_F(SecurityServiceTest, ValidateScramCredentialNameValid) {
+    // Valid SCRAM credential names should not throw
+    EXPECT_NO_THROW(validate_scram_credential_name("admin"));
+    EXPECT_NO_THROW(validate_scram_credential_name("user1"));
+    EXPECT_NO_THROW(validate_scram_credential_name("my-cred"));
+    EXPECT_NO_THROW(validate_scram_credential_name("my_cred"));
+    EXPECT_NO_THROW(validate_scram_credential_name("user123"));
+}
+
+// Parameterized tests for invalid SCRAM credential names
+struct InvalidScramCredentialNameCase {
+    ss::sstring name;
+    ss::sstring test_suffix;
+};
+
+class InvalidScramCredentialNameTest
+  : public ::testing::TestWithParam<InvalidScramCredentialNameCase> {};
+
+TEST_P(InvalidScramCredentialNameTest, RejectsInvalidName) {
+    EXPECT_THROW(
+      validate_scram_credential_name(GetParam().name),
+      serde::pb::rpc::invalid_argument_exception);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  InvalidNames,
+  InvalidScramCredentialNameTest,
+  ::testing::Values(
+    InvalidScramCredentialNameCase{"user\nname", "newline"},
+    InvalidScramCredentialNameCase{"user\tname", "tab"},
+    InvalidScramCredentialNameCase{"user\rname", "carriage_return"},
+    InvalidScramCredentialNameCase{"\x01user", "control_char"},
+    InvalidScramCredentialNameCase{"user,name", "comma"},
+    InvalidScramCredentialNameCase{"user=name", "equals"},
+    InvalidScramCredentialNameCase{"", "empty"},
+    InvalidScramCredentialNameCase{std::string("user\0name", 9), "null_char"}),
+  [](const ::testing::TestParamInfo<InvalidScramCredentialNameCase>& info) {
+      return info.param.test_suffix;
+  });
+
+// =============================================
+// Tests for validate_pb_scram_credential
+// =============================================
+
+TEST_F(SecurityServiceTest, ValidatePbScramCredentialValidSha256) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("valid_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_256);
+    pb_cred.set_password("a_valid_password_that_is_long_enough");
+
+    // Should not throw
+    EXPECT_NO_THROW(validate_pb_scram_credential(pb_cred));
+}
+
+TEST_F(SecurityServiceTest, ValidatePbScramCredentialValidSha512) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("valid_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_512);
+    pb_cred.set_password("a_valid_password_that_is_long_enough");
+
+    // Should not throw
+    EXPECT_NO_THROW(validate_pb_scram_credential(pb_cred));
+}
+
+TEST_F(SecurityServiceTest, ValidatePbScramCredentialInvalidName) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("user\nname"); // Newline is invalid
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_256);
+    pb_cred.set_password("a_valid_password_that_is_long_enough");
+
+    // Should throw due to invalid name
+    EXPECT_THROW(
+      validate_pb_scram_credential(pb_cred),
+      serde::pb::rpc::invalid_argument_exception);
+}
+
+TEST_F(SecurityServiceTest, ValidatePbScramCredentialPasswordWithControlChar) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("valid_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_256);
+    pb_cred.set_password("password_with\ncontrol"); // Newline in password
+
+    // Should throw due to control character in password
+    EXPECT_THROW(
+      validate_pb_scram_credential(pb_cred),
+      serde::pb::rpc::invalid_argument_exception);
+}
+
+TEST_F(SecurityServiceTest, ValidatePbScramCredentialUnspecifiedMechanism) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("valid_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::unspecified);
+    pb_cred.set_password("a_valid_password_that_is_long_enough");
+
+    // Should throw due to unspecified mechanism
+    EXPECT_THROW(
+      validate_pb_scram_credential(pb_cred),
+      serde::pb::rpc::invalid_argument_exception);
+}
+
+// =============================================
+// Tests for convert_to_security_scram_credential
+// =============================================
+
+TEST_F(SecurityServiceTest, ConvertToSecurityScramCredentialSha256) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_256);
+    pb_cred.set_password("test_password");
+
+    auto security_cred = convert_to_security_scram_credential(pb_cred);
+
+    // Verify the credential was created with correct properties
+    EXPECT_EQ(
+      security_cred.iterations(), security::scram_sha256::min_iterations);
+    EXPECT_FALSE(security_cred.salt().empty());
+    EXPECT_FALSE(security_cred.stored_key().empty());
+    EXPECT_FALSE(security_cred.server_key().empty());
+
+    EXPECT_TRUE(match_scram_credential(pb_cred, security_cred));
+}
+
+TEST_F(SecurityServiceTest, ConvertToSecurityScramCredentialSha512) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::scram_sha_512);
+    pb_cred.set_password("test_password");
+
+    auto security_cred = convert_to_security_scram_credential(pb_cred);
+
+    // Verify the credential was created with correct properties
+    EXPECT_EQ(
+      security_cred.iterations(), security::scram_sha512::min_iterations);
+    EXPECT_FALSE(security_cred.salt().empty());
+    EXPECT_FALSE(security_cred.stored_key().empty());
+    EXPECT_FALSE(security_cred.server_key().empty());
+
+    EXPECT_TRUE(match_scram_credential(pb_cred, security_cred));
+}
+
+TEST_F(SecurityServiceTest, ConvertToSecurityScramCredentialUnknownMechanism) {
+    proto::admin::scram_credential pb_cred;
+    pb_cred.set_name("test_user");
+    pb_cred.set_mechanism(proto::common::scram_mechanism::unspecified);
+    pb_cred.set_password("test_password");
+
+    // Should throw due to unknown mechanism
+    EXPECT_THROW(
+      convert_to_security_scram_credential(pb_cred),
+      serde::pb::rpc::invalid_argument_exception);
+}
+
+// =============================================
+// Tests for convert_to_pb_scram_credential
+// =============================================
+
+TEST_F(SecurityServiceTest, ConvertToPbScramCredentialSha256) {
+    ss::sstring password = "test_password";
+    ss::sstring name = "test_user";
+
+    // Create a SHA-256 SCRAM credential
+    auto security_cred = security::scram_sha256::make_credentials(
+      password, security::scram_sha256::min_iterations);
+
+    // Convert to protobuf
+    auto pb_cred = convert_to_pb_scram_credential(name, security_cred);
+
+    // Verify the mechanism is set correctly
+    EXPECT_EQ(
+      pb_cred.get_mechanism(), proto::common::scram_mechanism::scram_sha_256);
+    EXPECT_EQ(pb_cred.get_name(), name);
+
+    // The password field is not able to be populated during conversion.
+    // Therefore, the match should fail.
+    EXPECT_TRUE(pb_cred.get_password().empty());
+    EXPECT_FALSE(match_scram_credential(pb_cred, security_cred));
+}
+
+TEST_F(SecurityServiceTest, ConvertToPbScramCredentialSha512) {
+    ss::sstring password = "test_password";
+    ss::sstring name = "test_user";
+
+    // Create a SHA-512 SCRAM credential
+    auto security_cred = security::scram_sha512::make_credentials(
+      password, security::scram_sha512::min_iterations);
+
+    // Convert to protobuf
+    auto pb_cred = convert_to_pb_scram_credential(name, security_cred);
+
+    // Verify the mechanism is set correctly
+    EXPECT_EQ(
+      pb_cred.get_mechanism(), proto::common::scram_mechanism::scram_sha_512);
+    EXPECT_EQ(pb_cred.get_name(), name);
+
+    // The password field is not able to be populated during conversion.
+    // Therefore, the match should fail.
+    EXPECT_TRUE(pb_cred.get_password().empty());
+    EXPECT_FALSE(match_scram_credential(pb_cred, security_cred));
+}
+
+TEST_F(SecurityServiceTest, ConvertToPbScramCredentialUnknownKeySize) {
+    ss::sstring name = "test_user";
+
+    // Create a credential with an invalid stored key size
+    // Using empty keys which will have size 0 (not matching SHA-256 or SHA-512)
+    security::scram_credential invalid_cred{
+      bytes{}, // salt
+      bytes{}, // server_key
+      bytes{}, // stored_key - empty, so size = 0
+      security::scram_sha256::min_iterations};
+
+    // Should throw internal_exception due to unknown key size
+    EXPECT_THROW(
+      convert_to_pb_scram_credential(name, invalid_cred),
+      serde::pb::rpc::internal_exception);
+}
 
 // =============================================
 // Tests for validate_role_name
