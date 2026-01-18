@@ -111,7 +111,6 @@
         "rptest/tests/datalake/coordinator_retention_test.py",
         "rptest/tests/datalake/databricks_test.py",
         "rptest/tests/datalake/datalake_dlq_test.py",
-        "rptest/tests/datalake/datalake_omb_test.py",
         "rptest/tests/datalake/datalake_services.py",
         "rptest/tests/datalake/datalake_table_name_test.py",
         "rptest/tests/datalake/datalake_upgrade_test.py",
