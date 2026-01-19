@@ -99,6 +99,7 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:streambuf",
+        "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/container:json",
         "//src/v/hashing:jump_consistent",

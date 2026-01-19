@@ -331,6 +331,12 @@ void ctp_stm::apply_placeholder(const model::record_batch& batch) {
     // because the assertion is about the physical content of the log rather
     // than the computed state.
     if (id.epoch > _epoch_window_max) {
+        vlog(
+          _log.debug,
+          "Sliding epoch window from [{}, {}] with {}",
+          _epoch_window_min,
+          _epoch_window_max,
+          id.epoch);
         _epoch_window_min = _epoch_window_max;
         _epoch_window_max = id.epoch;
     }
@@ -414,6 +420,7 @@ ctp_stm::fence_epoch(cluster_epoch e) {
               get_applied_epoch);
             std::optional<cluster_epoch_fence> epoch_fence_opt;
             if (!current_epoch.has_value() || current_epoch.value() <= e) {
+                vlog(_log.debug, "Bumping max seen epoch to {}", e);
                 _state.advance_max_seen_epoch(e);
                 // Demote to reader lock after max_seen_epoch is updated.
                 unit.return_units(unit.count() - 1);

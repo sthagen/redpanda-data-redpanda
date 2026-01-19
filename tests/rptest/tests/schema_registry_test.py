@@ -579,7 +579,7 @@ schema_avro_dependee_def = """
     ]
 }"""
 
-soft_deleted_schemas = {
+base_schemas = {
     "proto": {
         "subject": "schema_proto",
         "schema": schema_proto_def,
@@ -1700,6 +1700,181 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             self.logger.debug(result_raw)
             assert result_raw.status_code == requests.codes.ok
             assert result_raw.json()["id"] == 1
+
+    @cluster(num_nodes=1)
+    def test_default_context(self):
+        schema_data = json.dumps({"schema": schema1_def})
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject="default-ctx-subject", data=schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["id"], 1)
+
+        result = self.sr_client.post_subjects_subject(
+            subject=":.:default-ctx-subject", data=schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["id"], 1)
+
+    @cluster(num_nodes=1)
+    def test_contexts(self):
+        """Verify context-aware endpoints work with qualified subjects."""
+
+        schema_data = json.dumps({"schema": schema1_def})
+        compat_schema_data = json.dumps({"schema": schema2_def})
+        ctx_subject = ":.ctx1:sub1"
+
+        # Register in context
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=ctx_subject, data=schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Lookup in context
+        result = self.sr_client.post_subjects_subject(
+            subject=ctx_subject, data=schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Compatibility check in context
+        result = self.sr_client.post_compatibility_subject_version(
+            subject=ctx_subject, version="latest", data=compat_schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["is_compatible"], True)
+
+        # List versions in context
+        result = self.sr_client.get_subjects_subject_versions(subject=ctx_subject)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json(), [1])
+
+        # Get specific version in context
+        result = self.sr_client.get_subjects_subject_versions_version(
+            subject=ctx_subject, version=1
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["version"], 1)
+
+        # Get schema only for specific version in context
+        result = self.sr_client.get_subjects_subject_versions_version_schema(
+            subject=ctx_subject, version=1
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Get referenced-by in context (empty list, no references)
+        result = self.sr_client.get_subjects_subject_versions_version_referenced_by(
+            subject=ctx_subject, version=1
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json(), [])
+
+        # Delete specific version in context
+        result = self.sr_client.delete_subject_version(subject=ctx_subject, version=1)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json(), 1)
+
+        # Delete subject in context (cleanup)
+        result = self.sr_client.delete_subject(subject=ctx_subject, permanent=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+    @cluster(num_nodes=1)
+    def test_context_isolation(self):
+        """Verify contexts are isolated: independent IDs, no cross-context lookups."""
+
+        # Register in default context
+        result = self.sr_client.post_subjects_subject_versions(
+            subject="sub1", data=json.dumps({"schema": schema1_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["id"], 1)
+
+        # Register same schema in .ctx1 - should get id=1 (independent counter)
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=":.ctx1:sub1", data=json.dumps({"schema": schema2_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["id"], 1)
+
+        # Lookup schema in different context - should fail
+        result = self.sr_client.post_subjects_subject(
+            subject=":.ctx2:sub1", data=json.dumps({"schema": schema1_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.not_found)
+
+    @cluster(num_nodes=1)
+    def test_context_references(self):
+        """Test schema references work with context-qualified subjects."""
+        # Test all schema types using existing test data
+        for schema_type in ["proto", "avro", "json"]:
+            base = base_schemas[schema_type]
+            dependent = dependent_schemas[schema_type]
+            ref_name = dependent["references"][0]["name"]
+
+            ctx = f"ctx-{schema_type}"
+            ctx_ref_subject = f":.{ctx}:base"
+            ctx_main_subject = f":.{ctx}:dependent"
+
+            # Register base schema in context
+            ref_data = json.dumps(
+                {"schema": base["schema"], "schemaType": base["type"]}
+            )
+            result = self.sr_client.post_subjects_subject_versions(
+                subject=ctx_ref_subject, data=ref_data
+            )
+            self.assert_equal(result.status_code, requests.codes.ok)
+
+            # Register dependent schema with in-context reference
+            main_data = json.dumps(
+                {
+                    "schema": dependent["schema"],
+                    "schemaType": dependent["type"],
+                    "references": [
+                        {"name": ref_name, "subject": ctx_ref_subject, "version": 1}
+                    ],
+                }
+            )
+            result = self.sr_client.post_subjects_subject_versions(
+                subject=ctx_main_subject, data=main_data
+            )
+            self.assert_equal(result.status_code, requests.codes.ok)
+
+            # Verify referenced-by works with context subjects
+            result = self.sr_client.get_subjects_subject_versions_version_referenced_by(
+                subject=ctx_ref_subject, version=1
+            )
+            self.assert_equal(result.status_code, requests.codes.ok)
+            self.assert_equal(len(result.json()), 1)
+
+        # Test cross-context references
+        base = base_schemas["proto"]
+        dependent = dependent_schemas["proto"]
+        cross_ref_subject = ":.ctx-cross-ref:base"
+        cross_main_subject = ":.ctx-cross-main:dependent"
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=cross_ref_subject,
+            data=json.dumps({"schema": base["schema"], "schemaType": base["type"]}),
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=cross_main_subject,
+            data=json.dumps(
+                {
+                    "schema": dependent["schema"],
+                    "schemaType": dependent["type"],
+                    "references": [
+                        {
+                            "name": dependent["references"][0]["name"],
+                            "subject": cross_ref_subject,
+                            "version": 1,
+                        }
+                    ],
+                }
+            ),
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
 
     @cluster(num_nodes=3)
     def test_post_subjects_subject_versions_null_metadata_ruleset(self):
@@ -3512,7 +3687,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         # Test setup. Insert and soft-delete schemas to be referencedby
 
         for name in ["proto", "json", "avro"]:
-            schema = soft_deleted_schemas[name]
+            schema = base_schemas[name]
             result_raw = self.sr_client.post_subjects_subject_versions(
                 subject=schema["subject"],
                 data=json.dumps(

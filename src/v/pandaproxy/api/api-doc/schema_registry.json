@@ -638,6 +638,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -719,6 +720,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -767,6 +769,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -815,6 +818,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -873,6 +877,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -942,6 +947,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1001,6 +1007,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1072,6 +1079,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1128,6 +1136,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1188,6 +1197,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
             "in": "path",
             "required": true,
             "type": "string"
