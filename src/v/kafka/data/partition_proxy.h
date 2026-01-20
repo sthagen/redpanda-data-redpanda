@@ -71,10 +71,8 @@ public:
         virtual ss::future<std::error_code> linearizable_barrier() = 0;
         virtual ss::future<error_code>
           prefix_truncate(model::offset, ss::lowres_clock::time_point) = 0;
-        virtual ss::future<storage::translating_reader> make_reader(
-          kafka::log_reader_config,
-          std::optional<model::timeout_clock::time_point>)
-          = 0;
+        virtual ss::future<storage::translating_reader>
+          make_reader(kafka::log_reader_config) = 0;
         virtual ss::future<std::optional<storage::timequery_result>>
           timequery(storage::timequery_config) = 0;
         virtual ss::future<std::vector<model::tx_range>> aborted_transactions(
@@ -139,11 +137,9 @@ public:
         return _impl->aborted_transactions(base, last, std::move(ot_state));
     }
 
-    ss::future<storage::translating_reader> make_reader(
-      kafka::log_reader_config cfg,
-      std::optional<model::timeout_clock::time_point> debounce_deadline
-      = std::nullopt) {
-        return _impl->make_reader(cfg, debounce_deadline);
+    ss::future<storage::translating_reader>
+    make_reader(kafka::log_reader_config cfg) {
+        return _impl->make_reader(cfg);
     }
 
     ss::future<std::optional<storage::timequery_result>>

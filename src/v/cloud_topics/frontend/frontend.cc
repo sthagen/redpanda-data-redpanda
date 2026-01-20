@@ -33,6 +33,7 @@
 #include "model/timeout_clock.h"
 #include "raft/errc.h"
 #include "raft/replicate.h"
+#include "ssx/future-util.h"
 #include "storage/log_reader.h"
 #include "storage/offset_translator_state.h"
 #include "storage/record_batch_builder.h"
@@ -241,9 +242,8 @@ model::term_id frontend::leader_epoch() const {
     return _partition->raft()->confirmed_term();
 }
 
-ss::future<storage::translating_reader> frontend::make_reader(
-  cloud_topic_log_reader_config cfg,
-  std::optional<model::timeout_clock::time_point>) {
+ss::future<storage::translating_reader>
+frontend::make_reader(cloud_topic_log_reader_config cfg) {
     vassert(_data_plane != nullptr, "cloud topics api not initialized");
 
     const auto lro = _ctp_stm_api->get_last_reconciled_offset();
@@ -470,7 +470,7 @@ frontend::refine_timequery_result(
     // giving the reader a timestamp so it uses the L1 object indexes to seek
     // to the correct spot within the index, this would allow us to optimize IO
     // against the cloud.
-    auto reader = co_await make_reader(reader_cfg, std::nullopt);
+    auto reader = co_await make_reader(reader_cfg);
     auto generator = std::move(reader.reader).generator(model::no_timeout);
     auto query_interval = model::bounded_offset_interval::checked(
       kafka::offset_cast(input.start_offset),
@@ -591,8 +591,10 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
       ctp_stm_api->fence_epoch(upload_res.value().front().id.epoch));
     if (fence_fut.failed()) {
         auto e = fence_fut.get_exception();
-        vlog(
-          cd_log.warn,
+        vlogl(
+          cd_log,
+          ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                        : ss::log_level::warn,
           "Failed to fence epoch {} for ntp {}, error: {}",
           upload_res.value().front().id.epoch,
           ntp,
@@ -725,10 +727,11 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
     auto fence_fut = co_await ss::coroutine::as_future(
       _ctp_stm_api->fence_epoch(res.value().front().id.epoch));
     if (fence_fut.failed()) {
-        // TODO: handle shutdown failures gracefully
         auto e = fence_fut.get_exception();
-        vlog(
-          cd_log.warn,
+        vlogl(
+          cd_log,
+          ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                        : ss::log_level::warn,
           "Failed to fence epoch {} for ntp {}, error: {}",
           res.value().front().id.epoch,
           ntp(),

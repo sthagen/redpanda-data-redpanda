@@ -904,22 +904,10 @@ consensus::do_make_reader(storage::local_log_reader_config config) {
     return _log->make_reader(config);
 }
 
-ss::future<model::record_batch_reader> consensus::make_reader(
-  storage::local_log_reader_config config,
-  std::optional<clock_type::time_point> debounce_timeout) {
-    return ss::try_with_gate(_bg, [this, config, debounce_timeout] {
-        if (!debounce_timeout) {
-            // fast path, do not wait
-            return do_make_reader(config);
-        }
-
-        return _consumable_offset_monitor
-          .wait(
-            model::next_offset(_majority_replicated_index),
-            *debounce_timeout,
-            _as)
-          .then([this, config]() mutable { return do_make_reader(config); });
-    });
+ss::future<model::record_batch_reader>
+consensus::make_reader(storage::local_log_reader_config config) {
+    return ss::try_with_gate(
+      _bg, [this, config] { return do_make_reader(config); });
 }
 
 bool consensus::should_skip_vote(bool ignore_heartbeat) {

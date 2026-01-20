@@ -110,9 +110,8 @@ public:
     prefix_truncate(model::offset, ss::lowres_clock::time_point) final {
         throw std::runtime_error("unimplemented");
     }
-    ss::future<storage::translating_reader> make_reader(
-      kafka::log_reader_config config,
-      std::optional<model::timeout_clock::time_point>) final {
+    ss::future<storage::translating_reader>
+    make_reader(kafka::log_reader_config config) final {
         if (config.first_timestamp.has_value()) {
             throw std::runtime_error("unimplemented");
         }

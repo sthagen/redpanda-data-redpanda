@@ -78,13 +78,8 @@ public:
     /// batch reader will produce batches with kafka offsets and the config will
     /// be updated using kafka offsets.
     /// \param config is a reader config
-    /// \param deadline is an optional time point which is used to debounce
-    ///        readers which are waiting for an offset. This is not a
-    ///        cancellation deadline.  Not used for tiered-storage.
-    ss::future<storage::translating_reader> make_reader(
-      cloud_storage::cloud_log_reader_config config,
-      std::optional<model::timeout_clock::time_point> debounce_deadline
-      = std::nullopt);
+    ss::future<storage::translating_reader>
+    make_reader(cloud_storage::cloud_log_reader_config config);
 
     static size_t reader_mem_use_estimate() noexcept;
 

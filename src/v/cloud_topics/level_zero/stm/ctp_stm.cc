@@ -380,6 +380,8 @@ ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
 ctp_stm::fence_epoch(cluster_epoch e) {
     auto holder = _gate.hold();
     if (!co_await sync(sync_timeout, _as)) {
+        // Prevent the below log spam if we are shutting down.
+        _as.check();
         vlog(_log.warn, "ctp_stm::fence_epoch sync timeout");
         throw std::runtime_error(fmt_with_ctx(fmt::format, "Sync timeout"));
     }

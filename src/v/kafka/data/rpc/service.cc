@@ -225,8 +225,7 @@ local_service::consume(
           auto deadline = model::timeout_clock::now() + timeout;
 
           // Create reader
-          auto translating_reader = co_await partition->make_reader(
-            reader_cfg, deadline);
+          auto translating_reader = co_await partition->make_reader(reader_cfg);
 
           // Consume batches from reader
           try {

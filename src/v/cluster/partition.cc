@@ -328,14 +328,13 @@ model::offset partition::next_cloud_offset() const {
     return kafka::offset_cast(_cloud_storage_partition->next_kafka_offset());
 }
 
-ss::future<storage::translating_reader> partition::make_cloud_reader(
-  cloud_storage::cloud_log_reader_config config,
-  std::optional<model::timeout_clock::time_point> deadline) {
+ss::future<storage::translating_reader>
+partition::make_cloud_reader(cloud_storage::cloud_log_reader_config config) {
     vassert(
       cloud_data_available(),
       "Method can only be called if cloud data is available, ntp: {}",
       _raft->ntp());
-    return _cloud_storage_partition->make_reader(config, deadline);
+    return _cloud_storage_partition->make_reader(config);
 }
 
 ss::future<result<kafka_result>> partition::replicate(
@@ -1614,10 +1613,9 @@ partition::remote_partition() const {
     return _cloud_storage_partition;
 }
 
-ss::future<model::record_batch_reader> partition::make_local_reader(
-  storage::local_log_reader_config config,
-  std::optional<model::timeout_clock::time_point> debounce_deadline) {
-    return _raft->make_reader(std::move(config), debounce_deadline);
+ss::future<model::record_batch_reader>
+partition::make_local_reader(storage::local_log_reader_config config) {
+    return _raft->make_reader(config);
 }
 
 model::term_id partition::term() const { return _raft->term(); }

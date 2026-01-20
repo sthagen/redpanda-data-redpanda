@@ -359,9 +359,7 @@ ss::future<> compaction_committer::compaction_job::do_finalize(
       _id,
       _tp);
 
-    auto f = await_inflight_uploads();
-    auto fut = co_await ss::coroutine::as_future(
-      ssx::with_timeout_abortable(std::move(f), model::no_timeout, _as));
+    auto fut = co_await ss::coroutine::as_future(await_inflight_uploads());
 
     if (_metadata_builder->is_empty()) {
         // There is no update to push.

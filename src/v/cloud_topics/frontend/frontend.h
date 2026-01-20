@@ -127,9 +127,8 @@ public:
     raft::replicate_stages replicate(
       model::batch_identity, model::record_batch, raft::replicate_options);
 
-    ss::future<storage::translating_reader> make_reader(
-      cloud_topic_log_reader_config cfg,
-      std::optional<model::timeout_clock::time_point>);
+    ss::future<storage::translating_reader>
+    make_reader(cloud_topic_log_reader_config cfg);
 
     ss::future<std::vector<model::tx_range>> aborted_transactions(
       kafka::offset base,
