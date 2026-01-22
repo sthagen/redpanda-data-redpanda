@@ -151,43 +151,60 @@ public:
     /// \param force Override checks for soft-delete first.
     ss::future<bool> delete_subject_version(
       context_subject sub, schema_version version, force f = force::no);
-    ///\brief Get the global mode.
+    ///\brief Get the mode of a context.
     ss::future<mode> get_mode(context ctx);
 
     ///\brief Get the mode for a subject, or fallback to global.
     ss::future<mode> get_mode(context_subject sub, default_to_global fallback);
 
-    ///\brief Set the global mode.
+    ///\brief Set the mode of a context.
     /// \param force Override checks, always apply action
-    ss::future<bool> set_mode(context ctx, mode m, force f);
+    ss::future<bool> set_mode(seq_marker marker, context ctx, mode m, force f);
 
     ///\brief Set the mode for a subject.
     /// \param force Override checks, always apply action
     ss::future<bool>
     set_mode(seq_marker marker, context_subject sub, mode m, force f);
+
+    ///\brief Clear the mode of a context.
+    /// \param force Override checks, always apply action
+    ss::future<bool> clear_mode(context ctx, force f);
     ///\brief Clear the mode for a subject.
     /// \param force Override checks, always apply action
     ss::future<bool>
     clear_mode(seq_marker marker, context_subject sub, force f);
 
-    ///\brief Get the global compatibility level.
+    /// \brief Return the seq_marker write history of a context, but only
+    /// mode keys
+    ss::future<chunked_vector<seq_marker>>
+    get_context_mode_written_at(context ctx);
+
+    ///\brief Get the compatibility level of a context.
     ss::future<compatibility_level> get_compatibility(context ctx);
 
     ///\brief Get the compatibility level for a subject, or fallback to global.
     ss::future<compatibility_level>
     get_compatibility(context_subject sub, default_to_global fallback);
-    ///\brief Set the global compatibility level.
-    ss::future<bool>
-    set_compatibility(context ctx, compatibility_level compatibility);
+    ///\brief Set the compatibility level of a context.
+    ss::future<bool> set_compatibility(
+      seq_marker marker, context ctx, compatibility_level compatibility);
 
     ///\brief Set the compatibility level for a subject.
     ss::future<bool> set_compatibility(
       seq_marker marker,
       context_subject sub,
       compatibility_level compatibility);
+
+    ///\brief Clear the compatibility level of a context.
+    ss::future<bool> clear_compatibility(context ctx);
     ///\brief Clear the compatibility level for a subject.
     ss::future<bool>
     clear_compatibility(seq_marker marker, context_subject sub);
+
+    /// \brief Return the seq_marker write history of a context, but only
+    /// config keys
+    ss::future<chunked_vector<seq_marker>>
+    get_context_config_written_at(context ctx);
 
     ///\brief Check if the provided schema is compatible with the subject and
     /// version, according the the current compatibility.

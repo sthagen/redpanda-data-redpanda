@@ -327,43 +327,39 @@ void ctp_stm::apply_placeholder(const model::record_batch& batch) {
     });
     auto placeholder = serde::from_iobuf<ctp_placeholder>(std::move(value));
     auto id = placeholder.id;
-    // this assertion is made here rather than inside the state object itself
-    // because the assertion is about the physical content of the log rather
-    // than the computed state.
-    if (id.epoch > _epoch_window_max) {
-        vlog(
-          _log.debug,
-          "Sliding epoch window from [{}, {}] with {}",
-          _epoch_window_min,
-          _epoch_window_max,
-          id.epoch);
-        _epoch_window_min = _epoch_window_max;
-        _epoch_window_max = id.epoch;
-    }
-    vassert(
-      id.epoch >= _epoch_window_min,
-      "[{}] Observed a non-monotonic epoch sequence {} < {}",
-      ntp(),
-      id.epoch,
-      _epoch_window_min);
+    _epoch_checker.check_epoch(id.epoch, batch.header().base_offset);
     _state.advance_epoch(id.epoch, batch.header().base_offset);
 }
 
+struct ctp_stm_snapshot
+  : serde::
+      envelope<ctp_stm_snapshot, serde::version<0>, serde::compat_version<0>> {
+    ctp_stm_state state;
+    epoch_window_checker checker;
+
+    auto serde_fields() { return std::tie(state, checker); }
+};
+
 ss::future<raft::local_snapshot_applied>
-ctp_stm::apply_local_snapshot(raft::stm_snapshot_header, iobuf&& buf) {
-    _state = serde::from_iobuf<ctp_stm_state>(std::move(buf));
+ctp_stm::apply_local_snapshot(raft::stm_snapshot_header header, iobuf&& buf) {
+    auto snap = serde::from_iobuf<ctp_stm_snapshot>(std::move(buf));
+    _state = snap.state;
+    _epoch_checker = snap.checker;
     co_return raft::local_snapshot_applied::yes;
 }
 
 ss::future<raft::stm_snapshot>
 ctp_stm::take_local_snapshot(ssx::semaphore_units) {
-    auto buf = serde::to_iobuf(_state);
-    co_return raft::stm_snapshot::create(
-      0, this->last_applied(), std::move(buf));
+    auto buf = serde::to_iobuf(
+      ctp_stm_snapshot{.state = _state, .checker = _epoch_checker});
+    auto snapshot_offset = last_applied();
+    co_return raft::stm_snapshot::create(0, snapshot_offset, std::move(buf));
 }
 
 ss::future<> ctp_stm::apply_raft_snapshot(const iobuf& buf) {
-    _state = serde::from_iobuf<ctp_stm_state>(buf.copy());
+    auto snap = serde::from_iobuf<ctp_stm_snapshot>(buf.copy());
+    _state = snap.state;
+    _epoch_checker = snap.checker;
     co_return;
 }
 
@@ -373,7 +369,8 @@ ss::future<iobuf> ctp_stm::take_raft_snapshot(model::offset snapshot_at) {
       "The snapshot is taken at offset {} but current insync offset is {}",
       snapshot_at,
       last_applied());
-    co_return serde::to_iobuf(_state);
+    co_return serde::to_iobuf(
+      ctp_stm_snapshot{.state = _state, .checker = _epoch_checker});
 }
 
 ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
@@ -452,5 +449,27 @@ model::offset ctp_stm::max_removable_local_log_offset() {
 }
 
 l0::producer_queue& ctp_stm::producer_queue() { return _producer_queue; }
+
+void epoch_window_checker::check_epoch(
+  cluster_epoch epoch, model::offset offset) {
+    if (offset < _latest_offset) {
+        return;
+    }
+    if (epoch > _max_epoch) {
+        _min_epoch = _max_epoch;
+        _max_epoch = epoch;
+        if (_min_epoch == cluster_epoch::min()) {
+            _min_epoch = epoch;
+        }
+    }
+    vassert(
+      _min_epoch <= epoch && epoch <= _max_epoch,
+      "epoch {} at {} is outside of sliding window [{}, {}]",
+      epoch,
+      offset,
+      _min_epoch,
+      _max_epoch);
+    _latest_offset = offset;
+}
 
 }; // namespace cloud_topics

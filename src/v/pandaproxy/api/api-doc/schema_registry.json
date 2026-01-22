@@ -6,6 +6,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject to get the config for. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context. Use :.<context>: for context-level config.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -48,6 +49,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject to set the config for. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context. Use :.<context>: for context-level config.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -86,6 +88,7 @@
         "parameters": [
           {
             "name": "subject",
+            "description": "The subject to delete the config for. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context. Use :.<context>: for context-level config.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -264,7 +267,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject to get the mode for.",
+            "description": "The subject to get the mode for. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context. Use :.<context>: for context-level mode.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -314,7 +317,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject to set the mode for.",
+            "description": "The subject to set the mode for. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context. Use :.<context>: for context-level mode.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -372,7 +375,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject to delete the mode for.",
+            "description": "The subject to delete the mode for. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context. Use :.<context>: for context-level mode.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -638,7 +641,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -720,7 +723,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -769,7 +772,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -818,7 +821,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -877,7 +880,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -947,7 +950,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1007,7 +1010,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1079,7 +1082,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1136,7 +1139,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"
@@ -1197,7 +1200,7 @@
         "parameters": [
           {
             "name": "subject",
-            "description": "The subject name. Supports context-qualified subjects with the format `[:.<context>:]<subject>`.",
+            "description": "The subject name. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context.",
             "in": "path",
             "required": true,
             "type": "string"

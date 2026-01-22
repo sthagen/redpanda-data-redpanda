@@ -6,6 +6,7 @@ go_library(
         "config.go",
         "format.go",
         "params.go",
+        "profile_doc.go",
         "redpanda_yaml.go",
         "rpk_yaml.go",
         "weak.go",
@@ -36,6 +37,7 @@ go_test(
     srcs = [
         "config_test.go",
         "params_test.go",
+        "profile_doc_test.go",
         "rpk_yaml_test.go",
         "weak_test.go",
     ],

@@ -27,6 +27,7 @@
 #include "serde/rw/inet_address.h"
 #include "serde/rw/iobuf.h"
 #include "serde/rw/map.h"
+#include "serde/rw/pair.h"
 #include "serde/rw/rw.h"
 #include "serde/rw/set.h"
 #include "serde/rw/sstring.h"
@@ -1156,4 +1157,31 @@ SEASTAR_THREAD_TEST_CASE(variant) {
     BOOST_CHECK_THROW(
       serde::from_iobuf<decltype(v1)>(serde::to_iobuf(v0)),
       serde::serde_exception);
+}
+
+SEASTAR_THREAD_TEST_CASE(pair_test) {
+    // Test pair with primitive types
+    const std::pair p1{42, 123};
+    BOOST_REQUIRE(serde_input(p1) == p1);
+
+    // Test pair with different types
+    const std::pair<ss::sstring, int> p2{"hello", 456};
+    BOOST_REQUIRE(serde_input(p2) == p2);
+
+    // Test pair with complex types
+    const std::pair<ss::sstring, std::vector<int>> p3{"test", {1, 2, 3}};
+    BOOST_REQUIRE(serde_input(p3) == p3);
+
+    // Test pair with envelope types
+    const std::pair p4{test_msg0{._i = 'a', ._j = 'b'}, 789};
+    BOOST_REQUIRE(serde_input(p4) == p4);
+
+    // Test nested pairs
+    const std::pair p5{std::pair{10, 20}, ss::sstring{"nested"}};
+    BOOST_REQUIRE(serde_input(p5) == p5);
+
+    // Test vector of pairs
+    const std::vector<std::pair<ss::sstring, int>> v{
+      {"one", 1}, {"two", 2}, {"three", 3}};
+    BOOST_REQUIRE(serde_input(v) == v);
 }

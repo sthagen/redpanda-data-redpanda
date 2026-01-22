@@ -13,6 +13,7 @@
 #include "cloud_topics/level_one/metastore/lsm/values.h"
 #include "lsm/lsm.h"
 #include "model/fundamental.h"
+#include "utils/detailed_error.h"
 
 namespace cloud_topics::l1 {
 
@@ -20,10 +21,17 @@ namespace cloud_topics::l1 {
 class state_reader {
 public:
     enum class errc {
+        // There was an issue reading state when building the update. This may
+        // be transient (e.g. timeout when reading from object storage).
         io_error,
+        // There was an issue reading state that is unexpected. This indicates
+        // non-transient errors like broken invariants and should be logged at
+        // ERROR level.
         corruption,
+        // The underlying state is being shutdown.
         shutting_down,
     };
+    using error = detailed_error<errc>;
 
     struct extent_row {
         ss::sstring key;
@@ -45,10 +53,10 @@ public:
         // _last_key, or generates an error if it can't.
         //
         // Stops generating after the first error.
-        ss::coroutine::experimental::generator<std::expected<extent_row, errc>>
+        ss::coroutine::experimental::generator<std::expected<extent_row, error>>
         get_rows();
 
-        ss::future<chunked_vector<std::expected<extent_row, errc>>>
+        ss::future<chunked_vector<std::expected<extent_row, error>>>
         materialize_rows();
 
     private:
@@ -65,42 +73,42 @@ public:
     explicit state_reader(lsm::snapshot snap)
       : snap_(std::move(snap)) {}
 
-    ss::future<std::expected<std::optional<metadata_row_value>, errc>>
+    ss::future<std::expected<std::optional<metadata_row_value>, error>>
     get_metadata(const model::topic_id_partition&);
 
-    ss::future<std::expected<std::optional<compaction_state>, errc>>
+    ss::future<std::expected<std::optional<compaction_state>, error>>
     get_compaction_metadata(const model::topic_id_partition&);
 
-    ss::future<std::expected<std::optional<object_entry>, errc>>
+    ss::future<std::expected<std::optional<object_entry>, error>>
       get_object(object_id);
 
     // Returns the highest term start for the given partition, or nullopt if
     // the partition does not exist.
-    ss::future<std::expected<std::optional<term_start>, errc>>
+    ss::future<std::expected<std::optional<term_start>, error>>
     get_max_term(const model::topic_id_partition&);
 
     // Returns the first extent that contains an offset at or equal to the
     // given offset. If no such extent exists (e.g. all extents are below the
     // offset) returns nullopt.
-    ss::future<std::expected<std::optional<extent>, errc>>
+    ss::future<std::expected<std::optional<extent>, error>>
     get_extent_ge(const model::topic_id_partition&, kafka::offset);
 
     // Returns the key ranges whose first extent's base offset matches `base`
     // and whose last extent's last offset matches `last`. If no such range
     // exists, return nullopt.
-    ss::future<std::expected<std::optional<extent_key_range>, errc>>
+    ss::future<std::expected<std::optional<extent_key_range>, error>>
     get_extent_range(
       const model::topic_id_partition&, kafka::offset base, kafka::offset last);
 
     // Returns an iterator for all extents that overlap with the inclusive
     // range [min_offset, max_offset]. Returns nullopt if there are no extents
     // in the given bounds.
-    ss::future<std::expected<std::optional<extent_key_range>, errc>>
+    ss::future<std::expected<std::optional<extent_key_range>, error>>
     get_inclusive_extents(
       const model::topic_id_partition&,
       std::optional<kafka::offset> min_offset,
       std::optional<kafka::offset> max_offset);
-    ss::future<std::expected<std::optional<extent_key_range>, errc>>
+    ss::future<std::expected<std::optional<extent_key_range>, error>>
     get_inclusive_extents_backward(
       const model::topic_id_partition&,
       std::optional<kafka::offset> min_offset,
@@ -108,7 +116,7 @@ public:
 
     // Returns the term containing the given offset, i.e. the term with the
     // start_offset <= the given offset, or  nullopt if no such term exists.
-    ss::future<std::expected<std::optional<term_start>, errc>>
+    ss::future<std::expected<std::optional<term_start>, error>>
     get_term_le(const model::topic_id_partition&, kafka::offset);
 
     // Returns the end offset (exclusive) for the given term:
@@ -116,22 +124,44 @@ public:
     // - If this is the highest term, the partition's next_offset
     // Returns nullopt if all terms are below the given term or the term
     // doesn't exist.
-    ss::future<std::expected<std::optional<kafka::offset>, errc>>
+    ss::future<std::expected<std::optional<kafka::offset>, error>>
     get_term_end(const model::topic_id_partition&, model::term_id);
 
 private:
     ss::future<
-      std::expected<std::optional<std::pair<ss::sstring, ss::sstring>>, errc>>
+      std::expected<std::optional<std::pair<ss::sstring, ss::sstring>>, error>>
     find_inclusive_extent_keys(
       const model::topic_id_partition&,
       std::optional<kafka::offset> min_offset,
       std::optional<kafka::offset> max_offset);
 
     template<typename KeyT, typename ValT, typename... KeyEncodeArgs>
-    ss::future<std::expected<std::optional<ValT>, errc>>
+    ss::future<std::expected<std::optional<ValT>, error>>
     get_val(KeyEncodeArgs...);
 
     lsm::snapshot snap_;
 };
 
 } // namespace cloud_topics::l1
+
+template<>
+struct fmt::formatter<cloud_topics::l1::state_reader::errc>
+  : fmt::formatter<std::string_view> {
+    auto
+    format(cloud_topics::l1::state_reader::errc e, format_context& ctx) const {
+        using errc = cloud_topics::l1::state_reader::errc;
+        std::string_view name;
+        switch (e) {
+        case errc::io_error:
+            name = "state_reader::errc::io_error";
+            break;
+        case errc::corruption:
+            name = "state_reader::errc::corruption";
+            break;
+        case errc::shutting_down:
+            name = "state_reader::errc::shutting_down";
+            break;
+        }
+        return fmt::format_to(ctx.out(), "{}", name);
+    }
+};

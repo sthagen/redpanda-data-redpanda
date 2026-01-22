@@ -19,7 +19,7 @@
         },
         "subject": {
           "type": "string",
-          "description": "The subject name of the referenced schema. Supports context-qualified subjects with the format `[:.<context>:]<subject>`."
+          "description": "The subject name of the referenced schema. Use [:.<context>:]<subject> for context-qualified subjects, or just <subject> for the default context."
         },
         "version": {
           "type": "integer",

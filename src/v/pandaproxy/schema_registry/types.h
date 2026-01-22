@@ -129,7 +129,6 @@ using registry_resource = named_type<ss::sstring, struct registry_resource_tag>;
 ///
 /// Typically it will be "<topic>-key" or "<topic>-value".
 using subject = named_type<ss::sstring, struct subject_tag>;
-inline const subject invalid_subject{};
 
 /// \brief A schema context, used for namespacing schemas and schema ids. Can be
 /// used to implement multi-tenancy, environment (e.g., dev, staging, prod)
@@ -201,9 +200,22 @@ struct context_subject {
         return to_string().starts_with(prefix);
     }
 
+    /// Returns true if this represents a context-only identifier (empty
+    /// subject). Used to distinguish context-level operations (like setting
+    /// context-wide mode/config) from subject-level operations.
+    bool is_context_only() const { return sub().empty(); }
+
+    /// Retrurns true if this represents the default context with an empty
+    /// subject.
+    bool is_default_context() const {
+        return is_context_only() && ctx == default_context;
+    }
+
     context ctx;
     subject sub;
 };
+
+inline const context_subject invalid_subject{default_context, subject{""}};
 
 ///\brief The version of the schema registered with a subject.
 ///

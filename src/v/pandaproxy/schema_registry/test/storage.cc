@@ -87,7 +87,7 @@ constexpr std::string_view config_key_sub_sv{
 const auto expected_config_key_sub = config_key{
   .seq{model::offset{0}},
   .node{model::node_id{0}},
-  .sub{subject{"my-kafka-value"}},
+  .sub{context_subject{"my-kafka-value"}},
   .magic{topic_key_magic{0}}};
 
 constexpr std::string_view config_value_sv{
@@ -104,7 +104,7 @@ constexpr std::string_view config_value_sub_sv{
 })"};
 const auto expected_config_value_sub = config_value{
   .compat = compatibility_level::forward_transitive,
-  .sub{subject{"my-kafka-value"}}};
+  .sub{context_subject{"my-kafka-value"}}};
 
 constexpr std::string_view delete_subject_key_sv{
   R"({
@@ -380,6 +380,168 @@ TEST(StorageTest, SerdeContextSubject) {
 
         auto str = ppj::rjson_serialize_str(expected_delete_value_ctx);
         EXPECT_EQ(str, ::json::minify(delete_value_ctx_sv));
+    }
+
+    // Test config_key with context_subject (subject-level config in context)
+    {
+        constexpr std::string_view config_key_ctx_sv{
+          R"({
+  "keytype": "CONFIG",
+  "subject": ":.my-context:my-kafka-value",
+  "magic": 0,
+  "seq": 10,
+  "node": 1
+})"};
+        const auto expected_config_key_ctx = config_key{
+          .seq{model::offset{10}},
+          .node{model::node_id{1}},
+          .sub{
+            context_subject{context{".my-context"}, subject{"my-kafka-value"}}},
+          .magic{topic_key_magic{0}}};
+
+        auto key = ppj::impl::rjson_parse(
+          config_key_ctx_sv.data(), config_key_handler<>{});
+        EXPECT_EQ(expected_config_key_ctx, key);
+
+        auto str = ppj::rjson_serialize_str(expected_config_key_ctx);
+        EXPECT_EQ(str, ::json::minify(config_key_ctx_sv));
+    }
+
+    // Test config_key with context-only (context-level config, empty subject)
+    {
+        constexpr std::string_view config_key_ctx_only_sv{
+          R"({
+  "keytype": "CONFIG",
+  "subject": ":.my-context:",
+  "magic": 0,
+  "seq": 11,
+  "node": 1
+})"};
+        const auto expected_config_key_ctx_only = config_key{
+          .seq{model::offset{11}},
+          .node{model::node_id{1}},
+          .sub{context_subject{context{".my-context"}, subject{""}}},
+          .magic{topic_key_magic{0}}};
+
+        auto key = ppj::impl::rjson_parse(
+          config_key_ctx_only_sv.data(), config_key_handler<>{});
+        EXPECT_EQ(expected_config_key_ctx_only, key);
+
+        auto str = ppj::rjson_serialize_str(expected_config_key_ctx_only);
+        EXPECT_EQ(str, ::json::minify(config_key_ctx_only_sv));
+    }
+
+    // Test config_value with context_subject
+    {
+        constexpr std::string_view config_value_ctx_sv{
+          R"({
+  "subject": ":.my-context:my-kafka-value",
+  "compatibilityLevel": "BACKWARD"
+})"};
+        const auto expected_config_value_ctx = config_value{
+          .compat = compatibility_level::backward,
+          .sub{context_subject{
+            context{".my-context"}, subject{"my-kafka-value"}}}};
+
+        auto val = ppj::impl::rjson_parse(
+          config_value_ctx_sv.data(), config_value_handler<>{});
+        EXPECT_EQ(expected_config_value_ctx, val);
+
+        auto str = ppj::rjson_serialize_str(expected_config_value_ctx);
+        EXPECT_EQ(str, ::json::minify(config_value_ctx_sv));
+    }
+
+    // Test mode_key with context_subject (subject-level mode in context)
+    {
+        constexpr std::string_view mode_key_ctx_sv{
+          R"({
+  "keytype": "MODE",
+  "subject": ":.my-context:my-kafka-value",
+  "magic": 0,
+  "seq": 20,
+  "node": 1
+})"};
+        const auto expected_mode_key_ctx = mode_key{
+          .seq{model::offset{20}},
+          .node{model::node_id{1}},
+          .sub{
+            context_subject{context{".my-context"}, subject{"my-kafka-value"}}},
+          .magic{topic_key_magic{0}}};
+
+        auto key = ppj::impl::rjson_parse(
+          mode_key_ctx_sv.data(), mode_key_handler<>{});
+        EXPECT_EQ(expected_mode_key_ctx, key);
+
+        auto str = ppj::rjson_serialize_str(expected_mode_key_ctx);
+        EXPECT_EQ(str, ::json::minify(mode_key_ctx_sv));
+    }
+
+    // Test mode_key with context-only (context-level mode, empty subject)
+    {
+        constexpr std::string_view mode_key_ctx_only_sv{
+          R"({
+  "keytype": "MODE",
+  "subject": ":.my-context:",
+  "magic": 0,
+  "seq": 21,
+  "node": 1
+})"};
+        const auto expected_mode_key_ctx_only = mode_key{
+          .seq{model::offset{21}},
+          .node{model::node_id{1}},
+          .sub{context_subject{context{".my-context"}, subject{""}}},
+          .magic{topic_key_magic{0}}};
+
+        auto key = ppj::impl::rjson_parse(
+          mode_key_ctx_only_sv.data(), mode_key_handler<>{});
+        EXPECT_EQ(expected_mode_key_ctx_only, key);
+
+        auto str = ppj::rjson_serialize_str(expected_mode_key_ctx_only);
+        EXPECT_EQ(str, ::json::minify(mode_key_ctx_only_sv));
+    }
+
+    // Test mode_value with context_subject
+    {
+        constexpr std::string_view mode_value_ctx_sv{
+          R"({
+  "subject": ":.my-context:my-kafka-value",
+  "mode": "READONLY"
+})"};
+        const auto expected_mode_value_ctx = mode_value{
+          .mode = mode::read_only,
+          .sub{context_subject{
+            context{".my-context"}, subject{"my-kafka-value"}}}};
+
+        auto val = ppj::impl::rjson_parse(
+          mode_value_ctx_sv.data(), mode_value_handler<>{});
+        EXPECT_EQ(expected_mode_value_ctx, val);
+
+        auto str = ppj::rjson_serialize_str(expected_mode_value_ctx);
+        EXPECT_EQ(str, ::json::minify(mode_value_ctx_sv));
+    }
+
+    // Test mode_key/value without context (legacy format in default context)
+    {
+        constexpr std::string_view mode_key_legacy_sv{
+          R"({
+  "keytype": "MODE",
+  "subject": "my-kafka-value",
+  "magic": 0,
+  "seq": 22,
+  "node": 1
+})"};
+        const auto expected_mode_key_legacy = mode_key{
+          .seq{model::offset{22}},
+          .node{model::node_id{1}},
+          .sub{context_subject{"my-kafka-value"}},
+          .magic{topic_key_magic{0}}};
+
+        auto key = ppj::impl::rjson_parse(
+          mode_key_legacy_sv.data(), mode_key_handler<>{});
+        EXPECT_EQ(expected_mode_key_legacy, key);
+
+        auto str = ppj::rjson_serialize_str(expected_mode_key_legacy);
+        EXPECT_EQ(str, ::json::minify(mode_key_legacy_sv));
     }
 }
 

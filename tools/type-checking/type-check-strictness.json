@@ -30,6 +30,7 @@
         "rptest/remote_scripts/compute_storage.py",
         "rptest/remote_scripts/schema_registry_test_helper.py",
         "rptest/remote_scripts/tgkill.py",
+        "rptest/scale_tests/datalake_scale_test.py",
         "rptest/scale_tests/franzgo_bench.py",
         "rptest/scale_tests/large_controller_snapshot_test.py",
         "rptest/scale_tests/list_kafka_connections_scale_test.py",

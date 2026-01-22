@@ -20,9 +20,11 @@
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace cloud_topics::l1;
+using testing::HasSubstr;
 
 namespace {
 
@@ -431,12 +433,18 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsDuplicateObject) {
     chunked_vector<write_batch_row> rows;
     auto result = dupe_update.build_rows(reader, rows).get();
     ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(fmt::format("{}", result.error()), HasSubstr("already exists"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsEmptyObjects) {
     auto update = make_add_objects_update({terms(tidp0, {{0, 0}})});
     auto validate_res = update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("No objects requested"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsMissingTerms) {
@@ -444,6 +452,10 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsMissingTerms) {
       term_specs{}, make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("Missing term info in request"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsNonContiguousExtents) {
@@ -454,6 +466,9 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsNonContiguousExtents) {
       make_object(make_oid(), tp(tidp0, 200, 299).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()), HasSubstr("offset ordering"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsExtentTermMismatch) {
@@ -463,6 +478,10 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsExtentTermMismatch) {
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("Extent start and term start do not match"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsExtentsEndBeforeLastTerm) {
@@ -472,6 +491,10 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsExtentsEndBeforeLastTerm) {
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("Extents end below a requested new term"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsDecreasingTerm) {
@@ -481,15 +504,21 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsDecreasingTerm) {
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()), HasSubstr("Invalid term"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsDecreasingTermOffset) {
-    // Term offsets go backwards: offset 100 before offset 50.
+    // Term offsets go backwards.
     auto db_update = make_add_objects_update(
-      {terms(tidp0, {{50, 1}, {0, 2}})},
+      {terms(tidp0, {{0, 1}, {75, 2}, {50, 3}})},
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()), HasSubstr("Invalid term"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsRejectsNonIncreasingTermId) {
@@ -499,6 +528,9 @@ TEST_F(StateUpdateTest, TestAddObjectsRejectsNonIncreasingTermId) {
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()), HasSubstr("Invalid term"));
 }
 
 TEST_F(StateUpdateTest, TestAddObjectsWithCorrections) {
@@ -579,6 +611,9 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsMissingPartition) {
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
     ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()), HasSubstr("not tracked by state"));
 }
 
 TEST_F(StateUpdateTest, TestReplaceObjectsRejectsEmptyObjects) {
@@ -588,6 +623,10 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsEmptyObjects) {
     };
     auto validate_res = update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("No objects requested"));
 }
 
 TEST_F(
@@ -604,6 +643,10 @@ TEST_F(
 
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("does not refer to partition with extent"));
 }
 
 TEST_F(
@@ -618,6 +661,10 @@ TEST_F(
 
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("does not match requested new extents' last_offset"));
 }
 
 TEST_F(
@@ -632,6 +679,10 @@ TEST_F(
 
     auto validate_res = db_update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
+    EXPECT_EQ(validate_res.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", validate_res.error()),
+      HasSubstr("is not covered by extents"));
 }
 
 TEST_F(StateUpdateTest, TestReplaceObjectsRejectsDuplicateObject) {
@@ -647,6 +698,8 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsDuplicateObject) {
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
     ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(fmt::format("{}", result.error()), HasSubstr("already exists"));
 }
 
 TEST_F(StateUpdateTest, TestReplaceObjectsRejectsOverlappingCleanedRanges) {
@@ -682,6 +735,10 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsOverlappingCleanedRanges) {
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
     ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()),
+      HasSubstr("overlaps with an existing cleaned range"));
 }
 
 TEST_F(StateUpdateTest, TestReplaceObjectsRejectsRemovingUntrackedTombstones) {
@@ -696,12 +753,16 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsRemovingUntrackedTombstones) {
         .tidp = tidp0,
         .rm_tombstones = {{0, 49}},
       }}},
-      make_object(make_oid(), tp(tidp0, 0, 49).pos(0, 511)));
+      make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
 
     auto reader = make_reader();
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
     ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()),
+      HasSubstr("is not tracked as having tombstones"));
 }
 
 TEST_F(StateUpdateTest, TestReplaceObjectsWithCompactionAndTombstones) {
@@ -776,6 +837,10 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeNotAtLogStart) {
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
     ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()),
+      HasSubstr("does not replace to the beginning of the log"));
 
     // Now validate that replacing down to 0 works.
     replace_objects(

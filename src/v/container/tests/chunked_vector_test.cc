@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
+#include <list>
 #include <numeric>
 #include <ranges>
 #include <stdexcept>
@@ -605,9 +606,14 @@ TEST(ChunkedVector, FromRange) {
     for (int i = 0; i < 10; ++i) {
         buffer.push_back(i);
     }
-
     auto vec = chunked_vector<int32_t>(std::from_range, buffer);
     EXPECT_THAT(vec, ElementsAreArray(buffer));
+}
+
+TEST(ChunkedVector, FromRangeUnsized) {
+    std::list<int32_t> input{1, 2, 3, 4, 5};
+    auto vec = chunked_vector<int32_t>(std::from_range, input);
+    EXPECT_THAT(vec, ElementsAreArray(input));
 }
 
 struct move_only_t {

@@ -115,6 +115,8 @@ class remote_fixture_base
 public:
     remote_fixture_base(cloud_storage_clients::s3_url_style url_style)
       : s3_imposter_fixture(url_style) {
+        conf.is_gcs = config::shard_local_cfg().cloud_storage_backend()
+                      == model::cloud_storage_backend::google_s3_compat;
         scoped_remote_io_ = cloud_io::scoped_remote::create(10, conf);
         remote.start(std::ref(scoped_remote_io_->remote), conf).get();
     }
@@ -917,7 +919,12 @@ TEST_P(all_types_remote_fixture, test_delete_objects_failure_handling) {
 }
 
 TEST_P(all_types_gcs_remote_fixture, test_delete_objects_on_unknown_backend) {
-    set_expectations_and_listen({});
+    set_expectations_and_listen(
+      {} /* expectations */,
+      std::nullopt /* headers_to_store */,
+      {"multipart/mixed; boundary=response_boundary"}
+      /* content_type_overrides */
+    );
 
     retry_chain_node fib(never_abort, 60s, 20ms);
 
@@ -945,24 +952,28 @@ TEST_P(all_types_gcs_remote_fixture, test_delete_objects_on_unknown_backend) {
       = remote.local().delete_objects(bucket_name, to_delete, fib).get();
     ASSERT_EQ(cloud_storage::upload_result::success, result);
 
-    ASSERT_EQ(get_requests().size(), 4);
-    auto first_delete = get_requests()[2];
+    ASSERT_EQ(get_requests().size(), 3);
+    auto batch_delete = get_requests()[2];
 
-    std::unordered_set<ss::sstring> expected_urls{
-      "/" + url_base() + "p", "/" + url_base() + "q"};
-    ASSERT_EQ(first_delete.method, "DELETE");
-    ASSERT_TRUE(expected_urls.contains(first_delete.url));
+    // The storage batch endpoint is part of the GCS-native JSON API (_not_ the
+    // s3 compat layer like other endpoints consumed by s3_client). So we use
+    // native GCS uri style in subrequests.
+    auto json_api_url = [this](std::string_view key) {
+        return ssx::sformat("/storage/v1/b/{}/o/{}", bucket_name, key);
+    };
 
-    expected_urls.erase(first_delete.url);
-    auto second_delete = get_requests()[3];
-    ASSERT_EQ(second_delete.method, "DELETE");
-    ASSERT_TRUE(expected_urls.contains(second_delete.url));
+    std::vector<ss::sstring> expected_urls{
+      json_api_url("p"), json_api_url("q")};
+    ASSERT_EQ(batch_delete.method, "POST");
+    ASSERT_TRUE(batch_delete.content.contains(expected_urls[0]));
+    ASSERT_TRUE(batch_delete.content.contains(expected_urls[1]));
 }
 
 TEST_P(
   all_types_gcs_remote_fixture,
   test_delete_objects_on_unknown_backend_result_reduction) {
-    set_expectations_and_listen({});
+    set_expectations_and_listen(
+      {}, std::nullopt, {"multipart/mixed; boundary=response_boundary"});
 
     retry_chain_node fib(never_abort, 5s, 20ms);
 
@@ -981,17 +992,17 @@ TEST_P(
       // will time out
       cloud_storage_clients::object_key{"failme"}};
 
+    // key 'failme' will produce a 500 error on the corresponding subrequest in
+    // s3_imposter. by design, this should fail the entire 'delete_objects'
+    // operations, though key 'p' may have been deleted in the process
     auto result
       = remote.local().delete_objects(bucket_name, to_delete, fib).get();
-    if (conf.url_style == cloud_storage_clients::s3_url_style::virtual_host) {
-        // Due to virtual-host style addressing, this will timeout as DNS tries
-        // to resolve the request with the provided bucket name.
-        ASSERT_EQ(cloud_storage::upload_result::timedout, result);
-    } else {
-        // But, if we have path style addressing, the object won't be found, a
-        // warning will be issued, and the request will return success instead.
-        ASSERT_EQ(cloud_storage::upload_result::success, result);
-    }
+    ASSERT_EQ(cloud_storage::upload_result::failed, result);
+
+    // drop the poison object key
+    to_delete.pop_back();
+    result = remote.local().delete_objects(bucket_name, to_delete, fib).get();
+    ASSERT_EQ(cloud_storage::upload_result::success, result);
 }
 
 TEST_P(all_types_remote_fixture, test_filter_by_source) { // NOLINT

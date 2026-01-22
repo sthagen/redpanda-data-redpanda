@@ -77,7 +77,7 @@ class RedpandaConfig:
     rack: Optional[str] = None
     cloud_storage_enabled: bool = False
     iceberg_enabled: bool = False
-    unstable_beta_feature_cloud_topics_enabled: bool = False
+    cloud_topics_enabled: bool = False
     enable_developmental_unrecoverable_data_corrupting_features: int = int(time.time())
     enable_metrics_reporter: bool = False
 
@@ -94,7 +94,7 @@ class DefaultMinioRedpandaConfig:
     cloud_storage_disable_tls: bool = True
     cloud_storage_backend: str = "aws"
     iceberg_enabled: bool = True
-    unstable_beta_feature_cloud_topics_enabled: bool = True
+    cloud_topics_enabled: bool = True
 
 
 @dataclasses.dataclass

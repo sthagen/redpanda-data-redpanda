@@ -72,6 +72,9 @@ struct s3_configuration : common_configuration {
     std::optional<cloud_roles::private_key_str> secret_key;
     /// AWS URL style, either virtual-hosted-style or path-style.
     s3_url_style url_style = s3_url_style::virtual_host;
+    /// Whether the s3-compatible backend is GCS. Used in the client pool to
+    /// select between s3_client and gcs_client at client creation time.
+    bool is_gcs{false};
 
     /// \brief opinionated configuration initialization
     /// Generates uri field from region, initializes credentials for the

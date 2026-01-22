@@ -30,7 +30,7 @@ SEASTAR_THREAD_TEST_CASE(test_avro_basic_backwards_store_compat) {
     pps::seq_marker dummy_marker;
 
     s.set_compatibility(
-       pps::default_context, pps::compatibility_level::backward)
+       dummy_marker, pps::default_context, pps::compatibility_level::backward)
       .get();
     auto sub = pps::subject{"sub"};
     s.upsert(
@@ -73,7 +73,9 @@ SEASTAR_THREAD_TEST_CASE(test_avro_basic_backwards_store_compat) {
       !s.is_compatible(pps::schema_version{1}, {sub, schema3.share()}).get());
 
     s.set_compatibility(
-       pps::default_context, pps::compatibility_level::backward_transitive)
+       dummy_marker,
+       pps::default_context,
+       pps::compatibility_level::backward_transitive)
       .get();
 
     // Test transitive defaulted field to previous - should fail

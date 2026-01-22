@@ -155,6 +155,32 @@ TEST(MultipartParser, SinglePart) {
     EXPECT_FALSE(part2.has_value());
 }
 
+TEST(MultipartParser, EmptyBody) {
+    using namespace cloud_storage_clients;
+
+    std::string_view multipart_data = "--boundary\r\n"
+                                      "Content-Type: application/json\r\n"
+                                      "\r\n"
+                                      "\r\n"
+                                      "--boundary--\r\n";
+
+    auto buf = iobuf::from(multipart_data);
+
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--boundary"));
+
+    // Get first part
+    auto part1 = parser.get_part();
+    EXPECT_TRUE(part1.has_value());
+
+    auto content = part1.value().linearize_to_string();
+    EXPECT_THAT(content, testing::HasSubstr("Content-Type: application/json"));
+
+    // Should be no more parts
+    auto part2 = parser.get_part();
+    EXPECT_FALSE(part2.has_value());
+}
+
 TEST(MultipartParser, MultipleParts) {
     using namespace cloud_storage_clients;
 

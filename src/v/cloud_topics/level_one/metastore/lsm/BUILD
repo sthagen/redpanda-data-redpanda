@@ -139,6 +139,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/lsm",
         "//src/v/model",
+        "//src/v/utils:detailed_error",
         "@seastar",
     ],
 )

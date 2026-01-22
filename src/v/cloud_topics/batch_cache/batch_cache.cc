@@ -46,7 +46,8 @@ ss::future<> batch_cache::stop() {
     co_await _gate.close();
 }
 
-void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
+void batch_cache::put(
+  const model::topic_id_partition& tidp, const model::record_batch& b) {
     vassert(
       b.term() > model::term_id{-1},
       "Batch without term in the cache: {}",
@@ -55,7 +56,7 @@ void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
         return;
     }
     _gate.check();
-    auto it = _index.find(ntp);
+    auto it = _index.find(tidp);
     if (it == _index.end()) {
         auto cache_ix = _lm->create_cache(storage::with_cache::yes);
         if (!cache_ix.has_value()) {
@@ -63,7 +64,7 @@ void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
         }
         auto [new_it, ok] = _index.insert(
           std::make_pair(
-            ntp,
+            tidp,
             std::make_unique<storage::batch_cache_index>(
               std::move(*cache_ix))));
         if (ok) {
@@ -77,12 +78,12 @@ void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
 }
 
 std::optional<model::record_batch>
-batch_cache::get(const model::ntp& ntp, model::offset o) {
+batch_cache::get(const model::topic_id_partition& tidp, model::offset o) {
     if (_lm == nullptr) {
         return std::nullopt;
     }
     _gate.check();
-    if (auto it = _index.find(ntp); it != _index.end()) {
+    if (auto it = _index.find(tidp); it != _index.end()) {
         auto rb = it->second->get(o);
         if (rb.has_value()) {
             vassert(
@@ -92,7 +93,7 @@ batch_cache::get(const model::ntp& ntp, model::offset o) {
             vassert(
               rb->base_offset() <= o && o <= rb->last_offset(),
               "Unexpected batch for {}, got range: [{},{}] for offset {}",
-              ntp,
+              tidp,
               rb->base_offset(),
               rb->last_offset(),
               o);
@@ -119,7 +120,7 @@ ss::future<> batch_cache::cleanup_index_entries() {
             ++it;
         }
         if (ss::need_preempt() && it != _index.end()) {
-            model::ntp next = it->first;
+            model::topic_id_partition next = it->first;
             co_await ss::yield();
             it = _index.lower_bound(next);
         }

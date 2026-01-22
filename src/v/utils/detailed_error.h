@@ -35,15 +35,25 @@ struct detailed_error {
 public:
     explicit detailed_error(ErrorT e)
       : e(std::move(e)) {}
+
     detailed_error(ErrorT e, ss::sstring detail)
       : e(std::move(e))
       , details({std::move(detail)}) {}
 
+    template<typename... T>
+    detailed_error(ErrorT e, fmt::format_string<T...> msg, T&&... args)
+      : e(std::move(e))
+      , details({fmt::format(std::move(msg), std::forward<T>(args)...)}) {}
+
     ~detailed_error() = default;
-    detailed_error(const detailed_error&) = delete;
     detailed_error& operator=(const detailed_error&) = delete;
     detailed_error(detailed_error&&) noexcept = default;
     detailed_error& operator=(detailed_error&&) noexcept = default;
+
+    // NOTE: prefer to not copy if possible -- this is implemented primarily so
+    // that .value() calls from a std::expected can be used, as it requires an
+    // implemented copy constructor.
+    detailed_error(const detailed_error&) = default;
 
     template<typename OtherErrorT>
     detailed_error<OtherErrorT> wrap(OtherErrorT&& other) && {
@@ -52,12 +62,13 @@ public:
         return ret;
     }
 
-    template<typename OtherErrorT>
+    template<typename OtherErrorT, typename... T>
     detailed_error<OtherErrorT>
-    wrap(OtherErrorT&& other, ss::sstring detail) && {
+    wrap(OtherErrorT&& other, fmt::format_string<T...> msg, T&&... args) && {
         detailed_error<OtherErrorT> ret(std::forward<OtherErrorT>(other));
         ret.details = std::move(details);
-        ret.details.push_front(std::move(detail));
+        ret.details.push_front(
+          fmt::format(std::move(msg), std::forward<T>(args)...));
         return std::move(ret);
     }
 
@@ -65,11 +76,15 @@ public:
     static detailed_error wrap(detailed_error<OtherErrorT> other, ErrorT&& e) {
         return std::move(other).wrap(std::forward<ErrorT>(e));
     }
-    template<typename OtherErrorT>
-    static detailed_error
-    wrap(detailed_error<OtherErrorT> other, ErrorT&& e, ss::sstring detail) {
+
+    template<typename OtherErrorT, typename... T>
+    static detailed_error wrap(
+      detailed_error<OtherErrorT> other,
+      ErrorT&& e,
+      fmt::format_string<T...> msg,
+      T&&... args) {
         return std::move(other).wrap(
-          std::forward<ErrorT>(e), std::move(detail));
+          std::forward<ErrorT>(e), std::move(msg), std::forward<T>(args)...);
     }
 
     fmt::iterator format_to(fmt::iterator it) const {

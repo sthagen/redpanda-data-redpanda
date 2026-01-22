@@ -70,13 +70,13 @@ public:
     write_subject_version(stored_schema schema);
 
     ss::future<bool>
-    write_config(std::optional<subject> sub, compatibility_level compat);
+    write_config(context_subject ctx_sub, compatibility_level compat);
 
-    ss::future<bool> delete_config(subject sub);
+    ss::future<bool> delete_config(context_subject ctx_sub);
 
-    ss::future<bool> write_mode(std::optional<subject> sub, mode m, force f);
+    ss::future<bool> write_mode(context_subject ctx_sub, mode m, force f);
 
-    ss::future<bool> delete_mode(subject sub);
+    ss::future<bool> delete_mode(context_subject ctx_sub);
 
     ss::future<bool>
     delete_subject_version(context_subject sub, schema_version version);
@@ -101,17 +101,17 @@ private:
     do_write_subject_version(stored_schema schema, model::offset write_at);
 
     ss::future<std::optional<bool>> do_write_config(
-      std::optional<subject> sub,
+      context_subject ctx_sub,
       compatibility_level compat,
       model::offset write_at);
 
-    ss::future<std::optional<bool>> do_delete_config(subject sub);
+    ss::future<std::optional<bool>> do_delete_config(context_subject ctx_sub);
 
     ss::future<std::optional<bool>> do_write_mode(
-      std::optional<subject> sub, mode m, force f, model::offset write_at);
+      context_subject ctx_sub, mode m, force f, model::offset write_at);
 
     ss::future<std::optional<bool>>
-    do_delete_mode(subject sub, model::offset write_at);
+    do_delete_mode(context_subject ctx_sub, model::offset write_at);
 
     ss::future<std::optional<bool>> do_delete_subject_version(
       context_subject sub, schema_version version, model::offset write_at);

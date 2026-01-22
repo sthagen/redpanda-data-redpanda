@@ -160,7 +160,7 @@ def _redpanda_cc_test(
             "layering_check",
         ],
         tags = resource_tags + tags,
-        env = {"RP_FIXTURE_ENV": "1"} | env | test_env,
+        env = {"RP_FIXTURE_ENV": "1"} | test_env | env,
         target_compatible_with = target_compatible_with,
         data = data + test_data,
         local_defines = local_defines,
@@ -204,7 +204,7 @@ def _redpanda_cc_fuzz_test(
         tags = [
             "fuzz",
         ],
-        env = env | test_env,
+        env = test_env | env,
         data = data + test_data,
         linkopts = [
             "-fsanitize=fuzzer",
@@ -500,7 +500,7 @@ def redpanda_cc_bench(
         main = "bench_wrapper.py",
         tags = resource_tags + tags,
         srcs = ["//bazel:bench_wrapper"],
-        env = env | test_env,
+        env = test_env | env,
         args = args + ["--iterations=1 --runs=1 --duration=0 --no-stdout --overprovisioned"],
         data = [":" + binary_name] + data + test_data,
     )

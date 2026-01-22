@@ -83,7 +83,8 @@ public:
     void set_expectations_and_listen(
       std::vector<expectation> expectations,
       std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store
-      = std::nullopt);
+      = std::nullopt,
+      std::set<ss::sstring> content_type_overrides = {});
 
     /// Update expectations for the REST API.
     void add_expectations(std::vector<expectation> expectations);
@@ -128,7 +129,8 @@ private:
       ss::httpd::routes& r,
       const std::vector<expectation>& expectations,
       std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store
-      = std::nullopt);
+      = std::nullopt,
+      std::set<ss::sstring> content_type_overrides = {});
 
     ss::socket_address _server_addr;
     ss::shared_ptr<ss::httpd::http_server_control> _server;
@@ -163,3 +165,6 @@ cloud_storage_clients::http_byte_range parse_byte_header(std::string_view s);
 
 std::vector<cloud_storage_clients::object_key>
 keys_from_delete_objects_request(const http_test_utils::request_info&);
+
+std::vector<std::pair<ss::sstring, cloud_storage_clients::object_key>>
+keys_from_batch_delete_request(const http_test_utils::request_info&);

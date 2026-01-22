@@ -20,6 +20,24 @@ namespace cloud_topics::l1 {
 
 namespace {
 
+using enum db_update_errc;
+
+template<typename... T>
+db_update_error wrap_read_err(
+  state_reader::error e, fmt::format_string<T...> msg, T&&... args) {
+    switch (e.e) {
+    case state_reader::errc::io_error:
+        return std::move(e).wrap(
+          io_error, std::move(msg), std::forward<T>(args)...);
+    case state_reader::errc::corruption:
+        return std::move(e).wrap(
+          corruption, std::move(msg), std::forward<T>(args)...);
+    case state_reader::errc::shutting_down:
+        return std::move(e).wrap(
+          shutting_down, std::move(msg), std::forward<T>(args)...);
+    }
+}
+
 // Checks the input new objects and ensures that they don't already exist in
 // the state. Collects the input extents and objects into the input maps.
 ss::future<std::expected<void, db_update_error>> validate_new_objects_missing(
@@ -30,12 +48,12 @@ ss::future<std::expected<void, db_update_error>> validate_new_objects_missing(
     for (const auto& o : new_objects) {
         auto object_res = co_await state.get_object(o.oid);
         if (!object_res.has_value()) {
-            co_return std::unexpected(
-              db_update_error{fmt::format("Error getting object {}", o.oid)});
+            co_return std::unexpected(db_update_error(
+              invalid_update, fmt::format("Error getting object {}", o.oid)));
         }
-        if (object_res.value().has_value()) {
-            co_return std::unexpected(
-              db_update_error{fmt::format("Object {} already exists", o.oid)});
+        if (object_res->has_value()) {
+            co_return std::unexpected(db_update_error(
+              invalid_update, fmt::format("Object {} already exists", o.oid)));
         }
         auto data_size = o.collect_extents_by_tidp(&out_extents);
         out_objects.emplace(
@@ -64,32 +82,33 @@ ss::future<std::expected<void, db_update_error>> collect_exact_intervals(
           tidp, interval.base_offset, interval.last_offset);
 
         if (!range_res.has_value()) {
-            co_return std::unexpected(
-              db_update_error{fmt::format(
-                "Error getting extent range for {} [{}, {}]",
-                tidp,
-                interval.base_offset,
-                interval.last_offset)});
+            co_return std::unexpected(wrap_read_err(
+              std::move(range_res.error()),
+              "Error getting extent range for {} [{}, {}]",
+              tidp,
+              interval.base_offset,
+              interval.last_offset));
         }
         if (!range_res.value().has_value()) {
-            co_return std::unexpected(
-              db_update_error{fmt::format(
+            co_return std::unexpected(db_update_error(
+              invalid_update,
+              fmt::format(
                 "Partition {} doesn't contain extents that span exactly "
                 "[{}, {}]",
                 tidp,
                 interval.base_offset,
-                interval.last_offset)});
+                interval.last_offset)));
         }
 
         auto extent_gen = range_res.value()->get_rows();
         while (auto extent_res = co_await extent_gen()) {
             if (!extent_res->get().has_value()) {
-                co_return std::unexpected(
-                  db_update_error{fmt::format(
-                    "Error iterating through {} extents in range [{}, {}]",
-                    tidp,
-                    interval.base_offset,
-                    interval.last_offset)});
+                co_return std::unexpected(wrap_read_err(
+                  std::move(extent_res->get().error()),
+                  "Error iterating through {} extents in range [{}, {}]",
+                  tidp,
+                  interval.base_offset,
+                  interval.last_offset));
             }
             auto& row = extent_res->get().value();
             out_sizes[row.val.oid] += row.val.len;
@@ -108,23 +127,25 @@ ss::future<std::expected<void, db_update_error>> merge_compaction_state(
     // Get current metadata to validate and update compaction_epoch.
     auto meta_res = co_await state.get_metadata(tidp);
     if (!meta_res.has_value()) {
-        co_return std::unexpected(
-          db_update_error{fmt::format(
-            "Error getting metadata for {} during compaction", tidp)});
+        co_return std::unexpected(wrap_read_err(
+          std::move(meta_res.error()),
+          "Error getting metadata for {} during compaction",
+          tidp));
     }
     if (!meta_res.value().has_value()) {
-        co_return std::unexpected(
-          db_update_error{
-            fmt::format("Partition {} not tracked during compaction", tidp)});
+        co_return std::unexpected(db_update_error(
+          invalid_update,
+          fmt::format("Partition {} not tracked during compaction", tidp)));
     }
     auto& meta = meta_res.value().value();
     if (meta.compaction_epoch != comp_update.expected_compaction_epoch) {
-        co_return std::unexpected(
-          db_update_error{fmt::format(
+        co_return std::unexpected(db_update_error(
+          invalid_update,
+          fmt::format(
             "Compaction epoch mismatch for {}: expected {}, got {}",
             tidp,
             comp_update.expected_compaction_epoch,
-            meta.compaction_epoch)});
+            meta.compaction_epoch)));
     }
     meta.compaction_epoch = partition_state::compaction_epoch_t{
       meta.compaction_epoch() + 1};
@@ -132,9 +153,10 @@ ss::future<std::expected<void, db_update_error>> merge_compaction_state(
 
     auto comp_res = co_await state.get_compaction_metadata(tidp);
     if (!comp_res.has_value()) {
-        co_return std::unexpected(
-          db_update_error{
-            fmt::format("Error getting compaction metadata for {}", tidp)});
+        co_return std::unexpected(wrap_read_err(
+          std::move(comp_res.error()),
+          "Error getting compaction metadata for {}",
+          tidp));
     }
 
     // Validate and apply new cleaned ranges.
@@ -152,14 +174,15 @@ ss::future<std::expected<void, db_update_error>> merge_compaction_state(
                   .last_offset = req_cleaned_range.last_offset,
                   .cleaned_with_tombstones_at = comp_update.cleaned_at,
                 })) {
-                co_return std::unexpected(
-                  db_update_error{fmt::format(
+                co_return std::unexpected(db_update_error(
+                  invalid_update,
+                  fmt::format(
                     "Cleaned range for {} has tombstones and overlaps "
                     "with an existing cleaned range with tombstones: "
                     "[{}, {}]",
                     tidp,
                     req_cleaned_range.base_offset,
-                    req_cleaned_range.last_offset)});
+                    req_cleaned_range.last_offset)));
             }
         }
 
@@ -196,13 +219,14 @@ ss::future<std::expected<void, db_update_error>> merge_compaction_state(
         auto req_range = req_range_removed_tombstones.next();
         if (!merged_state.has_contiguous_range_with_tombstones(
               req_range.base_offset, req_range.last_offset)) {
-            co_return std::unexpected(
-              db_update_error{fmt::format(
+            co_return std::unexpected(db_update_error(
+              invalid_update,
+              fmt::format(
                 "Tombstone-removed range [{}, {}] for {} is not "
                 "tracked as having tombstones",
                 req_range.base_offset,
                 req_range.last_offset,
-                tidp)});
+                tidp)));
         }
         auto erased = merged_state.erase_contiguous_range_with_tombstones(
           req_range.base_offset, req_range.last_offset);
@@ -227,14 +251,14 @@ add_objects_db_update::build_rows(
   const {
     auto validate_res = validate_inputs();
     if (!validate_res.has_value()) {
-        co_return std::unexpected(validate_res.error());
+        co_return std::unexpected(std::move(validate_res.error()));
     }
     sorted_extents_by_tidp_t new_extents_by_tp;
     chunked_hash_map<object_id, object_entry> new_objects_by_oid;
     auto new_extents_res = co_await validate_new_objects_missing(
       new_objects, state, new_extents_by_tp, new_objects_by_oid);
     if (!new_extents_res.has_value()) {
-        co_return std::unexpected(new_extents_res.error());
+        co_return std::unexpected(std::move(new_extents_res.error()));
     }
 
     chunked_hash_map<model::topic_id_partition, kafka::offset>
@@ -248,9 +272,10 @@ add_objects_db_update::build_rows(
         // and allows it to start a specific offset.
         auto meta_res = co_await state.get_metadata(tidp);
         if (!meta_res.has_value()) {
-            co_return std::unexpected(
-              db_update_error{
-                fmt::format("Error getting metadata for {}", tidp)});
+            co_return std::unexpected(wrap_read_err(
+              std::move(meta_res.error()),
+              "Error getting metadata for {}",
+              tidp));
         }
         auto opt = meta_res.value();
         auto expected_next = opt ? opt->next_offset : kafka::offset{0};
@@ -288,9 +313,10 @@ add_objects_db_update::build_rows(
         // appended to our state without violating ordering requirements.
         auto term_res = co_await state.get_max_term(tp);
         if (!term_res.has_value()) {
-            co_return std::unexpected(
-              db_update_error{
-                fmt::format("Error getting max term for {}", tp)});
+            co_return std::unexpected(wrap_read_err(
+              std::move(term_res.error()),
+              "Error getting max term for {}",
+              tp));
         }
         auto term_opt = term_res.value();
         if (term_opt.has_value()) {
@@ -299,20 +325,22 @@ add_objects_db_update::build_rows(
             // last term (e.g. if leadership has not changed). The same cannot
             // be said about offsets, hence the difference in comparator.
             if (req_first_entry->term_id < term_opt->term_id) {
-                co_return std::unexpected(
-                  db_update_error{fmt::format(
+                co_return std::unexpected(db_update_error(
+                  invalid_update,
+                  fmt::format(
                     "New term for {} must be >= last term: {} < {}",
                     tp,
                     req_first_entry->term_id,
-                    term_opt->term_id)});
+                    term_opt->term_id)));
             }
             if (req_first_entry->start_offset <= term_opt->start_offset) {
-                co_return std::unexpected(
-                  db_update_error{fmt::format(
+                co_return std::unexpected(db_update_error(
+                  invalid_update,
+                  fmt::format(
                     "New term for {} must start after last term: {} <= {}",
                     tp,
                     req_first_entry->start_offset,
-                    term_opt->start_offset)});
+                    term_opt->start_offset)));
             }
         }
         auto new_term_it = req_entries.begin();
@@ -378,10 +406,12 @@ add_objects_db_update::build_rows(
 std::expected<void, db_update_error>
 add_objects_db_update::validate_inputs() const {
     if (new_objects.empty()) {
-        return std::unexpected(db_update_error{"No objects requested"});
+        return std::unexpected(
+          db_update_error(invalid_input, "No objects requested"));
     }
     if (new_terms.empty()) {
-        return std::unexpected(db_update_error{"Missing term info in request"});
+        return std::unexpected(
+          db_update_error(invalid_input, "Missing term info in request"));
     }
     sorted_extents_by_tidp_t new_extents;
     for (const auto& o : new_objects) {
@@ -389,13 +419,14 @@ add_objects_db_update::validate_inputs() const {
     }
     for (const auto& [tidp, extents] : new_extents) {
         if (!new_terms.contains(tidp)) {
-            return std::unexpected(
-              db_update_error{fmt::format("Missing term info for {}", tidp)});
+            return std::unexpected(db_update_error(
+              invalid_input, fmt::format("Missing term info for {}", tidp)));
         }
         auto expected_next = extents.begin()->base_offset;
         for (const auto& extent : extents) {
             if (extent.base_offset != expected_next) {
                 return std::unexpected(db_update_error(
+                  invalid_input,
                   fmt::format(
                     "Input object breaks partition {} offset ordering: "
                     "expected next: {}, actual: {}",
@@ -408,36 +439,40 @@ add_objects_db_update::validate_inputs() const {
     }
     for (const auto& [tidp, terms] : new_terms) {
         if (terms.empty()) {
-            return std::unexpected(
-              db_update_error{
-                fmt::format("Empty terms requested for {}", tidp)});
+            return std::unexpected(db_update_error(
+              invalid_input,
+              fmt::format("Empty terms requested for {}", tidp)));
         }
         auto extents_it = new_extents.find(tidp);
         if (extents_it == new_extents.end() || extents_it->second.empty()) {
-            return std::unexpected(
-              db_update_error{fmt::format(
-                "Terms provided for a partition that has no extents", tidp)});
+            return std::unexpected(db_update_error(
+              invalid_input,
+              fmt::format(
+                "Terms provided for a partition that has no extents: {}",
+                tidp)));
         }
         auto new_extents_start_offset
           = extents_it->second.begin()->base_offset();
         auto new_terms_start_offset = terms.begin()->start_offset;
         if (new_extents_start_offset != new_terms_start_offset) {
-            return std::unexpected(
-              db_update_error{fmt::format(
+            return std::unexpected(db_update_error(
+              invalid_input,
+              fmt::format(
                 "Extent start and term start do not match for {}: {} != {}",
                 tidp,
                 new_extents_start_offset,
-                new_terms_start_offset)});
+                new_terms_start_offset)));
         }
         auto new_extents_last_offset = extents_it->second.rbegin()->last_offset;
         auto new_terms_last_start_offset = terms.back().start_offset;
         if (new_extents_last_offset < new_terms_last_start_offset) {
-            return std::unexpected(
-              db_update_error{fmt::format(
+            return std::unexpected(db_update_error(
+              invalid_input,
+              fmt::format(
                 "Extents end below a requested new term for {}: {} < {}",
                 tidp,
                 new_extents_last_offset,
-                new_terms_last_start_offset)});
+                new_terms_last_start_offset)));
         }
         // Now check that the the term entries themselves (both terms and
         // offsets) are in increasing order.
@@ -447,15 +482,16 @@ add_objects_db_update::validate_inputs() const {
             if (
               entry.term_id <= max_term_so_far
               || entry.start_offset <= max_offset_so_far) {
-                return std::unexpected(
-                  db_update_error{fmt::format(
+                return std::unexpected(db_update_error(
+                  invalid_input,
+                  fmt::format(
                     "Invalid term for {}: term={}, offset={}, "
                     "max_term_so_far={}, max_offset_so_far={}",
                     tidp,
                     entry.term_id,
                     entry.start_offset,
                     max_term_so_far,
-                    max_offset_so_far)});
+                    max_offset_so_far)));
             }
             max_term_so_far = entry.term_id;
             max_offset_so_far = entry.start_offset;
@@ -469,7 +505,7 @@ replace_objects_db_update::build_rows(
   state_reader& state, chunked_vector<write_batch_row>& out) const {
     auto validate_res = validate_inputs();
     if (!validate_res.has_value()) {
-        co_return std::unexpected(validate_res.error());
+        co_return std::unexpected(std::move(validate_res.error()));
     }
 
     // Verify new objects don't exist.
@@ -478,7 +514,7 @@ replace_objects_db_update::build_rows(
     auto new_extents_res = co_await validate_new_objects_missing(
       new_objects, state, new_extents_by_tp, new_objects_map);
     if (!new_extents_res.has_value()) {
-        co_return std::unexpected(new_extents_res.error());
+        co_return std::unexpected(std::move(new_extents_res.error()));
     }
 
     // Calculate contiguous intervals and validate that they align with
@@ -486,7 +522,8 @@ replace_objects_db_update::build_rows(
     auto contiguous_intervals_res = contiguous_intervals_for_extents(
       new_extents_by_tp);
     if (!contiguous_intervals_res.has_value()) {
-        co_return std::unexpected(contiguous_intervals_res.error());
+        co_return std::unexpected(db_update_error(
+          invalid_input, std::move(contiguous_intervals_res.error())));
     }
     const auto& contiguous_intervals_by_tp = contiguous_intervals_res.value();
     chunked_hash_map<object_id, size_t> old_extent_sizes_by_oid;
@@ -495,14 +532,15 @@ replace_objects_db_update::build_rows(
     for (const auto& [tidp, intervals] : contiguous_intervals_by_tp) {
         auto meta_res = co_await state.get_metadata(tidp);
         if (!meta_res.has_value()) {
-            co_return std::unexpected(
-              db_update_error{
-                fmt::format("Error getting metadata for {}", tidp)});
+            co_return std::unexpected(wrap_read_err(
+              std::move(meta_res.error()),
+              "Error getting metadata for {}",
+              tidp));
         }
         if (!meta_res.value().has_value()) {
-            co_return std::unexpected(
-              db_update_error{
-                fmt::format("Partition {} not tracked by state", tidp)});
+            co_return std::unexpected(db_update_error(
+              invalid_update,
+              fmt::format("Partition {} not tracked by state", tidp)));
         }
         auto exact_intervals_res = co_await collect_exact_intervals(
           tidp,
@@ -511,7 +549,7 @@ replace_objects_db_update::build_rows(
           extent_keys_to_delete[tidp],
           old_extent_sizes_by_oid);
         if (!exact_intervals_res.has_value()) {
-            co_return std::unexpected(exact_intervals_res.error());
+            co_return std::unexpected(std::move(exact_intervals_res.error()));
         }
     }
 
@@ -521,9 +559,10 @@ replace_objects_db_update::build_rows(
     for (const auto& [oid, removed_size] : old_extent_sizes_by_oid) {
         auto obj_res = co_await state.get_object(oid);
         if (!obj_res.has_value()) {
-            co_return std::unexpected(
-              db_update_error{
-                fmt::format("Error getting object {} for update", oid)});
+            co_return std::unexpected(wrap_read_err(
+              std::move(obj_res.error()),
+              "Error getting object {} for update",
+              oid));
         }
         if (obj_res.value().has_value()) {
             auto obj_entry = obj_res.value().value();
@@ -547,7 +586,7 @@ replace_objects_db_update::build_rows(
               updated_metadata[tidp],
               merged_compaction_states[tidp]);
             if (!merge_res.has_value()) {
-                co_return std::unexpected(merge_res.error());
+                co_return std::unexpected(std::move(merge_res.error()));
             }
 
             // If there are new cleaned ranges, check that the extents replace
@@ -560,13 +599,14 @@ replace_objects_db_update::build_rows(
                       = new_extent_iter->second.begin()->base_offset;
                     auto start_offset = updated_metadata[tidp].start_offset;
                     if (req_extents_base > start_offset) {
-                        co_return std::unexpected(
-                          db_update_error{fmt::format(
+                        co_return std::unexpected(db_update_error(
+                          invalid_update,
+                          fmt::format(
                             "Cleaned range for {} does not replace to the "
                             "beginning of the log: {} > {}",
                             tidp,
                             req_extents_base,
-                            start_offset)});
+                            start_offset)));
                     }
                 }
             }
@@ -640,7 +680,8 @@ replace_objects_db_update::build_rows(
 std::expected<void, db_update_error>
 replace_objects_db_update::validate_inputs() const {
     if (new_objects.empty()) {
-        return std::unexpected(db_update_error{"No objects requested"});
+        return std::unexpected(
+          db_update_error(invalid_input, "No objects requested"));
     }
 
     sorted_extents_by_tidp_t new_extents_by_tp;
@@ -651,7 +692,8 @@ replace_objects_db_update::validate_inputs() const {
     auto contiguous_intervals = contiguous_intervals_for_extents(
       new_extents_by_tp);
     if (!contiguous_intervals.has_value()) {
-        return std::unexpected(db_update_error(contiguous_intervals.error()));
+        return std::unexpected(
+          db_update_error(invalid_input, contiguous_intervals.error()));
     }
 
     // Validate compaction updates align with extents
@@ -665,11 +707,12 @@ replace_objects_db_update::validate_inputs() const {
             // Verify partition has new extents
             auto new_extent_iter = new_extents_by_tp.find(tidp);
             if (new_extent_iter == new_extents_by_tp.end()) {
-                return std::unexpected(
-                  db_update_error{fmt::format(
+                return std::unexpected(db_update_error(
+                  invalid_input,
+                  fmt::format(
                     "New cleaned range does not refer to partition with "
                     "extent: {}",
-                    tidp)});
+                    tidp)));
             }
 
             if (!compaction_update.new_cleaned_ranges.empty()) {
@@ -681,25 +724,27 @@ replace_objects_db_update::validate_inputs() const {
                 auto req_last = new_extents.rbegin()->last_offset;
                 auto clean_last = req_cleaned_ranges.back().last_offset;
                 if (clean_last > req_last) {
-                    return std::unexpected(
-                      db_update_error{fmt::format(
+                    return std::unexpected(db_update_error(
+                      invalid_input,
+                      fmt::format(
                         "Cleaned range for {} does not match requested "
                         "new extents' last_offset {} > {}",
                         tidp,
                         clean_last,
-                        req_last)});
+                        req_last)));
                 }
 
                 auto req_extents_base = new_extents.begin()->base_offset;
                 auto clean_base = req_cleaned_ranges.front().base_offset;
                 if (req_extents_base > clean_base) {
-                    return std::unexpected(
-                      db_update_error{fmt::format(
+                    return std::unexpected(db_update_error(
+                      invalid_input,
+                      fmt::format(
                         "Cleaned range start_offset for {} is not "
                         "covered by extents: {} > {}",
                         tidp,
                         req_extents_base,
-                        clean_base)});
+                        clean_base)));
                 }
             }
         }

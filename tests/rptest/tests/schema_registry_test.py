@@ -1702,22 +1702,6 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             assert result_raw.json()["id"] == 1
 
     @cluster(num_nodes=1)
-    def test_default_context(self):
-        schema_data = json.dumps({"schema": schema1_def})
-
-        result = self.sr_client.post_subjects_subject_versions(
-            subject="default-ctx-subject", data=schema_data
-        )
-        self.assert_equal(result.status_code, requests.codes.ok)
-        self.assert_equal(result.json()["id"], 1)
-
-        result = self.sr_client.post_subjects_subject(
-            subject=":.:default-ctx-subject", data=schema_data
-        )
-        self.assert_equal(result.status_code, requests.codes.ok)
-        self.assert_equal(result.json()["id"], 1)
-
-    @cluster(num_nodes=1)
     def test_contexts(self):
         """Verify context-aware endpoints work with qualified subjects."""
 
@@ -1875,6 +1859,72 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             ),
         )
         self.assert_equal(result.status_code, requests.codes.ok)
+
+    @cluster(num_nodes=1)
+    def test_context_config(self):
+        """Test context-level config operations."""
+
+        ctx = "test-ctx"
+        ctx_prefix = f":.{ctx}:"
+        ctx_subject = f"{ctx_prefix}test-sub"
+
+        # Register a schema in the context first
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=ctx_subject, data=json.dumps({"schema": schema1_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Set context-level config (empty subject = context-level)
+        result = self.sr_client.set_config_subject(
+            subject=ctx_prefix,
+            data=json.dumps({"compatibility": "NONE"}),
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Get context-level config
+        result = self.sr_client.get_config_subject(subject=ctx_prefix)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "NONE")
+
+        # Subject-level config should fall back to context-level
+        result = self.sr_client.get_config_subject(subject=ctx_subject, fallback=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "NONE")
+
+        # Default context should not be affected by context-level config
+        result = self.sr_client.get_config()
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "BACKWARD")
+
+        # Set subject-level config (different from context-level)
+        result = self.sr_client.set_config_subject(
+            subject=ctx_subject,
+            data=json.dumps({"compatibility": "FULL"}),
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Subject should now have FULL (not context's NONE)
+        result = self.sr_client.get_config_subject(subject=ctx_subject, fallback=False)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "FULL")
+
+        # Delete subject-level config
+        result = self.sr_client.delete_config_subject(subject=ctx_subject)
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Subject should fall back to context-level NONE
+        result = self.sr_client.get_config_subject(subject=ctx_subject, fallback=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "NONE")
+
+        # Delete the context-level config
+        result = self.sr_client.delete_config_subject(subject=ctx_prefix)
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Subject should fall back to default BACKWARD
+        result = self.sr_client.get_config_subject(subject=ctx_subject, fallback=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "BACKWARD")
 
     @cluster(num_nodes=3)
     def test_post_subjects_subject_versions_null_metadata_ruleset(self):
@@ -5141,6 +5191,134 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
         )
         self.assert_equal(result_raw.status_code, 200)
         self.assert_equal(result_raw.json()["id"], 2)
+
+    @cluster(num_nodes=1)
+    def test_default_context(self):
+        schema_data = json.dumps({"schema": schema1_def})
+
+        # Register in default context with unqualified subject
+        result = self.sr_client.post_subjects_subject_versions(
+            subject="default-ctx-subject", data=schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["id"], 1)
+
+        # Look up in default context with qualified subject
+        result = self.sr_client.post_subjects_subject(
+            subject=":.:default-ctx-subject", data=schema_data
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["id"], 1)
+
+        # Set the compatibility level with qualified subject
+        result = self.sr_client.set_config_subject(
+            subject=":.:", data=json.dumps({"compatibility": "FULL"})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibility"], "FULL")
+
+        # Look up the compatibility level of default context
+        result = self.sr_client.get_config()
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "FULL")
+
+        # Delete the compatibility level with qualified subject
+        result = self.sr_client.delete_config_subject(subject=":.:")
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "FULL")
+
+        # Look up the compatibility level of default context
+        result = self.sr_client.get_config()
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["compatibilityLevel"], "BACKWARD")
+
+        # Set the mode with qualified subject
+        result = self.sr_client.set_mode_subject(
+            subject=":.:", data=json.dumps({"mode": "READONLY"}), force=True
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READONLY")
+
+        # Look up the mode of default context
+        result = self.sr_client.get_mode()
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READONLY")
+
+        # Delete the mode with qualified subject
+        result = self.sr_client.delete_mode_subject(subject=":.:")
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READONLY")
+
+        # Look up the mode of default context
+        result = self.sr_client.get_mode()
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READWRITE")
+
+    @cluster(num_nodes=1)
+    def test_context_mode(self):
+        """Test context-level mode operations."""
+
+        ctx = "test-ctx"
+        ctx_prefix = f":.{ctx}:"
+        ctx_subject = f"{ctx_prefix}test-sub"
+
+        # Register a schema in the context first
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=ctx_subject, data=json.dumps({"schema": schema1_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Set context-level mode (empty subject = context-level)
+        result = self.sr_client.set_mode_subject(
+            subject=ctx_prefix,
+            data=json.dumps({"mode": "READONLY"}),
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Get context-level mode
+        result = self.sr_client.get_mode_subject(subject=ctx_prefix)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READONLY")
+
+        # Subject-level mode should fall back to context-level
+        result = self.sr_client.get_mode_subject(subject=ctx_subject, fallback=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READONLY")
+
+        # Default context should not be affected by context-level mode
+        result = self.sr_client.get_mode()
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READWRITE")
+
+        # Set subject-level mode (different from context-level)
+        result = self.sr_client.set_mode_subject(
+            subject=ctx_subject,
+            data=json.dumps({"mode": "READWRITE"}),
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Subject should now have READWRITE (not context's READONLY)
+        result = self.sr_client.get_mode_subject(subject=ctx_subject, fallback=False)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READWRITE")
+
+        # Delete subject-level mode
+        result = self.sr_client.delete_mode_subject(subject=ctx_subject)
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Subject should fall back to context-level READONLY
+        result = self.sr_client.get_mode_subject(subject=ctx_subject, fallback=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READONLY")
+
+        # Delete the context-level mode
+        result = self.sr_client.delete_mode_subject(subject=ctx_prefix)
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Subject should fall back to default READWRITE
+        result = self.sr_client.get_mode_subject(subject=ctx_subject, fallback=True)
+        self.assert_equal(result.status_code, requests.codes.ok)
+        self.assert_equal(result.json()["mode"], "READWRITE")
 
 
 class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):

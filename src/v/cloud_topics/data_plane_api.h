@@ -87,11 +87,13 @@ public:
     virtual size_t materialize_max_bytes() const = 0;
 
     /// Cache materialized record batch
-    virtual void cache_put(const model::ntp&, const model::record_batch& b) = 0;
+    virtual void
+    cache_put(const model::topic_id_partition&, const model::record_batch& b)
+      = 0;
 
     /// Retrieve materialized record batch from cache
     virtual std::optional<model::record_batch>
-    cache_get(const model::ntp&, model::offset o) = 0;
+    cache_get(const model::topic_id_partition&, model::offset o) = 0;
 };
 
 } // namespace cloud_topics

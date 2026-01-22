@@ -186,7 +186,8 @@ put_config(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto config = co_await rjson_parse(*rq.req, put_config_handler<>{});
 
-    co_await rq.service().writer().write_config(std::nullopt, config.compat);
+    auto ctx_sub = context_subject{default_context, subject{""}};
+    co_await rq.service().writer().write_config(ctx_sub, config.compat);
 
     auto resp = ppj::rjson_serialize_iobuf(config);
     log_response(*rq.req, resp);
@@ -197,7 +198,8 @@ put_config(server::request_t rq, server::reply_t rp) {
 ss::future<server::reply_t>
 get_config_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    auto sub = parse::request_param<subject>(*rq.req, "subject");
+    auto ctx_sub = context_subject::from_string(
+      parse::request_param<ss::sstring>(*rq.req, "subject"));
     auto fallback = parse::query_param<std::optional<default_to_global>>(
                       *rq.req, "defaultToGlobal")
                       .value_or(default_to_global::no);
@@ -205,8 +207,14 @@ get_config_subject(server::request_t rq, server::reply_t rp) {
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto res = co_await rq.service().schema_store().get_compatibility(
-      sub, fallback);
+    compatibility_level res;
+    if (ctx_sub.is_context_only()) {
+        res = co_await rq.service().schema_store().get_compatibility(
+          ctx_sub.ctx);
+    } else {
+        res = co_await rq.service().schema_store().get_compatibility(
+          ctx_sub, fallback);
+    }
 
     auto resp = ppj::rjson_serialize_iobuf(get_config_req_rep{.compat = res});
     log_response(*rq.req, resp);
@@ -249,12 +257,13 @@ ss::future<server::reply_t>
 put_config_subject(server::request_t rq, server::reply_t rp) {
     parse_content_type_header(rq);
     parse_accept_header(rq, rp);
-    auto sub = parse::request_param<subject>(*rq.req, "subject");
+    auto ctx_sub = context_subject::from_string(
+      parse::request_param<ss::sstring>(*rq.req, "subject"));
     auto config = co_await rjson_parse(*rq.req, put_config_handler<>{});
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
-    co_await rq.service().writer().write_config(sub, config.compat);
+    co_await rq.service().writer().write_config(ctx_sub, config.compat);
 
     auto resp = ppj::rjson_serialize_iobuf(std::move(config));
     log_response(*rq.req, resp);
@@ -265,25 +274,33 @@ put_config_subject(server::request_t rq, server::reply_t rp) {
 ss::future<server::reply_t>
 delete_config_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    auto sub = parse::request_param<subject>(*rq.req, "subject");
+    auto ctx_sub = context_subject::from_string(
+      parse::request_param<ss::sstring>(*rq.req, "subject"));
 
     // ensure we see latest writes
     co_await rq.service().writer().read_sync();
-    co_await rq.service().writer().check_mutable(default_context, sub);
+    auto sub_opt = ctx_sub.is_context_only() ? std::nullopt
+                                             : std::make_optional(ctx_sub.sub);
+    co_await rq.service().writer().check_mutable(ctx_sub.ctx, sub_opt);
 
     compatibility_level lvl{};
     try {
-        lvl = co_await rq.service().schema_store().get_compatibility(
-          sub, default_to_global::no);
+        if (ctx_sub.is_context_only()) {
+            lvl = co_await rq.service().schema_store().get_compatibility(
+              ctx_sub.ctx);
+        } else {
+            lvl = co_await rq.service().schema_store().get_compatibility(
+              ctx_sub, default_to_global::no);
+        }
     } catch (const exception& e) {
         if (e.code() == error_code::compatibility_not_found) {
-            throw as_exception(not_found(sub));
+            throw as_exception(not_found(ctx_sub));
         } else {
             throw;
         }
     }
 
-    co_await rq.service().writer().delete_config(sub);
+    co_await rq.service().writer().delete_config(ctx_sub);
 
     auto resp = ppj::rjson_serialize_iobuf(get_config_req_rep{.compat = lvl});
     log_response(*rq.req, resp);
@@ -314,7 +331,8 @@ ss::future<server::reply_t> put_mode(server::request_t rq, server::reply_t rp) {
 
     // Ensure we are up to date (eg. see all existing subjects for import mode)
     co_await rq.service().writer().read_sync();
-    co_await rq.service().writer().write_mode(std::nullopt, res.mode, frc);
+    auto ctx_sub = context_subject{default_context, subject{""}};
+    co_await rq.service().writer().write_mode(ctx_sub, res.mode, frc);
 
     auto resp = ppj::rjson_serialize_iobuf(res);
     log_response(*rq.req, resp);
@@ -325,7 +343,8 @@ ss::future<server::reply_t> put_mode(server::request_t rq, server::reply_t rp) {
 ss::future<server::reply_t>
 get_mode_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    auto sub = parse::request_param<subject>(*rq.req, "subject");
+    auto ctx_sub = context_subject::from_string(
+      parse::request_param<ss::sstring>(*rq.req, "subject"));
     auto fallback = parse::query_param<std::optional<default_to_global>>(
                       *rq.req, "defaultToGlobal")
                       .value_or(default_to_global::no);
@@ -333,7 +352,12 @@ get_mode_subject(server::request_t rq, server::reply_t rp) {
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto res = co_await rq.service().schema_store().get_mode(sub, fallback);
+    mode res;
+    if (ctx_sub.is_context_only()) {
+        res = co_await rq.service().schema_store().get_mode(ctx_sub.ctx);
+    } else {
+        res = co_await rq.service().schema_store().get_mode(ctx_sub, fallback);
+    }
 
     auto resp = ppj::rjson_serialize_iobuf(mode_req_rep{.mode = res});
     log_response(*rq.req, resp);
@@ -347,12 +371,13 @@ put_mode_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto frc = parse::query_param<std::optional<force>>(*rq.req, "force")
                  .value_or(force::no);
-    auto sub = parse::request_param<subject>(*rq.req, "subject");
+    auto ctx_sub = context_subject::from_string(
+      parse::request_param<ss::sstring>(*rq.req, "subject"));
     auto res = co_await rjson_parse(*rq.req, mode_handler<>{});
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
-    co_await rq.service().writer().write_mode(sub, res.mode, frc);
+    co_await rq.service().writer().write_mode(ctx_sub, res.mode, frc);
 
     auto resp = ppj::rjson_serialize_iobuf(res);
     log_response(*rq.req, resp);
@@ -363,24 +388,29 @@ put_mode_subject(server::request_t rq, server::reply_t rp) {
 ss::future<server::reply_t>
 delete_mode_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    auto sub = parse::request_param<subject>(*rq.req, "subject");
+    auto ctx_sub = context_subject::from_string(
+      parse::request_param<ss::sstring>(*rq.req, "subject"));
 
     // ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
     mode m{};
     try {
-        m = co_await rq.service().schema_store().get_mode(
-          sub, default_to_global::no);
+        if (ctx_sub.is_context_only()) {
+            m = co_await rq.service().schema_store().get_mode(ctx_sub.ctx);
+        } else {
+            m = co_await rq.service().schema_store().get_mode(
+              ctx_sub, default_to_global::no);
+        }
     } catch (const exception& e) {
         if (e.code() == error_code::mode_not_found) {
             // Upstream compatibility: return 40401 instead of 40409
-            throw as_exception(not_found(sub));
+            throw as_exception(not_found(ctx_sub));
         }
         throw;
     }
 
-    co_await rq.service().writer().delete_mode(sub);
+    co_await rq.service().writer().delete_mode(ctx_sub);
 
     auto resp = ppj::rjson_serialize_iobuf(mode_req_rep{.mode = m});
     log_response(*rq.req, resp);

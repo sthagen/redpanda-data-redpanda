@@ -81,13 +81,11 @@ struct batch_builder : public storage::record_batch_builder {
             add_raw_kv(to_json_iobuf(std::move(key)), std::nullopt);
         } break;
         case seq_marker_key_type::config: {
-            // TODO: use the full context_subject once it is stored
-            auto key = config_key{.seq{s.seq}, .node{s.node}, .sub{sub.sub}};
+            auto key = config_key{.seq{s.seq}, .node{s.node}, .sub{sub}};
             add_raw_kv(to_json_iobuf(std::move(key)), std::nullopt);
         } break;
         case seq_marker_key_type::mode: {
-            // TODO: use the full context_subject once it is stored
-            auto key = mode_key{.seq{s.seq}, .node{s.node}, .sub{sub.sub}};
+            auto key = mode_key{.seq{s.seq}, .node{s.node}, .sub{sub}};
             add_raw_kv(to_json_iobuf(std::move(key)), std::nullopt);
         } break;
         case seq_marker_key_type::invalid:
@@ -292,9 +290,7 @@ seq_writer::write_subject_version(stored_schema schema) {
 }
 
 ss::future<std::optional<bool>> seq_writer::do_write_config(
-  std::optional<subject> sub,
-  compatibility_level compat,
-  model::offset write_at) {
+  context_subject sub, compatibility_level compat, model::offset write_at) {
     vlog(
       srlog.debug,
       "write_config sub={} compat={} offset={}",
@@ -302,16 +298,18 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
       to_string_view(compat),
       write_at);
 
-    co_await check_mutable(default_context, sub);
+    auto sub_opt = sub.is_context_only() ? std::nullopt
+                                         : std::make_optional(sub.sub);
+    co_await check_mutable(sub.ctx, sub_opt);
 
     try {
         // Check for no-op case
         compatibility_level existing;
-        if (sub.has_value()) {
+        if (!sub.is_context_only()) {
             existing = co_await _store.get_compatibility(
-              sub.value(), default_to_global::no);
+              sub, default_to_global::no);
         } else {
-            existing = co_await _store.get_compatibility(default_context);
+            existing = co_await _store.get_compatibility(sub.ctx);
         }
         if (existing == compat) {
             co_return false;
@@ -321,10 +319,11 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
     }
 
     batch_builder rb(write_at);
+    auto sub_key = sub.is_default_context() ? std::optional<context_subject>{}
+                                            : std::make_optional(sub);
     rb(
-      config_key{.seq{write_at}, .node{_node_id}, .sub{sub}},
-      config_value{.compat = compat});
-
+      config_key{.seq{write_at}, .node{_node_id}, .sub{sub_key}},
+      config_value{.compat = compat, .sub{sub_key}});
     if (co_await produce_and_apply(write_at, std::move(rb).build())) {
         co_return true;
     } else {
@@ -333,28 +332,42 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
     }
 }
 
-ss::future<bool> seq_writer::write_config(
-  std::optional<subject> sub, compatibility_level compat) {
-    return sequenced_write(
-      [sub{std::move(sub)}, compat](model::offset write_at, seq_writer& seq) {
-          return seq.do_write_config(sub, compat, write_at);
-      });
+ss::future<bool>
+seq_writer::write_config(context_subject ctx_sub, compatibility_level compat) {
+    return sequenced_write([ctx_sub{std::move(ctx_sub)},
+                            compat](model::offset write_at, seq_writer& seq) {
+        return seq.do_write_config(ctx_sub, compat, write_at);
+    });
 }
 
-ss::future<std::optional<bool>> seq_writer::do_delete_config(subject sub) {
-    vlog(srlog.debug, "delete config sub={}", sub);
+ss::future<std::optional<bool>>
+seq_writer::do_delete_config(context_subject ctx_sub) {
+    vlog(srlog.debug, "delete config sub={}", ctx_sub);
 
-    co_await check_mutable(default_context, sub);
+    auto sub_opt = ctx_sub.is_context_only() ? std::nullopt
+                                             : std::make_optional(ctx_sub.sub);
+    co_await check_mutable(ctx_sub.ctx, sub_opt);
 
     try {
-        co_await _store.get_compatibility(sub, default_to_global::no);
+        if (ctx_sub.is_context_only()) {
+            co_await _store.get_compatibility(ctx_sub.ctx);
+        } else {
+            co_await _store.get_compatibility(ctx_sub, default_to_global::no);
+        }
+
     } catch (const exception&) {
         // subject config already blank
         co_return false;
     }
 
     batch_builder rb{model::offset{0}};
-    rb.add_tombstones(sub, co_await _store.get_subject_config_written_at(sub));
+    if (ctx_sub.is_context_only()) {
+        rb.add_tombstones(
+          ctx_sub, co_await _store.get_context_config_written_at(ctx_sub.ctx));
+    } else {
+        rb.add_tombstones(
+          ctx_sub, co_await _store.get_subject_config_written_at(ctx_sub));
+    }
 
     if (co_await produce_and_apply(std::nullopt, std::move(rb).build())) {
         co_return true;
@@ -364,19 +377,19 @@ ss::future<std::optional<bool>> seq_writer::do_delete_config(subject sub) {
     }
 }
 
-ss::future<bool> seq_writer::delete_config(subject sub) {
+ss::future<bool> seq_writer::delete_config(context_subject ctx_sub) {
     return sequenced_write(
-      [sub{std::move(sub)}](model::offset, seq_writer& seq) {
-          return seq.do_delete_config(sub);
+      [ctx_sub{std::move(ctx_sub)}](model::offset, seq_writer& seq) {
+          return seq.do_delete_config(ctx_sub);
       });
 }
 
 ss::future<std::optional<bool>> seq_writer::do_write_mode(
-  std::optional<subject> sub, mode m, force f, model::offset write_at) {
+  context_subject ctx_sub, mode m, force f, model::offset write_at) {
     vlog(
       srlog.debug,
       "write_mode sub={} mode={} force={} offset={}",
-      sub,
+      ctx_sub,
       to_string_view(m),
       f,
       write_at);
@@ -385,9 +398,10 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
 
     try {
         // Check for no-op case
-        mode existing = sub ? co_await _store.get_mode(
-                                sub.value(), default_to_global::no)
-                            : co_await _store.get_mode(default_context);
+        mode existing = !ctx_sub.is_context_only()
+                          ? co_await _store.get_mode(
+                              ctx_sub, default_to_global::no)
+                          : co_await _store.get_mode(ctx_sub.ctx);
         if (existing == m) {
             co_return false;
         }
@@ -405,15 +419,14 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
                 "Schema Registry can only move to import mode if empty"});
         };
         if (
-          !sub
-          && co_await _store.has_subjects(
-            default_context, include_deleted::yes)) {
+          ctx_sub.is_context_only()
+          && co_await _store.has_subjects(ctx_sub.ctx, include_deleted::yes)) {
             throw make_exception();
         }
-        if (sub) {
+        if (!ctx_sub.is_context_only()) {
             try {
                 auto versions = co_await _store.get_versions(
-                  *sub, include_deleted::yes);
+                  ctx_sub, include_deleted::yes);
                 if (!versions.empty()) {
                     throw make_exception();
                 }
@@ -431,9 +444,13 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
     }
 
     batch_builder rb(write_at);
+    auto sub_key = ctx_sub.is_default_context()
+                     ? std::optional<context_subject>{}
+                     : std::make_optional(ctx_sub);
+
     rb(
-      mode_key{.seq{write_at}, .node{_node_id}, .sub{sub}},
-      mode_value{.mode = m});
+      mode_key{.seq{write_at}, .node{_node_id}, .sub{sub_key}},
+      mode_value{.mode = m, .sub{sub_key}});
 
     if (co_await produce_and_apply(write_at, std::move(rb).build())) {
         co_return true;
@@ -444,23 +461,33 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
 }
 
 ss::future<bool>
-seq_writer::write_mode(std::optional<subject> sub, mode mode, force f) {
-    return sequenced_write(
-      [sub{std::move(sub)}, mode, f](model::offset write_at, seq_writer& seq) {
-          return seq.do_write_mode(sub, mode, f, write_at);
-      });
+seq_writer::write_mode(context_subject ctx_sub, mode mode, force f) {
+    return sequenced_write([ctx_sub{std::move(ctx_sub)}, mode, f](
+                             model::offset write_at, seq_writer& seq) {
+        return seq.do_write_mode(ctx_sub, mode, f, write_at);
+    });
 }
 
 ss::future<std::optional<bool>>
-seq_writer::do_delete_mode(subject sub, model::offset write_at) {
-    vlog(srlog.debug, "delete mode sub={} offset={}", sub, write_at);
-
+seq_writer::do_delete_mode(context_subject ctx_sub, model::offset write_at) {
+    vlog(srlog.debug, "delete mode sub={} offset={}", ctx_sub, write_at);
     // Report an error if the mode isn't registered
-    co_await _store.get_mode(sub, default_to_global::no);
+    if (ctx_sub.is_context_only()) {
+        co_await _store.get_mode(ctx_sub.ctx);
+    } else {
+        co_await _store.get_mode(ctx_sub, default_to_global::no);
+    }
     _store.check_mode_mutability(force::no);
 
     batch_builder rb{write_at};
-    rb.add_tombstones(sub, co_await _store.get_subject_mode_written_at(sub));
+    if (ctx_sub.is_context_only()) {
+        rb.add_tombstones(
+          ctx_sub, co_await _store.get_context_mode_written_at(ctx_sub.ctx));
+    } else {
+        rb.add_tombstones(
+          ctx_sub, co_await _store.get_subject_mode_written_at(ctx_sub));
+    }
+
     if (co_await produce_and_apply(std::nullopt, std::move(rb).build())) {
         co_return true;
     } else {
@@ -469,10 +496,10 @@ seq_writer::do_delete_mode(subject sub, model::offset write_at) {
     }
 }
 
-ss::future<bool> seq_writer::delete_mode(subject sub) {
+ss::future<bool> seq_writer::delete_mode(context_subject ctx_sub) {
     return sequenced_write(
-      [sub{std::move(sub)}](model::offset write_at, seq_writer& seq) {
-          return seq.do_delete_mode(sub, write_at);
+      [ctx_sub{std::move(ctx_sub)}](model::offset write_at, seq_writer& seq) {
+          return seq.do_delete_mode(ctx_sub, write_at);
       });
 }
 

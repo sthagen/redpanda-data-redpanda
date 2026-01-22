@@ -127,35 +127,52 @@ struct resolution_context {
     json_conversion_ir::struct_field_map_t* current_field_map{&root_field_map};
 };
 
+class collect_context {
+public:
+    [[nodiscard]] auto recurse_guard() {
+        constexpr static size_t max_depth{32};
+        if (depth_ >= max_depth) {
+            throw std::runtime_error(
+              "Schema depth limit exceeded during constraint collection");
+        }
+        ++depth_;
+        return ss::defer([this] noexcept { --depth_; });
+    }
+
+private:
+    size_t depth_{0};
+};
+
 // Forward declarations.
 conversion_outcome<constraint>
-collect(const conversion::json_schema::subschema&);
+collect(collect_context& ctx, const conversion::json_schema::subschema&);
 
 conversion_outcome<field_type> resolve(resolution_context&, const constraint&);
 
 /// Collect item constraints from a JSON Schema array.
-conversion_outcome<std::optional<std::vector<constraint>>>
-collect_items(const conversion::json_schema::subschema& s) {
+conversion_outcome<std::optional<std::vector<constraint>>> collect_items(
+  collect_context& ctx, const conversion::json_schema::subschema& s) {
     using ret_t = conversion_outcome<std::optional<std::vector<constraint>>>;
 
     return ss::visit(
       s.items(),
       [](std::monostate) -> ret_t { return std::nullopt; },
-      [](std::reference_wrapper<const conversion::json_schema::subschema> item)
+      [&ctx](
+        std::reference_wrapper<const conversion::json_schema::subschema> item)
         -> ret_t {
-          auto c = collect(item.get());
+          auto c = collect(ctx, item.get());
           if (c.has_error()) {
               return c.error();
           }
           return std::vector<constraint>{std::move(c.value())};
       },
-      [&s](
+      [&ctx, &s](
         const conversion::json_schema::const_list_view& tuple_items) -> ret_t {
           std::vector<constraint> result;
           result.reserve(tuple_items.size() + (s.additional_items() ? 1 : 0));
 
           for (const auto& item : tuple_items) {
-              auto c = collect(item);
+              auto c = collect(ctx, item);
               if (c.has_error()) {
                   return c.error();
               }
@@ -163,7 +180,7 @@ collect_items(const conversion::json_schema::subschema& s) {
           }
 
           if (s.additional_items()) {
-              auto c = collect(s.additional_items()->get());
+              auto c = collect(ctx, s.additional_items()->get());
               if (c.has_error()) {
                   return c.error();
               }
@@ -176,7 +193,9 @@ collect_items(const conversion::json_schema::subschema& s) {
 
 /// Collect constraints from a JSON Schema subschema.
 conversion_outcome<constraint>
-collect(const conversion::json_schema::subschema& s) {
+collect(collect_context& ctx, const conversion::json_schema::subschema& s) {
+    auto recurse_guard = ctx.recurse_guard();
+
     // Validate dialect for each subschema.
     if (s.base().dialect() != conversion::json_schema::dialect::draft7) {
         return conversion_exception(
@@ -185,6 +204,11 @@ collect(const conversion::json_schema::subschema& s) {
     }
 
     constraint c;
+
+    if (s.ref() != nullptr) {
+        // draft-07: $ref takes precedence over all other keywords
+        return collect(ctx, *s.ref());
+    }
 
     // Type keyword.
     const auto& schema_types = s.types();
@@ -201,7 +225,7 @@ collect(const conversion::json_schema::subschema& s) {
     // Object properties (only if object type is possible).
     if (c.types.test(json_type::object)) {
         for (const auto& [name, prop] : s.properties()) {
-            auto prop_constraint = collect(prop);
+            auto prop_constraint = collect(ctx, prop);
             if (prop_constraint.has_error()) {
                 return prop_constraint.error();
             }
@@ -219,7 +243,7 @@ collect(const conversion::json_schema::subschema& s) {
 
     // Array items (only if array type is possible).
     if (c.types.test(json_type::array)) {
-        auto items_result = collect_items(s);
+        auto items_result = collect_items(ctx, s);
         if (items_result.has_error()) {
             return items_result.error();
         }
@@ -374,20 +398,22 @@ type_to_ir(const conversion::json_schema::schema& schema) {
             "Unsupported JSON schema dialect: {}", schema.root().dialect()));
     }
 
-    auto c = collect(schema.root());
+    collect_context collect_ctx;
+
+    auto c = collect(collect_ctx, schema.root());
     if (c.has_error()) {
         return c.error();
     }
 
-    resolution_context ctx;
-    auto result = resolve(ctx, c.value());
+    resolution_context resolution_ctx;
+    auto result = resolve(resolution_ctx, c.value());
     if (result.has_error()) {
         return result.error();
     }
 
     return json_conversion_ir(
       std::make_unique<field_type>(std::move(result.value())),
-      std::move(ctx.root_field_map));
+      std::move(resolution_ctx.root_field_map));
 }
 
 } // namespace iceberg

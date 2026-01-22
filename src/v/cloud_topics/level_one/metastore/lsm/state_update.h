@@ -21,7 +21,23 @@
 
 namespace cloud_topics::l1 {
 
-using db_update_error = named_type<ss::sstring, struct db_update_error_tag>;
+// TODO: might be nice to make this be some kind of variant that contains
+// state_reader::errc instead of duplicating error codes.
+enum class db_update_errc {
+    io_error,
+    corruption,
+    shutting_down,
+
+    // The input is invalid, indicating a bug in the caller. Worth logging at
+    // ERROR level, as these are unexpected.
+    invalid_input,
+
+    // The request cannot be applied to the current state because it would
+    // break an invariant. These errors may be caused by races and therefore
+    // may not necessarily be unexpected.
+    invalid_update,
+};
+using db_update_error = detailed_error<db_update_errc>;
 
 struct add_objects_db_update {
     ss::future<std::expected<void, db_update_error>> build_rows(
@@ -60,3 +76,32 @@ struct replace_objects_db_update {
 };
 
 } // namespace cloud_topics::l1
+
+template<>
+struct fmt::formatter<cloud_topics::l1::db_update_errc> final
+  : fmt::formatter<std::string_view> {
+    template<typename FormatContext>
+    auto format(
+      const cloud_topics::l1::db_update_errc& e, FormatContext& ctx) const {
+        using enum cloud_topics::l1::db_update_errc;
+        std::string_view name;
+        switch (e) {
+        case io_error:
+            name = "db_update_errc::io_error";
+            break;
+        case corruption:
+            name = "db_update_errc::corruption";
+            break;
+        case shutting_down:
+            name = "db_update_errc::shutting_down";
+            break;
+        case invalid_input:
+            name = "db_update_errc::invalid_input";
+            break;
+        case invalid_update:
+            name = "db_update_errc::invalid_update";
+            break;
+        }
+        return fmt::format_to(ctx.out(), "{}", name);
+    }
+};

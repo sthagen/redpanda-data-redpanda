@@ -176,7 +176,8 @@ protected:
         chunked_vector<write_batch_row> rows;
         auto result = db_update.build_rows(reader, rows).get();
         if (!result.has_value()) {
-            return std::unexpected(stm_update_error{result.error()()});
+            return std::unexpected(
+              stm_update_error{fmt::format("{}", result.error())});
         }
         apply_rows_to_db(rows);
         return std::monostate{};
@@ -195,7 +196,8 @@ protected:
         chunked_vector<write_batch_row> rows;
         auto result = db_update.build_rows(reader, rows).get();
         if (!result.has_value()) {
-            return std::unexpected(stm_update_error{result.error()()});
+            return std::unexpected(
+              stm_update_error{fmt::format("{}", result.error())});
         }
         apply_rows_to_db(rows);
         return std::monostate{};
@@ -212,13 +214,15 @@ protected:
         };
         auto validate_res = db_update.validate_inputs();
         if (!validate_res.has_value()) {
-            return std::unexpected(stm_update_error{validate_res.error()()});
+            return std::unexpected(
+              stm_update_error{fmt::format("{}", validate_res.error())});
         }
         auto reader = state_reader(db_->create_snapshot());
         chunked_vector<write_batch_row> rows;
         auto result = db_update.build_rows(reader, rows).get();
         if (!result.has_value()) {
-            return std::unexpected(stm_update_error(result.error()()));
+            return std::unexpected(
+              stm_update_error{fmt::format("{}", result.error())});
         }
         return std::monostate{};
     }

@@ -1333,3 +1333,21 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "client_quota_serde_test",
+    timeout = "short",
+    srcs = [
+        "client_quota_serde_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/serde",
+        "//src/v/serde:set",
+        "//src/v/serde:sstring",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

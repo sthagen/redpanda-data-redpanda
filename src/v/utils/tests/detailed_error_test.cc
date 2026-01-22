@@ -45,6 +45,16 @@ TEST(DetailedErrorTest, TestErrorAndDetails) {
     EXPECT_EQ(fmt::format("{}", error(errc::foo, "msg")), "[foo]: msg");
 }
 
+TEST(DetailedErrorTest, TestErrorAndFmtDetails) {
+    EXPECT_EQ(fmt::format("{}", error(errc::foo, "{} msg", 1)), "[foo]: 1 msg");
+}
+
+TEST(DetailedErrorTest, TestWrapFmt) {
+    auto inner = error(errc::bar, "inner");
+    auto outer = error::wrap(std::move(inner), errc::foo, "{} outer", 1);
+    EXPECT_EQ(fmt::format("{}", outer), "[foo]: 1 outer: inner");
+}
+
 TEST(DetailedErrorTest, TestWrap) {
     auto inner = error(errc::bar, "inner");
     auto outer = error::wrap(std::move(inner), errc::foo, "outer");
@@ -55,6 +65,12 @@ TEST(DetailedErrorTest, TestWrapCall) {
     auto inner = error(errc::bar, "inner");
     auto outer = std::move(inner).wrap(errc::foo, "outer");
     EXPECT_EQ(fmt::format("{}", outer), "[foo]: outer: inner");
+}
+
+TEST(DetailedErrorTest, TestWrapCallFmt) {
+    auto inner = error(errc::bar, "inner");
+    auto outer = std::move(inner).wrap(errc::foo, "{} outer", 1);
+    EXPECT_EQ(fmt::format("{}", outer), "[foo]: 1 outer: inner");
 }
 
 TEST(DetailedErrorTest, TestWrapChain) {

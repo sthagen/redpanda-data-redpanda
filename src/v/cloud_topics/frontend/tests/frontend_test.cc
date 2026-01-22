@@ -69,13 +69,13 @@ public:
     MOCK_METHOD(
       void,
       cache_put,
-      (const model::ntp&, const model::record_batch&),
+      (const model::topic_id_partition&, const model::record_batch&),
       (override));
 
     MOCK_METHOD(
       std::optional<model::record_batch>,
       cache_get,
-      (const model::ntp&, model::offset o),
+      (const model::topic_id_partition&, model::offset o),
       (override));
 
     MOCK_METHOD(size_t, materialize_max_bytes, (), (const, override));

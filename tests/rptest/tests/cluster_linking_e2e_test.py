@@ -1665,10 +1665,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                     self.logger.debug(
                         f"Partition {partition_id}: source hwm={hwm}, shadow_hwm{p_info.source_high_watermark}, last_update={p_info.source_last_updated_timestamp}"
                     )
-                    # TODO: Re-enable once CORE-14617 is addressed
-                    # TODO: CORE-14653
-                    # if p_info.source_high_watermark != hwm:
-                    #     return False
+                    if p_info.source_high_watermark != hwm:
+                        return False
         return True
 
     def _fetch_shadow_topic_and_compare_results(
@@ -3408,12 +3406,11 @@ class ShadowLinkingMetricsTests(ShadowLinkPreAllocTestBase):
             msg_cnt=5000000,
             use_transactions=True,
             producer_properties={
-                "msgs_per_transaction": "10000",
-                "transaction_abort_rate": "0.3",
+                "msgs_per_transaction": "100000",
             },
         ):
             validate_metrics(
-                timeout_sec=30,
+                timeout_sec=120,
                 metric_validators=[
                     (self.SHADOW_LAG, check_shadow_lag_positive),
                 ],

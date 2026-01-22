@@ -129,6 +129,11 @@ ss::future<s3_configuration> s3_configuration::make_configuration(
     client_cfg.max_idle_time = overrides.max_idle_time
                                  ? *overrides.max_idle_time
                                  : default_max_idle_time;
+
+    client_cfg.is_gcs = cloud_storage_clients::infer_backend_from_configuration(
+                          client_cfg, client_cfg.cloud_credentials_source)
+                        == model::cloud_storage_backend::google_s3_compat;
+
     co_return client_cfg;
 }
 

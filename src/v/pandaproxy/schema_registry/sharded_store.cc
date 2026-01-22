@@ -615,9 +615,10 @@ sharded_store::get_mode(context_subject sub, default_to_global fallback) {
       });
 }
 
-ss::future<bool> sharded_store::set_mode(context ctx, mode m, force f) {
-    auto map = [m, f, ctx{std::move(ctx)}](store& s) {
-        return s.set_mode(ctx, m, f).value();
+ss::future<bool>
+sharded_store::set_mode(seq_marker marker, context ctx, mode m, force f) {
+    auto map = [marker, m, f, ctx{std::move(ctx)}](store& s) {
+        return s.set_mode(marker, ctx, m, f).value();
     };
     auto reduce = std::logical_and<>{};
     co_return co_await _store.map_reduce0(map, true, reduce);
@@ -632,6 +633,14 @@ ss::future<bool> sharded_store::set_mode(
       });
 }
 
+ss::future<bool> sharded_store::clear_mode(context ctx, force f) {
+    auto map = [f, ctx{std::move(ctx)}](store& s) {
+        return s.clear_mode(ctx, f).value();
+    };
+    auto reduce = std::logical_and<>{};
+    co_return co_await _store.map_reduce0(map, true, reduce);
+}
+
 ss::future<bool>
 sharded_store::clear_mode(seq_marker marker, context_subject sub, force f) {
     auto sub_shard{shard_for(sub)};
@@ -639,6 +648,11 @@ sharded_store::clear_mode(seq_marker marker, context_subject sub, force f) {
       sub_shard, _smp_opts, [marker, sub{std::move(sub)}, f](store& s) {
           return s.clear_mode(marker, sub, f).value();
       });
+}
+
+ss::future<chunked_vector<seq_marker>>
+sharded_store::get_context_mode_written_at(context ctx) {
+    co_return _store.local().get_context_mode_written_at(ctx).value();
 }
 
 ss::future<compatibility_level> sharded_store::get_compatibility(context ctx) {
@@ -655,9 +669,9 @@ ss::future<compatibility_level> sharded_store::get_compatibility(
 }
 
 ss::future<bool> sharded_store::set_compatibility(
-  context ctx, compatibility_level compatibility) {
-    auto map = [compatibility, ctx{std::move(ctx)}](store& s) {
-        return s.set_compatibility(ctx, compatibility).value();
+  seq_marker marker, context ctx, compatibility_level compatibility) {
+    auto map = [marker, compatibility, ctx{std::move(ctx)}](store& s) {
+        return s.set_compatibility(marker, ctx, compatibility).value();
     };
     auto reduce = std::logical_and<>{};
     co_return co_await _store.map_reduce0(map, true, reduce);
@@ -674,6 +688,14 @@ ss::future<bool> sharded_store::set_compatibility(
       });
 }
 
+ss::future<bool> sharded_store::clear_compatibility(context ctx) {
+    auto map = [ctx{std::move(ctx)}](store& s) {
+        return s.clear_compatibility(ctx).value();
+    };
+    auto reduce = std::logical_and<>{};
+    co_return co_await _store.map_reduce0(map, true, reduce);
+}
+
 ss::future<bool>
 sharded_store::clear_compatibility(seq_marker marker, context_subject sub) {
     auto sub_shard{shard_for(sub)};
@@ -681,6 +703,11 @@ sharded_store::clear_compatibility(seq_marker marker, context_subject sub) {
       sub_shard, _smp_opts, [marker, sub{std::move(sub)}](store& s) {
           return s.clear_compatibility(marker, sub).value();
       });
+}
+
+ss::future<chunked_vector<seq_marker>>
+sharded_store::get_context_config_written_at(context ctx) {
+    co_return _store.local().get_context_config_written_at(ctx).value();
 }
 
 ss::future<bool> sharded_store::upsert_schema(

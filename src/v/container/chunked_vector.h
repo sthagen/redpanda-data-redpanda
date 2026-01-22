@@ -126,11 +126,13 @@ public:
      * https://en.cppreference.com/w/cpp/ranges/as_rvalue_view.html
      */
     template<typename Range>
-    requires(std::ranges::sized_range<Range>)
+    requires(std::ranges::range<Range>)
     // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     chunked_vector(std::from_range_t, Range&& range)
       : chunked_vector() {
-        reserve(std::ranges::size(range));
+        if constexpr (std::ranges::sized_range<Range>) {
+            reserve(std::ranges::size(range));
+        }
         std::copy(
           std::ranges::begin(range),
           std::ranges::end(range),

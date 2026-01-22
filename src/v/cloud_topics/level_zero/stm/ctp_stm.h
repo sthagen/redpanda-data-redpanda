@@ -25,6 +25,25 @@ namespace cloud_topics {
 class ctp_stm_api;
 struct ctp_stm_accessor;
 
+// Log sliding window state, we use this to assert that the log contents
+// never break the invariants that the epoch fencing should enforce.
+struct epoch_window_checker
+  : serde::envelope<
+      epoch_window_checker,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() {
+        return std::tie(_min_epoch, _max_epoch, _latest_offset);
+    }
+
+    // Assert if the epoch at this offset in the log is valid or not.
+    void check_epoch(cluster_epoch epoch, model::offset offset);
+
+    cluster_epoch _min_epoch;
+    cluster_epoch _max_epoch;
+    model::offset _latest_offset;
+};
+
 /// The STM that tracks current cluster epoch and LRO.
 /// The goal is to guarantee that the cluster epoch is monotonic and
 /// to provide the smallest cluster epoch available through the
@@ -129,15 +148,12 @@ private:
     /// Current in-memory state of the STM
     ctp_stm_state _state;
 
-    // Log sliding window state, we use this to assert that the log contents
-    // never break the invariants that the epoch fencing should enforce.
+    // The checker of the STM state.
     //
-    // Note that in the state object we assign the first epoch ever observed
-    // to be the min *and* max. Here we only can assign it to the max because
-    // we don't know if we are truly at the beginning of the log or not due to
-    // this state being ephemeral.
-    cluster_epoch _epoch_window_min;
-    cluster_epoch _epoch_window_max;
+    // this is seperate from the state object itself because the assertion
+    // is about the content of the log rather than the computed state. The state
+    // is purely idempotent in terms of operations applied.
+    epoch_window_checker _epoch_checker;
 
     // An abort source to stop the prefix truncation loop on stop.
     ss::condition_variable _lro_advanced;

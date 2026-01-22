@@ -9,10 +9,13 @@
  */
 #pragma once
 
+#include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/log_reader_config.h"
 #include "model/record_batch_reader.h"
 #include "utils/prefix_logger.h"
+
+#include <expected>
 
 namespace cluster {
 class partition;
@@ -108,7 +111,8 @@ private:
     fetch_metadata(
       storage::local_log_reader_config cfg,
       model::timeout_clock::time_point deadline) const;
-    ss::future<chunked_circular_buffer<model::record_batch>>
+    ss::future<
+      std::expected<chunked_circular_buffer<model::record_batch>, errc>>
     materialize_batches(
       chunked_circular_buffer<local_log_batch> unhydrated,
       model::timeout_clock::time_point deadline);

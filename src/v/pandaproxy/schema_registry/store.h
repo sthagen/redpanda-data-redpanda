@@ -537,11 +537,13 @@ public:
         return true;
     }
 
-    ///\brief Get the global mode of a context.
+    ///\brief Get the mode of a context.
     result<mode> get_mode(const context& ctx) const {
         auto it = _context_stores.find(ctx);
-        return it != _context_stores.end() ? it->second._mode
-                                           : mode::read_write;
+        if (it == _context_stores.end() || !it->second._mode.has_value()) {
+            return mode::read_write;
+        }
+        return *it->second._mode;
     }
 
     ///\brief Get the mode for a subject, or fallback to global.
@@ -556,9 +558,11 @@ public:
         return mode_not_found(sub);
     }
 
-    ///\brief Set the global mode.
-    result<bool> set_mode(const context& ctx, mode m, force f) {
+    ///\brief Set the mode of a context.
+    result<bool>
+    set_mode(seq_marker marker, const context& ctx, mode m, force f) {
         BOOST_OUTCOME_TRYX(check_mode_mutability(f));
+        _context_stores[ctx]._mode_written_at.emplace_back(marker);
         return std::exchange(_context_stores[ctx]._mode, m) != m;
     }
 
@@ -582,11 +586,34 @@ public:
         return std::exchange(sub_it->second.mode, std::nullopt) != std::nullopt;
     }
 
-    ///\brief Get the global compatibility level in a context.
+    ///\brief Clear the mode for a context.
+    result<bool> clear_mode(const context& ctx, force f) {
+        BOOST_OUTCOME_TRYX(check_mode_mutability(f));
+        _context_stores[ctx]._mode_written_at.clear();
+        return std::exchange(_context_stores[ctx]._mode, std::nullopt)
+               != std::nullopt;
+    }
+
+    /// \brief Return the seq_marker write history of a context, but only
+    /// mode keys
+    result<chunked_vector<seq_marker>>
+    get_context_mode_written_at(const context& ctx) const {
+        auto it = _context_stores.find(ctx);
+        if (it == _context_stores.end()) {
+            return chunked_vector<seq_marker>{};
+        }
+        return it->second._mode_written_at.copy();
+    }
+
+    ///\brief Get the compatibility level of a context.
     result<compatibility_level> get_compatibility(const context& ctx) const {
         auto it = _context_stores.find(ctx);
-        return it != _context_stores.end() ? it->second._compatibility
-                                           : compatibility_level::backward;
+        if (
+          it == _context_stores.end()
+          || !it->second._compatibility.has_value()) {
+            return compatibility_level::backward;
+        }
+        return *it->second._compatibility;
     }
 
     ///\brief Get the compatibility level for a subject, or fallback to global.
@@ -606,9 +633,12 @@ public:
         return compatibility_not_found(sub);
     }
 
-    ///\brief Set the global compatibility level.
-    result<bool>
-    set_compatibility(const context& ctx, compatibility_level compatibility) {
+    ///\brief Set the compatibility level of a context.
+    result<bool> set_compatibility(
+      seq_marker marker,
+      const context& ctx,
+      compatibility_level compatibility) {
+        _context_stores[ctx]._config_written_at.push_back(marker);
         return std::exchange(_context_stores[ctx]._compatibility, compatibility)
                != compatibility;
     }
@@ -624,6 +654,13 @@ public:
                != compatibility;
     }
 
+    ///\brief Clear the compatibility level of a context.
+    result<bool> clear_compatibility(const context& ctx) {
+        _context_stores[ctx]._config_written_at.clear();
+        return std::exchange(_context_stores[ctx]._compatibility, std::nullopt)
+               != std::nullopt;
+    }
+
     ///\brief Clear the compatibility level for a subject.
     result<bool>
     clear_compatibility(const seq_marker& marker, const context_subject& sub) {
@@ -633,6 +670,17 @@ public:
         vec.erase_to_end(std::ranges::remove(vec, marker).begin());
         return std::exchange(sub_it->second.compatibility, std::nullopt)
                != std::nullopt;
+    }
+
+    /// \brief Return the seq_marker write history of a context, but only
+    /// config keys
+    result<chunked_vector<seq_marker>>
+    get_context_config_written_at(const context& ctx) const {
+        auto it = _context_stores.find(ctx);
+        if (it == _context_stores.end()) {
+            return chunked_vector<seq_marker>{};
+        }
+        return it->second._config_written_at.copy();
     }
 
     struct insert_schema_result {
@@ -958,9 +1006,12 @@ private:
     }
 
     struct context_store {
-        compatibility_level _compatibility{compatibility_level::backward};
-        mode _mode{mode::read_write};
+        std::optional<compatibility_level> _compatibility{std::nullopt};
+        std::optional<mode> _mode{std::nullopt};
         schema_id _next_schema_id{1};
+
+        chunked_vector<seq_marker> _config_written_at;
+        chunked_vector<seq_marker> _mode_written_at;
     };
     using context_store_map = absl::node_hash_map<context, context_store>;
 
@@ -968,7 +1019,7 @@ private:
     // fields are only present on certain shards.
     // _schemas: sharded by (context, schema_id)
     // _subjects: sharded by (context, subject)
-    // _marked_schemas: shard 0 ??
+    // _marked_schemas: sharded by (context, schema_id)
     // context_store:
     //  - next_schema_id: sharded by context
     //  - compatibility: replicated across all shards

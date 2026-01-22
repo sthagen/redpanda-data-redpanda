@@ -192,13 +192,15 @@ public:
         co_return std::move(res.value().results);
     }
 
-    void cache_put(const model::ntp& ntp, const model::record_batch& b) final {
-        _batch_cache.local().put(ntp, b);
+    void cache_put(
+      const model::topic_id_partition& tidp,
+      const model::record_batch& b) final {
+        _batch_cache.local().put(tidp, b);
     }
 
     std::optional<model::record_batch>
-    cache_get(const model::ntp& ntp, model::offset o) final {
-        return _batch_cache.local().get(ntp, o);
+    cache_get(const model::topic_id_partition& tidp, model::offset o) final {
+        return _batch_cache.local().get(tidp, o);
     }
 
     size_t materialize_max_bytes() const final {

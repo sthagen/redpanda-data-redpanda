@@ -27,7 +27,6 @@ compaction_committer::compaction_job::compaction_job(
   compaction_job_id id,
   model::topic_id_partition tidp,
   std::unique_ptr<metastore::object_metadata_builder> metadata_builder,
-  compaction_committer* committer,
   io* io,
   metastore* metastore,
   committing_policy* policy,
@@ -36,7 +35,6 @@ compaction_committer::compaction_job::compaction_job(
   , _tp(tidp)
   , _metadata_builder(std::move(metadata_builder))
   , _upload_sem(0, fmt::format("upload_sem_{}", id))
-  , _committer(committer)
   , _io(io)
   , _metastore(metastore)
   , _policy(policy)
@@ -81,10 +79,8 @@ ss::future<> compaction_committer::compaction_job::finalize(
 
     if (!_inflight_uploads.empty()) {
         // Await and discard unresolved inflight futures, if any.
-        auto inflight_uploads = std::exchange(_inflight_uploads, {});
-        using res_t = chunked_vector<expected_t>;
         auto res = co_await ss::coroutine::as_future(
-          ssx::when_all_succeed<res_t>(std::move(inflight_uploads)));
+          do_await_inflight_uploads());
         res.ignore_ready_future();
     }
 
@@ -92,14 +88,13 @@ ss::future<> compaction_committer::compaction_job::finalize(
         // Remove leftover staging files, if any.
         co_await remove_staging_files();
     }
-
-    _committer->finalize_job(_id);
 }
 
-void compaction_committer::compaction_job::cancel_job() {
+ss::future<> compaction_committer::compaction_job::stop() {
     _as.request_abort();
     _upload_sem.broken();
     _last_upload_scheduled.broken();
+    co_await _gate.close();
 }
 
 ss::future<> compaction_committer::compaction_job::remove_staging_files() {
@@ -138,17 +133,20 @@ ss::future<> compaction_committer::compaction_job::upload_loop() {
 }
 
 void compaction_committer::compaction_job::start_upload_loop() {
-    ssx::background = upload_loop().handle_exception(
-      [this](const std::exception_ptr& e) {
-          auto log_level = ssx::is_shutdown_exception(e) ? ss::log_level::debug
-                                                         : ss::log_level::warn;
-          vlogl(
-            compaction_log,
-            log_level,
-            "Encountered exception in upload loop for job {}: {}",
-            _id,
-            e);
-      });
+    ssx::spawn_with_gate(_gate, [this] {
+        return upload_loop().handle_exception(
+          [this](const std::exception_ptr& e) {
+              auto log_level = ssx::is_shutdown_exception(e)
+                                 ? ss::log_level::debug
+                                 : ss::log_level::warn;
+              vlogl(
+                compaction_log,
+                log_level,
+                "Encountered exception in upload loop for job {}: {}",
+                _id,
+                e);
+          });
+    });
 }
 
 ss::future<compaction_committer::compaction_job::expected_t>
@@ -233,15 +231,18 @@ void compaction_committer::compaction_job::upload_some() {
     }
 }
 
+ss::future<chunked_vector<compaction_committer::compaction_job::expected_t>>
+compaction_committer::compaction_job::do_await_inflight_uploads() {
+    auto inflight_uploads = std::exchange(_inflight_uploads, {});
+    return ssx::when_all_succeed<chunked_vector<expected_t>>(
+      std::move(inflight_uploads));
+}
+
 ss::future<std::optional<ss::sstring>>
 compaction_committer::compaction_job::await_inflight_uploads() {
     co_await _last_upload_scheduled.wait();
 
-    auto inflight_uploads = std::exchange(_inflight_uploads, {});
-
-    using res_t = chunked_vector<expected_t>;
-    auto res = co_await ssx::when_all_succeed<res_t>(
-      std::move(inflight_uploads));
+    auto res = co_await do_await_inflight_uploads();
 
     auto failed = res | std::views::filter([](const expected_t& res) {
                       return !res.has_value();
@@ -429,9 +430,7 @@ ss::future<> compaction_committer::stop() {
       "Stopping compaction committer with {} active jobs.",
       _compaction_jobs.size());
     _as.request_abort();
-    auto close_fut = _gate.close();
-    cancel_active_jobs();
-    co_await std::move(close_fut);
+    co_await _gate.close();
 }
 
 ss::future<compaction_committer::compaction_job*>
@@ -458,7 +457,6 @@ compaction_committer::begin_compaction_job(model::topic_id_partition tidp) {
         id,
         tidp,
         std::move(metadata_builder),
-        this,
         _io,
         _metastore,
         _policy.get(),
@@ -474,18 +472,22 @@ compaction_committer::begin_compaction_job(model::topic_id_partition tidp) {
     co_return it->second.get();
 }
 
-void compaction_committer::finalize_job(compaction_job_id id) {
-    // Now safe to extract/remove the underlying job state from
-    // `_compaction_jobs`.
+ss::future<> compaction_committer::finalize_compaction_job(
+  compaction_job_id id,
+  chunked_vector<metastore::compaction_update::cleaned_range>
+    new_cleaned_ranges,
+  offset_interval_set removed_tombstone_ranges,
+  metastore::compaction_epoch expected_compaction_epoch) {
     auto job_ptr_opt = _compaction_jobs.extract(id);
     vassert(job_ptr_opt.has_value(), "concurrency issue?");
     auto job_ptr = std::move(job_ptr_opt.value().second);
-}
 
-void compaction_committer::cancel_active_jobs() {
-    for (auto& [_, job] : _compaction_jobs) {
-        job->cancel_job();
-    }
+    co_await job_ptr->finalize(
+      std::move(new_cleaned_ranges),
+      std::move(removed_tombstone_ranges),
+      expected_compaction_epoch);
+
+    co_await job_ptr->stop();
 }
 
 } // namespace cloud_topics::l1

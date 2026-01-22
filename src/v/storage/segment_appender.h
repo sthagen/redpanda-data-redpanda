@@ -71,6 +71,9 @@ public:
         size_t fallocations{0};
         // A counter of number of last page hydrations
         size_t last_page_hydrations{0};
+        // A counter of number of bytes copied into new chunk to avoid writing
+        // to a chunk which write was already dispatched
+        size_t bytes_copied_in_chunk_remainder{0};
 
         fmt::iterator format_to(fmt::iterator it) const;
     };
@@ -221,15 +224,24 @@ private:
     // still heavy weight operations compared to regular flush()
     ss::future<> hard_flush();
 
+    /**
+     * Returns true if there is an inflight write for the current head chunk and
+     * that write is already dispatched.
+     */
+    bool is_chunk_write_dispatched(const chunk_ptr& chunk) const {
+        return chunk && !_inflight.empty() && _inflight.back()->chunk == chunk
+               && _inflight.back()->state == inflight_write::DISPATCHED;
+    }
+
     enum class write_state : char { QUEUED = 1, DISPATCHED, DONE };
 
     struct inflight_write {
         using enum write_state;
 
-        // true if the write extends to the end of the chunk, i.e., this
-        // is the last write that will use the current chunk before it
-        // is recycled
-        bool full;
+        // true if the write extends to the end of the chunk or current write is
+        // the last one using current chunk i.e., this is the last write that
+        // will use the current chunk before it is recycled
+        bool last_write_to_current_chunk;
 
         // the current state of the write
         write_state state = QUEUED;
@@ -250,6 +262,9 @@ private:
         // The committed file offset after this this write, i.e., the offset
         // one beyond the last byte logically written by this write.
         size_t committed_offset;
+
+        // write alignment
+        size_t alignment;
 
         /**
          * @brief Set the state of the write
@@ -285,6 +300,13 @@ private:
          */
         bool
         try_merge(const inflight_write& other, size_t prior_committed_offset);
+
+        /**
+         * Returns true if the write's end is aligned to the page boundary.
+         */
+        bool is_aligned_to_page_boundary() const {
+            return committed_offset % alignment == 0;
+        }
 
         friend std::ostream&
         operator<<(std::ostream& s, const inflight_write& op);

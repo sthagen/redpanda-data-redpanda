@@ -24,39 +24,6 @@ namespace cluster {
 
 struct health_bench : health_report_accessor {
     using health_report_accessor::aggregated_report;
-    /**
-     * @brief The original aggregate function prior to optimization.
-     */
-    template<size_t max_partitions_report>
-    static aggregated_report original_aggregate(report_cache_t& reports) {
-        aggregated_report ret;
-
-        absl::node_hash_map<
-          model::topic_namespace,
-          std::vector<model::partition_id>>
-          leaderless, urp;
-
-        for (const auto& [_, report] : reports) {
-            for (const auto& [tp_ns, partitions] : report->topics) {
-                for (const auto& [_, partition] : partitions) {
-                    if (
-                      !partition.leader_id.has_value()
-                      && ret.leaderless.size() < max_partitions_report) {
-                        ret.leaderless.emplace(
-                          tp_ns.ns, tp_ns.tp, partition.id);
-                    }
-                    if (
-                      partition.under_replicated_replicas.value_or(0) > 0
-                      && ret.under_replicated.size() < max_partitions_report) {
-                        ret.under_replicated.emplace(
-                          tp_ns.ns, tp_ns.tp, partition.id);
-                    }
-                }
-            }
-        }
-
-        return ret;
-    }
 
     void bench(auto aggr_fn) {
         using namespace cluster;
@@ -114,14 +81,6 @@ struct health_bench : health_report_accessor {
         perf_tests::stop_measuring_time();
     }
 };
-
-PERF_TEST_F(health_bench, original) {
-    bench(original_aggregate<original_limit>);
-}
-
-PERF_TEST_F(health_bench, original_unlimited) {
-    bench(original_aggregate<std::numeric_limits<size_t>::max()>);
-}
 
 PERF_TEST_F(health_bench, current) { bench(aggregate); }
 

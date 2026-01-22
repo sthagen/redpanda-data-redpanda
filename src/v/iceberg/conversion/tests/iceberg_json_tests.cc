@@ -835,11 +835,65 @@ TEST(JsonSchema, FormatIgnoredOnNonStringTypes) {
       iceberg::field_required::no));
 }
 
+TEST(JsonSchema, RefInternalSubschema) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://example.com/root.json",
+      "definitions": {
+        "positiveInteger": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        }
+      },
+      "type": "object",
+      "properties": {
+        "age": { "$ref": "#/definitions/positiveInteger" }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "age",
+      iceberg::long_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, RefInfiniteRecursion) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://example.com/root.json",
+      "definitions": {
+        "node": {
+          "type": "object",
+          "properties": {
+            "value": { "type": "integer" },
+            "next": { "$ref": "#/definitions/node" }
+          }
+        }
+      },
+      "type": "object",
+      "properties": {
+        "head": { "$ref": "#/definitions/node" }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Failed to convert JSON schema: Schema depth limit exceeded during "
+      "constraint collection",
+      result.error().what());
+}
+
 TEST(JsonSchema, BannedKeywords) {
     for (const auto& keyword : {
            "patternProperties",
            "dependencies",
-           "$ref",
            "allOf",
            "anyOf",
            "oneOf",

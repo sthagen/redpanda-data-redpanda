@@ -667,6 +667,15 @@ client_pool::client_ptr client_pool::make_client() noexcept {
     return ss::visit(
       _config,
       [this](const s3_configuration& cfg) -> client_ptr {
+          if (cfg.is_gcs) {
+              return ss::make_shared<gcs_client>(
+                weak_from_this(),
+                cfg,
+                _transport_config,
+                _probe,
+                _as,
+                _apply_credentials);
+          }
           return ss::make_shared<s3_client>(
             weak_from_this(),
             cfg,

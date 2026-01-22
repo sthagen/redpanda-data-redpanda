@@ -18,21 +18,35 @@
 
 namespace cloud_topics::l1 {
 
+using errc = state_reader::errc;
+using error = state_reader::error;
+
 namespace {
 
-state_reader::errc to_errc(std::exception_ptr e) {
+error to_error(std::exception_ptr e, std::string_view prefix = "") {
     if (ssx::is_shutdown_exception(e)) {
-        return state_reader::errc::shutting_down;
+        return {errc::shutting_down, "{}{}", prefix, e};
     }
+    errc ec{};
+    ss::sstring msg;
     try {
         std::rethrow_exception(e);
-    } catch (lsm::abort_requested_exception&) {
-        return state_reader::errc::shutting_down;
-    } catch (lsm::corruption_exception&) {
-        return state_reader::errc::corruption;
+    } catch (lsm::abort_requested_exception& ex) {
+        ec = errc::shutting_down;
+        msg = fmt::format("{}{}", prefix, ex.what());
+    } catch (lsm::corruption_exception& ex) {
+        ec = errc::corruption;
+        msg = fmt::format("{}{}", prefix, ex.what());
+    } catch (std::exception& ex) {
+        ec = errc::io_error;
+        msg = fmt::format("{}{}", prefix, ex.what());
+        vlog(cd_log.error, "Unexpected exception: {}", msg);
     } catch (...) {
-        return state_reader::errc::io_error;
+        ec = errc::io_error;
+        msg = fmt::format("{}{}", prefix, e);
+        vlog(cd_log.error, "Unexpected exception_ptr: {}", msg);
     }
+    return {ec, std::move(msg)};
 }
 
 model::topic_id_partition next_partition(const model::topic_id_partition& tp) {
@@ -69,7 +83,7 @@ ss::sstring state_reader::extent_key_range::to_string() {
 }
 
 ss::coroutine::experimental::generator<
-  std::expected<state_reader::extent_row, state_reader::errc>>
+  std::expected<state_reader::extent_row, state_reader::error>>
 state_reader::extent_key_range::get_rows() {
     const bool forward = _direction == direction::forward;
     const auto& start_key = forward ? _base_key : _last_key;
@@ -78,20 +92,22 @@ state_reader::extent_key_range::get_rows() {
     auto fut = co_await ss::coroutine::as_future(_iter.seek(start_key));
     if (fut.failed()) {
         auto ex = fut.get_exception();
-        co_yield std::unexpected(to_errc(ex));
+        co_yield std::unexpected(to_error(ex));
         co_return;
     }
     if (!_iter.valid() || _iter.key() != start_key) {
-        vlog(cd_log.error, "Expected base key: {}", to_string());
-        co_yield std::unexpected(errc::corruption);
+        co_yield std::unexpected(
+          error(errc::corruption, "Expected base key: {}", to_string()));
         co_return;
     }
     while (_iter.valid()) {
         std::exception_ptr ex;
         try {
             if (forward ? (_iter.key() > end_key) : (_iter.key() < end_key)) {
-                vlog(cd_log.error, "Unexpected key past last: {}", to_string());
-                co_yield std::unexpected(errc::corruption);
+                co_yield std::unexpected(error(
+                  errc::corruption,
+                  "Unexpected key past last: {}",
+                  to_string()));
                 co_return;
             }
             auto val = serde::from_iobuf<extent_row_value>(_iter.value());
@@ -111,19 +127,18 @@ state_reader::extent_key_range::get_rows() {
             ex = std::current_exception();
         }
         if (ex) {
-            vlog(
-              cd_log.warn, "Exception when iterating {}: {}", to_string(), ex);
-            co_yield std::unexpected(to_errc(ex));
+            co_yield std::unexpected(to_error(
+              ex, fmt::format("Exception iterating {}: ", to_string())));
             co_return;
         }
     }
 }
 
 ss::future<
-  chunked_vector<std::expected<state_reader::extent_row, state_reader::errc>>>
+  chunked_vector<std::expected<state_reader::extent_row, state_reader::error>>>
 state_reader::extent_key_range::materialize_rows() {
     auto gen = get_rows();
-    chunked_vector<std::expected<extent_row, errc>> ret;
+    chunked_vector<std::expected<extent_row, error>> ret;
     while (auto res = co_await gen()) {
         if (!res.has_value()) {
             break;
@@ -133,17 +148,18 @@ state_reader::extent_key_range::materialize_rows() {
     co_return ret;
 }
 
-ss::future<std::expected<std::optional<metadata_row_value>, state_reader::errc>>
+ss::future<
+  std::expected<std::optional<metadata_row_value>, state_reader::error>>
 state_reader::get_metadata(const model::topic_id_partition& tidp) {
     return get_val<metadata_row_key, metadata_row_value>(tidp);
 }
 
-ss::future<std::expected<std::optional<compaction_state>, state_reader::errc>>
+ss::future<std::expected<std::optional<compaction_state>, state_reader::error>>
 state_reader::get_compaction_metadata(const model::topic_id_partition& tidp) {
     auto opt_val_res
       = co_await get_val<compaction_row_key, compaction_row_value>(tidp);
     if (!opt_val_res.has_value()) {
-        co_return std::unexpected(opt_val_res.error());
+        co_return std::unexpected(std::move(opt_val_res.error()));
     }
     if (!opt_val_res.value().has_value()) {
         co_return std::nullopt;
@@ -151,11 +167,11 @@ state_reader::get_compaction_metadata(const model::topic_id_partition& tidp) {
     co_return opt_val_res.value()->state;
 }
 
-ss::future<std::expected<std::optional<object_entry>, state_reader::errc>>
+ss::future<std::expected<std::optional<object_entry>, state_reader::error>>
 state_reader::get_object(object_id oid) {
     auto opt_val_res = co_await get_val<object_row_key, object_row_value>(oid);
     if (!opt_val_res.has_value()) {
-        co_return std::unexpected(opt_val_res.error());
+        co_return std::unexpected(std::move(opt_val_res.error()));
     }
     if (!opt_val_res.value().has_value()) {
         co_return std::nullopt;
@@ -163,7 +179,7 @@ state_reader::get_object(object_id oid) {
     co_return opt_val_res.value()->object;
 }
 
-ss::future<std::expected<std::optional<term_start>, state_reader::errc>>
+ss::future<std::expected<std::optional<term_start>, state_reader::error>>
 state_reader::get_max_term(const model::topic_id_partition& tidp) {
     iobuf val_buf;
     model::term_id term;
@@ -190,26 +206,23 @@ state_reader::get_max_term(const model::topic_id_partition& tidp) {
         term = key->term;
         val_buf = iter.value();
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
     try {
         auto val = serde::from_iobuf<term_row_value>(std::move(val_buf));
         co_return term_start{
           .term_id = term, .start_offset = val.term_start_offset};
     } catch (...) {
-        vlog(
-          cd_log.error,
-          "Unexpected exception decoding term row value for {} term {} "
-          "key {}: {}",
+        co_return std::unexpected(error(
+          errc::corruption,
+          "Failed to decode term row value for {} term {} key {}",
           tidp,
           term,
-          base_key_str,
-          std::current_exception());
-        co_return std::unexpected(errc::corruption);
+          base_key_str));
     }
 }
 
-ss::future<std::expected<std::optional<extent>, state_reader::errc>>
+ss::future<std::expected<std::optional<extent>, state_reader::error>>
 state_reader::get_extent_ge(
   const model::topic_id_partition& tidp, kafka::offset o) {
     iobuf val_buf;
@@ -248,7 +261,7 @@ state_reader::get_extent_ge(
         base_offset = key->base_offset;
         val_buf = iter.value();
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
     try {
         auto val = serde::from_iobuf<extent_row_value>(std::move(val_buf));
@@ -266,21 +279,18 @@ state_reader::get_extent_ge(
           .oid = val.oid,
         };
     } catch (...) {
-        vlog(
-          cd_log.error,
-          "Unexpected exception decoding extent row value for {} offset {} "
-          "key {}: {}",
+        co_return std::unexpected(error(
+          errc::corruption,
+          "Failed to decode extent row value for {} offset {} key {}",
           tidp,
           base_offset,
-          base_key_str,
-          std::current_exception());
-        co_return std::unexpected(errc::corruption);
+          base_key_str));
     }
 }
 
 ss::future<std::expected<
   std::optional<state_reader::extent_key_range>,
-  state_reader::errc>>
+  state_reader::error>>
 state_reader::get_extent_range(
   const model::topic_id_partition& tidp,
   kafka::offset base,
@@ -313,7 +323,7 @@ state_reader::get_extent_range(
         last_key = ss::sstring(iter.key());
         last_val_buf = iter.value();
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
     try {
         auto val = serde::from_iobuf<extent_row_value>(std::move(last_val_buf));
@@ -321,22 +331,19 @@ state_reader::get_extent_range(
             co_return std::nullopt;
         }
     } catch (...) {
-        vlog(
-          cd_log.error,
-          "Unexpected exception decoding extent row value for {} offset {} "
-          "key {}: {}",
+        co_return std::unexpected(error(
+          errc::corruption,
+          "Failed to decode extent row value for {} offset {} key {}",
           tidp,
           base,
-          base_key,
-          std::current_exception());
-        co_return std::unexpected(errc::corruption);
+          base_key));
     }
     // Position iterator back at base_key to return to the caller.
     try {
         co_await iter.seek(base_key);
         dassert(iter.valid(), "Iterator became invalid for key: {}", base_key);
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
     co_return extent_key_range(
       std::move(base_key),
@@ -347,7 +354,7 @@ state_reader::get_extent_range(
 
 ss::future<std::expected<
   std::optional<std::pair<ss::sstring, ss::sstring>>,
-  state_reader::errc>>
+  state_reader::error>>
 state_reader::find_inclusive_extent_keys(
   const model::topic_id_partition& tidp,
   std::optional<kafka::offset> min_offset,
@@ -432,7 +439,7 @@ state_reader::find_inclusive_extent_keys(
             co_return std::nullopt;
         }
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
 
     co_return std::make_optional(
@@ -441,7 +448,7 @@ state_reader::find_inclusive_extent_keys(
 
 ss::future<std::expected<
   std::optional<state_reader::extent_key_range>,
-  state_reader::errc>>
+  state_reader::error>>
 state_reader::get_inclusive_extents(
   const model::topic_id_partition& tidp,
   std::optional<kafka::offset> min_offset,
@@ -449,7 +456,7 @@ state_reader::get_inclusive_extents(
     auto keys_res = co_await find_inclusive_extent_keys(
       tidp, min_offset, max_offset);
     if (!keys_res.has_value()) {
-        co_return std::unexpected(keys_res.error());
+        co_return std::unexpected(std::move(keys_res.error()));
     }
     if (!keys_res.value().has_value()) {
         co_return std::nullopt;
@@ -465,7 +472,7 @@ state_reader::get_inclusive_extents(
 
 ss::future<std::expected<
   std::optional<state_reader::extent_key_range>,
-  state_reader::errc>>
+  state_reader::error>>
 state_reader::get_inclusive_extents_backward(
   const model::topic_id_partition& tidp,
   std::optional<kafka::offset> min_offset,
@@ -473,7 +480,7 @@ state_reader::get_inclusive_extents_backward(
     auto keys_res = co_await find_inclusive_extent_keys(
       tidp, min_offset, max_offset);
     if (!keys_res.has_value()) {
-        co_return std::unexpected(keys_res.error());
+        co_return std::unexpected(std::move(keys_res.error()));
     }
     if (!keys_res.value().has_value()) {
         co_return std::nullopt;
@@ -508,7 +515,7 @@ bool is_at_term(
 
 } // namespace
 
-ss::future<std::expected<std::optional<term_start>, state_reader::errc>>
+ss::future<std::expected<std::optional<term_start>, state_reader::error>>
 state_reader::get_term_le(
   const model::topic_id_partition& tidp, kafka::offset offset) {
     try {
@@ -540,11 +547,11 @@ state_reader::get_term_le(
         // No term found with start_offset <= offset.
         co_return std::nullopt;
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
 }
 
-ss::future<std::expected<std::optional<kafka::offset>, state_reader::errc>>
+ss::future<std::expected<std::optional<kafka::offset>, state_reader::error>>
 state_reader::get_term_end(
   const model::topic_id_partition& tidp, model::term_id term) {
     try {
@@ -578,25 +585,25 @@ state_reader::get_term_end(
         auto metadata_res
           = co_await get_val<metadata_row_key, metadata_row_value>(tidp);
         if (!metadata_res.has_value()) {
-            co_return std::unexpected(metadata_res.error());
+            co_return std::unexpected(std::move(metadata_res.error()));
         }
         if (!metadata_res.value().has_value()) {
-            vlog(cd_log.error, "Missing partition metadata for {}", tidp);
-            co_return std::unexpected(errc::corruption);
+            co_return std::unexpected(error(
+              errc::corruption, "Missing partition metadata for {}", tidp));
         }
         co_return metadata_res.value()->next_offset;
     } catch (...) {
-        co_return std::unexpected(to_errc(std::current_exception()));
+        co_return std::unexpected(to_error(std::current_exception()));
     }
 }
 
 template<typename KeyT, typename ValT, typename... KeyEncodeArgs>
-ss::future<std::expected<std::optional<ValT>, state_reader::errc>>
+ss::future<std::expected<std::optional<ValT>, state_reader::error>>
 state_reader::get_val(KeyEncodeArgs... args) {
     auto key_str = KeyT::encode(args...);
     auto fut = co_await ss::coroutine::as_future(snap_.get(key_str));
     if (fut.failed()) {
-        co_return std::unexpected(to_errc(fut.get_exception()));
+        co_return std::unexpected(to_error(fut.get_exception()));
     }
     auto opt_buf = fut.get();
     if (!opt_buf.has_value()) {
@@ -606,12 +613,8 @@ state_reader::get_val(KeyEncodeArgs... args) {
         auto val = serde::from_iobuf<ValT>(std::move(*opt_buf));
         co_return val;
     } catch (...) {
-        vlog(
-          cd_log.error,
-          "Unexpected exception decoding value at key {}: {}",
-          key_str,
-          std::current_exception());
-        co_return std::unexpected(errc::corruption);
+        co_return std::unexpected(
+          error(errc::corruption, "Failed to decode value at key {}", key_str));
     }
 }
 

@@ -296,7 +296,10 @@ SEASTAR_THREAD_TEST_CASE(test_writes_disabled) {
 
     BOOST_REQUIRE_EXCEPTION(
       seq.local()
-        .write_mode(std::nullopt, pps::mode::read_only, pps::force::no)
+        .write_mode(
+          pps::context_subject{pps::default_context, pps::subject{""}},
+          pps::mode::read_only,
+          pps::force::no)
         .get(),
       pps::exception,
       [](pps::exception e) {

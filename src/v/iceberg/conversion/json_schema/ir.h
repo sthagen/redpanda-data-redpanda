@@ -307,6 +307,14 @@ public:
     /// See https://www.learnjsonschema.com/2020-12/validation/format
     const std::optional<format>& format() const { return format_; }
 
+    /// \return The raw $ref value.
+    /// See
+    /// https://json-schema.org/understanding-json-schema/structuring#dollarref
+    const std::optional<std::string>& ref_value() const { return ref_value_; }
+
+    /// \return The resolved subschema pointed to by $ref.
+    const subschema* ref() const { return ref_; }
+
 private:
     /// Base.
     schema_resource* parent_base_{};
@@ -326,6 +334,9 @@ private:
     ss::shared_ptr<subschema> additional_items_;
 
     std::optional<enum format> format_;
+
+    std::optional<std::string> ref_value_;
+    const subschema* ref_{nullptr};
 };
 
 /// Represents a JSON Schema resource identified by a canonical URI

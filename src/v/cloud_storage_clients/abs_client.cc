@@ -1094,30 +1094,44 @@ abs_client::do_batch_delete_objects(
     auto& [header, body] = request.value();
     vlog(abs_log.trace, "send batch delete request:\n{}", header);
 
-    auto response_stream = co_await _client.request(
-      std::move(header), body, timeout);
+    std::exception_ptr ex;
+    std::optional<delete_objects_result> result;
+    try {
+        auto response_stream = co_await _client.request(
+          std::move(header), body, timeout);
 
-    co_await response_stream->prefetch_headers();
-    vassert(response_stream->is_header_done(), "Header is not received");
+        co_await response_stream->prefetch_headers();
+        vassert(response_stream->is_header_done(), "Header is not received");
 
-    const auto status = response_stream->get_headers().result();
-    if (status != boost::beast::http::status::accepted) {
-        // If the top level request fails, we expect a regular old XML or JSON
-        // REST error response, like any other endpoint.
-        const auto content_type = util::get_response_content_type(
-          response_stream->get_headers());
-        auto buf = co_await http::drain(std::move(response_stream));
-        throw parse_rest_error_response(content_type, status, std::move(buf));
+        const auto status = response_stream->get_headers().result();
+        if (status != boost::beast::http::status::accepted) {
+            // If the top level request fails, we expect a regular old XML or
+            // JSON REST error response, like any other endpoint.
+            const auto content_type = util::get_response_content_type(
+              response_stream->get_headers());
+            auto buf = co_await http::drain(std::move(response_stream));
+            throw parse_rest_error_response(
+              content_type, status, std::move(buf));
+        }
+
+        const auto& headers = response_stream->get_headers();
+        auto boundary = util::find_multipart_boundary(headers);
+        auto response_buf = co_await http::drain(std::move(response_stream));
+        if (!boundary.has_value()) {
+            throw std::runtime_error(boundary.error());
+        }
+        result = parse_batch_delete_response(
+          std::move(response_buf), boundary.value(), keys);
+    } catch (...) {
+        ex = std::current_exception();
     }
 
-    const auto& headers = response_stream->get_headers();
-    auto boundary = util::find_multipart_boundary(headers);
-    auto response_buf = co_await http::drain(std::move(response_stream));
-    if (!boundary.has_value()) {
-        throw std::runtime_error(boundary.error());
+    co_await body.close();
+
+    if (ex) {
+        std::rethrow_exception(ex);
     }
-    co_return parse_batch_delete_response(
-      std::move(response_buf), boundary.value(), keys);
+    co_return std::move(result).value();
 }
 
 ss::future<result<abs_client::delete_objects_result, error_outcome>>

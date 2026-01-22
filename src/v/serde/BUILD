@@ -96,6 +96,17 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "pair",
+    hdrs = [
+        "rw/pair.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":serde",
+    ],
+)
+
+redpanda_cc_library(
     name = "set",
     hdrs = [
         "rw/set.h",
