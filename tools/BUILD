@@ -102,9 +102,11 @@ genrule(
     testonly = True,
     srcs = [
         "//bazel/thirdparty:omb_minimal",
+        "//bazel/thirdparty:minio",
         "@current_llvm_toolchain//:llvm-profdata",
         "dev_cluster.py",
         ":redpanda_package_for_pgo",
+        "//src/go/rpk/cmd/rpk",
     ],
     outs = ["pgo_profile.profdata"],
     cmd = "$(execpath :train_pgo) " +
@@ -112,6 +114,8 @@ genrule(
           "--llvm-profdata-bin $(execpath @current_llvm_toolchain//:llvm-profdata) " +
           "--redpanda-tar $(location :redpanda_package_for_pgo) " +
           "--omb-benchmark $(execpath //bazel/thirdparty:omb_minimal) " +
+          "--minio-binary $(execpath //bazel/thirdparty:minio) " +
+          "--rpk-binary $(execpath //src/go/rpk/cmd/rpk) " +
           "--combined-profile-file $(RULEDIR)/pgo_profile.profdata",
     tags = [
         "manual",

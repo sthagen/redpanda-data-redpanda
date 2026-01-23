@@ -41,6 +41,7 @@ class ScramCredential(google.protobuf.message.Message):
     NAME_FIELD_NUMBER: builtins.int
     MECHANISM_FIELD_NUMBER: builtins.int
     PASSWORD_FIELD_NUMBER: builtins.int
+    PASSWORD_SET_AT_FIELD_NUMBER: builtins.int
     name: builtins.str
     'The name of the SCRAM credential.'
     mechanism: proto.redpanda.core.common.v1.security_types_pb2.ScramMechanism.ValueType
@@ -48,10 +49,20 @@ class ScramCredential(google.protobuf.message.Message):
     password: builtins.str
     'The password for the SCRAM credential.'
 
-    def __init__(self, *, name: builtins.str=..., mechanism: proto.redpanda.core.common.v1.security_types_pb2.ScramMechanism.ValueType=..., password: builtins.str=...) -> None:
+    @property
+    def password_set_at(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        """The timestamp when the password was last set.
+        For passwords set before this feature was implemented, this will return
+        the Unix epoch (1970-01-01T00:00:00Z).
+        """
+
+    def __init__(self, *, name: builtins.str=..., mechanism: proto.redpanda.core.common.v1.security_types_pb2.ScramMechanism.ValueType=..., password: builtins.str=..., password_set_at: google.protobuf.timestamp_pb2.Timestamp | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['mechanism', b'mechanism', 'name', b'name', 'password', b'password']) -> None:
+    def HasField(self, field_name: typing.Literal['password_set_at', b'password_set_at']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['mechanism', b'mechanism', 'name', b'name', 'password', b'password', 'password_set_at', b'password_set_at']) -> None:
         ...
 Global___ScramCredential: typing_extensions.TypeAlias = ScramCredential
 

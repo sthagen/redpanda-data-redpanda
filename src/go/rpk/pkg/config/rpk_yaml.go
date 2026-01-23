@@ -538,9 +538,9 @@ func MaybePrintAuthSwitchMessage(priorAuth *RpkCloudAuth, currentAuth *RpkCloudA
 	}
 }
 
-// isLikelyCloudCluster checks if the broker URLs indicate this is a cloud
+// IsLikelyCloudCluster checks if the broker URLs indicate this is a cloud
 // cluster.
-func isLikelyCloudCluster(p *RpkProfile) bool {
+func IsLikelyCloudCluster(p *RpkProfile) bool {
 	for _, broker := range p.KafkaAPI.Brokers {
 		if isLikelyCloudBrokerURL(broker) {
 			return true
@@ -564,7 +564,7 @@ func isLikelyCloudBrokerURL(url string) bool {
 // cluster but the profile is not properly configured with FromCloud=true. If
 // so, it prints a helpful warning message and exits.
 func warnIfMisconfiguredCloudProfile(p *RpkProfile) {
-	if !p.FromCloud && isLikelyCloudCluster(p) {
+	if !p.FromCloud && IsLikelyCloudCluster(p) {
 		fmt.Fprintln(os.Stderr, `This appears to be a Redpanda Cloud cluster, but your rpk profile is not aware of it.
 
 Please configure rpk to use Redpanda Cloud by running:

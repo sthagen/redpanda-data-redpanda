@@ -205,6 +205,12 @@ message ScramCredential {
     // The password for the SCRAM credential.
     string password = 3
         [debug_redact = true, (google.api.field_behavior) = INPUT_ONLY];
+
+    // The timestamp when the password was last set.
+    // For passwords set before this feature was implemented, this will return
+    // the Unix epoch (1970-01-01T00:00:00Z).
+    google.protobuf.Timestamp password_set_at = 4
+        [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // The Role resource represents a security role with associated members.

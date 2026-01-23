@@ -14,6 +14,7 @@ go_library(
         "@com_github_alecaivazis_survey_v2//:survey",
         "@com_github_briandowns_spinner//:spinner",
         "@com_github_fatih_color//:color",
+        "@com_github_ladicle_tabwriter//:tabwriter",
         "@com_github_mattn_go_isatty//:go-isatty",
         "@com_github_spf13_afero//:afero",
         "@com_github_twmb_franz_go_pkg_kadm//:kadm",

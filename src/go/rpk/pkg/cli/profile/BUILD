@@ -18,6 +18,7 @@ go_library(
         "set.go",
         "set_globals.go",
         "use.go",
+        "validate.go",
     ],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/profile",
     visibility = ["//visibility:public"],
@@ -47,6 +48,7 @@ go_test(
         "create_test.go",
         "print_test.go",
         "prompt_test.go",
+        "validate_test.go",
     ],
     embed = [":profile"],
     env = {

@@ -641,7 +641,7 @@ def bg_thread_cm(func) -> Callable[..., ContextManager]:
         while (yield):
             try:
                 # Some action we'd like to repeat
-            catch Exception as e:
+            except Exception as e:
                 # Handle exception, typically just log it.
                 # If we (re-)throw an exception, the background thread stops
         # Some cleanup if needed

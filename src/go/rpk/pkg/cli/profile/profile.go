@@ -57,6 +57,7 @@ takes precedence over the environment variable if both are set.
 		newSetCommand(fs, p),
 		newSetGlobalsCommand(fs, p),
 		newUseCommand(fs, p),
+		newValidateCommand(fs, p),
 	)
 
 	return cmd

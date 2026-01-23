@@ -151,7 +151,7 @@ func TestIsLikelyCloudCluster(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isLikelyCloudCluster(tt.profile)
+			result := IsLikelyCloudCluster(tt.profile)
 			require.Equal(t, tt.expected, result)
 		})
 	}

@@ -498,7 +498,7 @@ public:
         const in_progress_update* update = nullptr;
     };
 
-    explicit topic_table(data_migrations::migrated_resources&);
+    explicit topic_table(data_migrations::migrated_resources&, model::node_id);
 
     cluster::notification_id_type
     register_topic_delta_notification(topic_delta_cb_t cb) {

@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 from typing import Any
 import yaml
+from pathlib import Path
 
 CLUSTER_STARTUP_MARKER = "Successfully started Redpanda"
 BENCH_START_MARKER = "Starting benchmark traffic"
@@ -20,6 +21,63 @@ BENCH_START_MARKER = "Starting benchmark traffic"
 # We use the devcluster to launch a basic rf=3 cluster and run OMB against it.
 # Finally we use llvm-profdata to merge the generated profiles (from all
 # brokers) into one file.
+
+ICEBERG_SCHEMA = """
+
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Simple {
+    string name = 1;
+    int32 id = 2;
+    google.protobuf.Timestamp ts = 3;
+}
+"""
+
+ICEBERG_SAMPLE_PAYLOAD = b"\n\x1fhello my name is protobuf shady\x10\xb9`\x1a\x0b\x08\xf4\xf4\xb7\xcb\x06\x10\xc0\xb1\xc3v"
+ICEBERG_TOPIC_NAME = "iceberg-topic"
+
+
+async def setup_iceberg_schema_registry_and_topic(
+    args: argparse.Namespace, tmpdir: Path
+):
+    schema_path = tmpdir / "iceberg_schema.proto"
+    schema_path.write_text(ICEBERG_SCHEMA)
+    schema_create_args: list[str] = [
+        str(args.rpk_binary),
+        "registry",
+        "schema",
+        "create",
+        f"{ICEBERG_TOPIC_NAME}-value",
+        "--schema",
+        str(schema_path),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *schema_create_args,
+        start_new_session=True,
+    )
+    await proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError("Failed to create iceberg schema in schema registry")
+    topic_create_args: list[str] = [
+        str(args.rpk_binary),
+        "topic",
+        "create",
+        ICEBERG_TOPIC_NAME,
+        "-p",
+        "18",
+        "-r",
+        "3",
+        "--topic-config=redpanda.iceberg.mode=value_schema_latest",
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *topic_create_args,
+        start_new_session=True,
+    )
+    await proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError("Failed to create iceberg topic")
 
 
 async def read_until(proc: asyncio.subprocess.Process, marker: str, tag: str):
@@ -45,21 +103,22 @@ async def continue_stream(proc: asyncio.subprocess.Process, tag: str):
         print(f"[{tag}] - {line}")
 
 
-async def start_dev_cluster(dev_cluster_py: str, redpanda_bin: str, tmpdir: str):
-    data_dir = os.path.join(tmpdir, "rp_data")
-    os.makedirs(data_dir, exist_ok=True)
-    cmd = [
+async def start_dev_cluster(redpanda_bin: Path, args: argparse.Namespace, tmpdir: Path):
+    data_dir = tmpdir / "rp_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cmd: list[str] = [
         sys.executable,
-        dev_cluster_py,
+        str(args.dev_cluster_py),
         "--cores",
         "2",
         "-d",
-        data_dir,
+        str(data_dir),
         "--no-use-grafana",
         "--no-use-prometheus",
-        "--no-use-minio",
+        "--minio_executable",
+        str(args.minio_binary),
         "-e",
-        redpanda_bin,
+        str(redpanda_bin),
     ]
     print(f"Launching dev_cluster: {' '.join(cmd)}")
     proc = await asyncio.create_subprocess_exec(
@@ -71,32 +130,82 @@ async def start_dev_cluster(dev_cluster_py: str, redpanda_bin: str, tmpdir: str)
     return proc
 
 
+def omb_driver_config() -> str:
+    config: dict[str, Any] = {
+        "name": "pgo-bl3-like",
+        "driverClass": "io.openmessaging.benchmark.driver.redpanda.RedpandaBenchmarkDriver",
+        "replicationFactor": 3,
+        "reset": True,
+        "topicConfig": "",
+        "commonConfig": (
+            "bootstrap.servers=localhost:9092\n"
+            "request.timeout.ms=300000\n"
+            "security.protocol=PLAINTEXT\n"
+        ),
+        "producerConfig": (
+            "acks=all\nlinger.ms=1\nbatch.size=1\nenable.idempotence=true\n"
+        ),
+        "consumerConfig": (
+            "auto.offset.reset=earliest\n"
+            "enable.auto.commit=True\n"
+            "max.partition.fetch.bytes=1048576\n"
+        ),
+    }
+
+    return yaml.dump(config)
+
+
+def omb_workload_config(tmpdir: Path) -> str:
+    payload_file = tmpdir / "payload.pb"
+    payload_file.write_bytes(ICEBERG_SAMPLE_PAYLOAD)
+
+    workload: dict[str, Any] = {
+        "name": "pgo-bl3-like",
+        "messageSize": len(ICEBERG_SAMPLE_PAYLOAD),
+        "existingTopicList": [ICEBERG_TOPIC_NAME],
+        "payloadFile": str(payload_file),
+        "subscriptionsPerTopic": 1,
+        "producersPerTopic": 10,
+        "consumerPerSubscription": 10,
+        "producerRate": 20000,
+        "consumerBacklogSizeGB": 0,
+        "warmupDurationMinutes": 0,
+        "testDurationMinutes": 2,
+        "keyDistributor": "NO_KEY",
+    }
+
+    return yaml.dump(workload)
+
+
 @dataclass
 class OmbTarget:
-    results_path: str
+    results_path: Path
     total_messages: int
 
 
 async def start_omb(
-    tmpdir: str, omb_benchmark: str
+    tmpdir: Path, omb_benchmark: Path
 ) -> tuple[asyncio.subprocess.Process, OmbTarget]:
-    workload_path = (
-        f"{os.path.dirname(os.path.realpath(__file__))}/omb_config/workload.yaml"
-    )
-    driver_path = (
-        f"{os.path.dirname(os.path.realpath(__file__))}/omb_config/driver.yaml"
-    )
-    results_path = os.path.join(tmpdir, "results.json")
+    tmp_dir = Path(tmpdir) / "omb"
+    tmp_dir.mkdir()
+    results_path = tmpdir / "results.json"
+
+    driver_config = omb_driver_config()
+    driver_path = tmp_dir / "driver.yaml"
+    driver_path.write_text(driver_config)
+    workload_config = omb_workload_config(tmp_dir)
+    workload_path = tmp_dir / "workload.yaml"
+    workload_path.write_text(workload_config)
 
     bench_cmd: list[str] = [
-        omb_benchmark,
+        str(omb_benchmark),
         "--drivers",
-        driver_path,
+        str(driver_path),
         "--output",
-        results_path,
+        str(results_path),
         "--service-version",
         "unknown_version",
-        workload_path,
+        str(workload_path),
     ]
     print(f"Launching omb: {' '.join(bench_cmd)}")
     proc = await asyncio.create_subprocess_exec(
@@ -131,6 +240,35 @@ def check_omb(omb_target: OmbTarget):
         raise RuntimeError("OMB consumed too few messages")
 
 
+def check_iceberg_state(tmpdir: Path):
+    def get_dir_size(path: Path) -> int:
+        return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+    iceberg_dir = (
+        tmpdir
+        / "rp_data/minio/data/panda-bucket/redpanda-iceberg-catalog/redpanda/iceberg-topic/"
+    )
+    dlq_dir = (
+        tmpdir
+        / "rp_data/minio/data/panda-bucket/redpanda-iceberg-catalog/redpanda/iceberg-topic~dlq/"
+    )
+    iceberg_dir_size = get_dir_size(iceberg_dir)
+    dlq_dir_size = get_dir_size(dlq_dir)
+
+    # We check 1MiB in either direction which gives good enough margin. Can't do
+    # exact checks as compression gets involved.
+    threshold = 1024 * 1024
+
+    if iceberg_dir_size < threshold:
+        raise RuntimeError(
+            f"Iceberg data directory is unexpectedly small - {iceberg_dir_size}. Probably not enough data was translated"
+        )
+    if dlq_dir_size > threshold:
+        raise RuntimeError(
+            f"Iceberg DLQ directory is unexpectedly large - {dlq_dir_size}. Probably too much data was failing translation"
+        )
+
+
 async def terminate(proc: asyncio.subprocess.Process, name: str) -> int:
     try:
         print(f"Terminating {name} (pid {proc.pid})")
@@ -143,24 +281,27 @@ async def terminate(proc: asyncio.subprocess.Process, name: str) -> int:
     return await proc.wait()
 
 
-async def profile(args: argparse.Namespace, tmpdir: str, redpanda_bin: str):
+async def profile(args: argparse.Namespace, tmpdir: Path, redpanda_bin: Path):
     cluster_proc: asyncio.subprocess.Process | None = None
     omb_proc: asyncio.subprocess.Process | None = None
     cluster_task: asyncio.Task[None] | None = None
     failed = False
     try:
         cluster_proc = await start_dev_cluster(
-            args.dev_cluster_py,
             redpanda_bin,
+            args,
             tmpdir,
         )
         await read_until(cluster_proc, CLUSTER_STARTUP_MARKER, "cluster")
         cluster_task = asyncio.create_task(continue_stream(cluster_proc, "cluster"))
 
+        await setup_iceberg_schema_registry_and_topic(args, tmpdir)
+
         omb_proc, omb_target = await start_omb(tmpdir, args.omb_benchmark)
         await read_until(omb_proc, BENCH_START_MARKER, "omb")
         await asyncio.create_task(continue_stream(omb_proc, "omb"))
         check_omb(omb_target)
+        check_iceberg_state(tmpdir)
 
     finally:
         if omb_proc:
@@ -177,7 +318,7 @@ async def profile(args: argparse.Namespace, tmpdir: str, redpanda_bin: str):
 
 
 def combine_profiles(
-    args: argparse.Namespace, base_profile_dir: str, combined_profile_file: str
+    args: argparse.Namespace, base_profile_dir: Path, combined_profile_file: Path
 ):
     profiles = glob.glob(f"{base_profile_dir}/*.profraw")
 
@@ -187,19 +328,19 @@ def combine_profiles(
         print(f"Profile: {profile} size: {os.path.getsize(profile)} bytes")
 
     llvm_profdata_cmd: list[str] = [
-        args.llvm_profdata_bin,
+        str(args.llvm_profdata_bin),
         "merge",
         "-o",
-        combined_profile_file,
+        str(combined_profile_file),
         *profiles,
     ]
     print(f"Combining profiles: {' '.join(llvm_profdata_cmd)}")
     subprocess.check_call(llvm_profdata_cmd)
 
 
-def extra_rp_tar(rp_tar: str, temp_dir: str):
-    extract_path = os.path.join(temp_dir, "redpanda_extracted")
-    os.makedirs(extract_path)
+def extra_rp_tar(rp_tar: Path, temp_dir: Path):
+    extract_path = temp_dir / "redpanda_extracted"
+    extract_path.mkdir()
 
     with tarfile.open(rp_tar, "r") as tar:
         for member in tar.getmembers():
@@ -208,7 +349,7 @@ def extra_rp_tar(rp_tar: str, temp_dir: str):
     # Find the redpanda binary (to avoid hardcoding the a little bit brittle path)
     for root, _, files in os.walk(extract_path):
         if "redpanda" in files:
-            redpanda_bin = os.path.join(root, "redpanda")
+            redpanda_bin = Path(root) / "redpanda"
             return redpanda_bin
 
     raise FileNotFoundError("redpanda binary not found in the tarball")
@@ -218,13 +359,13 @@ def main(args: argparse.Namespace):
     with tempfile.TemporaryDirectory(
         prefix="redpanda_pgo_", dir="/dev/shm"
     ) as tmpdirname:
-        profile_dir = os.path.join(tmpdirname, "profile_dir")
+        tmpdir_path = Path(tmpdirname)
+        profile_dir = tmpdir_path / "profile_dir"
         os.makedirs(profile_dir)
         os.environ["LLVM_PROFILE_FILE"] = f"{profile_dir}/data-%p.profraw"
 
-        redpanda_bin = extra_rp_tar(args.redpanda_tar, tmpdirname)
-
-        asyncio.run(profile(args, tmpdirname, redpanda_bin))
+        redpanda_bin = extra_rp_tar(args.redpanda_tar, tmpdir_path)
+        asyncio.run(profile(args, tmpdir_path, redpanda_bin))
         combine_profiles(args, profile_dir, args.combined_profile_file)
 
 
@@ -239,27 +380,37 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dev-cluster-py",
-        type=str,
+        type=Path,
         help="path to dev_cluster.py",
     )
     parser.add_argument(
         "--llvm-profdata-bin",
-        type=str,
+        type=Path,
         help="path to llvm-profdata binary",
     )
     parser.add_argument(
         "--redpanda-tar",
-        type=str,
+        type=Path,
         help="path to redpanda tarball (bazel packaged with runfiles)",
     )
     parser.add_argument(
         "--omb-benchmark",
-        type=str,
+        type=Path,
         help="path to omb benchmark executable",
     )
     parser.add_argument(
+        "--minio-binary",
+        type=Path,
+        help="path to minio binary",
+    )
+    parser.add_argument(
+        "--rpk-binary",
+        type=Path,
+        help="path to rpk binary",
+    )
+    parser.add_argument(
         "--combined-profile-file",
-        type=str,
+        type=Path,
         help="output path for combined PGO profile file",
     )
     args = parser.parse_args()

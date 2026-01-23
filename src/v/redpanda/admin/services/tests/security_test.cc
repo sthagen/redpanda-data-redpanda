@@ -314,6 +314,9 @@ TEST_F(SecurityServiceTest, ConvertToPbScramCredentialSha256) {
     // Therefore, the match should fail.
     EXPECT_TRUE(pb_cred.get_password().empty());
     EXPECT_FALSE(match_scram_credential(pb_cred, security_cred));
+
+    // Verify password_set_at is populated with a real timestamp
+    EXPECT_GT(pb_cred.get_password_set_at(), absl::UnixEpoch());
 }
 
 TEST_F(SecurityServiceTest, ConvertToPbScramCredentialSha512) {
@@ -336,6 +339,32 @@ TEST_F(SecurityServiceTest, ConvertToPbScramCredentialSha512) {
     // Therefore, the match should fail.
     EXPECT_TRUE(pb_cred.get_password().empty());
     EXPECT_FALSE(match_scram_credential(pb_cred, security_cred));
+
+    // Verify password_set_at is populated with a real timestamp
+    EXPECT_GT(pb_cred.get_password_set_at(), absl::UnixEpoch());
+}
+
+TEST_F(SecurityServiceTest, ConvertToPbScramCredentialWithoutTimestamp) {
+    ss::sstring name = "test_user";
+    ss::sstring password = "test_password";
+
+    // Create a SHA-256 SCRAM credential with a missing password_set_at
+    auto security_cred = security::scram_sha256::make_credentials(
+      password,
+      security::scram_sha256::min_iterations,
+      model::timestamp::missing());
+
+    // Convert to protobuf
+    auto pb_cred = convert_to_pb_scram_credential(name, security_cred);
+
+    // Verify the mechanism is set correctly
+    EXPECT_EQ(
+      pb_cred.get_mechanism(), proto::common::scram_mechanism::scram_sha_256);
+    EXPECT_EQ(pb_cred.get_name(), name);
+
+    // Verify password_set_at is set to UnixEpoch for old credentials without
+    // a timestamp.
+    EXPECT_EQ(pb_cred.get_password_set_at(), absl::UnixEpoch());
 }
 
 TEST_F(SecurityServiceTest, ConvertToPbScramCredentialUnknownKeySize) {

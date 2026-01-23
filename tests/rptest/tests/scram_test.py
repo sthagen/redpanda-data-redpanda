@@ -6,6 +6,7 @@
 # As of the Change Date specified in that file, in accordance with
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
+import datetime
 import json
 import random
 import re
@@ -239,6 +240,39 @@ class BaseScramTest(RedpandaTest):
         return PythonLibrdkafka(
             self.redpanda, username=username, password=password, algorithm=algorithm
         )
+
+    def check_credential_on_all_nodes(
+        self, username: str, expected_password_set_at: datetime.datetime | None
+    ) -> bool:
+        """
+        Check that a credential with the given username and expected password_set_at exists on all nodes.
+
+        :returns: true if the credential exists on all nodes
+        """
+        for node in self.redpanda.nodes:
+            self.logger.debug(f"Checking for credential {username} on node {node.name}")
+            try:
+                cred = self.admin.security(node=node).get_scram_credential(
+                    security_pb2.GetScramCredentialRequest(name=username)
+                )
+                self.logger.debug(f"Got credential {username} on node {node.name}")
+                if expected_password_set_at is not None:
+                    password_set_at = cred.scram_credential.password_set_at.ToDatetime(
+                        tzinfo=datetime.timezone.utc
+                    )
+                    if password_set_at != expected_password_set_at:
+                        self.logger.info(
+                            f"Credential {username} on node {node.name} has unexpected password_set_at {password_set_at}, expected {expected_password_set_at}"
+                        )
+                        return False
+            except Exception as e:
+                self.logger.warning(
+                    f"Error getting credential {username} on node {node.name}: {e}"
+                )
+                return False
+
+        self.logger.debug(f"Credential {username} found on all nodes")
+        return True
 
 
 class ScramTest(BaseScramTest):
@@ -583,6 +617,86 @@ class ScramTest(BaseScramTest):
             assert False, f"Expected {test_username} to not exist"
         except RpkException:
             pass
+
+    @cluster(num_nodes=3)
+    def test_scram_password_set_at_v2(self):
+        """
+        Comprehensive test for password_set_at timestamp behavior in v2 API.
+
+        This test verifies that:
+        1. password_set_at is populated when creating a new credential
+        2. getting the credential returns the correct password_set_at
+        3. password_set_at is updated when the password is changed
+        4. password_set_at persists correctly across cluster restarts
+        """
+        username = "test-user-v2"
+        password = "test-password0123456"
+        mechanism = security_types_pb2.SCRAM_MECHANISM_SCRAM_SHA_256
+
+        self.logger.info("Creating credential and verifying password_set_at")
+        created_cred = self.create_scram_credential_v2(username, mechanism, password)
+
+        created_at = created_cred.password_set_at.ToDatetime(
+            tzinfo=datetime.timezone.utc
+        )
+
+        self.logger.info(f"Created credential with password_set_at={created_at}")
+
+        self.logger.info("Wait for created credential to be available on all nodes")
+        wait_until(
+            lambda: self.check_credential_on_all_nodes(username, created_at),
+            timeout_sec=30,
+            backoff_sec=0.5,
+            err_msg=f"Timeout waiting for {username} to propagate to all nodes",
+        )
+
+        self.logger.info(
+            "Got expected credential on every node; created credential propagated to all nodes"
+        )
+
+        self.logger.info("Updating password and verifying password_set_at changes")
+
+        # Sleep to ensure timestamp difference (at least 1 second)
+        time.sleep(1)
+
+        new_password = "new-password0123456"
+        updated_cred = self.update_scram_credential_v2(
+            username, mechanism, new_password
+        )
+
+        updated_at = updated_cred.password_set_at.ToDatetime(
+            tzinfo=datetime.timezone.utc
+        )
+
+        assert updated_at > created_at, (
+            f"password_set_at should be updated: {updated_at} < {created_at}"
+        )
+
+        # Wait for updated credential to be available on all nodes (propagation delay)
+        wait_until(
+            lambda: self.check_credential_on_all_nodes(username, updated_at),
+            timeout_sec=30,
+            backoff_sec=0.5,
+            err_msg=f"Timeout waiting for update to {username} to propagate to all nodes",
+        )
+
+        self.logger.info(
+            "Got expected credential on every node; updated credential propagated to all nodes"
+        )
+
+        self.logger.info("Restarting cluster and verifying password_set_at persistence")
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+
+        wait_until(
+            lambda: self.check_credential_on_all_nodes(username, updated_at),
+            timeout_sec=30,
+            backoff_sec=0.5,
+            err_msg=f"Timeout waiting for credential {username} to be available on all nodes after restart",
+        )
+
+        self.logger.info(
+            "Got expected credential on every node after restart; password_set_at persisted correctly"
+        )
 
 
 class SaslPlainTest(BaseScramTest):

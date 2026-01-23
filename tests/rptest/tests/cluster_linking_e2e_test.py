@@ -2775,6 +2775,190 @@ class ShadowLinkSecurityTests(ShadowLinkTestBase):
             err_msg="Failed to sync acls",
         )
 
+    @cluster(num_nodes=6)
+    def test_group_acl_sync(self):
+        """
+        This test verifies that Group: principal ACLs are synced from source
+        to target cluster when a shadow link is created and configured
+        """
+        req = self.create_default_link_request("test-link")
+
+        resource_filter = shadow_link_pb2.ACLResourceFilter(
+            resource_type=acl_pb2.ACL_RESOURCE_ANY,
+            pattern_type=acl_pb2.ACL_PATTERN_ANY,
+        )
+        access_filter = shadow_link_pb2.ACLAccessFilter(
+            permission_type=acl_pb2.ACL_PERMISSION_TYPE_ANY,
+            operation=acl_pb2.ACL_OPERATION_ANY,
+        )
+        acl_filter = shadow_link_pb2.ACLFilter(
+            resource_filter=resource_filter, access_filter=access_filter
+        )
+        acl_filters: list[shadow_link_pb2.ACLFilter] = [acl_filter]
+
+        security_sync_options = shadow_link_pb2.SecuritySettingsSyncOptions(
+            interval=google.protobuf.duration_pb2.Duration(seconds=1),
+            acl_filters=acl_filters,
+        )
+        req.shadow_link.configurations.security_sync_options.CopyFrom(
+            security_sync_options
+        )
+
+        _ = self.create_link_with_request(req=req)
+        self.logger.info("Successfully created link")
+
+        target_acls: Any = self.target_cluster_rpk.acl_list(format="json")
+        assert len(target_acls["matches"]) == 0, (
+            f"Expected no ACLs on target cluster, got {target_acls}"
+        )
+
+        # Create a Group ACL on the source cluster
+        group_acl = RPKACLInput(
+            allow_principal=["Group:test-group"],
+            allow_host=["*"],
+            topic=["test-topic"],
+            operation=["read", "describe"],
+            resource_pattern_type="literal",
+        )
+        self.source_cluster_rpk.acl_create(group_acl)
+
+        def check_if_group_acls_synced():
+            target_acls: Any = self.target_cluster_rpk.acl_list(format="json")
+            # We expect 2 ACLs (one for read, one for describe)
+            group_acls_found = [
+                acl
+                for acl in target_acls.get("matches", [])
+                if acl.get("principal") == "Group:test-group"
+            ]
+            if len(group_acls_found) != 2:
+                self.logger.debug(f"Found {len(group_acls_found)} ACLs")
+                return False
+
+            self.logger.info(f"Found Group ACLs on target cluster: {group_acls_found}")
+            for acl in group_acls_found:
+                if not (
+                    acl["host"] == "*"
+                    and acl["resource_type"] == "TOPIC"
+                    and acl["resource_name"] == "test-topic"
+                    and acl["resource_pattern_type"] == "LITERAL"
+                    and acl["permission"] == "ALLOW"
+                ):
+                    return False
+            return True
+
+        wait_until(
+            check_if_group_acls_synced,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Failed to sync Group ACLs",
+        )
+
+        self.logger.info("Group ACLs successfully synced")
+
+    @cluster(num_nodes=6)
+    def test_mixed_principal_acl_sync(self):
+        """
+        This test verifies that a mix of User, Role, and Group ACLs are all
+        synced from source to target cluster
+        """
+        req = self.create_default_link_request("test-link")
+
+        resource_filter = shadow_link_pb2.ACLResourceFilter(
+            resource_type=acl_pb2.ACL_RESOURCE_ANY,
+            pattern_type=acl_pb2.ACL_PATTERN_ANY,
+        )
+        access_filter = shadow_link_pb2.ACLAccessFilter(
+            permission_type=acl_pb2.ACL_PERMISSION_TYPE_ANY,
+            operation=acl_pb2.ACL_OPERATION_ANY,
+        )
+        acl_filter = shadow_link_pb2.ACLFilter(
+            resource_filter=resource_filter, access_filter=access_filter
+        )
+        acl_filters: list[shadow_link_pb2.ACLFilter] = [acl_filter]
+
+        security_sync_options = shadow_link_pb2.SecuritySettingsSyncOptions(
+            interval=google.protobuf.duration_pb2.Duration(seconds=1),
+            acl_filters=acl_filters,
+        )
+        req.shadow_link.configurations.security_sync_options.CopyFrom(
+            security_sync_options
+        )
+
+        _ = self.create_link_with_request(req=req)
+        self.logger.info("Successfully created link")
+
+        target_acls: Any = self.target_cluster_rpk.acl_list(format="json")
+        assert len(target_acls["matches"]) == 0, (
+            f"Expected no ACLs on target cluster, got {target_acls}"
+        )
+
+        # Create User ACL
+        user_acl = RPKACLInput(
+            allow_principal=["test-user"],
+            topic=["mixed-topic"],
+            operation=["read"],
+            resource_pattern_type="literal",
+        )
+        self.source_cluster_rpk.acl_create(user_acl)
+
+        # Create Role ACL
+        role_acl = RPKACLInput(
+            allow_role=["test-role"],
+            topic=["mixed-topic"],
+            operation=["write"],
+            resource_pattern_type="literal",
+        )
+        self.source_cluster_rpk.acl_create(role_acl)
+
+        # Create Group ACL
+        group_acl = RPKACLInput(
+            allow_principal=["Group:test-group"],
+            allow_host=["*"],
+            topic=["mixed-topic"],
+            operation=["describe"],
+            resource_pattern_type="literal",
+        )
+        self.source_cluster_rpk.acl_create(group_acl)
+
+        def check_if_all_acls_synced():
+            target_acls: Any = self.target_cluster_rpk.acl_list(format="json")
+            matches = target_acls.get("matches", [])
+
+            user_acl_found = any(
+                acl.get("principal") == "User:test-user"
+                and acl.get("operation") == "READ"
+                for acl in matches
+            )
+            role_acl_found = any(
+                acl.get("principal") == "RedpandaRole:test-role"
+                and acl.get("operation") == "WRITE"
+                for acl in matches
+            )
+            group_acl_found = any(
+                acl.get("principal") == "Group:test-group"
+                and acl.get("operation") == "DESCRIBE"
+                for acl in matches
+            )
+
+            if user_acl_found and role_acl_found and group_acl_found:
+                self.logger.info(f"All ACL types found on target cluster: {matches}")
+                return True
+
+            self.logger.debug(
+                f"Waiting for ACLs - User: {user_acl_found}, Role: {role_acl_found}, "
+                f"Group: {group_acl_found}, matches: {matches}"
+            )
+            return False
+
+        wait_until(
+            check_if_all_acls_synced,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Failed to sync mixed principal ACLs",
+        )
+
+        self.logger.info("All mixed principal ACLs successfully synced")
+
 
 class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
     def _maybe_failure_injector(self, with_failures: bool):

@@ -71,14 +71,12 @@ struct controller_workers {
 public:
     controller_workers()
       : dispatcher(allocator, table, state) {
-        ss::smp::invoke_on_all([] {
-            config::node().node_id.set_value(model::node_id{1});
-        }).get();
         migrated_resources.start().get();
         table
-          .start(ss::sharded_parameter([this] {
-              return std::ref(migrated_resources.local());
-          }))
+          .start(
+            ss::sharded_parameter(
+              [this] { return std::ref(migrated_resources.local()); }),
+            model::node_id{1})
           .get();
         members.start_single().get();
         features.start().get();

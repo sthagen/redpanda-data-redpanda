@@ -159,6 +159,14 @@ proto::admin::scram_credential convert_to_pb_scram_credential(
     }
 
     pb_cred.set_name(std::move(name));
+
+    // Set password_set_at from credential, or UnixEpoch for credentials
+    // without a password_set_at value
+    pb_cred.set_password_set_at(
+      cred.password_set_at().is_missing()
+        ? absl::UnixEpoch()
+        : absl::FromChrono(model::to_time_point(cred.password_set_at())));
+
     return pb_cred;
 }
 

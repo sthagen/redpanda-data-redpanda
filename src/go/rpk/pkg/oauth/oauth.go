@@ -80,7 +80,17 @@ func ClientCredentialFlow(ctx context.Context, cl Client, auth *config.RpkCloudA
 			zap.L().Sugar().Debug("Your existing auth token is still valid, avoiding re-authentication.")
 			return Token{AccessToken: auth.AuthToken}, false, nil
 		}
-		fmt.Println("Your existing authorization token has expired.")
+		fmt.Println("Your client credentials token has expired.")
+
+		// Check if we have the client secret needed to refresh the token
+		if auth.ClientSecret == "" {
+			return Token{}, false, fmt.Errorf(`client secret not available for token refresh
+
+the client secret is not stored in your configuration. To re-authenticate, you can:
+  - Set the RPK_CLOUD_CLIENT_SECRET environment variable
+  - Use the --client-secret flag
+  - Re-login with 'rpk cloud login --client-id %s --client-secret <secret> --save' to persist credentials`, auth.ClientID)
+		}
 	}
 	zap.L().Sugar().Debug("Requesting a new authorization token with your client credentials.")
 	t, err := cl.Token(ctx, auth.ClientID, auth.ClientSecret)
@@ -107,7 +117,7 @@ func DeviceFlow(ctx context.Context, cl Client, auth *config.RpkCloudAuth, noUI,
 			zap.L().Sugar().Debug("Your existing auth token is still valid, avoiding re-authentication.")
 			return Token{AccessToken: auth.AuthToken}, false, nil
 		}
-		fmt.Println("Your existing authorization token has expired.")
+		fmt.Println("Your SSO authorization token has expired. Re-authenticating via browser...")
 	}
 
 	zap.L().Sugar().Debug("Requesting a new authorization token.")

@@ -17,6 +17,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	connectrpc.com/connect v1.19.1
 	github.com/AlecAivazis/survey/v2 v2.3.7
+	github.com/Ladicle/tabwriter v1.0.0
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/aws/aws-sdk-go v1.55.6
 	github.com/beevik/ntp v1.5.0

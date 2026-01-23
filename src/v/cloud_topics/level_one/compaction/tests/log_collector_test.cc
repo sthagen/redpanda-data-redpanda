@@ -30,18 +30,13 @@ using namespace std::chrono_literals;
 namespace cloud_topics::l1 {
 
 struct log_collector_test_fixture : public seastar_test {
-    static void SetUpTestSuite() {
-        ss::smp::invoke_on_all([] {
-            config::node().node_id.set_value(model::node_id{1});
-        }).get();
-    }
-
     ss::future<> SetUpAsync() override {
         co_await _as.start();
         co_await _migrated_resources.start();
-        co_await _topics.start(ss::sharded_parameter([this] {
-            return std::ref(_migrated_resources.local());
-        }));
+        co_await _topics.start(
+          ss::sharded_parameter(
+            [this] { return std::ref(_migrated_resources.local()); }),
+          model::node_id{1});
         co_await _leaders.start_single(std::ref(_topics), std::ref(_as));
     }
 

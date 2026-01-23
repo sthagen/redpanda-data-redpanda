@@ -36,8 +36,9 @@
 namespace cluster {
 
 topic_table::topic_table(
-  data_migrations::migrated_resources& migrated_resources)
-  : _probe(*this)
+  data_migrations::migrated_resources& migrated_resources,
+  model::node_id node_id)
+  : _probe(*this, node_id)
   , _migrated_resources(migrated_resources) {}
 
 ss::future<std::error_code>
