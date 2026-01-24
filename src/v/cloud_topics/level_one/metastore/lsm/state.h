@@ -62,8 +62,8 @@ struct lsm_state
     // Conversion between Redpanda space and LSM DB space.
     model::term_id to_term(lsm::internal::database_epoch) const;
     lsm::internal::database_epoch to_epoch(model::term_id) const;
-    kafka::offset to_offset(lsm::sequence_number) const;
-    lsm::sequence_number to_seqno(kafka::offset) const;
+    model::offset to_offset(lsm::sequence_number) const;
+    lsm::sequence_number to_seqno(model::offset) const;
 
     // The unique identifier for this LSM state. This should be used as the
     // basis for where the database writes its data and metadata.

@@ -51,7 +51,7 @@ public:
     // Returns nullopt if the domain manager for the given L1 metastore NTP, if
     // one exists (e.g. if it is currently leader and has processed the
     // appropriate leadership notification).
-    ss::lw_shared_ptr<domain_manager> get(const model::ntp&) const;
+    ss::shared_ptr<domain_manager> get(const model::ntp&) const;
 
     // Creates the L1 metastore topic, returning false if there was an issue
     // while creating.

@@ -369,6 +369,24 @@ public:
             }
         });
     }
+    ss::future<> step_down_in_term(model::term_id term, std::string_view ctx) {
+        return _op_lock.with([this, term, ctx] {
+            if (_term != term) {
+                vlog(
+                  _ctxlog.trace,
+                  "[{}] Skipping leader step down in term {}, current term: {}",
+                  ctx,
+                  term,
+                  _term);
+                return;
+            }
+            do_step_down(fmt::format("external_stepdown - {}", ctx));
+            if (_leader_id) {
+                _leader_id = std::nullopt;
+                trigger_leadership_notification();
+            }
+        });
+    }
 
     ss::future<std::optional<storage::timequery_result>>
     timequery(storage::timequery_config cfg);

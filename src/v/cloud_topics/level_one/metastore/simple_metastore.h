@@ -51,7 +51,7 @@ private:
 
 // Wrapper around state to implement the `metastore` interface.
 // Not replicated or persisted, used for tests only.
-class domain_manager;
+class simple_domain_manager;
 class simple_metastore : public metastore {
 public:
     ss::future<std::expected<std::unique_ptr<object_metadata_builder>, errc>>
@@ -122,7 +122,7 @@ public:
       size_t) override;
 
 private:
-    friend class domain_manager;
+    friend class simple_domain_manager;
     static std::expected<offsets_response, errc>
     get_offsets(const state&, const model::topic_id_partition&);
     static std::expected<object_response, errc>

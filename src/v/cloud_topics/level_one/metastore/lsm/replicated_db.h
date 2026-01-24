@@ -18,6 +18,7 @@
 #include "lsm/lsm.h"
 #include "lsm/proto/manifest.proto.h"
 #include "model/fundamental.h"
+#include "utils/detailed_error.h"
 
 #include <expected>
 #include <filesystem>
@@ -39,6 +40,7 @@ public:
         not_leader,
         shutting_down,
     };
+    using error = detailed_error<errc>;
 
     // Opens a replicated database for the leader of this term.
     //
@@ -52,17 +54,20 @@ public:
     //
     // It is expected that this is called by the leader once in a given term,
     // before any LSM state updates are replicated in this term.
-    static ss::future<std::expected<std::unique_ptr<replicated_database>, errc>>
+    static ss::future<
+      std::expected<std::unique_ptr<replicated_database>, error>>
     open(
+      model::term_id expected_term,
       stm* s,
       const std::filesystem::path& staging_directory,
       cloud_io::remote* remote,
       const cloud_storage_clients::bucket_name& bucket,
       ss::abort_source& as);
 
-    replicated_database(replicated_database&&) = default;
+    replicated_database(replicated_database&&) = delete;
     ~replicated_database() = default;
-    ss::future<std::expected<void, errc>> close();
+    void start();
+    ss::future<std::expected<void, error>> close();
     bool needs_reopen() const;
 
     // Builds a write batch for the given rows, replicates it to the STM, and
@@ -73,16 +78,16 @@ public:
     // the update actually happened, callers should either retry, or step down
     // as leader to ensure the next leader picks up any potentially timed out
     // writes.
-    ss::future<std::expected<void, errc>>
+    ss::future<std::expected<void, error>>
     write(chunked_vector<write_batch_row> rows);
 
     // Resets the underlying STM to the given manifest.
     // NOTE: once this is called, this database instance must not be used.
-    ss::future<std::expected<void, errc>>
+    ss::future<std::expected<void, error>>
     reset(domain_uuid, std::optional<lsm::proto::manifest> manifest);
 
     domain_uuid get_domain_uuid() const;
-    ss::future<std::expected<void, errc>>
+    ss::future<std::expected<void, error>>
       flush(std::optional<ss::lowres_clock::duration> = std::nullopt);
 
     lsm::database& db() { return db_; }
@@ -100,6 +105,8 @@ private:
       , db_(std::move(db))
       , as_(as) {}
 
+    ss::future<> apply_loop();
+
     // All replication happens with this term as the invariant.
     const model::term_id term_;
 
@@ -108,12 +115,22 @@ private:
     // usable and callers should open a new one.
     const domain_uuid expected_domain_uuid_;
 
+    std::optional<model::offset> applied_offset_;
+
+    // Indicates that there are rows in the volatile buffer that have yet to be
+    // applied to the database.
+    ssx::condition_variable needs_apply_cv_;
+
+    // Indicates that some rows were just applied to the database.
+    ssx::condition_variable finished_apply_cv_;
+
     // STM for replication and state access.
     stm* stm_;
 
     // The underlying LSM database.
     lsm::database db_;
 
+    ss::gate gate_;
     ss::abort_source& as_;
 };
 

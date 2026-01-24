@@ -73,10 +73,15 @@ struct replicated_db_node {
       , bucket(bucket)
       , staging_directory(staging_path.data()) {}
 
-    ss::future<std::expected<replicated_database*, replicated_database::errc>>
+    ss::future<std::expected<replicated_database*, replicated_database::error>>
     open_db() {
         auto ret = co_await replicated_database::open(
-          stm_ptr.get(), staging_directory.get_path(), remote, bucket, as);
+          stm_ptr->raft()->confirmed_term(),
+          stm_ptr.get(),
+          staging_directory.get_path(),
+          remote,
+          bucket,
+          as);
         if (!ret.has_value()) {
             co_return std::unexpected(ret.error());
         }
@@ -480,7 +485,7 @@ TEST_F(ReplicatedDatabaseTest, TestFlushFailure) {
     // gracefully (no hangs, crashes, etc).
     auto flush_res = initial_db->flush(1s).get();
     ASSERT_FALSE(flush_res.has_value());
-    EXPECT_EQ(flush_res.error(), replicated_database::errc::io_error);
+    EXPECT_EQ(flush_res.error().e, replicated_database::errc::io_error);
 }
 
 TEST_F(ReplicatedDatabaseTest, TestResetWithEmptyManifest) {
@@ -586,7 +591,7 @@ TEST_F(ReplicatedDatabaseTest, TestResetFailsNonEmpty) {
 TEST_F(ReplicatedDatabaseTest, TestConcurrentWrites) {
     // Kick off writes in parallel.
     constexpr int num_concurrent_writes = 5;
-    std::vector<ss::future<std::expected<void, replicated_database::errc>>>
+    std::vector<ss::future<std::expected<void, replicated_database::error>>>
       write_futs;
     write_futs.reserve(num_concurrent_writes);
     for (int i = 0; i < num_concurrent_writes; ++i) {

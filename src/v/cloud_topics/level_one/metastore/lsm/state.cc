@@ -65,11 +65,11 @@ lsm::internal::database_epoch lsm_state::to_epoch(model::term_id t) const {
     return lsm::internal::database_epoch(t() + db_epoch_delta);
 }
 
-kafka::offset lsm_state::to_offset(lsm::sequence_number s) const {
-    return kafka::offset(s() - seqno_delta);
+model::offset lsm_state::to_offset(lsm::sequence_number s) const {
+    return model::offset(s() - seqno_delta);
 }
 
-lsm::sequence_number lsm_state::to_seqno(kafka::offset o) const {
+lsm::sequence_number lsm_state::to_seqno(model::offset o) const {
     return lsm::sequence_number(o() + seqno_delta);
 }
 

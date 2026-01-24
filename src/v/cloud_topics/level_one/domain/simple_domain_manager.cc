@@ -7,7 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_one/domain/domain_manager.h"
+#include "cloud_topics/level_one/domain/simple_domain_manager.h"
 
 #include "cloud_topics/level_one/metastore/garbage_collector.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
@@ -65,7 +65,8 @@ meta_to_rpc_extent_metadata(metastore::extent_metadata_vec v) {
 
 } // namespace
 
-domain_manager::domain_manager(ss::shared_ptr<simple_stm> stm, io* io)
+simple_domain_manager::simple_domain_manager(
+  ss::shared_ptr<simple_stm> stm, io* io)
   : gc_interval_(
       config::shard_local_cfg()
         .cloud_topics_long_term_garbage_collection_interval)
@@ -74,11 +75,11 @@ domain_manager::domain_manager(ss::shared_ptr<simple_stm> stm, io* io)
     gc_interval_.watch([this]() { sem_.signal(); });
 }
 
-void domain_manager::start() {
+void simple_domain_manager::start() {
     ssx::spawn_with_gate(gate_, [this] { return gc_loop(); });
 }
 
-ss::future<> domain_manager::stop_and_wait() {
+ss::future<> simple_domain_manager::stop_and_wait() {
     vlog(cd_log.debug, "Domain manager stopping...");
     as_.request_abort();
     sem_.broken();
@@ -86,7 +87,7 @@ ss::future<> domain_manager::stop_and_wait() {
     vlog(cd_log.debug, "Domain manager stopped...");
 }
 
-std::optional<ss::gate::holder> domain_manager::maybe_gate() {
+std::optional<ss::gate::holder> simple_domain_manager::maybe_gate() {
     ss::gate::holder h;
     if (as_.abort_requested() || gate_.is_closed()) {
         return std::nullopt;
@@ -95,7 +96,7 @@ std::optional<ss::gate::holder> domain_manager::maybe_gate() {
 }
 
 ss::future<rpc::add_objects_reply>
-domain_manager::add_objects(rpc::add_objects_request req) {
+simple_domain_manager::add_objects(rpc::add_objects_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::add_objects_reply{
@@ -162,7 +163,7 @@ domain_manager::add_objects(rpc::add_objects_request req) {
 }
 
 ss::future<rpc::replace_objects_reply>
-domain_manager::replace_objects(rpc::replace_objects_request req) {
+simple_domain_manager::replace_objects(rpc::replace_objects_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::replace_objects_reply{
@@ -224,7 +225,8 @@ domain_manager::replace_objects(rpc::replace_objects_request req) {
 }
 
 ss::future<rpc::get_first_offset_ge_reply>
-domain_manager::get_first_offset_ge(rpc::get_first_offset_ge_request req) {
+simple_domain_manager::get_first_offset_ge(
+  rpc::get_first_offset_ge_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::get_first_offset_ge_reply{
@@ -258,7 +260,7 @@ domain_manager::get_first_offset_ge(rpc::get_first_offset_ge_request req) {
 }
 
 ss::future<rpc::get_first_timestamp_ge_reply>
-domain_manager::get_first_timestamp_ge(
+simple_domain_manager::get_first_timestamp_ge(
   rpc::get_first_timestamp_ge_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
@@ -294,7 +296,7 @@ domain_manager::get_first_timestamp_ge(
 }
 
 ss::future<rpc::get_first_offset_for_bytes_reply>
-domain_manager::get_first_offset_for_bytes(
+simple_domain_manager::get_first_offset_for_bytes(
   rpc::get_first_offset_for_bytes_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
@@ -324,7 +326,7 @@ domain_manager::get_first_offset_for_bytes(
 }
 
 ss::future<rpc::get_offsets_reply>
-domain_manager::get_offsets(rpc::get_offsets_request req) {
+simple_domain_manager::get_offsets(rpc::get_offsets_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::get_offsets_reply{
@@ -351,7 +353,7 @@ domain_manager::get_offsets(rpc::get_offsets_request req) {
     };
 }
 
-rpc::get_compaction_info_reply domain_manager::do_get_compaction_info(
+rpc::get_compaction_info_reply simple_domain_manager::do_get_compaction_info(
   const state& stm_state, rpc::get_compaction_info_request req) {
     auto get_res = simple_metastore::get_compaction_info(
       stm_state, req.tp, req.tombstone_removal_upper_bound_ts);
@@ -373,7 +375,8 @@ rpc::get_compaction_info_reply domain_manager::do_get_compaction_info(
 }
 
 ss::future<rpc::get_compaction_info_reply>
-domain_manager::get_compaction_info(rpc::get_compaction_info_request req) {
+simple_domain_manager::get_compaction_info(
+  rpc::get_compaction_info_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::get_compaction_info_reply{
@@ -392,7 +395,8 @@ domain_manager::get_compaction_info(rpc::get_compaction_info_request req) {
 }
 
 ss::future<rpc::get_term_for_offset_reply>
-domain_manager::get_term_for_offset(rpc::get_term_for_offset_request req) {
+simple_domain_manager::get_term_for_offset(
+  rpc::get_term_for_offset_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::get_term_for_offset_reply{
@@ -420,7 +424,7 @@ domain_manager::get_term_for_offset(rpc::get_term_for_offset_request req) {
 }
 
 ss::future<rpc::get_end_offset_for_term_reply>
-domain_manager::get_end_offset_for_term(
+simple_domain_manager::get_end_offset_for_term(
   rpc::get_end_offset_for_term_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
@@ -449,7 +453,7 @@ domain_manager::get_end_offset_for_term(
 }
 
 ss::future<rpc::set_start_offset_reply>
-domain_manager::set_start_offset(rpc::set_start_offset_request req) {
+simple_domain_manager::set_start_offset(rpc::set_start_offset_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::set_start_offset_reply{.ec = rpc::errc::not_leader};
@@ -503,7 +507,7 @@ domain_manager::set_start_offset(rpc::set_start_offset_request req) {
 }
 
 ss::future<rpc::remove_topics_reply>
-domain_manager::remove_topics(rpc::remove_topics_request req) {
+simple_domain_manager::remove_topics(rpc::remove_topics_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::remove_topics_reply{
@@ -564,7 +568,8 @@ domain_manager::remove_topics(rpc::remove_topics_request req) {
 }
 
 ss::future<rpc::get_compaction_infos_reply>
-domain_manager::get_compaction_infos(rpc::get_compaction_infos_request req) {
+simple_domain_manager::get_compaction_infos(
+  rpc::get_compaction_infos_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::get_compaction_infos_reply{
@@ -590,7 +595,8 @@ domain_manager::get_compaction_infos(rpc::get_compaction_infos_request req) {
 }
 
 ss::future<rpc::get_extent_metadata_reply>
-domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
+simple_domain_manager::get_extent_metadata(
+  rpc::get_extent_metadata_request req) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return rpc::get_extent_metadata_reply{
@@ -634,7 +640,7 @@ domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
       .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents))};
 }
 
-ss::future<> domain_manager::gc_loop() {
+ss::future<> simple_domain_manager::gc_loop() {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return;
