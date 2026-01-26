@@ -345,8 +345,17 @@ TEST_F(TranslateTaskTest, TestCleanupAfterOOMError) {
                       as)
                     .get();
 
-    ASSERT_TRUE(result.has_error());
-    ASSERT_EQ(result.error(), datalake::translation_task::errc::no_data);
+    if (result.has_error()) {
+        // There are two ways a writer can handle an OOM. If it allocates the
+        // memory units prior to writing the record then there should be no data
+        // when flushed.
+        ASSERT_EQ(result.error(), datalake::translation_task::errc::no_data);
+    } else {
+        // Otherwise if it allocates the memory units after writing the record
+        // then only a single record should've been written at which point the
+        // OOM error would've bubbled up to the translator.
+        ASSERT_EQ(result.value().last_offset, kafka::offset{0});
+    }
 
     // check no data files are left behind
     ASSERT_THAT(list_data_files().get(), IsEmpty());

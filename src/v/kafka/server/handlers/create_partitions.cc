@@ -290,8 +290,10 @@ ss::future<response_ptr> create_partitions_handler::handle(
             tp.count > cfg->partition_count,
             "Sanity check for request increase partition count failed");
           const auto mutations = (tp.count - cfg->partition_count);
+          // TODO: wire in principal
           return ctx.quota_mgr()
-            .record_partition_mutations(ctx.header().client_id, mutations, now)
+            .record_partition_mutations(
+              std::nullopt, ctx.header().client_id, mutations, now)
             .then([&resp](std::chrono::milliseconds delay) {
                 resp.data.throttle_time_ms = std::max(
                   resp.data.throttle_time_ms, delay);

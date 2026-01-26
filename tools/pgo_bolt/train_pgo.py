@@ -70,6 +70,7 @@ async def setup_iceberg_schema_registry_and_topic(
         "-r",
         "3",
         "--topic-config=redpanda.iceberg.mode=value_schema_latest",
+        "--topic-config=redpanda.iceberg.target.lag.ms=20000",
     ]
     proc = await asyncio.create_subprocess_exec(
         *topic_create_args,

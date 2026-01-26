@@ -404,9 +404,11 @@ ss::future<response_ptr> create_topics_handler::handle(
       begin, valid_range_end, [&ctx, &response, now](const creatable_topic& t) {
           /// Capture before next scheduling point below
           auto& response_ref = response;
-          return ctx.quota_mgr()
+          return ctx
+            .quota_mgr()
+            // TODO: wire in principal
             .record_partition_mutations(
-              ctx.header().client_id, t.num_partitions, now)
+              std::nullopt, ctx.header().client_id, t.num_partitions, now)
             .then([&response_ref](std::chrono::milliseconds delay) {
                 response_ref.data.throttle_time_ms = std::max(
                   response_ref.data.throttle_time_ms, delay);

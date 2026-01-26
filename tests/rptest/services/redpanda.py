@@ -80,7 +80,11 @@ from rptest.context.gcp import GCPContext
 from rptest.services import redpanda_types, tls
 from rptest.services.admin import Admin
 from rptest.services.cloud_broker import CloudBroker
-from rptest.services.redpanda_cloud import CloudCluster, get_config_profile_name
+from rptest.services.redpanda_cloud import (
+    CloudCluster,
+    get_config_profile_name,
+    ThroughputTierInfo,
+)
 from rptest.services.redpanda_installer import (
     VERSION_RE as RI_VERSION_RE,
 )
@@ -1835,10 +1839,10 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         )
 
         self.rebuild_pods_classes()
+        self._initial_node_count = len(self.pods)
 
-        node_count = self.config_profile["nodes_count"]
-        assert self._min_brokers <= node_count, (
-            f"Not enough brokers: test needs {self._min_brokers} but cluster has {node_count}"
+        assert self._min_brokers <= self._initial_node_count, (
+            f"Not enough brokers: test needs {self._min_brokers} but cluster has {self._initial_node_count}"
         )
 
     @property
@@ -2228,6 +2232,37 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         """
         return self._cloud_cluster.get_tier()
 
+    def get_scaled_tier(self) -> ThroughputTierInfo | None:
+        """Get tier limits scaled for the actual number of nodes.
+
+        Returns tier info with limits adjusted proportionally based on
+        the ratio of actual nodes to the default tier node count.
+        Returns None if base tier info is not found.
+        """
+        tier = self.get_tier()
+        if tier is None:
+            return None
+
+        # Global limits
+        global_partition_limit = 112500
+
+        default_nodes = int(self.config_profile["nodes_count"])
+        actual_nodes = len(self.pods)
+
+        if actual_nodes == default_nodes:
+            return tier
+
+        scale_factor = actual_nodes / default_nodes
+
+        return ThroughputTierInfo(
+            max_ingress=int(tier.max_ingress * scale_factor),
+            max_egress=int(tier.max_egress * scale_factor),
+            max_connections_count=int(tier.max_connections_count * scale_factor),
+            max_partition_count=min(
+                int(tier.max_partition_count * scale_factor), global_partition_limit
+            ),
+        )
+
     def get_install_pack(self):
         install_pack_client = InstallPackClient(
             self._cloud_cluster.config.install_pack_url_template,
@@ -2292,20 +2327,20 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
 
         self._cloud_cluster._ensure_cluster_health()
 
-        expected_nodes = int(self.config_profile["nodes_count"])
+        expected_nodes = self._initial_node_count
         active, _, _ = self.get_redpanda_pods_presorted()
         failed = self.get_redpanda_pods_filtered("failed")
         active_count = len(active)
         failed_count = len(failed)
         assert expected_nodes == active_count, (
-            f"Expected {expected_nodes} per tier definition but found {active_count} active pods"
+            f"Expected {expected_nodes} nodes (initial count) but found {active_count} active pods"
         )
         assert failed_count == 0, f"Expected no failed pods, found {failed_count}"
 
         brokers = self._cloud_cluster.get_brokers()
         broker_count = len(brokers)
         assert expected_nodes == broker_count, (
-            f"Expected {expected_nodes} per tier definition but there "
+            f"Expected {expected_nodes} nodes (initial count) but there "
             f"were only {broker_count} brokers: {brokers}"
         )
 

@@ -1688,8 +1688,10 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
           const auto mutations = cfg ? cfg->partition_count : 0;
           /// Capture before next scheduling point below
           auto& resp_delay_ref = resp_delay;
+          // TODO: wire in principal
           return ctx.quota_mgr()
-            .record_partition_mutations(ctx.header().client_id, mutations, now)
+            .record_partition_mutations(
+              std::nullopt, ctx.header().client_id, mutations, now)
             .then([&resp_delay_ref](std::chrono::milliseconds delay) {
                 resp_delay_ref = std::max(delay, resp_delay_ref);
                 return delay == 0ms;
