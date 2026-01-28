@@ -116,7 +116,11 @@ private:
 
 class ImplTest : public testing::Test {
 public:
-    using shadow_map = std::map<ss::sstring, iobuf>;
+    struct shadow_entry {
+        iobuf value;
+        lsm::internal::sequence_number seqno;
+    };
+    using shadow_map = std::map<ss::sstring, shadow_entry>;
 
     void SetUp() override {
         // Make a smaller sized database so we get some actual leveling
@@ -143,6 +147,7 @@ public:
         _db->close().get();
         _underlying_data_persistence->close().get();
         _meta_persistence->close().get();
+        _shadow.clear();
     }
 
     void write_at_least(size_t size) {
@@ -158,7 +163,8 @@ public:
             auto value = iobuf::from(
               random_generators::gen_alphanum_string(1_KiB));
             shadow_batch.insert_or_assign(
-              ss::sstring(key.user_key()), value.share());
+              ss::sstring(key.user_key()),
+              shadow_entry(value.share(), key.seqno()));
             batch->put(key, value.share());
         }
         _db->apply(std::move(batch)).get();
@@ -174,8 +180,8 @@ public:
 
     shadow_map clone_shadow_map() {
         shadow_map s;
-        for (auto& [k, v] : _shadow) {
-            s.emplace(k, v.share());
+        for (auto& [k, e] : _shadow) {
+            s.emplace(k, shadow_entry(e.value.share(), e.seqno));
         }
         return s;
     }
@@ -190,15 +196,20 @@ public:
                 errors.emplace_back("extra elements");
                 break;
             }
-            if (*it != std::make_pair(iter->key().user_key(), iter->value())) {
+            bool key_eq = it->first == iter->key().user_key();
+            bool val_eq = it->second.value == iter->value();
+            bool seqno_eq = it->second.seqno == iter->key().seqno();
+            if (!key_eq || !val_eq || !seqno_eq) {
                 errors.push_back(
                   fmt::format(
                     "expected key {}, got key {}, keys equal {}, values equal "
-                    "{}",
+                    "{}, expected seqno {}, got seqno {}",
                     it->first,
                     iter->key(),
                     it->first == iter->key().user_key(),
-                    it->second == iter->value()));
+                    it->second.value == iter->value(),
+                    it->second.seqno,
+                    iter->key().seqno()));
             }
             ++it;
         }

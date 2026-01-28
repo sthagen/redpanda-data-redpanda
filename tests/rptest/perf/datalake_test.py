@@ -66,7 +66,7 @@ class DatalakeTest(RedpandaTest):
 
         return msg
 
-    @cluster(num_nodes=6)
+    @cluster(num_nodes=7)
     @matrix(cloud_storage_type=supported_storage_types())
     def test_omb(self, cloud_storage_type: str) -> None:
         topic_name = "atestingtopic"
@@ -152,10 +152,8 @@ class DatalakeTest(RedpandaTest):
                 workload=(workload, validator),
                 topology="ensemble",
                 local_payload_dir=payloads,
-                # Share the omb driver node with the iceberg catalog node. Both do hardly anything and this saves us a node.
-                node=dl.catalog_service.get_node(0),
             )
             benchmark.start()
-            benchmark_time_min = benchmark.benchmark_time_mins() + 1
+            benchmark_time_min = benchmark.benchmark_time_mins() + 5
             benchmark.wait(timeout_sec=benchmark_time_min * 60)
             benchmark.check_succeed()

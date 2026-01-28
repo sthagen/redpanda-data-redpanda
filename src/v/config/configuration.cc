@@ -3279,7 +3279,7 @@ configuration::configuration()
       15min)
   , partition_autobalancing_node_autodecommission_timeout_sec(
       *this,
-      "partition_autobalancing_node_autodecommission_time",
+      "partition_autobalancing_node_autodecommission_timeout_sec",
       "When a node is unavailable for at least this timeout duration, it "
       "triggers Redpanda to decommission the node. This property "
       "applies only when `partition_autobalancing_mode` is set to "
@@ -3783,6 +3783,15 @@ configuration::configuration()
       {.needs_restart = needs_restart::no,
        .visibility = visibility::user,
        .aliases = {"schema_registry_normalize_on_startup"}},
+      false)
+  , schema_registry_enable_qualified_subjects(
+      *this,
+      "schema_registry_enable_qualified_subjects",
+      "Enable parsing of qualified subject syntax (:.context:subject). "
+      "When false, subjects are treated literally, as subjects in the default "
+      "context. When true, qualified syntax is parsed to extract context and "
+      "subject.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       false)
   , schema_registry_protobuf_renderer_v2(
       *this, "schema_registry_protobuf_renderer_v2")

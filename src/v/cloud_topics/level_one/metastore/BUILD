@@ -198,6 +198,7 @@ redpanda_cc_library(
     hdrs = [
         "state.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":offset_interval_set",
         "//src/v/base",

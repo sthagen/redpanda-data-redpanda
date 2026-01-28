@@ -13,7 +13,13 @@
 
 namespace pandaproxy::schema_registry {
 
-TEST(ContextSubjectTest, FromString) {
+class ContextSubjectTest : public ::testing::Test {
+protected:
+    void SetUp() override { enable_qualified_subjects::set_local(true); }
+    void TearDown() override { enable_qualified_subjects::reset_local(); }
+};
+
+TEST_F(ContextSubjectTest, FromString) {
     // Unqualified subjects use default context
     EXPECT_EQ(
       context_subject::from_string("my-topic"),
@@ -48,7 +54,7 @@ TEST(ContextSubjectTest, FromString) {
       (context_subject{default_context, subject{":.no-second-colon"}}));
 }
 
-TEST(ContextSubjectTest, ToStringAndRoundTrip) {
+TEST_F(ContextSubjectTest, ToStringAndRoundTrip) {
     // Default context: just the subject
     auto unqualified = context_subject{default_context, subject{"my-topic"}};
     EXPECT_EQ(unqualified.to_string(), "my-topic");
@@ -64,6 +70,42 @@ TEST(ContextSubjectTest, ToStringAndRoundTrip) {
     auto ctx_only = context_subject{context{".my-ctx"}, subject{""}};
     EXPECT_EQ(ctx_only.to_string(), ":.my-ctx:");
     EXPECT_EQ(context_subject::from_string(ctx_only.to_string()), ctx_only);
+}
+
+TEST_F(ContextSubjectTest, FlagOffTreatsQualifiedAsLiteral) {
+    enable_qualified_subjects::reset_local();
+    enable_qualified_subjects::set_local(false);
+
+    auto ctx_sub = context_subject::from_string(":.myctx:my-topic");
+
+    // With flag off, the entire string is the subject in default context
+    EXPECT_EQ(ctx_sub.ctx, default_context);
+    EXPECT_EQ(ctx_sub.sub(), ":.myctx:my-topic");
+}
+
+TEST_F(ContextSubjectTest, FlagOnParsesQualifiedSyntax) {
+    auto ctx_sub = context_subject::from_string(":.myctx:my-topic");
+
+    // With flag on, qualified syntax is parsed
+    EXPECT_EQ(ctx_sub.ctx(), ".myctx");
+    EXPECT_EQ(ctx_sub.sub(), "my-topic");
+}
+
+TEST_F(ContextSubjectTest, FlagOnUnqualifiedUsesDefaultContext) {
+    auto ctx_sub = context_subject::from_string("plain-topic");
+
+    EXPECT_EQ(ctx_sub.ctx, default_context);
+    EXPECT_EQ(ctx_sub.sub(), "plain-topic");
+}
+
+TEST_F(ContextSubjectTest, FlagOffUnqualifiedUsesDefaultContext) {
+    enable_qualified_subjects::reset_local();
+    enable_qualified_subjects::set_local(false);
+
+    auto ctx_sub = context_subject::from_string("plain-topic");
+
+    EXPECT_EQ(ctx_sub.ctx, default_context);
+    EXPECT_EQ(ctx_sub.sub(), "plain-topic");
 }
 
 } // namespace pandaproxy::schema_registry

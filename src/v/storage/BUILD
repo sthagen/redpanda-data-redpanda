@@ -460,6 +460,7 @@ redpanda_cc_library(
         "@seastar",
     ],
     deps = [
+        ":segment_appender",
         "//src/v/metrics",
     ],
 )

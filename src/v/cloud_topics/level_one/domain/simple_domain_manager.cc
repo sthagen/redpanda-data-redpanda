@@ -464,8 +464,9 @@ simple_domain_manager::set_start_offset(rpc::set_start_offset_request req) {
         co_return rpc::set_start_offset_reply{
           .ec = convert_stm_errc(sync_res.error())};
     }
+    bool is_no_op = false;
     auto update_res = set_start_offset_update::build(
-      stm_->state(), req.tp, req.start_offset);
+      stm_->state(), req.tp, req.start_offset, &is_no_op);
     if (!update_res.has_value()) {
         vlog(
           cd_log.debug,
@@ -475,7 +476,7 @@ simple_domain_manager::set_start_offset(rpc::set_start_offset_request req) {
           .ec = rpc::errc::concurrent_requests,
         };
     }
-    if (update_res.value().is_no_op(stm_->state())) {
+    if (is_no_op) {
         vlog(
           cd_log.debug,
           "Request to set {} start offset to {} is no-op",

@@ -693,12 +693,15 @@ replace_objects_update::build(
 
 std::expected<set_start_offset_update, stm_update_error>
 set_start_offset_update::build(
-  const state& state, const model::topic_id_partition& tp, kafka::offset o) {
+  const state& state,
+  const model::topic_id_partition& tp,
+  kafka::offset o,
+  bool* is_no_op) {
     set_start_offset_update update{
       .tp = tp,
       .new_start_offset = o,
     };
-    auto allowed = update.can_apply(state);
+    auto allowed = update.can_apply(state, is_no_op);
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
     }
@@ -706,37 +709,36 @@ set_start_offset_update::build(
 }
 
 std::expected<std::monostate, stm_update_error>
-set_start_offset_update::can_apply(const state& state) {
+set_start_offset_update::can_apply(const state& state, bool* is_no_op) {
     auto prt_ref = state.partition_state(tp);
     if (!prt_ref.has_value()) {
         return std::unexpected(stm_update_error(
           fmt::format("Partition {} not tracked by state", tp)));
     }
     auto& prt = prt_ref->get();
-    if (new_start_offset < prt.start_offset) {
-        return std::unexpected(stm_update_error(
-          fmt::format(
-            "Requested start offset for {} is below the current start: {} < {}",
-            tp,
-            new_start_offset,
-            prt.start_offset)));
-    }
     if (new_start_offset > prt.next_offset) {
         return std::unexpected(stm_update_error(
           fmt::format(
-            "Requested start offset for {} is above the next start: {} < {}",
+            "Requested start offset for {} is above the next offset: {} > {}",
             tp,
             new_start_offset,
             prt.next_offset)));
+    }
+    if (is_no_op) {
+        *is_no_op = new_start_offset <= prt.start_offset;
     }
     return std::monostate{};
 }
 
 std::expected<std::monostate, stm_update_error>
 set_start_offset_update::apply(state& state) {
-    auto allowed = can_apply(state);
+    bool is_no_op = false;
+    auto allowed = can_apply(state, &is_no_op);
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
+    }
+    if (is_no_op) {
+        return std::monostate{};
     }
     auto& p_state
       = state.topic_to_state[tp.topic_id].pid_to_state[tp.partition];
@@ -759,15 +761,6 @@ set_start_offset_update::apply(state& state) {
         c_state.truncate_with_new_start_offset(new_start_offset);
     }
     return std::monostate{};
-}
-
-bool set_start_offset_update::is_no_op(const state& state) const {
-    auto prt_ref = state.partition_state(tp);
-    if (!prt_ref.has_value()) {
-        return false;
-    }
-    const auto& prt = prt_ref->get();
-    return prt.start_offset >= new_start_offset;
 }
 
 std::expected<remove_objects_update, stm_update_error>

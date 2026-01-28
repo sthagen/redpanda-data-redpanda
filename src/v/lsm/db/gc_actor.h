@@ -22,11 +22,12 @@ namespace lsm::db {
 
 // A request to the GC actor to remove old unused files.
 struct gc_message {
-    // The ID of the highest file that has been committed to the database.
-    // Files with higher IDs are ignored as they could be currently built.
-    internal::file_id highest_used_file_id;
     // All the of the live files in the database at this time.
     chunked_hash_set<internal::file_handle> live_files;
+    // The highest file ID that is safe to consider for GC.
+    // Files with IDs > safe_highest_file_id are in-flight and must be skipped.
+    // This is set to (min_in_flight_file_id - 1) by the manifest actor.
+    internal::file_id safe_highest_file_id;
 };
 
 // An actor to remove old files from the database that are no longer being used.

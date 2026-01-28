@@ -639,31 +639,34 @@ simple_metastore::get_earliest_dirty_ts(
 
     const auto& compaction_state = prt.compaction_state;
 
-    // Start search for first dirty offset from the start offset of the log
-    // (which may not be 0 for a `compact,delete` topic). If compaction hasn't
-    // yet been run for this partition, this value is already the first dirty
-    // offset.
-    kafka::offset first_dirty_offset{prt.start_offset};
+    // Get cleaned ranges if compaction has been run.
+    offset_interval_set cleaned_ranges;
     if (compaction_state.has_value()) {
-        const auto& clean_ranges = compaction_state->cleaned_ranges;
-        auto clean_ranges_strm = clean_ranges.make_stream();
-        while (clean_ranges_strm.has_next()) {
-            auto clean_interval = clean_ranges_strm.next();
-            if (first_dirty_offset < clean_interval.base_offset) {
-                break;
-            }
+        cleaned_ranges = compaction_state->cleaned_ranges;
+    }
 
-            first_dirty_offset = kafka::next_offset(clean_interval.last_offset);
+    // Iterate through all extents to find the minimum timestamp among dirty
+    // extents.
+    std::optional<model::timestamp> earliest_dirty_ts;
+    for (const auto& extent : prt.extents) {
+        auto base = extent.base_offset;
+        if (base < prt.start_offset) {
+            // The extent is partially truncated.
+            base = prt.start_offset;
+        }
+        auto last = extent.last_offset;
+
+        if (!cleaned_ranges.covers(base, last)) {
+            // This extent is dirty. Track the minimum timestamp.
+            if (
+              !earliest_dirty_ts.has_value()
+              || extent.max_timestamp < *earliest_dirty_ts) {
+                earliest_dirty_ts = extent.max_timestamp;
+            }
         }
     }
 
-    auto it = std::ranges::lower_bound(
-      prt.extents, first_dirty_offset, std::less<>{}, &extent::last_offset);
-    if (it != prt.extents.end()) {
-        return it->max_timestamp;
-    }
-
-    return std::nullopt;
+    return earliest_dirty_ts;
 }
 
 std::expected<metastore::compaction_epoch, metastore::errc>

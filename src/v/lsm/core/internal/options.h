@@ -165,7 +165,7 @@ struct options {
     size_t block_cache_size = default_block_cache_size;
 
     // The size of a single block within an SST file.
-    constexpr static size_t default_sst_block_size = 8_KiB;
+    constexpr static size_t default_sst_block_size = 16_KiB;
     size_t sst_block_size = default_sst_block_size;
 
     // The frequency at which to generate a new bloom filter.

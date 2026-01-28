@@ -18,6 +18,7 @@
 
 namespace cloud_topics::l1 {
 class io;
+class state_reader;
 
 // Database-backed implementation of domain_manager.
 // Expected to be running on the leader replicas of the partition that backs
@@ -121,6 +122,9 @@ private:
     // prevent further updates from succeeding.
     ss::future<std::expected<void, rpc::errc>>
     write_rows(const gate_writer_locks&, chunked_vector<write_batch_row>);
+
+    ss::future<rpc::get_compaction_info_reply> do_get_compaction_info(
+      const gate_read_lock&, state_reader&, rpc::get_compaction_info_request);
 
     ss::gate gate_;
     ss::abort_source as_;

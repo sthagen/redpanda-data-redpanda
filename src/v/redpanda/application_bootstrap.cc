@@ -384,7 +384,8 @@ void application::start_bootstrap_services() {
       config::node().rpc_server());
 }
 
-void application::wire_up_and_start(::stop_signal& app_signal, bool test_mode) {
+void application::wire_up_and_start(
+  ::stop_signal& app_signal, bool test_mode, bool use_lsm_metastore) {
     // Setup the app level abort service
     construct_service(_as).get();
 
@@ -544,7 +545,7 @@ void application::wire_up_and_start(::stop_signal& app_signal, bool test_mode) {
         controller->set_ready().get();
     }
 
-    start_runtime_services(cd, app_signal);
+    start_runtime_services(cd, app_signal, use_lsm_metastore);
 
     if (_proxy_config && !config::node().recovery_mode_enabled) {
         _proxy->start().get();

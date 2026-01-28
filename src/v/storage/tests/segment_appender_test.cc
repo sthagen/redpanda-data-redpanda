@@ -46,7 +46,7 @@ public:
             | ss::open_flags::truncate,
           ss::file_open_options{});
 
-        storage::segment_appender::options opts(std::nullopt, resources);
+        storage::segment_appender::options opts(std::nullopt, resources, stats);
         appender = std::make_unique<storage::segment_appender>(
           std::move(file), opts);
     }
@@ -188,6 +188,8 @@ public:
 
     std::string_view file_name = "test_segment.log";
     storage::storage_resources resources;
+    ss::lw_shared_ptr<storage::segment_appender::stats> stats
+      = ss::make_lw_shared<storage::segment_appender::stats>();
     std::unique_ptr<storage::segment_appender> appender;
     ss::gate gate;
     iobuf reference;
@@ -262,7 +264,7 @@ TEST_F(SegmentAppenderFixture, TestFlushesAreMerged) {
     }
     ops.emplace_back(flush_op(true));
     execute_operations(std::move(ops)).get();
-    EXPECT_GE(appender->get_stats().fsyncs, 1);
+    EXPECT_GE(stats->fsyncs, 1);
     // TODO: fix possible redundant flushes in segment appender
     // EXPECT_LE(appender->get_stats().fsyncs, 2);
     appender->close().get();
@@ -271,7 +273,7 @@ TEST_F(SegmentAppenderFixture, TestFlushesAreMerged) {
 
 TEST_F(SegmentAppenderFixture, TestConcurrentFlushes) {
     execute_concurrent_flush_and_writes(1, 16_KiB).get();
-    ASSERT_GT(appender->get_stats().bytes_copied_in_chunk_remainder, 0);
+    ASSERT_GT(stats->bytes_copied_in_chunk_remainder, 0);
     appender->close().get();
     ASSERT_TRUE(file_content_equal_to_reference().get());
     ASSERT_EQ(reference.size_bytes(), 16_KiB);
@@ -279,7 +281,7 @@ TEST_F(SegmentAppenderFixture, TestConcurrentFlushes) {
 
 TEST_F(SegmentAppenderFixture, TestConcurrentFlushesPageBoundaryWrites) {
     execute_concurrent_flush_and_writes(4_KiB, 1_MiB).get();
-    ASSERT_EQ(appender->get_stats().bytes_copied_in_chunk_remainder, 0);
+    ASSERT_EQ(stats->bytes_copied_in_chunk_remainder, 0);
     appender->close().get();
     ASSERT_TRUE(file_content_equal_to_reference().get());
     ASSERT_GE(reference.size_bytes(), 1_MiB);
@@ -290,7 +292,7 @@ TEST_F(SegmentAppenderFixture, TestConcurrentFlushesSmallWritesShifted) {
     execute_operation(write_op(8_KiB)).get();
     // now execute concurrent flushes with 1 byte writes
     execute_concurrent_flush_and_writes(1, 16_KiB).get();
-    ASSERT_GT(appender->get_stats().bytes_copied_in_chunk_remainder, 0);
+    ASSERT_GT(stats->bytes_copied_in_chunk_remainder, 0);
     appender->close().get();
     ASSERT_TRUE(file_content_equal_to_reference().get());
     ASSERT_GE(reference.size_bytes(), 24_KiB);

@@ -141,7 +141,7 @@ private:
 class abs_client : public client {
 public:
     abs_client(
-      ss::weak_ptr<client_pool> pool_ptr,
+      ss::weak_ptr<upstream> upstream_ptr,
       const abs_configuration& conf,
       const net::base_transport::configuration& transport_conf,
       ss::shared_ptr<client_probe> probe,
@@ -149,7 +149,7 @@ public:
         apply_credentials);
 
     abs_client(
-      ss::weak_ptr<client_pool> pool_ptr,
+      ss::weak_ptr<upstream> upstream_ptr,
       const abs_configuration& conf,
       const net::base_transport::configuration& transport_conf,
       ss::shared_ptr<client_probe> probe,
@@ -243,6 +243,8 @@ public:
       const plain_bucket_name& bucket,
       const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout) override;
+
+    bool is_valid() const noexcept override;
 
     struct storage_account_info {
         bool is_hns_enabled{false};

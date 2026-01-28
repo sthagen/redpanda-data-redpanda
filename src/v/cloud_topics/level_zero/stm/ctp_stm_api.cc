@@ -180,14 +180,15 @@ ctp_stm_api::fence_epoch(cluster_epoch e) {
     auto res = co_await _stm->fence_epoch(e);
     vlog(
       _log.debug,
-      "Fence acquired = {} in term {}",
+      "Fence acquired = {} for epoch {} in term {}",
       res.has_value(),
+      e,
       res.has_value() ? res->term : model::term_id{-1});
     co_return std::move(res);
 }
 
 std::optional<cluster_epoch> ctp_stm_api::get_max_epoch() const {
-    return _stm->state().get_max_epoch();
+    return _stm->state().get_max_applied_epoch();
 }
 
 std::optional<cluster_epoch> ctp_stm_api::get_max_seen_epoch() const {

@@ -12,7 +12,6 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "container/chunked_hash_map.h"
 #include "lsm/core/internal/iterator.h"
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/options.h"
@@ -23,6 +22,7 @@
 #include "lsm/db/version_set.h"
 #include "lsm/io/persistence.h"
 #include "ssx/condition_variable.h"
+#include "ssx/mutex.h"
 #include "ssx/time.h"
 
 #include <seastar/core/future.hh>
@@ -110,9 +110,9 @@ private:
 
     void maybe_schedule_compaction();
 
-    ss::future<> run_background_compaction();
-
-    ss::future<> flush_memtable();
+    ss::future<> do_flush();
+    ss::future<> do_compaction();
+    ss::future<> apply_edits(ss::lw_shared_ptr<version_edit>);
 
     io::persistence _persistence;
     ss::lw_shared_ptr<internal::options> _opts;
@@ -122,14 +122,13 @@ private:
     ss::optimized_optional<ss::lw_shared_ptr<memtable>> _imm;
     std::unique_ptr<table_cache> _table_cache;
     std::unique_ptr<version_set> _versions;
-    ssx::condition_variable _start_background_work_signal;
     ssx::condition_variable _background_work_finished_signal;
     ss::abort_source _as;
-    bool _background_work_running = false;
-    std::optional<ss::future<>> _background_work;
     snapshot_list _snapshots;
-
     gc_actor _gc_actor;
+    ssx::mutex _manifest_write_mu;
+    std::optional<ss::future<>> _compaction_task;
+    std::optional<ss::future<>> _flush_task;
 };
 
 } // namespace lsm::db

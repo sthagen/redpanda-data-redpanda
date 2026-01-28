@@ -105,6 +105,31 @@ public:
         co_return co_await accessor.replicated_apply(std::move(rb), as);
     }
 
+    /// Helper method that follows the producer pattern: fence → replicate
+    /// Fences the given epoch, and if successful, replicates a batch with that
+    /// epoch. Returns true if both operations succeeded.
+    ss::future<bool> replicate_with_epoch(
+      raft::raft_node_instance& node,
+      ct::cluster_epoch epoch,
+      model::offset base_offset,
+      int32_t seq = 0) {
+        // Fence the epoch first (like producer does)
+        auto fence_result = co_await api(node).fence_epoch(epoch);
+        if (!fence_result.has_value()) {
+            co_return false;
+        }
+
+        // Keep the fence guard alive during replication
+        auto fence_guard = std::move(fence_result.value());
+
+        // Then replicate with that epoch
+        auto batch = make_record_batch(epoch, base_offset, seq);
+        auto res = co_await replicate_record_batch(node, std::move(batch));
+
+        // fence_guard released here when it goes out of scope
+        co_return res.has_value();
+    }
+
     ss::abort_source as;
 };
 
@@ -584,7 +609,7 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
     // Get the previous epoch (should be epoch 2, the previous
     // max_applied_epoch)
     auto stm = get_stm<0>(leader);
-    auto previous_epoch = stm->state().get_previous_epoch();
+    auto previous_epoch = stm->state().get_previous_applied_epoch();
     ASSERT_TRUE_CORO(previous_epoch.has_value());
     ASSERT_EQ_CORO(previous_epoch.value(), ct::cluster_epoch{2});
 
@@ -608,7 +633,7 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
         // get_previous_epoch() returns the committed _previous_epoch, which
         // is still 2 because no batch with epoch 4 has been applied yet.
         // The transient _previous_seen_epoch is 3 (used by epoch_in_window).
-        previous_epoch = stm->state().get_previous_epoch();
+        previous_epoch = stm->state().get_previous_applied_epoch();
         ASSERT_TRUE_CORO(previous_epoch.has_value());
         ASSERT_EQ_CORO(previous_epoch.value(), ct::cluster_epoch{2});
     }
@@ -659,7 +684,7 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
 
     // Get the previous epoch (lower bound of active epochs)
     // The previous epoch is still 2 (no new epochs have been applied)
-    previous_epoch = stm->state().get_previous_epoch();
+    previous_epoch = stm->state().get_previous_applied_epoch();
     ASSERT_TRUE_CORO(previous_epoch.has_value());
     ASSERT_EQ_CORO(previous_epoch.value(), ct::cluster_epoch{2});
 
@@ -685,7 +710,7 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
     }
 
     // The previous epoch is still 2 (no new epochs have been applied)
-    previous_epoch = stm->state().get_previous_epoch();
+    previous_epoch = stm->state().get_previous_applied_epoch();
     ASSERT_TRUE_CORO(previous_epoch.has_value());
     ASSERT_EQ_CORO(previous_epoch.value(), ct::cluster_epoch{2});
 
@@ -703,7 +728,7 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
     ASSERT_TRUE_CORO(inactive_after_lro4);
 
     // Previous epoch should still be 2 (unchanged, no new epochs applied)
-    previous_epoch = stm->state().get_previous_epoch();
+    previous_epoch = stm->state().get_previous_applied_epoch();
     ASSERT_TRUE_CORO(previous_epoch.has_value());
     ASSERT_EQ_CORO(previous_epoch.value(), ct::cluster_epoch{2});
 
@@ -713,4 +738,126 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
     // _previous_epoch - 1) = min(3 - 1, 2 - 1) = min(2, 1) = 1
     auto estimated_inactive_lro4 = leader_api.estimate_inactive_epoch();
     ASSERT_EQ_CORO(estimated_inactive_lro4.value(), ct::cluster_epoch{1});
+}
+
+TEST_F_CORO(
+  ctp_stm_fixture, test_stale_in_memory_window_after_leadership_change) {
+    // This test verifies a bug where a node that becomes leader again
+    // can have a stale in-memory _max_seen_epoch window and incorrectly
+    // accept stale epochs.
+    //
+    // Scenario:
+    // 1. Node 0 is leader with in-memory window [11, 12]
+    // 2. Leadership changes to Node 1
+    // 3. Node 1 advances the window to [13, 15]
+    // 4. Leadership changes back to Node 0
+    // 5. Node 0 still has stale in-memory window [11, 12]
+    // 6. Node 0 incorrectly accepts epoch 11 (which is now stale)
+
+    co_await start();
+    co_await wait_for_leader(raft::default_timeout());
+
+    // Step 1: Node 0 becomes leader and advances the window
+    auto initial_leader_id = get_leader().value();
+    vlog(ct::cd_log.info, "Initial leader: {}", initial_leader_id);
+
+    auto& node0 = node(initial_leader_id);
+
+    // Fence and replicate batches to establish window [11, 12]
+    for (int i = 0; i < 13; i++) {
+        auto epoch = ct::cluster_epoch{i};
+        bool success = co_await replicate_with_epoch(
+          node0, epoch, model::offset{i}, i);
+        ASSERT_TRUE_CORO(success);
+    }
+
+    // Verify Node 0's window
+    auto max_seen_0 = api(node0).get_max_seen_epoch();
+    ASSERT_TRUE_CORO(max_seen_0.has_value());
+    vlog(
+      ct::cd_log.info,
+      "Node {} max_seen_epoch before failover: {}",
+      initial_leader_id,
+      max_seen_0.value());
+    ASSERT_EQ_CORO(max_seen_0.value(), ct::cluster_epoch{12});
+
+    // Step 2: Transfer leadership to a different node
+    // Block the current leader from immediately becoming leader again
+    node0.raft()->block_new_leadership();
+    vlog(
+      ct::cd_log.info,
+      "Triggering leadership change from Node {}",
+      initial_leader_id);
+    co_await node0.raft()->step_down("test_induced_failover");
+
+    // Wait for a different node to become leader
+    co_await wait_for_leader(10s);
+    auto new_leader_id = get_leader().value();
+    ASSERT_NE_CORO(new_leader_id, initial_leader_id)
+      << "New leader should be different";
+    vlog(ct::cd_log.info, "New leader: {}", new_leader_id);
+
+    auto& node1 = node(new_leader_id);
+
+    // Step 3: On new leader, advance the window to [14, 15]
+    for (int i = 13; i < 16; i++) {
+        auto epoch = ct::cluster_epoch{i};
+        bool success = co_await replicate_with_epoch(
+          node1, epoch, model::offset{i}, i);
+        ASSERT_TRUE_CORO(success);
+    }
+
+    auto max_seen_1 = api(node1).get_max_seen_epoch();
+    ASSERT_TRUE_CORO(max_seen_1.has_value());
+    vlog(
+      ct::cd_log.info,
+      "Node {} max_seen_epoch after advancement: {}",
+      new_leader_id,
+      max_seen_1.value());
+    ASSERT_EQ_CORO(max_seen_1.value(), ct::cluster_epoch{15});
+
+    // Step 4: Transfer leadership back to the original leader
+    // This is where the bug manifests: Node 0 has stale in-memory window [11,
+    // 12]
+    node0.raft()->unblock_new_leadership();
+    vlog(
+      ct::cd_log.info,
+      "Transferring leadership back to Node {}",
+      initial_leader_id);
+    co_await node1.raft()->transfer_leadership(
+      raft::transfer_leadership_request{
+        .group = node1.raft()->group(),
+        .target = initial_leader_id,
+        .timeout = 10s});
+
+    co_await wait_for_leader(10s);
+    auto final_leader_id = *get_leader();
+    vlog(ct::cd_log.info, "Final leader: {}", final_leader_id);
+    ASSERT_EQ_CORO(final_leader_id, initial_leader_id)
+      << "Leadership should have transferred back to original leader";
+
+    auto& final_leader = node(final_leader_id);
+
+    // Step 5: Try to fence epoch 11 on the current leader
+    // This epoch is now stale (window is [14, 15] or higher after new leader
+    // replicated through epoch 15)
+    // but if the bug exists and the leader is the original node with
+    // stale in-memory state [11, 12], it might incorrectly accept it
+    vlog(
+      ct::cd_log.info,
+      "Attempting to fence stale epoch 11 on Node {}",
+      final_leader_id);
+
+    auto stale_fence_result
+      = co_await api(final_leader).fence_epoch(ct::cluster_epoch{11});
+
+    // This should FAIL because epoch 11 is now stale
+    // If the bug exists and final_leader == initial_leader_id, this will
+    // incorrectly succeed because the leader has stale in-memory window [11,
+    // 12]
+    ASSERT_FALSE_CORO(stale_fence_result.has_value())
+      << "Leader " << final_leader_id
+      << " incorrectly accepted stale epoch 11. "
+      << "This indicates the bug where in-memory _max_seen_epoch "
+      << "is stale after regaining leadership.";
 }

@@ -164,7 +164,8 @@ ss::future<segment_appender_ptr> make_segment_appender(
   const segment_full_path& path,
   std::optional<uint64_t> segment_size,
   storage_resources& resources,
-  std::optional<ntp_sanitizer_config> ntp_sanitizer_config);
+  std::optional<ntp_sanitizer_config> ntp_sanitizer_config,
+  segment_appender::stats_ptr shared_stats);
 
 uint64_t segment_size_from_config(const storage::ntp_config&);
 

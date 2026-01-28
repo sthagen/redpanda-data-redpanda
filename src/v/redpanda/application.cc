@@ -157,6 +157,13 @@ void application::shutdown() {
           });
     }
 
+    if (upstreams.local_is_initialized()) {
+        upstreams
+          .invoke_on_all(
+            &cloud_storage_clients::upstream_registry::prepare_stop)
+          .get();
+    }
+
     // Stop any I/O to object store: this will cause any readers in flight
     // to abort and enables partition shutdown to proceed reliably.
     if (cloud_storage_clients.local_is_initialized()) {

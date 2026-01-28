@@ -86,7 +86,8 @@ public:
       bool enable_legacy_upload_mode = true,
       bool iceberg_enabled = false,
       bool enable_cloud_topics = false,
-      bool development_cluster_linking_enabled = false);
+      bool development_cluster_linking_enabled = false,
+      bool use_lsm_metastore = false);
 
     // creates single node with default configuration
     redpanda_thread_fixture();
@@ -289,4 +290,5 @@ public:
     ss::sharded<kafka::server> proto;
     bool remove_on_shutdown;
     std::unique_ptr<::stop_signal> app_signal;
+    bool use_lsm_metastore{true};
 };

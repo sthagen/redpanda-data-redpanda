@@ -65,9 +65,12 @@ ss::future<> app::construct(
       ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }));
 
     co_await construct_service(
-      domain_supervisor, controller, ss::sharded_parameter([this] {
-          return &l1_io.local();
-      }));
+      domain_supervisor,
+      controller,
+      ss::sharded_parameter([this] { return &l1_io.local(); }),
+      config::node().l1_staging_path(),
+      ss::sharded_parameter([&remote] { return &remote->local(); }),
+      bucket);
 
     co_await construct_service(
       l1_metastore_router,
@@ -104,11 +107,13 @@ ss::future<> app::construct(
 
     co_await construct_service(
       l0_gc,
+      self,
       ss::sharded_parameter([&] { return &remote->local(); }),
       bucket,
       &controller->get_health_monitor(),
       &controller->get_controller_stm(),
-      &controller->get_topics_state());
+      &controller->get_topics_state(),
+      &controller->get_members_table());
 
     co_await construct_service(housekeeper_manager, ss::sharded_parameter([&] {
                                    return &replicated_metastore.local();
@@ -143,6 +148,7 @@ ss::future<> app::start() {
       [](auto& ds) { return ds.start(); });
     co_await housekeeper_manager.invoke_on_all(&housekeeper_manager::start);
     co_await compaction_scheduler->start();
+    co_await l0_gc.invoke_on_all(&level_zero_gc::start);
 
     // When start is called, we must have registered all the callbacks before
     // this as starting the manager will invoke callbacks for partitions already
@@ -152,23 +158,6 @@ ss::future<> app::start() {
 }
 
 ss::future<> app::wire_up_notifications() {
-    co_await l0_gc.invoke_on_all([this](auto& gc) {
-        // Tie the starting/stopping of L0 GC to the L1 domain partition 0 so
-        // that it's a cluster wide singleton.
-        manager.local().on_l1_domain_leader([&gc](
-                                              const model::ntp& ntp,
-                                              const auto&,
-                                              const auto& partition) noexcept {
-            if (ntp.tp.partition != model::partition_id{0}) {
-                return;
-            }
-            if (partition) {
-                gc.start();
-            } else {
-                gc.pause();
-            }
-        });
-    });
     co_await topic_purge_manager.invoke_on_all([this](auto& purge_mgr) {
         manager.local().on_l1_domain_leader([&purge_mgr](
                                               const model::ntp& ntp,

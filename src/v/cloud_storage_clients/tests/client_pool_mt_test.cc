@@ -12,6 +12,7 @@
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/tests/client_pool_builder.h"
 #include "random/generators.h"
+#include "test_utils/async.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
@@ -409,8 +410,20 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_concurrent_acquire_release) {
 
     // Verify all clients returned to the pool.
     pool
-      .invoke_on_all([&](client_pool& p) {
-          BOOST_CHECK_EQUAL(p.idle_count(), num_connections_per_shard);
+      .invoke_on_all([&](this auto, client_pool& p) -> ss::future<> {
+          try {
+              co_await tests::cooperative_spin_wait_with_timeout(5s, [&p] {
+                  return p.idle_count() == num_connections_per_shard;
+              });
+          } catch (const ss::timed_out_error&) {
+              BOOST_FAIL(
+                ssx::sformat(
+                  "Timed out waiting for all clients to return to the "
+                  "pool on shard {}. Idle: {}, Capacity: {}",
+                  ss::this_shard_id(),
+                  p.idle_count(),
+                  num_connections_per_shard));
+          }
       })
       .get();
 }

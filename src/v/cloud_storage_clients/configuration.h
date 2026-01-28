@@ -172,7 +172,11 @@ build_refresh_credentials_source(
   const client_configuration& config,
   model::cloud_credentials_source cloud_credentials_source);
 
-ss::future<net::base_transport::configuration>
-build_transport_configuration(const client_configuration&);
+ss::future<ss::shared_ptr<ss::tls::certificate_credentials>>
+build_tls_credentials(const client_configuration& config);
+
+net::base_transport::configuration build_transport_configuration(
+  const client_configuration&,
+  ss::shared_ptr<ss::tls::certificate_credentials>);
 
 } // namespace cloud_storage_clients

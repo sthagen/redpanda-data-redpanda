@@ -14,6 +14,7 @@
 #include "absl/container/btree_map.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
+#include "config/startup_config.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
@@ -136,6 +137,10 @@ using subject = named_type<ss::sstring, struct subject_tag>;
 using context = named_type<ss::sstring, struct context_tag>;
 inline const context default_context{"."};
 
+/// Whether qualified subject parsing is enabled. Captured at SR startup.
+using enable_qualified_subjects
+  = config::startup_config<bool, struct enable_qualified_subjects_tag>;
+
 // A subject bound to a context
 struct context_subject {
     constexpr context_subject() = default;
@@ -167,23 +172,7 @@ struct context_subject {
 
     /// Parse from qualified subject ":.context:subject" or unqualified
     /// "subject" (which uses the default context)
-    static context_subject from_string(std::string_view input) {
-        // Check for qualified syntax: starts with ":."
-        if (input.starts_with(":.")) {
-            // Find the second colon that separates context from subject
-            auto second_colon = input.find(':', 2);
-
-            if (second_colon != std::string_view::npos) {
-                auto ctx_str = input.substr(1, second_colon - 1);
-                auto sub_str = input.substr(second_colon + 1);
-
-                return context_subject{context{ctx_str}, subject{sub_str}};
-            }
-        }
-
-        // Default case: unqualified subject or invalid qualified syntax
-        return context_subject{default_context, subject{input}};
-    }
+    static context_subject from_string(std::string_view input);
 
     /// Format as qualified subject ":.context:subject" or "subject" if in the
     /// default context
@@ -199,6 +188,9 @@ struct context_subject {
     bool starts_with(const ss::sstring& prefix) const {
         return to_string().starts_with(prefix);
     }
+
+    /// Returns the qualified subject string for ACL authorization.
+    ss::sstring operator()() const { return to_string(); }
 
     /// Returns true if this represents a context-only identifier (empty
     /// subject). Used to distinguish context-level operations (like setting

@@ -20,6 +20,7 @@ redpanda_cc_btest(
     srcs = [
         "client_pool_test.cc",
     ],
+    cpu = 1,
     deps = [
         ":client_pool_builder",
         "//src/v/base",

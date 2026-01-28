@@ -11,7 +11,9 @@
 #include "cloud_topics/level_one/domain/domain_supervisor.h"
 
 #include "cloud_topics/level_one/common/abstract_io.h"
+#include "cloud_topics/level_one/domain/db_domain_manager.h"
 #include "cloud_topics/level_one/domain/simple_domain_manager.h"
+#include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/logger.h"
 #include "cluster/controller.h"
 #include "cluster/topics_frontend.h"
@@ -26,12 +28,19 @@
 using namespace std::chrono_literals;
 
 namespace cloud_topics::l1 {
-
 class domain_supervisor::impl {
 public:
-    explicit impl(cluster::controller* controller, io* io)
+    explicit impl(
+      cluster::controller* controller,
+      io* io,
+      std::filesystem::path staging_dir,
+      cloud_io::remote* remote,
+      cloud_storage_clients::bucket_name bucket)
       : _controller(controller)
       , _object_io(io)
+      , _staging_dir(std::move(staging_dir))
+      , _remote(remote)
+      , _bucket(std::move(bucket))
       , _queue([](const std::exception_ptr& ex) {
           vlog(cd_log.error, "Unexpected domain supervisor error: {}", ex);
       }) {}
@@ -298,14 +307,34 @@ private:
               raft->term());
             co_return;
         }
-        auto domain_mgr = ss::make_shared<simple_domain_manager>(
-          (*partition)->raft()->stm_manager()->get<simple_stm>(), _object_io);
+        vlog(
+          cd_log.info,
+          "Starting new domain manager for {} in term {}",
+          dm_id,
+          *expected_term);
+
+        ss::shared_ptr<domain_manager> domain_mgr;
+        auto& stm_manager = (*partition)->raft()->stm_manager();
+        if (stm_manager->get<stm>()) {
+            domain_mgr = ss::make_shared<db_domain_manager>(
+              *expected_term,
+              stm_manager->get<stm>(),
+              _staging_dir,
+              _remote,
+              _bucket);
+        } else {
+            domain_mgr = ss::make_shared<simple_domain_manager>(
+              stm_manager->get<simple_stm>(), _object_io);
+        }
         domain_mgr->start();
         _domains.emplace(dm_id, std::move(domain_mgr));
     }
 
     cluster::controller* _controller;
     io* _object_io;
+    std::filesystem::path _staging_dir;
+    cloud_io::remote* _remote;
+    cloud_storage_clients::bucket_name _bucket;
 
     // Queue to process async work associated with starting and stopping domain
     // managers when handling partition notifications.
@@ -321,8 +350,15 @@ private:
     ss::abort_source _as;
 };
 
-domain_supervisor::domain_supervisor(cluster::controller* controller, io* io)
-  : _impl(std::make_unique<impl>(controller, io)) {}
+domain_supervisor::domain_supervisor(
+  cluster::controller* controller,
+  io* io,
+  std::filesystem::path staging_dir,
+  cloud_io::remote* remote,
+  cloud_storage_clients::bucket_name bucket)
+  : _impl(
+      std::make_unique<impl>(
+        controller, io, std::move(staging_dir), remote, std::move(bucket))) {}
 
 domain_supervisor::~domain_supervisor() = default;
 

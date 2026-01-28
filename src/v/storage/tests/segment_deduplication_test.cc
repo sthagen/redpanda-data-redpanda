@@ -526,10 +526,13 @@ TEST(DeduplicateSegmentsTest, TestBadReader) {
     // Set up an appender and index writer.
     auto first_seg = segs[0];
     const auto tmpname = first_seg->reader().path().to_compaction_staging();
-    auto appender
-      = storage::internal::make_segment_appender(
-          tmpname, std::nullopt, disk_log.resources(), cfg.sanitizer_config)
-          .get();
+    auto appender = storage::internal::make_segment_appender(
+                      tmpname,
+                      std::nullopt,
+                      disk_log.resources(),
+                      cfg.sanitizer_config,
+                      nullptr)
+                      .get();
     const auto cmp_idx_tmpname = tmpname.to_compacted_index();
     auto compacted_idx_writer = make_file_backed_compacted_index(
       cmp_idx_tmpname, true, disk_log.resources(), cfg.sanitizer_config);

@@ -193,7 +193,7 @@ class AutoDecommissionTest(PreallocNodesTest):
             {
                 "partition_autobalancing_mode": "continuous",
                 "partition_autobalancing_node_availability_timeout_sec": partition_balancer_unavailable_timeout_s,
-                "partition_autobalancing_node_autodecommission_time": autodecommission_timeout_s,
+                "partition_autobalancing_node_autodecommission_timeout_sec": autodecommission_timeout_s,
                 "partition_autobalancing_tick_interval_ms": partition_balancer_tick_interval_ms,
             }
         )
@@ -267,7 +267,7 @@ class AutoDecommissionTest(PreallocNodesTest):
             {
                 "partition_autobalancing_mode": "continuous",
                 "partition_autobalancing_node_availability_timeout_sec": partition_balancer_unavailable_timeout_s,
-                "partition_autobalancing_node_autodecommission_time": autodecommission_timeout_s,
+                "partition_autobalancing_node_autodecommission_timeout_sec": autodecommission_timeout_s,
                 "partition_autobalancing_tick_interval_ms": partition_balancer_tick_interval_ms,
             }
         )

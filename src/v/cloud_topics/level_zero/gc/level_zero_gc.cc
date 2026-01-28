@@ -9,17 +9,21 @@
  */
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
 
+#include "base/format_to.h"
 #include "base/vlog.h"
 #include "cloud_io/remote.h"
+#include "cloud_storage_clients/types.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
 #include "cluster/health_monitor_frontend.h"
+#include "cluster/members_table.h"
 #include "cluster/topic_table.h"
 #include "ssx/semaphore.h"
 #include "ssx/work_queue.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
+#include <seastar/core/shard_id.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
 
@@ -28,8 +32,11 @@ namespace cloud_topics {
 class level_zero_gc::list_delete_worker {
 public:
     explicit list_delete_worker(
-      std::unique_ptr<object_storage> storage, level_zero_gc_probe& probe)
+      std::unique_ptr<object_storage> storage,
+      std::unique_ptr<node_info> node_info,
+      level_zero_gc_probe& probe)
       : storage_(std::move(storage))
+      , node_info_(std::move(node_info))
       , probe_(&probe)
       , worker_([](std::exception_ptr eptr) {
           vlog(cd_log.warn, "Exception from delete worker: {}", eptr);
@@ -60,37 +67,31 @@ public:
         vlog(cd_log.info, "Stopped cloud topics list/delete worker");
     }
 
-    seastar::future<std::expected<size_t, level_zero_gc::collection_error>>
-    collect() {
-        throw std::runtime_error("not implemented");
-    }
-
     bool has_capacity() const { return page_sem_.available_units() > 0; }
 
     seastar::future<std::expected<
-      cloud_storage_clients::client::list_bucket_result,
+      chunked_vector<cloud_storage_clients::client::list_bucket_item>,
       cloud_storage_clients::error_outcome>>
     next_page() {
-        // cached continuation is single use. pass it to list_objects and null
-        // it out immediately.
-        auto objects = co_await storage_->list_objects(
-          &as_, std::exchange(continuation_token_, std::nullopt));
+        while (
+          !as_.abort_requested()
+          && (continuation_token_.has_value() || (curr_prefix_ = next_prefix()).has_value())) {
+            vassert(
+              curr_prefix_.has_value(),
+              "Expected curr_prefix_ to be populated here...");
+            auto objects = co_await do_next_page(curr_prefix_.value());
 
-        // fairly naive approach to caching the token. if the list request
-        // failed, we leave the cached token empty, but if some other error
-        // occurs while processing a page, we keep the token and "skip" that
-        // page. with lexicographically ordered list results and monotonic
-        // epochs, any eligible keys in a skipped page are guaranteed to appear
-        // in a subsequent round. given the volume of L0 objects at higher
-        // throughput rates, we're going to err on the side of making progress
-        // (vs performing a perfect sweep of outstanding objects).
-        if (
-          objects.has_value()
-          && !objects.value().next_continuation_token.empty()) {
-            continuation_token_.emplace(
-              std::move(objects.value().next_continuation_token));
+            // we could filter here to ensure that all the prefixes are in
+            // range, but if they're not it doesn't really matter. all best
+            // effort.
+            if (!objects.has_value() || !objects.value().empty()) {
+                co_return std::move(objects);
+            }
+
+            // nothing to do...try the next prefix
         }
-        co_return objects;
+        co_return chunked_vector<
+          cloud_storage_clients::client::list_bucket_item>{};
     }
 
     size_t delete_objects(
@@ -163,7 +164,50 @@ public:
     }
 
 private:
+    std::optional<cloud_storage_clients::object_key> next_prefix() {
+        key_prefixes_.set_range(compute_prefix_range(
+          node_info_->shard_index(), node_info_->total_shards()));
+        return key_prefixes_.consume_prefix();
+    }
+
+    seastar::future<std::expected<
+      chunked_vector<cloud_storage_clients::client::list_bucket_item>,
+      cloud_storage_clients::error_outcome>>
+    do_next_page(const cloud_storage_clients::object_key& prefix) {
+        vlog(
+          cd_log.trace,
+          "list_delete_worker: Processing key prefix {}",
+          curr_prefix_);
+        // cached continuation is single use. pass it to list_objects and
+        // null it out immediately.
+        auto list_result = co_await storage_->list_objects(
+          &as_, curr_prefix_, std::exchange(continuation_token_, std::nullopt));
+        if (!list_result.has_value()) {
+            co_return std::unexpected{list_result.error()};
+        }
+
+        auto objects = std::move(list_result).value();
+        if (objects.contents.empty()) {
+            co_return std::move(objects.contents);
+        }
+
+        // fairly naive approach to caching the token. if the list request
+        // failed, we leave the cached token empty, but if some other error
+        // occurs while processing a page, we keep the token and "skip" that
+        // page. with lexicographically ordered list results and monotonic
+        // epochs, any eligible keys in a skipped page are guaranteed to
+        // appear in a subsequent round. given the volume of L0 objects at
+        // higher throughput rates, we're going to err on the side of making
+        // progress (vs performing a perfect sweep of outstanding objects).
+        if (objects.is_truncated && !objects.next_continuation_token.empty()) {
+            continuation_token_.emplace(
+              std::move(objects.next_continuation_token));
+        }
+        co_return std::move(objects.contents);
+    }
+
     std::unique_ptr<object_storage> storage_;
+    std::unique_ptr<node_info> node_info_;
     level_zero_gc_probe* probe_;
     ssx::work_queue worker_;
     // TODO: configurable limits?
@@ -175,6 +219,8 @@ private:
     seastar::abort_source as_{};
     seastar::gate gate_{};
     std::optional<ss::sstring> continuation_token_{};
+    std::optional<cloud_storage_clients::object_key> curr_prefix_;
+    prefix_compressor key_prefixes_;
 };
 
 class object_storage_remote_impl : public level_zero_gc::object_storage {
@@ -194,15 +240,18 @@ public:
       cloud_storage_clients::error_outcome>>
     list_objects(
       seastar::abort_source* asrc,
+      std::optional<cloud_storage_clients::object_key> prefix,
       std::optional<ss::sstring> continuation_token) override {
         retry_chain_node rtc(*asrc, timeout, backoff);
         auto res = co_await remote_->list_objects(
           bucket_,
           rtc,
-          object_path_factory::level_zero_data_dir(),
+          std::move(prefix).value_or(
+            object_path_factory::level_zero_data_dir()),
           std::nullopt /*delimiter*/,
           std::nullopt /*item_filter*/,
-          std::nullopt /*max_keys*/,
+          // TODO: should depend on cloud backend (abs is 5000 max)
+          1000 /*max_keys*/,
           std::move(continuation_token));
         if (res.has_value()) {
             co_return std::move(res).assume_value();
@@ -484,10 +533,39 @@ private:
     seastar::sharded<cluster::topic_table>* topic_table_;
 };
 
+class node_info_impl : public level_zero_gc::node_info {
+public:
+    node_info_impl(
+      model::node_id self, seastar::sharded<cluster::members_table>* mt)
+      : self_(self)
+      , members_table_(mt) {}
+
+    size_t shard_index() const final {
+        return shards_up_to(self_) + seastar::this_shard_id();
+    }
+    size_t total_shards() const final {
+        return shards_up_to(model::node_id::max());
+    }
+
+private:
+    size_t shards_up_to(model::node_id ub) const {
+        size_t total{0};
+        for (const auto& [id, node] : members_table_->local().nodes()) {
+            if (id < ub) {
+                total += node.broker.properties().cores;
+            }
+        }
+        return total;
+    }
+    model::node_id self_;
+    seastar::sharded<cluster::members_table>* members_table_;
+};
+
 level_zero_gc::level_zero_gc(
   level_zero_gc_config config,
   std::unique_ptr<object_storage> storage,
-  std::unique_ptr<epoch_source> epoch_source)
+  std::unique_ptr<epoch_source> epoch_source,
+  std::unique_ptr<node_info> node_info)
   : config_(std::move(config))
   , epoch_source_(std::move(epoch_source))
   , should_run_(false) // begin in a stopped state
@@ -495,14 +573,17 @@ level_zero_gc::level_zero_gc(
   , worker_(worker())
   , probe_(config::shard_local_cfg().disable_metrics())
   , delete_worker_(
-      std::make_unique<list_delete_worker>(std::move(storage), probe_)) {}
+      std::make_unique<list_delete_worker>(
+        std::move(storage), std::move(node_info), probe_)) {}
 
 level_zero_gc::level_zero_gc(
+  model::node_id self,
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
   seastar::sharded<cluster::health_monitor_frontend>* health_monitor,
   seastar::sharded<cluster::controller_stm>* controller_stm,
-  seastar::sharded<cluster::topic_table>* topic_table)
+  seastar::sharded<cluster::topic_table>* topic_table,
+  seastar::sharded<cluster::members_table>* members_table)
   : level_zero_gc(
       level_zero_gc_config{
         .deletion_grace_period
@@ -516,7 +597,8 @@ level_zero_gc::level_zero_gc(
       },
       std::make_unique<object_storage_remote_impl>(remote, std::move(bucket)),
       std::make_unique<epoch_source_impl>(
-        health_monitor, controller_stm, topic_table)) {}
+        health_monitor, controller_stm, topic_table),
+      std::make_unique<node_info_impl>(self, members_table)) {}
 
 level_zero_gc::~level_zero_gc() = default;
 
@@ -676,7 +758,7 @@ level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
     std::optional<cluster_epoch> last_epoch;
     object_id::prefix_t last_prefix{0};
 
-    for (const auto& object : candidate_objects.value().contents) {
+    for (const auto& object : candidate_objects.value()) {
         const auto object_epoch = object_path_factory::level_zero_path_to_epoch(
           object.key);
 
@@ -756,6 +838,23 @@ level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
 
     co_return delete_worker_->delete_objects(
       std::move(eligible_objects), object_keys_total_bytes);
+}
+
+std::optional<prefix_range_inclusive>
+compute_prefix_range(size_t shard_idx, size_t total_shards) {
+    auto total_prefixes = object_id::prefix_max + 1;
+    total_shards = std::min(total_shards, static_cast<size_t>(total_prefixes));
+    if (shard_idx >= total_shards) {
+        return std::nullopt;
+    }
+    auto stride = total_prefixes / total_shards;
+    auto min = static_cast<object_id::prefix_t>(shard_idx * stride);
+    auto max = static_cast<object_id::prefix_t>(min + stride - 1);
+    if (shard_idx == total_shards - 1) {
+        max = object_id::prefix_max;
+    }
+
+    return prefix_range_inclusive{min, max};
 }
 
 } // namespace cloud_topics

@@ -902,7 +902,7 @@ get_allowed_operations<acl_cluster_name>();
 template const std::vector<acl_operation>&
 get_allowed_operations<kafka::transactional_id>();
 template const std::vector<acl_operation>&
-get_allowed_operations<pandaproxy::schema_registry::subject>();
+get_allowed_operations<pandaproxy::schema_registry::context_subject>();
 template const std::vector<acl_operation>&
 get_allowed_operations<pandaproxy::schema_registry::registry_resource>();
 

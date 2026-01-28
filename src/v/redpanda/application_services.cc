@@ -16,6 +16,7 @@
 #include "cloud_storage/remote.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/configuration.h"
+#include "cloud_storage_clients/upstream_registry.h"
 #include "cloud_topics/app.h"
 #include "cluster/archival/archiver_manager.h"
 #include "cluster/archival/ntp_archiver_service.h"
@@ -182,8 +183,19 @@ void application::wire_up_redpanda_services(
         cloud_config = cloud_storage::configuration::get_config().get();
         backend = cloud_storage_clients::infer_backend_from_configuration(
           cloud_config->client_config, cloud_config->cloud_credentials_source);
+        construct_service(upstreams, cloud_config->client_config).get();
+        upstreams
+          .invoke_on_all(&cloud_storage_clients::upstream_registry::start)
+          .get();
+        upstreams
+          .invoke_on_all(
+            &cloud_storage_clients::upstream_registry::start_evictor,
+            /*interval=*/30s,
+            /*max_idle_time=*/300s)
+          .get();
         construct_service(
           cloud_storage_clients,
+          ss::sharded_parameter([this] { return std::ref(upstreams.local()); }),
           cloud_config->connection_limit,
           cloud_config->client_config,
           cloud_storage_clients::client_pool_overdraft_policy::borrow_if_empty)

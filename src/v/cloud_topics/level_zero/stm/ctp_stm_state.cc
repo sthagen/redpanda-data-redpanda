@@ -11,6 +11,7 @@
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 
 #include "model/fundamental.h"
+#include "utils/to_string.h"
 
 namespace cloud_topics {
 
@@ -37,8 +38,13 @@ ctp_stm_state::estimate_min_epoch() const noexcept {
 }
 
 std::optional<cluster_epoch>
-ctp_stm_state::get_previous_epoch() const noexcept {
+ctp_stm_state::get_previous_applied_epoch() const noexcept {
     return _previous_applied_epoch;
+}
+
+std::optional<cluster_epoch>
+ctp_stm_state::get_previous_seen_epoch() const noexcept {
+    return _previous_seen_epoch;
 }
 
 bool ctp_stm_state::epoch_in_window(cluster_epoch epoch) const noexcept {
@@ -54,6 +60,12 @@ bool ctp_stm_state::epoch_in_window(cluster_epoch epoch) const noexcept {
     return epoch >= begin && epoch <= end;
 }
 
+bool ctp_stm_state::epoch_above_window(cluster_epoch epoch) const noexcept {
+    auto end = _max_seen_epoch.value_or(
+      _max_applied_epoch.value_or(cluster_epoch::min()));
+    return epoch > end;
+}
+
 std::optional<cluster_epoch>
 ctp_stm_state::estimate_inactive_epoch() const noexcept {
     return estimate_min_epoch().transform(prev_cluster_epoch);
@@ -63,10 +75,12 @@ void ctp_stm_state::advance_epoch(cluster_epoch epoch, model::offset offset) {
     // The STM works on both leader and followers, on a leader the
     // max_seen_epoch epoch is updated by the fencing mechanism.
     // On the follower the max_seen_epoch epoch has to follow the max epoch.
-    _max_seen_epoch = std::max(
-      _max_seen_epoch.value_or(cluster_epoch::min()), epoch);
+    if (epoch > _max_seen_epoch) {
+        _previous_seen_epoch = _max_seen_epoch.value_or(epoch);
+        _max_seen_epoch = epoch;
+    }
     // Register new epoch
-    if (_max_applied_epoch.value_or(cluster_epoch::min()) < epoch) {
+    if (epoch > _max_applied_epoch.value_or(cluster_epoch::min())) {
         // A new max epoch requires the sliding window of epoch values in flight
         // to be moved.
         if (!_min_epoch_lower_bound.has_value()) {
@@ -99,7 +113,8 @@ void ctp_stm_state::advance_last_reconciled_offset(
       new_last_reconciled_log_offset);
 }
 
-std::optional<cluster_epoch> ctp_stm_state::get_max_epoch() const noexcept {
+std::optional<cluster_epoch>
+ctp_stm_state::get_max_applied_epoch() const noexcept {
     return _max_applied_epoch;
 }
 
@@ -125,6 +140,23 @@ void ctp_stm_state::set_start_offset(kafka::offset new_offset) noexcept {
 
 kafka::offset ctp_stm_state::start_offset() const noexcept {
     return _start_offset;
+}
+
+fmt::iterator ctp_stm_state::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{seen_window=[{}, {}], applied_window=[{}, {}], "
+      "epoch_window_offset={}, min_epoch_lower_bound={}, lro={}, lrlo={}, "
+      "start_offset={}}}",
+      _previous_seen_epoch,
+      _max_seen_epoch,
+      _previous_applied_epoch,
+      _max_applied_epoch,
+      _current_epoch_window_offset,
+      _min_epoch_lower_bound,
+      _last_reconciled_offset,
+      _last_reconciled_log_offset,
+      _start_offset);
 }
 
 } // namespace cloud_topics

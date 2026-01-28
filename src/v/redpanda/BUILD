@@ -32,6 +32,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics/level_one/metastore:leader_router",
         "//src/v/cloud_topics/level_one/metastore:simple_stm",
+        "//src/v/cloud_topics/level_one/metastore/lsm:stm",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_factory",
         "//src/v/cluster",
         "//src/v/cluster:cloud_metadata_offsets_recovery_router",

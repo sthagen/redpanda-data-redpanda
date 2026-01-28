@@ -111,7 +111,7 @@ consteval resource_type get_resource_type() {
         return resource_type::cluster;
     } else if constexpr (std::is_same_v<T, kafka::transactional_id>) {
         return resource_type::transactional_id;
-    } else if constexpr (std::is_same_v<T, ppsr::subject>) {
+    } else if constexpr (std::is_same_v<T, ppsr::context_subject>) {
         return resource_type::sr_subject;
     } else if constexpr (std::is_same_v<T, ppsr::registry_resource>) {
         return resource_type::sr_registry;

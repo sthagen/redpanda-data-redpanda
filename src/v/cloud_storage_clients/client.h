@@ -22,7 +22,7 @@
 
 namespace cloud_storage_clients {
 
-class client_pool;
+class upstream;
 
 // Corresponds to the Range HTTP header in the form <range-start>-<range-end>
 //
@@ -38,8 +38,8 @@ public:
     struct no_response {};
 
 public:
-    explicit client(ss::weak_ptr<client_pool> pool_ptr)
-      : _pool_ptr(std::move(pool_ptr)) {}
+    explicit client(ss::weak_ptr<upstream> upstream_ptr)
+      : _upstream_ptr(std::move(upstream_ptr)) {}
     virtual ~client() = default;
 
 public:
@@ -187,8 +187,13 @@ public:
       ss::lowres_clock::duration timeout)
       = 0;
 
+    /// Returns true if the client is in a valid state to perform operations.
+    /// If this returns false, the client should be discarded and a new one
+    /// created.
+    virtual bool is_valid() const noexcept = 0;
+
 protected:
-    ss::weak_ptr<client_pool> _pool_ptr;
+    ss::weak_ptr<upstream> _upstream_ptr;
 };
 
 } // namespace cloud_storage_clients

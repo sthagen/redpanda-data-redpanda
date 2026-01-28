@@ -158,11 +158,13 @@ ss::future<segment_appender_ptr> make_segment_appender(
   const segment_full_path& path,
   std::optional<uint64_t> segment_size,
   storage_resources& resources,
-  std::optional<ntp_sanitizer_config> ntp_sanitizer_config) {
+  std::optional<ntp_sanitizer_config> ntp_sanitizer_config,
+  segment_appender::stats_ptr shared_stats) {
     return internal::make_writer_handle(path, std::nullopt)
       .then([path,
              segment_size,
              &resources,
+             shared_stats,
              ntp_sanitizer_config = std::move(ntp_sanitizer_config)](
               ss::file writer) mutable {
           // file_io_sanitizer requires a pointer to the appender,
@@ -183,7 +185,9 @@ ss::future<segment_appender_ptr> make_segment_appender(
               // exception during an OOM condition, since the appender allocates
               // 1MB of memory aligned buffers
               auto appender_ptr = std::make_unique<segment_appender>(
-                writer, segment_appender::options(segment_size, resources));
+                writer,
+                segment_appender::options(
+                  segment_size, resources, shared_stats));
 
               if (sanitized_writer) {
                   sanitized_writer->set_pointer_to_appender(appender_ptr.get());
@@ -381,7 +385,11 @@ ss::future<storage::index_state> do_copy_segment_data(
 
     auto size_before = seg->size_bytes();
     auto appender = co_await make_segment_appender(
-      tmpname, size_before, resources, cfg.sanitizer_config);
+      tmpname,
+      size_before,
+      resources,
+      cfg.sanitizer_config,
+      seg->get_appender_stats());
 
     vlog(
       gclog.trace,

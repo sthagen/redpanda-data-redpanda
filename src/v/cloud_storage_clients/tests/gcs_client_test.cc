@@ -282,7 +282,7 @@ public:
         auto resolved = net::resolve_dns(conf.server_addr).get();
         server->listen(resolved).get();
 
-        auto transport_conf = build_transport_configuration(conf).get();
+        auto transport_conf = build_transport_configuration(conf, nullptr);
         client = ss::make_shared<gcs_client>(
           nullptr,
           conf,

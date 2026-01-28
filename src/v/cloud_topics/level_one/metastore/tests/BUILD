@@ -12,6 +12,25 @@ redpanda_test_cc_library(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "state_utils",
+    srcs = [
+        "state_utils.cc",
+    ],
+    hdrs = [
+        "state_utils.h",
+    ],
+    implementation_deps = [
+        "//src/v/cloud_topics/level_one/metastore/lsm:keys",
+        "//src/v/cloud_topics/level_one/metastore/lsm:values",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cloud_topics/level_one/metastore:state",
+        "//src/v/lsm",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "simple_metastore_test",
     timeout = "short",
@@ -62,8 +81,15 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
+        "//src/v/cloud_topics/level_one/metastore:state",
+        "//src/v/cloud_topics/level_one/metastore/lsm:stm",
+        "//src/v/cloud_topics/level_one/metastore/tests:state_utils",
         "//src/v/cloud_topics/tests:cluster_fixture",
+        "//src/v/lsm",
+        "//src/v/lsm/io:cloud_persistence",
+        "//src/v/lsm/io:memory_persistence",
         "//src/v/model",
+        "//src/v/serde",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
     ],
@@ -93,6 +119,7 @@ redpanda_cc_gtest(
         "state_update_test.cc",
     ],
     deps = [
+        ":state_utils",
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/metastore:state",
         "//src/v/cloud_topics/level_one/metastore:state_update",

@@ -10,6 +10,7 @@
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/types.h"
+#include "cloud_storage_clients/upstream_registry.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/errc.h"
 #include "http/tests/http_imposter.h"
@@ -97,12 +98,16 @@ struct archival_metadata_stm_base_fixture
                 cfg.client_config = get_s3_configuration(port);
             })
           .get();
+        // Upstream registry
+        upstreams.start(cloud_cfg.local().client_config).get();
         // Connection pool
         cloud_conn_pool
           .start(
-            cloud_cfg.local().connection_limit(), ss::sharded_parameter([this] {
-                return cloud_cfg.local().client_config;
-            }))
+            ss::sharded_parameter(
+              [this] { return std::ref(upstreams.local()); }),
+            cloud_cfg.local().connection_limit(),
+            ss::sharded_parameter(
+              [this] { return cloud_cfg.local().client_config; }))
           .get();
         // Cloud storage remote api
         cloud_io
@@ -145,10 +150,12 @@ struct archival_metadata_stm_base_fixture
         cloud_io.stop().get();
         cloud_api.stop().get();
         cloud_conn_pool.stop().get();
+        upstreams.stop().get();
         cloud_cfg.stop().get();
     }
 
     ss::sharded<cloud_storage::configuration> cloud_cfg;
+    ss::sharded<cloud_storage_clients::upstream_registry> upstreams;
     ss::sharded<cloud_storage_clients::client_pool> cloud_conn_pool;
     ss::sharded<cloud_io::remote> cloud_io;
     ss::sharded<cloud_storage::remote> cloud_api;

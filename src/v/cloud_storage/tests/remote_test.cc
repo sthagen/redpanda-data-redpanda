@@ -23,6 +23,7 @@
 #include "cloud_storage/tests/common_def.h"
 #include "cloud_storage/types.h"
 #include "cloud_storage_clients/client_pool.h"
+#include "cloud_storage_clients/upstream_registry.h"
 #include "config/configuration.h"
 #include "model/metadata.h"
 #include "test_utils/async.h"
@@ -1403,6 +1404,7 @@ INSTANTIATE_TEST_SUITE_P(
       .url_style = cloud_storage_clients::s3_url_style::path}));
 
 TEST(RemoteTest, TestShutdownOnRetry) {
+    ss::sharded<cloud_storage_clients::upstream_registry> upstreams;
     ss::sharded<cloud_storage_clients::client_pool> pool;
     ss::sharded<cloud_io::remote> io;
     ss::sharded<remote> remote;
@@ -1417,9 +1419,17 @@ TEST(RemoteTest, TestShutdownOnRetry) {
         }
         io.stop().get();
         pool.stop().get();
+        upstreams.stop().get();
     });
 
-    pool.start(10, ss::sharded_parameter([&s3] { return s3.conf; })).get();
+    upstreams.start(s3.conf).get();
+    pool
+      .start(
+        ss::sharded_parameter(
+          [&upstreams] { return std::ref(upstreams.local()); }),
+        10,
+        ss::sharded_parameter([&s3] { return s3.conf; }))
+      .get();
     io.start(
         std::ref(pool),
         ss::sharded_parameter([&s3] { return s3.conf; }),

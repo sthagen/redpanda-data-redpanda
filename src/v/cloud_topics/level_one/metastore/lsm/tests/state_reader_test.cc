@@ -789,6 +789,21 @@ void verify_term_end(
     }
 }
 
+void verify_term_keys(
+  state_reader& reader,
+  const model::topic_id_partition& tidp,
+  std::optional<kafka::offset> upper_bound,
+  size_t expected_count) {
+    SCOPED_TRACE(
+      fmt::format(
+        "tidp={}, upper_bound={}",
+        tidp,
+        upper_bound.has_value() ? fmt::format("{}", *upper_bound) : "nullopt"));
+    auto res = reader.get_term_keys(tidp, upper_bound).get();
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(res->size(), expected_count);
+}
+
 } // namespace
 
 TEST_F(StateReaderTestFixture, TestGetTermLe) {
@@ -842,4 +857,38 @@ TEST_F(StateReaderTestFixture, TestGetTermEnd) {
     // Missing partition should return nullopt.
     auto missing_tidp = make_tidp(1);
     verify_term_end(reader, missing_tidp, model::term_id(1), std::nullopt);
+}
+
+TEST_F(StateReaderTestFixture, TestGetTermKeys) {
+    auto tidp = make_tidp(0);
+    write_term_start(tidp, model::term_id(1), kafka::offset(0));
+    write_term_start(tidp, model::term_id(3), kafka::offset(50));
+    write_term_start(tidp, model::term_id(7), kafka::offset(100));
+    auto reader = make_reader();
+
+    // No upper bound, grab all the terms.
+    verify_term_keys(reader, tidp, std::nullopt, 3);
+
+    // With upper_bound below first term, returns empty.
+    verify_term_keys(reader, tidp, kafka::offset(-1), 0);
+
+    // With upper_bound between first and second term, returns first term only.
+    verify_term_keys(reader, tidp, kafka::offset(0), 1);
+    verify_term_keys(reader, tidp, kafka::offset(1), 1);
+    verify_term_keys(reader, tidp, kafka::offset(49), 1);
+
+    // With upper_bound at second term's start_offset, returns first two.
+    verify_term_keys(reader, tidp, kafka::offset(50), 2);
+    verify_term_keys(reader, tidp, kafka::offset(51), 2);
+    verify_term_keys(reader, tidp, kafka::offset(99), 2);
+
+    // With upper_bound at or beyond third term, returns all three.
+    verify_term_keys(reader, tidp, kafka::offset(100), 3);
+    verify_term_keys(reader, tidp, kafka::offset(1000), 3);
+
+    // Missing partition returns empty.
+    auto missing_tidp = make_tidp(1);
+    verify_term_keys(reader, missing_tidp, kafka::offset(0), 0);
+    verify_term_keys(reader, missing_tidp, kafka::offset(100), 0);
+    verify_term_keys(reader, missing_tidp, std::nullopt, 0);
 }

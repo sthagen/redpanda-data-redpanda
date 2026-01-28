@@ -127,6 +127,17 @@ public:
     ss::future<std::expected<std::optional<kafka::offset>, error>>
     get_term_end(const model::topic_id_partition&, model::term_id);
 
+    // Returns term row keys for the given partition. If `upper_bound` is
+    // provided, returns keys for all terms up to and including the highest
+    // term with start_offset <= upper_bound.
+    ss::future<std::expected<chunked_vector<ss::sstring>, error>> get_term_keys(
+      const model::topic_id_partition&,
+      std::optional<kafka::offset> upper_bound);
+
+    // Returns all partition IDs that have metadata for the given topic.
+    ss::future<std::expected<chunked_vector<model::partition_id>, error>>
+    get_partitions_for_topic(const model::topic_id&);
+
 private:
     ss::future<
       std::expected<std::optional<std::pair<ss::sstring, ss::sstring>>, error>>

@@ -411,33 +411,41 @@ build_tls_credentials(
       ss::tls::certificate_credentials>(
       cred_builder, "cloud_storage_client", std::move(name));
 }
-
-ss::future<net::base_transport::configuration> build_transport_configuration(
-  ss::sstring name, const common_configuration& config) {
-    co_return net::base_transport::configuration{
-      .server_addr = config.server_addr,
-      .credentials = config.tls_credentials_builder
-                       ? co_await build_tls_credentials(
-                           std::move(name), *config.tls_credentials_builder)
-                       : nullptr,
-      .tls_sni_hostname = config.tls_sni_hostname,
-      .wait_for_tls_server_eof = config.wait_for_tls_server_eof,
-    };
-}
 } // namespace
 
-ss::future<net::base_transport::configuration>
-build_transport_configuration(const client_configuration& config) {
+ss::future<ss::shared_ptr<ss::tls::certificate_credentials>>
+build_tls_credentials(const client_configuration& config) {
+    using val_t = ss::shared_ptr<ss::tls::certificate_credentials>;
+
     return ss::visit(
       config,
-      [](const cloud_storage_clients::s3_configuration& s3_cfg)
-        -> ss::future<net::base_transport::configuration> {
-          return build_transport_configuration("s3", s3_cfg);
+      [](const s3_configuration& s3_cfg) {
+          if (s3_cfg.tls_credentials_builder) {
+              return build_tls_credentials(
+                "s3", *s3_cfg.tls_credentials_builder);
+          }
+          return ss::make_ready_future<val_t>(nullptr);
       },
-      [](const cloud_storage_clients::abs_configuration& abs_cfg)
-        -> ss::future<net::base_transport::configuration> {
-          return build_transport_configuration("abs", abs_cfg);
+      [](const abs_configuration& abs_cfg) {
+          if (abs_cfg.tls_credentials_builder) {
+              return build_tls_credentials(
+                "abs", *abs_cfg.tls_credentials_builder);
+          }
+          return ss::make_ready_future<val_t>(nullptr);
       });
+}
+
+net::base_transport::configuration build_transport_configuration(
+  const client_configuration& config,
+  ss::shared_ptr<ss::tls::certificate_credentials> tls_credentials) {
+    return ss::visit(config, [&tls_credentials](const auto& cfg) {
+        return net::base_transport::configuration{
+          .server_addr = cfg.server_addr,
+          .credentials = tls_credentials,
+          .tls_sni_hostname = cfg.tls_sni_hostname,
+          .wait_for_tls_server_eof = cfg.wait_for_tls_server_eof,
+        };
+    });
 }
 
 } // namespace cloud_storage_clients

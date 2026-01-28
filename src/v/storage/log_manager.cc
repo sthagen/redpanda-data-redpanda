@@ -712,7 +712,8 @@ ss::future<ss::lw_shared_ptr<segment>> log_manager::make_log_segment(
       _resources,
       _feature_table,
       std::move(ntp_sanitizer_cfg),
-      segment_size_hint);
+      segment_size_hint,
+      _probe->get_appender_stats());
 }
 
 std::optional<batch_cache_index>

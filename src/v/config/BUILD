@@ -1,6 +1,16 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "startup_config",
+    hdrs = ["startup_config.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "config",
     srcs = [
         "base_property.cc",

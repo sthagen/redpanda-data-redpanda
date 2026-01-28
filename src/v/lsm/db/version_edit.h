@@ -14,6 +14,7 @@
 #include "absl/container/fixed_array.h"
 #include "base/format_to.h"
 #include "container/chunked_hash_map.h"
+#include "container/intrusive_list_helpers.h"
 #include "lsm/core/internal/files.h"
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/options.h"
@@ -44,12 +45,42 @@ struct file_meta_data {
     fmt::iterator format_to(fmt::iterator it) const;
 };
 
+// This allocator can create new file ID for files being created in the LSM
+// tree.
+//
+// The main purpose of this abstraction is to remove a circular dependency
+// between a version_set and a version_edit.
+class file_id_allocator {
+public:
+    file_id_allocator() = default;
+    file_id_allocator(const file_id_allocator&) = delete;
+    file_id_allocator(file_id_allocator&&) = delete;
+    file_id_allocator& operator=(const file_id_allocator&) = delete;
+    file_id_allocator& operator=(file_id_allocator&&) = delete;
+    virtual ~file_id_allocator() = default;
+
+    // Allocate a new ID that will not clash with any other files.
+    virtual internal::file_id allocate_id() = 0;
+};
+
 // A class representing all the incremental changes needed to progress from one
 // version to another version.
+//
+// Additionally, these track and book keep any IDs allocated while creating this
+// version edit. All active edits are tracked in the version_set, which can
+// ensure that any new files are not garbage collected.
 class version_edit {
 public:
-    explicit version_edit(const internal::options& options)
-      : _mutations_by_level(options.levels.size()) {}
+    explicit version_edit(
+      file_id_allocator* id_allocator, const internal::options& options)
+      : _id_allocator(id_allocator)
+      , _mutations_by_level(options.levels.size()) {}
+
+    version_edit(const version_edit&) = delete;
+    version_edit(version_edit&&) = delete;
+    version_edit& operator=(const version_edit&) = delete;
+    version_edit& operator=(version_edit&& o) = delete;
+    ~version_edit() = default;
 
     // Set the compaction pointer, which is where the next compaction should
     // begin.
@@ -61,6 +92,13 @@ public:
     // new data is added to the database which is only memtable flushes.
     void set_last_seqno(internal::sequence_number seqno) {
         _last_seqno = seqno;
+    }
+
+    // Allocate an ID for a file that will be added to the edit via `add_file`.
+    internal::file_id allocate_id() {
+        auto id = _id_allocator->allocate_id();
+        _min_allocated_id = std::min(_min_allocated_id, id);
+        return id;
     }
 
     // The parameters to `add_file`
@@ -103,9 +141,12 @@ private:
 
         fmt::iterator format_to(fmt::iterator) const;
     };
+    file_id_allocator* _id_allocator;
     absl::FixedArray<mutation> _mutations_by_level;
     // This is safe because it is applied idempotently.
     std::optional<internal::sequence_number> _last_seqno;
+    internal::file_id _min_allocated_id = internal::file_id::max();
+    intrusive_list_hook _list_hook;
 };
 
 } // namespace lsm::db

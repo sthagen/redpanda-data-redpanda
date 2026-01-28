@@ -10,6 +10,7 @@ import asyncio
 import sys
 import tarfile
 import tempfile
+import time
 from typing import Any
 import yaml
 from pathlib import Path
@@ -241,7 +242,7 @@ def check_omb(omb_target: OmbTarget):
         raise RuntimeError("OMB consumed too few messages")
 
 
-def check_iceberg_state(tmpdir: Path):
+async def check_iceberg_state(tmpdir: Path):
     def get_dir_size(path: Path) -> int:
         return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 
@@ -253,21 +254,31 @@ def check_iceberg_state(tmpdir: Path):
         tmpdir
         / "rp_data/minio/data/panda-bucket/redpanda-iceberg-catalog/redpanda/iceberg-topic~dlq/"
     )
-    iceberg_dir_size = get_dir_size(iceberg_dir)
-    dlq_dir_size = get_dir_size(dlq_dir)
 
-    # We check 1MiB in either direction which gives good enough margin. Can't do
-    # exact checks as compression gets involved.
-    threshold = 1024 * 1024
+    def check_sizes() -> str:
+        iceberg_dir_size = get_dir_size(iceberg_dir)
+        dlq_dir_size = get_dir_size(dlq_dir)
 
-    if iceberg_dir_size < threshold:
-        raise RuntimeError(
-            f"Iceberg data directory is unexpectedly small - {iceberg_dir_size}. Probably not enough data was translated"
-        )
-    if dlq_dir_size > threshold:
-        raise RuntimeError(
-            f"Iceberg DLQ directory is unexpectedly large - {dlq_dir_size}. Probably too much data was failing translation"
-        )
+        # We check 1MiB in either direction which gives good enough margin. Can't do
+        # exact checks as compression gets involved.
+        threshold = 1024 * 1024
+
+        if iceberg_dir_size < threshold:
+            return f"Iceberg data directory is unexpectedly small - {iceberg_dir_size}. Probably not enough data was translated"
+        if dlq_dir_size > threshold:
+            return f"Iceberg DLQ directory is unexpectedly large - {dlq_dir_size}. Probably too much data was failing translation"
+
+        return ""
+
+    start_time = time.time()
+
+    while check_sizes() and (time.time() - start_time) < 120:
+        print("Waiting for iceberg data to settle...")
+        await asyncio.sleep(1)
+
+    status = check_sizes()
+    if status:
+        raise RuntimeError(status)
 
 
 async def terminate(proc: asyncio.subprocess.Process, name: str) -> int:
@@ -302,7 +313,7 @@ async def profile(args: argparse.Namespace, tmpdir: Path, redpanda_bin: Path):
         await read_until(omb_proc, BENCH_START_MARKER, "omb")
         await asyncio.create_task(continue_stream(omb_proc, "omb"))
         check_omb(omb_target)
-        check_iceberg_state(tmpdir)
+        await check_iceberg_state(tmpdir)
 
     finally:
         if omb_proc:

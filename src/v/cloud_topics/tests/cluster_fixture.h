@@ -12,6 +12,7 @@
 
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_topics/app.h"
+#include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/level_one/metastore/simple_stm.h"
 #include "cluster/tests/cluster_test_fixture.h"
 #include "kafka/server/tests/produce_consume_utils.h"
@@ -38,7 +39,7 @@ public:
             remove_node_application(id);
         }
     }
-    void add_node() {
+    void add_node(bool use_lsm_metastore = true) {
         static constexpr int kafka_port_base = 9092;
         static constexpr int rpc_port_base = 11000;
         auto [s3_conf, a_conf, cs_conf] = get_cloud_storage_configurations(
@@ -56,7 +57,10 @@ public:
           cs_conf,
           /*legacy_upload_mode_enabled=*/true,
           /*iceberg_enabled=*/false,
-          /*cloud_topics_enabled=*/true);
+          /*cloud_topics_enabled=*/true,
+          /*cluster_linking_enabled=*/false,
+          /*seed_node_id=*/model::node_id{0},
+          use_lsm_metastore);
     }
 
     ss::future<kafka_produce_transport*> make_producer(model::node_id id) {
@@ -89,6 +93,16 @@ public:
             return nullptr;
         }
         return leader_p->raft()->stm_manager()->get<l1::simple_stm>();
+    }
+
+    ss::shared_ptr<l1::stm> get_l1_lsm_stm(model::partition_id pid) {
+        auto domain_ntp = model::ntp{
+          model::kafka_internal_namespace, model::l1_metastore_topic, pid};
+        auto [leader_fx, leader_p] = get_leader(domain_ntp);
+        if (leader_fx == nullptr) {
+            return nullptr;
+        }
+        return leader_p->raft()->stm_manager()->get<l1::stm>();
     }
     std::vector<ss::noncopyable_function<void()>> cleanup;
 };

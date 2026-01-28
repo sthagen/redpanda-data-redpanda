@@ -349,7 +349,7 @@ template auth_result authorizer::authorized(
   const chunked_vector<acl_principal>&) const;
 
 template auth_result authorizer::authorized(
-  const pandaproxy::schema_registry::subject&,
+  const pandaproxy::schema_registry::context_subject&,
   acl_operation,
   const acl_principal&,
   const acl_host&,

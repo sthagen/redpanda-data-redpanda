@@ -38,14 +38,15 @@ namespace detail {
 template<typename T, size_t Capacity>
 class ring_buffer {
 public:
-    void push_back(T val) {
-        _data[_tail] = std::move(val);
+    void push_back(T val) noexcept {
+        new (&_data[_tail].data) T(std::move(val));
         _tail = (_tail + 1) % Capacity;
         ++_size;
     }
 
-    T pop_front() {
-        auto val = std::move(_data[_head]);
+    T pop_front() noexcept {
+        auto val = std::move(_data[_head].data);
+        (&_data[_head].data)->~T();
         _head = (_head + 1) % Capacity;
         --_size;
         return val;
@@ -55,7 +56,14 @@ public:
     [[nodiscard]] size_t size() const { return _size; }
 
 private:
-    std::array<T, Capacity> _data;
+    // This is a trick that seastar uses for `circular_buffer_fixed_capacity`
+    // to allow uninitialized storage.
+    union maybe_storage {
+        T data;
+        maybe_storage() noexcept {}
+        ~maybe_storage() {}
+    };
+    std::array<maybe_storage, Capacity> _data;
     size_t _head{0};
     size_t _tail{0};
     size_t _size{0};
@@ -79,7 +87,7 @@ struct mailbox_storage<T, 1> {
 
     static bool is_full(const type& m, size_t) { return m.has_value(); }
     static bool is_empty(const type& m) { return !m.has_value(); }
-    static void push(type& m, T val) { m = std::move(val); }
+    static void push(type& m, T val) { m.emplace(std::move(val)); }
     static T pop(type& m) {
         auto v = std::move(*m);
         m.reset();
@@ -114,41 +122,51 @@ public:
     virtual ~actor() = default;
 
     // Start the actor's processing loop
-    ss::future<> start() {
+    virtual ss::future<> start() {
         ssx::background = ss::with_gate(_gate, [this] { return run(); });
         return ss::now();
     }
 
     // Stop the actor, waiting for current message processing to complete
-    ss::future<> stop() {
+    virtual ss::future<> stop() {
         _as.request_abort();
         _cv.broadcast();
         co_await _gate.close();
     }
 
-    // Send a message. Behavior when mailbox is full depends on OverflowPolicy:
-    // - block: waits until space is available
-    // - drop_oldest: drops the oldest message to make room (never blocks)
-    ss::future<> tell(T msg) {
+    // Send a message. It waits until space is available.
+    ss::future<> tell(T msg)
+    requires(OverflowPolicy == overflow_policy::block)
+    {
         if (_as.abort_requested()) {
             co_return;
         }
         auto holder = _gate.hold();
-        if constexpr (OverflowPolicy == overflow_policy::block) {
-            // Wait for space if mailbox is full
-            co_await _cv.wait(
-              [this] { return _as.abort_requested() || !is_full(); });
-            if (_as.abort_requested()) {
-                co_return;
-            }
-        } else {
-            // Drop oldest if full
-            if (is_full()) {
-                storage_traits::pop(_mailbox);
-            }
+        // Wait for space if mailbox is full
+        while (!_as.abort_requested() && is_full()) {
+            co_await _cv.wait();
+        }
+        if (_as.abort_requested()) {
+            co_return;
         }
         storage_traits::push(_mailbox, std::move(msg));
-        _cv.signal();
+        _cv.broadcast();
+    }
+
+    // Send a message. It drops the oldest message to make room (never blocks)
+    void tell(T msg)
+    requires(OverflowPolicy == overflow_policy::drop_oldest)
+    {
+        if (_as.abort_requested()) {
+            return;
+        }
+        auto holder = _gate.hold();
+        // Drop oldest if full
+        if (is_full()) {
+            storage_traits::pop(_mailbox);
+        }
+        storage_traits::push(_mailbox, std::move(msg));
+        _cv.broadcast();
     }
 
     // Try to send a message without blocking, returns false if mailbox is full.
@@ -161,7 +179,7 @@ public:
             return false;
         }
         storage_traits::push(_mailbox, std::move(msg));
-        _cv.signal();
+        _cv.broadcast();
         return true;
     }
 
@@ -184,8 +202,9 @@ private:
 
     ss::future<> run() {
         while (true) {
-            co_await _cv.wait(
-              [this] { return _as.abort_requested() || !is_empty(); });
+            while (!_as.abort_requested() && is_empty()) {
+                co_await _cv.wait();
+            }
             if (_as.abort_requested()) {
                 co_return;
             }
@@ -200,12 +219,13 @@ private:
         }
     }
 
-    mailbox_type _mailbox;
-    ss::condition_variable _cv;
-
 protected:
-    ss::gate _gate;
     ss::abort_source _as;
+    ss::gate _gate;
+
+private:
+    ss::condition_variable _cv;
+    mailbox_type _mailbox;
 };
 
 } // namespace ssx

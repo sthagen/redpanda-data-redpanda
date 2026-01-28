@@ -181,12 +181,15 @@ struct set_start_offset_update
     auto serde_fields() { return std::tie(tp, new_start_offset); }
 
     static constexpr auto key{update_key::set_start_offset};
-    static std::expected<set_start_offset_update, stm_update_error>
-    build(const state&, const model::topic_id_partition&, kafka::offset);
+    static std::expected<set_start_offset_update, stm_update_error> build(
+      const state&,
+      const model::topic_id_partition&,
+      kafka::offset,
+      bool* is_no_op = nullptr);
 
-    std::expected<std::monostate, stm_update_error> can_apply(const state&);
+    std::expected<std::monostate, stm_update_error>
+    can_apply(const state&, bool* is_no_op = nullptr);
     std::expected<std::monostate, stm_update_error> apply(state&);
-    bool is_no_op(const state&) const;
 
     model::topic_id_partition tp;
     kafka::offset new_start_offset;

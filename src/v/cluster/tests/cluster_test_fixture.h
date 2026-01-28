@@ -121,7 +121,8 @@ public:
       bool enable_legacy_upload_mode = true,
       bool iceberg_enabled = false,
       bool cloud_topics_enabled = false,
-      bool cluster_linking_enabled = false) {
+      bool cluster_linking_enabled = false,
+      bool use_lsm_metastore = false) {
         return std::make_unique<redpanda_thread_fixture>(
           node_id,
           kafka_port,
@@ -140,7 +141,8 @@ public:
           enable_legacy_upload_mode,
           iceberg_enabled,
           cloud_topics_enabled,
-          cluster_linking_enabled);
+          cluster_linking_enabled,
+          use_lsm_metastore);
     }
 
     void add_node(
@@ -160,7 +162,8 @@ public:
       bool enable_legacy_upload_mode = true,
       bool iceberg_enabled = false,
       bool cloud_topics_enabled = false,
-      bool cluster_linking_enabled = false) {
+      bool cluster_linking_enabled = false,
+      bool use_lsm_metastore = true) {
         _instances.emplace(
           node_id,
           make_redpanda_fixture(
@@ -178,7 +181,8 @@ public:
             enable_legacy_upload_mode,
             iceberg_enabled,
             cloud_topics_enabled,
-            cluster_linking_enabled));
+            cluster_linking_enabled,
+            use_lsm_metastore));
     }
 
     application* get_node_application(model::node_id id) {
@@ -220,7 +224,8 @@ public:
       bool iceberg_enabled = false,
       bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
-      model::node_id seed_node_id = model::node_id{0}) {
+      model::node_id seed_node_id = model::node_id{0},
+      bool use_lsm_metastore = true) {
         std::vector<config::seed_server> seeds = {};
         if (!empty_seed_starts_cluster_val || node_id != 0) {
             seeds.push_back(
@@ -244,7 +249,8 @@ public:
           legacy_upload_mode_enabled,
           iceberg_enabled,
           cloud_topics_enabled,
-          cluster_linking_enabled);
+          cluster_linking_enabled,
+          use_lsm_metastore);
         return get_node_application(node_id);
     }
 

@@ -58,6 +58,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cloud_storage",
         "//src/v/cloud_storage:types",
+        "//src/v/cloud_storage_clients",
         "//src/v/cluster",
         "//src/v/config",
         "//src/v/http/tests:utils",

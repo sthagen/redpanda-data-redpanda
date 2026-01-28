@@ -39,9 +39,9 @@ ss::future<> gc_actor::process(gc_message msg) {
         }
         if (
           file_handle.epoch == _opts->database_epoch
-          && file_handle.id > msg.highest_used_file_id) {
-            // This file is being written concurrently with a compaction.
-            // Or it is for a future version of the database.
+          && file_handle.id > msg.safe_highest_file_id) {
+            // This file ID is at or above the minimum in-flight ID.
+            // It could be currently being written, so skip deletion.
             continue;
         }
         auto it = _pending_deletes.find(file_handle);

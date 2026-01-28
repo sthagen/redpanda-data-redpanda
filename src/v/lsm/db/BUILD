@@ -10,9 +10,6 @@ redpanda_cc_library(
     hdrs = [
         "table_builder.h",
     ],
-    implementation_deps = [
-        "//src/v/lsm/sst:builder",
-    ],
     deps = [
         "//src/v/base",
         "//src/v/lsm/core/internal:files",
@@ -20,6 +17,7 @@ redpanda_cc_library(
         "//src/v/lsm/core/internal:keys",
         "//src/v/lsm/core/internal:options",
         "//src/v/lsm/io:persistence",
+        "//src/v/lsm/sst:builder",
         "@seastar",
     ],
 )
@@ -54,6 +52,8 @@ redpanda_cc_library(
         "impl.h",
     ],
     implementation_deps = [
+        ":compaction_task",
+        ":flush_task",
         ":iter",
         ":table_builder",
         ":version_edit",
@@ -79,6 +79,7 @@ redpanda_cc_library(
         "//src/v/lsm/sst:block_cache",
         "//src/v/ssx:clock",
         "//src/v/ssx:condition_variable",
+        "//src/v/ssx:mutex",
         "//src/v/ssx:time",
         "@seastar",
     ],
@@ -146,6 +147,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/container:chunked_hash_map",
+        "//src/v/container:intrusive",
         "//src/v/lsm/core/internal:files",
         "//src/v/lsm/core/internal:keys",
         "//src/v/lsm/core/internal:options",
@@ -250,6 +252,54 @@ redpanda_cc_library(
         "//src/v/lsm/core/internal:options",
         "//src/v/lsm/io:persistence",
         "//src/v/ssx:actor",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "flush_task",
+    srcs = [
+        "flush_task.cc",
+    ],
+    hdrs = [
+        "flush_task.h",
+    ],
+    implementation_deps = [
+        "//src/v/lsm/core/internal:logger",
+    ],
+    deps = [
+        ":memtable",
+        ":table_builder",
+        ":version_set",
+        "//src/v/base",
+        "//src/v/lsm/core/internal:files",
+        "//src/v/lsm/core/internal:options",
+        "//src/v/lsm/io:persistence",
+        "//src/v/ssx:actor",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "compaction_task",
+    srcs = [
+        "compaction_task.cc",
+    ],
+    hdrs = [
+        "compaction_task.h",
+    ],
+    implementation_deps = [
+        "//src/v/lsm/core:exceptions",
+        "//src/v/lsm/core/internal:logger",
+        "//src/v/lsm/sst:builder",
+    ],
+    deps = [
+        ":snapshot",
+        ":version_set",
+        "//src/v/base",
+        "//src/v/lsm/core/internal:files",
+        "//src/v/lsm/core/internal:options",
+        "//src/v/lsm/io:persistence",
         "@seastar",
     ],
 )

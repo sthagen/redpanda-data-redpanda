@@ -1655,7 +1655,11 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
 
     const auto size_before = seg->size_bytes();
     auto appender = co_await internal::make_segment_appender(
-      tmpname, size_before, resources(), cfg.sanitizer_config);
+      tmpname,
+      size_before,
+      resources(),
+      cfg.sanitizer_config,
+      seg->get_appender_stats());
 
     auto cmp_idx_name = seg->path().to_compacted_index();
     auto compacted_idx_writer = make_file_backed_compacted_index(

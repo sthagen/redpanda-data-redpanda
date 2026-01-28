@@ -71,23 +71,64 @@ ss::future<std::expected<void, db_update_error>> validate_new_objects_missing(
 // Returns the extents of the given partition that align exactly with the input
 // intervals. If there any of the intervals don't align with exact intervals,
 // returns an error.
+//
+// Intervals that start below start_offset are adjusted: we find the first
+// extent at or above start_offset and use that as the range start. This allows
+// replacement extents referencing offsets that have been truncated.
 ss::future<std::expected<void, db_update_error>> collect_exact_intervals(
   const model::topic_id_partition& tidp,
   const chunked_vector<offset_interval_set::interval>& intervals,
+  kafka::offset start_offset,
   state_reader& state,
   chunked_vector<ss::sstring>& out_extent_keys,
   chunked_hash_map<object_id, size_t>& out_sizes) {
     for (const auto& interval : intervals) {
-        auto range_res = co_await state.get_extent_range(
-          tidp, interval.base_offset, interval.last_offset);
+        auto base = interval.base_offset;
+        auto last = interval.last_offset;
+        if (last < start_offset) {
+            // This whole interval is below the start offset. We don't need to
+            // find extents for it, as it will be dropped.
+            continue;
+        }
+
+        // If base < start_offset, we are considering replacing an extent that
+        // starts below the log start offset. Adjust the base offset to point
+        // at the first extent; we'll collect all extents below the start
+        // offset for removal.
+        if (base < start_offset) {
+            auto first_extent_res = co_await state.get_extent_ge(
+              tidp, kafka::offset(0));
+            if (!first_extent_res.has_value()) {
+                co_return std::unexpected(wrap_read_err(
+                  std::move(first_extent_res.error()),
+                  "Error getting first extent >= {} for {}",
+                  start_offset,
+                  tidp));
+            }
+            if (!first_extent_res->has_value()) {
+                // There are no extents at all, and therefore we cannot collect
+                // extents to replace.
+                co_return std::unexpected(db_update_error(
+                  invalid_update,
+                  fmt::format(
+                    "Partition {} doesn't contain extents that span exactly "
+                    "[{}, {}]",
+                    tidp,
+                    base,
+                    last)));
+            }
+            base = first_extent_res->value().base_offset;
+        }
+
+        auto range_res = co_await state.get_extent_range(tidp, base, last);
 
         if (!range_res.has_value()) {
             co_return std::unexpected(wrap_read_err(
               std::move(range_res.error()),
               "Error getting extent range for {} [{}, {}]",
               tidp,
-              interval.base_offset,
-              interval.last_offset));
+              base,
+              last));
         }
         if (!range_res.value().has_value()) {
             co_return std::unexpected(db_update_error(
@@ -96,8 +137,8 @@ ss::future<std::expected<void, db_update_error>> collect_exact_intervals(
                 "Partition {} doesn't contain extents that span exactly "
                 "[{}, {}]",
                 tidp,
-                interval.base_offset,
-                interval.last_offset)));
+                base,
+                last)));
         }
 
         auto extent_gen = range_res.value()->get_rows();
@@ -107,8 +148,8 @@ ss::future<std::expected<void, db_update_error>> collect_exact_intervals(
                   std::move(extent_res->get().error()),
                   "Error iterating through {} extents in range [{}, {}]",
                   tidp,
-                  interval.base_offset,
-                  interval.last_offset));
+                  base,
+                  last));
             }
             auto& row = extent_res->get().value();
             out_sizes[row.val.oid] += row.val.len;
@@ -239,6 +280,30 @@ ss::future<std::expected<void, db_update_error>> merge_compaction_state(
 
     out_state = std::move(merged_state);
     co_return std::expected<void, db_update_error>{};
+}
+
+// Goes through the given removed objects and builds a map of object_entries of
+// corresponding objects with the provided sizes removed.
+ss::future<
+  std::expected<chunked_hash_map<object_id, object_entry>, db_update_error>>
+build_object_removal_entries(
+  state_reader& state,
+  const chunked_hash_map<object_id, size_t>& removed_sizes_by_oid) {
+    chunked_hash_map<object_id, object_entry> updated_old_objects;
+    for (const auto& [oid, removed_size] : removed_sizes_by_oid) {
+        auto obj_res = co_await state.get_object(oid);
+        if (!obj_res.has_value()) {
+            co_return std::unexpected(wrap_read_err(
+              std::move(obj_res.error()), "Error getting object {}", oid));
+        }
+        if (obj_res.value().has_value()) {
+            auto obj_entry = obj_res.value().value();
+            obj_entry.removed_data_size += removed_size;
+            updated_old_objects[oid] = obj_entry;
+        }
+        // If object doesn't exist, skip it (benign).
+    }
+    co_return updated_old_objects;
 }
 
 } // namespace
@@ -529,6 +594,8 @@ replace_objects_db_update::build_rows(
     chunked_hash_map<object_id, size_t> old_extent_sizes_by_oid;
     chunked_hash_map<model::topic_id_partition, chunked_vector<ss::sstring>>
       extent_keys_to_delete;
+    chunked_hash_map<model::topic_id_partition, kafka::offset>
+      start_offsets_by_tp;
     for (const auto& [tidp, intervals] : contiguous_intervals_by_tp) {
         auto meta_res = co_await state.get_metadata(tidp);
         if (!meta_res.has_value()) {
@@ -542,9 +609,11 @@ replace_objects_db_update::build_rows(
               invalid_update,
               fmt::format("Partition {} not tracked by state", tidp)));
         }
+        start_offsets_by_tp[tidp] = meta_res.value()->start_offset;
         auto exact_intervals_res = co_await collect_exact_intervals(
           tidp,
           intervals,
+          meta_res.value()->start_offset,
           state,
           extent_keys_to_delete[tidp],
           old_extent_sizes_by_oid);
@@ -555,22 +624,12 @@ replace_objects_db_update::build_rows(
 
     // Update existing object entries to indicate the removal of data from
     // replaced extents.
-    chunked_hash_map<object_id, object_entry> updated_old_objects;
-    for (const auto& [oid, removed_size] : old_extent_sizes_by_oid) {
-        auto obj_res = co_await state.get_object(oid);
-        if (!obj_res.has_value()) {
-            co_return std::unexpected(wrap_read_err(
-              std::move(obj_res.error()),
-              "Error getting object {} for update",
-              oid));
-        }
-        if (obj_res.value().has_value()) {
-            auto obj_entry = obj_res.value().value();
-            obj_entry.removed_data_size += removed_size;
-            updated_old_objects[oid] = obj_entry;
-        }
-        // If object doesn't exist, skip it (benign).
+    auto updated_old_objects_res = co_await build_object_removal_entries(
+      state, old_extent_sizes_by_oid);
+    if (!updated_old_objects_res.has_value()) {
+        co_return std::unexpected(updated_old_objects_res.error());
     }
+    auto& updated_old_objects = updated_old_objects_res.value();
 
     chunked_hash_map<model::topic_id_partition, compaction_state>
       merged_compaction_states;
@@ -616,7 +675,17 @@ replace_objects_db_update::build_rows(
     // Generate the rows.
     chunked_hash_set<ss::sstring> added_extent_keys;
     for (const auto& [tidp, extents] : new_extents_by_tp) {
+        auto start_it = start_offsets_by_tp.find(tidp);
+        auto start_offset = start_it != start_offsets_by_tp.end()
+                              ? start_it->second
+                              : kafka::offset{0};
         for (const auto& extent : extents) {
+            // Skip extents fully below start_offset. These are stale
+            // replacements for extents that have been truncated.
+            if (extent.last_offset < start_offset) {
+                new_objects_map[extent.oid].removed_data_size += extent.len;
+                continue;
+            }
             auto key = extent_row_key::encode(tidp, extent.base_offset);
             added_extent_keys.emplace(key);
             out.emplace_back(
@@ -632,6 +701,12 @@ replace_objects_db_update::build_rows(
                   }),
               });
         }
+    }
+    if (added_extent_keys.empty()) {
+        // No extents, e.g. because all replacements are below the current
+        // start offsets.
+        co_return std::unexpected(db_update_error(
+          invalid_update, "Replacement extents all filtered out"));
     }
     for (const auto& [tidp, keys] : extent_keys_to_delete) {
         for (const auto& key : keys) {
@@ -751,6 +826,275 @@ replace_objects_db_update::validate_inputs() const {
     }
 
     return std::expected<void, db_update_error>{};
+}
+
+ss::future<std::expected<void, db_update_error>>
+set_start_offset_db_update::build_rows(
+  state_reader& reader,
+  chunked_vector<write_batch_row>& out,
+  bool* is_no_op) const {
+    auto meta_res = co_await reader.get_metadata(tp);
+    if (!meta_res.has_value()) {
+        co_return std::unexpected(wrap_read_err(
+          std::move(meta_res.error()), "Error reading metadata for {}", tp));
+    }
+    if (!meta_res->has_value()) {
+        co_return std::unexpected(db_update_error(
+          invalid_update, fmt::format("Partition {} not found", tp)));
+    }
+    const auto& metadata = meta_res.value().value();
+
+    // Validate the current offset range.
+    if (new_start_offset > metadata.next_offset) {
+        co_return std::unexpected(db_update_error(
+          invalid_update,
+          fmt::format(
+            "Requested start offset for {} is above the next offset: {} > {}",
+            new_start_offset,
+            tp,
+            metadata.next_offset)));
+    }
+    auto no_op = new_start_offset <= metadata.start_offset;
+    if (is_no_op) {
+        *is_no_op = no_op;
+    }
+    if (no_op) {
+        co_return std::expected<void, db_update_error>{};
+    }
+
+    // Find extents below new_start_offset and collect for deletion.
+    chunked_hash_map<object_id, size_t> removed_size_by_oid;
+    chunked_vector<ss::sstring> extent_keys_to_delete;
+
+    auto max_to_remove = kafka::prev_offset(new_start_offset);
+    auto extents_res = co_await reader.get_inclusive_extents(
+      tp, metadata.start_offset, max_to_remove);
+    if (!extents_res.has_value()) {
+        co_return std::unexpected(wrap_read_err(
+          std::move(extents_res.error()),
+          "Error getting {} extents for removal in range [{}, {}]",
+          tp,
+          metadata.start_offset,
+          max_to_remove));
+    }
+    if (extents_res.value().has_value()) {
+        auto extent_gen = (*extents_res)->get_rows();
+        while (auto row_res = co_await extent_gen()) {
+            const auto& row = row_res->get();
+            if (!row.has_value()) {
+                co_return std::unexpected(wrap_read_err(
+                  row.error(),
+                  "Error iterating through {} extents in range [{}, {}]",
+                  tp,
+                  metadata.start_offset,
+                  max_to_remove));
+            }
+            // Only delete if extent is fully below new_start_offset.
+            const auto& extent = *row;
+            if (extent.val.last_offset < new_start_offset) {
+                removed_size_by_oid[extent.val.oid] += extent.val.len;
+                extent_keys_to_delete.push_back(extent.key);
+            }
+        }
+    }
+
+    // Write tombstones for deleted extents.
+    for (const auto& key : extent_keys_to_delete) {
+        out.emplace_back(write_batch_row{.key = key, .value = iobuf{}});
+    }
+
+    // Update object entries with removed_data_size.
+    auto updated_old_objects_res = co_await build_object_removal_entries(
+      reader, removed_size_by_oid);
+    if (!updated_old_objects_res.has_value()) {
+        co_return std::unexpected(updated_old_objects_res.error());
+    }
+    auto& updated_old_objects = updated_old_objects_res.value();
+    for (const auto& [oid, obj_entry] : updated_old_objects) {
+        out.emplace_back(
+          write_batch_row{
+            .key = object_row_key::encode(oid),
+            .value = serde::to_iobuf(object_row_value{.object = obj_entry}),
+          });
+    }
+
+    // Collect term starts at or below new_start_offset.
+    auto term_keys_res = co_await reader.get_term_keys(tp, new_start_offset);
+    if (!term_keys_res.has_value()) {
+        co_return std::unexpected(wrap_read_err(
+          std::move(term_keys_res.error()),
+          "Error getting term keys for {}",
+          tp));
+    }
+    auto& term_keys = *term_keys_res;
+    if (!term_keys.empty()) {
+        // Keep the last one to ensure we still have the term for the start
+        // offset.
+        term_keys.pop_back();
+    }
+    for (const auto& term_key : term_keys) {
+        out.emplace_back(write_batch_row{.key = term_key, .value = iobuf{}});
+    }
+
+    // Truncate compaction state if it exists.
+    if (metadata.compaction_epoch > partition_state::compaction_epoch_t(0)) {
+        auto comp_res = co_await reader.get_compaction_metadata(tp);
+        if (!comp_res.has_value()) {
+            co_return std::unexpected(wrap_read_err(
+              std::move(comp_res.error()),
+              "Error getting compaction metadata for {}",
+              tp));
+        }
+        if (comp_res->has_value()) {
+            auto comp_state = std::move(comp_res.value().value());
+            comp_state.truncate_with_new_start_offset(new_start_offset);
+            out.emplace_back(
+              write_batch_row{
+                .key = compaction_row_key::encode(tp),
+                .value = serde::to_iobuf(
+                  compaction_row_value{.state = comp_state}),
+              });
+        }
+    }
+
+    // Finally, write updated partition metadata.
+    out.emplace_back(
+      write_batch_row{
+        .key = metadata_row_key::encode(tp),
+        .value = serde::to_iobuf(
+          metadata_row_value{
+            .start_offset = new_start_offset,
+            .next_offset = metadata.next_offset,
+            .compaction_epoch = metadata.compaction_epoch,
+          }),
+      });
+
+    // TODO: if the resulting set of rows is too large, we should consider
+    // doing some incremental prefix truncation.
+    co_return std::expected<void, db_update_error>{};
+}
+
+ss::future<std::expected<void, db_update_error>>
+remove_topics_db_update::build_rows(
+  state_reader& reader, chunked_vector<write_batch_row>& out) const {
+    if (topics.empty()) {
+        co_return std::expected<void, db_update_error>{};
+    }
+
+    // Track removed data sizes by object across all topics/partitions.
+    chunked_hash_map<object_id, size_t> removed_size_by_oid;
+
+    // TODO: this is embarassingly parallel.
+    for (const auto& tid : topics) {
+        // Get all partitions for this topic.
+        auto partitions_res = co_await reader.get_partitions_for_topic(tid);
+        if (!partitions_res.has_value()) {
+            co_return std::unexpected(wrap_read_err(
+              std::move(partitions_res.error()),
+              "Error getting partitions for topic {}",
+              tid));
+        }
+
+        for (const auto& pid : partitions_res.value()) {
+            model::topic_id_partition tidp(tid, pid);
+
+            // Collect all extents to be removed and track the removed sizes by
+            // object.
+            auto extents_res = co_await reader.get_inclusive_extents(
+              tidp, std::nullopt, std::nullopt);
+            if (extents_res.has_value() && extents_res->has_value()) {
+                auto extent_gen = (*extents_res)->get_rows();
+                while (auto row_res = co_await extent_gen()) {
+                    const auto& row = row_res->get();
+                    if (!row.has_value()) {
+                        break;
+                    }
+                    const auto& extent = *row;
+                    removed_size_by_oid[extent.val.oid] += extent.val.len;
+
+                    // Write tombstone for each extent row.
+                    out.emplace_back(
+                      write_batch_row{.key = extent.key, .value = iobuf{}});
+                }
+            }
+
+            // Get all term keys and write tombstones.
+            auto terms_res = co_await reader.get_term_keys(tidp, std::nullopt);
+            if (terms_res.has_value()) {
+                for (const auto& term_key : *terms_res) {
+                    out.emplace_back(
+                      write_batch_row{.key = term_key, .value = iobuf{}});
+                }
+            }
+
+            // Write tombstone for the partition's compaction row.
+            out.emplace_back(
+              write_batch_row{
+                .key = compaction_row_key::encode(tidp), .value = iobuf{}});
+
+            // Write tombstone for the partition's metadata row.
+            out.emplace_back(
+              write_batch_row{
+                .key = metadata_row_key::encode(tidp), .value = iobuf{}});
+        }
+    }
+
+    // Update object entries with removed_data_size.
+    auto updated_old_objects_res = co_await build_object_removal_entries(
+      reader, removed_size_by_oid);
+    if (!updated_old_objects_res.has_value()) {
+        co_return std::unexpected(updated_old_objects_res.error());
+    }
+    auto& updated_old_objects = updated_old_objects_res.value();
+    for (const auto& [oid, obj_entry] : updated_old_objects) {
+        out.emplace_back(
+          write_batch_row{
+            .key = object_row_key::encode(oid),
+            .value = serde::to_iobuf(object_row_value{.object = obj_entry}),
+          });
+    }
+
+    co_return std::expected<void, db_update_error>{};
+}
+
+ss::future<std::expected<void, db_update_error>>
+remove_objects_db_update::build_rows(
+  state_reader& reader, chunked_vector<write_batch_row>& out) const {
+    if (objects.empty()) {
+        co_return std::expected<void, db_update_error>{};
+    }
+
+    for (const auto& oid : objects) {
+        auto obj_res = co_await reader.get_object(oid);
+        if (!obj_res.has_value()) {
+            co_return std::unexpected(wrap_read_err(
+              std::move(obj_res.error()), "Error getting object {}", oid));
+        }
+        if (!obj_res.value().has_value()) {
+            // Object doesn't exist, skip.
+            continue;
+        }
+
+        const auto& obj_entry = obj_res.value().value();
+
+        // Reject if object still has referenced data.
+        if (obj_entry.removed_data_size < obj_entry.total_data_size) {
+            co_return std::unexpected(db_update_error(
+              invalid_update,
+              fmt::format(
+                "Object {} is still referenced (removed_data_size={}, "
+                "total_data_size={})",
+                oid,
+                obj_entry.removed_data_size,
+                obj_entry.total_data_size)));
+        }
+
+        out.emplace_back(
+          write_batch_row{
+            .key = object_row_key::encode(oid), .value = iobuf{}});
+    }
+
+    co_return std::expected<void, db_update_error>{};
 }
 
 } // namespace cloud_topics::l1

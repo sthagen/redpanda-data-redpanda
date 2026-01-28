@@ -427,8 +427,12 @@ class Redpanda:
     async def run(self) -> int:
         log_path = Path(os.path.dirname(self.node_meta.config_path)) / "redpanda.log"
 
+        def has_arg(*prefixes: str) -> bool:
+            """Check if any extra_arg starts with any of the given prefixes."""
+            return any(arg.startswith(prefixes) for arg in self.extra_args)
+
         # If user did not override cores with extra args, apply it from our internal cores setting
-        if not {"-c", "--smp"} & set(self.extra_args):
+        if not has_arg("-c", "--smp"):
             # Caller is required to pass a finite core count
             assert self.cores > 0
             base_core = self.cores * self.node_meta.index
@@ -437,10 +441,12 @@ class Redpanda:
         else:
             cores_args = ""
 
-        # If user did not specify memory, share 75% of memory equally between nodes
-        if not {"-m", "--memory"} & set(self.extra_args):
+        # If user did not specify memory, share 75% of memory equally between nodes, capped at 4GB
+        if not has_arg("-m", "--memory"):
+            max_memory_per_node = 4 * 2**30  # 4GB
             memory_total = psutil.virtual_memory().total
             memory_per_node = (3 * (memory_total // 4)) // self.node_meta.cluster_size
+            memory_per_node = min(memory_per_node, max_memory_per_node)
             memory_args = f"-m {memory_per_node // (1024 * 1024)}M"
         else:
             memory_args = ""
@@ -547,6 +553,12 @@ async def main() -> None:
         default=8092,
     )
     parser.add_argument(
+        "--port-offset",
+        type=int,
+        help="offset to add to all base ports (useful for running multiple clusters)",
+        default=0,
+    )
+    parser.add_argument(
         "--listen-address", type=str, help="listening address", default="127.0.0.1"
     )
     parser.add_argument(
@@ -610,6 +622,14 @@ async def main() -> None:
 
     if args.directory is None:
         args.directory = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")) / "data"
+
+    # Apply port offset to all base ports
+    if args.port_offset:
+        args.base_rpc_port += args.port_offset
+        args.base_kafka_port += args.port_offset
+        args.base_admin_port += args.port_offset
+        args.base_schema_registry_port += args.port_offset
+        args.base_pandaproxy_port += args.port_offset
 
     # Use the first 3 nodes as seed servers
     rpc_addresses = [

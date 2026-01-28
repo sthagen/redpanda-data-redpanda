@@ -1615,6 +1615,144 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsSingleDirtyAtEnd) {
       testing::ElementsAre(MatchesRange(100_o, 100_o)));
 }
 
+TEST(
+  SimpleMetastoreTest,
+  TestEarliestDirtyTsNonMonotonicTimestampsCleanedInOrder) {
+    simple_metastore m;
+    om_list_t os;
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Create three extents with non-monotonic timestamps:
+    // - Extent 1: offsets [0-9], max_timestamp = 1000
+    // - Extent 2: offsets [10-19], max_timestamp = 300
+    // - Extent 3: offsets [20-29], max_timestamp = 500
+    os.emplace_back(
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 9_o, 1000_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid2, 100, 1100).add(tid_a, 10_o, 19_o, 300_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid3, 100, 1100).add(tid_a, 20_o, 29_o, 500_t, 0, 99).build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Initially all extents are dirty. The earliest_dirty_ts should be the
+    // minimum timestamp across all extents, which is 300.
+    auto to_collect = metastore::compaction_info_spec{
+      .tidp = tp, .tombstone_removal_upper_bound_ts = 3000_t};
+    auto compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(compaction_info->earliest_dirty_ts.has_value());
+    EXPECT_EQ(compaction_info->earliest_dirty_ts.value(), 300_t);
+
+    // Clean the first extent [0-9]. Now only extents 2 and 3 are dirty.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid4, 100, 1100)
+                              .add(tid_a, 0_o, 9_o, 1000_t, 0, 99)
+                              .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 0_o, 9_o, 3000_t);
+        cmb.set_expected_epoch(tid_a, metastore::compaction_epoch{0});
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(compaction_info->earliest_dirty_ts.has_value());
+    EXPECT_EQ(compaction_info->earliest_dirty_ts.value(), 300_t);
+
+    // Clean extent 2 [0-19].
+    {
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid5, 100, 1100)
+                              .add(tid_a, 0_o, 19_o, 300_t, 0, 99)
+                              .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 10_o, 19_o, 3000_t);
+        cmb.set_expected_epoch(tid_a, metastore::compaction_epoch{1});
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(compaction_info->earliest_dirty_ts.has_value());
+    EXPECT_EQ(compaction_info->earliest_dirty_ts.value(), 500_t);
+}
+
+TEST(
+  SimpleMetastoreTest,
+  TestEarliestDirtyTsNonMonotonicTimestampsCleanedOutOfOrder) {
+    simple_metastore m;
+    om_list_t os;
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Create three extents with non-monotonic timestamps:
+    // - Extent 1: offsets [0-9], max_timestamp = 1000
+    // - Extent 2: offsets [10-19], max_timestamp = 500
+    // - Extent 3: offsets [20-29], max_timestamp = 300
+    os.emplace_back(
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 9_o, 1000_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid2, 100, 1100).add(tid_a, 10_o, 19_o, 500_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid3, 100, 1100).add(tid_a, 20_o, 29_o, 300_t, 0, 99).build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Initially all extents are dirty. The earliest_dirty_ts should be the
+    // minimum timestamp across all extents, which is 300.
+    auto to_collect = metastore::compaction_info_spec{
+      .tidp = tp, .tombstone_removal_upper_bound_ts = 3000_t};
+    auto compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(compaction_info->earliest_dirty_ts.has_value());
+    EXPECT_EQ(compaction_info->earliest_dirty_ts.value(), 300_t);
+
+    // Clean the first extent [0-9]. Now only extents 2 and 3 are dirty.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid4, 100, 1100)
+                              .add(tid_a, 0_o, 9_o, 1000_t, 0, 99)
+                              .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 0_o, 9_o, 3000_t);
+        cmb.set_expected_epoch(tid_a, metastore::compaction_epoch{0});
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(compaction_info->earliest_dirty_ts.has_value());
+    EXPECT_EQ(compaction_info->earliest_dirty_ts.value(), 300_t);
+
+    // Clean extent 3 [20-29].
+    {
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid5, 100, 1100)
+                              .add(tid_a, 0_o, 29_o, 500_t, 0, 99)
+                              .build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 20_o, 29_o, 3000_t);
+        cmb.set_expected_epoch(tid_a, metastore::compaction_epoch{1});
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    compaction_info = m.get_compaction_info(to_collect).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(compaction_info->earliest_dirty_ts.has_value());
+    EXPECT_EQ(compaction_info->earliest_dirty_ts.value(), 500_t);
+}
+
 TEST(SimpleMetastoreTest, TestAddGetOffsetAfterBytes) {
     simple_metastore m;
     om_list_t os;

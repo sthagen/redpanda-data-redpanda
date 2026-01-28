@@ -128,7 +128,13 @@ const auto expected_delete_subject_value = delete_subject_value{
 
 } // namespace
 
-TEST(StorageTest, Serde) {
+class StorageTest : public ::testing::Test {
+protected:
+    void SetUp() override { enable_qualified_subjects::set_local(true); }
+    void TearDown() override { enable_qualified_subjects::reset_local(); }
+};
+
+TEST_F(StorageTest, Serde) {
     {
         auto key = ppj::impl::rjson_parse(
           schema_key_sv.data(), schema_key_handler<>{});
@@ -202,7 +208,7 @@ TEST(StorageTest, Serde) {
     }
 }
 
-TEST(StorageTest, SerdeMetadata) {
+TEST_F(StorageTest, SerdeMetadata) {
     const auto make_schema = [](std::optional<std::string_view> metadata) {
         constexpr std::string_view fmt_schema{
           R"({{
@@ -279,7 +285,7 @@ TEST(StorageTest, SerdeMetadata) {
     }
 }
 
-TEST(StorageTest, SerdeContextSubject) {
+TEST_F(StorageTest, SerdeContextSubject) {
     // Test schema_key with context_subject (qualified format)
     {
         constexpr std::string_view schema_key_ctx_sv{

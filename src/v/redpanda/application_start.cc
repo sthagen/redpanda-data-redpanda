@@ -9,6 +9,7 @@
 
 #include "base/vlog.h"
 #include "cloud_topics/app.h"
+#include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/level_one/metastore/simple_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 #include "cluster/archival/archival_metadata_stm.h"
@@ -54,13 +55,15 @@
 #include <seastar/core/condition-variable.hh>
 
 void application::start_runtime_services(
-  cluster::cluster_discovery& cd, ::stop_signal& app_signal) {
+  cluster::cluster_discovery& cd,
+  ::stop_signal& app_signal,
+  bool use_lsm_metastore) {
     // single instance
     node_status_backend.invoke_on_all(&cluster::node_status_backend::start)
       .get();
     syschecks::systemd_message("Starting the partition manager").get();
     partition_manager
-      .invoke_on_all([this](cluster::partition_manager& pm) {
+      .invoke_on_all([this, use_lsm_metastore](cluster::partition_manager& pm) {
           pm.register_factory<cluster::tm_stm_factory>();
           pm.register_factory<cluster::id_allocator_stm_factory>();
           pm.register_factory<transform::transform_offsets_stm_factory>();
@@ -86,7 +89,11 @@ void application::start_runtime_services(
             config::shard_local_cfg().iceberg_enabled());
           if (config::shard_local_cfg().cloud_topics_enabled()) {
               pm.register_factory<cloud_topics::l0::ctp_stm_factory>();
-              pm.register_factory<cloud_topics::l1::stm_factory>();
+              if (use_lsm_metastore) {
+                  pm.register_factory<cloud_topics::l1::lsm_stm_factory>();
+              } else {
+                  pm.register_factory<cloud_topics::l1::stm_factory>();
+              }
           }
           pm.register_factory<kafka::write_at_offset_stm_factory>(
             storage.local().kvs(), model::offset_translator_batch_types());

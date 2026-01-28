@@ -90,7 +90,13 @@ archiver_fixture::archiver_fixture()
       [cfg = remote_cfg] { return cfg; });
     auto sharded_creds_source = ss::sharded_parameter(
       [cfg = remote_cfg] { return cfg.cloud_credentials_source; });
-    pool.start(remote_cfg.connection_limit(), sharded_client_conf).get();
+    upstreams.start(remote_cfg.client_config).get();
+    pool
+      .start(
+        ss::sharded_parameter([this] { return std::ref(upstreams.local()); }),
+        remote_cfg.connection_limit(),
+        sharded_client_conf)
+      .get();
     pool.invoke_on_all(&cloud_storage_clients::client_pool::start, std::nullopt)
       .get();
     io.start(
@@ -113,6 +119,7 @@ archiver_fixture::~archiver_fixture() {
     remote.stop().get();
     io.stop().get();
     pool.stop().get();
+    upstreams.stop().get();
 }
 
 static void write_batches(
