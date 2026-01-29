@@ -608,18 +608,4 @@ controller_api::get_global_reconciliation_state(
     co_return state;
 }
 
-ss::future<std::error_code>
-controller_api::remake_partition(const model::ntp& ntp) {
-    auto shard_for_opt = shard_for(ntp);
-    if (!shard_for_opt.has_value()) {
-        co_return errc::partition_not_exists;
-    }
-
-    auto shard = shard_for_opt.value();
-    co_return co_await _backend.invoke_on(
-      shard, [&ntp](cluster::controller_backend& b) {
-          return b.remake_partition(ntp);
-      });
-}
-
 } // namespace cluster

@@ -292,11 +292,11 @@ class EndToEndCloudTopicsCompactionTest(EndToEndCloudTopicsBase):
 
     def __init__(self, test_context):
         key_map_memory_kb = test_context.injected_args[
-            "storage_compaction_key_map_memory_kb"
+            "cloud_topics_compaction_key_map_memory_kb"
         ]
         extra_rp_conf = {
-            "log_compaction_interval_ms": 4000,
-            "storage_compaction_key_map_memory": key_map_memory_kb * 1024,
+            "cloud_topics_compaction_interval_ms": 4000,
+            "cloud_topics_compaction_key_map_memory": key_map_memory_kb * 1024,
         }
         environment = {"__REDPANDA_TEST_DISABLE_BOUNDED_PROPERTY_CHECKS": "ON"}
         super(EndToEndCloudTopicsCompactionTest, self).__init__(
@@ -375,8 +375,8 @@ class EndToEndCloudTopicsCompactionTest(EndToEndCloudTopicsBase):
             self.kgo_consumer.stop()
 
     @cluster(num_nodes=4)
-    @matrix(storage_compaction_key_map_memory_kb=[3, 10, 128 * 1024])
-    def test_compact(self, storage_compaction_key_map_memory_kb):
+    @matrix(cloud_topics_compaction_key_map_memory_kb=[3, 10, 128 * 1024])
+    def test_compact(self, cloud_topics_compaction_key_map_memory_kb):
         def seen_managed_logs():
             return self.get_managed_logs() > 0
 

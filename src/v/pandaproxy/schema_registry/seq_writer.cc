@@ -258,8 +258,23 @@ seq_writer::do_write_subject_version(
           projected.id,
           projected.version);
 
+        batch_builder rb(write_at);
+        auto record_offset = write_at;
+
+        // If context isn't materialized yet, prepend CONTEXT record
+        if (auto is_materialized = co_await _store.is_context_materialized(
+              sub.ctx);
+            !is_materialized) {
+            vlog(srlog.debug, "Writing CONTEXT record for ctx={}", sub.ctx);
+            auto ctx_key = context_key{
+              .seq{record_offset}, .node{_node_id}, .ctx{sub.ctx}};
+            auto ctx_value = context_value{.ctx{sub.ctx}};
+            rb(std::move(ctx_key), std::move(ctx_value));
+            ++record_offset;
+        }
+
         auto key = schema_key{
-          .seq{write_at},
+          .seq{record_offset},
           .node{_node_id},
           .sub{sub},
           .version{projected.version}};
@@ -268,8 +283,6 @@ seq_writer::do_write_subject_version(
           .version{projected.version},
           .id{projected.id},
           .deleted = is_deleted::no};
-
-        batch_builder rb(write_at);
         rb(std::move(key), std::move(value));
 
         if (co_await produce_and_apply(write_at, std::move(rb).build())) {

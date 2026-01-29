@@ -44,20 +44,21 @@ public:
     reader_lock_guard& operator=(reader_lock_guard&&) noexcept = default;
 
     static ss::future<reader_lock_guard> acquire(
-      chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>>* mu_map,
-      internal::file_id id) {
-        auto it = mu_map->find(id);
+      chunked_hash_map<internal::file_handle, std::unique_ptr<ssx::mutex>>*
+        mu_map,
+      internal::file_handle h) {
+        auto it = mu_map->find(h);
         ssx::mutex* mu = nullptr;
         if (it == mu_map->end()) {
             auto inserted = mu_map->emplace(
-              id, std::make_unique<ssx::mutex>("lsm::db::reader_lock_guard"));
+              h, std::make_unique<ssx::mutex>("lsm::db::reader_lock_guard"));
             vassert(inserted.second, "expected mutex to be inserted");
             mu = inserted.first->second.get();
         } else {
             mu = it->second.get();
         }
         ssx::mutex::units units = co_await mu->get_units();
-        co_return reader_lock_guard(id, mu_map, mu, std::move(units));
+        co_return reader_lock_guard(h, mu_map, mu, std::move(units));
     }
 
     ~reader_lock_guard() {
@@ -65,22 +66,24 @@ public:
         // If nothing is waiting on or holding the mutex, we can remove the lock
         // from the map.
         if (_mu->ready()) {
-            _mu_map->erase(_id);
+            _mu_map->erase(_handle);
         }
     }
 
 private:
     reader_lock_guard(
-      internal::file_id id,
-      chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>>* mu_map,
+      internal::file_handle h,
+      chunked_hash_map<internal::file_handle, std::unique_ptr<ssx::mutex>>*
+        mu_map,
       ssx::mutex* mu,
       ssx::mutex::units underlying)
-      : _id(id)
+      : _handle(h)
       , _mu_map(mu_map)
       , _mu(mu)
       , _underlying(std::move(underlying)) {}
-    internal::file_id _id;
-    chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>>* _mu_map;
+    internal::file_handle _handle;
+    chunked_hash_map<internal::file_handle, std::unique_ptr<ssx::mutex>>*
+      _mu_map;
     ssx::mutex* _mu;
     ssx::mutex::units _underlying;
 };
@@ -159,8 +162,8 @@ public:
 
     ss::future<> evict(internal::file_handle h) {
         gc_ghost_fifo();
-        auto guard = co_await reader_lock_guard::acquire(&_mu_map, h.id);
-        auto it = _map.find(h.id);
+        auto guard = co_await reader_lock_guard::acquire(&_mu_map, h);
+        auto it = _map.find(h);
         if (it == _map.end()) {
             co_return;
         }
@@ -170,13 +173,23 @@ public:
         }
         auto reader = std::exchange(it->second->value, {});
         _map.erase(it);
+        vassert(
+          reader.use_count() == 1,
+          "expected only a single reference for {} when evicting, was: {}",
+          h,
+          reader.use_count());
         co_await reader->close();
     }
 
     ss::future<> close() {
-        for (auto& [_, entry] : _map) {
+        for (auto& [h, entry] : _map) {
             _cache.remove(*entry);
             auto reader = std::exchange(entry->value, {});
+            vassert(
+              reader.use_count() == 1,
+              "expected only a single reference for {} when closing, was: {}",
+              h,
+              reader.use_count());
             co_await reader->close();
         }
         _ghost_fifo.clear();
@@ -216,7 +229,7 @@ private:
       boost::intrusive::link_mode<boost::intrusive::safe_link>>;
 
     struct cached_value {
-        internal::file_id id;
+        internal::file_handle handle;
         ss::lw_shared_ptr<sst::reader> value;
         utils::s3_fifo::cache_hook hook;
         ghost_hook_t ghost_hook;
@@ -260,22 +273,21 @@ private:
     ss::future<ss::lw_shared_ptr<sst::reader>>
     find_reader(internal::file_handle handle, uint64_t file_size) {
         gc_ghost_fifo();
-        auto it = _map.find(handle.id);
+        auto it = _map.find(handle);
         if (it == _map.end()) {
             // Use fine grained locking to prevent opening unrelated tables from
             // being a bottleneck.
-            auto guard = co_await reader_lock_guard::acquire(
-              &_mu_map, handle.id);
+            auto guard = co_await reader_lock_guard::acquire(&_mu_map, handle);
             // Make sure since we had a scheduling point that something else
             // didn't come along and insert what we were looking for into the
             // map, if it did, we can continue as usual, as the units will be
             // released after the `if` statement.
-            it = _map.find(handle.id);
+            it = _map.find(handle);
             if (it == _map.end()) {
                 auto reader = co_await open_reader(handle, file_size);
                 auto [it, succ] = _map.try_emplace(
-                  handle.id,
-                  std::make_unique<cached_value>(handle.id, std::move(reader)));
+                  handle,
+                  std::make_unique<cached_value>(handle, std::move(reader)));
                 vassert(succ, "lock is held, who mutated _map?");
                 _cache.insert(*it->second);
                 co_return it->second->value;
@@ -315,13 +327,14 @@ private:
             ++_handles_pending_cleanup;
             maybe_enqueue_cleanup(std::exchange(entry.value, {}));
             it = _ghost_fifo.erase(it);
-            _map.erase(entry.id);
+            _map.erase(entry.handle);
         }
     }
 
     io::data_persistence* _persistence;
-    chunked_hash_map<internal::file_id, std::unique_ptr<ssx::mutex>> _mu_map;
-    chunked_hash_map<internal::file_id, entry_t> _map;
+    chunked_hash_map<internal::file_handle, std::unique_ptr<ssx::mutex>>
+      _mu_map;
+    chunked_hash_map<internal::file_handle, entry_t> _map;
     cache_t _cache;
     // Entries that have been "soft evicted" from the cache. We keep them around
     // just in case and GC them after some period of time.

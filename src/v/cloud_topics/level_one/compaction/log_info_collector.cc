@@ -197,9 +197,8 @@ log_info_collector::get_logs_to_collect(
         }
 
         if (log.info_and_ts.has_value()) {
-            // TODO: maybe configure this some other way.
             auto sample_interval
-              = config::shard_local_cfg().log_compaction_interval_ms();
+              = config::shard_local_cfg().cloud_topics_compaction_interval_ms();
             auto delta = to_time_point(collection_timestamp)
                          - to_time_point(log.info_and_ts->collected_at);
             if (delta <= sample_interval) {

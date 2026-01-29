@@ -35,6 +35,16 @@ public:
     virtual ss::future<> start() = 0;
     virtual ss::future<> stop() noexcept = 0;
 
+    /**
+     * Reset the data sink to its initial state.
+     */
+    virtual ss::future<> reset() = 0;
+
+    /**
+     * Keeps track of the last replicated offset. Factors in inflight batches.
+     * Updated eagerly as soon as replicate() is called. If the replication
+     * fails, the offset may be out of sync.
+     */
     virtual kafka::offset last_replicated_offset() const = 0;
 
     virtual raft::replicate_stages replicate(

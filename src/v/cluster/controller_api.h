@@ -93,8 +93,6 @@ public:
     std::optional<ss::shard_id> shard_for(const raft::group_id& group) const;
     std::optional<ss::shard_id> shard_for(const model::ntp& ntp) const;
 
-    ss::future<std::error_code> remake_partition(const model::ntp& ntp);
-
 private:
     ss::future<std::optional<backend_operation>>
       get_current_op(model::ntp, ss::shard_id);

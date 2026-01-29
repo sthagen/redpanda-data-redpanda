@@ -301,21 +301,6 @@ private:
             }
             co_return ss::stop_iteration::yes;
         }
-        case shard_placement_table::reconciliation_action::remake: {
-            auto log_revision = expected_log_revision.value_or(_ntpt.revision);
-            auto ec = co_await delete_partition(ntp, placement, log_revision);
-            if (ec) {
-                co_return ec;
-            }
-            if (!_launched.contains(ntp)) {
-                ec = co_await create_partition(
-                  ntp, log_revision, placement.current().has_value());
-                if (ec) {
-                    co_return ec;
-                }
-            }
-            co_return ss::stop_iteration::yes;
-        }
         }
     }
 

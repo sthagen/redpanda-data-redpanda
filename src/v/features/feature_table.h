@@ -46,6 +46,7 @@ enum class feature : std::uint64_t {
     schema_registry_authz = 1ULL << 3U,
     topic_ids_api = 1ULL << 4U,
     controller_forced_reconfiguration = 1ULL << 5U,
+    user_based_client_quota = 1ULL << 6U,
     consumer_groups_migrations = 1ULL << 7U,
     shadow_linking = 1ULL << 8U,
     coordinated_compaction = 1ULL << 10U,
@@ -525,6 +526,12 @@ inline constexpr std::array feature_schema{
     release_version::v26_1_1,
     "group_based_authorization",
     feature::group_based_authorization,
+    feature_spec::available_policy::always,
+    feature_spec::prepare_policy::always},
+  feature_spec{
+    release_version::v26_1_1,
+    "user_based_client_quota",
+    feature::user_based_client_quota,
     feature_spec::available_policy::always,
     feature_spec::prepare_policy::always},
 };

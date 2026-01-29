@@ -35,6 +35,7 @@ enum class errc {
     kid_not_found,
     invalid_principal_mapping,
     invalid_group_claim_pointer,
+    group_claim_not_found
 };
 
 struct errc_category final : public std::error_category {
@@ -84,6 +85,8 @@ struct errc_category final : public std::error_category {
             return "invalid principal mapping rule";
         case errc::invalid_group_claim_pointer:
             return "invalid group claim pointer";
+        case errc::group_claim_not_found:
+            return "group claim not found";
         }
     }
 };

@@ -18,6 +18,7 @@
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cluster/metadata_cache.h"
 #include "compaction/key_offset_map.h"
+#include "config/property.h"
 #include "ssx/work_queue.h"
 
 class WorkerManagerTestFixture;
@@ -174,8 +175,12 @@ private:
 
     ss::abort_source _as;
 
-    // Used to alert worker that a job has become available.
+    // Used to alert worker that a job has become available, or when
+    // `cloud_topics_compaction_interval_ms` config changes.
     ss::condition_variable _worker_cv;
+
+    // The interval on which the worker polls for new work.
+    config::binding<std::chrono::milliseconds> _poll_interval;
 
     // Owned by `scheduler`.
     worker_manager* _worker_manager;

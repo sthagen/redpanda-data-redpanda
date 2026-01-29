@@ -418,7 +418,7 @@ def verify_file_layout(
     file name of the restored segment might be different from the original
     segment. This is because we're deleting raft configuration batches
     from the segments.
-    The function checks the size of the parition over the size of the original.
+    The function checks the size of the partition over the size of the original.
     The assertion is triggered only if the difference can't be explained by the
     upload lag and removal of configuration/archival-metadata batches.
     """

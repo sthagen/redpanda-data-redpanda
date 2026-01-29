@@ -1680,18 +1680,18 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
     // Measure the partition mutation rate
     auto resp_delay = 0ms;
     const auto now = quota_manager::clock::now();
+    const auto principal = ctx.connection()->get_principal();
     auto quota_exceeded_it = co_await ssx::partition(
       valid_topic_names.begin(),
       valid_topic_names.end(),
-      [&ctx, &resp_delay, now](const model::topic& t) {
+      [&ctx, &resp_delay, now, &principal](const model::topic& t) {
           const auto cfg = ctx.metadata_cache().get_topic_cfg(as_tp_ns_view(t));
           const auto mutations = cfg ? cfg->partition_count : 0;
           /// Capture before next scheduling point below
           auto& resp_delay_ref = resp_delay;
-          // TODO: wire in principal
           return ctx.quota_mgr()
             .record_partition_mutations(
-              std::nullopt, ctx.header().client_id, mutations, now)
+              principal.name_view(), ctx.header().client_id, mutations, now)
             .then([&resp_delay_ref](std::chrono::milliseconds delay) {
                 resp_delay_ref = std::max(delay, resp_delay_ref);
                 return delay == 0ms;

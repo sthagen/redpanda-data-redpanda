@@ -67,6 +67,7 @@ private:
 class test_data_sink : public data_sink {
 public:
     ss::future<> start() override { return ss::make_ready_future<>(); }
+    ss::future<> reset() override { return ss::make_ready_future<>(); }
     ss::future<> stop() noexcept override { return _gate.close(); }
 
     kafka::offset last_replicated_offset() const final {

@@ -68,16 +68,16 @@ result<authentication_data> authenticate(
     }
 
     auto groups = group_policy_apply(group_policy, jwt);
-    if (groups.has_error()) {
-        return groups.assume_error();
+    if (!groups.has_value()) {
+        return groups.error();
     }
-    vlog(seclog.trace, "Groups found in claim: {}", groups.assume_value());
+    vlog(seclog.trace, "Groups found in claim: {}", groups.value());
 
     return {
       std::move(principal).assume_value(),
       ss::sstring{jwt.sub().value_or("")},
       exp,
-      std::move(groups).assume_value()};
+      std::move(groups).value()};
 }
 
 result<authentication_data> authenticate(

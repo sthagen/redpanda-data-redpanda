@@ -84,8 +84,10 @@ compaction_sink::compaction_sink(
   kafka::offset start_offset,
   io* io,
   compaction_committer* committer,
+  config::binding<size_t> max_object_size,
   object_builder::options opts)
-  : _tp(tp)
+  : _max_object_size(std::move(max_object_size))
+  , _tp(tp)
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
   , _expected_compaction_epoch(expected_compaction_epoch)
@@ -210,7 +212,7 @@ compaction_sink::operator()(model::record_batch b, model::compression c) {
 
     if (
       _inflight_object
-      && _inflight_object->builder->file_size() >= max_object_size) {
+      && _inflight_object->builder->file_size() >= _max_object_size()) {
         co_await flush(prev_offset);
     }
 

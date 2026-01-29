@@ -928,9 +928,10 @@ sharded_store::get_schema_id(context ctx, schema_definition def) const {
       map, std::optional<schema_id>{}, reduce);
 }
 
-ss::future<chunked_vector<context>> sharded_store::get_contexts() const {
+ss::future<chunked_vector<context>>
+sharded_store::get_materialized_contexts() const {
     using contexts = chunked_vector<context>;
-    auto map = [](const store& s) { return s.get_contexts(); };
+    auto map = [](const store& s) { return s.get_materialized_contexts(); };
     auto reduce = [](contexts acc, contexts ctxs) {
         acc.reserve(acc.size() + ctxs.size());
         std::ranges::move(ctxs, std::back_inserter(acc));
@@ -941,6 +942,18 @@ ss::future<chunked_vector<context>> sharded_store::get_contexts() const {
     auto uniq = std::ranges::unique(ctxs);
     ctxs.erase_to_end(uniq.begin());
     co_return ctxs;
+}
+
+ss::future<bool> sharded_store::is_context_materialized(context ctx) const {
+    co_return _store.local().is_context_materialized(ctx);
+}
+
+ss::future<>
+sharded_store::set_context_materialized(context ctx, bool materialized) {
+    co_await _store.invoke_on_all(
+      _smp_opts, [ctx{std::move(ctx)}, materialized](store& s) {
+          s.set_context_materialized(ctx, materialized);
+      });
 }
 
 } // namespace pandaproxy::schema_registry

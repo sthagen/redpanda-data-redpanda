@@ -27,6 +27,7 @@
 #include "compaction/key_offset_map.h"
 #include "compaction/reducer.h"
 #include "compaction/tests/simple_reducer.h"
+#include "config/property.h"
 #include "container/chunked_circular_buffer.h"
 #include "container/chunked_vector.h"
 #include "kafka/server/tests/produce_consume_utils.h"
@@ -127,7 +128,8 @@ ss::future<> do_compact(
       expected_compaction_epoch,
       start_offset,
       io,
-      &committer);
+      &committer,
+      config::mock_binding<size_t>(128_MiB));
     auto reducer = compaction::sliding_window_reducer(
       std::move(src), std::move(sink));
 

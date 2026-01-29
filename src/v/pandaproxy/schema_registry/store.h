@@ -875,9 +875,27 @@ public:
         return _context_stores[ctx]._next_schema_id;
     }
 
-    chunked_vector<context> get_contexts() const {
-        return _context_stores | std::views::keys
-               | std::ranges::to<chunked_vector<context>>();
+    chunked_vector<context> get_materialized_contexts() const {
+        chunked_vector<context> result;
+        result.push_back(default_context);
+        for (const auto& [ctx, store] : _context_stores) {
+            if (store._materialized && ctx != default_context) {
+                result.push_back(ctx);
+            }
+        }
+        return result;
+    }
+
+    bool is_context_materialized(const context& ctx) const {
+        if (ctx == default_context) {
+            return true;
+        }
+        auto it = _context_stores.find(ctx);
+        return it != _context_stores.end() && it->second._materialized;
+    }
+
+    void set_context_materialized(const context& ctx, bool materialized) {
+        _context_stores[ctx]._materialized = materialized;
     }
 
 private:
@@ -1009,6 +1027,7 @@ private:
         std::optional<compatibility_level> _compatibility{std::nullopt};
         std::optional<mode> _mode{std::nullopt};
         schema_id _next_schema_id{1};
+        bool _materialized{false};
 
         chunked_vector<seq_marker> _config_written_at;
         chunked_vector<seq_marker> _mode_written_at;
@@ -1024,6 +1043,9 @@ private:
     //  - next_schema_id: sharded by context
     //  - compatibility: replicated across all shards
     //  - mode: replicated across all shards
+    //  - materialized: replicated across all shards
+    //  - _config_written_at: replicated across all shards
+    //  - _mode_written_at: replicated across all shards
     // _mutable: replicated across all shards
 
     // Alternative: Keep the store as is, but key the existing state under a

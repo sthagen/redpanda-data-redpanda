@@ -329,7 +329,7 @@ std::ostream& operator<<(std::ostream& o, const partitions_filter& filter) {
     for (auto& [ns, tp_f] : filter.namespaces) {
         fmt::print(o, "{{namespace: {}, topics: [", ns);
         for (auto& [tp, p_f] : tp_f) {
-            fmt::print(o, "{{topic: {}, paritions: [", tp);
+            fmt::print(o, "{{topic: {}, partitions: [", tp);
             if (!p_f.empty()) {
                 auto it = p_f.begin();
                 fmt::print(o, "{}", *it);

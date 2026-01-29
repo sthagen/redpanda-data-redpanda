@@ -27,6 +27,7 @@ namespace {
 namespace io = lsm::io;
 using lsm::internal::file_handle;
 using lsm::internal::operator""_seqno;
+using lsm::internal::operator""_key;
 
 class proxy_data_persistence : public io::data_persistence {
 public:
@@ -487,6 +488,43 @@ TEST_F(ImplTest, ExplicitSnapshot) {
     EXPECT_TRUE(matches_shadow(shadow, snap->get()));
     EXPECT_FALSE(matches_shadow(shadow, nullptr));
     EXPECT_TRUE(matches_shadow());
+}
+
+// Regression test for a bug where we previously wouldn't filter on file bounds
+// properly, which would previously show up as missing rows in snapshot::get().
+TEST_F(ImplTest, GetFindsKeysWithDifferentSeqno) {
+    // Write row "aaa" at seqno 1 and flush it so it ends up in a file.
+    {
+        auto batch = ss::make_lw_shared<lsm::db::memtable>();
+        batch->put("aaa@1"_key, iobuf::from("value_for_aaa"));
+        _db->apply(std::move(batch)).get();
+    }
+    _db->flush().get();
+    ASSERT_EQ(max_persisted_seqno(), 1_seqno);
+
+    {
+        auto batch = ss::make_lw_shared<lsm::db::memtable>();
+        batch->put("zzz@2"_key, iobuf::from("value_for_zzz"));
+        _db->apply(std::move(batch)).get();
+    }
+    ASSERT_EQ(max_applied_seqno(), 2_seqno);
+
+    // Create snapshot with seqno 2.
+    auto snap_opt = _db->create_snapshot();
+    ASSERT_TRUE(snap_opt);
+    auto snap = std::move(*snap_opt);
+    ASSERT_EQ(snap->seqno(), 2_seqno);
+
+    // Sanity check that iteration finds "aaa".
+    auto iter = _db->create_iterator({.snapshot = snap.get()}).get();
+    iter->seek_to_first().get();
+    ASSERT_TRUE(iter->valid());
+    EXPECT_EQ(iter->key(), "aaa@1"_key);
+
+    // Lookup the "aaa" at the snapshot's seqno, as is done in snapshot::get().
+    // This would previously skip the file containing "aaa" at seqno 1.
+    auto result = _db->get("aaa@2"_key).get();
+    EXPECT_FALSE(result.is_missing());
 }
 
 } // namespace

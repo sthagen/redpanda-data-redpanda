@@ -298,16 +298,6 @@ public:
 
     connection_attributes& attributes() { return _attributes; }
 
-private:
-    template<typename T>
-    security::auth_result authorized_user(
-      security::acl_principal principal,
-      security::acl_operation operation,
-      const T& name,
-      authz_quiet quiet,
-      superuser_required superuser_required,
-      const chunked_vector<security::acl_principal>& groups);
-
     security::acl_principal get_principal() const {
         if (_mtls_state) {
             return _mtls_state->principal();
@@ -317,6 +307,16 @@ private:
         // anonymous user
         return security::acl_principal{security::principal_type::user, {}};
     }
+
+private:
+    template<typename T>
+    security::auth_result authorized_user(
+      security::acl_principal principal,
+      security::acl_operation operation,
+      const T& name,
+      authz_quiet quiet,
+      superuser_required superuser_required,
+      const chunked_vector<security::acl_principal>& groups);
 
     const chunked_vector<security::acl_principal>& get_groups() const;
 

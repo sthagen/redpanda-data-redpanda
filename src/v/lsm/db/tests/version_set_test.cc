@@ -22,6 +22,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 namespace {
 
 using lsm::internal::operator""_level;
@@ -84,14 +86,26 @@ public:
         size_t file_size = builder.file_size();
         builder.close().get();
         auto edit = _version_set->new_edit();
+        auto min_seqno = std::ranges::min_element(
+                           spec.keys,
+                           std::less<>(),
+                           [](lsm::internal::key_view k) { return k.seqno(); })
+                           ->seqno();
+        auto max_seqno = std::ranges::max_element(
+                           spec.keys,
+                           std::less<>(),
+                           [](lsm::internal::key_view k) { return k.seqno(); })
+                           ->seqno();
         edit->add_file({
           .level = spec.level,
           .file_handle = {.id = spec.id},
           .file_size = file_size,
           .smallest = spec.keys.front(),
           .largest = spec.keys.back(),
+          .oldest_seqno = min_seqno,
+          .newest_seqno = max_seqno,
         });
-        edit->set_last_seqno(0_seqno);
+        edit->set_last_seqno(max_seqno);
         _version_set->log_and_apply(std::move(edit)).get();
     }
 
@@ -388,41 +402,72 @@ TEST_F(VersionSetTest, Get) {
       .id = 1_file_id,
       .level = 2_level,
       .keys = {
-        "b"_key,
-        "c"_key,
-        "d"_key,
-        "e"_key,
+        "b@1"_key,
+        "c@1"_key,
+        "d@1"_key,
+        "e@1"_key,
       },
     });
     add_sst({
       .id = 2_file_id,
       .level = 1_level,
       .keys = {
-        "a"_key,
-        "b"_key,
-        "c"_key,
-        "d"_key,
+        "a@2"_key,
+        "b@2"_key,
+        "c@2"_key,
+        "d@2"_key,
       },
     });
     add_sst({
       .id = 3_file_id,
       .level = 1_level,
       .keys = {
-        "w"_key,
-        "x"_key,
-        "y"_key,
-        "z"_key,
+        "w@2"_key,
+        "x@2"_key,
+        "y@2"_key,
+        "z@2"_key,
       },
     });
     auto& vset = version_set();
     lsm::db::version::get_stats stats;
-    auto result = vset.current()->get("a"_key, &stats).get();
-    EXPECT_THAT(result, IsLookupValue("a"_key, 1_level));
-    result = vset.current()->get("e"_key, &stats).get();
-    EXPECT_THAT(result, IsLookupValue("e"_key, 2_level));
-    result = vset.current()->get("b"_key, &stats).get();
-    EXPECT_THAT(result, IsLookupValue("b"_key, 1_level));
-    result = vset.current()->get("j"_key, &stats).get();
+    auto result = vset.current()->get("a@2"_key, &stats).get();
+    EXPECT_THAT(result, IsLookupValue("a@2"_key, 1_level));
+    result = vset.current()->get("e@1"_key, &stats).get();
+    EXPECT_THAT(result, IsLookupValue("e@1"_key, 2_level));
+    result = vset.current()->get("b@2"_key, &stats).get();
+    EXPECT_THAT(result, IsLookupValue("b@2"_key, 1_level));
+    result = vset.current()->get("j@1"_key, &stats).get();
+    EXPECT_THAT(result, IsMissing());
+}
+
+TEST_F(VersionSetTest, GetOverlappingUserKey) {
+    // Test a scenario with `get` where a level has the same user key split
+    // across multiple files. This is a rare but valid case.
+    add_sst({
+      .id = 2_file_id,
+      .level = 1_level,
+      .keys = {
+        "a@3"_key,
+        "a@2"_key,
+      },
+    });
+    add_sst({
+      .id = 3_file_id,
+      .level = 1_level,
+      .keys = {
+        "a@1"_key,
+        "b@2"_key,
+      },
+    });
+    auto& vset = version_set();
+    lsm::db::version::get_stats stats;
+    auto result = vset.current()->get("a@4"_key, &stats).get();
+    EXPECT_THAT(result, IsLookupValue("a@3"_key, 1_level));
+    result = vset.current()->get("a@1"_key, &stats).get();
+    EXPECT_THAT(result, IsLookupValue("a@1"_key, 1_level));
+    result = vset.current()->get("b@2"_key, &stats).get();
+    EXPECT_THAT(result, IsLookupValue("b@2"_key, 1_level));
+    result = vset.current()->get("j@1"_key, &stats).get();
     EXPECT_THAT(result, IsMissing());
 }
 

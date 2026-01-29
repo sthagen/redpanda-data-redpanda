@@ -925,7 +925,7 @@ private:
         // Prior to this change group_tx_fence shared the fence record
         // batch type with data partitions (tx_fence). This made compaction
         // logic complicated particularly because different compaction rules
-        // applied for fence batch in groups and data paritions. With the new
+        // applied for fence batch in groups and data partitions. With the new
         // feature, group fence has a separate dedicated batch type so it is
         // easy to diambiguate both fence types.
         return _feature_table.local().is_active(

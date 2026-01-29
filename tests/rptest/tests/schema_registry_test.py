@@ -5393,6 +5393,47 @@ class SchemaRegistryContextTest(SchemaRegistryEndpoints):
         self.assert_equal(result.status_code, requests.codes.ok)
         self.assert_equal(result.json()["mode"], "READWRITE")
 
+    @cluster(num_nodes=1)
+    def test_context_record_persistence(self):
+        # First, register a schema in the default context (no CONTEXT record)
+        result = self.sr_client.post_subjects_subject_versions(
+            subject="default-ctx-sub", data=json.dumps({"schema": schema1_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Verify no CONTEXT record was written for default context
+        time.sleep(1)  # Give some time for logs to be flushed
+        assert not self.redpanda.search_log_any("Writing CONTEXT record for ctx=\\."), (
+            "CONTEXT record should not be written for default context"
+        )
+
+        # Now register a schema in a non-default context
+        ctx = ".test-context"
+        ctx_subject = f":{ctx}:test-sub"
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=ctx_subject, data=json.dumps({"schema": schema2_def})
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+        # Verify CONTEXT record was written
+        # TODO: This test can be simplified with GET /contexts support later
+        # instead of relying on log lines.
+        write_pattern = f"Writing CONTEXT record for ctx={ctx}"
+        wait_until(
+            lambda: self.redpanda.search_log_any(write_pattern),
+            timeout_sec=10,
+            err_msg=f"Failed to find write log: {write_pattern}",
+        )
+
+        # Verify CONTEXT record was replayed (key contains "keytype: CONTEXT")
+        replay_pattern = f"keytype: CONTEXT.*context: {ctx}"
+        wait_until(
+            lambda: self.redpanda.search_log_any(replay_pattern),
+            timeout_sec=10,
+            err_msg=f"Failed to find replay log: {replay_pattern}",
+        )
+
 
 class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
     """

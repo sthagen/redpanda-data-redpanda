@@ -4609,6 +4609,29 @@ configuration::configuration()
       "target object size of 64 MiB.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       80_MiB)
+  , cloud_topics_compaction_max_object_size(
+      *this,
+      "cloud_topics_compaction_max_object_size",
+      "Maximum size in bytes for L1 objects produced by cloud topics "
+      "compaction.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      128_MiB)
+  , cloud_topics_compaction_interval_ms(
+      *this,
+      "cloud_topics_compaction_interval_ms",
+      "How often to trigger background compaction for cloud topics.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      30s)
+  , cloud_topics_compaction_key_map_memory(
+      *this,
+      "cloud_topics_compaction_key_map_memory",
+      "Maximum number of bytes that may be used on each shard by cloud topics "
+      "compaction key-offset maps.",
+      {.needs_restart = needs_restart::yes,
+       .example = "134217728",
+       .visibility = visibility::tunable},
+      128_MiB,
+      {.min = 16_MiB, .max = 100_GiB})
   , cloud_topics_long_term_garbage_collection_interval(
       *this,
       "cloud_topics_long_term_garbage_collection_interval",

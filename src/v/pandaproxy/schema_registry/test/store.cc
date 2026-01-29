@@ -1013,3 +1013,31 @@ BOOST_AUTO_TEST_CASE(test_store_context_config_written_at) {
     markers = s.get_context_config_written_at(test_ctx).value();
     BOOST_REQUIRE(markers.empty());
 }
+
+BOOST_AUTO_TEST_CASE(test_store_context_materialized) {
+    pps::store s;
+    auto test_ctx = pps::context{".test"};
+
+    // Empty state
+    BOOST_REQUIRE(s.is_context_materialized(pps::default_context));
+    BOOST_REQUIRE(!s.is_context_materialized(test_ctx));
+    auto contexts = s.get_materialized_contexts();
+    BOOST_REQUIRE_EQUAL(contexts.size(), 1);
+    BOOST_REQUIRE_EQUAL(contexts[0], pps::default_context);
+
+    // Set .test context as materialized
+    s.set_context_materialized(test_ctx, true);
+    BOOST_REQUIRE(s.is_context_materialized(test_ctx));
+    contexts = s.get_materialized_contexts();
+    BOOST_REQUIRE_EQUAL(contexts.size(), 2);
+    BOOST_REQUIRE(
+      std::ranges::find(contexts, pps::default_context) != contexts.end());
+    BOOST_REQUIRE(std::ranges::find(contexts, test_ctx) != contexts.end());
+
+    // Set .test context as not materialized (tombstone)
+    s.set_context_materialized(test_ctx, false);
+    BOOST_REQUIRE(!s.is_context_materialized(test_ctx));
+    contexts = s.get_materialized_contexts();
+    BOOST_REQUIRE_EQUAL(contexts.size(), 1);
+    BOOST_REQUIRE_EQUAL(contexts[0], pps::default_context);
+}

@@ -801,7 +801,7 @@ class ManyTopicsTest(RedpandaTest):
         self.redpanda.stop_node(maintenance_node, timeout=self.STOP_TIMEOUT)
 
         # Again, wait for healthy cluster
-        # This time underreplicated partion count should spike, ignore that
+        # This time underreplicated partition count should spike, ignore that
         # until restart
         self.logger.info("Making sure that cluster is healthy")
         self._wait_until_cluster_healthy(include_underreplicated=False)

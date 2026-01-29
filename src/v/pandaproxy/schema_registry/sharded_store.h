@@ -232,8 +232,14 @@ public:
     ss::future<std::optional<schema_id>>
     get_schema_id(context ctx, schema_definition def) const;
 
-    /// \brief List all contexts in the store
-    ss::future<chunked_vector<context>> get_contexts() const;
+    /// \brief List all materialized contexts (always includes default_context)
+    ss::future<chunked_vector<context>> get_materialized_contexts() const;
+
+    /// \brief Check if a context is materialized (has a CONTEXT record)
+    ss::future<bool> is_context_materialized(context ctx) const;
+
+    /// \brief Set the materialized state of a context
+    ss::future<> set_context_materialized(context ctx, bool materialized);
 
 private:
     ss::future<compatibility_result> do_is_compatible(

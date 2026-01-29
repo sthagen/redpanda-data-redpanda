@@ -53,7 +53,7 @@ compaction_scheduler::compaction_scheduler(
       state.metadata_cache,
       _probe)
   , _compaction_interval(
-      config::shard_local_cfg().log_compaction_interval_ms.bind())
+      config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {
     _compaction_interval.watch([this]() { _sem.signal(); });
 }
@@ -64,7 +64,7 @@ compaction_scheduler::compaction_scheduler(log_info_collector info_collector)
   , _worker_manager(
       _compaction_queue, nullptr, nullptr, &_committer, nullptr, _probe)
   , _compaction_interval(
-      config::shard_local_cfg().log_compaction_interval_ms.bind())
+      config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {
     _compaction_interval.watch([this]() { _sem.signal(); });
 }

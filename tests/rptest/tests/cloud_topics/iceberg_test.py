@@ -114,7 +114,7 @@ class EndToEndCloudTopicsIcebergCompactionTest(EndToEndCloudTopicsIcebergTestBas
             extra_rp_conf={
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "iceberg_target_lag_ms": 5000,
-                "log_compaction_interval_ms": 5000,
+                "cloud_topics_compaction_interval_ms": 5000,
                 "min_cleanable_dirty_ratio": 0.0,
             },
         )

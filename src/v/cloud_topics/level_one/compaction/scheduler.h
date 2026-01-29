@@ -117,8 +117,8 @@ private:
     config::binding<std::chrono::milliseconds> _compaction_interval;
 
     // This semaphore is used as a way to signal a change to
-    // `log_compaction_interval_ms` during the `wait()` operation in the main
-    // scheduling loop.
+    // `cloud_topics_compaction_interval_ms` during the `wait()` operation in
+    // the main scheduling loop.
     ssx::semaphore _sem{0, "cloud_topics::compaction::scheduling_loop"};
 
     ss::abort_source _as;

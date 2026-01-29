@@ -168,6 +168,20 @@ build:debug --config=debugger
 build:debug --copt=-O1
 
 # =================================
+# Fuzz
+# =================================
+# Fuzz configuration for running fuzz tests. It includes the coverage information
+# that libFuzzer needs to guide fuzzing. Fuzz tests still run without this, but
+# the state space will be poorly explored, you will see a message like:
+#
+# WARNING: no interesting inputs were found so far. Is the code instrumented for coverage?
+# This may also happen if the target rejected all inputs we tried so far
+#
+# https://llvm.org/docs/LibFuzzer.html
+build:fuzz --config=debug
+build:fuzz --copt=-fsanitize=fuzzer-no-link
+
+# =================================
 # ODR Finder
 # =================================
 build:odr-finder --cxxopt -stdlib=libc++

@@ -637,12 +637,12 @@ connection_context::record_tp_and_calculate_throttle(
     static_assert(std::is_same_v<clock, delay_t::clock>);
     const auto now = clock::now();
 
+    const auto principal = get_principal();
     // Throttle on client based quotas
     connection_context::delay_t client_quota_delay{};
     if (r_data.request_key == fetch_api::key) {
-        // TODO: wire in principal
         auto fetch_delay = co_await _server.quota_mgr().throttle_fetch_tp(
-          std::nullopt, r_data.client_id, now);
+          principal.name_view(), r_data.client_id, now);
         auto fetch_enforced = _throttling_state.update_fetch_delay(
           fetch_delay, now);
         client_quota_delay = delay_t{
@@ -650,10 +650,9 @@ connection_context::record_tp_and_calculate_throttle(
           .enforce = fetch_enforced,
         };
     } else if (r_data.request_key == produce_api::key) {
-        // TODO: wire in principal
         auto produce_delay
           = co_await _server.quota_mgr().record_produce_tp_and_throttle(
-            std::nullopt, r_data.client_id, request_size, now);
+            principal.name_view(), r_data.client_id, request_size, now);
         auto datalake_produce_delay
           = co_await _server.get_datalake_producer_throttle(r_data.client_id);
 
@@ -1184,9 +1183,9 @@ connection_context::client_protocol_state::do_process_responses(
 
     auto msg = response_as_scattered(std::move(resp_and_res.response));
     if (resp_and_res.resources->request_data.request_key == fetch_api::key) {
-        // TODO: wire in principal
+        const auto principal = connection_ctx->get_principal();
         co_await connection_ctx->_server.quota_mgr().record_fetch_tp(
-          std::nullopt,
+          principal.name_view(),
           resp_and_res.resources->request_data.client_id,
           msg.size(),
           quota_manager::clock::now());

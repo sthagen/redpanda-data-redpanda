@@ -20,6 +20,7 @@
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
+#include "resource_mgmt/memory_groups.h"
 #include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
@@ -38,11 +39,15 @@ compaction_worker::compaction_worker(
         "Unexpected compaction worker update queue error: {}",
         ex);
   })
+  , _poll_interval(
+      config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _worker_manager(worker_manager)
   , _io(io)
   , _metastore(metastore)
   , _committer(committer)
-  , _metadata_cache(metadata_cache) {}
+  , _metadata_cache(metadata_cache) {
+    _poll_interval.watch([this]() { _worker_cv.signal(); });
+}
 
 ss::future<> compaction_worker::start() {
     _probe.setup_metrics();
@@ -79,13 +84,17 @@ void compaction_worker::start_work_loop() {
 }
 
 ss::future<> compaction_worker::work_loop() {
-    constexpr std::chrono::seconds poll_frequency(60);
-
     while (is_active()) {
+        auto poll_interval = _poll_interval();
         try {
-            co_await _worker_cv.wait(poll_frequency);
-        } catch (const ss::semaphore_timed_out&) {
+            co_await _worker_cv.wait(_poll_interval());
+        } catch (const ss::condition_variable_timed_out&) {
             // Fall through
+        }
+
+        if (poll_interval != _poll_interval()) {
+            // Cluster config was changed while waiting.
+            continue;
         }
 
         while (is_active()) {
@@ -219,7 +228,8 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       expected_compaction_epoch,
       start_offset,
       _io,
-      _committer);
+      _committer,
+      config::shard_local_cfg().cloud_topics_compaction_max_object_size.bind());
     auto reducer = compaction::sliding_window_reducer(
       std::move(src), std::move(sink));
 
@@ -356,10 +366,8 @@ ss::future<> compaction_worker::initialize_map() {
         co_return;
     }
 
-    // TODO: use memory group reservation.
-    // auto compaction_mem_bytes = memory_groups().compaction_reserved_memory();
     auto compaction_mem_bytes
-      = config::shard_local_cfg().storage_compaction_key_map_memory();
+      = memory_groups().cloud_topics_compaction_reserved_memory();
     auto compaction_map = std::make_unique<compaction::hash_key_offset_map>();
     co_await compaction_map->initialize(compaction_mem_bytes);
     _map = std::move(compaction_map);

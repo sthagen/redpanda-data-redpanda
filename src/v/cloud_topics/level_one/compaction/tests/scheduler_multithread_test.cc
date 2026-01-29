@@ -34,7 +34,7 @@ TEST_F(SchedulerTestFixture, TestSchedulerMultithread) {
 #endif
 
     scoped_config cfg;
-    cfg.get("log_compaction_interval_ms").set_value(100ms);
+    cfg.get("cloud_topics_compaction_interval_ms").set_value(100ms);
     ss::abort_source as;
     chunked_hash_set<ss::shard_id> paused_workers;
     chunked_hash_map<model::ntp, model::topic_id_partition> managed_ntps;

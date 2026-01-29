@@ -2033,6 +2033,171 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 self._perform_auto_prefix_trimming(topic.name, partition_count)
 
     @cluster(num_nodes=7)
+    @ignore(
+        with_failures=True,
+        source_cluster_spec=SecondaryClusterSpec(
+            ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+        ),
+    )
+    @matrix(
+        with_failures=[True, False],
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_start_offset_catch_up(self, with_failures, source_cluster_spec):
+        """
+        Test that verifies shadow link can catch up to a source topic that has been
+        prefix-trimmed to its HWM (i.e., all data has been trimmed).
+
+        1. Create a source topic with 5 partitions
+        2. Write data to the topic across all partitions
+        3. Trim the prefix of each partition of the source topic to the partition's HWM
+        4. Create a new Shadow Link on the Shadow Cluster
+        5. Wait for the shadow topic to be created on the Shadow Cluster
+        6. Verify that the start offset and HWM of all shadow partitions match the source partitions
+        7. Write data to the source partitions
+        8. Verify that the shadow partitions replicate that data
+        """
+        partition_count = 5
+        topic = TopicSpec(
+            name="source-topic", partition_count=partition_count, replication_factor=3
+        )
+        self.source_default_client().create_topic(topic)
+
+        # Step 2: Write data to the topic across all partitions
+        initial_msg_count = 1000
+        KgoVerifierProducer.oneshot(
+            self.test_context,
+            self.source_cluster.service,
+            topic=topic.name,
+            msg_size=128,
+            msg_count=initial_msg_count,
+            custom_node=self.preallocated_nodes,
+        )
+
+        # Wait for all messages to be written (sum of HWMs across all partitions should equal msg_count)
+        def all_messages_written():
+            total_hwm = 0
+            for part in self.source_cluster_rpk.describe_topic(topic.name):
+                total_hwm += part.high_watermark or 0
+            return total_hwm >= initial_msg_count
+
+        self.source_cluster.service.wait_until(
+            all_messages_written,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Timed out waiting for {initial_msg_count} messages to be written",
+        )
+
+        # Step 3: Trim the prefix of each partition to its HWM
+        # First, collect the HWM for each partition
+        source_hwms: dict[int, int] = {}
+        for part in self.source_cluster_rpk.describe_topic(topic.name):
+            source_hwms[part.id] = part.high_watermark
+            self.logger.info(f"Source partition {part.id}: HWM={part.high_watermark}")
+
+        # Trim each partition to its HWM
+        for part_id, hwm in source_hwms.items():
+            self.logger.info(f"Trimming partition {part_id} to offset {hwm}")
+            self.source_cluster_rpk.trim_prefix(
+                topic=topic.name, offset=hwm, partitions=[part_id]
+            )
+
+        # Wait for the trim to take effect on all partitions
+        def all_partitions_trimmed():
+            for part in self.source_cluster_rpk.describe_topic(topic.name):
+                expected_offset = source_hwms[part.id]
+                if (part.start_offset or 0) != expected_offset:
+                    self.logger.debug(
+                        f"Partition {part.id}: start_offset={part.start_offset}, expected={expected_offset}"
+                    )
+                    return False
+            return True
+
+        self.source_cluster.service.wait_until(
+            all_partitions_trimmed,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Timed out waiting for prefix trim to take effect",
+        )
+
+        # Step 4: Create a new Shadow Link on the Shadow Cluster
+        with self._maybe_failure_injector(with_failures):
+            self.create_link("test-link")
+
+            # Step 5: Wait for the shadow topic to be created on the Shadow Cluster
+            self.target_cluster.service.wait_until(
+                lambda: self.topic_partitions_exists_in_target(topic),
+                timeout_sec=30,
+                backoff_sec=1,
+                err_msg=f"Topic {topic.name} not found in target cluster",
+            )
+
+            # Step 6: Verify that the start offset and HWM of all shadow partitions match the source partitions
+            def shadow_partitions_match_source():
+                target_parts = {
+                    p.id: p for p in self.target_cluster_rpk.describe_topic(topic.name)
+                }
+                source_parts = {
+                    p.id: p for p in self.source_cluster_rpk.describe_topic(topic.name)
+                }
+
+                if len(target_parts) != partition_count:
+                    self.logger.debug(
+                        f"Target partition count mismatch: {len(target_parts)} != {partition_count}"
+                    )
+                    return False
+
+                for part_id in range(partition_count):
+                    if part_id not in target_parts or part_id not in source_parts:
+                        return False
+
+                    target_part = target_parts[part_id]
+                    source_part = source_parts[part_id]
+
+                    # Start offset should match
+                    if target_part.start_offset != source_part.start_offset:
+                        self.logger.debug(
+                            f"Partition {part_id}: target start_offset={target_part.start_offset}, "
+                            f"source start_offset={source_part.start_offset}"
+                        )
+                        return False
+
+                    # HWM should match (both should be equal to start_offset since topic was trimmed to HWM)
+                    if target_part.high_watermark != source_part.high_watermark:
+                        self.logger.debug(
+                            f"Partition {part_id}: target HWM={target_part.high_watermark}, "
+                            f"source HWM={source_part.high_watermark}"
+                        )
+                        return False
+
+                return True
+
+            self.target_cluster.service.wait_until(
+                shadow_partitions_match_source,
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg="Shadow partitions do not match source partitions after prefix trim",
+            )
+
+            # Log the final state after matching
+            self.logger.info(
+                "Shadow partitions match source partitions after prefix trim:"
+            )
+            for part in self.target_cluster_rpk.describe_topic(topic.name):
+                self.logger.info(
+                    f"  Partition {part.id}: start_offset={part.start_offset}, HWM={part.high_watermark}"
+                )
+
+            # Step 7 & 8: Write data to the source partitions and verify replication
+            with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=10000):
+                self.verify()
+
+    @cluster(num_nodes=7)
     @matrix(
         timestamp_type=[
             "CreateTime",

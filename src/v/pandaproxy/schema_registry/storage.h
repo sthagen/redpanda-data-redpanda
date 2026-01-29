@@ -38,7 +38,14 @@
 namespace pandaproxy::schema_registry {
 
 using topic_key_magic = named_type<int32_t, struct topic_key_magic_tag>;
-enum class topic_key_type { noop = 0, schema, config, mode, delete_subject };
+enum class topic_key_type {
+    noop = 0,
+    schema,
+    config,
+    mode,
+    delete_subject,
+    context
+};
 
 constexpr std::string_view to_string_view(topic_key_type kt) {
     switch (kt) {
@@ -52,6 +59,8 @@ constexpr std::string_view to_string_view(topic_key_type kt) {
         return "MODE";
     case topic_key_type::delete_subject:
         return "DELETE_SUBJECT";
+    case topic_key_type::context:
+        return "CONTEXT";
     }
     return "{invalid}";
 };
@@ -66,6 +75,7 @@ from_string_view<topic_key_type>(std::string_view sv) {
       .match(
         to_string_view(topic_key_type::delete_subject),
         topic_key_type::delete_subject)
+      .match(to_string_view(topic_key_type::context), topic_key_type::context)
       .default_match(std::nullopt);
 }
 
@@ -1411,6 +1421,272 @@ public:
     }
 };
 
+struct context_key {
+    static constexpr topic_key_type keytype{topic_key_type::context};
+    std::optional<model::offset> seq;
+    std::optional<model::node_id> node;
+    ss::sstring tenant{"default"};
+    context ctx;
+    topic_key_magic magic{0};
+
+    friend bool operator==(const context_key&, const context_key&) = default;
+
+    friend std::ostream& operator<<(std::ostream& os, const context_key& v) {
+        if (v.seq.has_value() && v.node.has_value()) {
+            fmt::print(
+              os,
+              "seq: {}, node: {}, keytype: {}, tenant: {}, context: {}, magic: "
+              "{}",
+              *v.seq,
+              *v.node,
+              to_string_view(v.keytype),
+              v.tenant,
+              v.ctx,
+              v.magic);
+        } else {
+            fmt::print(
+              os,
+              "unsequenced keytype: {}, tenant: {}, context: {}, magic: {}",
+              to_string_view(v.keytype),
+              v.tenant,
+              v.ctx,
+              v.magic);
+        }
+        return os;
+    }
+};
+
+struct context_value {
+    ss::sstring tenant{"default"};
+    context ctx;
+
+    friend bool operator==(const context_value&, const context_value&)
+      = default;
+
+    friend std::ostream& operator<<(std::ostream& os, const context_value& v) {
+        fmt::print(os, "tenant: {}, context: {}", v.tenant, v.ctx);
+        return os;
+    }
+};
+
+template<typename Buffer>
+void rjson_serialize(
+  ::json::Writer<Buffer>& w, const schema_registry::context_key& key) {
+    w.StartObject();
+    w.Key("keytype");
+    ::json::rjson_serialize(w, to_string_view(key.keytype));
+    w.Key("tenant");
+    w.String(key.tenant);
+    w.Key("context");
+    w.String(key.ctx());
+    w.Key("magic");
+    ::json::rjson_serialize(w, key.magic);
+    if (key.seq.has_value()) {
+        w.Key("seq");
+        ::json::rjson_serialize(w, *key.seq);
+    }
+    if (key.node.has_value()) {
+        w.Key("node");
+        ::json::rjson_serialize(w, *key.node);
+    }
+    w.EndObject();
+}
+
+template<typename Buffer>
+void rjson_serialize(
+  ::json::Writer<Buffer>& w, const schema_registry::context_value& val) {
+    w.StartObject();
+    w.Key("tenant");
+    w.String(val.tenant);
+    w.Key("context");
+    w.String(val.ctx());
+    w.EndObject();
+}
+
+template<typename Encoding = ::json::UTF8<>>
+class context_key_handler : public json::base_handler<Encoding> {
+    enum class state {
+        empty = 0,
+        object,
+        keytype,
+        seq,
+        node,
+        tenant,
+        context,
+        magic,
+    };
+    state _state = state::empty;
+
+public:
+    using Ch = typename json::base_handler<Encoding>::Ch;
+    using rjson_parse_result = context_key;
+    rjson_parse_result result;
+
+    context_key_handler()
+      : json::base_handler<Encoding>{json::serialization_format::none} {}
+
+    bool Key(const Ch* str, ::json::SizeType len, bool) {
+        auto sv = std::string_view{str, len};
+        std::optional<state> s{string_switch<std::optional<state>>(sv)
+                                 .match("keytype", state::keytype)
+                                 .match("seq", state::seq)
+                                 .match("node", state::node)
+                                 .match("tenant", state::tenant)
+                                 .match("context", state::context)
+                                 .match("magic", state::magic)
+                                 .default_match(std::nullopt)};
+        return s.has_value() && std::exchange(_state, *s) == state::object;
+    }
+
+    bool Uint(int i) {
+        switch (_state) {
+        case state::magic: {
+            result.magic = topic_key_magic{i};
+            _state = state::object;
+            return true;
+        }
+        case state::seq: {
+            result.seq = model::offset{i};
+            _state = state::object;
+            return true;
+        }
+        case state::node: {
+            result.node = model::node_id{i};
+            _state = state::object;
+            return true;
+        }
+        case state::empty:
+        case state::tenant:
+        case state::context:
+        case state::keytype:
+        case state::object:
+            return false;
+        }
+        return false;
+    }
+
+    bool String(const Ch* str, ::json::SizeType len, bool) {
+        auto sv = std::string_view{str, len};
+        switch (_state) {
+        case state::keytype: {
+            auto kt = from_string_view<topic_key_type>(sv);
+            _state = state::object;
+            return kt == result.keytype;
+        }
+        case state::tenant: {
+            // Accept only "default" as valid tenant
+            if (sv != "default") {
+                return false;
+            }
+            result.tenant = ss::sstring{sv};
+            _state = state::object;
+            return true;
+        }
+        case state::context: {
+            result.ctx = context{ss::sstring{sv}};
+            _state = state::object;
+            return true;
+        }
+        case state::empty:
+        case state::seq:
+        case state::node:
+        case state::object:
+        case state::magic:
+            return false;
+        }
+        return false;
+    }
+
+    bool Null() {
+        // The tenant is nullable (treat as "default")
+        if (_state == state::tenant) {
+            result.tenant = "default";
+            _state = state::object;
+            return true;
+        }
+        return false;
+    }
+
+    bool StartObject() {
+        return std::exchange(_state, state::object) == state::empty;
+    }
+
+    bool EndObject(::json::SizeType) {
+        return result.seq.has_value() == result.node.has_value()
+               && std::exchange(_state, state::empty) == state::object;
+    }
+};
+
+template<typename Encoding = ::json::UTF8<>>
+class context_value_handler : public json::base_handler<Encoding> {
+    enum class state {
+        empty = 0,
+        object,
+        tenant,
+        context,
+    };
+    state _state = state::empty;
+
+public:
+    using Ch = typename json::base_handler<Encoding>::Ch;
+    using rjson_parse_result = context_value;
+    rjson_parse_result result;
+
+    context_value_handler()
+      : json::base_handler<Encoding>{json::serialization_format::none} {}
+
+    bool Key(const Ch* str, ::json::SizeType len, bool) {
+        auto sv = std::string_view{str, len};
+        std::optional<state> s{string_switch<std::optional<state>>(sv)
+                                 .match("tenant", state::tenant)
+                                 .match("context", state::context)
+                                 .default_match(std::nullopt)};
+        return s.has_value() && std::exchange(_state, *s) == state::object;
+    }
+
+    bool String(const Ch* str, ::json::SizeType len, bool) {
+        auto sv = std::string_view{str, len};
+        switch (_state) {
+        case state::tenant: {
+            // Accept only "default" as valid tenant
+            if (sv != "default") {
+                return false;
+            }
+            result.tenant = ss::sstring{sv};
+            _state = state::object;
+            return true;
+        }
+        case state::context: {
+            result.ctx = context{ss::sstring{sv}};
+            _state = state::object;
+            return true;
+        }
+        case state::empty:
+        case state::object:
+            return false;
+        }
+        return false;
+    }
+
+    bool Null() {
+        // The tenant is nullable (treat as "default")
+        if (_state == state::tenant) {
+            result.tenant = "default";
+            _state = state::object;
+            return true;
+        }
+        return false;
+    }
+
+    bool StartObject() {
+        return std::exchange(_state, state::object) == state::empty;
+    }
+
+    bool EndObject(::json::SizeType) {
+        return std::exchange(_state, state::empty) == state::object;
+    }
+};
+
 template<typename Handler, typename... Args>
 auto from_json_iobuf(iobuf&& iobuf, Args&&... args) {
     return json::rjson_parse(
@@ -1465,6 +1741,19 @@ struct consume_to_store {
         switch (*key_type) {
         case topic_key_type::noop:
             break;
+        case topic_key_type::context: {
+            std::optional<context_value> val;
+            if (!record.value().empty()) {
+                val.emplace(
+                  from_json_iobuf<context_value_handler<>>(
+                    record.release_value()));
+            }
+            co_await apply(
+              offset,
+              from_json_iobuf<context_key_handler<>>(std::move(key)),
+              std::move(val));
+            break;
+        }
         case topic_key_type::schema: {
             std::optional<schema_value> val;
             if (!record.value().empty()) {
@@ -1744,6 +2033,43 @@ struct consume_to_store {
                 .key_type = seq_marker_key_type::delete_subject},
               key.sub,
               permanent_delete::no);
+        } catch (const exception& e) {
+            vlog(srlog.debug, "Error replaying: {}: {}", key, e);
+        }
+    }
+
+    ss::future<> apply(
+      model::offset offset, context_key key, std::optional<context_value> val) {
+        // Check seq if it was provided, otherwise assume 3rdparty
+        // compatibility, which can't collide.
+        if (val && key.seq.has_value() && offset != key.seq) {
+            vlog(
+              srlog.debug,
+              "Ignoring out of order {} (at offset {})",
+              key,
+              offset);
+            co_return;
+        }
+
+        if (key.magic != 0) {
+            throw exception(
+              error_code::topic_parse_error,
+              fmt::format("Unexpected magic: {}", key));
+        }
+
+        try {
+            vlog(
+              srlog.debug,
+              "Applying: {} tombstone={} (at offset {})",
+              key,
+              !val.has_value(),
+              offset);
+
+            if (val.has_value()) {
+                co_await _store.set_context_materialized(key.ctx, true);
+            } else {
+                co_await _store.set_context_materialized(key.ctx, false);
+            }
         } catch (const exception& e) {
             vlog(srlog.debug, "Error replaying: {}: {}", key, e);
         }

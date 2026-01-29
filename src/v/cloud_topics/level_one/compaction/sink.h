@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/compaction/committer.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "compaction/reducer.h"
+#include "config/property.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
@@ -31,6 +32,7 @@ public:
       kafka::offset,
       l1::io*,
       compaction_committer*,
+      config::binding<size_t> max_object_size,
       object_builder::options = {});
 
     ss::future<bool>
@@ -59,7 +61,7 @@ private:
     // The target maximum L1 object size that will be built. After this
     // threshold is breached, `needs_roll()` should return `true` and a new L1
     // object will be started.
-    static constexpr size_t max_object_size = 128_MiB;
+    config::binding<size_t> _max_object_size;
 
     // Initializes the `_inflight_object`. It is guaranteed to have a value (!=
     // nullptr) after this function is called, if no exception is thrown.

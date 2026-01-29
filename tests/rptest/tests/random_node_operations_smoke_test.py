@@ -273,6 +273,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             self.redpanda.set_cluster_config(
                 values={
                     CLOUD_TOPICS_CONFIG_STR: True,
+                    # Set both compaction intervals for cloud topics compaction tests
+                    "log_compaction_interval_ms": 5000,
+                    "cloud_topics_compaction_interval_ms": 5000,
                 }
             )
             self.redpanda.restart_nodes(

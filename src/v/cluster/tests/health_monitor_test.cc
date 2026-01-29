@@ -164,9 +164,9 @@ cluster::topic_configuration topic_cfg(
   const model::ns& ns,
   const ss::sstring& name,
   int16_t replication,
-  int paritions) {
+  int partitions) {
     return cluster::topic_configuration(
-      ns, model::topic(name), paritions, replication);
+      ns, model::topic(name), partitions, replication);
 }
 
 bool contains_exactly_ntp_leaders(

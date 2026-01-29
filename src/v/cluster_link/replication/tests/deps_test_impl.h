@@ -27,6 +27,7 @@ class accounting_sink : public data_sink {
 public:
     ss::future<> start() override;
     ss::future<> stop() noexcept override;
+    ss::future<> reset() override;
     kafka::offset last_replicated_offset() const override;
     raft::replicate_stages replicate(
       chunked_vector<::model::record_batch> batches,

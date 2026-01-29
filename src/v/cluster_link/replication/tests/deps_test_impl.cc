@@ -26,6 +26,13 @@ test_config_provider::start_offset(const ::model::ntp&, ss::abort_source&) {
 
 ss::future<> accounting_sink::start() { return ss::now(); }
 
+ss::future<> accounting_sink::reset() {
+    _records_consumed = 0;
+    _last_offset = kafka::offset{0};
+    _start_offset = {};
+    return ss::now();
+}
+
 ss::future<> accounting_sink::stop() noexcept { return _gate.close(); };
 
 kafka::offset accounting_sink::last_replicated_offset() const {

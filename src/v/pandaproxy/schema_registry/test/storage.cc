@@ -126,6 +126,30 @@ constexpr std::string_view delete_subject_value_sv{
 const auto expected_delete_subject_value = delete_subject_value{
   .sub{subject{"my-kafka-value"}}};
 
+constexpr std::string_view context_key_sv{
+  R"({
+  "keytype": "CONTEXT",
+  "tenant": "default",
+  "context": ".staging",
+  "magic": 0,
+  "seq": 42,
+  "node": 2
+})"};
+const auto expected_context_key = context_key{
+  .seq{model::offset{42}},
+  .node{model::node_id{2}},
+  .tenant{"default"},
+  .ctx{context{".staging"}},
+  .magic{topic_key_magic{0}}};
+
+constexpr std::string_view context_value_sv{
+  R"({
+  "tenant": "default",
+  "context": ".staging"
+})"};
+const auto expected_context_value = context_value{
+  .tenant{"default"}, .ctx{context{".staging"}}};
+
 } // namespace
 
 class StorageTest : public ::testing::Test {
@@ -205,6 +229,24 @@ TEST_F(StorageTest, Serde) {
 
         auto str = ppj::rjson_serialize_str(expected_delete_subject_value);
         EXPECT_EQ(str, ::json::minify(delete_subject_value_sv));
+    }
+
+    {
+        auto key = ppj::impl::rjson_parse(
+          context_key_sv.data(), context_key_handler<>{});
+        EXPECT_EQ(expected_context_key, key);
+
+        auto str = ppj::rjson_serialize_str(expected_context_key);
+        EXPECT_EQ(str, ::json::minify(context_key_sv));
+    }
+
+    {
+        auto val = ppj::impl::rjson_parse(
+          context_value_sv.data(), context_value_handler<>{});
+        EXPECT_EQ(expected_context_value, val);
+
+        auto str = ppj::rjson_serialize_str(expected_context_value);
+        EXPECT_EQ(str, ::json::minify(context_value_sv));
     }
 }
 
@@ -549,6 +591,56 @@ TEST_F(StorageTest, SerdeContextSubject) {
         auto str = ppj::rjson_serialize_str(expected_mode_key_legacy);
         EXPECT_EQ(str, ::json::minify(mode_key_legacy_sv));
     }
+}
+
+TEST_F(StorageTest, ContextKeyTenantValidation) {
+    // null tenant should be accepted
+    constexpr std::string_view null_tenant_sv{
+      R"({"keytype": "CONTEXT", "tenant": null, "context": ".test", "magic": 0})"};
+    auto null_key = ppj::impl::rjson_parse(
+      null_tenant_sv.data(), context_key_handler<>{});
+    EXPECT_EQ(null_key.tenant, "default");
+    EXPECT_EQ(null_key.ctx, context{".test"});
+
+    // missing tenant should be accepted
+    constexpr std::string_view missing_tenant_sv{
+      R"({"keytype": "CONTEXT", "context": ".test", "magic": 0})"};
+    auto missing_key = ppj::impl::rjson_parse(
+      missing_tenant_sv.data(), context_key_handler<>{});
+    EXPECT_EQ(missing_key.tenant, "default");
+    EXPECT_EQ(missing_key.ctx, context{".test"});
+
+    // invalid tenant should be rejected
+    constexpr std::string_view invalid_tenant_sv{
+      R"({"keytype": "CONTEXT", "tenant": "other", "context": ".test", "magic": 0})"};
+    EXPECT_THROW(
+      ppj::impl::rjson_parse(invalid_tenant_sv.data(), context_key_handler<>{}),
+      ppj::parse_error);
+}
+
+TEST_F(StorageTest, ContextValueTenantValidation) {
+    // null tenant should be accepted
+    constexpr std::string_view null_tenant_sv{
+      R"({"tenant": null, "context": ".test"})"};
+    auto null_val = ppj::impl::rjson_parse(
+      null_tenant_sv.data(), context_value_handler<>{});
+    EXPECT_EQ(null_val.tenant, "default");
+    EXPECT_EQ(null_val.ctx, context{".test"});
+
+    // missing tenant should be accepted
+    constexpr std::string_view missing_tenant_sv{R"({"context": ".test"})"};
+    auto missing_val = ppj::impl::rjson_parse(
+      missing_tenant_sv.data(), context_value_handler<>{});
+    EXPECT_EQ(missing_val.tenant, "default");
+    EXPECT_EQ(missing_val.ctx, context{".test"});
+
+    // invalid tenant should be rejected
+    constexpr std::string_view invalid_tenant_sv{
+      R"({"tenant": "other", "context": ".test"})"};
+    EXPECT_THROW(
+      ppj::impl::rjson_parse(
+        invalid_tenant_sv.data(), context_value_handler<>{}),
+      ppj::parse_error);
 }
 
 } // namespace pandaproxy::schema_registry

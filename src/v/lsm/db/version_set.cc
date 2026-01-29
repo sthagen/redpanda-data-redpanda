@@ -427,11 +427,17 @@ ss::future<> version::for_each_overlapping(
   internal::key_view target,
   absl::FunctionRef<ss::future<ss::stop_iteration>(
     internal::level, ss::lw_shared_ptr<file_meta_data>)> fn) {
+    // NOTE: it is critical to use user keys to find overlapping files, since
+    // the internal keys include sequence numbers and result in incorrect file
+    // bound overlap checks.
+    auto user_key = target.user_key();
     // Search level-0 from newest to oldest
     chunked_vector<ss::lw_shared_ptr<file_meta_data>> tmp;
     tmp.reserve(_files[0_level].size());
     for (const auto& file : _files[0_level]) {
-        if (target >= file->smallest && target <= file->largest) {
+        if (
+          user_key >= file->smallest.user_key()
+          && user_key <= file->largest.user_key()) {
             tmp.push_back(file);
         }
     }
@@ -456,10 +462,13 @@ ss::future<> version::for_each_overlapping(
         if (files.empty()) {
             continue;
         }
+        // We binary search on the internal key not user key because
+        // if there is a key split across files we need to skip newer
+        // key versions.
         size_t index = find_file(files, target);
         if (index < files.size()) {
             const auto& file = files[index];
-            if (target < file->smallest) {
+            if (user_key < file->smallest.user_key()) {
                 // All of file is past any data for the key
             } else {
                 auto stop = co_await fn(level, file);

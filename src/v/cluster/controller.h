@@ -205,10 +205,6 @@ public:
         return _cluster_link_frontend;
     }
 
-    ss::sharded<shard_placement_table>& get_shard_placement_table() {
-        return _shard_placement;
-    }
-
     bool is_raft0_leader() const {
         vassert(
           ss::this_shard_id() == ss::shard_id(0),
