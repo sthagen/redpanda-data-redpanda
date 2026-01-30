@@ -82,9 +82,11 @@ ss::future<> app::construct(
       &domain_supervisor);
 
     co_await construct_service(
-      replicated_metastore, ss::sharded_parameter([this] {
-          return std::ref(l1_metastore_router.local());
-      }));
+      replicated_metastore,
+      ss::sharded_parameter(
+        [this] { return std::ref(l1_metastore_router.local()); }),
+      ss::sharded_parameter([&remote] { return std::ref(remote->local()); }),
+      bucket);
 
     co_await construct_service(
       state,
@@ -234,5 +236,7 @@ ss::sharded<l1::replicated_metastore>* app::get_sharded_replicated_metastore() {
 l1::compaction_scheduler* app::get_compaction_scheduler() {
     return compaction_scheduler.get();
 }
+
+ss::sharded<level_zero_gc>* app::get_level_zero_gc() { return &l0_gc; }
 
 } // namespace cloud_topics

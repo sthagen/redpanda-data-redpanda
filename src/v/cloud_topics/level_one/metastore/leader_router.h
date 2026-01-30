@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cloud_storage/remote_label.h"
 #include "cloud_topics/level_one/metastore/rpc_service.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cluster/fwd.h"
@@ -95,12 +96,22 @@ public:
     ss::future<rpc::get_extent_metadata_reply> get_extent_metadata(
       rpc::get_extent_metadata_request, local_only = local_only::no);
 
+    ss::future<rpc::flush_domain_reply>
+      flush_domain(rpc::flush_domain_request, local_only = local_only::no);
+
+    ss::future<rpc::restore_domain_reply>
+      restore_domain(rpc::restore_domain_request, local_only = local_only::no);
+
     std::optional<model::partition_id>
     metastore_partition(const model::topic_id_partition&) const;
 
     std::optional<int> num_metastore_partitions() const;
 
     ss::future<bool> ensure_topic_exists();
+
+    // Indicates the location in object storage that this metastore's manifest
+    // will be stored.
+    std::optional<cloud_storage::remote_label> metastore_restore_label() const;
 
 private:
     using proto_t = cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
@@ -187,6 +198,14 @@ private:
 
     ss::future<rpc::get_extent_metadata_reply> get_extent_metadata_locally(
       rpc::get_extent_metadata_request,
+      const model::ntp& metastore_ntp,
+      ss::shard_id);
+
+    ss::future<rpc::flush_domain_reply> flush_domain_locally(
+      rpc::flush_domain_request, const model::ntp& metastore_ntp, ss::shard_id);
+
+    ss::future<rpc::restore_domain_reply> restore_domain_locally(
+      rpc::restore_domain_request,
       const model::ntp& metastore_ntp,
       ss::shard_id);
 

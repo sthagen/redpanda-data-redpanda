@@ -27,7 +27,7 @@ func newReferencesCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			f := p.Formatter
-			if h, ok := f.Help([]subjectSchema{}); ok {
+			if h, ok := f.Help([]subjectSchemaMetadata{}); ok {
 				out.Exit(h)
 			}
 			p, err := p.LoadVirtualProfile(fs)
@@ -48,7 +48,7 @@ func newReferencesCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			references, err := cl.SchemaReferences(ctx, subject, version)
 			out.MaybeDie(err, "unable to check for references of subject %q and version %q: %v", subject, sversion, err)
 
-			err = printSubjectSchemaTable(f, false, references...)
+			err = printSubjectSchemaWithMetadata(f, false, false, references...)
 			out.MaybeDieErr(err)
 		},
 	}

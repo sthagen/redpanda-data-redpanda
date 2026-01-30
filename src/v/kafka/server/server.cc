@@ -561,7 +561,7 @@ ss::future<response_ptr> sasl_authenticate_handler::handle(
                   ctx.sasl()->session_lifetime_ms());
                 if (!ctx.audit_authn_success(
                       ctx.sasl()->mechanism().mechanism_name(),
-                      ctx.sasl()->mechanism().audit_user())) {
+                      ctx.sasl()->mechanism().audit_user().copy())) {
                     ctx.sasl()->set_state(
                       security::sasl_server::sasl_state::failed);
                     sasl_authenticate_response_data data{
@@ -602,7 +602,7 @@ ss::future<response_ptr> sasl_authenticate_handler::handle(
     if (!ctx.audit_authn_failure(
           fmt::format("SASL authentication failed: {}", ec.message()),
           ctx.sasl()->mechanism().mechanism_name(),
-          ctx.sasl()->mechanism().audit_user())) {
+          ctx.sasl()->mechanism().audit_user().copy())) {
         data.error_code = error_code::broker_not_available;
         data.error_message = "Broker not available - audit system failure";
     } else {

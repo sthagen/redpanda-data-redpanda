@@ -73,7 +73,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_gtest(
     name = "replicated_metastore_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "replicated_metastore_test.cc",
     ],

@@ -641,6 +641,18 @@ simple_domain_manager::get_extent_metadata(
       .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents))};
 }
 
+ss::future<rpc::flush_domain_reply>
+simple_domain_manager::flush_domain(rpc::flush_domain_request) {
+    // Not supported.
+    co_return rpc::flush_domain_reply{.ec = rpc::errc::concurrent_requests};
+}
+
+ss::future<rpc::restore_domain_reply>
+simple_domain_manager::restore_domain(rpc::restore_domain_request) {
+    // Not supported.
+    co_return rpc::restore_domain_reply{.ec = rpc::errc::concurrent_requests};
+}
+
 ss::future<> simple_domain_manager::gc_loop() {
     auto gate = maybe_gate();
     if (!gate.has_value()) {

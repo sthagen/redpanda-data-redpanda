@@ -611,6 +611,62 @@ class ClusterRateQuotaTest(RedpandaTest):
         return metrics.samples
 
     @cluster(num_nodes=1)
+    def test_all_client_quota_metrics_exist(self):
+        CQ_THROTTLE_TIME_COUNT = (
+            "vectorized_kafka_quotas_client_quota_throttle_time_count"
+        )
+        CQ_THROTTLE_TIME_SUM = "vectorized_kafka_quotas_client_quota_throttle_time_sum"
+        CQ_THROUGHPUT_COUNT = "vectorized_kafka_quotas_client_quota_throughput_count"
+        CQ_THROUGHPUT_SUM = "vectorized_kafka_quotas_client_quota_throughput_sum"
+
+        QUOTA_RULES = [
+            "kafka_user_client_id",
+            "kafka_user_client_prefix",
+            "kafka_user_client_default",
+            "kafka_user",
+            "kafka_user_default_client_id",
+            "kafka_user_default_client_prefix",
+            "kafka_user_default_client_default",
+            "kafka_user_default",
+            "kafka_client_default",
+            "kafka_client_id",
+            "kafka_client_prefix",
+            "not_applicable",
+        ]
+        QUOTA_TYPES = [
+            "fetch_quota",
+            "partition_mutation_quota",
+            "produce_quota",
+        ]
+
+        patterns = [
+            CQ_THROTTLE_TIME_COUNT,
+            CQ_THROTTLE_TIME_SUM,
+            CQ_THROUGHPUT_COUNT,
+            CQ_THROUGHPUT_SUM,
+        ]
+        for pattern in patterns:
+            self.logger.debug(f"Testing pattern '{pattern}'")
+            metrics = self.get_metrics(pattern)
+
+            # Checks if a metric exists with these 2 labels
+            def check_metric_exists(qrule: str, qtype: str):
+                for sample in metrics:
+                    labels = sample.labels
+                    rule_label = labels["redpanda_quota_rule"]
+                    type_label = labels["redpanda_quota_type"]
+                    if qrule == rule_label and qtype == type_label:
+                        return True
+                return False
+
+            self.logger.debug(f"Metric samples: {metrics}")
+            for qrule in QUOTA_RULES:
+                for qtype in QUOTA_TYPES:
+                    assert check_metric_exists(qrule, qtype), (
+                        f"Could not find metric with labels '{qrule}' and '{qtype}' for pattern '{pattern}'"
+                    )
+
+    @cluster(num_nodes=1)
     def test_client_quota_metrics(self):
         self.init_test_data()
 

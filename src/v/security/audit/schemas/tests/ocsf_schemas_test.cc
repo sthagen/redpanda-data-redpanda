@@ -55,7 +55,7 @@ static const sa::user default_user_with_role{
   .name = "redpanda-user",
   .type_id = sa::user::type::user,
   .uid = "none",
-  .groups = std::vector<sa::group>{
+  .groups = chunked_vector<sa::group>{
     {sa::group{.type = sa::group::type_id::role, .name = "redpanda-group"}}}};
 
 static const ss::sstring default_user_with_role_ser{
@@ -304,7 +304,8 @@ BOOST_AUTO_TEST_CASE(validate_api_activity) {
     auto api_act = sa::api_activity{
       sa::api_activity::activity_id::create,
       sa::actor{
-        .authorizations = {authz_success}, .user = default_user_with_role},
+        .authorizations = {authz_success},
+        .user = default_user_with_role.copy()},
       sa::api{api_create_topic},
       std::move(dst_endpoint),
       test_http_request(),
@@ -373,7 +374,7 @@ BOOST_AUTO_TEST_CASE(validate_authentication_sasl_scram) {
       sa::authentication::status_id::success,
       std::nullopt,
       now,
-      sa::user{default_user});
+      sa::user{default_user.copy()});
 
     auto ser = sa::rjson_serialize(authn);
 
@@ -427,7 +428,7 @@ BOOST_AUTO_TEST_CASE(validate_authentication_kerberos) {
       sa::authentication::status_id::failure,
       "Failure",
       now,
-      sa::user{default_user});
+      sa::user{default_user.copy()});
 
     auto ser = sa::rjson_serialize(authn);
 
@@ -985,6 +986,5 @@ BOOST_AUTO_TEST_CASE(test_ocsf_size) {
                           + sizeof(ss::sstring) + user.groups[0].name.size();
     }
 
-    BOOST_CHECK_EQUAL(estimated_size, 416);
-    BOOST_CHECK_EQUAL(authn.estimated_size(), 416);
+    BOOST_CHECK_EQUAL(estimated_size, authn.estimated_size());
 }

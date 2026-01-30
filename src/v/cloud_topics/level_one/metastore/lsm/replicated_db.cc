@@ -197,7 +197,7 @@ replicated_database::write(chunked_vector<write_batch_row> rows) {
 
     if (!update.has_value()) {
         co_return std::unexpected(error(
-          errc::replication_error,
+          errc::update_rejected,
           "Failed to build write batch update: {}",
           update.error()));
     }
@@ -255,11 +255,8 @@ replicated_database::reset(
       stm_->state(), uuid, std::move(serialized_man));
 
     if (!update.has_value()) {
-        vlog(
-          cd_log.warn,
-          "Failed to build reset_manifest update: {}",
-          update.error());
-        co_return std::unexpected(errc::replication_error);
+        co_return std::unexpected(error(
+          errc::update_rejected, "Failed to build reset_manifest update"));
     }
 
     model::batch_builder builder;

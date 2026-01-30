@@ -180,6 +180,7 @@ user user_from_request_auth_result(const request_auth_result& r) {
       .type_id = r.is_authenticated()
                    ? (r.is_superuser() ? user::type::admin : user::type::user)
                    : user::type::unknown,
+      .groups = acl_principals_to_audit_groups(r.get_groups()),
     };
 }
 
@@ -247,10 +248,10 @@ actor result_to_actor(const security::auth_result& result) {
     user user{
       .name = result.principal.name(),
       .type_id = result.is_superuser ? user::type::admin : user::type::user,
-      .groups = result.role ? std::vector<group>{group{
+      .groups = result.role ? chunked_vector<group>{group{
                                 .type = group::type_id::role,
                                 .name = result.role.value()}}
-                            : std::vector<group>{}};
+                            : chunked_vector<group>{}};
 
     policy policy;
     policy.name = "aclAuthorization";

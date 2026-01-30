@@ -70,6 +70,12 @@ public:
     ss::future<rpc::get_extent_metadata_reply>
       get_extent_metadata(rpc::get_extent_metadata_request) override;
 
+    ss::future<rpc::flush_domain_reply>
+      flush_domain(rpc::flush_domain_request) override;
+
+    ss::future<rpc::restore_domain_reply>
+      restore_domain(rpc::restore_domain_request) override;
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
     ss::future<> gc_loop();

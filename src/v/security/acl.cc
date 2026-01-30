@@ -906,4 +906,19 @@ get_allowed_operations<pandaproxy::schema_registry::context_subject>();
 template const std::vector<acl_operation>&
 get_allowed_operations<pandaproxy::schema_registry::registry_resource>();
 
+chunked_vector<audit::group> acl_principals_to_audit_groups(
+  const chunked_vector<acl_principal>& principals) {
+    chunked_vector<audit::group> audit_groups;
+    audit_groups.reserve(principals.size());
+    std::ranges::copy(
+      principals | std::views::filter([](const auto& p) {
+          return p.type() == principal_type::group;
+      }) | std::views::transform([](const auto& p) {
+          return audit::group{
+            .type = audit::group::type_id::idp_group, .name = p.name()};
+      }),
+      std::back_inserter(audit_groups));
+    return audit_groups;
+}
+
 } // namespace security

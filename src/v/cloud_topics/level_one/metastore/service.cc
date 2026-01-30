@@ -100,4 +100,16 @@ ss::future<get_extent_metadata_reply> service::get_extent_metadata(
       std::move(request), leader_router::local_only::yes);
 }
 
+ss::future<flush_domain_reply>
+service::flush_domain(flush_domain_request request, ::rpc::streaming_context&) {
+    return _leader_router->local().flush_domain(
+      std::move(request), leader_router::local_only::yes);
+}
+
+ss::future<restore_domain_reply> service::restore_domain(
+  restore_domain_request request, ::rpc::streaming_context&) {
+    return _leader_router->local().restore_domain(
+      std::move(request), leader_router::local_only::yes);
+}
+
 } // namespace cloud_topics::l1::rpc

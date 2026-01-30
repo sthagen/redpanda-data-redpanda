@@ -11,6 +11,7 @@
 
 #include "base/seastarx.h"
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/metastore_manifest.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
@@ -21,6 +22,10 @@
 #include <seastar/core/future.hh>
 
 #include <expected>
+
+namespace cloud_storage {
+struct remote_label;
+} // namespace cloud_storage
 
 namespace cloud_topics::l1 {
 
@@ -472,6 +477,16 @@ public:
     get_extent_metadata_backwards(
       const model::topic_id_partition&, kafka::offset, kafka::offset, size_t)
       = 0;
+
+    // Flushes all metastore partitions to cloud storage.
+    virtual ss::future<std::expected<std::nullopt_t, errc>> flush() = 0;
+
+    // Restores metastore state from a previously flushed manifest in the given
+    // cluster's cloud storage. This downloads the metastore topic manifest,
+    // ensures the metastore topic exists with the correct number of partitions,
+    // and restores each partition's domain to its corresponding domain_uuid.
+    virtual ss::future<std::expected<std::nullopt_t, errc>>
+    restore(const cloud_storage::remote_label&) = 0;
 };
 
 } // namespace cloud_topics::l1

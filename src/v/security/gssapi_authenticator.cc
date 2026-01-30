@@ -215,7 +215,7 @@ ss::future<result<bytes>> gssapi_authenticator::authenticate(bytes auth_bytes) {
 
     _state = res.state;
     _audit_user = co_await _worker.submit(
-      [this]() { return _impl->audit_user(); });
+      [this]() { return _impl->audit_user().copy(); });
     if (_state == state::complete) {
         std::optional<std::chrono::seconds> lifetime;
         std::tie(_principal, lifetime) = co_await _worker.submit([this]() {

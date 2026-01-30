@@ -37,6 +37,7 @@ public:
     enum class errc {
         io_error,
         replication_error,
+        update_rejected,
         not_leader,
         shutting_down,
     };
@@ -149,6 +150,8 @@ struct fmt::formatter<cloud_topics::l1::replicated_database::errc> final
             return formatter<string_view>::format("io_error", ctx);
         case replication_error:
             return formatter<string_view>::format("replication_error", ctx);
+        case update_rejected:
+            return formatter<string_view>::format("update_rejected", ctx);
         case not_leader:
             return formatter<string_view>::format("not_leader", ctx);
         case shutting_down:

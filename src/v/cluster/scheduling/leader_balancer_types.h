@@ -11,13 +11,14 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "config/leaders_preference.h"
 #include "container/chunked_hash_map.h"
 #include "model/metadata.h"
 #include "raft/fundamental.h"
 
 #include <roaring/roaring64map.hh>
+
+#include <ranges>
 
 namespace cluster::leader_balancer_types {
 
@@ -51,16 +52,21 @@ template<typename ValueType>
 using topic_map = chunked_hash_map<topic_id_t, ValueType>;
 
 struct leaders_preference {
-    absl::flat_hash_set<model::rack_id> racks;
+    config::leaders_preference::type_t type{
+      config::leaders_preference::type_t::none};
+    // O(N) find operations, fine so long as the rack preference number is small
+    std::vector<model::rack_id> racks;
 
     leaders_preference() = default;
-    explicit leaders_preference(const config::leaders_preference& cfg) {
+    explicit leaders_preference(const config::leaders_preference& cfg)
+      : type{cfg.type} {
         switch (cfg.type) {
         case config::leaders_preference::type_t::none:
             break;
         case config::leaders_preference::type_t::racks:
-            racks.reserve(cfg.racks.size());
-            racks.insert(cfg.racks.begin(), cfg.racks.end());
+            [[fallthrough]];
+        case config::leaders_preference::type_t::ordered_racks:
+            racks = std::vector<model::rack_id>(std::from_range, cfg.racks);
             break;
         }
     }

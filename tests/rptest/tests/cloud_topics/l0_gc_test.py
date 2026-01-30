@@ -6,11 +6,18 @@
 # As of the Change Date specified in that file, in accordance with
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
+
+from typing import TypeAlias, cast
+
+from rptest.clients.admin.v2 import Admin, l0_gc_pb
 from rptest.context.cloud_storage import CloudStorageType
 from rptest.services.kgo_repeater_service import repeater_traffic
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 
+from connectrpc.errors import ConnectError
+from ducktape.cluster.cluster import ClusterNode
+from ducktape.errors import TimeoutError
 from ducktape.tests.test import TestContext
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
@@ -21,9 +28,10 @@ from rptest.services.redpanda import (
     CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.util import expect_exception
 
 
-class CloudTopicsL0GCTest(RedpandaTest):
+class CloudTopicsL0GCTestBase(RedpandaTest):
     def __init__(self, test_context: TestContext):
         self.test_context = test_context
         si_settings = SISettings(
@@ -43,13 +51,13 @@ class CloudTopicsL0GCTest(RedpandaTest):
             "cloud_topics_short_term_gc_interval": 2000,
             "cloud_topics_short_term_gc_backoff_interval": 10000,
         }
-        super(CloudTopicsL0GCTest, self).__init__(
+        super().__init__(
             test_context=test_context,
             extra_rp_conf=extra_rp_conf,
             si_settings=si_settings,
         )
 
-    def __create_topics(self, topics: list[TopicSpec]):
+    def create_topics(self, topics: list[TopicSpec]):
         rpk = RpkTool(self.redpanda)
         for spec in topics:
             rpk.create_topic(
@@ -59,38 +67,326 @@ class CloudTopicsL0GCTest(RedpandaTest):
                 config={"redpanda.cloud_topic.enabled": "true"},
             )
 
-    @cluster(num_nodes=4)
-    @matrix(cloud_storage_type=get_cloud_storage_type())
-    def test_l0_gc(self, cloud_storage_type: CloudStorageType):
-        self.topics = [TopicSpec(partition_count=2)]
-        self.__create_topics(self.topics)
+    def get_num_objects_deleted(self, nodes: list[ClusterNode] | None = None):
+        samples = self.redpanda.metrics_sample(
+            "vectorized_cloud_topics_l0_gc_objects_deleted_total",
+            nodes=nodes,
+        )
+        self.logger.info(samples)
+        if samples is not None and samples.samples:
+            return int(sum(s.value for s in samples.samples))
+        return 0
 
+    def produce_some(self, topics: list[str], n: int = 300):
         with repeater_traffic(
             context=self.test_context,
             redpanda=self.redpanda,
-            topics=[spec.name for spec in self.topics],
+            topics=topics,
             msg_size=1024,
             rate_limit_bps=2 * 1024 * 1024,
             workers=1,
         ) as repeater:
             repeater.await_group_ready()
-            repeater.await_progress(300, timeout_sec=90)
+            repeater.await_progress(n, timeout_sec=90)
+
+
+class CloudTopicsL0GCTest(CloudTopicsL0GCTestBase):
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=get_cloud_storage_type())
+    def test_l0_gc(self, cloud_storage_type: CloudStorageType):
+        self.topics = [TopicSpec(partition_count=2)]
+        self.create_topics(self.topics)
+        self.produce_some(topics=[spec.name for spec in self.topics])
 
         # TODO: we are only checking that deletes are happening here (and should
         # also be happening in parallel with the repeater's fetch/produce
         # workload), but we do want to add tests that check constraints
-        def get_num_objects_deleted():
-            samples = self.redpanda.metrics_sample(
-                "vectorized_cloud_topics_l0_gc_objects_deleted_total"
-            )
-            self.logger.info(samples)
-            if samples is not None and samples.samples:
-                return int(sum(s.value for s in samples.samples))
-            return 0
-
         wait_until(
-            lambda: get_num_objects_deleted() > 0,
+            lambda: self.get_num_objects_deleted() > 0,
             timeout_sec=30,
             backoff_sec=5,
             retry_on_exc=True,
         )
+
+
+GcStatus: TypeAlias = l0_gc_pb.Status
+StatusReport: TypeAlias = dict[int, dict[int, GcStatus] | str]
+
+
+class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Admin API rpcs for starting and stopping level zero garbage collection.
+    """
+
+    @property
+    def l0_gc_client(self):
+        return Admin(self.redpanda).l0_gc()
+
+    def gc_get_status(self, node: int | None = None) -> StatusReport:
+        response = self.l0_gc_client.get_status(l0_gc_pb.GetStatusRequest(node_id=node))
+        assert response is not None, "GetStatusResponse should not be None"
+        expected_nodes = len(self.redpanda.nodes) if node is None else 1
+        assert len(response.nodes) == expected_nodes, (
+            f"{len(response.nodes)=} != {expected_nodes=}"
+        )
+        return {
+            n.node_id: (
+                {s.shard_id: cast(GcStatus, s.status) for s in n.shards}
+                if n.error == ""
+                else n.error
+            )
+            for n in response.nodes
+        }
+
+    def gc_pause(self, node: int | None = None) -> dict[int, str]:
+        self.logger.debug(
+            f"Pause L0 Garbage Collection {'clusterwide' if node is None else f'Node {node}'}"
+        )
+        response = self.l0_gc_client.pause(l0_gc_pb.PauseRequest(node_id=node))
+        assert response is not None, "PauseResponse should not be None"
+        expected_nodes = len(self.redpanda.nodes) if node is None else 1
+        assert len(response.results) == expected_nodes, (
+            f"{len(response.results)=} != {expected_nodes=}"
+        )
+        return {r.node_id: r.error for r in response.results if r.error}
+
+    def gc_start(self, node: int | None = None) -> dict[int, str]:
+        self.logger.debug(
+            f"Start L0 Garbage Collection {'clusterwide' if node is None else f'Node {node}'}"
+        )
+        response = self.l0_gc_client.start(l0_gc_pb.StartRequest(node_id=node))
+        assert response is not None, "StartResponse should not be None"
+        expected_nodes = len(self.redpanda.nodes) if node is None else 1
+        assert len(response.results) == expected_nodes, (
+            f"{len(response.results)=} != {expected_nodes=}"
+        )
+        return {r.node_id: r.error for r in response.results if r.error}
+
+    def check_statuses(
+        self,
+        report: StatusReport,
+        nodes: list[int] | None = None,
+        status: GcStatus.ValueType | None = None,
+        error: str | None = None,
+        strict: bool = True,
+    ):
+        assert status is not None or error is not None, (
+            "check_statuses usage: Set expected status or expected error"
+        )
+        if nodes is None or nodes == []:
+            nodes = [self.redpanda.node_id(n) for n in self.redpanda.nodes]
+        assert not strict or len(report) == len(nodes), (
+            f"Expected report for exactly {nodes=}, got {report=}"
+        )
+
+        for node_id in nodes:
+            assert node_id in report, f"Expected status for {node_id=}"
+            shards = report[node_id]
+            if error is not None:
+                assert isinstance(shards, str), (
+                    f"{node_id}: Expected error got {shards=}"
+                )
+                assert error in shards, f"{node_id=} Unexpected error body '{shards}'"
+            else:
+                assert isinstance(shards, dict), (
+                    f"{node_id=}: Unexpected error '{shards}'"
+                )
+                assert len(shards) > 0, f"{node_id=}: Report unexpectedly empty"
+                assert all(s == status for _, s in shards.items()), (
+                    f"Expected {status=} on {node_id=}: {shards=}"
+                )
+
+    @cluster(num_nodes=3)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_get_status(self, cloud_storage_type: CloudStorageType):
+        self.logger.debug("Clusterwide status")
+        statuses = self.gc_get_status()
+        self.check_statuses(statuses, status=GcStatus.L0_GC_STATUS_RUNNING)
+
+        target_node = self.redpanda.nodes[2]
+        target_node_id = self.redpanda.node_id(target_node)
+
+        self.logger.debug("Single-node status")
+        statuses = self.gc_get_status(target_node_id)
+        self.check_statuses(
+            statuses, nodes=[target_node_id], status=GcStatus.L0_GC_STATUS_RUNNING
+        )
+
+        self.logger.debug("Kill a node and check partial failure")
+        self.redpanda.stop_node(target_node, timeout=30)
+        statuses = self.gc_get_status()
+        self.check_statuses(
+            statuses,
+            nodes=[target_node_id],
+            error="(Service unavailable)",
+            strict=False,
+        )
+
+        self.check_statuses(
+            statuses,
+            nodes=[
+                self.redpanda.node_id(n)
+                for n in self.redpanda.nodes
+                if n.name != target_node.name
+            ],
+            status=GcStatus.L0_GC_STATUS_RUNNING,
+            strict=False,
+        )
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_basic_pause_unpause(self, cloud_storage_type: CloudStorageType):
+        self.topics = [
+            TopicSpec(partition_count=2),
+            TopicSpec(partition_count=2),
+        ]
+        self.create_topics(self.topics)
+        self.logger.debug("Produce some")
+        self.produce_some(topics=[spec.name for spec in self.topics])
+
+        self.check_statuses(self.gc_get_status(), status=GcStatus.L0_GC_STATUS_RUNNING)
+
+        self.logger.debug("Wait until we've deleted something...")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
+
+        errs = self.gc_pause()
+        assert len(errs) == 0, f"Unexpected errors pausing GC: {errs=}"
+        self.check_statuses(self.gc_get_status(), status=GcStatus.L0_GC_STATUS_PAUSED)
+
+        n_deleted = self.get_num_objects_deleted()
+        self.logger.debug(f"GC should be stopped now, so we won't exceed {n_deleted=}")
+        with expect_exception(TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.get_num_objects_deleted() > n_deleted,
+                timeout_sec=30,
+                backoff_sec=5,
+                retry_on_exc=True,
+            )
+
+        self.logger.debug(
+            "Re-start garbage collection. We should see the deleted object count ticking up."
+        )
+        errs = self.gc_start()
+        assert len(errs) == 0, f"Unexpected errors restarting GC: {errs=}"
+        self.check_statuses(self.gc_get_status(), status=GcStatus.L0_GC_STATUS_RUNNING)
+
+        wait_until(
+            lambda: self.get_num_objects_deleted() > n_deleted,
+            timeout_sec=30,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_single_node_pause_unpause(self, cloud_storage_type: CloudStorageType):
+        self.topics = [TopicSpec(partition_count=2)]
+        self.create_topics(self.topics)
+
+        pause_node = self.redpanda.nodes[0]
+        pause_node_id = self.redpanda.node_id(pause_node)
+
+        self.logger.debug(f"Pause GC on {pause_node.name} and produce some records")
+        errs = self.gc_pause(pause_node_id)
+        assert len(errs) == 0, (
+            f"Unexpected error pausing GC on {pause_node.name}: {errs=}"
+        )
+        self.check_statuses(
+            self.gc_get_status(node=pause_node_id),
+            nodes=[pause_node_id],
+            status=GcStatus.L0_GC_STATUS_PAUSED,
+        )
+        self.check_statuses(
+            self.gc_get_status(),
+            nodes=[self.redpanda.node_id(n) for n in self.redpanda.nodes[1:]],
+            status=GcStatus.L0_GC_STATUS_RUNNING,
+            strict=False,
+        )
+
+        self.produce_some(topics=[spec.name for spec in self.topics])
+
+        self.logger.debug("Wait for GC to kick in")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
+
+        self.logger.debug(
+            f"Confirm that we're not deleting any objects on {pause_node.name}"
+        )
+        with expect_exception(TimeoutError, lambda e: True):
+            wait_until(
+                lambda: self.get_num_objects_deleted(nodes=[pause_node]) > 0,
+                timeout_sec=15,
+                backoff_sec=3,
+                retry_on_exc=True,
+            )
+
+        self.logger.debug(f"Now unpause {pause_node.name} and wait for some deletes")
+        errs = self.gc_start(pause_node_id)
+        assert len(errs) == 0, (
+            f"Unexpected error re-starting GC on {pause_node.name}: {errs=}"
+        )
+        self.check_statuses(self.gc_get_status(), status=GcStatus.L0_GC_STATUS_RUNNING)
+
+        wait_until(
+            lambda: self.get_num_objects_deleted(nodes=[pause_node]) > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+    @cluster(num_nodes=1)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_not_found(self, cloud_storage_type: CloudStorageType):
+        nonexistent_node_id: int = 23
+        with expect_exception(ConnectError, lambda e: "23 not found" in str(e)):
+            self.gc_start(nonexistent_node_id)
+        with expect_exception(ConnectError, lambda e: "23 not found" in str(e)):
+            self.gc_pause(nonexistent_node_id)
+
+    @cluster(num_nodes=3)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_partial_failure(self, cloud_storage_type: CloudStorageType):
+        node_to_kill = self.redpanda.nodes[1]
+        node_to_kill_id = self.redpanda.node_id(node_to_kill)
+
+        self.logger.debug(f"Check that GC admin API is up and stop {node_to_kill.name}")
+        errs = self.gc_start()
+        assert len(errs) == 0, f"{errs=}"
+        self.redpanda.stop_node(node_to_kill, timeout=30)
+
+        self.logger.debug(
+            f"Try to pause GC clusterwide. Only {node_to_kill.name} ({node_to_kill_id})"
+            "should report an error."
+        )
+        errs = self.gc_pause()
+        assert len(errs) == 1, f"Expected 1 error, got {errs=}"
+        assert node_to_kill_id in errs, f"Unexpected error {errs=}"
+        assert "(Service unavailable)" in errs[node_to_kill_id], (
+            f"Unexpected error {errs=}"
+        )
+
+        self.logger.debug(f"Restart {node_to_kill.name} and pause GC there")
+        self.redpanda.start_node(
+            node_to_kill, timeout=30, node_id_override=node_to_kill_id
+        )
+        errs = self.gc_pause(node_to_kill_id)
+        assert len(errs) == 0, "Unexpected errors: {errs=}"

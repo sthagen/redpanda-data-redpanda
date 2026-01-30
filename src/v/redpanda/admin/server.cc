@@ -188,7 +188,9 @@ security::audit::authentication_event_options make_authn_event_options(
                      ? (auth_result.is_superuser()
                           ? security::audit::user::type::admin
                           : security::audit::user::type::user)
-                     : security::audit::user::type::unknown}};
+                     : security::audit::user::type::unknown,
+        .groups = security::acl_principals_to_audit_groups(
+          auth_result.get_groups())}};
 }
 
 security::audit::authentication_event_options make_authn_event_options(

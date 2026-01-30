@@ -108,6 +108,7 @@ redpanda_cc_fuzz_test(
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:scattered_message",
+        "@fmt",
     ],
 )
 

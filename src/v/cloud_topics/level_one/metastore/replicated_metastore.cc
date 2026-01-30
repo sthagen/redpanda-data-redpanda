@@ -10,6 +10,7 @@
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 
 #include "cloud_topics/level_one/metastore/leader_router.h"
+#include "cloud_topics/level_one/metastore/manifest_io.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "cloud_topics/logger.h"
@@ -251,8 +252,12 @@ rpc_to_meta_extent_metadata(chunked_vector<rpc::extent_metadata> v) {
 
 } // anonymous namespace
 
-replicated_metastore::replicated_metastore(leader_router& fe)
-  : fe_(fe) {}
+replicated_metastore::replicated_metastore(
+  leader_router& fe,
+  cloud_io::remote& io,
+  cloud_storage_clients::bucket_name bucket)
+  : fe_(fe)
+  , manifest_io_(std::make_unique<manifest_io>(io, std::move(bucket))) {}
 
 ss::future<std::expected<
   std::unique_ptr<metastore::object_metadata_builder>,
@@ -866,6 +871,140 @@ replicated_metastore::get_extent_metadata_backwards(
     resp.extents = rpc_to_meta_extent_metadata(std::move(reply.extents));
 
     co_return resp;
+}
+
+ss::future<std::expected<std::nullopt_t, metastore::errc>>
+replicated_metastore::flush() {
+    auto num_partitions = fe_.num_metastore_partitions();
+    if (!num_partitions.has_value()) {
+        vlog(cd_log.warn, "Unable to get num metastore partitions for flush");
+        co_return std::unexpected(errc::transport_error);
+    }
+    auto remote_label = fe_.metastore_restore_label();
+    if (!remote_label.has_value()) {
+        vlog(
+          cd_log.warn, "Unable to get the restore label for metastore topic");
+        co_return std::unexpected(errc::transport_error);
+    }
+
+    chunked_vector<domain_uuid> domains;
+    domains.reserve(*num_partitions);
+    for (int pid = 0; pid < *num_partitions; ++pid) {
+        rpc::flush_domain_request req{
+          .metastore_partition = model::partition_id{pid}};
+
+        auto reply_fut = co_await ss::coroutine::as_future(
+          fe_.flush_domain(std::move(req)));
+        if (reply_fut.failed()) {
+            vlog(
+              cd_log.warn,
+              "Error flushing partition {}: {}",
+              pid,
+              reply_fut.get_exception());
+            co_return std::unexpected(errc::transport_error);
+        }
+        auto reply = reply_fut.get();
+        if (reply.ec != rpc::errc::ok) {
+            co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+        }
+        domains.push_back(reply.uuid);
+    }
+
+    metastore_manifest manifest{
+      .partitioning_strategy = "murmur",
+      .domains = std::move(domains),
+    };
+    auto upload_res = co_await manifest_io_->upload_metastore_manifest(
+      *remote_label, std::move(manifest));
+    if (!upload_res.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Failed to upload metastore manifest: {}",
+          upload_res.error());
+        co_return std::unexpected(errc::transport_error);
+    }
+
+    co_return std::nullopt;
+}
+
+ss::future<std::expected<std::nullopt_t, metastore::errc>>
+replicated_metastore::restore(const cloud_storage::remote_label& source_label) {
+    // Download the metastore manifest from the source cluster
+    auto manifest_res = co_await manifest_io_->download_metastore_manifest(
+      source_label);
+    if (!manifest_res.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Failed to download metastore manifest for cluster {}: {}",
+          source_label,
+          manifest_res.error());
+        co_return std::unexpected(errc::transport_error);
+    }
+    auto manifest = std::move(manifest_res.value());
+
+    // Ensure the metastore topic exists with the correct number of partitions.
+    auto ensure_fut = co_await ss::coroutine::as_future(
+      fe_.ensure_topic_exists());
+    if (ensure_fut.failed()) {
+        auto ex = ensure_fut.get_exception();
+        vlog(
+          cd_log.warn,
+          "Error while ensuring metastore topic for restore: {}",
+          ex);
+        co_return std::unexpected(errc::transport_error);
+    }
+    if (!ensure_fut.get()) {
+        vlog(cd_log.warn, "Ensuring metastore topic did not succeed");
+        co_return std::unexpected(errc::transport_error);
+    }
+    auto num_partitions = fe_.num_metastore_partitions();
+    if (!num_partitions.has_value()) {
+        vlog(cd_log.warn, "Unable to get num metastore partitions for restore");
+        co_return std::unexpected(errc::transport_error);
+    }
+    if (manifest.domains.size() != static_cast<size_t>(*num_partitions)) {
+        vlog(
+          cd_log.error,
+          "Manifest domain count {} does not match metastore partition count "
+          "{}",
+          manifest.domains.size(),
+          *num_partitions);
+        co_return std::unexpected(errc::invalid_request);
+    }
+    if (manifest.partitioning_strategy != "murmur") {
+        vlog(
+          cd_log.error,
+          "Partitioning strategy {} not supported",
+          manifest.partitioning_strategy);
+        co_return std::unexpected(errc::invalid_request);
+    }
+
+    // Restore each partition with its corresponding domain_uuid
+    for (int pid = 0; pid < *num_partitions; ++pid) {
+        rpc::restore_domain_request req{
+          .metastore_partition = model::partition_id{pid},
+          .new_uuid = manifest.domains[pid],
+        };
+
+        auto reply_fut = co_await ss::coroutine::as_future(
+          fe_.restore_domain(std::move(req)));
+        if (reply_fut.failed()) {
+            vlog(
+              cd_log.warn,
+              "Error restoring partition {}: {}",
+              pid,
+              reply_fut.get_exception());
+            co_return std::unexpected(errc::transport_error);
+        }
+        auto reply = reply_fut.get();
+        if (reply.ec != rpc::errc::ok) {
+            vlog(
+              cd_log.warn, "Error restoring partition {}: {}", pid, reply.ec);
+            co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+        }
+    }
+
+    co_return std::nullopt;
 }
 
 } // namespace cloud_topics::l1

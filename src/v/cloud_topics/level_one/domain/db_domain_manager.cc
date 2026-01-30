@@ -16,6 +16,8 @@
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cloud_topics/logger.h"
 #include "container/chunked_hash_map.h"
+#include "lsm/io/cloud_persistence.h"
+#include "lsm/proto/manifest.proto.h"
 
 #include <seastar/core/sleep.hh>
 
@@ -87,6 +89,10 @@ log_and_convert(const replicated_database::error& e, std::string_view prefix) {
         break;
     case replicated_database::errc::io_error:
         ret = rpc::errc::timed_out;
+        lvl = ss::log_level::warn;
+        break;
+    case replicated_database::errc::update_rejected:
+        ret = rpc::errc::concurrent_requests;
         lvl = ss::log_level::warn;
         break;
     case replicated_database::errc::replication_error:
@@ -817,7 +823,13 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
         }
     }();
     auto extents_result = co_await std::move(extents_res);
-    if (!extents_result.has_value() || !extents_result->has_value()) {
+    if (!extents_result.has_value()) {
+        co_return rpc::get_extent_metadata_reply{
+          .ec = log_and_convert(
+            extents_result.error(), "Error getting extent range: "),
+        };
+    }
+    if (!extents_result->has_value()) {
         co_return rpc::get_extent_metadata_reply{
           .ec = rpc::errc::out_of_range,
         };
@@ -918,6 +930,7 @@ ss::future<std::expected<void, rpc::errc>> db_domain_manager::write_rows(
     case io_error:
         needs_step_down = true;
         break;
+    case update_rejected:
     case shutting_down:
     case not_leader:
         break;
@@ -976,6 +989,130 @@ ss::future<std::expected<void, rpc::errc>> db_domain_manager::maybe_open_db() {
     }
     db_ = std::move(*db_res);
     co_return std::expected<void, rpc::errc>{};
+}
+
+ss::future<rpc::restore_domain_reply>
+db_domain_manager::restore_domain(rpc::restore_domain_request req) {
+    vlog(cd_log.info, "Restoring domain UUID {}", req.new_uuid);
+    auto gate_res = maybe_gate();
+    if (!gate_res.has_value()) {
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto init_db_res = co_await maybe_open_db();
+    if (!init_db_res.has_value()) {
+        co_return rpc::restore_domain_reply{
+          .ec = init_db_res.error(),
+        };
+    }
+    // No-op, we're already restored!
+    if (db_->get_domain_uuid() == req.new_uuid) {
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::ok,
+        };
+    }
+
+    // Block other users of the database while we're in the process of
+    // resetting it.
+    auto lock_res = co_await exclusive_db_lock();
+    if (!lock_res.has_value()) {
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    // Check again for the no-op case a restore finished while we were waiting
+    // for the lock.
+    if (db_->get_domain_uuid() == req.new_uuid) {
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::ok,
+        };
+    }
+
+    cloud_storage_clients::object_key domain_prefix{
+      fmt::format("{}", req.new_uuid)};
+    auto meta_persist = co_await lsm::io::open_cloud_metadata_persistence(
+      remote_, bucket_, domain_prefix);
+
+    // When reading the manifest this will find the latest manifest at or below
+    // the given epoch. So to find the latest, supply the max epoch.
+    auto manifest_fut = co_await ss::coroutine::as_future(
+      meta_persist->read_manifest(lsm::internal::database_epoch::max()));
+    std::optional<lsm::proto::manifest> manifest;
+    if (manifest_fut.failed()) {
+        auto ex = manifest_fut.get_exception();
+        vlog(
+          cd_log.error,
+          "Failed to read domain manifest under path {}: {}",
+          domain_prefix,
+          ex);
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::concurrent_requests,
+        };
+    }
+    auto manifest_result = manifest_fut.get();
+    if (manifest_result.has_value()) {
+        auto manifest_serde_fut = co_await ss::coroutine::as_future(
+          lsm::proto::manifest::from_proto(std::move(manifest_result.value())));
+        if (manifest_serde_fut.failed()) {
+            auto ex = manifest_serde_fut.get_exception();
+            vlog(
+              cd_log.error,
+              "Failed to deserialize domain manifest under path {}: {}",
+              domain_prefix,
+              ex);
+            co_return rpc::restore_domain_reply{
+              .ec = rpc::errc::concurrent_requests,
+            };
+        }
+        manifest = std::move(manifest_serde_fut.get());
+    }
+    auto reset_res = co_await db_->reset(req.new_uuid, std::move(manifest));
+    if (!reset_res.has_value()) {
+        co_return rpc::restore_domain_reply{
+          .ec = log_and_convert(reset_res.error(), "Failed to reset database"),
+        };
+    }
+    co_await db_->close();
+    db_.reset();
+    vlog(
+      cd_log.debug,
+      "Re-opening database with expected term {}",
+      expected_term_);
+    auto db_res = co_await replicated_database::open(
+      expected_term_, stm_.get(), staging_dir_, remote_, bucket_, as_);
+    if (!db_res.has_value()) {
+        co_return rpc::restore_domain_reply{
+          .ec = log_and_convert(db_res.error(), "Failed to reopen database: "),
+        };
+    }
+    db_ = std::move(*db_res);
+    if (db_->get_domain_uuid() != req.new_uuid) {
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::concurrent_requests,
+        };
+    }
+    co_return rpc::restore_domain_reply{
+      .ec = rpc::errc::ok,
+    };
+}
+
+ss::future<rpc::flush_domain_reply>
+db_domain_manager::flush_domain(rpc::flush_domain_request req) {
+    auto gl_res = co_await gate_and_open_reads();
+    if (!gl_res.has_value()) {
+        co_return rpc::flush_domain_reply{.ec = gl_res.error()};
+    }
+    auto flush_res = co_await db_->flush(30s);
+    if (!flush_res.has_value()) {
+        co_return rpc::flush_domain_reply{
+          .ec = log_and_convert(flush_res.error(), "Failed to flush domain: "),
+        };
+    }
+    co_return rpc::flush_domain_reply{
+      .ec = rpc::errc::ok,
+      .uuid = db_->get_domain_uuid(),
+    };
 }
 
 } // namespace cloud_topics::l1

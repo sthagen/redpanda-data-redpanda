@@ -286,6 +286,26 @@ public:
      */
     seastar::future<> stop();
 
+    /**
+     * @brief Shard-local state for an instance of level_zero_gc
+     *
+     *   - paused: Paused indefinitely, call start() to run
+     *   - running: GC will run until paused or stopped
+     *   - stopping: stop() requested but there may be work still in flight
+     *   - stopped: Permanently stopped.
+     */
+    enum class state : uint8_t {
+        paused,
+        running,
+        stopping,
+        stopped,
+    };
+
+    /**
+     * @brief Compute the runtime state of this GC instance.
+     */
+    state get_state() const;
+
 private:
     level_zero_gc_config config_;
     std::unique_ptr<epoch_source> epoch_source_;
@@ -328,5 +348,7 @@ private:
 struct prefix_range_inclusive;
 std::optional<prefix_range_inclusive>
 compute_prefix_range(size_t shard_idx, size_t total_shards);
+
+std::string_view to_string_view(level_zero_gc::state s);
 
 } // namespace cloud_topics

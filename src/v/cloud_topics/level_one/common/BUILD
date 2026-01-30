@@ -120,3 +120,30 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "file_arena",
+    srcs = [
+        "file_arena.cc",
+        "file_arena_probe.cc",
+    ],
+    hdrs = [
+        "file_arena.h",
+        "file_arena_probe.h",
+    ],
+    implementation_deps = [
+        "//src/v/ssx:future_util",
+        "//src/v/utils:human",
+    ],
+    visibility = [
+        "//src/v/cloud_topics:__pkg__",
+        "//src/v/cloud_topics/level_one:__subpackages__",
+    ],
+    deps = [
+        ":abstract_io",
+        "//src/v/config",
+        "//src/v/metrics",
+        "//src/v/ssx:semaphore",
+        "@seastar",
+    ],
+)

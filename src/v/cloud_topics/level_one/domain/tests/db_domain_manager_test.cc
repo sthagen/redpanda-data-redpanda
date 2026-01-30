@@ -13,10 +13,14 @@
 #include "cloud_io/tests/scoped_remote.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/domain/db_domain_manager.h"
+#include "cloud_topics/level_one/metastore/lsm/state_reader.h"
+#include "cloud_topics/level_one/metastore/lsm/state_update.h"
 #include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "config/node_config.h"
+#include "lsm/io/cloud_persistence.h"
+#include "lsm/io/persistence.h"
 #include "model/fundamental.h"
 #include "raft/tests/raft_fixture.h"
 #include "test_utils/async.h"
@@ -150,7 +154,55 @@ term_state_update_t make_terms(
     return terms;
 }
 
+// Creates a manifest in cloud storage under the given domain UUID prefix.
+void flush_as_manifest(
+  cloud_io::remote* remote,
+  const cloud_storage_clients::bucket_name& bucket,
+  domain_uuid uuid,
+  uint64_t db_epoch,
+  chunked_vector<new_object> new_objects,
+  term_state_update_t new_terms) {
+    auto domain_prefix = cloud_storage_clients::object_key{
+      fmt::format("{}", uuid)};
+    temporary_dir tmp("test");
+    auto cloud_db = lsm::database::open(
+                      {.database_epoch = db_epoch},
+                      lsm::io::persistence{
+                        .data = lsm::io::open_cloud_data_persistence(
+                                  tmp.get_path(), remote, bucket, domain_prefix)
+                                  .get(),
+                        .metadata = lsm::io::open_cloud_metadata_persistence(
+                                      remote, bucket, domain_prefix)
+                                      .get()})
+                      .get();
+
+    // Build the rows for the given new objects.
+    add_objects_db_update update{
+      .new_objects = std::move(new_objects),
+      .new_terms = std::move(new_terms),
+    };
+    auto snap = cloud_db.create_snapshot();
+    state_reader reader(std::move(snap));
+    chunked_vector<write_batch_row> rows;
+    auto build_res = update.build_rows(reader, rows).get();
+    ASSERT_TRUE(build_res.has_value()) << build_res.error();
+
+    // Write them to the database and flush to make it recoverable.
+    auto wb = cloud_db.create_write_batch();
+    for (auto& r : rows) {
+        wb.put(r.key, std::move(r.value), lsm::sequence_number{1});
+    }
+    cloud_db.apply(std::move(wb)).get();
+
+    cloud_db.flush(ssx::instant::infinite_future()).get();
+    cloud_db.close().get();
+}
+
 } // namespace
+
+struct test_params {
+    bool with_flush_loop{false};
+};
 
 class DbDomainManagerTest
   : public raft::raft_fixture
@@ -158,6 +210,12 @@ class DbDomainManagerTest
 public:
     static constexpr auto num_nodes = 3;
     using opt_ref = std::optional<std::reference_wrapper<domain_manager_node>>;
+
+    virtual test_params params() const {
+        return {
+          .with_flush_loop = false,
+        };
+    }
 
     void SetUp() override {
         ss::smp::invoke_on_all([] {
@@ -350,6 +408,26 @@ public:
         }
     }
 
+    ss::future<> flusher_loop(domain_manager_node& node, bool& done) {
+        while (!done) {
+            std::vector<db_domain_manager*> managers;
+            std::vector<ss::future<l1_rpc::flush_domain_reply>> futs;
+            managers.reserve(node.managers.size());
+            for (auto& mgr : node.managers) {
+                managers.emplace_back(mgr.get());
+            }
+            for (auto* mgr : managers) {
+                l1_rpc::flush_domain_request req{
+                  .metastore_partition = model::partition_id(0),
+                };
+                futs.emplace_back(mgr->flush_domain(req));
+                co_await ss::maybe_yield();
+            }
+            co_await ss::when_all_succeed(std::move(futs));
+            co_await random_sleep_ms(100);
+        }
+    }
+
     using exact_next = ss::bool_class<struct exact_next_tag>;
     void validate_metadata(
       const model::topic_id_partition& tp,
@@ -404,7 +482,15 @@ public:
     db_domain_manager* initial_manager{nullptr};
 };
 
-TEST_F(DbDomainManagerTest, TestConcurrentUpdates) {
+class DbDomainManagerTestWithParams
+  : public DbDomainManagerTest
+  , public ::testing::WithParamInterface<test_params> {
+public:
+    test_params params() const override { return GetParam(); }
+};
+
+TEST_P(DbDomainManagerTestWithParams, TestConcurrentUpdates) {
+    auto args = params();
     auto tp = make_tp();
     bool done = false;
     std::vector<ss::future<>> futs;
@@ -417,6 +503,9 @@ TEST_F(DbDomainManagerTest, TestConcurrentUpdates) {
             futs.emplace_back(extent_validator_loop(*node, tp, done));
             futs.emplace_back(
               replacer_loop(*node, tp, expected_add_next, done));
+            if (args.with_flush_loop) {
+                futs.emplace_back(flusher_loop(*node, done));
+            }
         }
     }
     for (int i = 0; i < 10; ++i) {
@@ -447,7 +536,8 @@ TEST_F(DbDomainManagerTest, TestConcurrentUpdates) {
     validate_metadata(tp, kafka::offset(0), expected_add_next, exact_next::no);
 }
 
-TEST_F(DbDomainManagerTest, TestUpdatesWithDroppedAppends) {
+TEST_P(DbDomainManagerTestWithParams, TestUpdatesWithDroppedAppends) {
+    auto args = params();
     auto tp = make_tp();
     bool done = false;
     std::vector<ss::future<>> futs;
@@ -460,6 +550,9 @@ TEST_F(DbDomainManagerTest, TestUpdatesWithDroppedAppends) {
             futs.emplace_back(extent_validator_loop(*node, tp, done));
             futs.emplace_back(
               replacer_loop(*node, tp, expected_add_next, done));
+            if (args.with_flush_loop) {
+                futs.emplace_back(flusher_loop(*node, done));
+            }
         }
     }
     for (int i = 0; i < 3; ++i) {
@@ -510,6 +603,17 @@ TEST_F(DbDomainManagerTest, TestUpdatesWithDroppedAppends) {
     validate_metadata(tp, kafka::offset(0), expected_add_next, exact_next::no);
 }
 
+INSTANTIATE_TEST_SUITE_P(
+  WithFlushLoop,
+  DbDomainManagerTestWithParams,
+  ::testing::Values(
+    test_params{
+      .with_flush_loop = false,
+    },
+    test_params{
+      .with_flush_loop = true,
+    }));
+
 TEST_F(DbDomainManagerTest, TestBasicAddObjects) {
     auto tp = make_tp();
     // Add [0, 29].
@@ -555,4 +659,114 @@ TEST_F(DbDomainManagerTest, TestBasicReplaceObjects) {
     // Check that the replacement results in 1 extent.
     validate_metadata(
       tp, kafka::offset(0), kafka::offset(10), exact_next::yes, 1);
+}
+
+TEST_F(DbDomainManagerTest, TestBasicRestoreDomain) {
+    auto tp = make_tp();
+
+    // Create some data in cloud storage under a manually assigned domain UUID.
+    auto restore_uuid = domain_uuid(uuid_t::create());
+    const uint64_t db_epoch = 100;
+    auto new_objects = make_new_objects(tp, kafka::offset(0), 3, 10);
+    auto new_terms = make_terms(tp, kafka::offset(0), model::term_id(1));
+    flush_as_manifest(
+      &sr->remote.local(),
+      bucket_name,
+      restore_uuid,
+      db_epoch,
+      std::move(new_objects),
+      std::move(new_terms));
+
+    // Call restore_domain with the UUID where data was written.
+    l1_rpc::restore_domain_request req{
+      .metastore_partition = model::partition_id(0),
+      .new_uuid = restore_uuid,
+    };
+    auto reply = initial_manager->restore_domain(req).get();
+    ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+
+    // Validate the restored metadata matches what we wrote.
+    validate_metadata(tp, kafka::offset(0), kafka::offset(30));
+
+    // Sanity check that restoring again is a no-op.
+    reply = initial_manager->restore_domain(req).get();
+    ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+    validate_metadata(tp, kafka::offset(0), kafka::offset(30));
+
+    // Now try with some other UUID. Note that restoring from a non-existent
+    // manifest isn't an issue; it's more that our current database isn't
+    // empty.
+    req.new_uuid = domain_uuid(uuid_t::create());
+    reply = initial_manager->restore_domain(req).get();
+    ASSERT_EQ(reply.ec, l1_rpc::errc::concurrent_requests);
+    validate_metadata(tp, kafka::offset(0), kafka::offset(30));
+}
+
+TEST_F(DbDomainManagerTest, TestRestoreWithConcurrentReads) {
+    auto tp = make_tp();
+
+    // Create some data in cloud storage under a manually assigned domain UUID.
+    auto restore_uuid = domain_uuid(uuid_t::create());
+    const uint64_t db_epoch = 100;
+    auto new_objects = make_new_objects(tp, kafka::offset(0), 3, 10);
+    auto new_terms = make_terms(tp, kafka::offset(0), model::term_id(1));
+    flush_as_manifest(
+      &sr->remote.local(),
+      bucket_name,
+      restore_uuid,
+      db_epoch,
+      std::move(new_objects),
+      std::move(new_terms));
+
+    // Start a bunch of fibers that repeatedly call read.
+    bool restore_done{false};
+    size_t num_reads{0};
+    std::vector<ss::future<>> reader_futs;
+    for (int i = 0; i < 10; ++i) {
+        // Runs these loops long enough for some reads to actually happen.
+        reader_futs.emplace_back(
+          ss::do_until(
+            [&restore_done, &num_reads] {
+                return restore_done && num_reads >= 10;
+            },
+            [this, &tp, &num_reads] {
+                return initial_manager
+                  ->get_extent_metadata(
+                    {.tp = tp,
+                     .min_offset = kafka::offset(0),
+                     .max_offset = kafka::offset::max(),
+                     .o = l1_rpc::get_extent_metadata_request::order::forwards,
+                     .max_num_extents = std::numeric_limits<size_t>::max()})
+                  .then([&num_reads](auto reply) {
+                      ++num_reads;
+                      if (reply.ec != l1_rpc::errc::out_of_range) {
+                          EXPECT_EQ(reply.ec, l1_rpc::errc::ok);
+                          auto num_extents = reply.extents.size();
+                          EXPECT_TRUE(num_extents == 3)
+                            << "Unexpected number of extents: " << num_extents;
+                      }
+                  });
+            }));
+    }
+
+    // Give the readers a chance to start.
+    ss::sleep(10ms).get();
+
+    // Restore the domain while readers are active.
+    l1_rpc::restore_domain_request req{
+      .metastore_partition = model::partition_id(0),
+      .new_uuid = restore_uuid,
+    };
+    auto reply = initial_manager->restore_domain(req).get();
+    ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+
+    // Give readers a chance to run after restore.
+    ss::sleep(10ms).get();
+
+    // Stop the readers and wait for them to finish.
+    restore_done = true;
+    ss::when_all_succeed(reader_futs.begin(), reader_futs.end()).get();
+
+    // Validate the restored metadata.
+    validate_metadata(tp, kafka::offset(0), kafka::offset(30));
 }

@@ -13,6 +13,7 @@
 #include "cluster/metadata_cache.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "config/leaders_preference.h"
 #include "features/feature_table.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/alter_configs_request.h"
@@ -352,11 +353,28 @@ create_topic_properties_update(
                 continue;
             }
             if (cfg.name == topic_property_leaders_preference) {
+                // if we evaluate to ordered_racks, check that its fully enabled
+                // before setting it
+                // TODO remove in 26.2
+                auto feature_enabled_validator =
+                  [&feature_table = ctx.feature_table().local()](
+                    const ss::sstring&, const config::leaders_preference& lp)
+                  -> std::optional<ss::sstring> {
+                    if (
+                      lp.type
+                        == config::leaders_preference::type_t::ordered_racks
+                      && !feature_table.is_active(
+                        features::feature::ordered_leaders_pinning)) {
+                        return "ordered leaders pinning is not available until "
+                               "the cluster upgrade is finalized";
+                    }
+                    return std::nullopt;
+                };
                 parse_and_set_optional(
                   update.properties.leaders_preference,
                   cfg.value,
                   kafka::config_resource_operation::set,
-                  noop_validator<config::leaders_preference>{},
+                  feature_enabled_validator,
                   config::leaders_preference::parse);
                 continue;
             }

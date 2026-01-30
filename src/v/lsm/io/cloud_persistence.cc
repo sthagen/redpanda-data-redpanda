@@ -381,7 +381,7 @@ private:
     }
 
     std::filesystem::path staging_path(std::string_view name) {
-        return _staging / name;
+        return _staging / fmt::format("{}-{}", _prefix(), name);
     }
 
     cloud_storage_clients::object_key cloud_key(std::string_view name) {

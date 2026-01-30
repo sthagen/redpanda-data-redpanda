@@ -69,6 +69,16 @@
             "name": "get_extent_metadata",
             "input_type": "get_extent_metadata_request",
             "output_type": "get_extent_metadata_reply"
+        },
+        {
+            "name": "flush_domain",
+            "input_type": "flush_domain_request",
+            "output_type": "flush_domain_reply"
+        },
+        {
+            "name": "restore_domain",
+            "input_type": "restore_domain_request",
+            "output_type": "restore_domain_reply"
         }
     ]
 }

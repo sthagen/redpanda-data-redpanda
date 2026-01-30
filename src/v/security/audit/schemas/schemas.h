@@ -184,7 +184,8 @@ private:
     template<typename T>
     size_t estimated_ocsf_size(const T& t) const noexcept {
         size_t sz = 0;
-        if constexpr (reflection::is_std_vector<T>) {
+        if constexpr (
+          reflection::is_std_vector<T> || reflection::is_chunked_vector<T>) {
             sz += sizeof(t);
             for (const auto& element : t) {
                 sz += estimated_ocsf_size(element);

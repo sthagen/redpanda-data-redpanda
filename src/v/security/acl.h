@@ -16,6 +16,7 @@
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "pandaproxy/schema_registry/types.h"
+#include "security/audit/schemas/types.h"
 #include "serde/envelope.h"
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
@@ -345,6 +346,12 @@ private:
     principal_type _type;
     ss::sstring _name;
 };
+
+/// Convert ACL group principals to audit group objects for inclusion in audit
+/// logs. Filters to only principals with type::group and converts them to
+/// audit::group with type idp_group.
+chunked_vector<::security::audit::group>
+acl_principals_to_audit_groups(const chunked_vector<acl_principal>& principals);
 
 } // namespace security
 

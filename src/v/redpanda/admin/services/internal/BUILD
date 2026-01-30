@@ -54,6 +54,25 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "level_zero_gc",
+    srcs = ["level_zero_gc.cc"],
+    hdrs = ["level_zero_gc.h"],
+    deps = [
+        "//proto/redpanda/core/admin/internal/cloud_topics/v1:level_zero_gc_redpanda_proto",
+        "//src/v/base",
+        "//src/v/cloud_topics/level_zero/gc:level_zero_gc",
+        "//src/v/cluster",
+        "//src/v/model",
+        "//src/v/redpanda/admin/proxy:client",
+        "//src/v/redpanda/admin/proxy:context",
+        "//src/v/serde/protobuf:rpc",
+        "//src/v/ssx:sformat",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "shadow_link_internal",
     srcs = ["shadow_link_internal.cc"],
     hdrs = ["shadow_link_internal.h"],

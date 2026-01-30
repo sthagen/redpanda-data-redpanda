@@ -16,6 +16,7 @@
 #include "redpanda/admin/services/datalake/datalake.h"
 #include "redpanda/admin/services/internal/breakglass.h"
 #include "redpanda/admin/services/internal/debug.h"
+#include "redpanda/admin/services/internal/level_zero_gc.h"
 #include "redpanda/admin/services/internal/metastore.h"
 #include "redpanda/admin/services/internal/shadow_link_internal.h"
 #include "redpanda/admin/services/security.h"
@@ -101,6 +102,12 @@ void application::configure_admin_server(model::node_id node_id) {
                 std::make_unique<admin::metastore_service_impl>(
                   cloud_topics_app->get_sharded_replicated_metastore(),
                   &controller->get_topics_state()));
+              s.add_service(
+                std::make_unique<admin::level_zero_gc_service_impl>(
+                  node_id,
+                  create_client(),
+                  cloud_topics_app->get_level_zero_gc(),
+                  &controller->get_members_table()));
           }
           s.add_service(
             std::make_unique<

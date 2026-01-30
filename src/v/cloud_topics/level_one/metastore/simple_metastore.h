@@ -121,6 +121,15 @@ public:
       kafka::offset,
       size_t) override;
 
+    ss::future<std::expected<std::nullopt_t, errc>> flush() override {
+        co_return std::unexpected(errc::transport_error);
+    }
+
+    ss::future<std::expected<std::nullopt_t, errc>>
+    restore(const cloud_storage::remote_label&) override {
+        co_return std::unexpected(errc::transport_error);
+    }
+
 private:
     friend class simple_domain_manager;
     static std::expected<offsets_response, errc>

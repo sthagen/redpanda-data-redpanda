@@ -1,0 +1,120 @@
+// Copyright 2026 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.internal.cloud_topics.v1;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "proto/redpanda/core/pbgen/rpc.proto";
+import "proto/redpanda/core/common/v1/ntp.proto";
+
+option (pbgen.cpp_namespace) = "proto::admin::level_zero_gc";
+
+// Admin endpoints to query Level-0 garbage collection workers for Cloud Topics.
+
+service LevelZeroGcService {
+    // Returns GC worker status for each shard on targeted node(s).
+    rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+
+    // Starts GC workers on targeted node(s).
+    rpc Start(StartRequest) returns (StartResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+
+    // Pauses GC workers on targeted node(s).
+    rpc Pause(PauseRequest) returns (PauseResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+}
+
+// Request to query GC worker status.
+message GetStatusRequest {
+    // Target a specific node, or omit to query all nodes in the cluster.
+    optional int32 node_id = 1;
+}
+
+// Aggregated status from one or more nodes.
+message GetStatusResponse {
+    repeated NodeStatus nodes = 1;
+}
+
+// GC status for all shards on a single node.
+message NodeStatus {
+    int32 node_id = 1;
+    // One entry per shard on this node.
+    repeated ShardStatus shards = 2;
+    // Set if the node could not be reached or returned an error.
+    optional string error = 3;
+}
+
+// Status of the GC worker on a single shard.
+message ShardStatus {
+    int32 shard_id = 1;
+    Status status = 2;
+}
+
+// Request to start GC workers.
+message StartRequest {
+    // Target a specific node, or omit to start on all nodes.
+    optional int32 node_id = 1;
+}
+
+// Aggregated start results from one or more nodes.
+message StartResponse {
+    repeated StartResult results = 1;
+}
+
+// Request to pause GC workers.
+message PauseRequest {
+    // Target a specific node, or omit to pause on all nodes.
+    optional int32 node_id = 1;
+}
+
+// Aggregated pause results from one or more nodes.
+message PauseResponse {
+    repeated PauseResult results = 1;
+}
+
+// Outcome of starting GC on a single node.
+message StartResult {
+    int32 node_id = 1;
+    // Set if the node could not be reached or returned an error.
+    optional string error = 3;
+}
+
+// Outcome of pausing GC on a single node.
+message PauseResult {
+    int32 node_id = 1;
+    // Set if the node could not be reached or returned an error.
+    optional string error = 3;
+}
+
+// GC worker lifecycle states.
+// Maps to cloud_topics::level_zero_gc::state.
+enum Status {
+    L0_GC_STATUS_UNSPECIFIED = 0;
+    L0_GC_STATUS_PAUSED = 1;
+    L0_GC_STATUS_RUNNING = 2;
+    L0_GC_STATUS_STOPPING = 3;
+    L0_GC_STATUS_STOPPED = 4;
+}

@@ -26,12 +26,13 @@ import (
 
 func newGetCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var (
-		deleted     bool
-		printSchema bool
-		id          int
-		schemaFile  string
-		schemaType  string
-		sversion    string
+		deleted       bool
+		printSchema   bool
+		printMetadata bool
+		id            int
+		schemaFile    string
+		schemaType    string
+		sversion      string
 	)
 	cmd := &cobra.Command{
 		Use:   "get [SUBJECT]",
@@ -46,6 +47,8 @@ potential (mutually exclusive) ways:
 * By schema, checking if the schema has been created in the subject
 
 To print the schema, use the '--print-schema' flag.
+
+To print schema metadata properties, use the '--print-metadata' flag.
 `,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -53,7 +56,7 @@ To print the schema, use the '--print-schema' flag.
 			if printSchema && f.Kind != "text" {
 				out.Die("--print-schema cannot be used along with --format %v", f.Kind)
 			}
-			if h, ok := f.Help([]subjectSchema{}); ok {
+			if h, ok := f.Help([]subjectSchemaMetadata{}); ok {
 				out.Exit(h)
 			}
 			p, err := p.LoadVirtualProfile(fs)
@@ -125,7 +128,7 @@ To print the schema, use the '--print-schema' flag.
 				printSchemaString(ss)
 				return
 			}
-			err = printSubjectSchemaTable(f, false, ss...)
+			err = printSubjectSchemaWithMetadata(f, false, printMetadata, ss...)
 			out.MaybeDieErr(err)
 		},
 	}
@@ -136,7 +139,9 @@ To print the schema, use the '--print-schema' flag.
 	cmd.Flags().StringVar(&schemaType, "type", "", fmt.Sprintf("Schema type of the file used to lookup (%v); overrides schema file extension", strings.Join(supportedTypes, ",")))
 	cmd.Flags().BoolVar(&deleted, "deleted", false, "If true, also return deleted schemas")
 	cmd.Flags().BoolVar(&printSchema, "print-schema", false, "Prints the schema in JSON format")
+	cmd.Flags().BoolVar(&printMetadata, "print-metadata", false, "Print the schema metadata properties")
 
+	cmd.MarkFlagsMutuallyExclusive("print-schema", "print-metadata")
 	cmd.RegisterFlagCompletionFunc("type", validTypes())
 	return cmd
 }

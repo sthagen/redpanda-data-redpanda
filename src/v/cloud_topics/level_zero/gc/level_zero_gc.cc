@@ -10,6 +10,7 @@
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
 
 #include "base/format_to.h"
+#include "base/vassert.h"
 #include "base/vlog.h"
 #include "cloud_io/remote.h"
 #include "cloud_storage_clients/types.h"
@@ -624,6 +625,34 @@ seastar::future<> level_zero_gc::stop() {
     co_await delete_worker_->stop();
     co_await std::exchange(worker_, seastar::make_ready_future<>());
     vlog(cd_log.info, "Stopped cloud_topics L0 GC worker");
+}
+
+std::string_view to_string_view(level_zero_gc::state s) {
+    switch (s) {
+        using enum level_zero_gc::state;
+    case paused:
+        return "level_zero_gc::state::paused";
+    case running:
+        return "level_zero_gc::state::running";
+    case stopping:
+        return "level_zero_gc::state::stopping";
+    case stopped:
+        return "level_zero_gc::state::stopped";
+    }
+    vunreachable("Unrecognized GC state: {}", s);
+}
+
+auto format_as(level_zero_gc::state s) { return to_string_view(s); }
+
+auto level_zero_gc::get_state() const -> state {
+    auto st = [this] {
+        if (should_shutdown_) {
+            return worker_.available() ? state::stopped : state::stopping;
+        }
+        return should_run_ ? state::running : state::paused;
+    }();
+    vlog(cd_log.debug, "cloud_topics L0 GC worker state: {}", st);
+    return st;
 }
 
 // internal error codes used between the worker fiber and the main GC function

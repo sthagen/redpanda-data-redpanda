@@ -46,6 +46,26 @@ make_authn_event_options(const server::request_t& rq) {
         .type_id = rq.user.name.empty() ? security::audit::user::type::unknown
                                         : security::audit::user::type::user}};
 }
+
+security::audit::authentication_event_options make_authn_event_options(
+  const server::request_t& rq, const request_auth_result& auth_result) {
+    return {
+      .auth_protocol = auth_result.get_sasl_mechanism(),
+      .server_addr = net::unresolved_address{rq.req->get_server_address()},
+      .svc_name = audit_svc_name,
+      .client_addr = net::unresolved_address{rq.req->get_client_address()},
+      .is_cleartext = is_cleartext(rq.req->get_protocol_name()),
+      .user = {
+        .name = auth_result.get_username().empty() ? "{{anonymous}}"
+                                                   : auth_result.get_username(),
+        .type_id = auth_result.is_authenticated()
+                     ? (auth_result.is_superuser()
+                          ? security::audit::user::type::admin
+                          : security::audit::user::type::user)
+                     : security::audit::user::type::unknown,
+        .groups = security::acl_principals_to_audit_groups(
+          auth_result.get_groups())}};
+}
 security::audit::authentication_event_options make_authn_event_error(
   const server::request_t& rq,
   std::string_view username,
@@ -105,6 +125,11 @@ void audit_authn_failure(
 
 void audit_authn_success(const server::request_t& rq) {
     do_audit_authn(rq, make_authn_event_options(rq));
+}
+
+void audit_authn_success(
+  const server::request_t& rq, const request_auth_result& auth_result) {
+    do_audit_authn(rq, make_authn_event_options(rq, auth_result));
 }
 
 void audit_authz_success(const server::request_t& rq) { do_audit_authz(rq); }
@@ -182,7 +207,7 @@ std::optional<request_auth_result> auth::handle_auth(
           auth_result.get_username(),
           auth_result.get_password(),
           auth_result.get_sasl_mechanism()};
-        audit_authn_success(rq);
+        audit_authn_success(rq, auth_result);
 
         // Will throw 403 if user enabled HTTP Basic Auth but
         // did not give the authorization header.

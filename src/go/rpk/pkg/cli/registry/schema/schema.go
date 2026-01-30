@@ -42,21 +42,27 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	return cmd
 }
 
-type subjectSchema struct {
-	Subject string `json:"subject" yaml:"subject"`
-	Version int    `json:"version" yaml:"version"`
-	ID      int    `json:"id" yaml:"id"`
-	Type    string `json:"type" yaml:"type"`
+type subjectSchemaMetadata struct {
+	Subject            string            `json:"subject" yaml:"subject"`
+	Version            int               `json:"version" yaml:"version"`
+	ID                 int               `json:"id" yaml:"id"`
+	Type               string            `json:"type" yaml:"type"`
+	MetadataProperties map[string]string `json:"metadata_properties,omitempty" yaml:"metadata_properties,omitempty"`
 }
 
-func printSubjectSchemaTable(f config.OutFormatter, single bool, ss ...sr.SubjectSchema) error {
-	var rows []subjectSchema
+func printSubjectSchemaWithMetadata(f config.OutFormatter, single, printMetadata bool, ss ...sr.SubjectSchema) error {
+	var rows []subjectSchemaMetadata
 	for _, s := range ss {
-		rows = append(rows, subjectSchema{
-			Subject: s.Subject,
-			Version: s.Version,
-			ID:      s.ID,
-			Type:    s.Type.String(),
+		var props map[string]string
+		if s.SchemaMetadata != nil && len(s.SchemaMetadata.Properties) > 0 {
+			props = s.SchemaMetadata.Properties
+		}
+		rows = append(rows, subjectSchemaMetadata{
+			Subject:            s.Subject,
+			Version:            s.Version,
+			ID:                 s.ID,
+			Type:               s.Type.String(),
+			MetadataProperties: props,
 		})
 	}
 	// There are commands where a table for text format is fine, but a json
@@ -72,11 +78,40 @@ func printSubjectSchemaTable(f config.OutFormatter, single bool, ss ...sr.Subjec
 		fmt.Println(s)
 		return nil
 	}
-	tw := out.NewTable("subject", "version", "id", "type")
-	defer tw.Flush()
-	for _, r := range rows {
-		tw.PrintStructFields(r)
+
+	// Multiple rows only occur when querying by ID (without subject filter).
+	// Since changing metadata properties creates a new ID on the same schema,
+	// all rows here share the same metadata. We pick the first.
+	var props map[string]string
+	if len(rows) > 0 {
+		props = rows[0].MetadataProperties
 	}
+
+	secSchema := "schema"
+	secMetadata := "metadata properties"
+	sections := out.NewMaybeHeaderSections(
+		out.ConditionalSectionHeaders(map[string]bool{
+			secSchema:   true,
+			secMetadata: printMetadata,
+		})...,
+	)
+
+	sections.Add(secSchema, func() {
+		tw := out.NewTable("subject", "version", "id", "type")
+		defer tw.Flush()
+		for _, r := range rows {
+			tw.Print(r.Subject, r.Version, r.ID, r.Type)
+		}
+	})
+
+	sections.Add(secMetadata, func() {
+		tw := out.NewTable("key", "value")
+		defer tw.Flush()
+		for k, v := range props {
+			tw.Print(k, v)
+		}
+	})
+
 	return nil
 }
 

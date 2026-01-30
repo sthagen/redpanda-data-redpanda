@@ -12,6 +12,7 @@
 #include "base/vlog.h"
 #include "config/property.h"
 #include "security/acl.h"
+#include "security/audit/schemas/types.h"
 #include "security/errc.h"
 #include "security/jwt.h"
 #include "security/logger.h"
@@ -207,6 +208,7 @@ ss::future<result<bytes>> sasl_authenticator::authenticate(bytes auth_bytes) {
     _audit_user.type_id = audit::user::type::user;
     _audit_user.name = _auth_data.principal.name();
     _audit_user.uid = _auth_data.sub;
+    _audit_user.groups = acl_principals_to_audit_groups(_auth_data.groups);
     _state = state::complete;
 
     co_return bytes{};

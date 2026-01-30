@@ -11,6 +11,8 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "container/chunked_vector.h"
+#include "container/json.h"
 #include "json/json.h"
 #include "json/stringbuffer.h"
 #include "utils/named_type.h"
@@ -209,7 +211,7 @@ struct authorization_result {
 // A collection or association of entities, such as users, policies, or devices.
 // https://schema.ocsf.io/1.0.0/objects/group?extensions=
 struct group {
-    enum class type_id : int { unknown = 0, role = 1 };
+    enum class type_id : int { unknown = 0, role = 1, idp_group = 2 };
 
     type_id type{type_id::unknown};
     ss::sstring name;
@@ -232,7 +234,17 @@ struct user {
     ss::sstring name;
     type type_id{type::unknown};
     ss::sstring uid;
-    std::vector<group> groups;
+    chunked_vector<group> groups;
+
+    user copy() const {
+        user u;
+        u.domain = domain;
+        u.name = name;
+        u.type_id = type_id;
+        u.uid = uid;
+        u.groups = groups.copy();
+        return u;
+    }
 
     auto equality_fields() const {
         return std::tie(domain, name, type_id, uid, groups);
@@ -470,6 +482,8 @@ inline void rjson_serialize(Writer<StringBuffer>& w, sa::group::type_id type) {
         return rjson_serialize(w, std::string_view{"unknown"});
     case sa::group::type_id::role:
         return rjson_serialize(w, std::string_view{"role"});
+    case sa::group::type_id::idp_group:
+        return rjson_serialize(w, std::string_view{"idp_group"});
     }
 }
 

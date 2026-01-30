@@ -11,6 +11,8 @@
 #include "cluster/scheduling/leader_balancer_constraints.h"
 
 #include "base/vassert.h"
+#include "cluster/scheduling/leader_balancer_types.h"
+#include "config/leaders_preference.h"
 #include "model/metadata.h"
 
 namespace cluster::leader_balancer_types {
@@ -228,33 +230,65 @@ std::vector<shard_load> even_shard_load_constraint::stats() const {
 double pinning_constraint::evaluate_internal(const reassignment& r) {
     int diff = 0;
 
-    const leaders_preference* preference = &_preference_idx.default_preference;
-
     topic_id_t topic_id = _group2topic.get().at(r.group);
     auto pref_it = _preference_idx.topic2preference.find(topic_id);
-    if (pref_it != _preference_idx.topic2preference.end()) {
-        preference = &pref_it->second;
-    }
+    const auto& preference = pref_it == _preference_idx.topic2preference.end()
+                               ? _preference_idx.default_preference
+                               : pref_it->second;
 
-    if (preference->racks.empty()) {
+    switch (preference.type) {
+    case config::leaders_preference::type_t::none:
+        vassert(
+          preference.racks.empty(),
+          "no racks should be present if the preference type is none");
         return diff;
+    case config::leaders_preference::type_t::racks:
+        return do_evaluate_unordered(r, _preference_idx.node2rack, preference);
+    case config::leaders_preference::type_t::ordered_racks:
+        return do_evaluate_ordered(r, _preference_idx.node2rack, preference);
     }
+}
 
-    auto from_it = _preference_idx.node2rack.find(r.from.node_id);
+double pinning_constraint::do_evaluate_unordered(
+  const reassignment& r,
+  const absl::flat_hash_map<model::node_id, model::rack_id>& node_to_rack,
+  const leaders_preference& preference) {
+    double diff{0};
+    auto from_it = node_to_rack.find(r.from.node_id);
     if (
-      from_it != _preference_idx.node2rack.end()
-      && preference->racks.contains(from_it->second)) {
+      from_it != node_to_rack.end()
+      && std::ranges::contains(preference.racks, from_it->second)) {
         diff -= 1;
     }
 
-    auto to_it = _preference_idx.node2rack.find(r.to.node_id);
+    auto to_it = node_to_rack.find(r.to.node_id);
     if (
-      to_it != _preference_idx.node2rack.end()
-      && preference->racks.contains(to_it->second)) {
+      to_it != node_to_rack.end()
+      && std::ranges::contains(preference.racks, to_it->second)) {
         diff += 1;
     }
-
     return diff;
+}
+
+double pinning_constraint::do_evaluate_ordered(
+  const reassignment& reassignment,
+  const absl::flat_hash_map<model::node_id, model::rack_id>& node_to_rack,
+  const leaders_preference& preference) {
+    const auto do_find_priority = [&preference,
+                                   &node_to_rack](model::node_id to_evaluate) {
+        auto it = node_to_rack.find(to_evaluate);
+        if (it == node_to_rack.end()) {
+            return preference.racks.end();
+        }
+        const auto& rack = it->second;
+        return std::ranges::find(preference.racks, rack);
+    };
+
+    auto from_priority = do_find_priority(reassignment.from.node_id);
+    auto to_priority = do_find_priority(reassignment.to.node_id);
+
+    // snap to -1, 0, 1, were 'higher is preferable'
+    return (to_priority < from_priority) - (from_priority < to_priority);
 }
 
 even_node_load_constraint::even_node_load_constraint(const shard_index& si) {

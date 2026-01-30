@@ -65,6 +65,12 @@ public:
 
     virtual ss::future<rpc::get_extent_metadata_reply>
       get_extent_metadata(rpc::get_extent_metadata_request) = 0;
+
+    virtual ss::future<rpc::flush_domain_reply>
+      flush_domain(rpc::flush_domain_request) = 0;
+
+    virtual ss::future<rpc::restore_domain_reply>
+      restore_domain(rpc::restore_domain_request) = 0;
 };
 
 } // namespace cloud_topics::l1

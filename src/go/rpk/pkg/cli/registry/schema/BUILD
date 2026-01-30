@@ -27,7 +27,10 @@ go_library(
 go_test(
     name = "schema_test",
     size = "small",
-    srcs = ["schema_test.go"],
+    srcs = [
+        "create_test.go",
+        "schema_test.go",
+    ],
     embed = [":schema"],
     deps = [
         "@com_github_spf13_afero//:afero",

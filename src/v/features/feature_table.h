@@ -49,6 +49,7 @@ enum class feature : std::uint64_t {
     user_based_client_quota = 1ULL << 6U,
     consumer_groups_migrations = 1ULL << 7U,
     shadow_linking = 1ULL << 8U,
+    ordered_leaders_pinning = 1ULL << 9U,
     coordinated_compaction = 1ULL << 10U,
     cloud_retention = 1ULL << 11U,
     group_based_authorization = 1ULL << 12U,
@@ -532,6 +533,12 @@ inline constexpr std::array feature_schema{
     release_version::v26_1_1,
     "user_based_client_quota",
     feature::user_based_client_quota,
+    feature_spec::available_policy::always,
+    feature_spec::prepare_policy::always},
+  feature_spec{
+    release_version::v26_1_1,
+    "ordered_leaders_pinning",
+    feature::ordered_leaders_pinning,
     feature_spec::available_policy::always,
     feature_spec::prepare_policy::always},
 };
