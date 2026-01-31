@@ -251,6 +251,10 @@ public:
     // REQUIRES: valid()
     std::string_view key();
 
+    // Return the sequence number for the current entry.
+    // REQUIRES: valid()
+    sequence_number seqno();
+
     // Return the value for the current entry.
     // REQUIRES: valid()
     iobuf value();

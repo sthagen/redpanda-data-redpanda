@@ -1122,6 +1122,13 @@ ss::future<errc> backend::prepare_mount_topic(
           nt);
         co_return errc::topic_operation_error;
     }
+    // Cloud topics can't be unmounted now, but maybe someone will try to
+    // use this code to mount a cloud topic later code unmounts.
+    if (cfg->is_cloud_topic()) {
+        vlog(
+          dm_log.warn, "topic {} is a cloud topic and cannot be mounted", nt);
+        co_return errc::topic_invalid_config;
+    }
     vlog(
       dm_log.info,
       "trying to prepare mount topic, cfg={}, rev_id={}",

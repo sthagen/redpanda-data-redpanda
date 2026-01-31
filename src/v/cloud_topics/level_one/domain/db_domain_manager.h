@@ -30,7 +30,8 @@ public:
       ss::shared_ptr<stm> stm,
       std::filesystem::path staging_dir,
       cloud_io::remote* remote,
-      cloud_storage_clients::bucket_name bucket);
+      cloud_storage_clients::bucket_name bucket,
+      io* object_io);
 
     void start() override;
     ss::future<> stop_and_wait() override;
@@ -97,6 +98,8 @@ private:
     exclusive_db_lock();
 
     std::optional<ss::gate::holder> maybe_gate();
+    ss::future<> gc_loop();
+    ss::lowres_clock::duration gc_interval() const;
 
     struct gate_read_lock {
         ss::gate::holder gate;
@@ -138,6 +141,7 @@ private:
     std::filesystem::path staging_dir_;
     cloud_io::remote* remote_;
     cloud_storage_clients::bucket_name bucket_;
+    io* object_io_;
 
     ss::shared_ptr<stm> stm_;
 
@@ -154,6 +158,12 @@ private:
     // updates to the same object entry from multiple partitions, so maybe
     // there'd need to be some form of object locking as well.
     ssx::checkpoint_mutex writer_lock_{"l1/domain/writer"};
+
+    config::binding<std::chrono::milliseconds> gc_interval_;
+    // This semaphore is used as a way to signal a change to
+    // `cloud_topics_long_term_garbage_collection_interval` during the `wait()`
+    // operation in the main garbage collection loop.
+    ssx::semaphore sem_{0, "db_domain_manager::gc_loop"};
 
     // Database backed by cloud IO and a replicated STM.
     // Operations will only succeed with this db when the underlying Raft

@@ -240,3 +240,30 @@ redpanda_cc_library(
         "//src/v/serde",
     ],
 )
+
+redpanda_cc_library(
+    name = "garbage_collector",
+    srcs = [
+        "garbage_collector.cc",
+    ],
+    hdrs = [
+        "garbage_collector.h",
+    ],
+    implementation_deps = [
+        ":keys",
+        ":state_reader",
+        ":state_update",
+        "//src/v/base",
+        "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics/level_one/common:abstract_io",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":replicated_db",
+        "//src/v/base",
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/utils:detailed_error",
+        "//src/v/utils:named_type",
+        "@seastar",
+    ],
+)

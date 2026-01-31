@@ -64,3 +64,18 @@ bool operator<(const uuid_t& l, const uuid_t& r) { return l.uuid() < r.uuid(); }
 
 bool uuid_t::is_nil() const noexcept { return _uuid.is_nil(); }
 uuid_t::operator bool() const noexcept { return !is_nil(); }
+
+std::optional<uuid_t> next_uuid(const uuid_t& u) {
+    auto vec = u.to_vector();
+    for (auto rit = vec.rbegin(); rit != vec.rend(); ++rit) {
+        // Increment the byte if possible.
+        if (*rit < 0xFF) {
+            ++(*rit);
+            return uuid_t(vec);
+        }
+        // We're at 0xFF; set to 0x00 and continue (overflow to the next byte).
+        *rit = 0;
+    }
+    // All 0xFF.
+    return std::nullopt;
+}

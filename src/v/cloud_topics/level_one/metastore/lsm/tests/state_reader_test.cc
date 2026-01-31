@@ -18,7 +18,9 @@
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 #include "serde/rw/rw.h"
+#include "test_utils/test_macros.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace cloud_topics::l1;
@@ -891,4 +893,98 @@ TEST_F(StateReaderTestFixture, TestGetTermKeys) {
     verify_term_keys(reader, missing_tidp, kafka::offset(0), 0);
     verify_term_keys(reader, missing_tidp, kafka::offset(100), 0);
     verify_term_keys(reader, missing_tidp, std::nullopt, 0);
+}
+
+namespace {
+
+ss::future<> hydrate_object_rows(
+  ss::coroutine::experimental::generator<
+    std::expected<state_reader::object_row, state_reader::error>> gen,
+  chunked_vector<std::pair<object_id, object_entry>>& out) {
+    while (auto row_opt = co_await gen()) {
+        auto& row_res = row_opt->get();
+        RPTEST_REQUIRE_CORO(row_res.has_value()) << row_res.error();
+        const auto& row = row_res.value();
+        auto key = object_row_key::decode(row.key);
+        RPTEST_REQUIRE_CORO(key.has_value());
+        out.emplace_back(key->oid, row.val.object);
+    }
+}
+
+MATCHER_P2(ObjectIdAndSizeIs, expected_oid, expected_size, "") {
+    return arg.first == expected_oid
+           && arg.second.object_size == static_cast<size_t>(expected_size);
+}
+
+} // namespace
+
+TEST_F(StateReaderTestFixture, TestObjectKeyRangeNoLowerBound) {
+    auto oid1 = object_id(uuid_t::create());
+    auto oid2 = object_id(uuid_t::create());
+    auto oid3 = object_id(uuid_t::create());
+
+    write_object(oid1, make_object_entry(1024));
+    write_object(oid2, make_object_entry(2048));
+    write_object(oid3, make_object_entry(4096));
+
+    auto reader = make_reader();
+    auto range_res = reader.get_object_range(std::nullopt).get();
+    ASSERT_TRUE(range_res.has_value());
+
+    chunked_vector<std::pair<object_id, object_entry>> rows;
+    hydrate_object_rows(range_res->get_rows(), rows).get();
+    EXPECT_THAT(
+      rows,
+      testing::UnorderedElementsAre(
+        ObjectIdAndSizeIs(oid1, 1024),
+        ObjectIdAndSizeIs(oid2, 2048),
+        ObjectIdAndSizeIs(oid3, 4096)));
+}
+
+TEST_F(StateReaderTestFixture, TestObjectKeyRangeWithLowerBound) {
+    auto oid1 = object_id(
+      uuid_t::from_string("00000000-0000-0000-0000-000000000001"));
+    auto oid2 = object_id(
+      uuid_t::from_string("00000000-0000-0000-0000-000000000002"));
+    auto oid3 = object_id(
+      uuid_t::from_string("00000000-0000-0000-0000-000000000003"));
+    auto missing_oid = object_id(
+      uuid_t::from_string("00000000-0000-0000-0000-000000000004"));
+
+    write_object(oid1, make_object_entry(1024));
+    write_object(oid2, make_object_entry(2048));
+    write_object(oid3, make_object_entry(4096));
+
+    {
+        auto reader = make_reader();
+        auto range_res = reader.get_object_range(oid1).get();
+        ASSERT_TRUE(range_res.has_value());
+        chunked_vector<std::pair<object_id, object_entry>> rows;
+        hydrate_object_rows(range_res->get_rows(), rows).get();
+        EXPECT_THAT(
+          rows,
+          testing::UnorderedElementsAre(
+            ObjectIdAndSizeIs(oid1, 1024),
+            ObjectIdAndSizeIs(oid2, 2048),
+            ObjectIdAndSizeIs(oid3, 4096)));
+    }
+    {
+        auto reader = make_reader();
+        auto range_res = reader.get_object_range(oid2).get();
+        ASSERT_TRUE(range_res.has_value());
+        chunked_vector<std::pair<object_id, object_entry>> rows;
+        hydrate_object_rows(range_res->get_rows(), rows).get();
+        EXPECT_THAT(
+          rows,
+          testing::ElementsAre(
+            ObjectIdAndSizeIs(oid2, 2048), ObjectIdAndSizeIs(oid3, 4096)));
+    }
+    {
+        auto reader = make_reader();
+        auto range_res = reader.get_object_range(missing_oid).get();
+        ASSERT_TRUE(range_res.has_value());
+        chunked_vector<std::pair<object_id, object_entry>> rows;
+        hydrate_object_rows(range_res->get_rows(), rows).get();
+        EXPECT_THAT(rows, testing::ElementsAre());
+    }
 }

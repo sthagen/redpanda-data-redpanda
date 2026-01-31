@@ -26,7 +26,7 @@ class iobuf;
 namespace lsm::internal {
 
 // The sequence number for a write into the database.
-using sequence_number = named_type<uint64_t, struct seqno_tag>;
+using sequence_number = named_type<uint64_t, struct internal_seqno_tag>;
 
 consteval sequence_number operator""_seqno(unsigned long long val) {
     return sequence_number{val};

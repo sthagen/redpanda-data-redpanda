@@ -10,6 +10,7 @@
 #include "cloud_topics/level_one/domain/db_domain_manager.h"
 
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/lsm/garbage_collector.h"
 #include "cloud_topics/level_one/metastore/lsm/keys.h"
 #include "cloud_topics/level_one/metastore/lsm/state_reader.h"
 #include "cloud_topics/level_one/metastore/lsm/state_update.h"
@@ -18,6 +19,7 @@
 #include "container/chunked_hash_map.h"
 #include "lsm/io/cloud_persistence.h"
 #include "lsm/proto/manifest.proto.h"
+#include "ssx/sleep_abortable.h"
 
 #include <seastar/core/sleep.hh>
 
@@ -112,18 +114,28 @@ db_domain_manager::db_domain_manager(
   ss::shared_ptr<stm> stm,
   std::filesystem::path staging_dir,
   cloud_io::remote* remote,
-  cloud_storage_clients::bucket_name bucket)
+  cloud_storage_clients::bucket_name bucket,
+  io* object_io)
   : expected_term_(expected_term)
   , staging_dir_(std::move(staging_dir))
   , remote_(remote)
   , bucket_(std::move(bucket))
-  , stm_(std::move(stm)) {}
+  , object_io_(object_io)
+  , stm_(std::move(stm))
+  , gc_interval_(
+      config::shard_local_cfg()
+        .cloud_topics_long_term_garbage_collection_interval) {
+    gc_interval_.watch([this]() { sem_.signal(); });
+}
 
-void db_domain_manager::start() {}
+void db_domain_manager::start() {
+    ssx::spawn_with_gate(gate_, [this] { return gc_loop(); });
+}
 
 ss::future<> db_domain_manager::stop_and_wait() {
     vlog(cd_log.debug, "DB domain manager stopping...");
     as_.request_abort();
+    sem_.broken();
     auto gate_fut = gate_.close();
     writer_lock_.broken();
     auto wlock_res = co_await exclusive_db_lock();
@@ -989,6 +1001,74 @@ ss::future<std::expected<void, rpc::errc>> db_domain_manager::maybe_open_db() {
     }
     db_ = std::move(*db_res);
     co_return std::expected<void, rpc::errc>{};
+}
+
+ss::future<> db_domain_manager::gc_loop() {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return;
+    }
+
+    auto ntp = stm_->raft()->log()->config().ntp();
+    db_garbage_collector gc(object_io_);
+    while (!as_.abort_requested()) {
+        // NOTE: even though the garbage collector will remove objects and
+        // actually write to the database, we don't need to take the writer
+        // lock. This is because there is no risk of logical row operations
+        // colliding with object removal: the garbage collector will only ever
+        // mutate unreferenced objects, and no other updates will update these
+        // objects.
+        auto gl_res = co_await gate_and_open_reads();
+        if (!gl_res.has_value()) {
+            break;
+        }
+        // TODO: make batch size configurable.
+        vlog(cd_log.debug, "Running garbage collection now...");
+        auto gc_res = co_await gc.remove_unreferenced_objects(
+          db_.get(), &as_, 1000);
+        if (!gc_res.has_value()) {
+            using enum db_garbage_collector::errc;
+            switch (gc_res.error().e) {
+            case db_needs_reopen:
+                vlog(
+                  cd_log.debug,
+                  "Database needs reopen after GC: {}",
+                  gc_res.error());
+                break;
+            case io_error:
+                vlog(
+                  cd_log.warn,
+                  "IO error during garbage collection: {}",
+                  gc_res.error());
+                break;
+            }
+        }
+        // Drop the database lock while we sleep.
+        gl_res = {};
+
+        auto sleep_interval = gc_interval_();
+        vlog(
+          cd_log.debug,
+          "Re-running garbage collection in {}...",
+          sleep_interval);
+        try {
+            co_await sem_.wait(
+              sleep_interval, std::max(sem_.current(), size_t(1)));
+        } catch (const ss::semaphore_timed_out&) {
+            // Fall through
+        } catch (...) {
+            auto eptr = std::current_exception();
+            auto log_lvl = ssx::is_shutdown_exception(eptr)
+                             ? ss::log_level::debug
+                             : ss::log_level::warn;
+            vlogl(
+              cd_log,
+              log_lvl,
+              "Garbage collection loop hit exception while sleeping: {}",
+              eptr);
+        }
+    }
+    vlog(cd_log.debug, "Garbage collection loop stopped...");
 }
 
 ss::future<rpc::restore_domain_reply>

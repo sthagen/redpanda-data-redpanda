@@ -155,6 +155,9 @@ ss::future<> iterator::seek(std::string_view target) {
 ss::future<> iterator::next() { return _impl->next(); }
 ss::future<> iterator::prev() { return _impl->prev(); }
 std::string_view iterator::key() { return _impl->key().user_key(); }
+sequence_number iterator::seqno() {
+    return from_internal_seqno(_impl->key().seqno());
+}
 iobuf iterator::value() { return _impl->value(); }
 
 database::database(std::unique_ptr<db::impl> impl)

@@ -93,11 +93,15 @@ struct remove_topics_db_update {
 };
 
 struct remove_objects_db_update {
-    // Removes objects that are no longer referenced by any extents.
-    // An object is considered unreferenced when removed_data_size >=
-    // total_data_size.
+    // Removes objects from the metastore. Unlike the other updates, this does
+    // not take a state_reader, which helps us avoid hanging onto an
+    // lsm::snapshot while building the rows.
+    //
+    // WARN: it is up to callers to ensure that this is only called with
+    // objects that are no longer referenced, with the expectation that these
+    // objects have already been deleted in object storage.
     ss::future<std::expected<void, db_update_error>>
-    build_rows(state_reader&, chunked_vector<write_batch_row>&) const;
+    build_rows(chunked_vector<write_batch_row>&) const;
 
     chunked_vector<object_id> objects;
 };

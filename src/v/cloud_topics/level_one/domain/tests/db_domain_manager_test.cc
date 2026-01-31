@@ -11,7 +11,9 @@
 #include "cloud_io/remote.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
+#include "cloud_topics/level_one/common/file_io.h"
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/common/object_utils.h"
 #include "cloud_topics/level_one/domain/db_domain_manager.h"
 #include "cloud_topics/level_one/metastore/lsm/state_reader.h"
 #include "cloud_topics/level_one/metastore/lsm/state_update.h"
@@ -57,18 +59,26 @@ struct domain_manager_node {
       : stm_ptr(std::move(s))
       , remote(remote)
       , bucket(bucket)
-      , staging_directory(staging_path.data()) {}
+      , staging_directory(staging_path.data())
+      , object_io(
+          staging_directory.get_path(),
+          remote,
+          bucket,
+          /*cache=*/nullptr) {}
 
     // Open a new db_domain_manager for the current term. Previous managers are
     // retained in the list too, to validate that their usage fails.
-    db_domain_manager* open_manager() {
+    db_domain_manager* open_manager(bool start_gc) {
         auto mgr = std::make_unique<db_domain_manager>(
           stm_ptr->raft()->confirmed_term(),
           stm_ptr,
           staging_directory.get_path(),
           remote,
-          bucket);
-        mgr->start();
+          bucket,
+          &object_io);
+        if (start_gc) {
+            mgr->start();
+        }
         auto* ptr = mgr.get();
         managers.push_back(std::move(mgr));
         return ptr;
@@ -89,6 +99,7 @@ struct domain_manager_node {
     cloud_io::remote* remote;
     const cloud_storage_clients::bucket_name& bucket;
     temporary_dir staging_directory;
+    file_io object_io;
     std::list<std::unique_ptr<db_domain_manager>> managers;
 };
 
@@ -253,7 +264,7 @@ public:
         ASSERT_NO_FATAL_FAILURE(wait_for_leader(leader).get());
         initial_leader = &leader->get();
 
-        initial_manager = initial_leader->open_manager();
+        initial_manager = initial_leader->open_manager(false);
     }
 
     void TearDown() override {
@@ -472,6 +483,33 @@ public:
             expected_next = kafka::next_offset(e.last_offset);
         }
     }
+    ss::future<bool> object_exists(object_id oid) {
+        ss::abort_source as;
+        retry_chain_node rtc(as, 10s, 100ms);
+        auto path = object_path_factory::level_one_path(oid);
+        auto result = co_await sr->remote.local().object_exists(
+          bucket_name, path, rtc, "l1_object");
+        switch (result) {
+        case cloud_io::download_result::success:
+            co_return true;
+        case cloud_io::download_result::notfound:
+            co_return false;
+        case cloud_io::download_result::timedout:
+        case cloud_io::download_result::failed:
+            EXPECT_FALSE(true) << "Unexpected error checking object";
+        }
+        co_return false;
+    }
+
+    ss::future<bool>
+    all_objects_missing(const chunked_vector<object_id>& object_ids) {
+        for (const auto& oid : object_ids) {
+            if (co_await object_exists(oid)) {
+                co_return false;
+            }
+        }
+        co_return true;
+    }
 
     std::array<std::unique_ptr<domain_manager_node>, num_nodes> dm_nodes;
     scoped_config cfg;
@@ -525,7 +563,7 @@ TEST_P(DbDomainManagerTestWithParams, TestConcurrentUpdates) {
         leader_opt->get().stm_ptr->raft()->step_down("test stepdown").get();
         ASSERT_NO_FATAL_FAILURE(wait_for_leader(leader_opt).get());
         auto& leader_node = leader_opt->get();
-        leader_node.open_manager();
+        leader_node.open_manager(/*start_gc=*/true);
     }
     done = true;
     ss::when_all_succeed(std::move(futs)).get();
@@ -592,7 +630,7 @@ TEST_P(DbDomainManagerTestWithParams, TestUpdatesWithDroppedAppends) {
         // Open a new domain manager in the new term for the new leader.
         ASSERT_NO_FATAL_FAILURE(wait_for_leader(leader_opt).get());
         auto& leader_node = leader_opt->get();
-        leader_node.open_manager();
+        leader_node.open_manager(/*start_gc=*/true);
     }
     done = true;
     ss::when_all_succeed(std::move(futs)).get();
@@ -769,4 +807,76 @@ TEST_F(DbDomainManagerTest, TestRestoreWithConcurrentReads) {
 
     // Validate the restored metadata.
     validate_metadata(tp, kafka::offset(0), kafka::offset(30));
+}
+
+namespace {
+
+chunked_vector<object_id> put_dummy_objects(
+  io& object_io, const chunked_vector<new_object>& new_objects) {
+    chunked_vector<object_id> object_ids;
+    for (auto& obj : new_objects) {
+        object_ids.push_back(obj.oid);
+        auto file_res = object_io.create_tmp_file().get();
+        EXPECT_TRUE(file_res.has_value());
+        auto ostream = file_res.value()->output_stream().get();
+        ostream.write("test data").get();
+        ostream.close().get();
+        ss::abort_source as;
+
+        auto put_res
+          = object_io.put_object(obj.oid, file_res->get(), &as).get();
+        EXPECT_TRUE(put_res.has_value());
+        file_res.value()->remove().get();
+    }
+    return object_ids;
+}
+
+} // namespace
+
+TEST_F(DbDomainManagerTest, TestGarbageCollectionAfterRemoveTopic) {
+    cfg.get("cloud_topics_long_term_garbage_collection_interval")
+      .set_value(100ms);
+
+    auto tp = make_tp();
+
+    // Create some object metadata and actually create dummy objects for them.
+    auto new_objects = make_new_objects(tp, kafka::offset(0), 4321, 10);
+    auto object_ids = put_dummy_objects(initial_leader->object_io, new_objects);
+
+    // Verify objects exist in S3 using remote->object_exists.
+    for (const auto& oid : object_ids) {
+        EXPECT_TRUE(object_exists(oid).get());
+    }
+
+    // Add objects to the metastore.
+    {
+        l1_rpc::add_objects_request req;
+        req.new_objects = std::move(new_objects);
+        req.new_terms = make_terms(tp, kafka::offset(0), model::term_id(1));
+        auto reply = initial_manager->add_objects(std::move(req)).get();
+        ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+    }
+
+    // Remove the topic, marking the objects as removable.
+    {
+        l1_rpc::remove_topics_request req;
+        req.topics.push_back(tp.topic_id);
+        auto reply = initial_manager->remove_topics(std::move(req)).get();
+        ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+        ASSERT_TRUE(reply.not_removed.empty());
+    }
+
+    // Allow for some time to GC, but no GC should happen until we flush.
+    ss::sleep(1s).get();
+    for (const auto& oid : object_ids) {
+        EXPECT_TRUE(object_exists(oid).get());
+    }
+
+    // Now flush and ensure GC happens.
+    ASSERT_EQ(initial_manager->flush_domain({}).get().ec, l1_rpc::errc::ok);
+
+    // Start running GC and wait for all the objects to be removed.
+    initial_manager->start();
+    RPTEST_REQUIRE_EVENTUALLY(
+      30s, [&] { return all_objects_missing(object_ids); });
 }

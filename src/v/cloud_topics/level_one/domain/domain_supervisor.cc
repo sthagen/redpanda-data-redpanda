@@ -321,7 +321,8 @@ private:
               stm_manager->get<stm>(),
               _staging_dir,
               _remote,
-              _bucket);
+              _bucket,
+              _object_io);
         } else {
             domain_mgr = ss::make_shared<simple_domain_manager>(
               stm_manager->get<simple_stm>(), _object_io);

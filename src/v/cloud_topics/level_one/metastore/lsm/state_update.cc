@@ -1059,36 +1059,8 @@ remove_topics_db_update::build_rows(
 
 ss::future<std::expected<void, db_update_error>>
 remove_objects_db_update::build_rows(
-  state_reader& reader, chunked_vector<write_batch_row>& out) const {
-    if (objects.empty()) {
-        co_return std::expected<void, db_update_error>{};
-    }
-
+  chunked_vector<write_batch_row>& out) const {
     for (const auto& oid : objects) {
-        auto obj_res = co_await reader.get_object(oid);
-        if (!obj_res.has_value()) {
-            co_return std::unexpected(wrap_read_err(
-              std::move(obj_res.error()), "Error getting object {}", oid));
-        }
-        if (!obj_res.value().has_value()) {
-            // Object doesn't exist, skip.
-            continue;
-        }
-
-        const auto& obj_entry = obj_res.value().value();
-
-        // Reject if object still has referenced data.
-        if (obj_entry.removed_data_size < obj_entry.total_data_size) {
-            co_return std::unexpected(db_update_error(
-              invalid_update,
-              fmt::format(
-                "Object {} is still referenced (removed_data_size={}, "
-                "total_data_size={})",
-                oid,
-                obj_entry.removed_data_size,
-                obj_entry.total_data_size)));
-        }
-
         out.emplace_back(
           write_batch_row{
             .key = object_row_key::encode(oid), .value = iobuf{}});

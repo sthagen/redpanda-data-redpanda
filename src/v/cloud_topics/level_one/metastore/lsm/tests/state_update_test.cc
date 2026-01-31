@@ -443,7 +443,7 @@ protected:
     void apply_remove_objects_update(remove_objects_db_update& update) {
         auto reader = make_reader();
         chunked_vector<write_batch_row> rows;
-        auto result = update.build_rows(reader, rows).get();
+        auto result = update.build_rows(rows).get();
         ASSERT_TRUE(result.has_value());
 
         auto seqno = next_seqno();
@@ -1311,60 +1311,6 @@ TEST_F(StateUpdateTest, TestRemoveObjectsFullyRemoved) {
     verify_object_missing(oid);
 }
 
-TEST_F(StateUpdateTest, TestRemoveObjectsPartiallyRemoved) {
-    // Set up partition with two extents from different objects.
-    auto oid1 = make_oid();
-    auto oid2 = make_oid();
-    add_objects(
-      {terms(tidp0, {{0, 1}})},
-      make_object(oid1, tp(tidp0, 0, 99).pos(0, 1023)),
-      make_object(oid2, tp(tidp0, 100, 199).pos(0, 1023)));
-
-    // Remove first extent only.
-    set_start_offset(tidp0, kafka::offset(100));
-    verify_object_exists(oid1, 1024, /*removed_data_size=*/1024);
-    verify_object_exists(oid2, 1024, /*removed_data_size=*/0);
-
-    // Try to remove both objects - should fail because oid2 is still
-    // referenced.
-    auto update = remove_objects_db_update{
-      .objects = {},
-    };
-    update.objects.push_back(oid1);
-    update.objects.push_back(oid2);
-    auto reader = make_reader();
-    chunked_vector<write_batch_row> rows;
-    auto result = update.build_rows(reader, rows).get();
-    ASSERT_FALSE(result.has_value());
-
-    // Both objects should still exist (update rejected).
-    verify_object_exists(oid1, 1024, /*removed_data_size=*/1024);
-    verify_object_exists(oid2, 1024, /*removed_data_size=*/0);
-}
-
-TEST_F(StateUpdateTest, TestRemoveObjectsNoneRemoved) {
-    // Set up partition with extents still referencing objects.
-    auto oid = make_oid();
-    add_objects(
-      {terms(tidp0, {{0, 1}})},
-      make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
-
-    verify_object_exists(oid, 1024, /*removed_data_size=*/0);
-
-    // Try to remove the object without removing extents first - should fail.
-    auto update = remove_objects_db_update{
-      .objects = {},
-    };
-    update.objects.push_back(oid);
-    auto reader = make_reader();
-    chunked_vector<write_batch_row> rows;
-    auto result = update.build_rows(reader, rows).get();
-    ASSERT_FALSE(result.has_value());
-
-    // Object should still exist (still referenced by extents).
-    verify_object_exists(oid, 1024, /*removed_data_size=*/0);
-}
-
 TEST_F(StateUpdateTest, TestRemoveObjectsEmpty) {
     // Removing empty objects list should be no-op.
     chunked_vector<object_id> objects_to_remove;
@@ -1387,28 +1333,4 @@ TEST_F(StateUpdateTest, TestRemoveObjectsNonExistent) {
 
     // Original object should still exist.
     verify_object_exists(oid, 1024, /*removed_data_size=*/0);
-}
-
-TEST_F(StateUpdateTest, TestRemoveObjectsAfterTopicRemoval) {
-    // Set up partition and remove the topic.
-    auto oid = make_oid();
-    add_objects(
-      {terms(tidp0, {{0, 1}})},
-      make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
-
-    // Remove the topic.
-    chunked_vector<model::topic_id> topics_to_remove;
-    topics_to_remove.push_back(tidp0.topic_id);
-    remove_topics(std::move(topics_to_remove));
-
-    // Object should have removed_data_size == total_data_size.
-    verify_object_exists(oid, 1024, /*removed_data_size=*/1024);
-
-    // Now remove the object.
-    chunked_vector<object_id> objects_to_remove;
-    objects_to_remove.push_back(oid);
-    remove_objects(std::move(objects_to_remove));
-
-    // Object should be removed.
-    verify_object_missing(oid);
 }

@@ -148,6 +148,60 @@ state_reader::extent_key_range::materialize_rows() {
     co_return ret;
 }
 
+namespace {
+
+bool is_at_object(lsm::iterator& iter) {
+    if (!iter.valid()) {
+        return false;
+    }
+    auto key = object_row_key::decode(iter.key());
+    return key.has_value();
+}
+
+} // namespace
+
+ss::sstring state_reader::object_key_range::to_string() {
+    return fmt::format(
+      "object_key_range: inclusive_base_key: {}, iter: {}",
+      _inclusive_base_key,
+      _iter.valid() ? _iter.key() : "{invalid iterator}");
+}
+
+ss::coroutine::experimental::generator<
+  std::expected<state_reader::object_row, state_reader::error>>
+state_reader::object_key_range::get_rows() {
+    auto fut = co_await ss::coroutine::as_future(
+      _iter.seek(_inclusive_base_key));
+    if (fut.failed()) {
+        auto ex = fut.get_exception();
+        co_yield std::unexpected(to_error(ex));
+        co_return;
+    }
+    while (_iter.valid()) {
+        std::exception_ptr ex;
+        if (!is_at_object(_iter)) {
+            co_return;
+        }
+        try {
+            auto val = serde::from_iobuf<object_row_value>(_iter.value());
+            co_yield object_row{
+              .key = ss::sstring(_iter.key()),
+              .val = val,
+              .seqno = _iter.seqno(),
+            };
+
+            co_await _iter.next();
+        } catch (...) {
+            ex = std::current_exception();
+        }
+        if (ex) {
+            co_yield std::unexpected(to_error(
+              ex, fmt::format("Exception iterating {}: ", to_string())));
+            co_return;
+        }
+    }
+}
+
 ss::future<
   std::expected<std::optional<metadata_row_value>, state_reader::error>>
 state_reader::get_metadata(const model::topic_id_partition& tidp) {
@@ -689,6 +743,25 @@ state_reader::get_partitions_for_topic(const model::topic_id& tid) {
         co_return std::unexpected(to_error(std::current_exception()));
     }
     co_return partitions;
+}
+
+std::expected<state_reader::object_key_range, state_reader::error>
+make_object_range(lsm::iterator iter, std::optional<object_id> start_oid) {
+    auto base_key = start_oid ? object_row_key::encode(*start_oid)
+                              : object_row_key::encode(object_id(uuid_t{}));
+    return state_reader::object_key_range(std::move(base_key), std::move(iter));
+}
+
+ss::future<std::expected<state_reader::object_key_range, state_reader::error>>
+state_reader::get_object_range(std::optional<object_id> start_oid) {
+    auto base_key = start_oid ? object_row_key::encode(*start_oid)
+                              : object_row_key::encode(object_id(uuid_t{}));
+    try {
+        auto iter = co_await snap_.create_iterator();
+        co_return object_key_range(std::move(base_key), std::move(iter));
+    } catch (...) {
+        co_return std::unexpected(to_error(std::current_exception()));
+    }
 }
 
 } // namespace cloud_topics::l1

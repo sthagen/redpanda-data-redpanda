@@ -303,7 +303,7 @@ protected:
         };
         auto reader = state_reader(db_->create_snapshot());
         chunked_vector<write_batch_row> rows;
-        auto result = db_update.build_rows(reader, rows).get();
+        auto result = db_update.build_rows(rows).get();
         if (!result.has_value()) {
             return std::unexpected(
               stm_update_error{fmt::format("{}", result.error())});
@@ -1852,12 +1852,20 @@ TEST_P(StateUpdateParamTest, TestRemoveObjectsWithReferences) {
     ASSERT_TRUE(apply_set_start_offset(tp, 11_o).has_value());
 
     auto remove_res = apply_remove_objects({oid1});
-    ASSERT_FALSE(remove_res.has_value());
-    EXPECT_THAT(
-      remove_res.error()(), testing::ContainsRegex("is still referenced"));
+    if (GetParam() == state_backend::lsm) {
+        // The LSM state update is more permissive (burden is on callers to do
+        // this safely).
+        ASSERT_TRUE(remove_res.has_value());
+        EXPECT_EQ(0, get_state().objects.size());
+        EXPECT_FALSE(get_state().objects.contains(oid1));
+    } else {
+        ASSERT_FALSE(remove_res.has_value());
+        EXPECT_THAT(
+          remove_res.error()(), testing::ContainsRegex("is still referenced"));
 
-    EXPECT_EQ(1, get_state().objects.size());
-    EXPECT_TRUE(get_state().objects.contains(oid1));
+        EXPECT_EQ(1, get_state().objects.size());
+        EXPECT_TRUE(get_state().objects.contains(oid1));
+    }
 }
 
 TEST_P(StateUpdateParamTest, TestRemoveMissingObjects) {
@@ -1916,12 +1924,16 @@ TEST_P(StateUpdateParamTest, TestRemoveTopicsBasic) {
     EXPECT_EQ(198, s.objects.at(oid1).total_data_size);
     EXPECT_EQ(99, s.objects.at(oid1).removed_data_size);
 
-    // We should be unable to remove object until the other topic is removed.
-    auto remove_obj_res = apply_remove_objects({oid1});
-    EXPECT_FALSE(remove_obj_res.has_value());
-    EXPECT_THAT(
-      remove_obj_res.error()(), testing::ContainsRegex("is still referenced"));
-    EXPECT_EQ(1, get_state().objects.size());
+    if (GetParam() == state_backend::simple) {
+        // We should be unable to remove object until the other topic is
+        // removed. Note, the LSM backend is more permissive.
+        auto remove_obj_res = apply_remove_objects({oid1});
+        EXPECT_FALSE(remove_obj_res.has_value());
+        EXPECT_THAT(
+          remove_obj_res.error()(),
+          testing::ContainsRegex("is still referenced"));
+        EXPECT_EQ(1, get_state().objects.size());
+    }
 
     // Now remove the other topic and try again.
     ASSERT_TRUE(apply_remove_topics({tp_b.topic_id}).has_value());

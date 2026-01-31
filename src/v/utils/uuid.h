@@ -16,6 +16,7 @@
 #include <boost/uuid/uuid.hpp>
 
 #include <compare>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -71,3 +72,7 @@ private:
 };
 
 bool operator<(const uuid_t& l, const uuid_t& r);
+
+// Returns the given UUID incremented by 1.
+// Returns nullopt on overflow (all 0xFF).
+std::optional<uuid_t> next_uuid(const uuid_t& u);

@@ -68,6 +68,18 @@ SEASTAR_THREAD_TEST_CASE(uuid_test) {
     BOOST_REQUIRE_EQUAL(u, r);
 }
 
+SEASTAR_THREAD_TEST_CASE(test_next) {
+    auto uuid1 = uuid_t{};
+    auto uuid2 = uuid_t::from_string("00000000-0000-0000-0000-000000000001");
+    BOOST_REQUIRE_EQUAL(*next_uuid(uuid1), uuid2);
+
+    auto uuid3 = uuid_t::from_string("ffffffff-ffff-ffff-ffff-fffffffffffe");
+    auto uuid4 = uuid_t::from_string("ffffffff-ffff-ffff-ffff-ffffffffffff");
+    BOOST_REQUIRE_EQUAL(*next_uuid(uuid3), uuid4);
+
+    BOOST_REQUIRE(!next_uuid(uuid4).has_value());
+}
+
 struct uuid_struct
   : serde::envelope<uuid_struct, serde::version<0>, serde::compat_version<0>> {
     uuid_t single;

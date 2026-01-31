@@ -620,6 +620,44 @@ TEST_F(ReplicatedDatabaseTest, TestConcurrentWrites) {
         MatchesKV("key4", "value4")));
 }
 
+// Regression test that tombstones in the volatile buffer are properly replayed
+// as deletions when opening the database on a new leader.
+TEST_F(ReplicatedDatabaseTest, TestReplayTombstones) {
+    chunked_vector<write_batch_row> rows1;
+    rows1.emplace_back(
+      write_batch_row{
+        .key = "key1",
+        .value = iobuf::from("value1"),
+      });
+    auto write_res = initial_db->write(std::move(rows1)).get();
+    ASSERT_TRUE(write_res.has_value());
+
+    // Write a tombstone.
+    chunked_vector<write_batch_row> tombstone_rows;
+    tombstone_rows.emplace_back(
+      write_batch_row{
+        .key = "key1",
+        .value = iobuf{},
+      });
+    write_res = initial_db->write(std::move(tombstone_rows)).get();
+    ASSERT_TRUE(write_res.has_value());
+    EXPECT_THAT(get_rows(initial_db->db()).get(), ElementsAre());
+
+    // Transfer leadership. The new leader will replay the tombstone from the
+    // volatile buffer.
+    initial_leader->stm_ptr->raft()->step_down("test").get();
+    opt_ref leader_opt;
+    ASSERT_NO_FATAL_FAILURE(wait_for_leader(leader_opt).get());
+    auto& new_leader = leader_opt->get();
+
+    auto new_db_result = new_leader.open_db().get();
+    ASSERT_TRUE(new_db_result.has_value());
+    auto& new_db = *new_db_result.value();
+
+    // The key should still be deleted after replay.
+    EXPECT_THAT(get_rows(new_db.db()).get(), ElementsAre());
+}
+
 // Test that concurrent flush and write operations execute correctly.
 TEST_F(ReplicatedDatabaseTest, TestConcurrentFlushAndWrite) {
     // Start a fiber that is repeatedly calling flush until we stop it.

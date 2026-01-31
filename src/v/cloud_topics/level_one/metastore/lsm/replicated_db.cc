@@ -135,7 +135,11 @@ replicated_database::open(
             if (seqno <= max_persisted_seqno) {
                 continue;
             }
-            wb.put(row.row.key, row.row.value.copy(), seqno);
+            if (row.row.value.empty()) {
+                wb.remove(row.row.key, seqno);
+            } else {
+                wb.put(row.row.key, row.row.value.copy(), seqno);
+            }
             vlog(
               cd_log.trace,
               "Replaying at seqno: {}, key: {}",

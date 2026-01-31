@@ -170,8 +170,8 @@ model::offset stm::max_removable_local_log_offset() { return {}; }
 ss::future<raft::local_snapshot_applied>
 stm::apply_local_snapshot(raft::stm_snapshot_header, iobuf&& snapshot_buf) {
     auto parser = iobuf_parser(std::move(snapshot_buf));
-    auto snapshot = co_await serde::read_async<lsm_state>(parser);
-    state_ = std::move(snapshot);
+    auto stm_snapshot = co_await serde::read_async<lsm_stm_snapshot>(parser);
+    state_ = std::move(stm_snapshot.state);
     co_return raft::local_snapshot_applied::yes;
 }
 
@@ -188,8 +188,8 @@ stm::take_local_snapshot(ssx::semaphore_units units) {
 
 ss::future<> stm::apply_raft_snapshot(const iobuf& snapshot_buf) {
     auto parser = iobuf_parser(snapshot_buf.copy());
-    auto snapshot = co_await serde::read_async<lsm_state>(parser);
-    state_ = std::move(snapshot);
+    auto stm_snapshot = co_await serde::read_async<lsm_stm_snapshot>(parser);
+    state_ = std::move(stm_snapshot.state);
 }
 
 ss::future<iobuf> stm::take_raft_snapshot() {
