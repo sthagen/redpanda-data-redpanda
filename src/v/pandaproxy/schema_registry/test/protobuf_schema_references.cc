@@ -72,7 +72,9 @@ message Test { Dep d = 1; })";
                         schema_definition{
                           test_schema,
                           schema_type::protobuf,
-                          {{"dep.proto", dep_ctx_a, schema_version{1}}},
+                          {{"dep.proto",
+                            {dep_ctx_a, is_qualified::yes},
+                            schema_version{1}}},
                           {}}})
                       .get();
 
@@ -84,7 +86,9 @@ message Test { Dep d = 1; })";
                         schema_definition{
                           test_schema,
                           schema_type::protobuf,
-                          {{"dep.proto", dep_ctx_b, schema_version{1}}},
+                          {{"dep.proto",
+                            {dep_ctx_b, is_qualified::yes},
+                            schema_version{1}}},
                           {}}})
                       .get();
 

@@ -236,7 +236,8 @@ ss::future<> sharded_store::process_marked_schemas() {
                       return ss::now();
                   }
                   return make_canonical_schema(
-                           {{}, std::move(schema).assume_value()},
+                           {context_subject{id.ctx, subject{}},
+                            std::move(schema).assume_value()},
                            normalize::no,
                            false)
                     .then([id, &store](auto canonical) {
@@ -245,10 +246,16 @@ ss::future<> sharded_store::process_marked_schemas() {
                         auto [sub, schema] = std::move(canonical).destructure();
                         store.upsert_schema(id, std::move(schema), false);
                     })
-                    .handle_exception([](const std::exception_ptr&) {
+                    .handle_exception([id](const std::exception_ptr& ep) {
                         // processing attempt failed on marked schema. This is
                         // not an issue of forward references. Ignore error and
                         // keep schema in the store as-is
+                        vlog(
+                          srlog.debug,
+                          "process_marked_schemas failed for ctx={} id={}: {}",
+                          id.ctx,
+                          id.id,
+                          ep);
                     });
               });
           });

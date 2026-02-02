@@ -124,7 +124,9 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_missing_nested_reference_error_subject) {
       pps::schema_definition{
         R"(syntax = "proto3"; import "c.proto"; message B { C c = 1; })",
         pps::schema_type::protobuf,
-        {{"c.proto", pps::subject{"subject-for-C"}, pps::schema_version{1}}},
+        {{"c.proto",
+          pps::context_subject_reference::unqualified("subject-for-C"),
+          pps::schema_version{1}}},
         {}}};
 
     auto schema_a = pps::subject_schema{
@@ -132,7 +134,9 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_missing_nested_reference_error_subject) {
       pps::schema_definition{
         R"(syntax = "proto3"; import "b.proto"; message A { B b = 1; })",
         pps::schema_type::protobuf,
-        {{"b.proto", pps::subject{"subject-for-B"}, pps::schema_version{1}}},
+        {{"b.proto",
+          pps::context_subject_reference::unqualified("subject-for-B"),
+          pps::schema_version{1}}},
         {}}};
 
     store.insert(schema_b.share(), pps::schema_version{1});

@@ -5434,6 +5434,90 @@ class SchemaRegistryContextTest(SchemaRegistryEndpoints):
             err_msg=f"Failed to find replay log: {replay_pattern}",
         )
 
+    @cluster(num_nodes=1)
+    def test_context_unqualified_references(self):
+        base_schema = schema_proto_def
+        dependent_schema = schema_proto_dependee_def
+
+        ctx = ".unqual-ref-ctx"
+
+        # 1. Register base schema in a non-default context
+        base_subject = f":{ctx}:base-subject"
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=base_subject,
+            data=json.dumps({"schema": base_schema, "schemaType": "PROTOBUF"}),
+        )
+        self.assert_equal(result.status_code, 200)
+
+        # 2. Register dependent schema in SAME context with UNQUALIFIED reference
+        # The reference "base-subject" should resolve to ":.unqual-ref-ctx:base-subject"
+        dependent_subject = f":{ctx}:dependent-subject"
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=dependent_subject,
+            data=json.dumps(
+                {
+                    "schema": dependent_schema,
+                    "schemaType": "PROTOBUF",
+                    "references": [
+                        {
+                            "name": "schema_proto.proto",
+                            "subject": "base-subject",  # UNQUALIFIED - should inherit context
+                            "version": 1,
+                        }
+                    ],
+                }
+            ),
+        )
+        self.assert_equal(result.status_code, 200)
+
+        # 3. Verify the referenced-by relationship exists
+        result = self.sr_client.get_subjects_subject_versions_version_referenced_by(
+            subject=base_subject, version=1
+        )
+        self.assert_equal(result.status_code, 200)
+        self.assert_equal(result.json(), [2])  # dependent_subject v1 has schema id 2
+
+        # 4. Test that unqualified references in DEFAULT context don't find
+        # schemas from other contexts
+        default_dependent_subject = "default-ctx-dependent"
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=default_dependent_subject,
+            data=json.dumps(
+                {
+                    "schema": dependent_schema,
+                    "schemaType": "PROTOBUF",
+                    "references": [
+                        {
+                            "name": "schema_proto.proto",
+                            "subject": "base-subject",  # UNQUALIFIED - resolves to default context
+                            "version": 1,
+                        }
+                    ],
+                }
+            ),
+        )
+        # Should fail because "base-subject" doesn't exist in default context
+        self.assert_equal(result.status_code, 422)
+
+        # 5. Test qualified cross-context reference works
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=default_dependent_subject,
+            data=json.dumps(
+                {
+                    "schema": dependent_schema,
+                    "schemaType": "PROTOBUF",
+                    "references": [
+                        {
+                            "name": "schema_proto.proto",
+                            "subject": base_subject,  # QUALIFIED - explicit context
+                            "version": 1,
+                        }
+                    ],
+                }
+            ),
+        )
+        self.assert_equal(result.status_code, 200)
+
 
 class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
     """

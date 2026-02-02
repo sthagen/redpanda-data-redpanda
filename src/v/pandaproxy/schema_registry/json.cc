@@ -283,12 +283,13 @@ std::string_view as_string_view(const json::Value& v) {
 
 ss::future<> check_references(sharded_store& store, subject_schema schema) {
     for (const auto& ref : schema.def().refs()) {
-        co_await store.get_id(ref.sub, ref.version)
+        auto resolved_sub = ref.sub.resolve(schema.sub().ctx);
+        co_await store.get_id(resolved_sub, ref.version)
           .discard_result()
           .handle_exception_type([&](const exception& e) {
               if (failed_subject_schema_lookup(e.code())) {
                   throw as_exception(
-                    no_reference_found_for(schema, ref.sub, ref.version));
+                    no_reference_found_for(schema, resolved_sub, ref.version));
               }
               throw;
           });

@@ -270,7 +270,8 @@ message NestedMessage {
                            schema_type::protobuf,
                            {schema_reference{
                              .name = "simple.proto",
-                             .sub = subject{"simple_schema"},
+                             .sub = context_subject_reference::unqualified(
+                               "simple_schema"),
                              .version = schema_version{0}}},
                            std::optional<schema_metadata>{}}})
                      .get();

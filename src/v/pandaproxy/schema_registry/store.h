@@ -426,7 +426,9 @@ public:
         schema_id_set references;
         for (const auto& s : _schemas) {
             for (const auto& r : s.second.definition.refs()) {
-                if (r.sub == sub && (!ver.has_value() || r.version == *ver)) {
+                if (
+                  r.sub.resolve(s.first.ctx) == sub
+                  && (!ver.has_value() || r.version == *ver)) {
                     references.insert(s.first);
                 }
             }

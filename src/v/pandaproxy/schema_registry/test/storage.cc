@@ -56,7 +56,9 @@ const auto expected_schema_value = schema_value{
     schema_definition{
       R"({"type":"string"})",
       schema_type::avro,
-      {{{"name"}, subject{"subject"}, schema_version{1}}},
+      {{{"name"},
+        context_subject_reference::unqualified("subject"),
+        schema_version{1}}},
       {}}},
   .version{schema_version{1}},
   .id{schema_id{1}},
@@ -374,8 +376,9 @@ TEST_F(StorageTest, SerdeContextSubject) {
               R"({"type":"string"})",
               schema_type::avro,
               {{{"ref-name"},
-                context_subject{
-                  context{".ref-context"}, subject{"ref-subject"}},
+                {context_subject{
+                   context{".ref-context"}, subject{"ref-subject"}},
+                 is_qualified::yes},
                 schema_version{2}}},
               {}}},
           .version{schema_version{1}},

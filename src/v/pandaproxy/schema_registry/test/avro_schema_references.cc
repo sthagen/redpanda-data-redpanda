@@ -78,7 +78,9 @@ TEST_F(AvroSchemaReferencesTest, RegisterWithReferences) {
 })",
       schema_type::avro,
       {schema_reference{
-        .name = ref_name, .sub = ref_sub, .version = schema_version(1)}},
+        .name = ref_name,
+        .sub = {ref_sub, is_qualified::no},
+        .version = schema_version(1)}},
       {}};
 
     // Register the referenced schema (should not throw)
@@ -116,7 +118,7 @@ TEST_F(AvroSchemaReferencesTest, DiamondDependencies) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.Base",
-          .sub = subject("BaseSubject"),
+          .sub = context_subject_reference::unqualified("BaseSubject"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -130,7 +132,7 @@ TEST_F(AvroSchemaReferencesTest, DiamondDependencies) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.Base",
-          .sub = subject("BaseSubject"),
+          .sub = context_subject_reference::unqualified("BaseSubject"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -147,11 +149,11 @@ TEST_F(AvroSchemaReferencesTest, DiamondDependencies) {
         schema_type::avro,
         {schema_reference{
            .name = "com.example.Left",
-           .sub = subject("LeftSubject"),
+           .sub = context_subject_reference::unqualified("LeftSubject"),
            .version = schema_version(1)},
          schema_reference{
            .name = "com.example.Right",
-           .sub = subject("RightSubject"),
+           .sub = context_subject_reference::unqualified("RightSubject"),
            .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -181,7 +183,7 @@ TEST_F(AvroSchemaReferencesTest, TransitiveReferences) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.Country",
-          .sub = subject("CountrySubject"),
+          .sub = context_subject_reference::unqualified("CountrySubject"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -195,7 +197,7 @@ TEST_F(AvroSchemaReferencesTest, TransitiveReferences) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.Address",
-          .sub = subject("AddressSubject"),
+          .sub = context_subject_reference::unqualified("AddressSubject"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -220,7 +222,7 @@ TEST_F(AvroSchemaReferencesTest, PrimitiveTypeReference) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.CustomString",
-          .sub = subject("StringSubject"),
+          .sub = context_subject_reference::unqualified("StringSubject"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -282,7 +284,7 @@ TEST_F(AvroSchemaReferencesTest, SameNameDifferentSubjectsInIsolation) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.Shared",
-          .sub = subject("SubjectD"),
+          .sub = context_subject_reference::unqualified("SubjectD"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -296,7 +298,7 @@ TEST_F(AvroSchemaReferencesTest, SameNameDifferentSubjectsInIsolation) {
         schema_type::avro,
         {schema_reference{
           .name = "com.example.Shared",
-          .sub = subject("SubjectE"),
+          .sub = context_subject_reference::unqualified("SubjectE"),
           .version = schema_version(1)}},
         {}},
       schema_version{1});
@@ -314,11 +316,11 @@ TEST_F(AvroSchemaReferencesTest, SameNameDifferentSubjectsInIsolation) {
         schema_type::avro,
         {schema_reference{
            .name = "com.example.B",
-           .sub = subject("SubjectB"),
+           .sub = context_subject_reference::unqualified("SubjectB"),
            .version = schema_version(1)},
          schema_reference{
            .name = "com.example.C",
-           .sub = subject("SubjectC"),
+           .sub = context_subject_reference::unqualified("SubjectC"),
            .version = schema_version(1)}},
         {}},
       schema_version{1});

@@ -82,7 +82,11 @@ read_encoded_schema_def(ffi::reader* r) {
         auto name = r->read_sized_string();
         auto sub = r->read_sized_string();
         auto v = int(r->read_varint());
-        refs.emplace_back(name, subject(sub), schema_version(v));
+        refs.emplace_back(
+          name,
+          pandaproxy::schema_registry::context_subject_reference::from_string(
+            sub),
+          schema_version(v));
     }
     return {std::move(def), *type, std::move(refs), {}};
 }

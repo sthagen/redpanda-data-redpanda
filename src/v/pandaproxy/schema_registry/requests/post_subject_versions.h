@@ -243,7 +243,8 @@ public:
             return true;
         }
         case state::reference_subject: {
-            _schema.refs.back().sub = context_subject::from_string(sv);
+            _schema.refs.back().sub = context_subject_reference::from_string(
+              sv);
             _state = state::reference;
             return true;
         }
@@ -318,7 +319,8 @@ public:
         case state::reference: {
             _state = state::references;
             const auto& reference{_schema.refs.back()};
-            return !reference.name.empty() && reference.sub != invalid_subject
+            return !reference.name.empty()
+                   && reference.sub.sub != invalid_subject
                    && reference.version != invalid_schema_version;
         }
         case state::metadata: {

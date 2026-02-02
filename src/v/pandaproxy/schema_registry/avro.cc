@@ -599,11 +599,12 @@ avro::ValidSchema compile_avro_schema(
 ss::future<collected_schema> collect_references(
   schema_getter& store, collected_schema collected, subject_schema sub_schema) {
     for (const auto& ref : sub_schema.def().refs()) {
+        auto resolved_sub = ref.sub.resolve(sub_schema.sub().ctx);
         auto avro_ref_name = avro::Name{ref.name};
         if (!collected.contains(avro_ref_name)) {
             try {
                 auto ss = co_await store.get_subject_schema(
-                  ref.sub, ref.version, include_deleted::yes);
+                  resolved_sub, ref.version, include_deleted::yes);
 
                 // Pass the collected schemas to avoid recompiling already
                 // compiled schemas and to detect redefinitions of the same
@@ -620,12 +621,12 @@ ss::future<collected_schema> collect_references(
                 collected.insert(
                   avro_ref_name,
                   std::move(compiled_schema),
-                  ref.sub,
+                  resolved_sub,
                   ref.version);
             } catch (const exception& e) {
                 if (failed_subject_schema_lookup(e.code())) {
-                    throw as_exception(
-                      no_reference_found_for(sub_schema, ref.sub, ref.version));
+                    throw as_exception(no_reference_found_for(
+                      sub_schema, resolved_sub, ref.version));
                 }
                 throw;
             }
@@ -636,7 +637,7 @@ ss::future<collected_schema> collect_references(
             // throwing an exception.
             auto existing_source = collected.get_source(avro_ref_name);
             if (existing_source
-                && (existing_source->first != ref.sub
+                && (existing_source->first != resolved_sub
                     || existing_source->second != ref.version)) {
                 vlog(
                   srlog.warn,
@@ -646,7 +647,7 @@ ss::future<collected_schema> collect_references(
                   "indicate different subjects defining schemas with the same "
                   "fully qualified name.",
                   avro_ref_name.fullname(),
-                  ref.sub,
+                  resolved_sub,
                   ref.version,
                   existing_source->first,
                   existing_source->second);

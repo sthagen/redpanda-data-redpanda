@@ -108,4 +108,71 @@ TEST_F(ContextSubjectTest, FlagOffUnqualifiedUsesDefaultContext) {
     EXPECT_EQ(ctx_sub.sub(), "plain-topic");
 }
 
+class ContextSubjectReferenceTest : public ::testing::Test {
+protected:
+    void SetUp() override { enable_qualified_subjects::set_local(true); }
+    void TearDown() override { enable_qualified_subjects::reset_local(); }
+};
+
+TEST_F(ContextSubjectReferenceTest, FromString) {
+    // Unqualified subjects: qualified=false
+    auto unqual = context_subject_reference::from_string("subject-for-C");
+    EXPECT_EQ(
+      unqual.sub, (context_subject{default_context, subject{"subject-for-C"}}));
+    EXPECT_FALSE(unqual.qualified);
+
+    // Qualified subjects: qualified=true
+    auto qual = context_subject_reference::from_string(":.ctx:subject-for-C");
+    EXPECT_EQ(
+      qual.sub, (context_subject{context{".ctx"}, subject{"subject-for-C"}}));
+    EXPECT_TRUE(qual.qualified);
+
+    // Explicit default context is still qualified
+    auto default_qual = context_subject_reference::from_string(
+      ":.:subject-for-C");
+    EXPECT_EQ(
+      default_qual.sub,
+      (context_subject{default_context, subject{"subject-for-C"}}));
+    EXPECT_TRUE(default_qual.qualified);
+
+    // Subject in the default context with dot prefix is unqualified
+    auto default_ctx_with_dot = context_subject_reference::from_string(
+      ":.something");
+    EXPECT_EQ(default_ctx_with_dot.qualified, is_qualified::no);
+    EXPECT_EQ(
+      default_ctx_with_dot.sub,
+      (context_subject{default_context, subject{":.something"}}));
+}
+
+TEST_F(ContextSubjectReferenceTest, Resolve) {
+    auto parent_ctx = context{".parent"};
+
+    // Unqualified: inherits parent's context
+    auto unqual = context_subject_reference::from_string("subject-for-C");
+    EXPECT_EQ(
+      unqual.resolve(parent_ctx),
+      (context_subject{parent_ctx, subject{"subject-for-C"}}));
+
+    // Qualified: keeps its own context
+    auto qual = context_subject_reference::from_string(":.other:subject-for-C");
+    EXPECT_EQ(
+      qual.resolve(parent_ctx),
+      (context_subject{context{".other"}, subject{"subject-for-C"}}));
+}
+
+TEST_F(ContextSubjectReferenceTest, ToStringRoundTrip) {
+    auto inputs = {
+      "simple-subject",
+      ":.:default-context-subject",
+      ":.ctx:qualified-subject",
+      ":.default-context-with-dot",
+    };
+    // Unqualified round-trip
+    for (const auto& input : inputs) {
+        SCOPED_TRACE(input);
+        auto got = context_subject_reference::from_string(input).to_string();
+        EXPECT_EQ(got, input);
+    }
+}
+
 } // namespace pandaproxy::schema_registry

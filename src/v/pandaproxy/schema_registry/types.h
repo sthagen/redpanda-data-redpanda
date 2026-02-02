@@ -39,6 +39,7 @@ using default_to_global = ss::bool_class<struct default_to_global_tag>;
 using force = ss::bool_class<struct force_tag>;
 using normalize = ss::bool_class<struct normalize_tag>;
 using verbose = ss::bool_class<struct verbose_tag>;
+using is_qualified = ss::bool_class<struct is_qualified_tag>;
 
 template<typename E>
 std::enable_if_t<std::is_enum_v<E>, std::optional<E>>
@@ -209,6 +210,50 @@ struct context_subject {
 
 inline const context_subject invalid_subject{default_context, subject{""}};
 
+/// A reference subject that may be qualified or unqualified.
+/// Unqualified references are resolved relative to a parent schema's context.
+struct context_subject_reference {
+    /// Parse from a string while detecting qualification status
+    static context_subject_reference from_string(std::string_view input);
+
+    /// Helper for testing to create a simple unqualified reference
+    static context_subject_reference unqualified(std::string_view input) {
+        return context_subject_reference{
+          context_subject{default_context, subject{ss::sstring(input)}},
+          is_qualified::no};
+    }
+
+    /// Resolve relative to a parent context.
+    /// - If qualified: returns sub as-is
+    /// - If unqualified: returns context_subject{parent_ctx, sub.sub}
+    context_subject resolve(const context& parent_ctx) const;
+
+    /// Serialize back to original form (qualified or unqualified)
+    ss::sstring to_string() const;
+
+    fmt::iterator format_to(fmt::iterator it) const;
+
+    friend bool operator==(
+      const context_subject_reference& lhs,
+      const context_subject_reference& rhs)
+      = default;
+
+    /// Comparison is done by string representation for compatibility with the
+    /// reference implementation where normalization sorts references by string.
+    friend auto operator<=>(
+      const context_subject_reference& lhs,
+      const context_subject_reference& rhs) {
+        return lhs.to_string() <=> rhs.to_string();
+    }
+
+    /// The subject as parsed
+    context_subject sub{invalid_subject};
+
+    /// True if the original string was qualified (e.g., ":.:subject" instead of
+    /// "subject")
+    is_qualified qualified{false};
+};
+
 ///\brief The version of the schema registered with a subject.
 ///
 /// A subject may evolve its schema over time. Each version is associated with a
@@ -228,7 +273,7 @@ struct schema_reference {
     operator<(const schema_reference& lhs, const schema_reference& rhs);
 
     ss::sstring name;
-    context_subject sub{invalid_subject};
+    context_subject_reference sub{invalid_subject, is_qualified::no};
     schema_version version{invalid_schema_version};
 };
 

@@ -44,7 +44,9 @@ message Test2 {
   Simple id =  1;
 })",
   pps::schema_type::protobuf,
-  {{"simple", pps::subject{"simple.proto"}, pps::schema_version{1}}},
+  {{"simple",
+    pps::context_subject_reference::unqualified("simple.proto"),
+    pps::schema_version{1}}},
   {}};
 
 const auto imported_again = pps::schema_definition{
@@ -57,7 +59,9 @@ message Test3 {
   Test2 id =  1;
 })",
   pps::schema_type::protobuf,
-  {{"imported", pps::subject{"imported.proto"}, pps::schema_version{1}}},
+  {{"imported",
+    pps::context_subject_reference::unqualified("imported.proto"),
+    pps::schema_version{1}}},
   {}};
 
 const auto imported_twice = pps::schema_definition{
@@ -71,8 +75,12 @@ message Test3 {
   Test2 id =  1;
 })",
   pps::schema_type::protobuf,
-  {{"simple", pps::subject{"simple.proto"}, pps::schema_version{1}},
-   {"imported", pps::subject{"imported.proto"}, pps::schema_version{1}}},
+  {{"simple",
+    pps::context_subject_reference::unqualified("simple.proto"),
+    pps::schema_version{1}},
+   {"imported",
+    pps::context_subject_reference::unqualified("imported.proto"),
+    pps::schema_version{1}}},
   {}};
 
 const auto nested = pps::schema_definition{

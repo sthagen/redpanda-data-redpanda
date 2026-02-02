@@ -333,7 +333,7 @@ const auto referencer = pps::subject_schema{
     pps::schema_type::json,
     {pps::schema_reference{
       .name = "example.com/referenced.json",
-      .sub{referenced.sub()},
+      .sub = pps::context_subject_reference::unqualified("referenced"),
       .version = pps::schema_version{1}}},
     {}}};
 
@@ -344,7 +344,7 @@ const auto referencer_wrong_sub = pps::subject_schema{
     referencer.def().type(),
     {pps::schema_reference{
       .name = "example.com/referenced.json",
-      .sub{"wrong_sub"},
+      .sub = pps::context_subject_reference::unqualified("wrong_sub"),
       .version = pps::schema_version{1}}},
     {}}};
 

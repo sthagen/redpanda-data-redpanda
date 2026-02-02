@@ -445,15 +445,16 @@ ss::future<pb::FileDescriptorProto> build_file_with_refs(
         if (dp.FindFileByName(ref.name)) {
             continue;
         }
+        auto resolved_sub = ref.sub.resolve(schema.sub().ctx);
         try {
             auto dep_ss = co_await store.get_subject_schema(
-              ref.sub, ref.version, include_deleted::yes);
+              resolved_sub, ref.version, include_deleted::yes);
             co_await build_file_with_refs(
               dp, store, ref.name, std::move(dep_ss.schema), normalize::no);
         } catch (const exception& e) {
             if (failed_subject_schema_lookup(e.code())) {
                 throw as_exception(
-                  no_reference_found_for(schema, ref.sub, ref.version));
+                  no_reference_found_for(schema, resolved_sub, ref.version));
             }
             throw;
         }

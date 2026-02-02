@@ -327,7 +327,7 @@ FIXTURE_TEST(schema_registry_post_avro_references, pandaproxy_test_fixture) {
 })",
         pps::schema_type::avro,
         {{"com.redpanda.company",
-          pps::subject{"company-value"},
+          pps::context_subject_reference::unqualified("company-value"),
           pps::schema_version{1}}},
         {}}}};
 

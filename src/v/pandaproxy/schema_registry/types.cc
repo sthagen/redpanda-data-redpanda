@@ -83,10 +83,12 @@ fmt::iterator schema_metadata::format_to(fmt::iterator it) const {
     return fmt::format_to(it, "{{ properties: {{ {} }} }}", properties);
 }
 
-context_subject context_subject::from_string(std::string_view input) {
+namespace {
+std::pair<context_subject, is_qualified> parse_subject(std::string_view input) {
     // If qualified subject parsing is disabled, treat everything as literal
     if (!enable_qualified_subjects::get()) {
-        return context_subject{default_context, subject{input}};
+        return {
+          context_subject{default_context, subject{input}}, is_qualified::no};
     }
 
     // Check for qualified syntax: starts with ":."
@@ -98,12 +100,49 @@ context_subject context_subject::from_string(std::string_view input) {
             auto ctx_str = input.substr(1, second_colon - 1);
             auto sub_str = input.substr(second_colon + 1);
 
-            return context_subject{context{ctx_str}, subject{sub_str}};
+            return {
+              context_subject{context{ctx_str}, subject{sub_str}},
+              is_qualified::yes};
         }
     }
 
     // Default case: unqualified subject or invalid qualified syntax
-    return context_subject{default_context, subject{input}};
+    return {context_subject{default_context, subject{input}}, is_qualified::no};
+}
+} // namespace
+
+context_subject context_subject::from_string(std::string_view input) {
+    return parse_subject(input).first;
+}
+
+context_subject_reference
+context_subject_reference::from_string(std::string_view input) {
+    auto [sub, qualified] = parse_subject(input);
+    return context_subject_reference{
+      .sub = std::move(sub),
+      .qualified = qualified,
+    };
+}
+
+context_subject
+context_subject_reference::resolve(const context& parent_ctx) const {
+    if (qualified) {
+        // Qualified reference: use its own context
+        return sub;
+    }
+    // Unqualified reference: inherit parent's context
+    return context_subject{parent_ctx, sub.sub};
+}
+
+ss::sstring context_subject_reference::to_string() const {
+    return ssx::sformat("{}", *this);
+}
+
+fmt::iterator context_subject_reference::format_to(fmt::iterator it) const {
+    if (qualified) {
+        return fmt::format_to(it, ":{}:{}", sub.ctx, sub.sub);
+    }
+    return fmt::format_to(it, "{}", sub);
 }
 
 } // namespace pandaproxy::schema_registry
