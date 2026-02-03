@@ -204,6 +204,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf_parser",
         "//src/v/cluster",
         "//src/v/config",
+        "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/container:json",
         "//src/v/json",

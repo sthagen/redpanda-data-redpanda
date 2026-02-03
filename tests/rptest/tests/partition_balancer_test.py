@@ -63,6 +63,7 @@ class PartitionBalancerService(EndToEndTest):
             ctx,
             *args,
             extra_rp_conf={
+                "health_monitor_tick_interval": 1500,
                 "partition_autobalancing_mode": "continuous",
                 "partition_autobalancing_node_availability_timeout_sec": 10,
                 "partition_autobalancing_tick_interval_ms": 5000,

@@ -142,11 +142,6 @@ initialize_result<initialize_thread_return> initialize_worker_thread(
     // thread instance so any use of OpenSSL within the thread worker (krb5)
     // uses the appropriately initialiazed context
     auto old_context = OSSL_LIB_CTX_set0_default(ctx);
-    vlog(
-      lg.debug,
-      "thread worker context: {}, replacing {}",
-      fmt::ptr(ctx),
-      fmt::ptr(old_context));
     auto init_return = initialize_openssl(
       ctx, module_path, conf_file, fips_mode);
 
@@ -232,11 +227,6 @@ public:
         // supply nullptr to the OSSL_LIB_CTX parameter to use the thread local
         // context
         _old_context = OSSL_LIB_CTX_set0_default(_shard_ctx.get());
-        vlog(
-          lg.debug,
-          "Created new shard context for {} replacing {}",
-          fmt::ptr(_shard_ctx.get()),
-          fmt::ptr(_old_context));
         auto init_resp = co_await _thread_worker.submit([this] {
             return initialize_openssl(
               _shard_ctx.get(), _module_path, _config_file, _fips_mode);
@@ -261,12 +251,6 @@ public:
         _fips_provider.reset();
         if (_old_context != nullptr) {
             auto replaced_context = OSSL_LIB_CTX_set0_default(_old_context);
-            vlog(
-              lg.debug,
-              "Reverted to old context {} and received back {} (expecting {})",
-              fmt::ptr(_old_context),
-              fmt::ptr(replaced_context),
-              fmt::ptr(_shard_ctx.get()));
             vassert(
               replaced_context == _shard_ctx.get(),
               "Replacing original context returns unexpected library context");

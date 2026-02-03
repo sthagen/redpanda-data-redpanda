@@ -1232,4 +1232,50 @@ delete_security_acls(server::request_t rq, server::reply_t rp) {
     co_return rp;
 }
 
+ss::future<server::reply_t> get_contexts(
+  server::request_t rq,
+  server::reply_t rp,
+  std::optional<request_auth_result> auth_result) {
+    parse_accept_header(rq, rp);
+
+    co_await rq.service().writer().read_sync();
+
+    auto contexts
+      = co_await rq.service().schema_store().get_materialized_contexts();
+
+    co_await enterprise::handle_get_contexts_authz(
+      rq, rq.service().schema_store(), auth_result, contexts);
+
+    auto contexts_str = std::move(contexts) | std::views::as_rvalue
+                        | std::ranges::views::transform([](context&& ctx) {
+                              return ss::sstring{std::move(ctx)};
+                          })
+                        | std::ranges::to<chunked_vector<ss::sstring>>();
+
+    auto resp = ppj::rjson_serialize_iobuf(std::move(contexts_str));
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
+    co_return rp;
+}
+
+ss::future<server::reply_t>
+delete_context(server::request_t rq, server::reply_t rp) {
+    parse_accept_header(rq, rp);
+
+    auto ctx_str = parse::request_param<ss::sstring>(*rq.req, "context");
+    auto ctx = context{ctx_str};
+
+    if (ctx == default_context) {
+        throw as_exception(
+          error_info{
+            error_code::subject_version_operation_not_permitted,
+            "Cannot delete the default context"});
+    }
+
+    co_await rq.service().writer().delete_context(ctx);
+
+    rp.rep->set_status(ss::http::reply::status_type::no_content);
+    co_return rp;
+}
+
 } // namespace pandaproxy::schema_registry

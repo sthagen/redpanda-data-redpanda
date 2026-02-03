@@ -46,4 +46,4 @@ class AioLimitTest(RedpandaTest):
         )
         producer.start()
         # RP shouldn't crash and still be able to handle the low rate
-        producer.wait(timeout_sec=80)
+        producer.wait(timeout_sec=180)

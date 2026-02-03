@@ -516,6 +516,41 @@ ss::future<bool> seq_writer::delete_mode(context_subject ctx_sub) {
       });
 }
 
+ss::future<std::optional<bool>>
+seq_writer::do_delete_context(context ctx, model::offset write_at) {
+    vlog(srlog.debug, "delete_context ctx={} offset={}", ctx, write_at);
+
+    if (auto is_materialized = co_await _store.is_context_materialized(ctx);
+        !is_materialized) {
+        throw as_exception(
+          error_info{
+            error_code::subject_not_found,
+            fmt::format("Context '{}' not found", ctx())});
+    }
+
+    auto has_subjects = co_await _store.has_subjects(ctx, include_deleted::yes);
+    if (has_subjects) {
+        throw as_exception(context_not_empty(ctx));
+    }
+
+    auto rb = batch_builder{write_at};
+    auto key = context_key{.seq{write_at}, .node{_node_id}, .ctx{ctx}};
+    rb.add_raw_kv(to_json_iobuf(std::move(key)), std::nullopt);
+
+    if (co_await produce_and_apply(write_at, std::move(rb).build())) {
+        co_return true;
+    } else {
+        co_return std::nullopt;
+    }
+}
+
+ss::future<> seq_writer::delete_context(context ctx) {
+    co_await sequenced_write(
+      [ctx{std::move(ctx)}](model::offset write_at, seq_writer& seq) {
+          return seq.do_delete_context(ctx, write_at);
+      });
+}
+
 /// Impermanent delete: update a version with is_deleted=true
 ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
   context_subject sub, schema_version version, model::offset write_at) {

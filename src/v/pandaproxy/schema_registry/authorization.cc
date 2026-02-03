@@ -10,9 +10,11 @@
 
 #include "pandaproxy/schema_registry/authorization.h"
 
+#include "container/chunked_hash_map.h"
 #include "pandaproxy/api/api-doc/schema_registry.json.hh"
 #include "pandaproxy/parsing/httpd.h"
 #include "pandaproxy/schema_registry/service.h"
+#include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "security/acl.h"
 #include "security/audit/audit_log_manager.h"
@@ -102,6 +104,9 @@ void check_authenticated(
 
 const auto subject_resource_type = ssx::sformat(
   "{}", security::resource_type::sr_subject);
+
+const auto registry_resource_type = ssx::sformat(
+  "{}", security::resource_type::sr_registry);
 
 using audit_resources = chunked_vector<security::audit::resource_detail>;
 
@@ -260,6 +265,120 @@ void handle_get_subjects_authz(
     // authorized subjects.
     // If there are any unauthorized subjects, generate failed audit event with
     // them.
+    audit_authz(
+      rq,
+      operation_name,
+      auth_result.value(),
+      true,
+      op,
+      std::move(passing_results));
+
+    if (!failing_results.empty()) {
+        audit_authz(
+          rq,
+          operation_name,
+          auth_result.value(),
+          false,
+          op,
+          std::move(failing_results));
+    }
+}
+
+ss::future<> handle_get_contexts_authz(
+  const server::request_t& rq,
+  sharded_store& store,
+  std::optional<request_auth_result>& auth_result,
+  chunked_vector<context>& contexts) {
+    const auto& operation_name
+      = ss::httpd::schema_registry_json::get_contexts.operations.nickname;
+    constexpr auto op = security::acl_operation::describe;
+
+    if (!auth_result.has_value()) {
+        co_return;
+    }
+
+    check_authenticated(rq, operation_name, op, *auth_result);
+
+    auto params = detail::auth_params{rq};
+
+    auto has_registry_describe = rq.service().authorizor().authorized(
+      registry_resource{},
+      op,
+      params.principal,
+      params.host,
+      security::superuser_required::no,
+      auth_result.value().get_groups());
+
+    auto all_subjects = co_await store.get_subjects(include_deleted::yes);
+
+    auto passing_results = audit_resources{};
+    auto failing_results = audit_resources{};
+
+    // Pass 1: Iterate subjects once, check authorization, track accessible
+    // contexts. Audit entries match the actual ACL checks performed.
+    auto allowed_contexts = chunked_hash_set<context>{};
+    auto non_empty_contexts = chunked_hash_set<context>{};
+
+    for (const auto& ctx_sub : all_subjects) {
+        // Track that this context has subjects
+        if (!non_empty_contexts.contains(ctx_sub.ctx)) {
+            non_empty_contexts.insert(ctx_sub.ctx);
+        }
+
+        // Skip if we already know this context is accessible
+        if (allowed_contexts.contains(ctx_sub.ctx)) {
+            continue;
+        }
+
+        auto res = rq.service().authorizor().authorized(
+          ctx_sub,
+          op,
+          params.principal,
+          params.host,
+          security::superuser_required::no,
+          auth_result.value().get_groups());
+
+        if (res.is_authorized()) {
+            passing_results.emplace_back(
+              ctx_sub.to_string(), subject_resource_type);
+            allowed_contexts.insert(ctx_sub.ctx);
+        } else {
+            failing_results.emplace_back(
+              ctx_sub.to_string(), subject_resource_type);
+        }
+    }
+
+    // Pass 2: Filter contexts list. For empty contexts, check registry access.
+    auto result_contexts = chunked_vector<context>{};
+    auto has_empty_contexts = false;
+
+    for (const auto& ctx : contexts) {
+        auto has_subjects = non_empty_contexts.contains(ctx);
+
+        if (!has_subjects) {
+            // Empty context: requires sr_registry describe access
+            has_empty_contexts = true;
+            if (has_registry_describe.is_authorized()) {
+                result_contexts.push_back(ctx);
+            }
+        } else if (allowed_contexts.contains(ctx)) {
+            result_contexts.push_back(ctx);
+        }
+    }
+
+    // Audit the registry resource check once (if any empty contexts existed)
+    if (has_empty_contexts) {
+        if (has_registry_describe.is_authorized()) {
+            passing_results.emplace_back(
+              registry_resource{}(), registry_resource_type);
+        } else {
+            failing_results.emplace_back(
+              registry_resource{}(), registry_resource_type);
+        }
+    }
+
+    contexts = std::move(result_contexts);
+
     audit_authz(
       rq,
       operation_name,

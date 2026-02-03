@@ -409,6 +409,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         self.start_redpanda()
         self.redpanda.set_cluster_config(
             {
+                "health_monitor_tick_interval": min(int(tick_interval / 3), 3000),
                 "partition_autobalancing_tick_interval_ms": tick_interval,
                 "partition_autobalancing_concurrent_moves": 2,
             }

@@ -3057,6 +3057,11 @@ class AuditLogTestSchemaRegistryACLs(AuditLogTestSchemaRegistryBase):
     def assert_in(self, member, container, msg=None):
         assert member in container, msg or f"{member!r} not found in {container!r}"
 
+    def assert_not_in(self, member, container, msg=None):
+        assert member not in container, (
+            msg or f"{member!r} unexpectedly found in {container!r}"
+        )
+
     def _create_acl(
         self, resource, resource_type, pattern_type, operation, permission="ALLOW"
     ):
@@ -3535,6 +3540,192 @@ class AuditLogTestSchemaRegistryACLs(AuditLogTestSchemaRegistryBase):
             "subject-level config access",
         )
         self.assert_equal(len(records), 1)
+
+    @skip_fips_mode
+    @cluster(num_nodes=5)
+    @matrix(audit_transport_mode=get_audit_modes())
+    def test_sr_audit_get_contexts(self, audit_transport_mode):
+        self.redpanda.set_cluster_config(
+            {"schema_registry_enable_qualified_subjects": True}, expect_restart=True
+        )
+        self.setup_cluster()
+
+        schema_data = json.dumps({"schema": schema1_def})
+
+        # Create subjects in different contexts
+        staging_subject = ":.staging:topic-a"
+        prod_subject = ":.prod:topic-b"
+        default_subject = "topic-c"
+
+        # Register schemas
+        for subject in [staging_subject, prod_subject, default_subject]:
+            result = self.sr_client.post_subjects_subject_versions(
+                subject=subject, data=schema_data, auth=self.super_auth
+            )
+            self.assert_equal(result.status_code, 200)
+
+        # Superuser should see all contexts
+        result = self.sr_client.get_contexts(auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+        contexts = result.json()
+        self.assert_in(".", contexts)
+        self.assert_in(".staging", contexts)
+        self.assert_in(".prod", contexts)
+
+        # Grant describe ACL only for staging subject
+        self._post_acl(
+            self._create_acl(staging_subject, "SUBJECT", "LITERAL", "DESCRIBE")
+        )
+
+        # User should only see .staging context (has access to staging_subject)
+        result = self.sr_client.get_contexts(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        contexts = result.json()
+        self.assert_in(".staging", contexts)
+        self.assert_not_in(".", contexts)
+        self.assert_not_in(".prod", contexts)
+
+        # Verify audit log shows subject checks performed
+        # Successful: staging_subject (authorized)
+        records = self.find_matching_record(
+            lambda record: self.match_api_record(
+                record,
+                path="contexts",
+                resources={"name": staging_subject, "type": "subject"},
+                status_id=StatusID.SUCCESS,
+                operation="get_contexts",
+            ),
+            lambda record_count: record_count >= 1,
+            "get_contexts authorized subject",
+        )
+        self.assert_equal(len(records), 1)
+
+        # Failed: other subjects (not authorized)
+        # The audit should contain the subjects that were checked and failed
+        records = self.find_matching_record(
+            lambda record: self.match_api_record(
+                record,
+                path="contexts",
+                resources=[
+                    {"name": prod_subject, "type": "subject"},
+                    {"name": default_subject, "type": "subject"},
+                ],
+                status_id=StatusID.FAILURE,
+                operation="get_contexts",
+            ),
+            lambda record_count: record_count >= 1,
+            "get_contexts unauthorized subjects",
+        )
+        self.assert_equal(len(records), 1)
+
+    @skip_fips_mode
+    @cluster(num_nodes=5)
+    @matrix(audit_transport_mode=get_audit_modes())
+    def test_sr_audit_delete_context(self, audit_transport_mode):
+        self.redpanda.set_cluster_config(
+            {"schema_registry_enable_qualified_subjects": True}, expect_restart=True
+        )
+        self.setup_cluster()
+
+        schema_data = json.dumps({"schema": schema1_def})
+        ctx = ".testctx"
+        ctx_subject = f":{ctx}:topic-a"
+
+        # Create a schema in a custom context (materializes the context)
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=ctx_subject, data=schema_data, auth=self.super_auth
+        )
+        self.assert_equal(result.status_code, 200)
+
+        # Superuser should see the context
+        result = self.sr_client.get_contexts(auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_in(ctx, result.json())
+
+        # Make the context empty by deleting the subject (soft then hard delete)
+        result = self.sr_client.delete_subject(
+            subject=ctx_subject, auth=self.super_auth
+        )
+        self.assert_equal(result.status_code, 200)
+        result = self.sr_client.delete_subject(
+            subject=ctx_subject, permanent=True, auth=self.super_auth
+        )
+        self.assert_equal(result.status_code, 200)
+
+        # Superuser should still see the empty context
+        result = self.sr_client.get_contexts(auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_in(ctx, result.json())
+
+        # User without permissions should not see the empty context
+        result = self.sr_client.get_contexts(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_not_in(ctx, result.json())
+        self.assert_not_in(".prod", result.json())
+
+        # Grant sr_registry DESCRIBE - user should now see empty context
+        self._post_acl(self._create_acl("", "REGISTRY", "LITERAL", "DESCRIBE"))
+
+        result = self.sr_client.get_contexts(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_in(ctx, result.json())
+
+        # Verify audit log shows registry resource check for empty context
+        records = self.find_matching_record(
+            lambda record: self.match_api_record(
+                record,
+                path="contexts",
+                resources={"name": "", "type": "registry"},
+                status_id=StatusID.SUCCESS,
+                operation="get_contexts",
+            ),
+            lambda record_count: record_count >= 1,
+            "get_contexts with registry describe for empty context",
+        )
+        self.assert_equal(len(records), 1)
+
+        # User with only DESCRIBE cannot delete context
+        result = self.sr_client.delete_context(ctx, auth=self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+        # Verify audit log shows failed delete attempt
+        records = self.find_matching_record(
+            lambda record: self.match_api_record(
+                record,
+                path=f"contexts/{ctx}",
+                resources={"name": "", "type": "registry"},
+                status_id=StatusID.FAILURE,
+                operation="delete_context",
+            ),
+            lambda record_count: record_count >= 1,
+            "delete_context unauthorized",
+        )
+        self.assert_equal(len(records), 1)
+
+        # Grant sr_registry DELETE (maps to remove permission) - user can delete
+        self._post_acl(self._create_acl("", "REGISTRY", "LITERAL", "DELETE"))
+
+        result = self.sr_client.delete_context(ctx, auth=self.user_auth)
+        self.assert_equal(result.status_code, 204)
+
+        # Verify audit log shows successful delete
+        records = self.find_matching_record(
+            lambda record: self.match_api_record(
+                record,
+                path=f"contexts/{ctx}",
+                resources={"name": "", "type": "registry"},
+                status_id=StatusID.SUCCESS,
+                operation="delete_context",
+            ),
+            lambda record_count: record_count >= 1,
+            "delete_context authorized",
+        )
+        self.assert_equal(len(records), 1)
+
+        # Context should no longer be visible
+        result = self.sr_client.get_contexts(auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_not_in(ctx, result.json())
 
     @skip_fips_mode
     @cluster(num_nodes=5)

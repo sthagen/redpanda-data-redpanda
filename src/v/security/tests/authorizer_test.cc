@@ -3204,4 +3204,174 @@ TEST(AUTHORIZER_TEST, authz_sr_context_subject_patterns) {
     }
 }
 
+// Tests for Group principal parsing and validation
+TEST(AUTHORIZER_TEST, parse_group_principal_from_string_view) {
+    // Test the fixed from_string_view<principal_type> function
+    auto user_type = from_string_view<principal_type>("user");
+    ASSERT_TRUE(user_type.has_value());
+    EXPECT_EQ(*user_type, principal_type::user);
+
+    auto group_type = from_string_view<principal_type>("group");
+    ASSERT_TRUE(group_type.has_value());
+    EXPECT_EQ(*group_type, principal_type::group);
+
+    auto role_type = from_string_view<principal_type>("role");
+    ASSERT_TRUE(role_type.has_value());
+    EXPECT_EQ(*role_type, principal_type::role);
+
+    auto ephemeral_type = from_string_view<principal_type>("ephemeral user");
+    ASSERT_TRUE(ephemeral_type.has_value());
+    EXPECT_EQ(*ephemeral_type, principal_type::ephemeral_user);
+
+    // Test invalid type
+    auto invalid_type = from_string_view<principal_type>("invalid");
+    EXPECT_FALSE(invalid_type.has_value());
+}
+
+TEST(AUTHORIZER_TEST, parse_group_principal_from_string) {
+    // Test basic Group principal parsing
+    auto group1 = acl_principal::from_string("Group:developers");
+    EXPECT_EQ(group1.type(), principal_type::group);
+    EXPECT_EQ(group1.name(), "developers");
+
+    // Test Group with hyphens
+    auto group2 = acl_principal::from_string("Group:my-team");
+    EXPECT_EQ(group2.type(), principal_type::group);
+    EXPECT_EQ(group2.name(), "my-team");
+
+    // Test Group with underscores
+    auto group3 = acl_principal::from_string("Group:team_123");
+    EXPECT_EQ(group3.type(), principal_type::group);
+    EXPECT_EQ(group3.name(), "team_123");
+
+    // Test Group with mixed case
+    auto group4 = acl_principal::from_string("Group:TeamLead");
+    EXPECT_EQ(group4.type(), principal_type::group);
+    EXPECT_EQ(group4.name(), "TeamLead");
+
+    // Test that wildcard groups throw exception (only users can be wildcards)
+    EXPECT_THROW(acl_principal::from_string("Group:*"), acl_conversion_error);
+
+    // Test empty group name throws
+    EXPECT_THROW(acl_principal::from_string("Group:"), std::exception);
+
+    // Verify User principal with wildcard still works
+    auto wildcard_user = acl_principal::from_string("User:*");
+    EXPECT_EQ(wildcard_user.type(), principal_type::user);
+    EXPECT_TRUE(wildcard_user.wildcard());
+
+    // Verify User principal without wildcard
+    auto user1 = acl_principal::from_string("User:alice");
+    EXPECT_EQ(user1.type(), principal_type::user);
+    EXPECT_EQ(user1.name(), "alice");
+    EXPECT_FALSE(user1.wildcard());
+}
+
+TEST(AUTHORIZER_TEST, authorize_with_group_principal_acls) {
+    // Create test principals
+    auto user = acl_principal(principal_type::user, "alice");
+    auto group = acl_principal(principal_type::group, "developers");
+    auto host = acl_host("192.168.1.1");
+    const model::topic topic("dev-topic");
+
+    // Create ACL for Group:developers
+    acl_entry allow_read(
+      group, acl_wildcard_host, acl_operation::read, acl_permission::allow);
+
+    // Create resource and binding
+    resource_pattern resource(
+      resource_type::topic, topic(), pattern_type::literal);
+    std::vector<acl_binding> bindings;
+    bindings.emplace_back(resource, allow_read);
+
+    // Setup authorizer
+    role_store roles;
+    auto auth = make_test_instance(authorizer::allow_empty_matches::no, &roles);
+    auth.add_bindings(bindings);
+
+    // Test authorization with user who is in the group
+    auto result = auth.authorized(
+      topic,
+      acl_operation::read,
+      user,
+      host,
+      security::superuser_required::no,
+      {group});
+
+    // Verify authorization succeeded
+    EXPECT_TRUE(bool(result));
+    EXPECT_EQ(result.acl, allow_read);
+    EXPECT_EQ(result.group, group);
+    EXPECT_EQ(result.principal, user);
+
+    // Test authorization without group membership fails
+    auto result_no_group = auth.authorized(
+      topic,
+      acl_operation::read,
+      user,
+      host,
+      security::superuser_required::no,
+      {});
+
+    EXPECT_FALSE(bool(result_no_group));
+}
+
+TEST(AUTHORIZER_TEST, group_principal_acl_deny_precedence) {
+    // Create test principals
+    auto user = acl_principal(principal_type::user, "bob");
+    auto blocked_group = acl_principal(principal_type::group, "blocked");
+    auto host = acl_host("192.168.1.1");
+    const model::topic topic("sensitive-topic");
+
+    // Create DENY ACL for Group:blocked
+    acl_entry deny_write(
+      blocked_group,
+      acl_wildcard_host,
+      acl_operation::write,
+      acl_permission::deny);
+
+    // Create ALLOW ACL for User:bob
+    acl_entry allow_write(
+      user, acl_wildcard_host, acl_operation::write, acl_permission::allow);
+
+    // Create resource and bindings
+    resource_pattern resource(
+      resource_type::topic, topic(), pattern_type::literal);
+    std::vector<acl_binding> bindings;
+    bindings.emplace_back(resource, deny_write);
+    bindings.emplace_back(resource, allow_write);
+
+    // Setup authorizer
+    role_store roles;
+    auto auth = make_test_instance(authorizer::allow_empty_matches::no, &roles);
+    auth.add_bindings(bindings);
+
+    // Test: User bob is in blocked group - DENY should win
+    auto result_with_group = auth.authorized(
+      topic,
+      acl_operation::write,
+      user,
+      host,
+      security::superuser_required::no,
+      {blocked_group});
+
+    // DENY via group should take precedence over user ALLOW
+    EXPECT_FALSE(bool(result_with_group));
+    EXPECT_EQ(result_with_group.acl, deny_write);
+    EXPECT_EQ(result_with_group.group, blocked_group);
+
+    // Test: User bob without blocked group - ALLOW should work
+    auto result_without_group = auth.authorized(
+      topic,
+      acl_operation::write,
+      user,
+      host,
+      security::superuser_required::no,
+      {});
+
+    EXPECT_TRUE(bool(result_without_group));
+    EXPECT_EQ(result_without_group.acl, allow_write);
+    EXPECT_FALSE(result_without_group.group.has_value());
+}
+
 } // namespace security

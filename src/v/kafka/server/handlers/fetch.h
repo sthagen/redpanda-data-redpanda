@@ -195,7 +195,18 @@ struct op_context {
 
     // operation budgets
     size_t bytes_left;
+    // The point in time at which `fetch.max.wait` has elapsed. Used to
+    // implement the kafka semantics by returning when this time has been
+    // reached, even when we have less than min_bytes. Due to slow sub-fetches,
+    // requests may sometimes take much longer, see fetch_deadline.
     std::optional<model::timeout_clock::time_point> deadline;
+    // The point in time before which we want to complete the fetch request.
+    // The fetch_deadline is >= deadline and the storage layer tries to stop
+    // reading if this deadline has been exceeded, if there is known to be more
+    // data to fetch. This deadline exists to try to bound the overall time for
+    // a single fetch request, as Kafka clients time out (and usually retry) if
+    // an individual request takes a long time.
+    model::timeout_clock::time_point fetch_deadline;
 
     // size of response
     size_t response_size;

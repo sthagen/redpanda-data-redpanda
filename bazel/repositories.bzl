@@ -138,9 +138,9 @@ def data_dependency():
     http_archive(
         name = "openssl",
         build_file = "//bazel/thirdparty:openssl.BUILD",
-        sha256 = "967311f84955316969bdb1d8d4b983718ef42338639c621ec4c34fddef355e99",
-        strip_prefix = "openssl-3.5.4",
-        url = "https://vectorized-public.s3.amazonaws.com/dependencies/openssl-3.5.4.tar.gz",
+        sha256 = "b28c91532a8b65a1f983b4c28b7488174e4a01008e29ce8e69bd789f28bc2a89",
+        strip_prefix = "openssl-3.5.5",
+        url = "https://vectorized-public.s3.amazonaws.com/dependencies/openssl-3.5.5.tar.gz",
     )
 
     http_archive(

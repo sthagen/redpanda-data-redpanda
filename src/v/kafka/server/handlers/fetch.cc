@@ -482,6 +482,7 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
   chunked_vector<ntp_fetch_config> ntp_fetch_configs,
   read_distribution_probe& read_probe,
   std::optional<model::timeout_clock::time_point> deadline,
+  model::timeout_clock::time_point fetch_deadline,
   const size_t bytes_left,
   fetch_memory_units_manager& units_mgr) {
     size_t total_read_size = 0;
@@ -499,6 +500,15 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
     for (const auto& _ : config_indexes) {
         results.emplace_back(error_code::none);
     }
+
+    // Ensure fetch_deadline is at least as large as deadline. The deadline is
+    // the point in time at which fetch.max.wait has elapsed. The fetch_deadline
+    // is the point in time before which we want to complete the fetch request.
+    // The fetch_deadline is >= deadline and the storage layer tries to stop
+    // reading if this deadline has been exceeded.
+    fetch_deadline = std::max(
+      deadline.value_or(model::timeout_clock::time_point::min()),
+      fetch_deadline);
 
     co_await ss::max_concurrent_for_each(
       config_indexes,
@@ -525,7 +535,7 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
                    md_cache,
                    replica_selector,
                    ntp_cfg,
-                   deadline,
+                   fetch_deadline,
                    obligatory_batch_read,
                    units_mgr)
             .then([&, cfg_idx](read_result&& res) {
@@ -573,8 +583,13 @@ public:
         // Specifies the minimum number of bytes this sub-fetch should read
         // before returning.
         size_t min_bytes;
-        // If set then the sub-fetch should return by the specified time_point .
+
+        // Debounce timeout
         std::optional<model::timeout_clock::time_point> deadline;
+
+        // If set then the sub-fetch should return by the specified time_point .
+        model::timeout_clock::time_point fetch_deadline;
+
         // The fetch sub-requests of partitions local to the shard this worker
         // is running on.
         chunked_vector<ntp_fetch_config> requests;
@@ -690,6 +705,7 @@ private:
           std::move(requests),
           _ctx.srv.read_probe(),
           _ctx.deadline,
+          _ctx.fetch_deadline,
           _ctx.bytes_left,
           _ctx.srv.fetch_units_manager());
 
@@ -1478,6 +1494,9 @@ op_context::op_context(request_context&& ctx, ss::smp_service_group ssg)
     if (auto delay = request.debounce_delay(); delay) {
         deadline = model::timeout_clock::now() + delay.value();
     }
+    fetch_deadline
+      = model::timeout_clock::now()
+        + config::shard_local_cfg().kafka_fetch_request_timeout_ms();
 
     if (rctx.header().version() >= api_version{13}) {
         /*

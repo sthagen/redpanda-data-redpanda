@@ -84,4 +84,7 @@ validate_cloud_storage_cluster_name(const std::optional<ss::sstring>&);
 std::optional<ss::sstring>
 validate_cloud_topics_reconciliation_intervals(const configuration& config);
 
+std::optional<ss::sstring>
+validate_sane_partition_balancer_timeouts(const configuration& config);
+
 }; // namespace config

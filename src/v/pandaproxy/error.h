@@ -95,6 +95,7 @@ enum class reply_error_code : uint16_t {
     subject_version_operation_not_permitted = 42205,
     subject_version_has_references = 42206,
     subject_version_schema_id_already_exists = 42207,
+    context_not_empty = 42211,
     write_collision = 50301,
     zookeeper_error = 50001,
     kafka_error = 50002,

@@ -405,6 +405,7 @@ from_string_view<principal_type>(std::string_view str) {
         to_string_view(principal_type::ephemeral_user),
         principal_type::ephemeral_user)
       .match(to_string_view(principal_type::role), principal_type::role)
+      .match(to_string_view(principal_type::group), principal_type::group)
       .default_match(std::nullopt);
 }
 

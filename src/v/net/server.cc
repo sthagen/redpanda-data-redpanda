@@ -286,7 +286,6 @@ ss::future<> server::shutdown_input() {
     for (auto& l : _listeners) {
         l->socket.abort_accept();
     }
-    vlog(_log.debug, "{} - Service probes {}", name(), _probe);
     _as.request_abort_ex(ssx::shutdown_requested_exception{});
 
     return _accept_gate.close().then([this] {

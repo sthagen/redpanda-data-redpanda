@@ -903,6 +903,9 @@ db_domain_manager::gate_and_open_reads() {
         // Shutting down.
         co_return std::unexpected(rpc::errc::not_leader);
     }
+    if (!db_ || db_->needs_reopen()) {
+        co_return std::unexpected(rpc::errc::not_leader);
+    }
     co_return gate_read_lock{
       .gate = std::move(*gate_res),
       .db_lock = std::move(fut.get()),
@@ -1087,7 +1090,7 @@ db_domain_manager::restore_domain(rpc::restore_domain_request req) {
         };
     }
     // No-op, we're already restored!
-    if (db_->get_domain_uuid() == req.new_uuid) {
+    if (db_ && db_->get_domain_uuid() == req.new_uuid) {
         co_return rpc::restore_domain_reply{
           .ec = rpc::errc::ok,
         };
@@ -1097,6 +1100,11 @@ db_domain_manager::restore_domain(rpc::restore_domain_request req) {
     // resetting it.
     auto lock_res = co_await exclusive_db_lock();
     if (!lock_res.has_value()) {
+        co_return rpc::restore_domain_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    if (!db_ || db_->needs_reopen()) {
         co_return rpc::restore_domain_reply{
           .ec = rpc::errc::not_leader,
         };

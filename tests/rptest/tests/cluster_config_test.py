@@ -665,6 +665,17 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         exclude_settings.add(CLOUD_TOPICS_CONFIG_STR)
         exclude_settings.add("iceberg_enabled")
 
+        # Partition balancer relies on relative sizes of these values
+        exclude_settings.update(
+            [
+                "node_status_interval",
+                "partition_autobalancing_tick_interval_ms",
+                "partition_autobalancing_node_availability_timeout_sec",
+                "partition_autobalancing_node_autodecommission_timeout_sec",
+                "health_monitor_tick_interval",
+            ]
+        )
+
         # List of settings that must be odd
         odd_settings = ["default_topic_replications", "minimum_topic_replications"]
 

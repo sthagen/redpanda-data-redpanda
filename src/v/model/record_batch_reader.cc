@@ -11,13 +11,12 @@
 
 #include "container/chunked_vector.h"
 #include "model/record.h"
-#include "model/record_batch_types.h"
 
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
+#include <seastar/coroutine/as_future.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <exception>
@@ -171,6 +170,75 @@ record_batch_reader make_generating_record_batch_reader(
     };
 
     return make_record_batch_reader<reader>(std::move(gen));
+}
+
+/// Creates a readahead wrapper around a record_batch_reader that issues one
+/// read ahead of the consumer. When do_load_slice() is called, it returns
+/// any buffered future from the previous readahead and immediately issues a
+/// new read for the next call. This amortizes the latency of the underlying
+/// reader across calls, improving throughput for sequential reads.
+///
+/// Note: Due to the record_batch_reader::impl interface not supporting
+/// concurrent do_load_slice() calls, the readahead depth is fixed at 1.
+record_batch_reader
+make_readahead_record_batch_reader(record_batch_reader&& reader) {
+    class readahead_reader final : public record_batch_reader::impl {
+    public:
+        explicit readahead_reader(std::unique_ptr<impl> underlying)
+          : _underlying(std::move(underlying)) {}
+
+        bool is_end_of_stream() const final {
+            return _underlying->is_end_of_stream()
+                   && !_readahead_future.has_value();
+        }
+
+        void print(std::ostream& os) final {
+            fmt::print(
+              os,
+              "readahead_reader(buffered={}) wrapping: ",
+              _readahead_future.has_value() ? 1 : 0);
+            _underlying->print(os);
+        }
+
+        ss::future<storage_t>
+        do_load_slice(timeout_clock::time_point timeout) final {
+            ss::future<storage_t> fut
+              = _readahead_future
+                  ? std::exchange(_readahead_future, std::nullopt).value()
+                  : _underlying->do_load_slice(timeout);
+            fut = co_await ss::coroutine::as_future(std::move(fut));
+            if (fut.failed()) {
+                // Don't issue readahead if the future fails, this allows the
+                // caller to decide what should happen.
+                std::rethrow_exception(fut.get_exception());
+            }
+            auto slice = std::move(fut.get());
+            if (!_underlying->is_end_of_stream()) {
+                _readahead_future = _underlying->do_load_slice(timeout);
+            }
+            co_return slice;
+        }
+
+        ss::future<> finally() noexcept final {
+            if (!_readahead_future.has_value()) {
+                return _underlying->finally();
+            }
+            // Drain the buffered future before calling underlying finally
+            return std::exchange(_readahead_future, std::nullopt)
+              .value()
+              .then_wrapped([this](ss::future<storage_t> f) {
+                  f.ignore_ready_future();
+                  return _underlying->finally();
+              });
+        }
+
+    private:
+        std::unique_ptr<impl> _underlying;
+        std::optional<ss::future<storage_t>> _readahead_future;
+    };
+
+    auto rdr = std::make_unique<readahead_reader>(std::move(reader).release());
+    return record_batch_reader(std::move(rdr));
 }
 
 namespace {

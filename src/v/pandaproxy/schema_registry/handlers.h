@@ -121,4 +121,12 @@ ss::future<ctx_server<service>::reply_t> post_security_acls(
 ss::future<ctx_server<service>::reply_t> delete_security_acls(
   ctx_server<service>::request_t, ctx_server<service>::reply_t);
 
+ss::future<ctx_server<service>::reply_t> get_contexts(
+  ctx_server<service>::request_t rq,
+  ctx_server<service>::reply_t rp,
+  std::optional<request_auth_result> auth_result);
+
+ss::future<ctx_server<service>::reply_t> delete_context(
+  ctx_server<service>::request_t rq, ctx_server<service>::reply_t rp);
+
 } // namespace pandaproxy::schema_registry

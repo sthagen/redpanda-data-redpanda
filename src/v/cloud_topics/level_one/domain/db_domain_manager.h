@@ -87,9 +87,8 @@ private:
     // reopening it if needed (e.g. the underlying Raft term has changed since
     // the last open).
     //
-    // Once called, callers should expect that db_ is at least set, though it
-    // is possible that it will still need to be reopened (e.g. because of a
-    // domain restore).
+    // Even upon success, callers should check the database is still opened
+    // with the database lock.
     ss::future<std::expected<void, rpc::errc>> maybe_open_db();
 
     // Should be called and held when resetting the database instance to ensure

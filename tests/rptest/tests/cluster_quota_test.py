@@ -205,27 +205,31 @@ class ClusterRateQuotaTest(RedpandaTest):
         throttle_ms = producer.metrics()["producer-metrics"][
             "produce-throttle-time-max"
         ]
-        assert throttle_ms > 0 and (
-            ignore_max_throttle or throttle_ms <= self.max_throttle_time
-        )
+        assert throttle_ms > 0, f"Expected throttle > 0. Got {throttle_ms} ms"
+        if not ignore_max_throttle:
+            assert throttle_ms <= self.max_throttle_time, (
+                f"Expected throttle <= {self.max_throttle_time}, got {throttle_ms}"
+            )
 
     def check_producer_not_throttled(self, producer):
         throttle_ms = producer.metrics()["producer-metrics"][
             "produce-throttle-time-max"
         ]
-        assert throttle_ms == 0
+        assert throttle_ms == 0, f"Expected 0 ms throttle. Got {throttle_ms} ms"
 
     def check_consumer_throttled(self, consumer):
         throttle_ms = consumer.metrics()["consumer-fetch-manager-metrics"][
             "fetch-throttle-time-max"
         ]
-        assert throttle_ms > 0 and throttle_ms <= self.max_throttle_time
+        assert throttle_ms > 0 and throttle_ms <= self.max_throttle_time, (
+            f"Expected throttle in range (0, {self.max_throttle_time}]. Got {throttle_ms}"
+        )
 
     def check_consumer_not_throttled(self, consumer):
         throttle_ms = consumer.metrics()["consumer-fetch-manager-metrics"][
             "fetch-throttle-time-max"
         ]
-        assert throttle_ms == 0
+        assert throttle_ms == 0, f"Expected 0 ms throttle. Got {throttle_ms} ms"
 
     def produce(self, producer, amount, message=None, timeout_sec=10):
         msg = message if message else self.msg

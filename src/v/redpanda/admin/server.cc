@@ -2048,6 +2048,12 @@ void config_multi_property_validation(
           updated_config.cloud_topics_reconciliation_min_interval.name()}]
           = interval_err.value();
     }
+
+    auto pbp_err = config::validate_sane_partition_balancer_timeouts(
+      updated_config);
+    if (pbp_err.has_value()) {
+        errors[ss::sstring{"partition_balancer_planner"}] = *pbp_err;
+    }
 }
 } // namespace
 

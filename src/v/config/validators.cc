@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <optional>
 #include <unordered_map>
 
@@ -449,6 +450,78 @@ validate_cloud_topics_reconciliation_intervals(const configuration& config) {
           max_interval.count());
     }
 
+    return std::nullopt;
+}
+
+std::optional<ss::sstring>
+validate_sane_partition_balancer_timeouts(const configuration& config) {
+    // how often node status sends an rpc
+    auto node_status = config.node_status_interval();
+    // in pbp, if 7 consecutive node statuses are missed, the node is considered
+    // down for the purposes of determining alive / dead quorums
+    auto node_unresponsiveness = 7 * node_status;
+    // how often the partition balancer runs
+    auto pbp_tick_interval = config.partition_autobalancing_tick_interval_ms();
+    // timeout after which the partition balancer will start draining partitions
+    // from a node
+    auto node_availability
+      = config.partition_autobalancing_node_availability_timeout_sec();
+    // timeout or nullopt. If timeout, its the timeout after which the partition
+    // balancer may consider a node for automatic decommissioning
+    auto maybe_auto_decom_timeout
+      = config.partition_autobalancing_node_autodecommission_timeout_sec();
+    // how often the health report refreshes of its own accord
+    auto health_report_tick_time = config.health_monitor_tick_interval();
+
+    // pbp is written under the assumption that node_status << pbp_tick_interval
+    if (node_status > pbp_tick_interval) {
+        return fmt::format(
+          "node_status_interval ({}) must be less than or equal to "
+          "partition_autobalancing_tick_interval_ms ({})",
+          node_status,
+          pbp_tick_interval);
+    }
+
+    // node_unresponsiveness is when a node is considered down from the
+    // perspective of quorum liveness, aka pbp will consider partitions
+    // immutable if their source quorum is down.
+    // node_availability is the time at which a node is preemptively drained of
+    // replicas. The sane assumption is that node_unresponsiveness <
+    // node_availability
+    if (node_unresponsiveness > node_availability) {
+        return fmt::format(
+          "node_status_interval * 7 ({}) should be less than "
+          "partition_autobalancing_node_availability_timeout_sec ({})",
+          node_unresponsiveness,
+          node_availability);
+    }
+
+    // pbp relies on health reports for feedback on how its last round of
+    // balancing actions worked out. If the health report interval is greater
+    // than the pbp_tick interval, pbp may exhibit oscillating behavior where it
+    // overshoots balance. It is best to keep the health report interval lower
+    // than the pbp tick
+    if (pbp_tick_interval < health_report_tick_time) {
+        return fmt::format(
+          "health_monitor_tick_interval ({}) must be less than "
+          "partition_autobalancing_tick_interval_ms ({})",
+          health_report_tick_time,
+          pbp_tick_interval);
+    }
+
+    // sanity check, we should drain but not decommission a node before we
+    // attempt to eject it from the cluster
+    if (
+      maybe_auto_decom_timeout
+      && std::chrono::duration_cast<std::chrono::seconds>(node_availability)
+           > maybe_auto_decom_timeout) {
+        return fmt::format(
+          "partition_autobalancing_node_availability_timeout_sec ({}) must be "
+          "less than partition_autobalancing_node_autodecommission_timeout_sec "
+          "({})",
+          node_availability,
+          *maybe_auto_decom_timeout);
+    }
     return std::nullopt;
 }
 

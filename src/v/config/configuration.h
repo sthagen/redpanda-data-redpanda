@@ -221,6 +221,7 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds> tx_timeout_delay_ms;
     deprecated_property rm_violation_recovery_policy;
     property<std::chrono::milliseconds> fetch_reads_debounce_timeout;
+    property<std::chrono::milliseconds> kafka_fetch_request_timeout_ms;
     enum_property<model::fetch_read_strategy> fetch_read_strategy;
     bounded_property<size_t> fetch_max_read_concurrency;
     bounded_property<double, numeric_bounds> fetch_pid_p_coeff;

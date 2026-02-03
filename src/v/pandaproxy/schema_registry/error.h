@@ -45,6 +45,7 @@ enum class error_code {
     acl_invalid,
     internal_server_error,
     writes_disabled,
+    context_not_empty,
 };
 
 std::error_code make_error_code(error_code);

@@ -132,6 +132,7 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/random:secure_random",
         "//src/v/thirdparty/krb5",
+        "@abseil-cpp//absl/strings",
     ],
     visibility = ["//visibility:public"],
     deps = [

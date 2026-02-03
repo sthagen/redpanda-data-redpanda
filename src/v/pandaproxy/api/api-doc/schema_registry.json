@@ -1274,6 +1274,79 @@
         }
       }
     },
+    "/contexts": {
+      "get": {
+        "summary": "List all contexts.",
+        "operationId": "get_contexts",
+        "parameters": [],
+        "produces": [
+          "application/vnd.schemaregistry.v1+json",
+          "application/vnd.schemaregistry+json",
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/error_body"
+            }
+          }
+        }
+      }
+    },
+    "/contexts/{context}": {
+      "delete": {
+        "summary": "Delete a context.",
+        "description": "Deletes the specified context if it is empty. Subjects must be permanently deleted before the context can be deleted.",
+        "operationId": "delete_context",
+        "parameters": [
+          {
+            "name": "context",
+            "description": "The context to delete (e.g., .staging). Cannot delete the default context.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "produces": [
+          "application/vnd.schemaregistry.v1+json",
+          "application/vnd.schemaregistry+json",
+          "application/json"
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found: Context not found",
+            "schema": {
+              "$ref": "#/definitions/error_body"
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity: Context not empty",
+            "schema": {
+              "$ref": "#/definitions/error_body"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/error_body"
+            }
+          }
+        }
+      }
+    },
     "/security/acls": {
       "get": {
         "summary": "List ACLs",

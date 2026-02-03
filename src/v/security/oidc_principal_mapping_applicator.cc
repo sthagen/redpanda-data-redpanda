@@ -10,6 +10,7 @@
 
 #include "security/oidc_principal_mapping_applicator.h"
 
+#include "absl/strings/str_split.h"
 #include "container/chunked_vector.h"
 #include "security/acl.h"
 #include "security/logger.h"
@@ -40,8 +41,13 @@ get_group_claim(const json::Pointer& p, const jwt& jwt) {
           string_claim.value());
 
         chunked_vector<std::string_view> string_claim_parsed;
-        boost::split(
-          string_claim_parsed, string_claim.value(), boost::is_any_of(","));
+
+        auto parts = absl::StrSplit(string_claim.value(), ',');
+
+        for (auto claim : parts) {
+            string_claim_parsed.push_back(absl::StripAsciiWhitespace(claim));
+        }
+
         return string_claim_parsed;
     }
 

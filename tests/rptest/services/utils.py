@@ -151,6 +151,7 @@ class LogSearch(ABC):
         self._raise_on_errors: bool = self._context.globals.get(
             self.RAISE_ON_ERRORS_KEY, True
         )
+        self._max_workers: int | None = None
 
         # Prepare matching terms
         self.match_terms: list[str] = list(self.DEFAULT_MATCH_TERMS)
@@ -242,7 +243,7 @@ class LogSearch(ABC):
         bad_lines: NodeToLines = {}
 
         # Run scans in parallel
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = [executor.submit(scan_one, v, n) for v, n in versioned_nodes]
             for fut in as_completed(futures):
                 node, vl = fut.result()
@@ -358,6 +359,9 @@ class LogSearchCloud(LogSearch):
         # Prepare capture functions
         self.kubectl = kubectl
         self.test_start_time = test_start_time
+        # Cloudv2 agents run on very small instances that can easily be
+        # overwhelmed by too many concurrent ssh sessions.
+        self._max_workers = 10
 
     def _capture_log(self, node: CloudBroker, expr: str) -> Generator[str, None, None]:
         """Capture log and check test timing.

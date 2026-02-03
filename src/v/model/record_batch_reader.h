@@ -421,6 +421,10 @@ record_batch_reader make_record_batch_reader(Args&&... args) {
 record_batch_reader
   make_memory_record_batch_reader(record_batch_reader::storage_t);
 
+/// Wraps a record_batch_reader with readahead buffering (depth=1).
+/// Issues reads one step ahead of consumer to hide latency.
+record_batch_reader make_readahead_record_batch_reader(record_batch_reader&&);
+
 record_batch_reader
   make_chunked_memory_record_batch_reader(chunked_vector<model::record_batch>);
 

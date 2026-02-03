@@ -246,6 +246,20 @@ server::routes_t get_schema_registry_routes(ss::gate& gate, one_shot& es) {
       get_subjects));
 
     routes.routes.emplace_back(wrap(
+      ss::httpd::schema_registry_json::get_contexts,
+      auth::level::user,
+      std::nullopt,
+      auth::deferred{},
+      get_contexts));
+
+    routes.routes.emplace_back(wrap(
+      ss::httpd::schema_registry_json::delete_context,
+      auth::level::superuser,
+      acl_operation::remove,
+      registry_resource{},
+      delete_context));
+
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_subject_versions,
       auth::level::user,
       acl_operation::describe,

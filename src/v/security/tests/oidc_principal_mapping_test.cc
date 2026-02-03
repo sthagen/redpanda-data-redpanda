@@ -311,10 +311,31 @@ BOOST_AUTO_TEST_CASE(test_get_group_claim_comma_with_spaces) {
     auto groups = std::move(result).value();
     BOOST_REQUIRE_EQUAL(groups.size(), 3);
     // Note: boost::split includes the spaces
-    // TODO: Update this so that leading/trailing spaces are trimmed.
     BOOST_CHECK_EQUAL(groups[0], "admin");
-    BOOST_CHECK_EQUAL(groups[1], " developers");
-    BOOST_CHECK_EQUAL(groups[2], " users");
+    BOOST_CHECK_EQUAL(groups[1], "developers");
+    BOOST_CHECK_EQUAL(groups[2], "users");
+}
+
+BOOST_AUTO_TEST_CASE(test_get_group_claim_comma_with_spaces_before) {
+    // Test: Comma-separated string with spaces around commas
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": "admin ,developers ,users"
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    BOOST_REQUIRE_EQUAL(groups.size(), 3);
+    // Note: boost::split includes the spaces
+    BOOST_CHECK_EQUAL(groups[0], "admin");
+    BOOST_CHECK_EQUAL(groups[1], "developers");
+    BOOST_CHECK_EQUAL(groups[2], "users");
 }
 
 BOOST_AUTO_TEST_CASE(test_apply_nested_group_policy_none_simple) {

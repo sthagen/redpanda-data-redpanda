@@ -78,6 +78,8 @@ public:
 
     ss::future<bool> delete_mode(context_subject ctx_sub);
 
+    ss::future<> delete_context(context ctx);
+
     ss::future<bool>
     delete_subject_version(context_subject sub, schema_version version);
 
@@ -112,6 +114,9 @@ private:
 
     ss::future<std::optional<bool>>
     do_delete_mode(context_subject ctx_sub, model::offset write_at);
+
+    ss::future<std::optional<bool>>
+    do_delete_context(context ctx, model::offset write_at);
 
     ss::future<std::optional<bool>> do_delete_subject_version(
       context_subject sub, schema_version version, model::offset write_at);

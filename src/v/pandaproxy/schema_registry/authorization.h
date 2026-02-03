@@ -13,8 +13,11 @@
 #include "container/chunked_vector.h"
 #include "pandaproxy/schema_registry/auth.h"
 #include "pandaproxy/schema_registry/fwd.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/server.h"
 #include "security/request_auth.h"
+
+#include <seastar/core/future.hh>
 
 #include <string_view>
 
@@ -37,6 +40,16 @@ void handle_get_subjects_authz(
   const server::request_t& rq,
   std::optional<request_auth_result>& auth_result,
   chunked_vector<context_subject>& subjects);
+
+/// Handles authorization for GET /contexts by filtering the contexts vector
+/// to only include contexts the user is authorized to see.
+/// - Contexts with subjects: user needs describe access to at least one subject
+/// - Empty contexts: user needs sr_registry describe access
+ss::future<> handle_get_contexts_authz(
+  const server::request_t& rq,
+  sharded_store& store,
+  std::optional<request_auth_result>& auth_result,
+  chunked_vector<context>& contexts);
 
 /// Handles authorization for config/mode endpoints that operate on either
 /// a context (e.g., PUT /config/:.ctx:) or a subject (e.g., PUT

@@ -721,6 +721,14 @@ configuration::configuration()
       "minimum bytes was not reached.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1ms)
+  , kafka_fetch_request_timeout_ms(
+      *this,
+      "kafka_fetch_request_timeout_ms",
+      "Broker-side target for the duration of a single fetch request. The "
+      "broker will try to complete fetches within the specified duration, even "
+      "if it means returning less bytes in the fetch than are available.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5s)
   , fetch_read_strategy(
       *this,
       "fetch_read_strategy",

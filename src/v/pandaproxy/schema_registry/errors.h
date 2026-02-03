@@ -234,6 +234,12 @@ inline error_info writes_disabled() {
       error_code::writes_disabled, "Writes to Schema Registry are disabled"};
 }
 
+inline error_info context_not_empty(const context& ctx) {
+    return error_info{
+      error_code::context_not_empty,
+      fmt::format("The specified context '{}' is not empty.", ctx())};
+}
+
 inline bool failed_subject_schema_lookup(std::error_code ec) {
     return ec == error_code::subject_not_found
            || ec == error_code::subject_version_not_found;

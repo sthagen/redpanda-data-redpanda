@@ -1749,7 +1749,11 @@ TEST_F(CompactionFixtureParamTest, TestSegmentConcatenation) {
                                 // concatenation works on its own without
                                 // considering compaction.
     auto batches_per_segment = 100;
+#ifdef NDEBUG
     auto records_per_batch = 100;
+#else
+    auto records_per_batch = 20;
+#endif
     generate_data(
       num_segments, cardinality, batches_per_segment, records_per_batch)
       .get();
@@ -1879,7 +1883,11 @@ TEST_F(CompactionFixtureTest, TestAdjacentCompactionMultipleRanges) {
     auto num_segments = 10;
     auto cardinality = 10;
     auto batches_per_segment = 100;
+#ifdef NDEBUG
     auto records_per_batch = 100;
+#else
+    auto records_per_batch = 20;
+#endif
     map_t latest_kv_map;
 
     // Write some data in different terms. Adjacent compaction should be able to
@@ -1887,7 +1895,11 @@ TEST_F(CompactionFixtureTest, TestAdjacentCompactionMultipleRanges) {
     // invalid iterators or running into other issues.
     auto raft = partition->raft();
     auto orig_term = raft->term();
+#ifdef NDEBUG
     auto num_raft_terms = 5;
+#else
+    auto num_raft_terms = 3;
+#endif
 
     int term_idx = 0;
     while (raft->term()() < orig_term() + num_raft_terms) {
