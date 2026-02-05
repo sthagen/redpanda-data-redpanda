@@ -360,10 +360,13 @@ struct get_extent_metadata_reply
       get_extent_metadata_reply,
       serde::version<0>,
       serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(ec, extents); }
+    auto serde_fields() { return std::tie(ec, extents, end_of_stream); }
 
     errc ec;
     chunked_vector<extent_metadata> extents;
+    // True when no more extents exist beyond this response (end of iteration).
+    // False when more extents may exist (hit max_num_extents limit).
+    bool end_of_stream{true};
 };
 struct get_extent_metadata_request
   : serde::envelope<

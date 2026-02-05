@@ -834,6 +834,7 @@ replicated_metastore::get_extent_metadata_forwards(
 
     metastore::extent_metadata_response resp;
     resp.extents = rpc_to_meta_extent_metadata(std::move(reply.extents));
+    resp.end_of_stream = reply.end_of_stream;
 
     co_return resp;
 }
@@ -869,6 +870,7 @@ replicated_metastore::get_extent_metadata_backwards(
 
     metastore::extent_metadata_response resp;
     resp.extents = rpc_to_meta_extent_metadata(std::move(reply.extents));
+    resp.end_of_stream = reply.end_of_stream;
 
     co_return resp;
 }

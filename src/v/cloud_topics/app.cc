@@ -22,6 +22,7 @@
 #include "cluster/cluster_epoch_service.h"
 #include "cluster/controller.h"
 #include "config/node_config.h"
+#include "resource_mgmt/cpu_scheduling.h"
 #include "ssx/sharded_service_container.h"
 
 #include <seastar/core/coroutine.hh>
@@ -105,7 +106,8 @@ ss::future<> app::construct(
     co_await construct_service(
       reconciler,
       ss::sharded_parameter([this] { return &l1_io.local(); }),
-      ss::sharded_parameter([this] { return &replicated_metastore.local(); }));
+      ss::sharded_parameter([this] { return &replicated_metastore.local(); }),
+      scheduling_groups::instance().cloud_topics_reconciler_sg());
 
     co_await construct_service(
       l0_gc,

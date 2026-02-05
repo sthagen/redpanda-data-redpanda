@@ -277,7 +277,9 @@ public:
         co_await impl_->remove_file(handle);
         // We also need to remove the expectation from the s3 imposter as well
         fixture_->remove_expectations(
-          {fmt::format("test-prefix/{}", lsm_internal::sst_file_name(handle))});
+          chunked_vector<ss::sstring>::single(
+            fmt::format(
+              "test-prefix/{}", lsm_internal::sst_file_name(handle))));
     }
 
     ss::coroutine::experimental::generator<lsm_internal::file_handle>

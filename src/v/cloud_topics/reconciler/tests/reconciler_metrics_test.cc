@@ -20,6 +20,8 @@
 #include "model/tests/randoms.h"
 #include "test_utils/metrics.h"
 
+#include <seastar/core/scheduling.hh>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -62,7 +64,8 @@ public:
 private:
     unreliable_io _io;
     unreliable_metastore _metastore;
-    reconciler::reconciler _reconciler{&_io, &_metastore};
+    reconciler::reconciler _reconciler{
+      &_io, &_metastore, ss::default_scheduling_group()};
 };
 
 using ::testing::Gt;

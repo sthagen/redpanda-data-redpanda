@@ -14,7 +14,6 @@
 #include "cluster/archival/archival_metadata_stm.h"
 #include "model/record.h"
 #include "raft/tests/raft_fixture.h"
-#include "test_utils/scoped_config.h"
 #include "test_utils/test.h"
 #include "utils/available_promise.h"
 
@@ -512,9 +511,6 @@ TEST_F_CORO(
   archival_metadata_stm_gtest_fixture, test_archival_stm_error_propagation) {
     ss::abort_source never_abort;
 
-    auto s_cfg = scoped_config{};
-    s_cfg.get("cloud_storage_disable_metadata_consistency_checks")
-      .set_value(false);
     co_await start();
 
     std::vector<cloud_storage::segment_meta> good_segment;
@@ -607,9 +603,6 @@ TEST_F_CORO(
     auto timeout = 30s;
     auto deadline = ss::lowres_clock::now() + timeout;
 
-    auto s_cfg = scoped_config{};
-    s_cfg.get("cloud_storage_disable_metadata_consistency_checks")
-      .set_value(false);
     co_await start();
 
     std::vector<cloud_storage::segment_meta> good_segment;

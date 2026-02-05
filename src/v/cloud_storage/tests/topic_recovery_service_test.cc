@@ -12,6 +12,7 @@
 #include "cloud_storage/recovery_request.h"
 #include "cluster/cloud_metadata/tests/manual_mixin.h"
 #include "cluster/topic_recovery_service.h"
+#include "container/chunked_vector.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/boost_fixture.h"
 #include "utils/memory_data_source.h"
@@ -99,13 +100,22 @@ const s3_imposter_fixture::expectation recovery_state{
   .body = recovery_results,
 };
 
+// Helper to build a chunked_vector of expectations from variadic args
+template<typename... Args>
+chunked_vector<s3_imposter_fixture::expectation>
+make_expectations(Args&&... args) {
+    chunked_vector<s3_imposter_fixture::expectation> result;
+    (result.push_back(std::forward<Args>(args)), ...);
+    return result;
+}
+
 // Generates expectations such that listing on a manifest prefix will result in
 // a response that contains no manifests.
-std::vector<s3_imposter_fixture::expectation>
+chunked_vector<s3_imposter_fixture::expectation>
 generate_no_manifests_expectations(
-  std::vector<s3_imposter_fixture::expectation> additional_expectations) {
+  chunked_vector<s3_imposter_fixture::expectation> additional_expectations) {
     const char hex_chars[] = "0123456789abcdef";
-    std::vector<s3_imposter_fixture::expectation> expectations;
+    chunked_vector<s3_imposter_fixture::expectation> expectations;
     for (int i = 0; i < 16; ++i) {
         expectations.emplace_back(
           s3_imposter_fixture::expectation{
@@ -280,15 +290,17 @@ void do_test(fixture& f) {
 }
 
 FIXTURE_TEST(recovery_with_unparseable_topic_manifest, fixture) {
-    set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, {.url = manifest.url, .body = "bad json"}}));
+    set_expectations_and_listen(
+      generate_no_manifests_expectations(make_expectations(
+        meta_level,
+        s3_imposter_fixture::expectation{
+          .url = manifest.url, .body = "bad json"})));
     do_test(*this);
 }
 
 FIXTURE_TEST(recovery_with_missing_topic_manifest, fixture) {
-    set_expectations_and_listen(generate_no_manifests_expectations({
-      meta_level,
-    }));
+    set_expectations_and_listen(
+      generate_no_manifests_expectations(make_expectations(meta_level)));
     do_test(*this);
 }
 
@@ -303,7 +315,7 @@ FIXTURE_TEST(recovery_with_existing_topic, fixture) {
                                  .get();
     wait_for_topics(std::move(topic_create_result)).get();
     set_expectations_and_listen(
-      generate_no_manifests_expectations({meta_level}));
+      generate_no_manifests_expectations(make_expectations(meta_level)));
 
     auto& service = app.topic_recovery_service;
     auto result = start_recovery();
@@ -324,7 +336,7 @@ FIXTURE_TEST(recovery_with_existing_topic, fixture) {
 
 FIXTURE_TEST(recovery_where_topic_is_created, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
 
     auto& service = app.topic_recovery_service;
     auto result = start_recovery();
@@ -368,7 +380,7 @@ FIXTURE_TEST(recovery_where_topic_is_created, fixture) {
 
 FIXTURE_TEST(recovery_result_clear_before_start, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
 
     start_recovery();
     wait_for_n_requests(22);
@@ -383,7 +395,7 @@ FIXTURE_TEST(recovery_result_clear_before_start, fixture) {
 
 FIXTURE_TEST(recovery_download_tracking, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
 
     start_recovery();
     wait_for_n_requests(3);
@@ -405,9 +417,8 @@ FIXTURE_TEST(recovery_download_tracking, fixture) {
 }
 
 FIXTURE_TEST(recovery_with_topic_name_pattern_without_match, fixture) {
-    set_expectations_and_listen(generate_no_manifests_expectations({
-      meta_level,
-    }));
+    set_expectations_and_listen(
+      generate_no_manifests_expectations(make_expectations(meta_level)));
 
     start_recovery(R"JSON({"topic_names_pattern": "abc*"})JSON");
 
@@ -423,7 +434,7 @@ FIXTURE_TEST(recovery_with_topic_name_pattern_without_match, fixture) {
 
 FIXTURE_TEST(recovery_with_topic_name_pattern_with_match, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
 
     start_recovery(R"JSON({"topic_names_pattern": ".*es*"})JSON");
 
@@ -433,7 +444,7 @@ FIXTURE_TEST(recovery_with_topic_name_pattern_with_match, fixture) {
 
 FIXTURE_TEST(recovery_with_retention_ms_override, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
 
     start_recovery(
       R"JSON({"topic_names_pattern": ".*es*", "retention_ms": 10000})JSON");
@@ -451,7 +462,7 @@ FIXTURE_TEST(recovery_with_retention_ms_override, fixture) {
 
 FIXTURE_TEST(recovery_with_retention_bytes_override, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
     start_recovery(
       R"JSON({"topic_names_pattern": ".*es*", "retention_bytes": 10000})JSON");
 
@@ -468,7 +479,7 @@ FIXTURE_TEST(recovery_with_retention_bytes_override, fixture) {
 
 FIXTURE_TEST(recovery_status, fixture) {
     set_expectations_and_listen(generate_no_manifests_expectations(
-      {meta_level, manifest, recovery_state}));
+      make_expectations(meta_level, manifest, recovery_state)));
 
     start_recovery(
       R"JSON({"topic_names_pattern": ".*es*", "retention_bytes": 10000})JSON");

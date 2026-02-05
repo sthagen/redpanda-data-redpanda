@@ -504,7 +504,6 @@ redpanda_cc_gtest(
     srcs = [
         "coordinated_compaction_test.cc",
     ],
-    flaky = True,
     deps = [
         "//src/v/model",
         "//src/v/raft",

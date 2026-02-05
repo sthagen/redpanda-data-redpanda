@@ -57,7 +57,8 @@ void log_error(
 
 } // namespace
 
-reconciler::reconciler(l1::io* l1_io, l1::metastore* metastore)
+reconciler::reconciler(
+  l1::io* l1_io, l1::metastore* metastore, ss::scheduling_group reconciler_sg)
   : _l1_io(l1_io)
   , _metastore(metastore)
   , _scheduler(
@@ -70,11 +71,15 @@ reconciler::reconciler(l1::io* l1_io, l1::metastore* metastore)
       config::shard_local_cfg()
         .cloud_topics_reconciliation_slowdown_blend.bind(),
       config::shard_local_cfg()
-        .cloud_topics_reconciliation_max_object_size.bind()) {}
+        .cloud_topics_reconciliation_max_object_size.bind())
+  , _reconciler_sg(reconciler_sg) {}
 
 ss::future<> reconciler::start() {
     _probe.setup_metrics();
-    ssx::spawn_with_gate(_gate, [this] { return reconciliation_loop(); });
+    ssx::spawn_with_gate(_gate, [this] {
+        return ss::with_scheduling_group(
+          _reconciler_sg, [this] { return reconciliation_loop(); });
+    });
     co_return;
 }
 

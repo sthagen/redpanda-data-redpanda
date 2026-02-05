@@ -843,11 +843,14 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
     }
     if (!extents_result->has_value()) {
         co_return rpc::get_extent_metadata_reply{
-          .ec = rpc::errc::out_of_range,
+          .ec = rpc::errc::ok,
+          .extents = {},
+          .end_of_stream = true,
         };
     }
 
     chunked_vector<rpc::extent_metadata> extents;
+    bool end_of_stream = true;
     auto gen = (*extents_result)->get_rows();
     while (auto row_opt = co_await gen()) {
         const auto& row = row_opt->get();
@@ -866,6 +869,7 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
             .max_timestamp = extent.val.max_timestamp,
           });
         if (extents.size() >= req.max_num_extents) {
+            end_of_stream = false;
             break;
         }
     }
@@ -873,6 +877,7 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
     co_return rpc::get_extent_metadata_reply{
       .ec = rpc::errc::ok,
       .extents = std::move(extents),
+      .end_of_stream = end_of_stream,
     };
 }
 
@@ -881,6 +886,8 @@ db_domain_manager::exclusive_db_lock() {
     auto fut = co_await ss::coroutine::as_future(
       db_instance_lock_.hold_write_lock());
     if (fut.failed()) {
+        auto ex = fut.get_exception();
+        vlog(cd_log.debug, "Exception while getting database lock: {}", ex);
         co_return std::unexpected(rpc::errc::not_leader);
     }
     co_return std::move(fut.get());
@@ -901,6 +908,8 @@ db_domain_manager::gate_and_open_reads() {
       db_instance_lock_.hold_read_lock());
     if (fut.failed()) {
         // Shutting down.
+        auto ex = fut.get_exception();
+        vlog(cd_log.debug, "Exception while getting database lock: {}", ex);
         co_return std::unexpected(rpc::errc::not_leader);
     }
     if (!db_ || db_->needs_reopen()) {
@@ -920,7 +929,8 @@ db_domain_manager::gate_and_open_writes() {
     }
     auto fut = co_await ss::coroutine::as_future(writer_lock_.get_units());
     if (fut.failed()) {
-        // Shutting down.
+        auto ex = fut.get_exception();
+        vlog(cd_log.debug, "Exception while getting writer lock: {}", ex);
         co_return std::unexpected(rpc::errc::not_leader);
     }
     auto& gl = *gl_res;
@@ -956,6 +966,8 @@ ss::future<std::expected<void, rpc::errc>> db_domain_manager::write_rows(
             expected_term_, "Failed to write to database"));
         if (step_down_fut.failed()) {
             // Only throws at shutdown.
+            auto ex = step_down_fut.get_exception();
+            vlog(cd_log.debug, "Exception while stepping down: {}", ex);
             co_return std::unexpected(rpc::errc::not_leader);
         }
     }

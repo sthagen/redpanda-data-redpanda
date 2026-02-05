@@ -94,7 +94,6 @@ redpanda_cc_gtest(
         "//src/v/storage",
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/test_utils:gtest",
-        "//src/v/test_utils:scoped_config",
         "//src/v/utils:available_promise",
         "@googletest//:gtest",
         "@seastar",

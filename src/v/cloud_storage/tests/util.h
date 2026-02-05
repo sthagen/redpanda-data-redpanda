@@ -19,6 +19,7 @@
 #include "cloud_storage/tests/cloud_storage_fixture.h"
 #include "cloud_storage/tests/common_def.h"
 #include "cloud_storage/topic_manifest.h"
+#include "container/chunked_vector.h"
 #include "json/ostreamwrapper.h"
 #include "model/record_batch_types.h"
 #include "utils/lazy_abort_source.h"
@@ -128,11 +129,11 @@ enum class manifest_inconsistency {
     duplicate_offset_ranges,
 };
 
-std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
+chunked_vector<cloud_storage_fixture::expectation> make_imposter_expectations(
   const cloud_storage::partition_manifest& m,
   const std::vector<in_memory_segment>& segments);
 
-std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
+chunked_vector<cloud_storage_fixture::expectation> make_imposter_expectations(
   cloud_storage::partition_manifest& m,
   const std::vector<in_memory_segment>& segments,
   bool truncate_segments = false,

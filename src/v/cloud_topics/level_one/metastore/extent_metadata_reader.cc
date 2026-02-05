@@ -61,16 +61,23 @@ extent_metadata_reader::forward_generator() {
         } else {
             // Yield extents.
             auto extents = std::move(extent_md_res->extents);
+            bool end_of_stream = extent_md_res->end_of_stream;
 
-            if (extents.empty()) {
-                break;
-            }
+            dassert(
+              end_of_stream || !extents.empty(),
+              "end_of_stream=false requires non-empty extents");
 
             for (const auto& extent : extents) {
                 co_yield extent;
             }
 
-            next_offset = kafka::next_offset(extents.back().last_offset);
+            if (end_of_stream) {
+                break;
+            }
+
+            if (!extents.empty()) {
+                next_offset = kafka::next_offset(extents.back().last_offset);
+            }
         }
     }
 }
@@ -94,16 +101,23 @@ extent_metadata_reader::backward_generator() {
         } else {
             // Yield extents.
             auto extents = std::move(extent_md_res->extents);
+            bool end_of_stream = extent_md_res->end_of_stream;
 
-            if (extents.empty()) {
-                break;
-            }
+            dassert(
+              end_of_stream || !extents.empty(),
+              "end_of_stream=false requires non-empty extents");
 
             for (const auto& extent : extents) {
                 co_yield extent;
             }
 
-            next_offset = kafka::prev_offset(extents.back().base_offset);
+            if (end_of_stream) {
+                break;
+            }
+
+            if (!extents.empty()) {
+                next_offset = kafka::prev_offset(extents.back().base_offset);
+            }
         }
     }
 }

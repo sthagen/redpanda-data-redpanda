@@ -20,6 +20,7 @@
 #include "model/tests/randoms.h"
 #include "test_utils/scoped_config.h"
 
+#include <seastar/core/scheduling.hh>
 #include <seastar/util/defer.hh>
 
 #include <gtest/gtest.h>
@@ -38,7 +39,7 @@ namespace {
 class ReconcilerTest : public testing::Test {
 public:
     ReconcilerTest()
-      : _reconciler(&_io, &_metastore) {}
+      : _reconciler(&_io, &_metastore, ss::default_scheduling_group()) {}
 
     ss::shared_ptr<fake_source> add_source(
       std::optional<model::topic> tp = std::nullopt,

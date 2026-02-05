@@ -244,7 +244,7 @@ public:
         }
     }
 
-    void listen() { set_expectations_and_listen(_expectations); }
+    void listen() { set_expectations_and_listen(std::move(_expectations)); }
 
     void collect_segments_to(std::vector<segment_meta>& meta) {
         all_segments = std::ref(meta);
@@ -330,7 +330,7 @@ public:
     retry_chain_logger ctxlog;
     partition_probe probe;
     async_manifest_view view;
-    std::vector<expectation> _expectations;
+    chunked_vector<expectation> _expectations;
     std::vector<model::offset> spillover_start_offsets;
     model::offset _last_spillover_offset;
     std::optional<std::reference_wrapper<std::vector<segment_meta>>>

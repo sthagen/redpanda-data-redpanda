@@ -777,10 +777,11 @@ TEST_F(DbDomainManagerTest, TestRestoreWithConcurrentReads) {
                      .max_num_extents = std::numeric_limits<size_t>::max()})
                   .then([&num_reads](auto reply) {
                       ++num_reads;
-                      if (reply.ec != l1_rpc::errc::out_of_range) {
-                          EXPECT_EQ(reply.ec, l1_rpc::errc::ok);
+                      if (reply.ec == l1_rpc::errc::ok) {
                           auto num_extents = reply.extents.size();
-                          EXPECT_TRUE(num_extents == 3)
+                          // Readers can see either 0 or 3 extents, depending on
+                          // when their read arrives.
+                          EXPECT_TRUE(num_extents == 0 || num_extents == 3)
                             << "Unexpected number of extents: " << num_extents;
                       }
                   });

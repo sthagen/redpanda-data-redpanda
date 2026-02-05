@@ -454,6 +454,10 @@ public:
 
     struct extent_metadata_response {
         extent_metadata_vec extents{};
+        // True when no more extents exist beyond this response (end of
+        // iteration). False when more extents may exist (hit max_num_extents
+        // limit).
+        bool end_of_stream{true};
     };
 
     // Returns a number of extents in the offset range `[start, end]`

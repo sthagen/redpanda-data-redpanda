@@ -1887,6 +1887,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -1899,6 +1900,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
           extent_metadata_res->extents,
           testing::ElementsAre(
             MatchesRange(0_o, 9_o), MatchesRange(10_o, 19_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -1911,6 +1913,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
           extent_metadata_res->extents,
           testing::ElementsAre(
             MatchesRange(0_o, 9_o), MatchesRange(10_o, 19_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -1925,6 +1928,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
             MatchesRange(0_o, 9_o),
             MatchesRange(10_o, 19_o),
             MatchesRange(20_o, 29_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -1939,6 +1943,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
             MatchesRange(0_o, 9_o),
             MatchesRange(10_o, 19_o),
             MatchesRange(20_o, 29_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
 
     // A few test cases where the number of extents is limited.
@@ -1947,8 +1952,10 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
         auto max_offset = kafka::offset{9};
         auto extent_metadata_res
           = m.get_extent_metadata_forwards(tp, min_offset, max_offset, 0).get();
+        // Requesting 0 extents still results in a single extent being returned.
         ASSERT_TRUE(extent_metadata_res.has_value());
-        ASSERT_TRUE(extent_metadata_res->extents.empty());
+        ASSERT_EQ(extent_metadata_res->extents.size(), 1);
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -1959,6 +1966,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(0_o, 9_o)));
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -1970,6 +1978,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
           extent_metadata_res->extents,
           testing::ElementsAre(
             MatchesRange(0_o, 9_o), MatchesRange(10_o, 19_o)));
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
 
     // Non zero min_offset test cases.
@@ -1983,6 +1992,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{9};
@@ -1997,6 +2007,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataForwards) {
             MatchesRange(0_o, 9_o),
             MatchesRange(10_o, 19_o),
             MatchesRange(20_o, 29_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
 }
 
@@ -2030,6 +2041,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2042,6 +2054,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
           extent_metadata_res->extents,
           testing::ElementsAre(
             MatchesRange(10_o, 19_o), MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2054,6 +2067,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
           extent_metadata_res->extents,
           testing::ElementsAre(
             MatchesRange(10_o, 19_o), MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2068,6 +2082,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
             MatchesRange(20_o, 29_o),
             MatchesRange(10_o, 19_o),
             MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2082,6 +2097,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
             MatchesRange(20_o, 29_o),
             MatchesRange(10_o, 19_o),
             MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
 
     // A few test cases where the number of extents is limited.
@@ -2091,8 +2107,10 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
         auto extent_metadata_res = m.get_extent_metadata_backwards(
                                       tp, min_offset, max_offset, 0)
                                      .get();
+        // Requesting 0 extents still results in a single extent being returned.
         ASSERT_TRUE(extent_metadata_res.has_value());
-        ASSERT_TRUE(extent_metadata_res->extents.empty());
+        ASSERT_EQ(extent_metadata_res->extents.size(), 1);
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2104,6 +2122,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(10_o, 19_o)));
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2115,6 +2134,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(20_o, 29_o)));
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2127,6 +2147,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
           extent_metadata_res->extents,
           testing::ElementsAre(
             MatchesRange(20_o, 29_o), MatchesRange(10_o, 19_o)));
+        EXPECT_FALSE(extent_metadata_res->end_of_stream);
     }
 
     // Non zero min_offset test cases.
@@ -2140,6 +2161,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
         EXPECT_THAT(
           extent_metadata_res->extents,
           testing::ElementsAre(MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{9};
@@ -2154,6 +2176,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataBackwards) {
             MatchesRange(20_o, 29_o),
             MatchesRange(10_o, 19_o),
             MatchesRange(0_o, 9_o)));
+        EXPECT_TRUE(extent_metadata_res->end_of_stream);
     }
 }
 
@@ -2187,6 +2210,7 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataEmpty) {
                                         .get();
         ASSERT_TRUE(extent_metadata_ge_res.has_value());
         ASSERT_TRUE(extent_metadata_ge_res->extents.empty());
+        EXPECT_TRUE(extent_metadata_ge_res->end_of_stream);
     }
     {
         auto min_offset = kafka::offset{0};
@@ -2196,5 +2220,6 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataEmpty) {
                                         .get();
         ASSERT_TRUE(extent_metadata_le_res.has_value());
         ASSERT_TRUE(extent_metadata_le_res->extents.empty());
+        EXPECT_TRUE(extent_metadata_le_res->end_of_stream);
     }
 }

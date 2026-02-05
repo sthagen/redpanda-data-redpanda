@@ -835,7 +835,7 @@ TEST_P(all_types_remote_fixture, test_delete_objects_multiple_batches) {
     auto result
       = remote.local().delete_objects(bucket_name, to_delete, fib).get();
     ASSERT_EQ(cloud_storage::upload_result::success, result);
-    auto requests = get_requests();
+    const auto& requests = get_requests();
     ASSERT_EQ(requests.size(), 3);
 
     std::vector<cloud_storage_clients::object_key> deleted_keys;
@@ -861,8 +861,10 @@ TEST_P(all_types_remote_fixture, test_delete_objects_multiple_batches) {
 TEST_P(
   all_types_remote_fixture,
   test_delete_objects_multiple_batches_single_failure) {
-    set_expectations_and_listen({expectation{
-      .url = "?delete", .body = ss::sstring(plural_delete_error)}});
+    set_expectations_and_listen(
+      chunked_vector<expectation>::single(
+        expectation{
+          .url = "?delete", .body = ss::sstring(plural_delete_error)}));
 
     retry_chain_node fib(never_abort, 500ms, 20ms);
 
@@ -875,7 +877,7 @@ TEST_P(
     auto result
       = remote.local().delete_objects(bucket_name, to_delete, fib).get();
     ASSERT_EQ(cloud_storage::upload_result::failed, result);
-    auto requests = get_requests();
+    const auto& requests = get_requests();
     ASSERT_EQ(requests.size(), 3);
 
     std::vector<cloud_storage_clients::object_key> deleted_keys;
@@ -901,8 +903,10 @@ TEST_P(
 TEST_P(all_types_remote_fixture, test_delete_objects_failure_handling) {
     // Test that the failure to delete one key via the plural form
     // fails the entire operation.
-    set_expectations_and_listen({expectation{
-      .url = "?delete", .body = ss::sstring(plural_delete_error)}});
+    set_expectations_and_listen(
+      chunked_vector<expectation>::single(
+        expectation{
+          .url = "?delete", .body = ss::sstring(plural_delete_error)}));
 
     retry_chain_node fib(never_abort, 100ms, 20ms);
 
@@ -1007,8 +1011,10 @@ TEST_P(
 }
 
 TEST_P(all_types_remote_fixture, test_filter_by_source) { // NOLINT
-    set_expectations_and_listen({expectation{
-      .url = manifest_url, .body = ss::sstring(manifest_payload)}});
+    set_expectations_and_listen(
+      chunked_vector<expectation>::single(
+        expectation{
+          .url = manifest_url, .body = ss::sstring(manifest_payload)}));
     auto conf = get_configuration();
     retry_chain_node root_rtc(never_abort, 100ms, 20ms);
     remote::event_filter flt;
@@ -1065,8 +1071,10 @@ TEST_P(all_types_remote_fixture, test_filter_by_source) { // NOLINT
 }
 
 TEST_P(all_types_remote_fixture, test_filter_by_type) { // NOLINT
-    set_expectations_and_listen({expectation{
-      .url = manifest_url, .body = ss::sstring(manifest_payload)}});
+    set_expectations_and_listen(
+      chunked_vector<expectation>::single(
+        expectation{
+          .url = manifest_url, .body = ss::sstring(manifest_payload)}));
     retry_chain_node root_rtc(never_abort, 100ms, 20ms);
     partition_manifest actual(manifest_ntp, manifest_revision);
 
@@ -1097,8 +1105,10 @@ TEST_P(all_types_remote_fixture, test_filter_by_type) { // NOLINT
 }
 
 TEST_P(all_types_remote_fixture, test_filter_lifetime_1) { // NOLINT
-    set_expectations_and_listen({expectation{
-      .url = manifest_url, .body = ss::sstring(manifest_payload)}});
+    set_expectations_and_listen(
+      chunked_vector<expectation>::single(
+        expectation{
+          .url = manifest_url, .body = ss::sstring(manifest_payload)}));
     retry_chain_node root_rtc(never_abort, 100ms, 20ms);
     partition_manifest actual(manifest_ntp, manifest_revision);
 
@@ -1354,7 +1364,7 @@ TEST_P(all_types_remote_fixture, test_get_object) {
              .payload = buf})
           .get();
 
-    const auto requests = get_requests();
+    const auto& requests = get_requests();
     ASSERT_EQ(requests.size(), 2);
 
     const auto last_request = requests.back();

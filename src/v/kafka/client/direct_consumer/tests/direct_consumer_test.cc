@@ -646,10 +646,14 @@ TEST_F(consumer_test_mock, TestOffsetResetPolicy) {
     }
     // add more data to partition 1
     make_data_available(test_topic, 1, 6);
-    fetch_and_append_to_map(all_batches, consumer).get();
-    ASSERT_EQ(
-      all_batches[test_topic][model::partition_id(1)].front().base_offset(),
-      model::offset(430));
+    auto& p1_batches = all_batches[test_topic][model::partition_id(1)];
+    RPTEST_REQUIRE_EVENTUALLY(10s, [&] {
+        return fetch_and_append_to_map(all_batches, consumer).then([&] {
+            return !p1_batches.empty();
+        });
+    });
+
+    ASSERT_EQ(p1_batches.front().base_offset(), model::offset(430));
 }
 TEST_F(consumer_test_mock, TestFetchErrorPropagation) {
     prepare_cluster();

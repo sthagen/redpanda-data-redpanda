@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -97,10 +98,14 @@ class CloudBroker:
         script_path = os.path.join(scripts_dir, script_name)
         assert os.path.exists(script_path)
 
+        # Avoid this script colliding on the agent node with
+        # any other scripts with the same name.
+        unique_script_name = f"{uuid.uuid4()}_{script_name}"
+
         # not using paramiko due to complexity of routing to actual node
         # Copy ducktape -> agent
         _scp_cmd = self._kubeclient._scp_cmd(
-            script_path, f"{self._kubeclient._remote_uri}:"
+            script_path, f"{self._kubeclient._remote_uri}:{unique_script_name}"
         )
         self.logger.debug(_scp_cmd)
         subprocess.check_output(_scp_cmd)
@@ -111,12 +116,14 @@ class CloudBroker:
             "-n",
             "redpanda",
             "cp",
-            script_name,
+            unique_script_name,
             f"{self.nodeshell.pod_name}:{remote_path}",
         ]
         self.logger.debug(_cp_cmd)
         subprocess.check_output(_cp_cmd)
-        return
+
+        # Remove script from agent node
+        self._kubeclient._ssh_cmd(["rm", unique_script_name])
 
     def _query_broker(self, path, port=None):
         """

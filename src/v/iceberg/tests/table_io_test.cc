@@ -86,10 +86,12 @@ TEST_F(TableIOTest, TestVersionHintRoundTrip) {
 TEST_F(TableIOTest, TestInvalidVersionHint) {
     auto io = table_io(remote(), bucket_name);
     const auto test_path = version_hint_path{"foo/bar/baz"};
-    add_expectations({expectation{
-      .url = test_path().native(),
-      .body = "100000000000",
-    }});
+    add_expectations(
+      chunked_vector<expectation>::single(
+        expectation{
+          .url = test_path().native(),
+          .body = "100000000000",
+        }));
     auto dl_res = io.download_version_hint(test_path).get();
     ASSERT_TRUE(dl_res.has_error());
 }

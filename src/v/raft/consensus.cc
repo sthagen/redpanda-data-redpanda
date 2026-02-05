@@ -3305,7 +3305,7 @@ void consensus::trigger_leadership_notification() {
         // can make progress.
         _follower_recovery_state->yield();
     }
-    _compaction_coordinator.on_leadership_change(_leader_id);
+    _compaction_coordinator.on_leadership_change(_leader_id, _term);
     _leadership_changed.broadcast();
 }
 

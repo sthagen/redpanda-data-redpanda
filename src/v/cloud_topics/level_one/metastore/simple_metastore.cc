@@ -764,6 +764,7 @@ simple_metastore::get_extent_metadata_forwards(
     const auto& prt = prt_ref->get();
 
     extent_metadata_vec extents;
+    bool end_of_stream = true;
 
     auto min_it = std::ranges::lower_bound(
       prt.extents, min_offset, std::less<>{}, &extent::last_offset);
@@ -773,17 +774,19 @@ simple_metastore::get_extent_metadata_forwards(
             break;
         }
 
-        if (extents.size() >= max_num_extents) {
-            break;
-        }
-
         extents.push_back(
           {.base_offset = extent.base_offset,
            .last_offset = extent.last_offset,
            .max_timestamp = extent.max_timestamp});
+
+        if (extents.size() >= max_num_extents) {
+            end_of_stream = false;
+            break;
+        }
     }
 
-    return extent_metadata_response{.extents = std::move(extents)};
+    return extent_metadata_response{
+      .extents = std::move(extents), .end_of_stream = end_of_stream};
 }
 
 ss::future<std::expected<metastore::extent_metadata_response, metastore::errc>>
@@ -813,6 +816,7 @@ simple_metastore::get_extent_metadata_backwards(
     const auto& prt = prt_ref->get();
 
     extent_metadata_vec extents;
+    bool end_of_stream = true;
 
     auto max_it = std::ranges::lower_bound(
       prt.extents, max_offset, std::less<>{}, &extent::last_offset);
@@ -833,17 +837,19 @@ simple_metastore::get_extent_metadata_backwards(
             break;
         }
 
-        if (extents.size() >= max_num_extents) {
-            break;
-        }
-
         extents.push_back(
           {.base_offset = extent.base_offset,
            .last_offset = extent.last_offset,
            .max_timestamp = extent.max_timestamp});
+
+        if (extents.size() >= max_num_extents) {
+            end_of_stream = false;
+            break;
+        }
     }
 
-    return extent_metadata_response{.extents = std::move(extents)};
+    return extent_metadata_response{
+      .extents = std::move(extents), .end_of_stream = end_of_stream};
 }
 
 } // namespace cloud_topics::l1

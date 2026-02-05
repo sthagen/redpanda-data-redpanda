@@ -110,6 +110,7 @@ redpanda_cc_library(
         "//src/v/config",
         "//src/v/container:chunked_vector",
         "//src/v/model",
+        "//src/v/resource_mgmt:cpu_scheduling",
         "//src/v/ssx:sharded_service_container",
         "//src/v/storage",
         "@seastar",

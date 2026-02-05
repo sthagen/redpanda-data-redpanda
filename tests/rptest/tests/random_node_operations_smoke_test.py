@@ -918,6 +918,7 @@ class RedpandaNodeOperationsSmokeTest(RandomNodeOperationsBase):
                     "kafka": "debug",
                     "reconciler": "debug",
                     "cloud_topics": "debug",
+                    "offset_translator": "trace",
                 },
             ),
         )

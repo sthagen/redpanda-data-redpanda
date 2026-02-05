@@ -232,17 +232,7 @@ build:secure --config=relro
 build:release --compilation_mode opt
 build:release --config=secure
 build:release --@seastar//:stack_guards=False --@seastar//:debug=False
-build:release --//src/v/redpanda:lto=True
-build:release --copt -flto=thin --copt -ffat-lto-objects
 build:release --copt -g --strip=never
-build:release --@rules_rust//rust/settings:lto=fat
-build:release --@rules_rust//rust/settings:extra_rustc_flag=-Ccodegen-units=1
-# I've seen others claim these flags help with LTO and the final binary, but these also
-# require a specific version of clang and I don't really want to tie rustc version with
-# clang version.
-# build:release --@rules_rust//rust/settings:extra_rustc_flag=-Clinker-plugin-lto
-# build:release --@rules_rust//rust/settings:extra_rustc_flag=-Cembed-bitcode=yes
-# build:release --@rules_rust//rust/settings:extra_rustc_flag=-Clink-arg=-fuse-ld=lld
 # For now, disable the hardened libc++ for release builds for maximum perf 🚀
 build:release --cxxopt=-U_LIBCPP_ASSERTION_SEMANTIC
 build:release --cxxopt=-U_LIBCPP_HARDENING_MODE
@@ -252,9 +242,21 @@ build:release --host_cxxopt=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE
 
 # Separate PGO configs to be combined with release
 
+# Enable LTO only in PGO build to save time in other builds
+build:pgo-base --//src/v/redpanda:lto=True
+build:pgo-base --copt -flto=thin
+build:pgo-base --@rules_rust//rust/settings:lto=fat
+build:pgo-base --@rules_rust//rust/settings:extra_rustc_flag=-Ccodegen-units=1
+# I've seen others claim these flags help with LTO and the final binary, but these also
+# require a specific version of clang and I don't really want to tie rustc version with
+# clang version.
+# build:pgo-base --@rules_rust//rust/settings:extra_rustc_flag=-Clinker-plugin-lto
+# build:pgo-base --@rules_rust//rust/settings:extra_rustc_flag=-Cembed-bitcode=yes
+# build:pgo-base --@rules_rust//rust/settings:extra_rustc_flag=-Clink-arg=-fuse-ld=lld
+
 # Instrumentation/training step
 # Empty arg is intentional, we provide the path via env var at run time
-build:pgo-instrument --fdo_instrument=
+build:pgo-instrument --config=pgo-base --fdo_instrument=
 
 # Final/Optimization build step
 
@@ -265,7 +267,7 @@ build:pgo-instrument --fdo_instrument=
 
 # bazel seems to pass -fprofile-correction unconditionally but that only exists
 # in gcc so need to make clang ignore it
-build:pgo-optimize --copt -Wno-ignored-optimization-argument
+build:pgo-optimize --config=pgo-base --copt -Wno-ignored-optimization-argument
 
 
 build:stamp --stamp --workspace_status_command=./bazel/stamp_vars.sh

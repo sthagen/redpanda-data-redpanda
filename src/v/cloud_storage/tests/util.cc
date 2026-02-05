@@ -429,10 +429,10 @@ std::vector<in_memory_segment> make_segments(
     return s;
 }
 
-std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
+chunked_vector<cloud_storage_fixture::expectation> make_imposter_expectations(
   const cloud_storage::partition_manifest& m,
   const std::vector<in_memory_segment>& segments) {
-    std::vector<cloud_storage_fixture::expectation> results;
+    chunked_vector<cloud_storage_fixture::expectation> results;
     for (const auto& s : segments) {
         auto url = m.generate_segment_path(
           *m.get(s.base_offset), path_provider);
@@ -459,13 +459,13 @@ std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
     return results;
 }
 
-std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
+chunked_vector<cloud_storage_fixture::expectation> make_imposter_expectations(
   cloud_storage::partition_manifest& m,
   const std::vector<in_memory_segment>& segments,
   bool truncate_segments,
   model::offset_delta delta,
   segment_name_format sname_format) {
-    std::vector<cloud_storage_fixture::expectation> results;
+    chunked_vector<cloud_storage_fixture::expectation> results;
 
     for (const auto& s : segments) {
         auto body = s.bytes;
@@ -544,7 +544,7 @@ std::vector<in_memory_segment> setup_s3_imposter(
       inject == manifest_inconsistency::truncated_segments,
       model::offset_delta(0),
       sname_format);
-    fixture.set_expectations_and_listen(expectations);
+    fixture.set_expectations_and_listen(std::move(expectations));
     return segments;
 }
 
@@ -557,7 +557,7 @@ std::vector<in_memory_segment> setup_s3_imposter(
     cloud_storage::partition_manifest manifest(manifest_ntp, manifest_revision);
     auto expectations = make_imposter_expectations(
       manifest, segments, false, base_delta);
-    fixture.set_expectations_and_listen(expectations);
+    fixture.set_expectations_and_listen(std::move(expectations));
     return segments;
 }
 
@@ -574,7 +574,7 @@ std::vector<in_memory_segment> replace_segments(
     auto segments = make_segments(batches, base_offset);
 
     // remove old segments
-    std::vector<ss::sstring> segments_to_remove;
+    chunked_vector<ss::sstring> segments_to_remove;
     for (const auto& s : segments) {
         auto bo = s.base_offset;
         auto it = manifest.find(bo);
@@ -582,26 +582,24 @@ std::vector<in_memory_segment> replace_segments(
         auto path = manifest.generate_segment_path(*it, path_provider);
         segments_to_remove.push_back(path().native());
     }
-    fixture.remove_expectations(segments_to_remove);
+    fixture.remove_expectations(std::move(segments_to_remove));
 
     // remove manifest from the list
     auto manifest_url = manifest.get_manifest_path(path_provider)().string();
 
-    auto expectations = make_imposter_expectations(
+    auto all_expectations = make_imposter_expectations(
       manifest, segments, false, base_delta);
 
-    auto it = std::find_if(
-      expectations.begin(),
-      expectations.end(),
-      [manifest_url](const cloud_storage_fixture::expectation& e) {
-          return e.url == manifest_url;
-      });
-
-    vassert(it != expectations.end(), "Can't find manifest URL");
-    expectations.erase(it);
+    // Build new vector excluding manifest expectation
+    chunked_vector<cloud_storage_fixture::expectation> expectations;
+    for (auto& e : all_expectations) {
+        if (e.url != manifest_url) {
+            expectations.push_back(std::move(e));
+        }
+    }
 
     // add re-generated segments to the impostor
-    fixture.add_expectations(expectations);
+    fixture.add_expectations(std::move(expectations));
     return segments;
 }
 
@@ -616,7 +614,7 @@ std::vector<in_memory_segment> setup_s3_imposter(
       inject == manifest_inconsistency::duplicate_offset_ranges);
     cloud_storage::partition_manifest manifest(manifest_ntp, manifest_revision);
     auto expectations = make_imposter_expectations(manifest, segments);
-    fixture.set_expectations_and_listen(expectations);
+    fixture.set_expectations_and_listen(std::move(expectations));
     return segments;
 }
 
@@ -625,7 +623,7 @@ std::vector<in_memory_segment> setup_s3_imposter(
   const cloud_storage::partition_manifest& manifest) {
     auto segments = make_segments(manifest);
     auto expectations = make_imposter_expectations(manifest, segments);
-    fixture.set_expectations_and_listen(expectations);
+    fixture.set_expectations_and_listen(std::move(expectations));
     return segments;
 }
 

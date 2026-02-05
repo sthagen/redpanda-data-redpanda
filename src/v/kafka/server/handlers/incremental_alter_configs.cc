@@ -593,7 +593,7 @@ static ss::future<chunked_vector<resp_resource_t>> alter_broker_configuration(
         }
 
         // Validate contents of the request
-        config::configuration cfg;
+        auto cfg = config::make_config();
         for (const auto& i : req.upsert) {
             // Decode to a YAML object because that's what the property
             // interface expects.
@@ -602,7 +602,7 @@ static ss::future<chunked_vector<resp_resource_t>> alter_broker_configuration(
             const auto& yaml_value = i.value;
             auto val = YAML::Load(yaml_value);
 
-            if (!cfg.contains(i.key)) {
+            if (!cfg->contains(i.key)) {
                 responses.push_back(
                   make_error_alter_config_resource_response<resp_resource_t>(
                     resource,
@@ -611,7 +611,7 @@ static ss::future<chunked_vector<resp_resource_t>> alter_broker_configuration(
                 errored = true;
                 continue;
             }
-            auto& property = cfg.get(i.key);
+            auto& property = cfg->get(i.key);
             try {
                 property.set_value(val);
             } catch (...) {

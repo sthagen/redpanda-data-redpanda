@@ -97,7 +97,7 @@ public:
       std::optional<YAML::Node> audit_log_client_cfg = std::nullopt);
     void check_environment();
     void wire_up_and_start(
-      ::stop_signal&, bool test_mode = false, bool use_lsm_metastore = false);
+      ::stop_signal&, bool test_mode = false, bool use_lsm_metastore = true);
     void post_start_tasks();
 
     void init_crashtracker(::stop_signal& app_signal);

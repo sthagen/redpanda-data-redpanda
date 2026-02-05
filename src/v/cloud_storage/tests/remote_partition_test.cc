@@ -421,7 +421,7 @@ FIXTURE_TEST(test_overlapping_segments, cloud_storage_fixture) {
       .url = prefixed_partition_manifest_json_path(
         manifest.get_ntp(), manifest.get_revision_id()),
       .body = body};
-    set_expectations_and_listen(expectations);
+    set_expectations_and_listen(std::move(expectations));
     BOOST_REQUIRE(check_scan(*this, kafka::offset(0), 9));
 }
 
@@ -2306,7 +2306,7 @@ FIXTURE_TEST(test_out_of_range_query, cloud_storage_fixture) {
     cloud_storage::partition_manifest manifest(manifest_ntp, manifest_revision);
 
     auto expectations = make_imposter_expectations(manifest, segments);
-    set_expectations_and_listen(expectations);
+    set_expectations_and_listen(std::move(expectations));
 
     // Advance start offset as-if archiver did apply retention but didn't
     // run GC yet (the clean offset is not updated).
@@ -2326,11 +2326,11 @@ FIXTURE_TEST(test_out_of_range_query, cloud_storage_fixture) {
       ostr.str());
 
     auto manifest_url = manifest.get_manifest_path(path_provider)().string();
-    remove_expectations({manifest_url});
-    add_expectations({
-      cloud_storage_fixture::expectation{
-        .url = manifest_url, .body = serialize_manifest(manifest)},
-    });
+    remove_expectations(chunked_vector<ss::sstring>::single(manifest_url));
+    add_expectations(
+      chunked_vector<cloud_storage_fixture::expectation>::single(
+        cloud_storage_fixture::expectation{
+          .url = manifest_url, .body = serialize_manifest(manifest)}));
 
     auto base = segments[0].base_offset;
     auto max = segments[segments.size() - 1].max_offset;
@@ -2376,7 +2376,7 @@ FIXTURE_TEST(test_out_of_range_spillover_query, cloud_storage_fixture) {
     cloud_storage::partition_manifest manifest(manifest_ntp, manifest_revision);
 
     auto expectations = make_imposter_expectations(manifest, segments);
-    set_expectations_and_listen(expectations);
+    set_expectations_and_listen(std::move(expectations));
 
     for (int i = 0; i < 2; i++) {
         spillover_manifest spm(manifest_ntp, manifest_revision);
@@ -2400,10 +2400,12 @@ FIXTURE_TEST(test_out_of_range_spillover_query, cloud_storage_fixture) {
 
         auto s_data = spm.serialize().get();
         auto buf = s_data.stream.read_exactly(s_data.size_bytes).get();
-        add_expectations({cloud_storage_fixture::expectation{
-          .url = spm.get_manifest_path(path_provider)().string(),
-          .body = ss::sstring(buf.begin(), buf.end()),
-        }});
+        add_expectations(
+          chunked_vector<cloud_storage_fixture::expectation>::single(
+            cloud_storage_fixture::expectation{
+              .url = spm.get_manifest_path(path_provider)().string(),
+              .body = ss::sstring(buf.begin(), buf.end()),
+            }));
     }
 
     // Advance start offset as-if archiver did apply retention but didn't
@@ -2430,11 +2432,11 @@ FIXTURE_TEST(test_out_of_range_spillover_query, cloud_storage_fixture) {
       ostr.str());
 
     auto manifest_url = manifest.get_manifest_path(path_provider)().string();
-    remove_expectations({manifest_url});
-    add_expectations({
-      cloud_storage_fixture::expectation{
-        .url = manifest_url, .body = serialize_manifest(manifest)},
-    });
+    remove_expectations(chunked_vector<ss::sstring>::single(manifest_url));
+    add_expectations(
+      chunked_vector<cloud_storage_fixture::expectation>::single(
+        cloud_storage_fixture::expectation{
+          .url = manifest_url, .body = serialize_manifest(manifest)}));
 
     auto base = segments[0].base_offset;
     auto max = segments[segments.size() - 1].max_offset;
@@ -2517,11 +2519,11 @@ FIXTURE_TEST(test_out_of_range_spillover_query, cloud_storage_fixture) {
       manifest.get_manifest_path(path_provider),
       ostr.str());
 
-    remove_expectations({manifest_url});
-    add_expectations({
-      cloud_storage_fixture::expectation{
-        .url = manifest_url, .body = serialize_manifest(manifest)},
-    });
+    remove_expectations(chunked_vector<ss::sstring>::single(manifest_url));
+    add_expectations(
+      chunked_vector<cloud_storage_fixture::expectation>::single(
+        cloud_storage_fixture::expectation{
+          .url = manifest_url, .body = serialize_manifest(manifest)}));
 
     // Still can't query from the base offset.
     BOOST_REQUIRE_EXCEPTION(

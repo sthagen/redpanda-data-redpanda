@@ -1486,6 +1486,40 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             "There should be 2 mountable topics"
         )
 
+    @cluster(num_nodes=3, log_allow_list=MIGRATION_LOG_ALLOW_LIST)
+    def test_cloud_topic_unmount_rejected(self):
+        """
+        Verify that cloud topics cannot be unmounted. Cloud topics use a
+        different storage backend and don't support mount/unmount operations.
+        """
+        # Enable cloud topics feature
+        self.redpanda.set_cluster_config({"cloud_topics_enabled": True})
+
+        # Create a cloud topic
+        rpk = RpkTool(self.redpanda)
+        topic_name = "cloud-topic-test-unmount"
+        rpk.create_topic(
+            topic_name,
+            partitions=3,
+            replicas=3,
+            config={"redpanda.cloud_topic.enabled": "true"},
+        )
+
+        # Verify the topic was created
+        topics = list(rpk.list_topics())
+        assert topic_name in topics, f"Cloud topic {topic_name} should exist"
+
+        # Attempt to unmount the cloud topic - should fail
+        topic = TopicSpec(name=topic_name, partition_count=3)
+        self.assure_not_migratable(
+            topic=topic,
+            group=None,
+            expected_response={
+                "message": "Data migration contains resources that are not eligible",
+                "code": 400,
+            },
+        )
+
 
 class DataMigrationsMultiClusterTest(DataMigrationTestMixin):
     log_segment_size = 10 * 1024

@@ -170,11 +170,6 @@ configuration::configuration()
       "replies.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
-  , enable_coproc(*this, "enable_coproc")
-  , coproc_max_inflight_bytes(*this, "coproc_max_inflight_bytes")
-  , coproc_max_ingest_bytes(*this, "coproc_max_ingest_bytes")
-  , coproc_max_batch_size(*this, "coproc_max_batch_size")
-  , coproc_offset_flush_interval_ms(*this, "coproc_offset_flush_interval_ms")
   , data_transforms_enabled(
       *this,
       "data_transforms_enabled",
@@ -396,8 +391,6 @@ configuration::configuration()
       "headers.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
-  , seed_server_meta_topic_partitions(
-      *this, "seed_server_meta_topic_partitions")
   , raft_heartbeat_interval_ms(
       *this,
       "raft_heartbeat_interval_ms",
@@ -427,8 +420,6 @@ configuration::configuration()
       {.visibility = visibility::tunable},
       3)
 
-  , min_version(*this, "min_version")
-  , max_version(*this, "max_version")
   , raft_max_recovery_memory(
       *this,
       "raft_max_recovery_memory",
@@ -439,7 +430,6 @@ configuration::configuration()
        .visibility = visibility::tunable},
       std::nullopt,
       {.min = 32_MiB})
-  , raft_recovery_default_read_size(*this, "raft_recovery_default_read_size")
   , raft_enable_lw_heartbeat(
       *this,
       "raft_enable_lw_heartbeat",
@@ -553,8 +543,6 @@ configuration::configuration()
        .visibility = visibility::tunable},
       std::chrono::seconds(60 * 5),
       {.min = std::chrono::seconds(1)})
-  , use_scheduling_groups(*this, "use_scheduling_groups")
-  , enable_admin_api(*this, "enable_admin_api")
   , default_num_windows(
       *this,
       "default_num_windows",
@@ -575,9 +563,6 @@ configuration::configuration()
       "Quota manager GC frequency in milliseconds.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::chrono::milliseconds(30000))
-  , target_quota_byte_rate(*this, "target_quota_byte_rate")
-  , target_fetch_quota_byte_rate(*this, "target_fetch_quota_byte_rate")
-  , kafka_admin_topic_api_rate(*this, "kafka_admin_topic_api_rate")
   , cluster_id(
       *this,
       "cluster_id",
@@ -701,19 +686,12 @@ configuration::configuration()
       "controls the number retries.",
       {.visibility = visibility::tunable},
       30)
-  , tm_sync_timeout_ms(*this, "tm_sync_timeout_ms")
-  , tx_registry_sync_timeout_ms(*this, "tx_registry_sync_timeout_ms")
-  , tm_violation_recovery_policy(*this, "tm_violation_recovery_policy")
-  , rm_sync_timeout_ms(*this, "rm_sync_timeout_ms")
-  , find_coordinator_timeout_ms(*this, "find_coordinator_timeout_ms")
-  , seq_table_min_size(*this, "seq_table_min_size")
   , tx_timeout_delay_ms(
       *this,
       "tx_timeout_delay_ms",
       "Delay before scheduling the next check for timed out transactions.",
       {.visibility = visibility::user},
       1000ms)
-  , rm_violation_recovery_policy(*this, "rm_violation_recovery_policy")
   , fetch_reads_debounce_timeout(
       *this,
       "fetch_reads_debounce_timeout",
@@ -805,7 +783,6 @@ configuration::configuration()
       "milliseconds.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       100ms)
-  , alter_topic_cfg_timeout_ms(*this, "alter_topic_cfg_timeout_ms")
   , log_cleanup_policy(
       *this,
       "log_cleanup_policy",
@@ -827,10 +804,6 @@ configuration::configuration()
        .visibility = visibility::user},
       model::timestamp_type::create_time,
       {model::timestamp_type::create_time, model::timestamp_type::append_time})
-  , log_message_timestamp_alert_before_ms(
-      *this, "log_message_timestamp_alert_before_ms")
-  , log_message_timestamp_alert_after_ms(
-      *this, "log_message_timestamp_alert_after_ms")
   , log_message_timestamp_before_max_ms(
       *this,
       "log_message_timestamp_before_max_ms",
@@ -913,7 +886,6 @@ configuration::configuration()
       "Use separate scheduler group to handle parsing Kafka protocol requests",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       true)
-  , metadata_status_wait_timeout_ms(*this, "metadata_status_wait_timeout_ms")
   , kafka_tcp_keepalive_idle_timeout_seconds(
       *this,
       "kafka_tcp_keepalive_timeout",
@@ -1115,8 +1087,6 @@ configuration::configuration()
       "when this is set to `true`.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
-  , log_compaction_adjacent_merge_self_compaction_count(
-      *this, "log_compaction_adjacent_merge_self_compaction_count")
   , log_compaction_merge_max_segments_per_range(
       *this,
       "log_compaction_merge_max_segments_per_range",
@@ -1137,8 +1107,6 @@ configuration::configuration()
       "compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt)
-  , log_compaction_disable_tx_batch_removal(
-      *this, "log_compaction_disable_tx_batch_removal")
   , log_compaction_tx_batch_removal_enabled(
       *this,
       "log_compaction_tx_batch_removal_enabled",
@@ -1187,9 +1155,6 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       1,
       {.min = 1, .oddeven = odd_even_constraint::odd})
-  , transaction_coordinator_replication(
-      *this, "transaction_coordinator_replication")
-  , id_allocator_replication(*this, "id_allocator_replication")
   , transaction_coordinator_partitions(
       *this,
       "transaction_coordinator_partitions",
@@ -1243,8 +1208,6 @@ configuration::configuration()
       {.needs_restart = needs_restart::no,
        .visibility = visibility::deprecated},
       10s)
-  , create_topic_timeout_ms(*this, "create_topic_timeout_ms")
-  , wait_for_leader_timeout_ms(*this, "wait_for_leader_timeout_ms")
   , default_topic_partitions(
       *this,
       "default_topic_partitions",
@@ -1275,7 +1238,6 @@ configuration::configuration()
       "Timeout for append entry requests issued while replicating entries.",
       {.visibility = visibility::tunable},
       3s)
-  , recovery_append_timeout_ms(*this, "recovery_append_timeout_ms")
   , raft_replicate_batch_window_size(
       *this,
       "raft_replicate_batch_window_size",
@@ -1310,8 +1272,6 @@ configuration::configuration()
       "`seastar::smp_service_group` documentation).",
       {.visibility = visibility::tunable},
       std::nullopt)
-  , raft_max_concurrent_append_requests_per_follower(
-      *this, "raft_max_concurrent_append_requests_per_follower")
   , write_caching_default(
       *this,
       "write_caching_default",
@@ -1615,7 +1575,6 @@ configuration::configuration()
       "for the log reader.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt)
-  , tx_registry_log_capacity(*this, "tx_registry_log_capacity")
   , id_allocator_log_capacity(
       *this,
       "id_allocator_log_capacity",
@@ -1748,8 +1707,6 @@ configuration::configuration()
       "Interval between iterations of controller backend housekeeping loop.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1s)
-  , node_management_operation_timeout_ms(
-      *this, "node_management_operation_timeout_ms")
   , kafka_request_max_bytes(
       *this,
       "kafka_request_max_bytes",
@@ -1871,10 +1828,6 @@ configuration::configuration()
        .visibility = visibility::user},
       {},
       validate_connection_rate)
-  , kafka_client_group_byte_rate_quota(
-      *this, "kafka_client_group_byte_rate_quota")
-  , kafka_client_group_fetch_byte_rate_quota(
-      *this, "kafka_client_group_fetch_byte_rate_quota")
   , kafka_rpc_server_tcp_recv_buf(
       *this,
       "kafka_rpc_server_tcp_recv_buf",
@@ -2155,8 +2108,6 @@ configuration::configuration()
       "Timeout for IAM role related operations (ms)",
       {.visibility = visibility::tunable},
       30s)
-  , cloud_storage_reconciliation_ms(
-      *this, "cloud_storage_reconciliation_interval_ms")
   , cloud_storage_upload_loop_initial_backoff_ms(
       *this,
       "cloud_storage_upload_loop_initial_backoff_ms",
@@ -2609,8 +2560,6 @@ configuration::configuration()
       "violations. Normally, this options should be disabled.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
-  , cloud_storage_disable_metadata_consistency_checks(
-      *this, "cloud_storage_disable_metadata_consistency_checks")
   , cloud_storage_disable_archival_stm_rw_fence(
       *this,
       "cloud_storage_disable_archival_stm_rw_fence",
@@ -3238,8 +3187,6 @@ configuration::configuration()
       "Disable reusable preallocated buffers for LZ4 decompression.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       false)
-  , full_raft_configuration_recovery_pattern(
-      *this, "full_raft_configuration_recovery_pattern")
   , enable_auto_rebalance_on_node_add(
       *this,
       "enable_auto_rebalance_on_node_add",
@@ -3358,7 +3305,6 @@ configuration::configuration()
       "Enable automatic leadership rebalancing.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       true)
-  , leader_balancer_mode(*this, "leader_balancer_mode")
   , leader_balancer_idle_timeout(
       *this,
       "leader_balancer_idle_timeout",
@@ -3662,7 +3608,6 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       std::nullopt,
       {.min = 1})
-  , kafka_throughput_throttling_v2(*this, "kafka_throughput_throttling_v2")
   , kafka_throughput_replenish_threshold(
       *this,
       "kafka_throughput_replenish_threshold",
@@ -3676,13 +3621,6 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt,
       {.min = 1})
-  , kafka_quota_balancer_window(*this, "kafka_quota_balancer_window_ms")
-  , kafka_quota_balancer_node_period(
-      *this, "kafka_quota_balancer_node_period_ms")
-  , kafka_quota_balancer_min_shard_throughput_ratio(
-      *this, "kafka_quota_balancer_min_shard_throughput_ratio")
-  , kafka_quota_balancer_min_shard_throughput_bps(
-      *this, "kafka_quota_balancer_min_shard_throughput_bps")
   , kafka_throughput_controlled_api_keys(
       *this,
       "kafka_throughput_controlled_api_keys",
@@ -3801,8 +3739,6 @@ configuration::configuration()
       "subject.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       false)
-  , schema_registry_protobuf_renderer_v2(
-      *this, "schema_registry_protobuf_renderer_v2")
   , pp_sr_smp_max_non_local_requests(
       *this,
       "pp_sr_smp_max_non_local_requests",
@@ -3837,8 +3773,6 @@ configuration::configuration()
       {.needs_restart = needs_restart::yes, .visibility = visibility::user},
       0.5,
       {.min = 0.0, .max = 1.0})
-  , kafka_memory_batch_size_estimate_for_fetch(
-      *this, "kafka_memory_batch_size_estimate_for_fetch")
   , cpu_profiler_enabled(
       *this,
       "cpu_profiler_enabled",
@@ -4471,8 +4405,6 @@ configuration::configuration()
       "Option to explicitly disable enforcement of datalake disk space usage",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       true)
-  , datalake_disk_space_monitor_interval(
-      *this, "datalake_disk_space_monitor_interval")
   , datalake_scratch_space_size_bytes(
       *this,
       "datalake_scratch_space_size_bytes",

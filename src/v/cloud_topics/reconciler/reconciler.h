@@ -25,6 +25,7 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
+#include <seastar/core/scheduling.hh>
 #include <seastar/core/sharded.hh>
 
 #include <memory>
@@ -87,7 +88,7 @@ struct reconcile_error {
  */
 class reconciler {
 public:
-    reconciler(l1::io*, l1::metastore*);
+    reconciler(l1::io*, l1::metastore*, ss::scheduling_group);
 
     reconciler(const reconciler&) = delete;
     reconciler& operator=(const reconciler&) = delete;
@@ -270,6 +271,7 @@ private:
     ss::abort_source _as;
     reconciler_probe _probe;
     adaptive_interval _scheduler;
+    ss::scheduling_group _reconciler_sg;
 };
 
 } // namespace cloud_topics::reconciler

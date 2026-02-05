@@ -129,13 +129,6 @@ struct configuration final : public config_store {
     bounded_property<std::optional<int>> rpc_server_tcp_send_buf;
     bounded_property<int> rpc_client_connections_per_peer;
     property<bool> rpc_server_compress_replies;
-    // Coproc
-    deprecated_property enable_coproc;
-    deprecated_property coproc_max_inflight_bytes;
-    deprecated_property coproc_max_ingest_bytes;
-    deprecated_property coproc_max_batch_size;
-    deprecated_property coproc_offset_flush_interval_ms;
-
     // Data Transforms
     property<bool> data_transforms_enabled;
     property<std::chrono::milliseconds> data_transforms_commit_interval_ms;
@@ -165,14 +158,10 @@ struct configuration final : public config_store {
     property<bool> admin_api_require_auth;
 
     // Raft
-    deprecated_property seed_server_meta_topic_partitions;
     bounded_property<std::chrono::milliseconds> raft_heartbeat_interval_ms;
     bounded_property<std::chrono::milliseconds> raft_heartbeat_timeout_ms;
     property<size_t> raft_heartbeat_disconnect_failures;
-    deprecated_property min_version;
-    deprecated_property max_version;
     bounded_property<std::optional<size_t>> raft_max_recovery_memory;
-    deprecated_property raft_recovery_default_read_size;
     property<bool> raft_enable_lw_heartbeat;
     bounded_property<size_t> raft_recovery_concurrency_per_shard;
     property<std::optional<size_t>> raft_replica_max_pending_flush_bytes;
@@ -188,14 +177,9 @@ struct configuration final : public config_store {
     bounded_property<size_t> usage_num_windows;
     bounded_property<std::chrono::seconds> usage_window_width_interval_sec;
     bounded_property<std::chrono::seconds> usage_disk_persistance_interval_sec;
-    deprecated_property use_scheduling_groups;
-    deprecated_property enable_admin_api;
     bounded_property<int16_t> default_num_windows;
     bounded_property<std::chrono::milliseconds> default_window_sec;
     property<std::chrono::milliseconds> quota_manager_gc_sec;
-    deprecated_property target_quota_byte_rate;
-    deprecated_property target_fetch_quota_byte_rate;
-    deprecated_property kafka_admin_topic_api_rate;
     property<std::optional<ss::sstring>> cluster_id;
     property<bool> disable_metrics;
     property<bool> disable_public_metrics;
@@ -212,14 +196,7 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds> metadata_dissemination_interval_ms;
     property<std::chrono::milliseconds> metadata_dissemination_retry_delay_ms;
     property<int16_t> metadata_dissemination_retries;
-    deprecated_property tm_sync_timeout_ms;
-    deprecated_property tx_registry_sync_timeout_ms;
-    deprecated_property tm_violation_recovery_policy;
-    deprecated_property rm_sync_timeout_ms;
-    deprecated_property find_coordinator_timeout_ms;
-    deprecated_property seq_table_min_size;
     property<std::chrono::milliseconds> tx_timeout_delay_ms;
-    deprecated_property rm_violation_recovery_policy;
     property<std::chrono::milliseconds> fetch_reads_debounce_timeout;
     property<std::chrono::milliseconds> kafka_fetch_request_timeout_ms;
     enum_property<model::fetch_read_strategy> fetch_read_strategy;
@@ -230,11 +207,8 @@ struct configuration final : public config_store {
     bounded_property<double, numeric_bounds>
       fetch_pid_target_utilization_fraction;
     property<std::chrono::milliseconds> fetch_pid_max_debounce_ms;
-    deprecated_property alter_topic_cfg_timeout_ms;
     property<model::cleanup_policy_bitflags> log_cleanup_policy;
     enum_property<model::timestamp_type> log_message_timestamp_type;
-    deprecated_property log_message_timestamp_alert_before_ms;
-    deprecated_property log_message_timestamp_alert_after_ms;
     bounded_property<std::chrono::milliseconds>
       log_message_timestamp_before_max_ms;
     bounded_property<std::chrono::milliseconds>
@@ -246,7 +220,6 @@ struct configuration final : public config_store {
     property<bool> use_fetch_scheduler_group;
     property<bool> use_produce_scheduler_group;
     property<bool> use_kafka_handler_scheduler_group;
-    deprecated_property metadata_status_wait_timeout_ms;
     property<std::chrono::seconds> kafka_tcp_keepalive_idle_timeout_seconds;
     property<std::chrono::seconds> kafka_tcp_keepalive_probe_interval_seconds;
     property<uint32_t> kafka_tcp_keepalive_probes;
@@ -271,19 +244,15 @@ struct configuration final : public config_store {
     property<bool> log_disable_housekeeping_for_tests;
     property<bool> log_compaction_use_sliding_window;
     property<bool> log_compaction_pause_use_sliding_window;
-    deprecated_property log_compaction_adjacent_merge_self_compaction_count;
     property<std::optional<uint32_t>>
       log_compaction_merge_max_segments_per_range;
     property<std::optional<uint32_t>> log_compaction_merge_max_ranges;
-    deprecated_property log_compaction_disable_tx_batch_removal;
     property<bool> log_compaction_tx_batch_removal_enabled;
     // same as retention.size in kafka - TODO: size not implemented
     property<std::optional<size_t>> retention_bytes;
     property<int32_t> group_topic_partitions;
     bounded_property<int16_t> default_topic_replication;
     bounded_property<int16_t> minimum_topic_replication;
-    deprecated_property transaction_coordinator_replication;
-    deprecated_property id_allocator_replication;
     property<int32_t> transaction_coordinator_partitions;
     property<model::cleanup_policy_bitflags>
       transaction_coordinator_cleanup_policy;
@@ -295,19 +264,15 @@ struct configuration final : public config_store {
     // same as transaction.max.timeout.ms in Apache Kafka.
     property<std::chrono::milliseconds> transaction_max_timeout_ms;
     property<std::chrono::seconds> tx_log_stats_interval_s;
-    deprecated_property create_topic_timeout_ms;
-    deprecated_property wait_for_leader_timeout_ms;
     property<int32_t> default_topic_partitions;
     property<bool> disable_batch_cache;
     property<std::chrono::milliseconds> raft_election_timeout_ms;
     property<std::chrono::milliseconds> kafka_group_recovery_timeout_ms;
     property<std::chrono::milliseconds> replicate_append_timeout_ms;
-    deprecated_property recovery_append_timeout_ms;
     property<size_t> raft_replicate_batch_window_size;
     property<size_t> raft_learner_recovery_rate;
     property<bool> raft_recovery_throttle_disable_dynamic_mode;
     property<std::optional<uint32_t>> raft_smp_max_non_local_requests;
-    deprecated_property raft_max_concurrent_append_requests_per_follower;
     enum_property<model::write_caching_mode> write_caching_default;
 
     property<size_t> reclaim_min_size;
@@ -346,7 +311,6 @@ struct configuration final : public config_store {
     bounded_property<int16_t> storage_reserve_min_segments;
     property<std::optional<uint32_t>> debug_load_slice_warning_depth;
 
-    deprecated_property tx_registry_log_capacity;
     property<int16_t> id_allocator_log_capacity;
     property<int16_t> id_allocator_batch_size;
     property<bool> enable_sasl;
@@ -366,7 +330,6 @@ struct configuration final : public config_store {
     property<bool> kafka_enable_partition_reassignment;
     property<std::chrono::milliseconds>
       controller_backend_housekeeping_interval_ms;
-    deprecated_property node_management_operation_timeout_ms;
     property<uint32_t> kafka_request_max_bytes;
     property<uint32_t> kafka_batch_max_bytes;
     property<std::vector<ss::sstring>> kafka_nodelete_topics;
@@ -387,8 +350,6 @@ struct configuration final : public config_store {
     property<std::optional<uint32_t>> kafka_connections_max;
     property<std::optional<uint32_t>> kafka_connections_max_per_ip;
     property<std::vector<ss::sstring>> kafka_connections_max_overrides;
-    deprecated_property kafka_client_group_byte_rate_quota;
-    deprecated_property kafka_client_group_fetch_byte_rate_quota;
     bounded_property<std::optional<int>> kafka_rpc_server_tcp_recv_buf;
     bounded_property<std::optional<int>> kafka_rpc_server_tcp_send_buf;
     bounded_property<std::optional<size_t>> kafka_rpc_server_stream_recv_buf;
@@ -424,7 +385,6 @@ struct configuration final : public config_store {
       cloud_storage_azure_managed_identity_id;
     property<std::chrono::milliseconds>
       cloud_storage_roles_operation_timeout_ms;
-    deprecated_property cloud_storage_reconciliation_ms;
     property<std::chrono::milliseconds>
       cloud_storage_upload_loop_initial_backoff_ms;
     property<std::chrono::milliseconds>
@@ -499,7 +459,6 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds>
       cloud_storage_topic_purge_grace_period_ms;
     property<bool> cloud_storage_disable_upload_consistency_checks;
-    deprecated_property cloud_storage_disable_metadata_consistency_checks;
     property<bool> cloud_storage_disable_archival_stm_rw_fence;
     property<std::chrono::milliseconds> cloud_storage_hydration_timeout_ms;
     property<bool> cloud_storage_disable_remote_labels_for_tests;
@@ -600,7 +559,6 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds> kafka_qdc_depth_update_ms;
     property<size_t> zstd_decompress_workspace_bytes;
     property<bool> lz4_decompress_reusable_buffers_disabled;
-    deprecated_property full_raft_configuration_recovery_pattern;
     property<bool> enable_auto_rebalance_on_node_add;
 
     enterprise<enum_property<model::partition_autobalancing_mode>>
@@ -621,7 +579,6 @@ struct configuration final : public config_store {
     property<bool> partition_autobalancing_topic_aware;
 
     property<bool> enable_leader_balancer;
-    deprecated_property leader_balancer_mode;
     property<std::chrono::milliseconds> leader_balancer_idle_timeout;
     property<std::chrono::milliseconds> leader_balancer_mute_timeout;
     property<std::chrono::milliseconds> leader_balancer_node_mute_timeout;
@@ -683,13 +640,8 @@ struct configuration final : public config_store {
     bounded_property<std::optional<int64_t>> kafka_throughput_limit_node_in_bps;
     bounded_property<std::optional<int64_t>>
       kafka_throughput_limit_node_out_bps;
-    deprecated_property kafka_throughput_throttling_v2;
     bounded_property<std::optional<int64_t>>
       kafka_throughput_replenish_threshold;
-    deprecated_property kafka_quota_balancer_window;
-    deprecated_property kafka_quota_balancer_node_period;
-    deprecated_property kafka_quota_balancer_min_shard_throughput_ratio;
-    deprecated_property kafka_quota_balancer_min_shard_throughput_bps;
     property<std::vector<ss::sstring>> kafka_throughput_controlled_api_keys;
     property<std::vector<throughput_control_group>> kafka_throughput_control;
 
@@ -709,13 +661,11 @@ struct configuration final : public config_store {
     enterprise<property<bool>> schema_registry_enable_authorization;
     property<bool> schema_registry_always_normalize;
     property<bool> schema_registry_enable_qualified_subjects;
-    deprecated_property schema_registry_protobuf_renderer_v2;
     property<std::optional<uint32_t>> pp_sr_smp_max_non_local_requests;
     bounded_property<size_t> max_in_flight_schema_registry_requests_per_shard;
     bounded_property<size_t> max_in_flight_pandaproxy_requests_per_shard;
 
     bounded_property<double, numeric_bounds> kafka_memory_share_for_fetch;
-    deprecated_property kafka_memory_batch_size_estimate_for_fetch;
     // debug controls
     property<bool> cpu_profiler_enabled;
     bounded_property<std::chrono::milliseconds> cpu_profiler_sample_period_ms;
@@ -808,7 +758,6 @@ struct configuration final : public config_store {
       datalake_scheduler_time_slice_ms;
     bounded_property<size_t> datalake_translator_flush_bytes;
     property<bool> datalake_disk_space_monitor_enable;
-    deprecated_property datalake_disk_space_monitor_interval;
     property<size_t> datalake_scratch_space_size_bytes;
     bounded_property<double, numeric_bounds>
       datalake_scratch_space_soft_limit_size_percent;
@@ -893,6 +842,8 @@ bool development_feature_property<T>::development_features_enabled(
   const configuration& conf) {
     return conf.development_features_enabled();
 }
+
+std::unique_ptr<configuration> make_config();
 
 configuration& shard_local_cfg();
 

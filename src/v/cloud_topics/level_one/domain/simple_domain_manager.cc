@@ -638,7 +638,8 @@ simple_domain_manager::get_extent_metadata(
     }
     co_return rpc::get_extent_metadata_reply{
       .ec = rpc::errc::ok,
-      .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents))};
+      .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents)),
+      .end_of_stream = get_res->end_of_stream};
 }
 
 ss::future<rpc::flush_domain_reply>

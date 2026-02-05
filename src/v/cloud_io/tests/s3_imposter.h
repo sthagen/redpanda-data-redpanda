@@ -10,10 +10,12 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "cloud_storage_clients/client.h"
 #include "config/configuration.h"
+#include "container/chunked_vector.h"
 #include "http/tests/registered_urls.h"
 #include "utils/uuid.h"
 
@@ -21,9 +23,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/http/httpd.hh>
-
-#include <map>
-#include <vector>
 
 inline cloud_storage_clients::bucket_name random_test_bucket_name() {
     return cloud_storage_clients::bucket_name{
@@ -81,30 +80,30 @@ public:
     /// to null but there was PUT call that sent some data, subsequent GET call
     /// will retrieve this data.
     void set_expectations_and_listen(
-      std::vector<expectation> expectations,
+      chunked_vector<expectation> expectations,
       std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store
       = std::nullopt,
       std::set<ss::sstring> content_type_overrides = {});
 
     /// Update expectations for the REST API.
-    void add_expectations(std::vector<expectation> expectations);
-    void remove_expectations(std::vector<ss::sstring> urls);
+    void add_expectations(chunked_vector<expectation> expectations);
+    void remove_expectations(chunked_vector<ss::sstring> urls);
 
     /// Get object from S3 or nullopt if it doesn't exist
     std::optional<ss::sstring> get_object(const ss::sstring& url) const;
 
     /// Access all http requests ordered by time
-    const std::vector<http_test_utils::request_info>& get_requests() const;
+    const chunked_vector<http_test_utils::request_info>& get_requests() const;
 
     using req_pred_t
       = std::function<bool(const http_test_utils::request_info&)>;
 
     /// Access http requests matching the given predicate
-    std::vector<http_test_utils::request_info>
+    chunked_vector<http_test_utils::request_info>
     get_requests(req_pred_t predicate) const;
 
     /// Access all http requests ordered by target url
-    const std::multimap<ss::sstring, http_test_utils::request_info>&
+    const absl::btree_multimap<ss::sstring, http_test_utils::request_info>&
     get_targets() const;
 
     cloud_storage_clients::s3_configuration get_configuration();
@@ -127,7 +126,7 @@ public:
 private:
     void set_routes(
       ss::httpd::routes& r,
-      const std::vector<expectation>& expectations,
+      const chunked_vector<expectation>& expectations,
       std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store
       = std::nullopt,
       std::set<ss::sstring> content_type_overrides = {});
@@ -140,16 +139,16 @@ private:
     ss::shared_ptr<content_handler> _content_handler;
     std::unique_ptr<ss::httpd::handler_base> _handler;
     /// Contains saved requests
-    std::vector<http_test_utils::request_info> _requests;
+    chunked_vector<http_test_utils::request_info> _requests;
     /// Contains all accessed target urls
-    std::multimap<ss::sstring, http_test_utils::request_info> _targets;
+    absl::btree_multimap<ss::sstring, http_test_utils::request_info> _targets;
 
     /// Whether or not to search through expectations for content when handling
     /// a list GET request.
     bool _search_on_get_list{true};
 
-    std::vector<req_pred_t> _fail_request_if;
-    std::vector<http_test_utils::response> _failure_response;
+    chunked_vector<req_pred_t> _fail_request_if;
+    chunked_vector<http_test_utils::response> _failure_response;
 };
 
 class enable_cloud_storage_fixture {
@@ -163,8 +162,8 @@ public:
 
 cloud_storage_clients::http_byte_range parse_byte_header(std::string_view s);
 
-std::vector<cloud_storage_clients::object_key>
+chunked_vector<cloud_storage_clients::object_key>
 keys_from_delete_objects_request(const http_test_utils::request_info&);
 
-std::vector<std::pair<ss::sstring, cloud_storage_clients::object_key>>
+chunked_vector<std::pair<ss::sstring, cloud_storage_clients::object_key>>
 keys_from_batch_delete_request(const http_test_utils::request_info&);

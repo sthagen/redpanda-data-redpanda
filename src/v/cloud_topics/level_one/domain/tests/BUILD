@@ -7,6 +7,7 @@ redpanda_cc_gtest(
         "db_domain_manager_test.cc",
     ],
     cpu = 1,
+    memory = "2GiB",
     deps = [
         "//src/v/cloud_io:remote",
         "//src/v/cloud_io/tests:s3_imposter",

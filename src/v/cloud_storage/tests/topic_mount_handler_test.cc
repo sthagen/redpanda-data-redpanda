@@ -324,13 +324,15 @@ TEST_F(TopicMountHandlerListSuite, TestListMountableTopics) {
     // Create some dummy paths in cloud storage to make sure we don't fail in
     // unexpected ways when list_objects returns results that can't be parsed
     // as topic mount manifests paths.
-    add_expectations({
-      expectation{.url = "foobar"},
-      expectation{.url = "migration/foo"},
-      expectation{.url = "migration/foo/bar"},
-      expectation{.url = "migration/foo/bar/baz"},
-      expectation{.url = "migration/foo/bar/baz/qux"},
-    });
+    {
+        chunked_vector<expectation> exps;
+        exps.push_back(expectation{.url = "foobar"});
+        exps.push_back(expectation{.url = "migration/foo"});
+        exps.push_back(expectation{.url = "migration/foo/bar"});
+        exps.push_back(expectation{.url = "migration/foo/bar/baz"});
+        exps.push_back(expectation{.url = "migration/foo/bar/baz/qux"});
+        add_expectations(std::move(exps));
+    }
 
     ASSERT_TRUE(result);
     ASSERT_TRUE(result.value().empty());

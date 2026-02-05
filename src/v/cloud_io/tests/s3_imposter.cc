@@ -39,7 +39,7 @@ uint16_t unit_test_httpd_port_number() { return 4442; }
 namespace {
 
 using expectation_map_t
-  = std::map<ss::sstring, s3_imposter_fixture::expectation>;
+  = absl::btree_map<ss::sstring, s3_imposter_fixture::expectation>;
 
 // Takes the input map of keys to expectations and returns a stringified XML
 // corresponding to the appropriate S3 response.
@@ -49,7 +49,7 @@ ss::sstring list_objects_resp(
   ss::sstring delimiter,
   std::optional<size_t> max_keys_opt,
   std::optional<ss::sstring> continuation_token_opt) {
-    std::map<ss::sstring, size_t> content_key_to_size;
+    absl::btree_map<ss::sstring, size_t> content_key_to_size;
     std::set<ss::sstring> common_prefixes;
     // Filter by prefix and group by the substring between the prefix and first
     // delimiter.
@@ -165,7 +165,7 @@ uint64_t string_view_to_ul(std::string_view sv) {
 
 struct s3_imposter_fixture::content_handler {
     content_handler(
-      const std::vector<s3_imposter_fixture::expectation>& exp,
+      const chunked_vector<s3_imposter_fixture::expectation>& exp,
       s3_imposter_fixture& imp,
       std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store
       = std::nullopt)
@@ -176,13 +176,13 @@ struct s3_imposter_fixture::content_handler {
         }
     }
 
-    void insert(const std::vector<s3_imposter_fixture::expectation>& list) {
+    void insert(const chunked_vector<s3_imposter_fixture::expectation>& list) {
         for (const auto& exp : list) {
             expectations.insert(std::make_pair(exp.url, exp));
         }
     }
 
-    void remove(const std::vector<ss::sstring>& urls) {
+    void remove(const chunked_vector<ss::sstring>& urls) {
         for (const auto& u : urls) {
             expectations.erase(u);
         }
@@ -474,15 +474,14 @@ uint16_t s3_imposter_fixture::httpd_port_number() {
     return unit_test_httpd_port_number();
 }
 
-const std::vector<http_test_utils::request_info>&
+const chunked_vector<http_test_utils::request_info>&
 s3_imposter_fixture::get_requests() const {
     return _requests;
 }
 
-std::vector<http_test_utils::request_info> s3_imposter_fixture::get_requests(
+chunked_vector<http_test_utils::request_info> s3_imposter_fixture::get_requests(
   s3_imposter_fixture::req_pred_t predicate) const {
-    std::vector<http_test_utils::request_info> matching_requests;
-    matching_requests.reserve(_requests.size());
+    chunked_vector<http_test_utils::request_info> matching_requests;
     std::copy_if(
       _requests.cbegin(),
       _requests.cend(),
@@ -491,13 +490,13 @@ std::vector<http_test_utils::request_info> s3_imposter_fixture::get_requests(
     return matching_requests;
 }
 
-const std::multimap<ss::sstring, http_test_utils::request_info>&
+const absl::btree_multimap<ss::sstring, http_test_utils::request_info>&
 s3_imposter_fixture::get_targets() const {
     return _targets;
 }
 
 void s3_imposter_fixture::set_expectations_and_listen(
-  std::vector<s3_imposter_fixture::expectation> expectations,
+  chunked_vector<s3_imposter_fixture::expectation> expectations,
   std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store,
   std::set<ss::sstring> content_type_overrides) {
     const ss::sstring url_prefix = "/" + url_base();
@@ -522,7 +521,7 @@ void s3_imposter_fixture::set_expectations_and_listen(
 }
 
 void s3_imposter_fixture::add_expectations(
-  std::vector<s3_imposter_fixture::expectation> expectations) {
+  chunked_vector<s3_imposter_fixture::expectation> expectations) {
     vassert(_content_handler != nullptr, "Imposter is not initialized");
     const ss::sstring url_prefix = "/" + url_base();
     for (auto& expectation : expectations) {
@@ -532,7 +531,8 @@ void s3_imposter_fixture::add_expectations(
     _content_handler->insert(expectations);
 }
 
-void s3_imposter_fixture::remove_expectations(std::vector<ss::sstring> urls) {
+void s3_imposter_fixture::remove_expectations(
+  chunked_vector<ss::sstring> urls) {
     vassert(_content_handler != nullptr, "Imposter is not initialized");
     const ss::sstring url_prefix = "/" + url_base();
     for (auto& url : urls) {
@@ -561,7 +561,7 @@ ss::sstring s3_imposter_fixture::url_base() const {
 
 void s3_imposter_fixture::set_routes(
   ss::httpd::routes& r,
-  const std::vector<s3_imposter_fixture::expectation>& expectations,
+  const chunked_vector<s3_imposter_fixture::expectation>& expectations,
   std::optional<absl::flat_hash_set<ss::sstring>> headers_to_store,
   std::set<ss::sstring> content_type_overrides) {
     using namespace ss::httpd;
@@ -626,9 +626,9 @@ cloud_storage_clients::http_byte_range parse_byte_header(std::string_view s) {
       string_view_to_ul(bytes_value.substr(split_at + 1)));
 }
 
-std::vector<cloud_storage_clients::object_key>
+chunked_vector<cloud_storage_clients::object_key>
 keys_from_delete_objects_request(const http_test_utils::request_info& req) {
-    std::vector<cloud_storage_clients::object_key> keys;
+    chunked_vector<cloud_storage_clients::object_key> keys;
 
     auto buffer_stream = std::istringstream{std::string{req.content}};
     boost::property_tree::ptree tree;
@@ -643,9 +643,10 @@ keys_from_delete_objects_request(const http_test_utils::request_info& req) {
     return keys;
 }
 
-std::vector<std::pair<ss::sstring, cloud_storage_clients::object_key>>
+chunked_vector<std::pair<ss::sstring, cloud_storage_clients::object_key>>
 keys_from_batch_delete_request(const http_test_utils::request_info& req) {
-    std::vector<std::pair<ss::sstring, cloud_storage_clients::object_key>> keys;
+    chunked_vector<std::pair<ss::sstring, cloud_storage_clients::object_key>>
+      keys;
     auto buffer_stream = std::istringstream{std::string{req.content}};
 
     // crudely iterate over request lines, stripping out object keys

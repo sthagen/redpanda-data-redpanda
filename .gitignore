@@ -281,8 +281,5 @@ tests/java/iceberg-rest-catalog/.gradle
 # needs to be ignored to not leave a dirty git state
 bazel_cc_flags.json
 
-# rpk CLAUDE.md
-/**/**/CLAUDE.md
-
 # claude local settings
 **/.claude/settings.local.json

@@ -2182,12 +2182,12 @@ admin_server::patch_cluster_config_handler(
         // the real live configuration object, that will be updated
         // by config_manager much after config is written to controller
         // log.
-        config::configuration cfg;
+        auto cfg = config::make_config();
 
         // Populate the temporary config object with existing values
         config::shard_local_cfg().for_each(
           [&cfg](const config::base_property& p) {
-              auto& tmp_p = cfg.get(p.name());
+              auto& tmp_p = cfg->get(p.name());
               tmp_p = p;
           });
 
@@ -2206,11 +2206,11 @@ admin_server::patch_cluster_config_handler(
             // just a few lines above.
             auto val = YAML::Load(yaml_value);
 
-            if (!cfg.contains(yaml_name)) {
+            if (!cfg->contains(yaml_name)) {
                 errors[yaml_name] = "Unknown property";
                 continue;
             }
-            auto& property = cfg.get(yaml_name);
+            auto& property = cfg->get(yaml_name);
 
             try {
                 auto validation_err = property.validate(val);
@@ -2291,8 +2291,8 @@ admin_server::patch_cluster_config_handler(
         }
 
         for (const auto& key : update.remove) {
-            if (cfg.contains(key)) {
-                cfg.get(key).reset();
+            if (cfg->contains(key)) {
+                cfg->get(key).reset();
             } else {
                 errors[key] = "Unknown property";
             }
@@ -2301,7 +2301,7 @@ admin_server::patch_cluster_config_handler(
         // After checking each individual property, check for
         // any multi-property validation errors
         config_multi_property_validation(
-          auth_state.get_username(), _schema_registry, update, cfg, errors);
+          auth_state.get_username(), _schema_registry, update, *cfg, errors);
 
         if (!errors.empty()) {
             json::StringBuffer buf;
@@ -5113,6 +5113,8 @@ admin_server::restart_service_handler(std::unique_ptr<ss::http::request> req) {
 
     vlog(
       adminlog.info, "Restart redpanda service: {}", to_string_view(*service));
-    co_await restart_redpanda_service(*service);
+    co_await container().invoke_on(0, [service](admin_server& server) {
+        return server.restart_redpanda_service(*service);
+    });
     co_return ss::json::json_return_type(ss::json::json_void());
 }

@@ -230,7 +230,7 @@ TEST_F(SnapshotRemoverTest, TestRemoveMissingFiles) {
         ASSERT_TRUE(get_object(url).has_value()) << url;
 
         // Remove the file from s3.
-        remove_expectations({filename});
+        remove_expectations(chunked_vector<ss::sstring>::single(filename));
 
         // Sanity check that we are now missing the file.
         ASSERT_FALSE(has_object(s.manifest_list_path));

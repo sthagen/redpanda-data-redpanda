@@ -89,10 +89,6 @@ struct throughput_test_case {
 };
 
 future<size_t> run_tc(throughput_test_case tc) {
-    co_await ss::smp::invoke_on_all([fetch_tp{tc.fetch_tp}]() {
-        config::shard_local_cfg().target_fetch_quota_byte_rate.set_value(
-          fetch_tp);
-    });
     co_await test_quota_manager(total_requests / ss::smp::count, tc.use_unique);
     co_return total_requests;
 }
