@@ -122,7 +122,7 @@ private:
 
     access_point_uri _ap;
 
-    s3_url_style _ap_style;
+    std::optional<s3_url_style> _ap_style;
     /// Applies credentials to http requests by adding headers and signing
     /// request payload. Shared pointer so that the credentials can be rotated
     /// through the client pool.

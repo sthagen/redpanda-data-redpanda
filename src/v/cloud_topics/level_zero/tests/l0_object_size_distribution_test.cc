@@ -41,13 +41,9 @@ static const model::ntp
 
 namespace cloud_topics::l0 {
 struct write_request_balancer_accessor {
-    static void disable_data_threshold_uploads(
-      write_request_scheduler<seastar::manual_clock>* s) {
-        s->_test_only_disable_data_threshold = true;
-    }
-    static void disable_time_based_fallback(
-      write_request_scheduler<seastar::manual_clock>* s) {
-        s->_test_only_disable_time_based_fallback = true;
+    static void
+    disable_background_loop(write_request_scheduler<seastar::manual_clock>* s) {
+        s->_test_only_disable_background_loop = true;
     }
 };
 } // namespace cloud_topics::l0
@@ -112,8 +108,7 @@ public:
 
 class L0ObjectSizeDistFixture : public seastar_test {
 public:
-    ss::future<>
-    start(bool disable_data_threshold, bool disable_time_based_fallback) {
+    ss::future<> start(bool disable_bg_loop) {
         co_await pipeline.start();
 
         /*
@@ -124,13 +119,9 @@ public:
         }));
 
         co_await scheduler.invoke_on_all([&](auto& sched) {
-            if (disable_data_threshold) {
-                l0::write_request_balancer_accessor::
-                  disable_data_threshold_uploads(&sched);
-            }
-            if (disable_time_based_fallback) {
-                l0::write_request_balancer_accessor::
-                  disable_time_based_fallback(&sched);
+            if (disable_bg_loop) {
+                l0::write_request_balancer_accessor::disable_background_loop(
+                  &sched);
             }
         });
 
@@ -205,8 +196,7 @@ TEST_F(L0ObjectSizeDistFixture, ThreeToOne) {
      * uploaded as a single object by the scheduler/batcher.
      */
     ASSERT_EQ(seastar::smp::count, 3);
-
-    start(true, false).get();
+    start(false).get();
 
     const auto timeout = 1s;
     auto deadline = ss::manual_clock::now() + timeout;
@@ -224,17 +214,24 @@ TEST_F(L0ObjectSizeDistFixture, ThreeToOne) {
     }
 
     // upload the built batches from each core
-    pipeline
-      .invoke_on_all([&](auto& p) {
-          return seastar::async([&] {
-              auto data = std::move(batches[seastar::this_shard_id()]);
-              p.write_and_debounce(
-                 test_ntp0, min_epoch, std::move(data), deadline)
-                .discard_result()
-                .get();
-          });
-      })
-      .get();
+    auto write_fut = pipeline.invoke_on_all([&](auto& p) {
+        auto data = std::move(batches[seastar::this_shard_id()]);
+        return p
+          .write_and_debounce(test_ntp0, min_epoch, std::move(data), deadline)
+          .discard_result();
+    });
+
+    // Allow requests to be propagated to the scheduler
+    ss::sleep(5ms).get();
+
+    // Advance time to trigger the scheduler
+    ss::manual_clock::advance(300ms);
+
+    // Give up the shard to allow the background fiber of the scheduler to run
+    ss::sleep(1ms).get();
+
+    // Wait for all write operations to complete
+    std::move(write_fut).get();
 
     // we expect there to have only been one object uploaded for all the data
     ASSERT_EQ(num_uploads().get(), 1);

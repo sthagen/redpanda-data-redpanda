@@ -28,6 +28,10 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sharded.hh>
 
+namespace cloud_topics {
+class state_accessors;
+} // namespace cloud_topics
+
 namespace cluster::cloud_metadata {
 
 class offsets_recovery_requestor;
@@ -52,7 +56,8 @@ public:
       ss::shared_ptr<producer_id_recovery_manager> producer_id_recovery,
       ss::shared_ptr<offsets_recovery_requestor> offsets_recovery,
       ss::sharded<cluster_recovery_table>&,
-      consensus_ptr raft0);
+      consensus_ptr raft0,
+      ss::sharded<cloud_topics::state_accessors>* ct_state);
 
     void start();
     ss::future<> stop_and_wait();
@@ -125,6 +130,9 @@ private:
     ss::sharded<cluster_recovery_table>& _recovery_table;
 
     consensus_ptr _raft0;
+
+    // Cloud topics metastore state. Null if cloud_topics isn't enabled.
+    ss::sharded<cloud_topics::state_accessors>* _ct_state;
 };
 
 } // namespace cluster::cloud_metadata

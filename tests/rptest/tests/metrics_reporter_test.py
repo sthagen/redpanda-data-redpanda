@@ -11,6 +11,7 @@ import hashlib
 import json
 import random
 
+import requests
 from ducktape.utils.util import wait_until
 
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import security_pb2
@@ -20,7 +21,7 @@ from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.http_server import HttpServer
-from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST
+from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, SchemaRegistryConfig
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.rpenv import sample_license
 
@@ -385,3 +386,104 @@ class UniqueGroupCountMetricsTest(RedpandaTest):
         _wait_for_group_count(4)
 
         self.metrics.stop()
+
+
+class SchemaRegistryContextMetricsTest(RedpandaTest):
+    # Simple Avro schema for testing
+    SCHEMA_DEF = (
+        '{"type":"record","name":"test","fields":[{"name":"f1","type":"string"}]}'
+    )
+
+    def __init__(self, test_ctx):
+        self._ctx = test_ctx
+        self.metrics = MetricsReporterServer(self._ctx)
+        super(SchemaRegistryContextMetricsTest, self).__init__(
+            test_context=test_ctx,
+            num_brokers=1,
+            extra_rp_conf={
+                "health_monitor_max_metadata_age": 1000,
+                "schema_registry_enable_qualified_subjects": True,
+                **self.metrics.rp_conf(),
+            },
+            schema_registry_config=SchemaRegistryConfig(),
+        )
+
+    def setUp(self):
+        self.metrics.start()
+        self.redpanda.start()
+
+    def tearDown(self):
+        self.metrics.stop()
+        super().tearDown()
+
+    def _get_sr_base_uri(self):
+        return f"http://{self.redpanda.nodes[0].account.hostname}:8081"
+
+    def _register_schema(self, subject: str):
+        """Register a schema to a subject (may be context-qualified)."""
+        uri = f"{self._get_sr_base_uri()}/subjects/{subject}/versions"
+        headers = {
+            "Content-Type": "application/vnd.schemaregistry.v1+json",
+            "Accept": "application/vnd.schemaregistry.v1+json",
+        }
+        data = json.dumps({"schema": self.SCHEMA_DEF})
+        resp = requests.post(uri, headers=headers, data=data)
+        assert resp.status_code == 200, f"Failed to register schema: {resp.text}"
+        return resp.json()
+
+    @cluster(num_nodes=2)
+    def test_schema_registry_context_count(self):
+        """
+        Test that schema_registry.context_count correctly counts non-default contexts.
+        """
+
+        def _get_context_count() -> int | None:
+            if self.metrics.requests():
+                r = self.metrics.reports()[-1]
+                self.logger.info(f"Latest request: {r}")
+                sr = r.get("schema_registry")
+                if sr is None:
+                    return None
+                return sr.get("context_count", None)
+            return None
+
+        def _wait_for_context_count(expected: int):
+            def check():
+                count = _get_context_count()
+                self.logger.info(
+                    f"Current context_count: {count}, expected: {expected}"
+                )
+                return count == expected
+
+            wait_until(check, timeout_sec=30, backoff_sec=1)
+
+        # Initially, context_count should be 0 (only default context exists)
+        _wait_for_context_count(0)
+
+        # Register a schema in the default context (no prefix)
+        self.logger.info("Registering schema in default context")
+        self._register_schema("default-subject")
+
+        # Still 0 non-default contexts
+        _wait_for_context_count(0)
+
+        # Register a schema in a non-default context using qualified subject
+        self.logger.info("Creating first non-default context")
+        self._register_schema(":.ctx1:subject1")
+
+        # Now 1 non-default context
+        _wait_for_context_count(1)
+
+        # Register another schema in the same context
+        self.logger.info("Registering another schema in same context")
+        self._register_schema(":.ctx1:subject2")
+
+        # Still 1 non-default context (same context)
+        _wait_for_context_count(1)
+
+        # Create a second non-default context
+        self.logger.info("Creating second non-default context")
+        self._register_schema(":.ctx2:subject1")
+
+        # Now 2 non-default contexts
+        _wait_for_context_count(2)

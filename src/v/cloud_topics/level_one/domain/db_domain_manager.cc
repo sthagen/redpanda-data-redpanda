@@ -468,6 +468,31 @@ db_domain_manager::get_offsets(rpc::get_offsets_request req) {
     };
 }
 
+ss::future<rpc::get_size_reply>
+db_domain_manager::get_size(rpc::get_size_request req) {
+    auto gl_res = co_await gate_and_open_reads();
+    if (!gl_res.has_value()) {
+        co_return rpc::get_size_reply{.ec = gl_res.error()};
+    }
+    auto reader = state_reader(db_->db().create_snapshot());
+    auto metadata_res = co_await reader.get_metadata(req.tp);
+    if (!metadata_res.has_value()) {
+        co_return rpc::get_size_reply{
+          .ec = log_and_convert(metadata_res.error(), "Error getting metadata"),
+        };
+    }
+    if (!metadata_res->has_value()) {
+        co_return rpc::get_size_reply{
+          .ec = rpc::errc::missing_ntp,
+        };
+    }
+    const auto& metadata = **metadata_res;
+    co_return rpc::get_size_reply{
+      .ec = rpc::errc::ok,
+      .size = metadata.size,
+    };
+}
+
 ss::future<rpc::get_compaction_info_reply>
 db_domain_manager::do_get_compaction_info(
   const gate_read_lock&,

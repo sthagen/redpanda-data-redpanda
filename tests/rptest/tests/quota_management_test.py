@@ -35,7 +35,7 @@ from rptest.services.redpanda import (
     ClusterNode,
 )
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import expect_exception
+from rptest.util import expect_exception, wait_until_result
 
 log_config = LoggingConfig(
     "info",
@@ -769,6 +769,15 @@ class QuotaManagementUpgradeTest(EndToEndTest, QuotaManagementUtils):
     def __init__(self, test_context):
         super().__init__(test_context=test_context)
 
+    def alter_quotas(self, body: dict[str, Any], node: ClusterNode | None = None):
+        return wait_until_result(
+            lambda: (True, self.kcl.raw_alter_quotas(body, node=node)),
+            timeout_sec=10,
+            backoff_sec=1,
+            retry_on_exc=True,
+            err_msg="Failed to get a non_throwing alter quotas request",
+        )
+
     def transfer_leadership(self, new_leader: ClusterNode):
         """
         Request leadership transfer of the controller and check that it completes successfully.
@@ -830,7 +839,7 @@ class QuotaManagementUpgradeTest(EndToEndTest, QuotaManagementUtils):
 
         # Sanity check: v25.3 doesn't support user quotas
         self.logger.debug("Verify that user quotas are not supported in older version")
-        res = self.kcl.raw_alter_quotas(alter_user_quota_body)
+        res = self.alter_quotas(alter_user_quota_body)
         assert len(res["Entries"]) == 1, f"Unexpected entries: {res}"
         entry = res["Entries"][0]
         assert entry["ErrorCode"] == 35, f"Unexpected entry: {entry}"
@@ -844,7 +853,7 @@ class QuotaManagementUpgradeTest(EndToEndTest, QuotaManagementUtils):
         wait_for_num_versions(self.redpanda, 2)
 
         self.logger.debug("Verify that during upgrade user quotas are disabled")
-        res = self.kcl.raw_alter_quotas(alter_user_quota_body)
+        res = self.alter_quotas(alter_user_quota_body)
         assert len(res["Entries"]) == 1, f"Unexpected entries: {res}"
         entry = res["Entries"][0]
         assert entry["ErrorCode"] == 35, f"Unexpected entry: {entry}"
@@ -856,7 +865,7 @@ class QuotaManagementUpgradeTest(EndToEndTest, QuotaManagementUtils):
         wait_for_num_versions(self.redpanda, 1)
 
         self.logger.debug("Verify that user quotas are now enabled")
-        res = self.kcl.raw_alter_quotas(alter_user_quota_body, node=second_node)
+        res = self.alter_quotas(alter_user_quota_body, node=second_node)
         assert len(res["Entries"]) == 1, f"Unexpected entries: {res}"
         entry = res["Entries"][0]
         assert entry["ErrorCode"] == 0, f"Unexpected entry: {entry}"

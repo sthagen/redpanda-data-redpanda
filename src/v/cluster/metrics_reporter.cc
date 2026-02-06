@@ -245,6 +245,16 @@ metrics_reporter::wait_cluster_info_initialized(ss::abort_source& as) {
     }
 }
 
+metrics_reporter::metrics_contributor_id
+metrics_reporter::register_metrics_contributor(metrics_contributor_fn fn) {
+    return _metrics_contributors.register_cb(std::move(fn));
+}
+
+void metrics_reporter::unregister_metrics_contributor(
+  metrics_contributor_id id) {
+    _metrics_contributors.unregister_cb(id);
+}
+
 void metrics_reporter::report_metrics() {
     ssx::background = ssx::spawn_with_gate_then(_gate, [this] {
                           return do_report_metrics().finally([this] {
@@ -445,6 +455,16 @@ metrics_reporter::build_metrics_snapshot() {
 
     if (auto km = get_kubernetes_metrics(); km) {
         snapshot.kubernetes.emplace(std::move(*km));
+    }
+
+    // Invoke external metrics contributors
+    auto futs = _metrics_contributors.notify(snapshot);
+    for (auto& fut : futs) {
+        try {
+            co_await std::move(fut);
+        } catch (const std::exception& e) {
+            vlog(clusterlog.error, "Metrics contributor failed: {}", e.what());
+        }
     }
 
     co_return snapshot;
@@ -774,6 +794,11 @@ void rjson_serialize(
     w.Key("schema_registry_shadowed");
     w.Bool(snapshot.schema_registry_shadowed);
 
+    if (snapshot.schema_registry.has_value()) {
+        w.Key("schema_registry");
+        rjson_serialize(w, snapshot.schema_registry.value());
+    }
+
     w.EndObject();
 }
 
@@ -844,6 +869,15 @@ void rjson_serialize(
     w.Key("kafka_advertised_listeners");
     rjson_serialize(w, nm.advertised_listeners);
 
+    w.EndObject();
+}
+
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w,
+  const cluster::metrics_reporter::schema_registry_metrics& sr) {
+    w.StartObject();
+    w.Key("context_count");
+    w.Uint(sr.context_count);
     w.EndObject();
 }
 } // namespace json

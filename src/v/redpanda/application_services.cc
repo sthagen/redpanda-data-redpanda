@@ -82,7 +82,8 @@ make_upload_controller_config(ss::scheduling_group sg, uint64_t fs_avail);
 void application::wire_up_redpanda_services(
   model::node_id node_id,
   ::stop_signal& app_signal,
-  std::optional<cloud_storage_clients::bucket_name>& bucket_name) {
+  std::optional<cloud_storage_clients::bucket_name>& bucket_name,
+  cloud_topics::test_fixture_cfg ct_test_cfg) {
     ss::smp::invoke_on_all([] {
         resources::available_memory::local().register_metrics();
     }).get();
@@ -717,7 +718,8 @@ void application::wire_up_redpanda_services(
             &metadata_cache,
             &_connection_cache,
             bucket_name.value(),
-            &storage)
+            &storage,
+            ct_test_cfg.skip_flush_loop)
           .get();
     }
 

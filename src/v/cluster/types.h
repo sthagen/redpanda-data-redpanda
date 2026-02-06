@@ -13,6 +13,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
+#include "cloud_storage/remote_label.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/cluster_link/errc.h"
 #include "cluster/errc.h"
@@ -562,7 +563,7 @@ struct property_update<tristate<T>>
 struct incremental_topic_updates
   : serde::envelope<
       incremental_topic_updates,
-      serde::version<9>,
+      serde::version<10>,
       serde::compat_version<0>> {
     static constexpr int8_t version_with_data_policy = -1;
     static constexpr int8_t version_with_shadow_indexing = -3;
@@ -657,6 +658,14 @@ struct incremental_topic_updates
     // topics that were created without one.
     property_update<std::optional<model::topic_id>> topic_id;
 
+    // Label used to identify the location of the topic's state in the cloud.
+    //
+    // WARNING: NOT meant for use for Kafka topics! Exercise caution when using
+    // this and make sure that changing this is handled gracefully by the topic
+    // being updated. E.g. can be used for the cloud topics metastore topic
+    // after the logical state of a given topic is restored.
+    property_update<std::optional<cloud_storage::remote_label>> remote_label;
+
     // To allow us to better control use of the deprecated shadow_indexing
     // field, use getters and setters instead.
     const auto& get_shadow_indexing() const { return shadow_indexing; }
@@ -705,7 +714,8 @@ struct incremental_topic_updates
           min_compaction_lag_ms,
           max_compaction_lag_ms,
           message_timestamp_before_max_ms,
-          message_timestamp_after_max_ms);
+          message_timestamp_after_max_ms,
+          remote_label);
     }
 
     friend std::ostream&
@@ -1904,6 +1914,8 @@ enum class recovery_stage : int8_t {
     recovered_cluster_config = 3,
     recovered_users = 4,
     recovered_acls = 5,
+    recovered_cloud_topics_metastore = 11,
+    recovered_cloud_topic_data = 12,
     recovered_remote_topic_data = 6,
     recovered_topic_data = 7,
 

@@ -21,6 +21,8 @@
 #include "model/fundamental.h"
 #include "security/fwd.h"
 #include "storage/fwd.h"
+#include "utils/named_type.h"
+#include "utils/notification_list.h"
 #include "utils/prefix_logger.h"
 #include "utils/unresolved_address.h"
 
@@ -29,6 +31,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sstring.hh>
+#include <seastar/util/noncopyable_function.hh>
 
 #include <cstdint>
 #include <vector>
@@ -96,6 +99,10 @@ public:
         std::optional<ss::sstring> k8s_cluster_id;
     };
 
+    struct schema_registry_metrics {
+        uint32_t context_count{0};
+    };
+
     struct metrics_snapshot {
         ss::sstring cluster_uuid;
         ss::sstring storage_uuid;
@@ -135,7 +142,20 @@ public:
         bool schema_registry_shadowed{false};
 
         std::optional<kubernetes_metrics> kubernetes;
+
+        // Schema Registry metrics (nullopt when SR not configured)
+        std::optional<schema_registry_metrics> schema_registry;
     };
+
+    /// Callback type for external subsystems to contribute metrics data.
+    using metrics_contributor_fn
+      = ss::noncopyable_function<ss::future<>(metrics_snapshot&)>;
+
+    /// ID type returned by register_metrics_contributor for later
+    /// unregistration.
+    using metrics_contributor_id
+      = named_type<int32_t, struct metrics_contributor_id_tag>;
+
     static constexpr ss::shard_id shard = 0;
 
     metrics_reporter(
@@ -158,6 +178,14 @@ public:
     ss::future<> stop();
 
     ss::future<> wait_cluster_info_initialized(ss::abort_source&);
+
+    /// Register a callback that will be invoked during metrics collection
+    /// to populate additional fields in the snapshot.
+    /// Returns an ID that can be used to unregister the contributor.
+    metrics_contributor_id register_metrics_contributor(metrics_contributor_fn);
+
+    /// Unregister a previously registered metrics contributor.
+    void unregister_metrics_contributor(metrics_contributor_id);
 
 private:
     void report_metrics();
@@ -190,6 +218,9 @@ private:
 
     ss::lowres_clock::time_point _last_success
       = ss::lowres_clock::time_point::min();
+
+    notification_list<metrics_contributor_fn, metrics_contributor_id>
+      _metrics_contributors;
 };
 
 std::optional<metrics_reporter::kubernetes_metrics> get_kubernetes_metrics();
@@ -208,4 +239,7 @@ void rjson_serialize(
 void rjson_serialize(
   json::Writer<json::StringBuffer>& w,
   const cluster::metrics_reporter::kubernetes_metrics& v);
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w,
+  const cluster::metrics_reporter::schema_registry_metrics& v);
 } // namespace json

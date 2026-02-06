@@ -43,6 +43,10 @@ namespace cloud_storage {
 class topic_mount_handler;
 }
 
+namespace cloud_topics {
+class state_accessors;
+} // namespace cloud_topics
+
 namespace cluster {
 
 class cluster_discovery;
@@ -205,6 +209,17 @@ public:
         return _cluster_link_frontend;
     }
 
+    /// Register a callback to contribute telemetry data during metrics
+    /// collection. This allows higher-layer subsystems to populate fields
+    /// in the metrics snapshot without creating build cycles.
+    /// Returns an ID that can be used to unregister the contributor.
+    metrics_reporter::metrics_contributor_id
+      register_metrics_contributor(metrics_reporter::metrics_contributor_fn);
+
+    /// Unregister a previously registered metrics contributor.
+    void
+      unregister_metrics_contributor(metrics_reporter::metrics_contributor_id);
+
     bool is_raft0_leader() const {
         vassert(
           ss::this_shard_id() == ss::shard_id(0),
@@ -231,7 +246,8 @@ public:
       ss::shared_ptr<cluster::cloud_metadata::producer_id_recovery_manager>,
       ss::shared_ptr<cluster::cloud_metadata::offsets_recovery_requestor>,
       std::chrono::milliseconds application_start_time,
-      ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&);
+      ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&,
+      ss::sharded<cloud_topics::state_accessors>* ct_state = nullptr);
 
     // prevents controller from accepting new requests
     ss::future<> shutdown_input();

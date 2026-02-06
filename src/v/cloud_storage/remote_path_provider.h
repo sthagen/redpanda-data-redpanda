@@ -9,7 +9,7 @@
 #pragma once
 
 #include "cloud_storage/fwd.h"
-#include "cloud_storage/remote_label.h"
+#include "cloud_storage/topic_path_provider.h"
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -20,7 +20,9 @@
 
 namespace cloud_storage {
 
-class remote_path_provider {
+/// Provides path computation for all cloud storage objects.
+/// Inherits topic path methods from topic_path_provider.
+class remote_path_provider : public topic_path_provider {
 public:
     // Discourage accidental copies to encourage referencing of a single path
     // provider (e.g. the one owned by the archival STM).
@@ -43,17 +45,6 @@ public:
 
     // For use in copy() and in coroutines.
     remote_path_provider(remote_path_provider&&) = default;
-
-    // Prefix of the topic manifest path. This can be used to filter objects to
-    // find topic manifests.
-    ss::sstring
-    topic_manifest_prefix(const model::topic_namespace& topic) const;
-
-    // Topic manifest path.
-    ss::sstring topic_manifest_path(
-      const model::topic_namespace& topic, model::initial_revision_id) const;
-    std::optional<ss::sstring>
-    topic_manifest_path_json(const model::topic_namespace& topic) const;
 
     // Prefix of the partition manifest path. This can be used to filter
     // objects to find partition or spillover manifests.
@@ -92,15 +83,6 @@ public:
       const model::ntp& ntp,
       model::initial_revision_id rev,
       const segment_meta& segment) const;
-
-    // Topic lifecycle marker path.
-    ss::sstring topic_lifecycle_marker_path(
-      const model::topic_namespace& topic,
-      model::initial_revision_id rev) const;
-
-private:
-    std::optional<remote_label> label_;
-    std::optional<model::topic_namespace> _topic_namespace_override;
 };
 
 } // namespace cloud_storage

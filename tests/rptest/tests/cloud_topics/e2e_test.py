@@ -30,6 +30,7 @@ from rptest.services.redpanda import (
 )
 from rptest.tests.end_to_end import EndToEndTest
 from rptest.util import Scale
+import rptest.tests.cloud_topics.utils as ct_utils
 
 
 class EndToEndCloudTopicsBase(EndToEndTest):
@@ -200,6 +201,44 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
             expected_missing_records=35 * self.topics[0].partition_count
         )
         self.wait_until_all_reconciled()
+
+    @cluster(num_nodes=4)
+    def test_get_size(self):
+        """
+        Test that the metastore GetSize RPC returns the correct partition size.
+
+        1. Before any data is written, GetSize should return either 0 or NOT_FOUND
+           (partitions are lazily created in the metastore).
+        2. After writing data, GetSize should eventually return a positive value.
+        """
+        topic = self.s3_topic_name
+        partition = 0
+
+        def get_partition_size() -> int | None:
+            return ct_utils.get_l1_partition_size(self.admin, topic, partition)
+
+        # Before writing data, the partition should either not exist or have size 0
+        initial_size = get_partition_size()
+        assert initial_size is None or initial_size == 0, (
+            f"Expected partition size to be 0 or not found before writing data, "
+            f"got {initial_size}"
+        )
+        self.logger.info(
+            f"Initial partition size: {initial_size} (None means not found)"
+        )
+
+        # Write data to the topic
+        self.start_producer()
+        self.await_num_produced(min_records=50000)
+        self.producer.stop()
+
+        # Wait for the data to be reconciled to the metastore
+        self.wait_until_reconciled(topic=topic, partition=partition)
+
+        # Waits until the the partition size reaches a reported positive size
+        ct_utils.wait_until_l1_partition_size(
+            self.admin, topic, partition, lambda size: size > 0
+        )
 
 
 class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):

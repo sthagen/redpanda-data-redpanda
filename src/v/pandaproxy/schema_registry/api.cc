@@ -26,6 +26,7 @@
 
 #include <seastar/core/coroutine.hh>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 
@@ -117,10 +118,33 @@ ss::future<> api::start() {
       std::ref(_audit_mgr));
 
     co_await _service.invoke_on_all(&service::start);
+
+    if (ss::this_shard_id() == 0) {
+        vassert(
+          !_metrics_contributor_id.has_value(),
+          "Metrics contributor ID should not be set when starting the API");
+        _metrics_contributor_id = _controller->register_metrics_contributor(
+          [this](cluster::metrics_reporter::metrics_snapshot& snap) {
+              if (_metrics_gate.is_closed()) {
+                  vlog(srlog.debug, "Gate already closed, skipping metrics");
+                  return ss::now();
+              }
+              return ss::with_gate(_metrics_gate, [this, &snap] {
+                  return contribute_metrics(snap);
+              });
+          });
+    }
 }
 
 ss::future<> api::stop() {
     vlog(srlog.debug, "Stopping schema registry API...");
+    if (ss::this_shard_id() == 0 && _metrics_contributor_id.has_value()) {
+        _controller->unregister_metrics_contributor(*_metrics_contributor_id);
+        _metrics_contributor_id.reset();
+        co_await _metrics_gate.close();
+        // Reset gate to support api restart
+        _metrics_gate = ss::gate{};
+    }
     co_await _client.invoke_on_all(&kafka::client::client::stop);
     co_await _service.stop();
     co_await _sequencer.stop();
@@ -148,5 +172,21 @@ const kafka::client::configuration& api::get_client_config() const {
 
 bool api::has_ephemeral_credentials() const {
     return _service.local().has_ephemeral_credentials();
+}
+
+ss::future<> api::contribute_metrics(
+  cluster::metrics_reporter::metrics_snapshot& snap) const {
+    if (!_store) {
+        vlog(
+          srlog.debug,
+          "Schema registry store not initialized, skipping metrics");
+        co_return;
+    }
+    auto ctxs = co_await _store->get_materialized_contexts();
+    auto count = std::ranges::count_if(
+      ctxs, [](const context& c) { return c != default_context; });
+    snap.schema_registry = cluster::metrics_reporter::schema_registry_metrics{
+      .context_count = static_cast<uint32_t>(count),
+    };
 }
 } // namespace pandaproxy::schema_registry

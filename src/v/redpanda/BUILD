@@ -30,6 +30,7 @@ redpanda_cc_library(
         "//src/v/cloud_storage",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics:test_fixture_cfg",
         "//src/v/cloud_topics/level_one/metastore:leader_router",
         "//src/v/cloud_topics/level_one/metastore:simple_stm",
         "//src/v/cloud_topics/level_one/metastore/lsm:stm",

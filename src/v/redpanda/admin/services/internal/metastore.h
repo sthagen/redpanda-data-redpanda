@@ -31,6 +31,10 @@ public:
       serde::pb::rpc::context,
       proto::admin::metastore::get_offsets_request) override;
 
+    seastar::future<proto::admin::metastore::get_size_response> get_size(
+      serde::pb::rpc::context,
+      proto::admin::metastore::get_size_request) override;
+
 private:
     ss::sharded<cluster::topic_table>* _topic_table;
     ss::sharded<cloud_topics::l1::replicated_metastore>* _metastore;

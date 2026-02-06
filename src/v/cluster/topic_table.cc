@@ -1207,6 +1207,7 @@ topic_properties topic_table::update_topic_properties(
     incremental_update(
       updated_properties.message_timestamp_after_max_ms,
       overrides.message_timestamp_after_max_ms);
+    incremental_update(updated_properties.remote_label, overrides.remote_label);
     return updated_properties;
 }
 

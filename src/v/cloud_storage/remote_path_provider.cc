@@ -15,7 +15,6 @@
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/topic_mount_manifest.h"
 #include "cloud_storage/topic_mount_manifest_path.h"
-#include "cloud_storage/topic_path_utils.h"
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"
 
@@ -26,48 +25,21 @@ namespace cloud_storage {
 remote_path_provider::remote_path_provider(
   std::optional<remote_label> label,
   std::optional<model::topic_namespace> topic_namespace_override)
-  : label_(label)
-  , _topic_namespace_override(std::move(topic_namespace_override)) {}
+  : topic_path_provider(std::move(label), std::move(topic_namespace_override)) {
+}
 
 remote_path_provider remote_path_provider::copy() const {
-    remote_path_provider ret(label_, _topic_namespace_override);
+    remote_path_provider ret(label_, topic_namespace_override_);
     return ret;
-}
-
-ss::sstring remote_path_provider::topic_manifest_prefix(
-  const model::topic_namespace& topic) const {
-    const auto& tp_ns = _topic_namespace_override.value_or(topic);
-    if (label_.has_value()) {
-        return labeled_topic_manifest_prefix(*label_, tp_ns);
-    }
-    return prefixed_topic_manifest_prefix(tp_ns);
-}
-
-ss::sstring remote_path_provider::topic_manifest_path(
-  const model::topic_namespace& topic, model::initial_revision_id rev) const {
-    const auto& tp_ns = _topic_namespace_override.value_or(topic);
-    if (label_.has_value()) {
-        return labeled_topic_manifest_path(*label_, tp_ns, rev);
-    }
-    return prefixed_topic_manifest_bin_path(tp_ns);
-}
-
-std::optional<ss::sstring> remote_path_provider::topic_manifest_path_json(
-  const model::topic_namespace& topic) const {
-    if (label_.has_value()) {
-        return std::nullopt;
-    }
-    const auto& tp_ns = _topic_namespace_override.value_or(topic);
-    return prefixed_topic_manifest_json_path(tp_ns);
 }
 
 ss::sstring remote_path_provider::partition_manifest_prefix(
   const model::ntp& ntp, model::initial_revision_id rev) const {
     std::optional<model::ntp> ntp_override;
-    if (_topic_namespace_override.has_value()) {
+    if (topic_namespace_override_.has_value()) {
         ntp_override = model::ntp(
-          _topic_namespace_override->ns,
-          _topic_namespace_override->tp,
+          topic_namespace_override_->ns,
+          topic_namespace_override_->tp,
           ntp.tp.partition);
     }
     const auto& maybe_overridden_ntp = ntp_override.value_or(ntp);
@@ -100,10 +72,10 @@ std::optional<ss::sstring> remote_path_provider::partition_manifest_path_json(
         return std::nullopt;
     }
     std::optional<model::ntp> ntp_override;
-    if (_topic_namespace_override.has_value()) {
+    if (topic_namespace_override_.has_value()) {
         ntp_override = model::ntp(
-          _topic_namespace_override->ns,
-          _topic_namespace_override->tp,
+          topic_namespace_override_->ns,
+          topic_namespace_override_->tp,
           ntp.tp.partition);
     }
     const auto& maybe_overridden_ntp = ntp_override.value_or(ntp);
@@ -136,10 +108,10 @@ ss::sstring remote_path_provider::segment_path(
     const auto segment_name = partition_manifest::generate_remote_segment_name(
       segment);
     std::optional<model::ntp> ntp_override;
-    if (_topic_namespace_override.has_value()) {
+    if (topic_namespace_override_.has_value()) {
         ntp_override = model::ntp(
-          _topic_namespace_override->ns,
-          _topic_namespace_override->tp,
+          topic_namespace_override_->ns,
+          topic_namespace_override_->tp,
           ntp.tp.partition);
     }
     const auto& maybe_overridden_ntp = ntp_override.value_or(ntp);
@@ -159,15 +131,6 @@ ss::sstring remote_path_provider::segment_path(
   const partition_manifest& manifest, const segment_meta& segment) const {
     return segment_path(
       manifest.get_ntp(), manifest.get_revision_id(), segment);
-}
-
-ss::sstring remote_path_provider::topic_lifecycle_marker_path(
-  const model::topic_namespace& topic, model::initial_revision_id rev) const {
-    const auto& tp_ns = _topic_namespace_override.value_or(topic);
-    if (label_.has_value()) {
-        return labeled_topic_lifecycle_marker_path(*label_, tp_ns, rev);
-    }
-    return prefixed_topic_lifecycle_marker_path(tp_ns, rev);
 }
 
 } // namespace cloud_storage

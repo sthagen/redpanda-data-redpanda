@@ -12,11 +12,13 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cluster/metrics_reporter.h"
 #include "kafka/client/fwd.h"
 #include "model/metadata.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "security/fwd.h"
 
+#include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 
 namespace YAML {
@@ -56,6 +58,10 @@ public:
 
     bool has_ephemeral_credentials() const;
 
+    /// Contributes Schema Registry metrics to the metrics snapshot.
+    ss::future<>
+    contribute_metrics(cluster::metrics_reporter::metrics_snapshot&) const;
+
 private:
     friend class schema_id_validator;
     friend class schema::registry;
@@ -74,6 +80,11 @@ private:
     ss::sharded<pandaproxy::schema_registry::service> _service;
     ss::sharded<pandaproxy::schema_registry::seq_writer> _sequencer;
     ss::sharded<security::audit::audit_log_manager>& _audit_mgr;
+
+    // Metrics telemetry support - only used on shard 0
+    ss::gate _metrics_gate{};
+    std::optional<cluster::metrics_reporter::metrics_contributor_id>
+      _metrics_contributor_id{};
 };
 
 } // namespace pandaproxy::schema_registry

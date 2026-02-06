@@ -385,7 +385,9 @@ void application::start_bootstrap_services() {
 }
 
 void application::wire_up_and_start(
-  ::stop_signal& app_signal, bool test_mode, bool use_lsm_metastore) {
+  ::stop_signal& app_signal,
+  bool test_mode,
+  cloud_topics::test_fixture_cfg ct_test_cfg) {
     // Setup the app level abort service
     construct_service(_as).get();
 
@@ -510,7 +512,7 @@ void application::wire_up_and_start(
       node_id,
       storage.local().get_cluster_uuid());
 
-    wire_up_runtime_services(node_id, app_signal);
+    wire_up_runtime_services(node_id, app_signal, ct_test_cfg);
 
     if (test_mode) {
         // When running inside a unit test fixture, we may fast-forward
@@ -545,7 +547,7 @@ void application::wire_up_and_start(
         controller->set_ready().get();
     }
 
-    start_runtime_services(cd, app_signal, use_lsm_metastore);
+    start_runtime_services(cd, app_signal, ct_test_cfg);
 
     if (_proxy_config && !config::node().recovery_mode_enabled) {
         _proxy->start().get();

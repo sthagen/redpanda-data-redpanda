@@ -50,6 +50,20 @@ pipeline_stage pipeline_stage_container::register_pipeline_stage() noexcept {
     return pipeline_stage(&_stages.at(_registered++));
 }
 
+int pipeline_stage_container::next_stage_index(pipeline_stage old) const {
+    if (old == unassigned_pipeline_stage) {
+        // First stage is index 0
+        return 0;
+    }
+    auto old_ix = old()->get_numeric_id();
+    auto next_ix = old_ix + 1;
+    // Return -1 if we would exceed the allocated stages
+    if (static_cast<size_t>(next_ix) >= _stages.size()) {
+        return -1;
+    }
+    return next_ix;
+}
+
 } // namespace cloud_topics::l0
 
 auto fmt::formatter<cloud_topics::l0::pipeline_stage>::format(

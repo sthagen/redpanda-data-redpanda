@@ -111,8 +111,7 @@ public:
             }
             for (const auto& vs : s.second.versions) {
                 if (vs.id == id.id && !vs.deleted) {
-                    // TODO: return the full context_subject here
-                    svs.emplace_back(s.first.sub, vs.version);
+                    svs.emplace_back(s.first, vs.version);
                 }
             }
         }

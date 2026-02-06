@@ -70,6 +70,12 @@ service::get_offsets(get_offsets_request request, ::rpc::streaming_context&) {
       std::move(request), leader_router::local_only::yes);
 }
 
+ss::future<get_size_reply>
+service::get_size(get_size_request request, ::rpc::streaming_context&) {
+    return _leader_router->local().get_size(
+      std::move(request), leader_router::local_only::yes);
+}
+
 ss::future<get_end_offset_for_term_reply> service::get_end_offset_for_term(
   get_end_offset_for_term_request request, ::rpc::streaming_context&) {
     return _leader_router->local().get_end_offset_for_term(

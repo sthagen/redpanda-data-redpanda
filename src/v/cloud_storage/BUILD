@@ -14,6 +14,21 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "topic_manifest_state",
+    hdrs = [
+        "topic_manifest_state.h",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        "//src/v/cluster:topic_configuration",
+        "//src/v/model",
+        "//src/v/serde",
+    ],
+)
+
+redpanda_cc_library(
     name = "topic_mount_manifest_path",
     srcs = [
         "topic_mount_manifest_path.cc",
@@ -27,6 +42,47 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
+    name = "topic_path_utils",
+    srcs = [
+        "topic_path_utils.cc",
+    ],
+    hdrs = [
+        "topic_path_utils.h",
+    ],
+    implementation_deps = [
+        "//src/v/hashing:xx",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":remote_label",
+        "//src/v/base",
+        "//src/v/container:chunked_vector",
+        "//src/v/model",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "topic_path_provider",
+    srcs = [
+        "topic_path_provider.cc",
+    ],
+    hdrs = [
+        "topic_path_provider.h",
+    ],
+    implementation_deps = [
+        ":topic_path_utils",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":remote_label",
+        "//src/v/model",
+        "@seastar",
     ],
 )
 
@@ -72,7 +128,6 @@ redpanda_cc_library(
         "topic_manifest_downloader.cc",
         "topic_mount_handler.cc",
         "topic_mount_manifest.cc",
-        "topic_path_utils.cc",
         "tx_range_manifest.cc",
     ],
     hdrs = [
@@ -118,10 +173,10 @@ redpanda_cc_library(
         "topic_manifest_downloader.h",
         "topic_mount_handler.h",
         "topic_mount_manifest.h",
-        "topic_path_utils.h",
         "tx_range_manifest.h",
     ],
     implementation_deps = [
+        ":topic_manifest_state",
         "//src/v/json",
         "@rapidjson",
     ],
@@ -131,6 +186,8 @@ redpanda_cc_library(
         ":remote_label",
         ":segment_meta_cstore",
         ":topic_mount_manifest_path",
+        ":topic_path_provider",
+        ":topic_path_utils",
         ":types",
         "//src/v/base",
         "//src/v/bytes:iobuf",

@@ -1010,6 +1010,13 @@ configuration::configuration()
       "How often to trigger background compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       10s)
+  , log_compaction_max_priority_wait_ms(
+      *this,
+      "log_compaction_max_priority_wait_ms",
+      "Maximum time a priority partition (for example, __consumer_offsets) can "
+      "wait for compaction before preempting regular compaction.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      60min)
   , tombstone_retention_ms(
       *this,
       "tombstone_retention_ms",
@@ -1115,7 +1122,9 @@ configuration::configuration()
       "delete.retention.ms, and only if the topic's cleanup.policy "
       "allows compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      false)
+      true,
+      property<bool>::noop_validator,
+      legacy_default<bool>(false, legacy_version{17}))
   , retention_bytes(
       *this,
       "retention_bytes",
@@ -1720,6 +1729,17 @@ configuration::configuration()
       "compressed, the limit applies to the compressed batch size.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1_MiB)
+  , delete_topic_enable(
+      *this,
+      false,
+      "delete_topic_enable",
+      "Enable or disable topic deletion via the Kafka DeleteTopics API. When "
+      "set to false, all topic deletion requests are rejected with error code "
+      "73 (TOPIC_DELETION_DISABLED). This is a cluster-wide safety setting "
+      "that cannot be overridden by superusers. Topics in "
+      "kafka_nodelete_topics are always protected regardless of this setting.",
+      meta{.needs_restart = needs_restart::no, .visibility = visibility::user},
+      true)
   , kafka_nodelete_topics(
       *this,
       "kafka_nodelete_topics",
@@ -4579,6 +4599,13 @@ configuration::configuration()
       "term storage.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       5min)
+  , cloud_topics_long_term_flush_interval(
+      *this,
+      "cloud_topics_long_term_flush_interval",
+      "Time interval at which long term storage metadata is flushed to object "
+      "storage.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10min)
   , cloud_topics_epoch_service_epoch_increment_interval(
       *this,
       "cloud_topics_epoch_service_epoch_increment_interval",

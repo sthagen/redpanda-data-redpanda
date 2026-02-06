@@ -278,6 +278,9 @@ feature_manager::report_enterprise_features() const {
     report.set(
       features::license_required_feature::cloud_topics,
       cfg.cloud_topics_enabled());
+    report.set(
+      features::license_required_feature::topic_deletion_disabled,
+      !cfg.delete_topic_enable());
     return report;
 }
 

@@ -24,6 +24,7 @@
 #include "config/property.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
+#include "ssx/semaphore.h"
 #include "utils/retry_chain_node.h"
 #include "utils/uuid.h"
 
@@ -121,5 +122,8 @@ private:
     write_pipeline<Clock>::stage _stage;
 
     batcher_probe _probe;
+
+    // Limit the number of concurrent background fibers running run_once
+    ssx::named_semaphore<Clock> _upload_sem;
 };
 } // namespace cloud_topics::l0

@@ -48,6 +48,7 @@ class Feature(IntEnum):
     oidc_override = 12
     shadow_linking = 13
     cloud_topics = 14
+    topic_deletion_disabled = 15
 
 
 def to_enterprise_feature(feature):
@@ -80,6 +81,7 @@ FEATURE_DEPENDENT_CONFIG = {
     Feature.oidc_override: "sasl_mechanisms_overrides",
     Feature.shadow_linking: "enable_shadow_linking",
     Feature.cloud_topics: CLOUD_TOPICS_CONFIG_STR,
+    Feature.topic_deletion_disabled: "delete_topic_enable",
 }
 
 SKIP_FEATURES = [
@@ -257,6 +259,8 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
             self.redpanda.set_cluster_config({"enable_shadow_linking": "true"})
         elif feature == Feature.cloud_topics:
             self.redpanda.set_cluster_config({CLOUD_TOPICS_CONFIG_STR: "true"})
+        elif feature == Feature.topic_deletion_disabled:
+            self.redpanda.set_cluster_config({"delete_topic_enable": "false"})
         else:
             assert False, f"Unexpected feature={feature}"
 

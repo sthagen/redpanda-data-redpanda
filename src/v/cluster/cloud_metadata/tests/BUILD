@@ -9,6 +9,7 @@ redpanda_test_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/cloud_storage_clients",
         "//src/v/cluster",
         "//src/v/cluster/tests:topic_properties_generator",
         "//src/v/model",
@@ -86,6 +87,7 @@ redpanda_cc_gtest(
         ":cluster_metadata_utils",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:remote_label",
         "//src/v/cluster",
         "//src/v/cluster/tests:tx_compaction_utils_gtest",
         "//src/v/config",

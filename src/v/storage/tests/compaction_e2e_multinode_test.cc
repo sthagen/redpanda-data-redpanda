@@ -375,6 +375,7 @@ FIXTURE_TEST(segment_tx_flags_compaction_disabled, compaction_multinode_test) {
       .set_value(std::make_optional<uint32_t>(0));
     cfg.get("log_compaction_merge_max_ranges")
       .set_value(std::make_optional<uint32_t>(0));
+    cfg.get("log_compaction_tx_batch_removal_enabled").set_value(false);
 
     const model::topic topic{"tapioca"};
     model::node_id id{0};

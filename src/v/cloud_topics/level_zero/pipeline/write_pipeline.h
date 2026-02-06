@@ -97,6 +97,13 @@ public:
         /// to avoid stalling the pipeline.
         void signal_next_stage();
 
+        /// Enqueue a foreign (cross-shard proxied) write request directly to
+        /// the next stage without byte accounting. This is used for requests
+        /// that were accounted for on a different shard.
+        /// \param r Write request to enqueue (must have unassigned stage)
+        /// \param signal If true signal the next stage
+        void enqueue_foreign_request(write_request<Clock>& r, bool signal);
+
         /// Extract write requests out of the pipeline atomically.
         /// The caller is responsible for handling each write request.
         /// The request could be either returned using 'push_next_stage'
@@ -178,6 +185,18 @@ public:
             return ss::get_units(_parent->_mem_budget, units);
         }
 
+        /// Get pointer to the stage's pending bytes counter
+        auto stage_bytes_ref() { return _parent->stage_bytes_ref(_ps); }
+
+        /// Get pointer to the next stage's pending bytes counter.
+        /// Unlike next_stage(), this method returns a valid pointer even if
+        /// the next stage hasn't been registered yet. The counters are
+        /// pre-allocated, so they can be accessed before registration.
+        auto next_stage_bytes_ref() {
+            return _parent->stage_bytes_ref_by_index(
+              _parent->next_stage_index(_ps));
+        }
+
     private:
         /// Pick the right abort source to use.
         ///
@@ -209,6 +228,15 @@ public:
 
     /// Get the number of bytes at a specific pipeline stage.
     size_t stage_bytes(pipeline_stage s) const;
+    const std::atomic<size_t>* stage_bytes_ref(pipeline_stage s) const;
+
+    /// Get pointer to stage bytes counter by index.
+    /// Unlike stage_bytes_ref(pipeline_stage), this method does not require
+    /// the stage to be registered. It returns the pointer to the pre-allocated
+    /// counter at the given index.
+    /// \param index The stage index (0-based)
+    /// \return Pointer to the atomic counter, or nullptr if index is invalid
+    const std::atomic<size_t>* stage_bytes_ref_by_index(int index) const;
 
 private:
     /// Transfer bytes from one stage to another.
@@ -237,7 +265,17 @@ private:
     void reenqueue(write_request<Clock>& req, bool signal = true);
 
     // Bytes per pipeline stage.
-    std::array<size_t, max_pipeline_stages> _stage_bytes{};
+    struct alignas(std::hardware_destructive_interference_size)
+      padded_atomic_counter {
+        // Always updated on the same shard.
+        // Can be read from any shard.
+        std::atomic<uint64_t> count{0};
+
+        void operator+=(size_t c) { count += c; }
+
+        void operator-=(size_t c) { count -= c; }
+    };
+    std::array<padded_atomic_counter, max_pipeline_stages> _stage_bytes{};
 
     /// Sum of bytes across all pipeline stages.
     size_t current_size() const;

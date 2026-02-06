@@ -257,6 +257,14 @@ protected:
         EXPECT_EQ(res.value()->next_offset, next);
     }
 
+    void verify_metadata_size(model::topic_id_partition tidp, size_t size) {
+        auto reader = make_reader();
+        auto res = reader.get_metadata(tidp).get();
+        ASSERT_TRUE(res.has_value());
+        ASSERT_TRUE(res.value().has_value());
+        EXPECT_EQ(res.value()->size, size);
+    }
+
     void verify_extent_exists(
       model::topic_id_partition tidp,
       kafka::offset base_offset,
@@ -1333,4 +1341,128 @@ TEST_F(StateUpdateTest, TestRemoveObjectsNonExistent) {
 
     // Original object should still exist.
     verify_object_exists(oid, 1024, /*removed_data_size=*/0);
+}
+
+TEST_F(StateUpdateTest, TestAddObjectsTracksSizeBasic) {
+    auto oid1 = make_oid();
+    auto oid2 = make_oid();
+    auto oid3 = make_oid();
+
+    // Add three extents with different sizes.
+    add_objects(
+      {terms(tidp0, {{0, 1}, {100, 2}, {200, 3}})},
+      make_object(oid1, tp(tidp0, 0, 99).pos(0, 1023)),    // size = 1024
+      make_object(oid2, tp(tidp0, 100, 199).pos(0, 2047)), // size = 2048
+      make_object(oid3, tp(tidp0, 200, 299).pos(0, 511))); // size = 512
+
+    // Total size should be 1024 + 2048 + 512 = 3584.
+    verify_metadata_size(tidp0, 3584);
+}
+
+TEST_F(StateUpdateTest, TestAddObjectsTracksSizeIncrementally) {
+    // Add first object.
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 999))); // size = 1000
+    verify_metadata_size(tidp0, 1000);
+
+    // Add more objects - size should accumulate.
+    add_objects(
+      {terms(tidp0, {{100, 1}})},
+      make_object(make_oid(), tp(tidp0, 100, 199).pos(0, 499))); // size = 500
+    verify_metadata_size(tidp0, 1500);
+
+    add_objects(
+      {terms(tidp0, {{200, 1}})},
+      make_object(make_oid(), tp(tidp0, 200, 299).pos(0, 249))); // size = 250
+    verify_metadata_size(tidp0, 1750);
+}
+
+TEST_F(StateUpdateTest, TestReplaceObjectsTracksSize) {
+    auto old_oid1 = make_oid();
+    auto old_oid2 = make_oid();
+
+    // Add initial extents.
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(old_oid1, tp(tidp0, 0, 99).pos(0, 1023))); // size = 1024
+    add_objects(
+      {terms(tidp0, {{100, 1}})},
+      make_object(old_oid2, tp(tidp0, 100, 199).pos(0, 2047))); // size = 2048
+    verify_metadata_size(tidp0, 3072);
+
+    // Replace both extents with a single smaller extent.
+    auto new_oid = make_oid();
+    replace_objects(
+      compact_specs{}, make_object(new_oid, tp(tidp0, 0, 199).pos(0, 511)));
+
+    // Size should be updated to the new extent size (512).
+    verify_metadata_size(tidp0, 512);
+}
+
+TEST_F(StateUpdateTest, TestReplaceObjectsTracksSizeMultiplePartitions) {
+    auto tidp1 = make_tidp(1);
+
+    // Add extents to two partitions.
+    add_objects(
+      {terms(tidp0, {{0, 1}}), terms(tidp1, {{0, 1}})},
+      make_object(
+        make_oid(),
+        tp(tidp0, 0, 99).pos(0, 999),       // size = 1000
+        tp(tidp1, 0, 99).pos(1000, 1499))); // size = 500
+
+    verify_metadata_size(tidp0, 1000);
+    verify_metadata_size(tidp1, 500);
+
+    // Replace only tidp0's extent with a smaller one.
+    replace_objects(
+      compact_specs{},
+      make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 199))); // size = 200
+
+    // tidp0 should have updated size, tidp1 should be unchanged.
+    verify_metadata_size(tidp0, 200);
+    verify_metadata_size(tidp1, 500);
+}
+
+TEST_F(StateUpdateTest, TestSetStartOffsetTracksSize) {
+    auto oid1 = make_oid();
+    auto oid2 = make_oid();
+    auto oid3 = make_oid();
+
+    // Add three extents.
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(oid1, tp(tidp0, 0, 99).pos(0, 999)),      // size = 1000
+      make_object(oid2, tp(tidp0, 100, 199).pos(0, 1999)),  // size = 2000
+      make_object(oid3, tp(tidp0, 200, 299).pos(0, 2999))); // size = 3000
+
+    verify_metadata_size(tidp0, 6000);
+
+    // Set start offset to remove the first extent.
+    set_start_offset(tidp0, kafka::offset(100));
+    verify_metadata_size(tidp0, 5000);
+
+    // Set start offset to remove the second extent as well.
+    set_start_offset(tidp0, kafka::offset(200));
+    verify_metadata_size(tidp0, 3000);
+
+    // Set start offset to remove all extents.
+    set_start_offset(tidp0, kafka::offset(300));
+    verify_metadata_size(tidp0, 0);
+}
+
+TEST_F(StateUpdateTest, TestRemoveTopicsZerosSize) {
+    // Add extents for a partition.
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
+    verify_metadata_size(tidp0, 1024);
+
+    // Remove the topic.
+    chunked_vector<model::topic_id> topics_to_remove;
+    topics_to_remove.push_back(tidp0.topic_id);
+    remove_topics(std::move(topics_to_remove));
+
+    // Metadata should be removed entirely.
+    verify_metadata_missing(tidp0);
 }

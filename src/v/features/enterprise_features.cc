@@ -45,6 +45,8 @@ std::ostream& operator<<(std::ostream& os, license_required_feature f) {
         return os << "shadow_linking";
     case license_required_feature::cloud_topics:
         return os << "cloud_topics";
+    case license_required_feature::topic_deletion_disabled:
+        return os << "topic_deletion_disabled";
     }
     __builtin_unreachable();
 }

@@ -8,6 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_storage/remote_label.h"
+#include "cloud_topics/level_one/metastore/manifest_io.h"
+#include "cloud_topics/level_one/metastore/metastore_manifest.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 #include "cloud_topics/level_one/metastore/tests/state_utils.h"
 #include "cloud_topics/tests/cluster_fixture.h"
@@ -41,9 +44,16 @@ public:
 
     bool is_lsm_backend() const { return GetParam() == metastore_backend::lsm; }
 
+    cloud_topics::test_fixture_cfg fixture_cfg() const {
+        return {
+          .use_lsm_metastore = is_lsm_backend(),
+          // Skip flushing since tests may exercise flushing.
+          .skip_flush_loop = true,
+        };
+    }
     void SetUp() override {
         for (size_t i = 0; i < num_brokers; i++) {
-            add_node(is_lsm_backend());
+            add_node(fixture_cfg());
         }
         wait_for_all_members(5s).get();
     }
@@ -1007,7 +1017,7 @@ TEST_P(ReplicatedMetastoreTest, TestBasicFlushAndRestore) {
     // Restart all nodes.
     // NOTE: the added nodes get the same node IDs 0, 1, 2.
     for (size_t i = 0; i < num_brokers; i++) {
-        add_node(is_lsm_backend());
+        add_node(fixture_cfg());
     }
     wait_for_all_members(5s).get();
 
@@ -1035,13 +1045,82 @@ TEST_P(ReplicatedMetastoreTest, TestRestoreManifestNotFound) {
     auto& app = get_ct_app(model::node_id{0});
     auto& meta = app.get_sharded_replicated_metastore()->local();
 
-    // Attempt to restore from a non-existent cluster UUID. The manifest
-    // download should fail.
+    // Attempt to restore from a non-existent cluster UUID. The manifest should
+    // be not found and we should create a new topic.
     auto fake_cluster_uuid = model::cluster_uuid{uuid_t::create()};
     cloud_storage::remote_label rl(fake_cluster_uuid);
     auto restore_res = meta.restore(rl).get();
-    ASSERT_FALSE(restore_res.has_value());
-    ASSERT_EQ(restore_res.error(), metastore::errc::transport_error);
+    ASSERT_TRUE(restore_res.has_value());
+}
+
+// Test that restore creates the metastore topic with the correct number of
+// partitions matching the number of domains in the manifest.
+TEST_P(ReplicatedMetastoreTest, TestRestoreCreatesCorrectPartitionCount) {
+    if (GetParam() == metastore_backend::simple) {
+        GTEST_SKIP() << "Restore not supported with simple backend";
+    }
+    auto& app = get_ct_app(model::node_id{0});
+    auto& meta = app.get_sharded_replicated_metastore()->local();
+
+    // Wait for the metastore topic to be created by background initialization.
+    // This helps ensure that there won't be a background recreation of the
+    // metastore topic after we delete it below.
+    for (const auto& node_id : instance_ids()) {
+        auto& tp_state = get_node_application(node_id)
+                           ->controller->get_topics_state()
+                           .local();
+        RPTEST_REQUIRE_EVENTUALLY(10s, [&tp_state] {
+            return tp_state.contains(model::l1_metastore_nt);
+        });
+    }
+
+    // Delete the existing metastore topic.
+    auto& tp_fe = get_node_application(model::node_id{0})
+                    ->controller->get_topics_frontend()
+                    .local();
+    tp_fe.dispatch_delete_topics({model::l1_metastore_nt}, 10s).get();
+    for (const auto& node_id : instance_ids()) {
+        auto& tp_state = get_node_application(node_id)
+                           ->controller->get_topics_state()
+                           .local();
+        RPTEST_REQUIRE_EVENTUALLY(10s, [&tp_state] {
+            return !tp_state.contains(model::l1_metastore_nt);
+        });
+    }
+
+    // Create a manifest with 10 domains and uplaod it.
+    constexpr int expected_partitions = 10;
+    metastore_manifest manifest;
+    manifest.partitioning_strategy = "murmur";
+    for (int i = 0; i < expected_partitions; ++i) {
+        manifest.domains.push_back(domain_uuid{uuid_t::create()});
+    }
+
+    auto* remote = &get_node_application(model::node_id{0})->cloud_io.local();
+    manifest_io mio(*remote, bucket_name);
+    auto fake_cluster_uuid = model::cluster_uuid{uuid_t::create()};
+    cloud_storage::remote_label rl(fake_cluster_uuid);
+    auto upload_res
+      = mio.upload_metastore_manifest(rl, std::move(manifest)).get();
+    ASSERT_TRUE(upload_res.has_value());
+
+    // Restore from the uploaded manifest. Retry until leaders are elected.
+    auto deadline = ss::lowres_clock::now() + 30s;
+    while (ss::lowres_clock::now() < deadline) {
+        auto restore_res = meta.restore(rl).get();
+        if (restore_res.has_value()) {
+            break;
+        }
+        ss::sleep(100ms).get();
+    }
+
+    // Verify the metastore topic was created with the correct partition count.
+    auto& tp_state = get_node_application(model::node_id{0})
+                       ->controller->get_topics_state()
+                       .local();
+    auto cfg = tp_state.get_topic_cfg(model::l1_metastore_nt);
+    ASSERT_TRUE(cfg.has_value());
+    ASSERT_EQ(cfg->partition_count, expected_partitions);
 }
 
 INSTANTIATE_TEST_SUITE_P(

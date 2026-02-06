@@ -37,15 +37,14 @@ static cloud_topics::cluster_epoch min_epoch{3840};
 namespace cloud_topics {
 namespace l0 {
 struct write_request_balancer_accessor {
-    static void disable_data_threshold_uploads(write_request_scheduler<>* s) {
-        s->_test_only_disable_data_threshold = true;
+    static void disable_background_loop(write_request_scheduler<>* s) {
+        s->_test_only_disable_background_loop = true;
     }
-    static void disable_time_based_fallback(write_request_scheduler<>* s) {
-        s->_test_only_disable_time_based_fallback = true;
-    }
-    static ss::future<>
-    apply_time_based_fallback(write_request_scheduler<>* s) {
-        return s->apply_time_based_fallback();
+    static ss::future<> run_background_loop_once(
+      write_request_scheduler<>* s, ss::lowres_clock::time_point last_upload) {
+        auto group_id = s->_context->shard_to_group[ss::this_shard_id()].load();
+        s->_context->record_upload_time(group_id, last_upload);
+        co_await s->run_once();
     }
 };
 } // namespace l0
@@ -93,8 +92,7 @@ struct pipeline_sink {
 
 class write_request_scheduler_bench {
 public:
-    ss::future<>
-    start(bool disable_data_threshold, bool disable_time_based_fallback) {
+    ss::future<> start(bool disable_background_loop = true) {
         co_await pipeline.start();
 
         co_await scheduler.start(ss::sharded_parameter([this] {
@@ -102,15 +100,11 @@ public:
         }));
 
         co_await scheduler.invoke_on_all(
-          [disable_data_threshold, disable_time_based_fallback](
+          [disable_background_loop](
             cloud_topics::l0::write_request_scheduler<>& s) {
-              if (disable_data_threshold) {
+              if (disable_background_loop) {
                   cloud_topics::l0::write_request_balancer_accessor::
-                    disable_data_threshold_uploads(&s);
-              }
-              if (disable_time_based_fallback) {
-                  cloud_topics::l0::write_request_balancer_accessor::
-                    disable_time_based_fallback(&s);
+                    disable_background_loop(&s);
               }
           });
 
@@ -143,7 +137,7 @@ PERF_TEST_C(write_request_scheduler_bench, data_threshold) {
     cfg.get("cloud_topics_produce_batching_size_threshold")
       .set_value(size_threshold);
 
-    co_await start(false, true);
+    co_await start(false);
 
     chunked_vector<model::record_batch> batches;
     auto batch = model::test::make_random_batch(
@@ -175,21 +169,21 @@ PERF_TEST_C(write_request_scheduler_bench, data_threshold) {
     co_await stop();
 }
 
-PERF_TEST_C(write_request_scheduler_bench, time_fallback) {
+PERF_TEST_C(write_request_scheduler_bench, cross_shard_upload) {
     // This test measures the time needed to propagate write requests
-    // from all shards.
+    // from all shards to a single target shard for upload.
 
     static constexpr size_t batch_size = 1000;
 
-    // Disable all background activity and invoke time based fallback
+    // Disable all background activity and invoke the cross-shard upload
     // manually.
-    co_await start(true, true);
+    co_await start(true);
 
     auto invoke_fut = pipeline.invoke_on_all(
       [](cloud_topics::l0::write_pipeline<>& p) -> ss::future<> {
           chunked_vector<model::record_batch> batches;
-          // Make shard 1 have more data so the uploads are moved to shard 1.
-          size_t size = ss::this_shard_id() == ss::shard_id(1) ? batch_size * 2
+          // Make shard 0 have more data so the uploads are moved to shard 0.
+          size_t size = ss::this_shard_id() == ss::shard_id(0) ? batch_size * 2
                                                                : batch_size;
           auto batch = model::test::make_random_batch(
             model::test::record_batch_spec{
@@ -209,12 +203,13 @@ PERF_TEST_C(write_request_scheduler_bench, time_fallback) {
             .discard_result();
       });
 
+    auto now = ss::lowres_clock::now() - 10s;
+
     // Make sure requests are enqueued on all shards
     co_await ss::sleep(100ms);
-
     perf_tests::start_measuring_time();
     co_await cloud_topics::l0::write_request_balancer_accessor::
-      apply_time_based_fallback(&scheduler.local());
+      run_background_loop_once(&scheduler.local(), now);
     perf_tests::stop_measuring_time();
 
     co_await std::move(invoke_fut);

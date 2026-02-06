@@ -38,8 +38,10 @@ class data_plane_api;
 class cloud_topics_manager;
 class level_zero_gc;
 class housekeeper_manager;
+class topic_manifest_upload_manager;
 
 namespace l1 {
+class flush_loop_manager;
 class topic_purger_manager;
 } // namespace l1
 
@@ -63,7 +65,8 @@ public:
       ss::sharded<cluster::metadata_cache>*,
       ss::sharded<rpc::connection_cache>*,
       cloud_storage_clients::bucket_name,
-      ss::sharded<storage::api>*);
+      ss::sharded<storage::api>*,
+      bool skip_flush_loop = false);
 
     ss::future<> start();
 
@@ -92,9 +95,11 @@ private:
     ss::sharded<l1::domain_supervisor> domain_supervisor;
     ss::sharded<l1::leader_router> l1_metastore_router;
     ss::sharded<l1::topic_purger_manager> topic_purge_manager;
+    ss::sharded<l1::flush_loop_manager> flush_loop_manager;
     ss::sharded<cloud_topics_manager> manager;
     ss::sharded<level_zero_gc> l0_gc;
     ss::sharded<housekeeper_manager> housekeeper_manager;
+    ss::sharded<topic_manifest_upload_manager> topic_manifest_upload_mgr;
     std::unique_ptr<l1::compaction_scheduler> compaction_scheduler;
 };
 

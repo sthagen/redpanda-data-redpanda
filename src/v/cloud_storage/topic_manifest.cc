@@ -13,7 +13,8 @@
 #include "bytes/iostream.h"
 #include "bytes/streambuf.h"
 #include "cloud_storage/logger.h"
-#include "cloud_storage/remote_path_provider.h"
+#include "cloud_storage/topic_manifest_state.h"
+#include "cloud_storage/topic_path_provider.h"
 #include "cloud_storage/types.h"
 #include "json/encodings.h"
 #include "json/istreamwrapper.h"
@@ -35,29 +36,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string_view>
-
-namespace {
-// topic manifest state is a serde-friendly representation of
-// topic_manifest. it will allow to evolve the manifest without pushing
-// fields to topic_properties, if the need arises
-struct topic_manifest_state
-  : public serde::envelope<
-      topic_manifest_state,
-      serde::version<0>,
-      serde::compat_version<0>> {
-    cluster::topic_configuration cfg;
-    // note: initial_revision will be used to initialize
-    // cfg.properties.remote_topic_properties.initial_revision, but keep it
-    // separate here to mirror the old behavior.
-
-    model::initial_revision_id initial_revision;
-
-    auto serde_fields() { return std::tie(cfg, initial_revision); }
-
-    bool operator==(const topic_manifest_state&) const = default;
-};
-
-} // namespace
 
 namespace cloud_storage {
 
@@ -448,7 +426,7 @@ ss::sstring topic_manifest::display_name() const {
 }
 
 remote_manifest_path topic_manifest::get_manifest_path(
-  const remote_path_provider& path_provider) const {
+  const topic_path_provider& path_provider) const {
     vassert(_topic_config, "Topic config is not set");
     return remote_manifest_path{
       path_provider.topic_manifest_path(_topic_config->tp_ns, _rev)};

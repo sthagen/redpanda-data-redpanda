@@ -9,6 +9,7 @@
  */
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/remote.h"
+#include "cloud_storage/remote_label.h"
 #include "cluster/cloud_metadata/tests/cluster_metadata_utils.h"
 #include "cluster/cluster_recovery_reconciler.h"
 #include "cluster/controller_snapshot.h"
@@ -26,6 +27,7 @@
 #include "security/types.h"
 #include "test_utils/async.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace cluster::cloud_metadata;
@@ -116,6 +118,16 @@ void validate_actions(
     ASSERT_EQ(
       !actions.local_topics.empty(),
       actions_contain(actions, cluster::recovery_stage::recovered_topic_data));
+
+    ASSERT_EQ(
+      actions.ct_metastore_topic.has_value(),
+      actions_contain(
+        actions, cluster::recovery_stage::recovered_cloud_topics_metastore));
+
+    ASSERT_EQ(
+      !actions.cloud_topics.empty(),
+      actions_contain(
+        actions, cluster::recovery_stage::recovered_cloud_topic_data));
 }
 
 } // anonymous namespace
@@ -436,4 +448,171 @@ TEST_F(
     ASSERT_TRUE(found_user) << "User ACL not found in actions";
     ASSERT_TRUE(found_role) << "Role ACL not found in actions";
     ASSERT_TRUE(found_group) << "Group ACL not found in actions";
+}
+
+TEST_F(
+  controller_snapshot_reconciliation_fixture, test_reconcile_metastore_topic) {
+    auto snapshot_label = cloud_storage::remote_label(
+      model::cluster_uuid{uuid_t::create()});
+
+    // Helper to check metastore topic reconciliation behavior.
+    const auto check_metastore_action =
+      [&](const cloud_storage::remote_label& label, bool expect_action) {
+          cluster::controller_snapshot snap;
+          auto& tps = snap.topics.topics[model::l1_metastore_nt];
+          tps.metadata.configuration.tp_ns = model::l1_metastore_nt;
+          tps.metadata.configuration.properties.remote_label = label;
+
+          auto actions = reconciler.get_actions(snap);
+          ASSERT_EQ(
+            actions_contain(
+              actions,
+              cluster::recovery_stage::recovered_cloud_topics_metastore),
+            expect_action);
+          validate_actions(actions);
+
+          ASSERT_EQ(actions.ct_metastore_topic.has_value(), expect_action);
+          if (expect_action) {
+              ASSERT_EQ(
+                actions.ct_metastore_topic->properties.remote_label, label);
+          }
+      };
+
+    // Case 1: Topic doesn't exist - should create with snapshot's label.
+    check_metastore_action(snapshot_label, true);
+
+    // Case 2: Topic exists with different label - should update to snapshot's
+    // label.
+    auto different_label = cloud_storage::remote_label(
+      model::cluster_uuid{uuid_t::create()});
+    cluster::topic_properties props;
+    props.remote_label = different_label;
+    add_topic(model::l1_metastore_nt, 1, props).get();
+
+    check_metastore_action(snapshot_label, true);
+
+    // Case 3: Topic exists with same label - no action needed.
+    check_metastore_action(different_label, false);
+}
+
+TEST_F(
+  controller_snapshot_reconciliation_fixture, test_reconcile_cloud_topics) {
+    // Helper to check cloud topic reconciliation behavior.
+    const auto check_cloud_topic_action =
+      [&](
+        const model::topic_namespace& tp_ns,
+        const cluster::topic_properties& props,
+        bool expect_action,
+        std::optional<bool> expect_recovery = std::nullopt) {
+          cluster::controller_snapshot snap;
+          auto& tps = snap.topics.topics[tp_ns];
+          tps.metadata.configuration.tp_ns = tp_ns;
+          tps.metadata.configuration.properties = props;
+
+          auto actions = reconciler.get_actions(snap);
+          ASSERT_EQ(
+            actions_contain(
+              actions, cluster::recovery_stage::recovered_cloud_topic_data),
+            expect_action);
+          // Cloud topics should NOT trigger remote_topic_data or topic_data
+          // stages.
+          ASSERT_FALSE(actions_contain(
+            actions, cluster::recovery_stage::recovered_remote_topic_data));
+          ASSERT_FALSE(actions_contain(
+            actions, cluster::recovery_stage::recovered_topic_data));
+          validate_actions(actions);
+
+          if (expect_action) {
+              ASSERT_EQ(actions.cloud_topics.size(), 1);
+              ASSERT_EQ(actions.cloud_topics[0].tp_ns, tp_ns);
+              if (expect_recovery.has_value()) {
+                  // recovery is std::optional<bool>, so we check the effective
+                  // boolean value (nullopt and false are both falsy).
+                  ASSERT_EQ(
+                    actions.cloud_topics[0].properties.recovery.value_or(false),
+                    *expect_recovery);
+              }
+          } else {
+              ASSERT_TRUE(actions.cloud_topics.empty());
+          }
+      };
+
+    model::topic_namespace tp_ns{model::kafka_namespace, model::topic{"foo"}};
+
+    // Case 1: Cloud topic doesn't exist - should create with recovery=true.
+    check_cloud_topic_action(tp_ns, cloud_topic_properties(), true, true);
+
+    // Case 2: Read-replica cloud topic - should create with recovery=false.
+    model::topic_namespace rr_tp_ns{
+      model::kafka_namespace, model::topic{"read_replica"}};
+    check_cloud_topic_action(
+      rr_tp_ns, read_replica_cloud_topic_properties(), true, false);
+
+    // Case 3: Topic already exists - no action needed.
+    // Create a topic in the cluster. The reconciler only checks for topic
+    // existence by name, so we use a non-cloud topic since cloud topics
+    // require development feature flags.
+    model::topic_namespace existing_tp_ns{
+      model::kafka_namespace, model::topic{"existing"}};
+    add_topic(existing_tp_ns, 1, non_remote_topic_properties()).get();
+    check_cloud_topic_action(
+      existing_tp_ns, cloud_topic_properties(), false, std::nullopt);
+}
+
+TEST_F(
+  controller_snapshot_reconciliation_fixture,
+  test_reconcile_mixed_topic_types) {
+    using cluster::recovery_stage;
+    cluster::controller_snapshot snap;
+
+    // Metastore topic.
+    auto metastore_label = cloud_storage::remote_label(
+      model::cluster_uuid{uuid_t::create()});
+    auto& metastore_tps = snap.topics.topics[model::l1_metastore_nt];
+    metastore_tps.metadata.configuration.tp_ns = model::l1_metastore_nt;
+    metastore_tps.metadata.configuration.properties.remote_label
+      = metastore_label;
+
+    // Cloud topic.
+    model::topic_namespace cloud_tp_ns{
+      model::kafka_namespace, model::topic{"cloud_topic"}};
+    auto& cloud_tps = snap.topics.topics[cloud_tp_ns];
+    cloud_tps.metadata.configuration.tp_ns = cloud_tp_ns;
+    cloud_tps.metadata.configuration.properties = cloud_topic_properties();
+
+    // Remote topic (tiered storage).
+    model::topic_namespace remote_tp_ns{
+      model::kafka_namespace, model::topic{"remote_topic"}};
+    auto& remote_tps = snap.topics.topics[remote_tp_ns];
+    remote_tps.metadata.configuration.tp_ns = remote_tp_ns;
+    remote_tps.metadata.configuration.properties
+      = uploadable_topic_properties();
+    remote_tps.metadata.revision = model::revision_id{1};
+
+    // Local topic.
+    model::topic_namespace local_tp_ns{
+      model::kafka_namespace, model::topic{"local_topic"}};
+    auto& local_tps = snap.topics.topics[local_tp_ns];
+    local_tps.metadata.configuration.tp_ns = local_tp_ns;
+    local_tps.metadata.configuration.properties = non_remote_topic_properties();
+
+    auto actions = reconciler.get_actions(snap);
+    validate_actions(actions);
+
+    // Validate the stages are present in the expected order.
+    EXPECT_THAT(
+      actions.stages,
+      testing::ElementsAre(
+        recovery_stage::recovered_cloud_topics_metastore,
+        recovery_stage::recovered_cloud_topic_data,
+        recovery_stage::recovered_remote_topic_data,
+        recovery_stage::recovered_topic_data,
+        recovery_stage::recovered_controller_snapshot));
+
+    ASSERT_TRUE(actions.ct_metastore_topic.has_value());
+    ASSERT_EQ(
+      actions.ct_metastore_topic->properties.remote_label, metastore_label);
+    ASSERT_EQ(actions.cloud_topics.size(), 1);
+    ASSERT_EQ(actions.remote_topics.size(), 1);
+    ASSERT_EQ(actions.local_topics.size(), 1);
 }

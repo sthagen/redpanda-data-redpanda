@@ -50,6 +50,9 @@ public:
     ss::future<get_offsets_reply>
     get_offsets(get_offsets_request, ::rpc::streaming_context&) override;
 
+    ss::future<get_size_reply>
+    get_size(get_size_request, ::rpc::streaming_context&) override;
+
     ss::future<get_end_offset_for_term_reply> get_end_offset_for_term(
       get_end_offset_for_term_request, ::rpc::streaming_context&) override;
 

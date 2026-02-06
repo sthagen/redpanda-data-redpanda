@@ -148,37 +148,6 @@ class KubectlTool:
                 p = ["env", "PATH=/usr/local/bin:/usr/bin:/bin:/snap/bin"]
                 breakglass_cmd = p + breakglass_cmd
             self._ssh_cmd(breakglass_cmd)
-
-            # Determine the appropriate command for the cloud provider
-            self._redpanda.logger.info(
-                f"Setting up kubectl config for provider: {self._provider}"
-            )
-
-            config_cmd = {
-                "aws": [
-                    "awscli2",
-                    "eks",
-                    "update-kubeconfig",
-                    "--name",
-                    f"redpanda-{self._cluster_id}",
-                    "--region",
-                    self._region,
-                ],
-                "gcp": [
-                    "gcloud",
-                    "container",
-                    "clusters",
-                    "get-credentials",
-                    f"redpanda-{self._cluster_id}",
-                    "--region",
-                    self._region,
-                ],
-                "azure": ["kubectl", "get", "nodes"],
-            }[self._provider]
-
-            # Log the full command to be executed
-            self._redpanda.logger.debug(f"Config command: {config_cmd}")
-            self._ssh_cmd(config_cmd)
             self._kubectl_installed = True
 
     @property

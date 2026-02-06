@@ -20,6 +20,7 @@ class remote_segment;
 class partition_manifest;
 class topic_mount_manifest;
 class topic_manifest;
+class topic_path_provider;
 class partition_probe;
 class async_manifest_view;
 

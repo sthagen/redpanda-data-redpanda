@@ -9,6 +9,7 @@
 
 #include "handlers.h"
 
+#include "base/vassert.h"
 #include "bytes/iobuf_parser.h"
 #include "cluster/controller.h"
 #include "cluster/security_frontend.h"
@@ -151,6 +152,153 @@ to_non_context_schema_ids(const chunked_vector<context_schema_id>& ids) {
            | std::ranges::views::transform(
              [](const context_schema_id& ctx_id) { return ctx_id.id; })
            | std::ranges::to<chunked_vector<schema_id>>();
+}
+
+struct schema_resolution_result {
+    context_schema_id ctx_id;
+    chunked_vector<context_subject> matched_subjects;
+
+    bool found() const { return !matched_subjects.empty(); }
+};
+
+/// Resolve a schema ID within a single context, optionally filtering by
+/// subject.
+ss::future<schema_resolution_result> resolve_schema_id_simple(
+  sharded_store& store, schema_id id, const context_subject& ctx_sub) {
+    vassert(
+      (ctx_sub.ctx != default_context) || (ctx_sub.sub().empty()),
+      "resolve_schema_id_simple should not be called with default context and "
+      "non-empty subject");
+
+    vlog(
+      srlog.debug,
+      "Resolving schema ID {} in context '{}'{}",
+      id,
+      ctx_sub.ctx,
+      ctx_sub.sub().empty()
+        ? ""
+        : ss::format(" (with subject '{}')", ctx_sub.sub()));
+
+    const context_schema_id ctx_id{ctx_sub.ctx, id};
+    auto schema_subjects = co_await store.get_schema_subjects(
+      ctx_id, include_deleted::yes);
+    // If a subject is provided, filter the schema_subjects to only that subject
+    // (if it exists)
+    if (!ctx_sub.sub().empty()) {
+        vlog(
+          srlog.debug,
+          "Filtering schema subjects for subject '{}'",
+          ctx_sub.sub());
+        schema_subjects = std::ranges::contains(schema_subjects, ctx_sub)
+                            ? decltype(schema_subjects){ctx_sub}
+                            : decltype(schema_subjects){};
+    }
+
+    schema_resolution_result result{
+      .ctx_id = ctx_id, .matched_subjects = std::move(schema_subjects)};
+
+    vlog(
+      srlog.debug,
+      "Schema ID {} was {} in context '{}'{}",
+      id,
+      result.found() ? "found" : "not found",
+      ctx_sub.ctx,
+      ctx_sub.sub().empty()
+        ? ""
+        : ss::format(" (with subject '{}')", ctx_sub.sub()));
+
+    co_return result;
+}
+
+/// Resolve a schema ID by searching across contexts and subjects. This function
+/// assumes that the subject is non-empty.
+/// The search order is:
+/// 1. Default context with provided subject
+/// 2. Other contexts with provided subject
+/// 3. Default context without subject restriction
+ss::future<schema_resolution_result> resolve_schema_id_extended(
+  sharded_store& store, schema_id id, const subject& subject) {
+    vassert(
+      !subject().empty(),
+      "resolve_schema_id_extended should only be called with non-empty "
+      "subject");
+
+    vlog(
+      srlog.debug,
+      "Performing an extended search to resolve schema ID {} with subject "
+      "'{}'.",
+      id,
+      subject());
+
+    // First, try default context with the provided subject
+    if (context_subject ctx_sub{default_context, subject};
+        co_await store.has_version(ctx_sub, id, include_deleted::yes)) {
+        vlog(
+          srlog.debug,
+          "Schema ID {} was found in default context with subject '{}'",
+          id,
+          subject());
+        co_return schema_resolution_result{
+          .ctx_id = context_schema_id{default_context, id},
+          .matched_subjects = {std::move(ctx_sub)}};
+    }
+
+    // Next, try other (non-default) contexts with the provided subject
+    auto contexts = co_await store.get_materialized_contexts();
+    for (const auto& ctx : contexts) {
+        if (ctx == default_context) {
+            continue;
+        }
+
+        if (context_subject ctx_sub{ctx, subject};
+            co_await store.has_version(ctx_sub, id, include_deleted::yes)) {
+            vlog(
+              srlog.debug,
+              "Schema ID {} was found in context '{}' with subject '{}'",
+              id,
+              ctx,
+              subject());
+            co_return schema_resolution_result{
+              .ctx_id = context_schema_id{ctx, id},
+              .matched_subjects = {std::move(ctx_sub)}};
+        }
+    }
+
+    // Finally, try default context without subject restriction
+    auto default_ctx_subjects = co_await store.get_schema_subjects(
+      {default_context, id}, include_deleted::yes);
+    if (!default_ctx_subjects.empty()) {
+        vlog(
+          srlog.debug,
+          "Schema ID {} was found in default context without subject "
+          "restriction",
+          id);
+        co_return schema_resolution_result{
+          .ctx_id = context_schema_id{default_context, id},
+          .matched_subjects = {std::move(default_ctx_subjects)}};
+    }
+
+    vlog(
+      srlog.debug,
+      "Schema ID {} was not found in any context with subject '{}' or in "
+      "default "
+      "context without subject restriction",
+      id,
+      subject());
+    co_return schema_resolution_result{
+      .ctx_id = context_schema_id{default_context, id}, .matched_subjects = {}};
+}
+
+/// Resolve a schema ID with the provided context and subject, performing
+/// an extended search if necessary.
+ss::future<schema_resolution_result> resolve_schema_id(
+  sharded_store& store, schema_id id, const context_subject& ctx_sub) {
+    auto perform_extended_search
+      = (ctx_sub.ctx == default_context && !ctx_sub.sub().empty());
+    co_return co_await (
+      perform_extended_search
+        ? resolve_schema_id_extended(store, id, ctx_sub.sub)
+        : resolve_schema_id_simple(store, id, ctx_sub));
 }
 
 } // namespace
@@ -486,24 +634,68 @@ ss::future<server::reply_t> get_schemas_ids_id(
     const auto format = parse_output_format(*rq.req);
 
     co_await rq.service().writer().read_sync();
-    auto subjects = co_await rq.service().schema_store().get_schema_subjects(
-      id, include_deleted::yes);
 
-    enterprise::handle_get_schemas_ids_id_authz(rq, auth_result, subjects);
+    // Parse optional subject query parameter to extract context
+    auto subject_param = parse::query_param<std::optional<ss::sstring>>(
+                           *rq.req, "subject")
+                           .value_or("");
 
-    // With deferred schema validation, there might be a schema that
-    // had invalid references. These might have already been posted, so
-    // we need to sync
-    co_await rq.service().writer().read_sync();
+    auto ctx_sub = context_subject::from_string(subject_param);
 
-    auto def = co_await get_or_load(rq, [&rq, id, format]() {
-        return rq.service().schema_store().get_schema_definition(id, format);
-    });
+    auto result = co_await resolve_schema_id(
+      rq.service().schema_store(), id, ctx_sub);
 
+    // Subject-based deferred authz (handles 403 vs 404)
+    enterprise::handle_get_schemas_ids_id_authz(
+      rq, auth_result, result.matched_subjects);
+
+    if (!result.found()) {
+        throw as_exception(not_found(id));
+    }
+
+    auto def = co_await rq.service().schema_store().get_schema_definition(
+      result.ctx_id, format);
     auto resp = ppj::rjson_serialize_iobuf(
       get_schemas_ids_id_response{.definition{std::move(def)}});
     log_response(*rq.req, resp);
     rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
+    co_return rp;
+}
+
+ss::future<server::reply_t> get_schemas_ids_id_schema(
+  server::request_t rq,
+  server::reply_t rp,
+  std::optional<request_auth_result> auth_result) {
+    parse_accept_header(rq, rp);
+    auto id = parse::request_param<schema_id>(*rq.req, "id");
+    const auto format = parse_output_format(*rq.req);
+
+    co_await rq.service().writer().read_sync();
+
+    // Parse optional subject query parameter to extract context
+    auto subject_param = parse::query_param<std::optional<ss::sstring>>(
+                           *rq.req, "subject")
+                           .value_or("");
+
+    auto ctx_sub = context_subject::from_string(subject_param);
+
+    auto result = co_await resolve_schema_id(
+      rq.service().schema_store(), id, ctx_sub);
+
+    // Subject-based deferred authz (handles 403 vs 404)
+    enterprise::handle_get_schemas_ids_id_authz(
+      rq, auth_result, result.matched_subjects);
+
+    if (!result.found()) {
+        throw as_exception(not_found(id));
+    }
+
+    auto def = co_await rq.service().schema_store().get_schema_definition(
+      result.ctx_id, format);
+
+    auto [resp, type, refs, meta] = std::move(def).destructure();
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)()));
     co_return rp;
 }
 
@@ -515,11 +707,22 @@ get_schemas_ids_id_versions(server::request_t rq, server::reply_t rp) {
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    // Force early 40403 if the schema id isn't found
-    co_await rq.service().schema_store().get_schema_definition(id);
+    // Parse optional subject query parameter to extract context
+    auto subject_param = parse::query_param<std::optional<ss::sstring>>(
+                           *rq.req, "subject")
+                           .value_or("");
+
+    auto ctx_sub = context_subject::from_string(subject_param);
+
+    auto result = co_await resolve_schema_id(
+      rq.service().schema_store(), id, ctx_sub);
+
+    if (!result.found()) {
+        throw as_exception(not_found(id));
+    }
 
     auto svs = co_await rq.service().schema_store().get_schema_subject_versions(
-      id);
+      result.ctx_id);
 
     auto resp = ppj::rjson_serialize_iobuf(
       get_schemas_ids_id_versions_response{.subject_versions{std::move(svs)}});
@@ -539,11 +742,23 @@ ss::future<ctx_server<service>::reply_t> get_schemas_ids_id_subjects(
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    // Force early 40403 if the schema id isn't found
-    co_await rq.service().schema_store().get_schema_definition(id);
+    // Parse optional subject query parameter to extract context
+    auto subject_param = parse::query_param<std::optional<ss::sstring>>(
+                           *rq.req, "subject")
+                           .value_or("");
+
+    auto ctx_sub = context_subject::from_string(subject_param);
+
+    auto result = co_await resolve_schema_id(
+      rq.service().schema_store(), id, ctx_sub);
+
+    if (!result.found()) {
+        throw as_exception(not_found(id));
+    }
 
     auto ctx_subjects
-      = co_await rq.service().schema_store().get_schema_subjects(id, incl_del);
+      = co_await rq.service().schema_store().get_schema_subjects(
+        result.ctx_id, incl_del);
 
     // Convert context_subject to qualified string format for JSON response
     auto subjects_str = std::move(ctx_subjects) | std::views::as_rvalue
@@ -576,7 +791,8 @@ ss::future<server::reply_t> get_subjects(
     auto res = co_await rq.service().schema_store().get_subjects(
       inc_del, subject_prefix);
 
-    // Handle AuthZ - Filters res for the subjects the user is allowed to see
+    // Handle AuthZ - Filters res for the subjects the user is allowed to
+    // see
     enterprise::handle_get_subjects_authz(rq, auth_result, res);
 
     // Convert context_subject to qualified string format for JSON response
@@ -627,7 +843,8 @@ post_subject(server::request_t rq, server::reply_t rp) {
     const auto format = parse_output_format(*rq.req);
     vlog(
       srlog.debug,
-      "post_subject subject='{}', normalize='{}', deleted='{}', format='{}'",
+      "post_subject subject='{}', normalize='{}', deleted='{}', "
+      "format='{}'",
       ctx_sub,
       norm,
       inc_del,
@@ -790,7 +1007,8 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
                 throw exception(
                   error_code::schema_incompatible,
                   fmt::format(
-                    "Schema being registered is incompatible with an earlier "
+                    "Schema being registered is incompatible with an "
+                    "earlier "
                     "schema for subject \"{}\", details: [{}]",
                     ctx_sub,
                     fmt::join(compat.messages, ", ")));
@@ -990,7 +1208,8 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
     auto unparsed = co_await rjson_parse(
       *rq.req, post_subject_versions_request_handler<>{ctx_sub});
 
-    // Must read, in case we have the subject in cache with an outdated config
+    // Must read, in case we have the subject in cache with an outdated
+    // config
     co_await rq.service().writer().read_sync();
 
     vlog(

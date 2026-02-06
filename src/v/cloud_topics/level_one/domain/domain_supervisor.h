@@ -66,7 +66,8 @@ public:
 
     // Creates the L1 metastore topic, returning false if there was an issue
     // while creating.
-    ss::future<bool> maybe_create_metastore_topic();
+    ss::future<bool>
+    maybe_create_metastore_topic(std::optional<int> num_partitions);
 
 private:
     std::unique_ptr<impl> _impl;

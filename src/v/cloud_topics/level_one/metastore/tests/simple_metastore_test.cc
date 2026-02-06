@@ -2223,3 +2223,120 @@ TEST(SimpleMetastoreTest, TestGetExtentMetadataEmpty) {
         EXPECT_TRUE(extent_metadata_le_res->end_of_stream);
     }
 }
+
+TEST(SimpleMetastoreTest, TestGetSizeMissingPartition) {
+    simple_metastore m;
+    auto size_res = m.get_size(model::topic_id_partition::from(tid_c)).get();
+    ASSERT_FALSE(size_res.has_value());
+    ASSERT_EQ(metastore::errc::missing_ntp, size_res.error());
+}
+
+TEST(SimpleMetastoreTest, TestGetSizeBasic) {
+    simple_metastore m;
+    constexpr size_t data_size_1 = 100;
+    constexpr size_t data_size_2 = 200;
+    constexpr size_t data_size_3 = 300;
+
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100, 1100)
+                      .add(tid_a, 0_o, 9_o, 2000_t, 0, data_size_1)
+                      .build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 10_o, 19_o, 2000_t, 0, data_size_2)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 20_o, 29_o, 2000_t, 0, data_size_3)
+                      .build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tid_a);
+    auto size_res = m.get_size(tp).get();
+    ASSERT_TRUE(size_res.has_value());
+    ASSERT_EQ(data_size_1 + data_size_2 + data_size_3, size_res->size);
+}
+
+TEST(SimpleMetastoreTest, TestGetSizeAfterSetStartOffset) {
+    simple_metastore m;
+    constexpr size_t data_size_1 = 100;
+    constexpr size_t data_size_2 = 200;
+    constexpr size_t data_size_3 = 300;
+
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100, 1100)
+                      .add(tid_a, 0_o, 9_o, 2000_t, 0, data_size_1)
+                      .build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 10_o, 19_o, 2000_t, 0, data_size_2)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 20_o, 29_o, 2000_t, 0, data_size_3)
+                      .build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Initial size should be sum of all extents.
+    auto size_res = m.get_size(tp).get();
+    ASSERT_TRUE(size_res.has_value());
+    ASSERT_EQ(data_size_1 + data_size_2 + data_size_3, size_res->size);
+
+    // Set start offset to remove the first extent.
+    auto set_start_res = m.set_start_offset(tp, 10_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    // Size should now exclude the first extent.
+    size_res = m.get_size(tp).get();
+    ASSERT_TRUE(size_res.has_value());
+    ASSERT_EQ(data_size_2 + data_size_3, size_res->size);
+
+    // Set start offset to remove the second extent as well.
+    set_start_res = m.set_start_offset(tp, 20_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    // Size should now only include the third extent.
+    size_res = m.get_size(tp).get();
+    ASSERT_TRUE(size_res.has_value());
+    ASSERT_EQ(data_size_3, size_res->size);
+
+    // Set start offset to remove all extents.
+    set_start_res = m.set_start_offset(tp, 30_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    // Size should now be zero.
+    size_res = m.get_size(tp).get();
+    ASSERT_TRUE(size_res.has_value());
+    ASSERT_EQ(0, size_res->size);
+}
+
+TEST(SimpleMetastoreTest, TestGetSizeMultiplePartitions) {
+    simple_metastore m;
+    constexpr size_t data_size_a = 100;
+    constexpr size_t data_size_b = 250;
+
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100, 1100)
+                      .add(tid_a, 0_o, 9_o, 2000_t, 0, data_size_a)
+                      .add(tid_b, 0_o, 9_o, 2000_t, 100, 100 + data_size_b)
+                      .build());
+    auto add_res
+      = m.add_objects(
+           os,
+           terms_builder().add(tid_a, 0_tm, 0_o).add(tid_b, 0_tm, 0_o).build())
+          .get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Each partition should report its own size.
+    auto tp_a = model::topic_id_partition::from(tid_a);
+    auto size_res_a = m.get_size(tp_a).get();
+    ASSERT_TRUE(size_res_a.has_value());
+    ASSERT_EQ(data_size_a, size_res_a->size);
+
+    auto tp_b = model::topic_id_partition::from(tid_b);
+    auto size_res_b = m.get_size(tp_b).get();
+    ASSERT_TRUE(size_res_b.has_value());
+    ASSERT_EQ(data_size_b, size_res_b->size);
+}

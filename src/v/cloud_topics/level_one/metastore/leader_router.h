@@ -75,6 +75,9 @@ public:
     ss::future<rpc::get_offsets_reply>
       get_offsets(rpc::get_offsets_request, local_only = local_only::no);
 
+    ss::future<rpc::get_size_reply>
+      get_size(rpc::get_size_request, local_only = local_only::no);
+
     ss::future<rpc::get_compaction_info_reply> get_compaction_info(
       rpc::get_compaction_info_request, local_only = local_only::no);
 
@@ -107,7 +110,11 @@ public:
 
     std::optional<int> num_metastore_partitions() const;
 
-    ss::future<bool> ensure_topic_exists();
+    // Creates the topic (optionally with the given number of partitions, if
+    // provided). Does not validate that the actual number of partitions in
+    // the topic matches if it already exists.
+    ss::future<bool>
+    ensure_topic_exists(std::optional<int> num_partitions = std::nullopt);
 
     // Indicates the location in object storage that this metastore's manifest
     // will be stored.
@@ -164,6 +171,9 @@ private:
 
     ss::future<rpc::get_offsets_reply> get_offsets_locally(
       rpc::get_offsets_request, const model::ntp& metastore_ntp, ss::shard_id);
+
+    ss::future<rpc::get_size_reply> get_size_locally(
+      rpc::get_size_request, const model::ntp& metastore_ntp, ss::shard_id);
 
     ss::future<rpc::get_compaction_info_reply> get_compaction_info_locally(
       rpc::get_compaction_info_request,

@@ -60,6 +60,9 @@ public:
     ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) override;
 
+    ss::future<std::expected<size_response, errc>>
+    get_size(const model::topic_id_partition&) override;
+
     ss::future<std::expected<add_response, errc>> add_objects(
       const object_metadata_builder&, const term_offset_map_t&) override;
     ss::future<std::expected<add_response, errc>> add_objects(
@@ -134,6 +137,8 @@ private:
     friend class simple_domain_manager;
     static std::expected<offsets_response, errc>
     get_offsets(const state&, const model::topic_id_partition&);
+    static std::expected<size_response, errc>
+    get_size(const state&, const model::topic_id_partition&);
     static std::expected<object_response, errc>
     get_first_ge(const state&, const model::topic_id_partition&, kafka::offset);
     static std::expected<object_response, errc> get_first_ge(

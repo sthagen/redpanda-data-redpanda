@@ -551,7 +551,10 @@ s3_imposter_fixture::get_object(const ss::sstring& url) const {
 }
 
 ss::sstring s3_imposter_fixture::url_base() const {
-    switch (conf.url_style) {
+    if (!conf.url_style.has_value()) {
+        return fmt::format("");
+    }
+    switch (*conf.url_style) {
     case cloud_storage_clients::s3_url_style::virtual_host:
         return fmt::format("");
     case cloud_storage_clients::s3_url_style::path:

@@ -177,6 +177,14 @@ public:
     virtual ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) = 0;
 
+    struct size_response {
+        // The total size of the partition in bytes.
+        size_t size;
+    };
+    // Returns the size of the partition in bytes.
+    virtual ss::future<std::expected<size_response, errc>>
+    get_size(const model::topic_id_partition&) = 0;
+
     struct add_response {
         // The actual next offsets for any topic partitions whose input objects
         // were not properly aligned in a given add request.

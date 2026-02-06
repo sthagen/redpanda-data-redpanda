@@ -360,6 +360,7 @@ redpanda_cc_btest(
         ":store_fixture",
         "//src/v/pandaproxy/schema_registry:core",
         "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:test_env",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@boost//:test",
         "@fmt",

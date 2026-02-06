@@ -191,6 +191,12 @@ protected:
         return _stages.next_stage(s);
     }
 
+    /// Return next stage index without checking if stage is registered.
+    /// This is useful for accessing pre-allocated resources.
+    int next_stage_index(pipeline_stage s) const {
+        return _stages.next_stage_index(s);
+    }
+
     /// Resolve every pending write that matches the predicate with an error.
     template<typename Pred>
     void remove_requests(Pred pred, errc error, std::string_view reason) {

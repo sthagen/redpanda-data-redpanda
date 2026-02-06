@@ -35,6 +35,7 @@ enum class license_required_feature {
     leadership_pinning,
     shadow_linking,
     cloud_topics,
+    topic_deletion_disabled,
 };
 
 std::ostream& operator<<(std::ostream&, license_required_feature);
@@ -70,6 +71,7 @@ public:
     // | Cluster     | `iceberg_enabled`               | `true`        |
     // | Cluster     | `enable_shadow_linking`         | `true`        |
     // | Cluster     | `cloud_topics_enabled`          | `true`        |
+    // | Cluster     | `delete_topic_enable`           | `false`       |
     // | Node        | `fips_mode`                     | `enabled`     |
     // | Node        | `fips_mode`                     | `permissive`  |
     // +-------------+---------------------------------+---------------+

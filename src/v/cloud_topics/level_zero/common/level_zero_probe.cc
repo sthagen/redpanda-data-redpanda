@@ -211,31 +211,16 @@ void write_request_scheduler_probe::setup_internal_metrics(bool disable) {
     _metrics.add_group(
       prometheus_sanitize::metrics_name("cloud_topics_write_request_scheduler"),
       {sm::make_counter(
-         "data_threshold_requests",
-         [this] { return _data_threshold_requests; },
+         "scheduler_requests",
+         [this] { return _scheduler_requests; },
          sm::description(
-           "Number of write requests scheduled by data threshold policy."),
+           "Number of write requests scheduled by the scheduler."),
          labels),
 
        sm::make_counter(
-         "data_threshold_bytes",
-         [this] { return _data_threshold_bytes; },
-         sm::description(
-           "Total number of bytes scheduled by data threshold policy."),
-         labels),
-
-       sm::make_counter(
-         "time_fallback_requests",
-         [this] { return _time_fallback_requests; },
-         sm::description(
-           "Number of write requests scheduled by time based fallback policy."),
-         labels),
-
-       sm::make_counter(
-         "time_fallback_bytes",
-         [this] { return _time_fallback_bytes; },
-         sm::description(
-           "Total number of bytes scheduled by time based fallback policy."),
+         "scheduler_bytes",
+         [this] { return _scheduler_bytes; },
+         sm::description("Total number of bytes scheduled by scheduler."),
          labels),
 
        sm::make_counter(
@@ -261,6 +246,12 @@ void write_request_scheduler_probe::setup_internal_metrics(bool disable) {
          "rx_bytes_xshard",
          [this] { return _rx_bytes_xshard; },
          sm::description("Total number of bytes received from another shard."),
+         labels),
+
+       sm::make_gauge(
+         "active_groups",
+         [this] { return _active_groups; },
+         sm::description("Number of active upload groups in the scheduler."),
          labels)});
 }
 batcher_probe::batcher_probe(bool disable) { setup_internal_metrics(disable); }

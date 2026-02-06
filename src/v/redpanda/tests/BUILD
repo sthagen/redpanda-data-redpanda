@@ -45,6 +45,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_io/tests:s3_imposter",
+        "//src/v/cloud_topics:test_fixture_cfg",
         "//src/v/redpanda:application",
         "//src/v/test_utils:async",
         "@seastar",

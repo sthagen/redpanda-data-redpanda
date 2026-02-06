@@ -27,7 +27,7 @@ void rjson_serialize(
     for (const auto& sv : res.subject_versions) {
         w.StartObject();
         w.Key("subject");
-        ::json::rjson_serialize(w, sv.sub);
+        w.String(sv.sub.to_string());
         w.Key("version");
         ::json::rjson_serialize(w, sv.version);
         w.EndObject();

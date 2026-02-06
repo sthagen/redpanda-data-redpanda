@@ -14,6 +14,7 @@
 #include "cloud_topics/app.h"
 #include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/level_one/metastore/simple_stm.h"
+#include "cloud_topics/test_fixture_cfg.h"
 #include "cluster/tests/cluster_test_fixture.h"
 #include "kafka/server/tests/produce_consume_utils.h"
 #include "model/fundamental.h"
@@ -39,7 +40,7 @@ public:
             remove_node_application(id);
         }
     }
-    void add_node(bool use_lsm_metastore = true) {
+    void add_node(cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
         static constexpr int kafka_port_base = 9092;
         static constexpr int rpc_port_base = 11000;
         auto [s3_conf, a_conf, cs_conf] = get_cloud_storage_configurations(
@@ -60,7 +61,7 @@ public:
           /*cloud_topics_enabled=*/true,
           /*cluster_linking_enabled=*/false,
           /*seed_node_id=*/model::node_id{0},
-          use_lsm_metastore);
+          ct_test_cfg);
     }
 
     ss::future<kafka_produce_transport*> make_producer(model::node_id id) {

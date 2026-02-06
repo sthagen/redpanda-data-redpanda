@@ -301,6 +301,28 @@ replicated_metastore::get_offsets(const model::topic_id_partition& tidp) {
     co_return resp;
 }
 
+ss::future<std::expected<metastore::size_response, metastore::errc>>
+replicated_metastore::get_size(const model::topic_id_partition& tidp) {
+    rpc::get_size_request req;
+    req.tp = tidp;
+
+    auto reply_fut = co_await ss::coroutine::as_future(
+      fe_.get_size(std::move(req)));
+    if (reply_fut.failed()) {
+        auto ex = reply_fut.get_exception();
+        vlog(cd_log.warn, "Error while sending request: {}", ex);
+        co_return std::unexpected(metastore::errc::transport_error);
+    }
+    auto reply = reply_fut.get();
+    if (reply.ec != rpc::errc::ok) {
+        co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+    }
+
+    metastore::size_response resp;
+    resp.size = reply.size;
+    co_return resp;
+}
+
 ss::future<std::expected<metastore::add_response, metastore::errc>>
 replicated_metastore::add_objects(
   const metastore::object_metadata_builder& builder,
@@ -935,18 +957,43 @@ replicated_metastore::restore(const cloud_storage::remote_label& source_label) {
     auto manifest_res = co_await manifest_io_->download_metastore_manifest(
       source_label);
     if (!manifest_res.has_value()) {
-        vlog(
-          cd_log.warn,
-          "Failed to download metastore manifest for cluster {}: {}",
-          source_label,
-          manifest_res.error());
-        co_return std::unexpected(errc::transport_error);
+        if (manifest_res.error().e == manifest_io::errc::not_found) {
+            vlog(
+              cd_log.warn,
+              "Manifest not found for metastore at {}, likely because it was "
+              "not uploaded. Ensuring metastore topic without restoring "
+              "domains",
+              source_label);
+            auto ensure_fut = co_await ss::coroutine::as_future(
+              fe_.ensure_topic_exists());
+            if (ensure_fut.failed()) {
+                auto ex = ensure_fut.get_exception();
+                vlog(
+                  cd_log.warn,
+                  "Error while ensuring metastore topic for restore: {}",
+                  ex);
+                co_return std::unexpected(errc::transport_error);
+            }
+            if (!ensure_fut.get()) {
+                vlog(cd_log.warn, "Ensuring metastore topic did not succeed");
+                co_return std::unexpected(errc::transport_error);
+            }
+            co_return std::nullopt;
+        } else {
+            vlog(
+              cd_log.warn,
+              "Failed to download metastore manifest for cluster {}: {}",
+              source_label,
+              manifest_res.error());
+            co_return std::unexpected(errc::transport_error);
+        }
     }
     auto manifest = std::move(manifest_res.value());
+    int num_domains = static_cast<int>(manifest.domains.size());
 
-    // Ensure the metastore topic exists with the correct number of partitions.
+    // Create the topic if it doesn't exist.
     auto ensure_fut = co_await ss::coroutine::as_future(
-      fe_.ensure_topic_exists());
+      fe_.ensure_topic_exists(num_domains));
     if (ensure_fut.failed()) {
         auto ex = ensure_fut.get_exception();
         vlog(
@@ -964,7 +1011,7 @@ replicated_metastore::restore(const cloud_storage::remote_label& source_label) {
         vlog(cd_log.warn, "Unable to get num metastore partitions for restore");
         co_return std::unexpected(errc::transport_error);
     }
-    if (manifest.domains.size() != static_cast<size_t>(*num_partitions)) {
+    if (num_domains != *num_partitions) {
         vlog(
           cd_log.error,
           "Manifest domain count {} does not match metastore partition count "
@@ -981,7 +1028,6 @@ replicated_metastore::restore(const cloud_storage::remote_label& source_label) {
         co_return std::unexpected(errc::invalid_request);
     }
 
-    // Restore each partition with its corresponding domain_uuid
     for (int pid = 0; pid < *num_partitions; ++pid) {
         rpc::restore_domain_request req{
           .metastore_partition = model::partition_id{pid},

@@ -509,7 +509,7 @@ request_creator::make_gcs_batch_delete_request(
 }
 
 std::string request_creator::make_host(const plain_bucket_name& name) const {
-    switch (_ap_style) {
+    switch (_ap_style.value()) {
     case s3_url_style::virtual_host:
         // Host: bucket-name.s3.region-code.amazonaws.com
         return fmt::format("{}.{}", name(), _ap());
@@ -521,7 +521,7 @@ std::string request_creator::make_host(const plain_bucket_name& name) const {
 
 std::string request_creator::make_target(
   const plain_bucket_name& name, const object_key& key) const {
-    switch (_ap_style) {
+    switch (_ap_style.value()) {
     case s3_url_style::virtual_host:
         // Target: /homepage.html
         return fmt::format("/{}", key().string());
@@ -907,8 +907,6 @@ s3_client::s3_client(
 
 ss::future<result<client_self_configuration_output, error_outcome>>
 s3_client::self_configure() {
-    auto result = s3_self_configuration_result{
-      .url_style = s3_url_style::virtual_host};
     // Oracle cloud storage only supports path-style requests
     // (https://www.oracle.com/ca-en/cloud/storage/object-storage/faq/#category-amazon),
     // but self-configuration will misconfigure to virtual-host style due to a
@@ -926,8 +924,7 @@ s3_client::self_configure() {
     if (
       backend == model::cloud_storage_backend::oracle_s3_compat
       || backend == model::cloud_storage_backend::minio) {
-        result.url_style = s3_url_style::path;
-        co_return result;
+        co_return s3_self_configuration_result{.url_style = s3_url_style::path};
     }
 
     // Also handle possibly inferred backend.
@@ -935,8 +932,7 @@ s3_client::self_configure() {
     if (
       inferred_backend == model::cloud_storage_backend::oracle_s3_compat
       || inferred_backend == model::cloud_storage_backend::minio) {
-        result.url_style = s3_url_style::path;
-        co_return result;
+        co_return s3_self_configuration_result{.url_style = s3_url_style::path};
     }
 
     // Test virtual host style addressing, fall back to path if necessary.
@@ -948,10 +944,11 @@ s3_client::self_configure() {
     if (!bucket_config.value().has_value()) {
         vlog(
           s3_log.warn,
-          "Could not self-configure S3 Client, {} is not set. Defaulting to {}",
-          bucket_config.name(),
-          result.url_style);
-        co_return result;
+          "Could not self-configure S3 Client, {} is not set. Defaulting to "
+          "virtual_host",
+          bucket_config.name());
+        co_return s3_self_configuration_result{
+          .url_style = s3_url_style::virtual_host};
     }
 
     // TODO: Review this code. It is likely buggy when Remote Read Replicas are
@@ -963,12 +960,15 @@ s3_client::self_configure() {
 
     // Test virtual_host style.
     vassert(
-      _requestor._ap_style == s3_url_style::virtual_host,
-      "_ap_style should be virtual host by default before self configuration "
+      !_requestor._ap_style.has_value()
+        || _requestor._ap_style == s3_url_style::virtual_host,
+      "_ap_style should be unset or virtual host before self configuration "
       "begins");
+    _requestor._ap_style = s3_url_style::virtual_host;
     if (co_await self_configure_test(bucket)) {
-        // Virtual-host style request succeeded.
-        co_return result;
+        // Virtual host style request succeeded.
+        co_return s3_self_configuration_result{
+          .url_style = s3_url_style::virtual_host};
     }
 
     // fips mode can only work in virtual_host mode, so if the above test failed
@@ -980,10 +980,9 @@ s3_client::self_configure() {
 
     // Test path style.
     _requestor._ap_style = s3_url_style::path;
-    result.url_style = _requestor._ap_style;
     if (co_await self_configure_test(bucket)) {
         // Path style request succeeded.
-        co_return result;
+        co_return s3_self_configuration_result{.url_style = s3_url_style::path};
     }
 
     // Both addressing styles failed.

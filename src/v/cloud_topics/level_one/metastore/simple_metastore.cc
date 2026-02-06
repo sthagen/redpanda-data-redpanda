@@ -162,6 +162,25 @@ simple_metastore::get_offsets(
     };
 }
 
+ss::future<std::expected<metastore::size_response, metastore::errc>>
+simple_metastore::get_size(const model::topic_id_partition& tpr) {
+    co_return get_size(state_, tpr);
+}
+
+std::expected<metastore::size_response, metastore::errc>
+simple_metastore::get_size(
+  const state& state, const model::topic_id_partition& tpr) {
+    auto prt_ref = state.partition_state(tpr);
+    if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tpr);
+        return std::unexpected(metastore::errc::missing_ntp);
+    }
+    const auto& prt = prt_ref->get();
+    return size_response{
+      .size = prt.calculate_size(),
+    };
+}
+
 ss::future<std::expected<metastore::add_response, metastore::errc>>
 simple_metastore::add_objects(
   const metastore::object_metadata_builder& builder,

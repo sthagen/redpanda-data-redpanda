@@ -350,6 +350,30 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "flush_loop",
+    srcs = [
+        "flush_loop.cc",
+    ],
+    hdrs = [
+        "flush_loop.h",
+    ],
+    implementation_deps = [
+        ":metastore",
+        "//src/v/base",
+        "//src/v/cloud_topics:logger",
+        "//src/v/config",
+        "//src/v/ssx:semaphore",
+        "//src/v/ssx:time",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/ssx:actor",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "extent_metadata_reader",
     srcs = [
         "extent_metadata_reader.cc",

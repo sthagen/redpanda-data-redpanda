@@ -53,6 +53,12 @@ std::ostream& operator<<(std::ostream& o, const recovery_stage& s) {
     case recovery_stage::recovered_remote_topic_data:
         o << "recovery_stage::recovered_remote_topic_data";
         break;
+    case recovery_stage::recovered_cloud_topics_metastore:
+        o << "recovery_stage::recovered_cloud_topics_metastore";
+        break;
+    case recovery_stage::recovered_cloud_topic_data:
+        o << "recovery_stage::recovered_cloud_topic_data";
+        break;
     case recovery_stage::recovered_topic_data:
         o << "recovery_stage::recovered_topic_data";
         break;

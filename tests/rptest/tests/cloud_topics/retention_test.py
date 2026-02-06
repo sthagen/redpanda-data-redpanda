@@ -20,6 +20,7 @@ from rptest.services.redpanda import (
     get_cloud_storage_type,
 )
 from rptest.tests.cloud_topics.e2e_test import EndToEndCloudTopicsBase
+import rptest.tests.cloud_topics.utils as ct_utils
 
 
 class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
@@ -251,6 +252,11 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
             f"Expected start_offset=0 with large retention, got {part_before.start_offset}"
         )
 
+        # Waits until the the partition size reaches a reported positive sign
+        ct_utils.wait_until_l1_partition_size(
+            self.admin, self.topic_name, 0, lambda size: size > 0
+        )
+
         # Alter retention.ms to trigger time-based deletion
         self.logger.info("Setting retention.ms to 10ms to trigger deletion")
         rpk.alter_topic_config(self.topic_name, TopicSpec.PROPERTY_RETENTION_TIME, "10")
@@ -287,4 +293,9 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
             timeout_sec=30,
             backoff_sec=3,
             err_msg=failed_to_expire_all_data,
+        )
+
+        # Waits until the the partition size reaches a reported size of 0
+        ct_utils.wait_until_l1_partition_size(
+            self.admin, self.topic_name, 0, lambda size: size == 0
         )

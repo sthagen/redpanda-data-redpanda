@@ -88,3 +88,40 @@ class Offsets(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal['next_offset', b'next_offset', 'start_offset', b'start_offset']) -> None:
         ...
 Global___Offsets: typing_extensions.TypeAlias = Offsets
+
+@typing.final
+class GetSizeRequest(google.protobuf.message.Message):
+    """GetSizeRequest is the request for looking up the size in bytes in the
+    metastore for a topic partition.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    PARTITION_FIELD_NUMBER: builtins.int
+
+    @property
+    def partition(self) -> proto.redpanda.core.common.v1.ntp_pb2.TopicPartition:
+        """The topic partition to lookup the size for."""
+
+    def __init__(self, *, partition: proto.redpanda.core.common.v1.ntp_pb2.TopicPartition | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['partition', b'partition']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['partition', b'partition']) -> None:
+        ...
+Global___GetSizeRequest: typing_extensions.TypeAlias = GetSizeRequest
+
+@typing.final
+class GetSizeResponse(google.protobuf.message.Message):
+    """GetSizeResponse is the response for looking up the size in the metastore."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SIZE_BYTES_FIELD_NUMBER: builtins.int
+    size_bytes: builtins.int
+    'The size in bytes of this partition in the metastore.'
+
+    def __init__(self, *, size_bytes: builtins.int=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['size_bytes', b'size_bytes']) -> None:
+        ...
+Global___GetSizeResponse: typing_extensions.TypeAlias = GetSizeResponse

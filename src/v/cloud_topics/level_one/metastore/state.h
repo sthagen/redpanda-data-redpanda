@@ -212,6 +212,17 @@ struct partition_state
     using extent_set_t = absl::btree_set<extent>;
     extent_set_t extents;
 
+    // Brute force calculation of the byte size of all the extents for this
+    // partition. This is used for the simple metastore which isn't used in
+    // production, so efficiency isn't critical.
+    size_t calculate_size() const {
+        size_t total = 0;
+        for (const auto& ext : extents) {
+            total += ext.len;
+        }
+        return total;
+    }
+
     // The start offset of the partition. This may not align with the front of
     // `extents` if the offset was set through the Kafka API.
     kafka::offset start_offset{0};

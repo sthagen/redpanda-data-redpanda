@@ -47,6 +47,8 @@ public:
         chunked_vector<cluster::user_credential> users;
         chunked_vector<security::acl_binding> acls;
         chunked_vector<cluster::role_recovery> roles;
+        std::optional<topic_configuration> ct_metastore_topic;
+        chunked_vector<topic_configuration> cloud_topics;
         chunked_vector<topic_configuration> remote_topics;
         chunked_vector<topic_configuration> local_topics;
         // TODO: restore wasm plugins/transforms

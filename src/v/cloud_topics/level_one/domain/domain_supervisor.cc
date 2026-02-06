@@ -101,12 +101,13 @@ public:
         return it->second;
     }
 
-    ss::future<bool> maybe_create_metastore_topic() {
+    ss::future<bool>
+    maybe_create_metastore_topic(std::optional<int> num_partitions) {
         if (_controller->get_topics_state().local().contains(
               model::l1_metastore_nt)) {
             co_return true;
         }
-        co_return co_await create_domains_topic();
+        co_return co_await create_domains_topic(num_partitions);
     }
 
 private:
@@ -186,7 +187,8 @@ private:
         }
     }
 
-    ss::future<bool> create_domains_topic() {
+    ss::future<bool>
+    create_domains_topic(std::optional<int> num_partitions = std::nullopt) {
         auto tp_ns = model::l1_metastore_nt;
         cluster::topic_properties topic_props;
         // Mark all these as disabled
@@ -199,7 +201,8 @@ private:
           = model::cleanup_policy_bitflags::none;
         // NOTE: For now we just have a fixed number of domains for the entire
         // cluster.
-        co_return co_await create_topic(tp_ns, 3, topic_props);
+        co_return co_await create_topic(
+          tp_ns, num_partitions.value_or(3), topic_props);
     }
 
     ss::future<> update_topic(cluster::topic_properties_update update) {
@@ -372,8 +375,9 @@ domain_supervisor::get(const model::ntp& ntp) const {
     return _impl->get(ntp);
 }
 
-ss::future<bool> domain_supervisor::maybe_create_metastore_topic() {
-    return _impl->maybe_create_metastore_topic();
+ss::future<bool> domain_supervisor::maybe_create_metastore_topic(
+  std::optional<int> num_partitions) {
+    return _impl->maybe_create_metastore_topic(num_partitions);
 }
 
 void domain_supervisor::on_domain_leadership_change(

@@ -48,6 +48,15 @@ public:
     pipeline_stage first_stage() const;
     pipeline_stage register_pipeline_stage() noexcept;
 
+    /// Get the numeric index of the next stage after the given stage.
+    /// Unlike next_stage(), this method does not check if the next stage
+    /// is registered. It returns the index even if the stage hasn't been
+    /// registered yet. This is useful for accessing pre-allocated resources
+    /// (like counters) that are indexed by stage number.
+    /// \param old The current pipeline stage
+    /// \return The index of the next stage, or -1 if old is unassigned or last
+    int next_stage_index(pipeline_stage old) const;
+
 private:
     std::vector<pipeline_stage_id> _stages;
     size_t _registered{0};

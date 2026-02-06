@@ -13,6 +13,7 @@
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/configuration.h"
 #include "cloud_storage_clients/configuration.h"
+#include "cloud_topics/test_fixture_cfg.h"
 #include "cluster/archival/types.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/controller.h"      // IWYU pragma: keep; public member devex
@@ -87,7 +88,7 @@ public:
       bool iceberg_enabled = false,
       bool enable_cloud_topics = false,
       bool development_cluster_linking_enabled = false,
-      bool use_lsm_metastore = false);
+      cloud_topics::test_fixture_cfg ct_test_cfg = {});
 
     // creates single node with default configuration
     redpanda_thread_fixture();
@@ -290,5 +291,5 @@ public:
     ss::sharded<kafka::server> proto;
     bool remove_on_shutdown;
     std::unique_ptr<::stop_signal> app_signal;
-    bool use_lsm_metastore{true};
+    cloud_topics::test_fixture_cfg ct_test_cfg{};
 };

@@ -45,6 +45,8 @@ public:
     virtual ss::future<rpc::get_offsets_reply>
       get_offsets(rpc::get_offsets_request) = 0;
 
+    virtual ss::future<rpc::get_size_reply> get_size(rpc::get_size_request) = 0;
+
     virtual ss::future<rpc::get_compaction_info_reply>
       get_compaction_info(rpc::get_compaction_info_request) = 0;
 

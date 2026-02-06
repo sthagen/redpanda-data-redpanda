@@ -53,6 +53,15 @@ service MetastoreService {
             authz: SUPERUSER
         };
     }
+
+    // Get the size in bytes of a topic partition in the Kafka namespace. If
+    // the metastore contains no data for this NTP then a not found error will
+    // be thrown.
+    rpc GetSize(GetSizeRequest) returns (GetSizeResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
 }
 
 // GetOffsetsRequest is the request for looking up the offsets in the metastore
@@ -76,4 +85,17 @@ message Offsets {
     // The next offset expected to be written to the metastore. It is
     // the exclusive upper bound of what is stored in the metastore.
     int64 next_offset = 2;
+}
+
+// GetSizeRequest is the request for looking up the size in bytes in the
+// metastore for a topic partition.
+message GetSizeRequest {
+    // The topic partition to lookup the size for.
+    common.v1.TopicPartition partition = 1;
+}
+
+// GetSizeResponse is the response for looking up the size in the metastore.
+message GetSizeResponse {
+    // The size in bytes of this partition in the metastore.
+    uint64 size_bytes = 1;
 }

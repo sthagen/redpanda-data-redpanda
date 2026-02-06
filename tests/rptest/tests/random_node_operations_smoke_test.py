@@ -283,8 +283,6 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                 auto_assign_node_id=True,
                 omit_seeds_on_idx_one=False,
             )
-            admin = Admin(self.redpanda)
-            admin.set_log_level("cloud_topics-compaction", "trace")
 
     def _alter_local_topic_retention_bytes(self, topic: str, retention_bytes: int):
         rpk = RpkTool(self.redpanda)
@@ -918,6 +916,7 @@ class RedpandaNodeOperationsSmokeTest(RandomNodeOperationsBase):
                     "kafka": "debug",
                     "reconciler": "debug",
                     "cloud_topics": "debug",
+                    "cloud_topics-compaction": "debug",
                     "offset_translator": "trace",
                 },
             ),

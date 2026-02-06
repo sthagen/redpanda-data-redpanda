@@ -38,9 +38,11 @@
 #include <seastar/core/metrics.hh>
 
 void application::wire_up_runtime_services(
-  model::node_id node_id, ::stop_signal& app_signal) {
+  model::node_id node_id,
+  ::stop_signal& app_signal,
+  cloud_topics::test_fixture_cfg ct_test_cfg) {
     std::optional<cloud_storage_clients::bucket_name> bucket;
-    wire_up_redpanda_services(node_id, app_signal, bucket);
+    wire_up_redpanda_services(node_id, app_signal, bucket, ct_test_cfg);
     if (_proxy_config) {
         construct_single_service(
           _proxy,

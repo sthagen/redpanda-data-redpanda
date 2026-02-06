@@ -41,4 +41,8 @@ getenv(std::string_view name, std::string_view default_value = "") noexcept;
 std::string getenv_default(
   std::string_view name, std::string_view default_value = "") noexcept;
 
+// Returns true if running in a CI environment.
+// Checks if the CI environment variable is set to "true" (case-insensitive).
+bool is_on_ci() noexcept;
+
 } // namespace test_env

@@ -7,6 +7,7 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics:test_fixture_cfg",
         "//src/v/cloud_topics/level_one/metastore:simple_stm",
         "//src/v/cluster/tests:cluster_test_fixture",
         "//src/v/kafka/server/tests:kafka_test_utils",
@@ -73,5 +74,45 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:scoped_config",
         "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "topic_manifest_uploader_test",
+    timeout = "short",
+    srcs = ["topic_manifest_uploader_test.cc"],
+    cpu = 1,
+    deps = [
+        ":cluster_fixture",
+        "//src/v/base",
+        "//src/v/cloud_storage",
+        "//src/v/cluster",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "cluster_recovery_test",
+    timeout = "moderate",
+    srcs = [
+        "cluster_recovery_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":cluster_fixture",
+        "//src/v/cloud_storage",
+        "//src/v/cluster",
+        "//src/v/cluster/cloud_metadata/tests:cluster_metadata_utils",
+        "//src/v/kafka/server/tests:kafka_test_utils",
+        "//src/v/random:generators",
+        "//src/v/ssx:future_util",
+        "//src/v/ssx:sformat",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/utils:retry_chain_node",
+        "@googletest//:gtest",
+        "@seastar",
     ],
 )

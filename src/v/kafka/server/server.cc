@@ -1462,6 +1462,41 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
 
+    // Check if topic deletion is globally disabled
+    if (!config::shard_local_cfg().delete_topic_enable()) {
+        delete_topics_response resp;
+        resp.data.responses.reserve(
+          request.data.topic_names.size() + request.data.topics.size());
+
+        // Use appropriate error code based on API version
+        // API version 3+ supports topic_deletion_disabled (error 73)
+        const auto ec = (ctx.header().version >= api_version(3))
+                          ? error_code::topic_deletion_disabled
+                          : error_code::invalid_request;
+        const auto err_msg = "Topic deletion is disabled.";
+
+        std::ranges::transform(
+          request.data.topic_names,
+          std::back_inserter(resp.data.responses),
+          [ec, err_msg](const model::topic& t) {
+              return deletable_topic_result{
+                .name = t, .error_code = ec, .error_message = err_msg};
+          });
+
+        std::ranges::transform(
+          request.data.topics,
+          std::back_inserter(resp.data.responses),
+          [ec, err_msg](const delete_topic_state& t) {
+              return deletable_topic_result{
+                .name = t.name,
+                .topic_id = t.topic_id,
+                .error_code = ec,
+                .error_message = err_msg};
+          });
+
+        co_return co_await ctx.respond(std::move(resp));
+    }
+
     // Determine the names and IDs that have been provided, and detect
     // duplicates.
     chunked_hash_set<model::topic> provided_names;

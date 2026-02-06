@@ -96,7 +96,7 @@ create_topic_properties_update(
     std::apply(apply_op(op_t::none), update.custom_properties.serde_fields());
 
     static_assert(
-      std::tuple_size_v<decltype(update.properties.serde_fields())> == 42,
+      std::tuple_size_v<decltype(update.properties.serde_fields())> == 43,
       "If you add a property, decide on its default alter config "
       "policy, and handle the update in the loop below");
     static_assert(
@@ -122,6 +122,10 @@ create_topic_properties_update(
     update.properties.remote_read.op = op_t::none;
     update.properties.remote_write.op = op_t::none;
     update.properties.remote_delete.op = op_t::none;
+
+    // remote_label is an internal property used for cluster recovery and should
+    // not be modified via AlterConfigs.
+    update.properties.remote_label.op = op_t::none;
 
     // Legacy
     auto& update_properties_shadow_indexing

@@ -79,7 +79,10 @@ redpanda_cc_gtest(
     ],
     cpu = 1,
     deps = [
+        "//src/v/cloud_storage:remote_label",
         "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics/level_one/metastore:manifest_io",
+        "//src/v/cloud_topics/level_one/metastore:metastore_manifest",
         "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
         "//src/v/cloud_topics/level_one/metastore:state",
         "//src/v/cloud_topics/level_one/metastore/lsm:stm",

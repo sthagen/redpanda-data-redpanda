@@ -11,6 +11,7 @@
 
 #include "test_utils/test_env.h"
 
+#include "absl/strings/match.h"
 #include "random/generators.h"
 
 #include <cstdlib>
@@ -53,6 +54,11 @@ std::string getenv_default(
     std::string name{name_sv};
     const char* v = std::getenv(name.c_str());
     return v ? v : test_env::getenv(name + "_DEFAULT", default_value);
+}
+
+bool is_on_ci() noexcept {
+    const char* ci_env = std::getenv("CI");
+    return ci_env && absl::EqualsIgnoreCase(ci_env, "true");
 }
 
 } // namespace test_env

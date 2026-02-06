@@ -51,7 +51,10 @@ batcher<Clock>::batcher(
   , _rtc(_as)
   , _logger(cd_log, _rtc)
   , _stage(std::move(stage))
-  , _probe(config::shard_local_cfg().disable_metrics()) {}
+  , _probe(config::shard_local_cfg().disable_metrics())
+  , _upload_sem(
+      config::shard_local_cfg().cloud_storage_max_connections(), "l0/batcher") {
+}
 
 template<class Clock>
 ss::future<> batcher<Clock>::start() {
@@ -254,29 +257,56 @@ ss::future<> batcher<Clock>::bg_controller_loop() {
             co_return;
         }
 
+        // Acquire semaphore units to limit concurrent background fibers.
+        // This blocks until a slot is available.
+        auto units_fut = co_await ss::coroutine::as_future(
+          ss::get_units(_upload_sem, 1, _as));
+
         auto list = _stage.pull_write_requests(
-          10_MiB); // TODO: use configuration parameter
+          config::shard_local_cfg()
+            .cloud_topics_produce_batching_size_threshold(),
+          config::shard_local_cfg()
+            .cloud_topics_produce_cardinality_threshold());
+
+        bool complete = list.complete;
+
+        if (units_fut.failed()) {
+            vlog(
+              _logger.info,
+              "Batcher upload loop is shutting down: {}",
+              units_fut.get_exception());
+            co_return;
+        }
+        auto units = std::move(units_fut.get());
 
         // We can spawn the work in the background without worrying about memory
-        // usage because the pipeline tracks the memory usage for us and will
-        // stop accepting new write requests if we go over the limit.
-        ssx::spawn_with_gate(_gate, [this, list = std::move(list)]() mutable {
-            return run_once(std::move(list))
-              .then([this](std::expected<std::monostate, errc> res) {
-                  if (!res.has_value()) {
-                      if (res.error() == errc::shutting_down) {
-                          vlog(
-                            _logger.info,
-                            "Batcher upload loop is shutting down");
-                      } else {
-                          vlog(
-                            _logger.info,
-                            "Batcher upload loop error: {}",
-                            res.error());
-                      }
-                  }
-              });
-        });
+        // usage because the background fibers is holding units acquired above.
+        ssx::spawn_with_gate(
+          _gate,
+          [this, list = std::move(list), units = std::move(units)]() mutable {
+              return run_once(std::move(list))
+                .then([this](std::expected<std::monostate, errc> res) {
+                    if (!res.has_value()) {
+                        if (res.error() == errc::shutting_down) {
+                            vlog(
+                              _logger.info,
+                              "Batcher upload loop is shutting down");
+                        } else {
+                            vlog(
+                              _logger.info,
+                              "Batcher upload loop error: {}",
+                              res.error());
+                        }
+                    }
+                })
+                .finally([u = std::move(units)] {});
+          });
+
+        // The work is spawned in the background so we can grab data for the
+        // next L0 object. If complete==true, all pending requests were pulled,
+        // so wait for more. If complete==false, there are more pending
+        // requests.
+        more_work = !complete;
     }
 }
 

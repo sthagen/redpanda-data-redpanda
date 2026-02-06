@@ -353,6 +353,33 @@ simple_domain_manager::get_offsets(rpc::get_offsets_request req) {
     };
 }
 
+ss::future<rpc::get_size_reply>
+simple_domain_manager::get_size(rpc::get_size_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::get_size_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::get_size_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+    auto& stm_state = stm_->state();
+    auto get_res = simple_metastore::get_size(stm_state, req.tp);
+    if (!get_res.has_value()) {
+        co_return rpc::get_size_reply{
+          .ec = convert_metastore_errc(get_res.error()),
+        };
+    }
+    co_return rpc::get_size_reply{
+      .ec = rpc::errc::ok,
+      .size = get_res->size,
+    };
+}
+
 rpc::get_compaction_info_reply simple_domain_manager::do_get_compaction_info(
   const state& stm_state, rpc::get_compaction_info_request req) {
     auto get_res = simple_metastore::get_compaction_info(

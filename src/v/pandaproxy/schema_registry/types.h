@@ -565,10 +565,10 @@ struct context_schema_id {
 };
 
 struct subject_version {
-    subject_version(subject s, schema_version v)
+    subject_version(context_subject s, schema_version v)
       : sub{std::move(s)}
       , version{v} {}
-    subject sub;
+    context_subject sub;
     schema_version version;
 };
 

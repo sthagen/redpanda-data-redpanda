@@ -246,6 +246,7 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
         "//src/v/random:generators",
+        "@abseil-cpp//absl/strings",
     ],
     visibility = ["//visibility:public"],
 )

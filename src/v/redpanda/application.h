@@ -14,6 +14,7 @@
 #include "base/seastarx.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_topics/app.h"
+#include "cloud_topics/test_fixture_cfg.h"
 #include "cluster/archival/fwd.h"
 #include "cluster/config_manager.h"
 #include "cluster/fwd.h"
@@ -97,7 +98,9 @@ public:
       std::optional<YAML::Node> audit_log_client_cfg = std::nullopt);
     void check_environment();
     void wire_up_and_start(
-      ::stop_signal&, bool test_mode = false, bool use_lsm_metastore = true);
+      ::stop_signal&,
+      bool test_mode = false,
+      cloud_topics::test_fixture_cfg ct_test_cfg = {});
     void post_start_tasks();
 
     void init_crashtracker(::stop_signal& app_signal);
@@ -224,13 +227,16 @@ private:
     void start_bootstrap_services();
 
     // Constructs services across shards meant for Redpanda runtime.
-    void
-    wire_up_runtime_services(model::node_id node_id, ::stop_signal& app_signal);
+    void wire_up_runtime_services(
+      model::node_id node_id,
+      ::stop_signal& app_signal,
+      cloud_topics::test_fixture_cfg ct_test_cfg);
     void configure_admin_server(model::node_id);
     void wire_up_redpanda_services(
       model::node_id,
       ::stop_signal& app_signal,
-      std::optional<cloud_storage_clients::bucket_name>& bucket_name);
+      std::optional<cloud_storage_clients::bucket_name>& bucket_name,
+      cloud_topics::test_fixture_cfg ct_test_cfg);
 
     void load_feature_table_snapshot();
 
@@ -239,7 +245,9 @@ private:
     // Starts the services meant for Redpanda runtime. Must be called after
     // having constructed the subsystems via the corresponding `wire_up` calls.
     void start_runtime_services(
-      cluster::cluster_discovery&, ::stop_signal&, bool use_lsm_metastore);
+      cluster::cluster_discovery&,
+      ::stop_signal&,
+      cloud_topics::test_fixture_cfg ct_test_cfg);
     void start_kafka(const model::node_id&, ::stop_signal&);
     void add_runtime_rpc_services(rpc::rpc_server&, bool start_raft_rpc_early);
 

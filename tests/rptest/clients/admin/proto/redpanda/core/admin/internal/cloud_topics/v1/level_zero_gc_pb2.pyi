@@ -35,13 +35,17 @@ class _Status:
 
 class _StatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Status.ValueType], builtins.type):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    L0_GC_STATUS_UNSPECIFIED: _Status.ValueType
     L0_GC_STATUS_PAUSED: _Status.ValueType
     L0_GC_STATUS_RUNNING: _Status.ValueType
     L0_GC_STATUS_STOPPING: _Status.ValueType
     L0_GC_STATUS_STOPPED: _Status.ValueType
 
 class Status(_Status, metaclass=_StatusEnumTypeWrapper):
-    ...
+    """GC worker lifecycle states.
+    Maps to cloud_topics::level_zero_gc::state.
+    """
+L0_GC_STATUS_UNSPECIFIED: Status.ValueType
 L0_GC_STATUS_PAUSED: Status.ValueType
 L0_GC_STATUS_RUNNING: Status.ValueType
 L0_GC_STATUS_STOPPING: Status.ValueType
@@ -50,9 +54,11 @@ Global___Status: typing_extensions.TypeAlias = Status
 
 @typing.final
 class GetStatusRequest(google.protobuf.message.Message):
+    """Request to query GC worker status."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     node_id: builtins.int
+    'Target a specific node, or omit to query all nodes in the cluster.'
 
     def __init__(self, *, node_id: builtins.int | None=...) -> None:
         ...
@@ -69,6 +75,7 @@ Global___GetStatusRequest: typing_extensions.TypeAlias = GetStatusRequest
 
 @typing.final
 class GetStatusResponse(google.protobuf.message.Message):
+    """Aggregated status from one or more nodes."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODES_FIELD_NUMBER: builtins.int
 
@@ -85,16 +92,18 @@ Global___GetStatusResponse: typing_extensions.TypeAlias = GetStatusResponse
 
 @typing.final
 class NodeStatus(google.protobuf.message.Message):
+    """GC status for all shards on a single node."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     SHARDS_FIELD_NUMBER: builtins.int
     ERROR_FIELD_NUMBER: builtins.int
     node_id: builtins.int
     error: builtins.str
+    'Set if the node could not be reached or returned an error.'
 
     @property
     def shards(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___ShardStatus]:
-        ...
+        """One entry per shard on this node."""
 
     def __init__(self, *, node_id: builtins.int=..., shards: collections.abc.Iterable[Global___ShardStatus] | None=..., error: builtins.str | None=...) -> None:
         ...
@@ -111,6 +120,7 @@ Global___NodeStatus: typing_extensions.TypeAlias = NodeStatus
 
 @typing.final
 class ShardStatus(google.protobuf.message.Message):
+    """Status of the GC worker on a single shard."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     SHARD_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
@@ -126,9 +136,11 @@ Global___ShardStatus: typing_extensions.TypeAlias = ShardStatus
 
 @typing.final
 class StartRequest(google.protobuf.message.Message):
+    """Request to start GC workers."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     node_id: builtins.int
+    'Target a specific node, or omit to start on all nodes.'
 
     def __init__(self, *, node_id: builtins.int | None=...) -> None:
         ...
@@ -145,6 +157,7 @@ Global___StartRequest: typing_extensions.TypeAlias = StartRequest
 
 @typing.final
 class StartResponse(google.protobuf.message.Message):
+    """Aggregated start results from one or more nodes."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     RESULTS_FIELD_NUMBER: builtins.int
 
@@ -161,9 +174,11 @@ Global___StartResponse: typing_extensions.TypeAlias = StartResponse
 
 @typing.final
 class PauseRequest(google.protobuf.message.Message):
+    """Request to pause GC workers."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     node_id: builtins.int
+    'Target a specific node, or omit to pause on all nodes.'
 
     def __init__(self, *, node_id: builtins.int | None=...) -> None:
         ...
@@ -180,6 +195,7 @@ Global___PauseRequest: typing_extensions.TypeAlias = PauseRequest
 
 @typing.final
 class PauseResponse(google.protobuf.message.Message):
+    """Aggregated pause results from one or more nodes."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     RESULTS_FIELD_NUMBER: builtins.int
 
@@ -196,11 +212,13 @@ Global___PauseResponse: typing_extensions.TypeAlias = PauseResponse
 
 @typing.final
 class StartResult(google.protobuf.message.Message):
+    """Outcome of starting GC on a single node."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     ERROR_FIELD_NUMBER: builtins.int
     node_id: builtins.int
     error: builtins.str
+    'Set if the node could not be reached or returned an error.'
 
     def __init__(self, *, node_id: builtins.int=..., error: builtins.str | None=...) -> None:
         ...
@@ -217,11 +235,13 @@ Global___StartResult: typing_extensions.TypeAlias = StartResult
 
 @typing.final
 class PauseResult(google.protobuf.message.Message):
+    """Outcome of pausing GC on a single node."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     ERROR_FIELD_NUMBER: builtins.int
     node_id: builtins.int
     error: builtins.str
+    'Set if the node could not be reached or returned an error.'
 
     def __init__(self, *, node_id: builtins.int=..., error: builtins.str | None=...) -> None:
         ...

@@ -17,6 +17,7 @@
 #include "pandaproxy/schema_registry/test/compatibility_common.h"
 #include "pandaproxy/schema_registry/test/store_fixture.h"
 #include "pandaproxy/schema_registry/types.h"
+#include "test_utils/test_env.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -2376,7 +2377,7 @@ SEASTAR_THREAD_TEST_CASE(test_object_recursion_depths) {
     // With validation disabled, setting the limit above ~130 causes corruption
     // of the heap due to stack overflow, which typically manifests as a crash
     // during Seastar shutdown, or during is_superset.
-    constexpr int max_test_depth = 30;
+    const int max_test_depth = test_env::is_on_ci() ? 30 : 17;
 
     for (int depth = 1; depth <= max_test_depth; ++depth) {
         BOOST_TEST_MESSAGE(fmt::format("Testing depth {}", depth));

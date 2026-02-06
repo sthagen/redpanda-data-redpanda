@@ -469,6 +469,113 @@ FIXTURE_TEST(
       "The provided topic name maps to an ID that was already supplied.");
 }
 
+FIXTURE_TEST(delete_topic_enable_disabled_v6, delete_topics_request_fixture) {
+    wait_for_controller_leadership().get();
+
+    create_topic("test-topic", 1, 1);
+
+    // Disable topic deletion globally (must set on all shards)
+    ss::smp::invoke_on_all([] {
+        config::shard_local_cfg().delete_topic_enable.set_value(false);
+    }).get();
+    auto reset_config = ss::defer([] {
+        ss::smp::invoke_on_all([] {
+            config::shard_local_cfg().delete_topic_enable.set_value(true);
+        }).get();
+    });
+
+    // Attempt to delete - should fail with topic_deletion_disabled (API v6)
+    auto resp = send_delete_topics_request(
+      kafka::delete_topics_request{
+        .data = {.topics = {{.name{"test-topic"}}}, .timeout_ms = 10s}},
+      kafka::api_version{6});
+
+    BOOST_REQUIRE_EQUAL(resp.data.responses.size(), 1);
+    BOOST_REQUIRE_EQUAL(
+      resp.data.responses[0].name, model::topic("test-topic"));
+    BOOST_REQUIRE_EQUAL(
+      resp.data.responses[0].error_code,
+      kafka::error_code::topic_deletion_disabled);
+    BOOST_REQUIRE_EQUAL(
+      resp.data.responses[0].error_message, "Topic deletion is disabled.");
+
+    // Verify topic still exists
+    auto md = get_topic_metadata(model::topic("test-topic"));
+    auto it = std::find_if(
+      md.data.topics.begin(),
+      md.data.topics.end(),
+      [](const kafka::metadata_response::topic& t) {
+          return t.name == model::topic("test-topic");
+      });
+    BOOST_REQUIRE(it != md.data.topics.end());
+    BOOST_REQUIRE_EQUAL(it->error_code, kafka::error_code::none);
+}
+
+FIXTURE_TEST(delete_topic_enable_disabled_v2, delete_topics_request_fixture) {
+    wait_for_controller_leadership().get();
+
+    create_topic("test-topic-v2", 1, 1);
+
+    // Disable topic deletion globally (must set on all shards)
+    ss::smp::invoke_on_all([] {
+        config::shard_local_cfg().delete_topic_enable.set_value(false);
+    }).get();
+    auto reset_config = ss::defer([] {
+        ss::smp::invoke_on_all([] {
+            config::shard_local_cfg().delete_topic_enable.set_value(true);
+        }).get();
+    });
+
+    // Attempt to delete with old API version - should get invalid_request
+    auto resp = send_delete_topics_request(
+      make_delete_topics_request(
+        chunked_vector<model::topic>{{model::topic("test-topic-v2")}}, 10s),
+      kafka::api_version{2});
+
+    BOOST_REQUIRE_EQUAL(resp.data.responses.size(), 1);
+    BOOST_REQUIRE_EQUAL(
+      resp.data.responses[0].name, model::topic("test-topic-v2"));
+    BOOST_REQUIRE_EQUAL(
+      resp.data.responses[0].error_code, kafka::error_code::invalid_request);
+    // Note: error_message field was only added in API version 5+, so we don't
+    // check it for v2
+}
+
+FIXTURE_TEST(delete_topic_enable_reenabled, delete_topics_request_fixture) {
+    wait_for_controller_leadership().get();
+
+    create_topic("test-topic-reenable", 1, 1);
+
+    // Disable topic deletion globally (must set on all shards)
+    ss::smp::invoke_on_all([] {
+        config::shard_local_cfg().delete_topic_enable.set_value(false);
+    }).get();
+
+    // Attempt to delete - should fail
+    auto resp1 = send_delete_topics_request(
+      kafka::delete_topics_request{
+        .data
+        = {.topics = {{.name{"test-topic-reenable"}}}, .timeout_ms = 10s}},
+      kafka::api_version{6});
+
+    BOOST_REQUIRE_EQUAL(resp1.data.responses.size(), 1);
+    BOOST_REQUIRE_EQUAL(
+      resp1.data.responses[0].error_code,
+      kafka::error_code::topic_deletion_disabled);
+
+    // Re-enable topic deletion (must set on all shards)
+    ss::smp::invoke_on_all([] {
+        config::shard_local_cfg().delete_topic_enable.set_value(true);
+    }).get();
+
+    // Now deletion should succeed
+    validate_valid_delete_topics_request(
+      kafka::delete_topics_request{
+        .data
+        = {.topics = {{.name{"test-topic-reenable"}}}, .timeout_ms = 10s}},
+      kafka::api_version{6});
+}
+
 #if 0
 // TODO(michal) - fix test fixture.
 //

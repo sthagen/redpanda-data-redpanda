@@ -38,6 +38,16 @@ replicated_database::errc map_stm_error(stm::errc e) {
         return replicated_database::errc::shutting_down;
     }
 }
+
+replicated_database::error
+wrap_failed_future(std::exception_ptr ex, std::string_view context) {
+    if (ssx::is_shutdown_exception(ex)) {
+        return replicated_database::error(
+          replicated_database::errc::shutting_down);
+    }
+    return replicated_database::error(
+      replicated_database::errc::io_error, "{}: {}", context, ex);
+}
 } // namespace
 
 ss::future<std::expected<
@@ -101,22 +111,39 @@ replicated_database::open(
     cloud_storage_clients::object_key domain_prefix{
       fmt::format("{}", domain_uuid())};
 
-    auto data_persist = co_await lsm::io::open_cloud_data_persistence(
-      staging_directory, remote, bucket, domain_prefix);
-    auto meta_persist = co_await open_replicated_metadata_persistence(
-      s, remote, bucket, domain_uuid, domain_prefix);
+    auto data_persist_fut = co_await ss::coroutine::as_future(
+      lsm::io::open_cloud_data_persistence(
+        staging_directory, remote, bucket, domain_prefix));
+    if (data_persist_fut.failed()) {
+        co_return std::unexpected(wrap_failed_future(
+          data_persist_fut.get_exception(), "Failed to open data persistence"));
+    }
+    auto meta_persist_fut = co_await ss::coroutine::as_future(
+      open_replicated_metadata_persistence(
+        s, remote, bucket, domain_uuid, domain_prefix));
+    if (meta_persist_fut.failed()) {
+        co_return std::unexpected(wrap_failed_future(
+          meta_persist_fut.get_exception(),
+          "Failed to open metadata persistence"));
+    }
     lsm::io::persistence io{
-      .data = std::move(data_persist),
-      .metadata = std::move(meta_persist),
+      .data = std::move(data_persist_fut.get()),
+      .metadata = std::move(meta_persist_fut.get()),
     };
 
     // Open the LSM database using the persisted manifest from the STM.
-    auto db = co_await lsm::database::open(
-      lsm::options{
-        .database_epoch = epoch(),
-        // TODO: tuning.
-      },
-      std::move(io));
+    auto db_fut = co_await ss::coroutine::as_future(
+      lsm::database::open(
+        lsm::options{
+          .database_epoch = epoch(),
+          // TODO: tuning.
+        },
+        std::move(io)));
+    if (db_fut.failed()) {
+        co_return std::unexpected(wrap_failed_future(
+          db_fut.get_exception(), "Failed to open LSM database"));
+    }
+    auto db = db_fut.get();
 
     // Replay the writes in the volatile_buffer as writes to the database.
     // These are writes that were replicated but not yet persisted to the
@@ -151,9 +178,9 @@ replicated_database::open(
             auto write_fut = co_await ss::coroutine::as_future(
               db.apply(std::move(wb)));
             if (write_fut.failed()) {
-                auto ex = write_fut.get_exception();
-                co_return std::unexpected(error(
-                  errc::io_error, "Failed to apply volatile writes: {}", ex));
+                co_return std::unexpected(wrap_failed_future(
+                  write_fut.get_exception(),
+                  "Failed to apply volatile writes"));
             }
         }
     }
@@ -174,12 +201,8 @@ replicated_database::close() {
     finished_apply_cv_.broken();
     auto fut = co_await ss::coroutine::as_future(db_.close());
     if (fut.failed()) {
-        auto ex = fut.get_exception();
-        if (ssx::is_shutdown_exception(ex)) {
-            co_return std::unexpected(error(errc::shutting_down));
-        }
         co_return std::unexpected(
-          error(errc::io_error, "Error closing database: {}", ex));
+          wrap_failed_future(fut.get_exception(), "Error closing database"));
     }
     co_await std::move(gate_fut);
     co_return std::expected<void, error>{};
@@ -300,9 +323,8 @@ replicated_database::flush(std::optional<ss::lowres_clock::duration> timeout) {
                             : ssx::instant::infinite_future();
     auto flush_fut = co_await ss::coroutine::as_future(db_.flush(deadline));
     if (flush_fut.failed()) {
-        auto ex = flush_fut.get_exception();
-        co_return std::unexpected(
-          error(errc::io_error, "Failed to flush to database: {}", ex));
+        co_return std::unexpected(wrap_failed_future(
+          flush_fut.get_exception(), "Failed to flush to database"));
     }
     co_return std::expected<void, error>{};
 }

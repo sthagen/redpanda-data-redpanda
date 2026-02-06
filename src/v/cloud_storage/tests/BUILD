@@ -186,6 +186,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cloud_storage",
         "//src/v/cloud_storage:topic_mount_manifest_path",
+        "//src/v/cloud_storage:topic_path_utils",
         "//src/v/cloud_storage:types",
         "//src/v/model",
         "//src/v/model/tests:random",
@@ -303,6 +304,7 @@ redpanda_cc_btest(
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:topic_path_utils",
         "//src/v/cloud_storage:types",
         "//src/v/cluster",
         "//src/v/model",
@@ -509,6 +511,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:topic_path_utils",
         "//src/v/cloud_storage:types",
         "//src/v/cloud_storage_clients",
         "//src/v/model",

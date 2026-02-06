@@ -21,6 +21,7 @@
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "reflection/adl.h"
+#include "ssx/abort_source.h"
 #include "ssx/future-util.h"
 #include "ssx/semaphore.h"
 #include "ssx/watchdog.h"
@@ -1418,7 +1419,15 @@ ss::future<> disk_log_impl::housekeeping(housekeeping_config cfg) {
 ss::future<> disk_log_impl::do_compact(
   compaction::compaction_config compact_cfg,
   std::optional<model::offset> new_start_offset) {
-    compact_cfg.asrc = &_compaction_as;
+    // Need to be able to respect both the config's original abort source (if it
+    // has one), as well as the local _compaction_as.
+    std::optional<ssx::composite_abort_source> composite_as;
+    if (compact_cfg.asrc) {
+        composite_as.emplace(_compaction_as, *compact_cfg.asrc);
+        compact_cfg.asrc = &composite_as->as();
+    } else {
+        compact_cfg.asrc = &_compaction_as;
+    }
 
     auto compact_fut = ss::now();
 

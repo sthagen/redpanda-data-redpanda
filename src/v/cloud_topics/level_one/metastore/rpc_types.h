@@ -190,6 +190,23 @@ struct get_offsets_request
     model::topic_id_partition tp;
 };
 
+struct get_size_reply
+  : serde::
+      envelope<get_size_reply, serde::version<0>, serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, size); }
+
+    errc ec;
+    size_t size{0};
+};
+struct get_size_request
+  : serde::
+      envelope<get_size_request, serde::version<0>, serde::compat_version<0>> {
+    using resp_t = get_size_reply;
+    auto serde_fields() { return std::tie(tp); }
+
+    model::topic_id_partition tp;
+};
+
 struct extent_metadata
   : serde::
       envelope<extent_metadata, serde::version<0>, serde::compat_version<0>> {

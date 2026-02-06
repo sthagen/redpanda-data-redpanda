@@ -65,6 +65,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_zero/pipeline:write_request",
         "//src/v/config",
         "//src/v/model",
+        "//src/v/ssx:semaphore",
         "//src/v/utils:retry_chain_node",
         "//src/v/utils:uuid",
         "@abseil-cpp//absl/container:btree",

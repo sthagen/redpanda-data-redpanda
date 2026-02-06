@@ -10,16 +10,16 @@
 
 #include "cloud_topics/level_zero/write_request_scheduler/write_request_scheduler.h"
 
+#include "base/vassert.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/pipeline/base_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "cloud_topics/logger.h"
 #include "config/configuration.h"
+#include "random/simple_time_jitter.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/circular_buffer.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/sharded.hh>
@@ -29,11 +29,19 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
-#include <limits>
+
+using namespace std::chrono_literals;
 
 namespace cloud_topics::l0 {
 
 namespace {
+static constexpr auto scheduler_long_sleep_interval = 20ms;
+static constexpr auto scheduler_short_sleep_interval = 5ms;
+static constexpr auto scheduler_sleep_jitter = 2ms;
+
+// Static zero counter used when next stage is not registered yet
+static std::atomic<size_t> zero_counter{0};
+
 // Copy extents and share the payload to use on another shard
 serialized_chunk shallow_copy(serialized_chunk& chunk) {
     serialized_chunk copy;
@@ -42,6 +50,280 @@ serialized_chunk shallow_copy(serialized_chunk& chunk) {
     return copy;
 }
 } // namespace
+
+template<typename Clock>
+size_t scheduler_context<Clock>::count_active_groups() const {
+    if (shard_to_group.empty()) {
+        return 0;
+    }
+    // Groups are monotonically increasing due to buddy algorithm allocation.
+    // Count transitions to new groups by tracking the last seen group.
+    size_t count = 1;
+    group_id last_group = shard_to_group[0].load();
+    for (size_t i = 1; i < shard_to_group.size(); i++) {
+        auto current_group = shard_to_group[i].load();
+        if (current_group != last_group) {
+            count++;
+            last_group = current_group;
+        }
+    }
+    return count;
+}
+
+template<typename Clock>
+size_t scheduler_context<Clock>::get_group_size(group_id gid) const {
+    size_t count = 0;
+    for (const auto& g : shard_to_group) {
+        if (g.load() == gid) {
+            count++;
+        }
+    }
+    return count;
+}
+
+template<typename Clock>
+size_t scheduler_context<Clock>::get_shard_index_in_group(
+  ss::shard_id shard, group_id gid) const {
+    size_t index = 0;
+    for (size_t i = 0; i < static_cast<size_t>(shard); i++) {
+        if (shard_to_group[i].load() == gid) {
+            index++;
+        }
+    }
+    return index;
+}
+
+template<typename Clock>
+uint64_t scheduler_context<Clock>::get_group_bytes(group_id gid) const {
+    uint64_t total_bytes = 0;
+    for (size_t i = 0; i < shards.size(); i++) {
+        if (shard_to_group[i].load() == gid) {
+            total_bytes += shards[i].backlog_size.get().load();
+        }
+    }
+    return total_bytes;
+}
+
+template<typename Clock>
+uint64_t
+scheduler_context<Clock>::get_group_next_stage_bytes(group_id gid) const {
+    uint64_t total_bytes = 0;
+    for (size_t i = 0; i < shards.size(); i++) {
+        if (shard_to_group[i].load() == gid) {
+            const auto& ref = shards[i].next_stage_backlog_size;
+            total_bytes += ref.get().load();
+        }
+    }
+    return total_bytes;
+}
+
+template<typename Clock>
+bool scheduler_context<Clock>::try_split_group(group_id gid) {
+    // Find all shards in this group
+    std::vector<size_t> group_shards;
+    for (size_t i = 0; i < shards.size(); i++) {
+        if (shard_to_group[i].load() == gid) {
+            group_shards.push_back(i);
+        }
+    }
+
+    // Can't split a group with only one shard
+    if (group_shards.size() <= 1) {
+        return false;
+    }
+
+    // Split in half: first half stays, second half moves to new group
+    size_t split_point = group_shards.size() / 2;
+
+    // New group ID = shard ID of first shard in second half
+    group_id new_gid = group_id(group_shards[split_point]);
+
+    // Move second half to the new group
+    for (size_t i = split_point; i < group_shards.size(); i++) {
+        shard_to_group[group_shards[i]].store(new_gid);
+    }
+
+    // Reset the new group's state
+    auto now = Clock::now();
+    groups[static_cast<size_t>(new_gid)].ix.store(0);
+    groups[static_cast<size_t>(new_gid)].last_upload_time.store(now);
+    groups[static_cast<size_t>(new_gid)].last_modification_time.store(now);
+
+    // Update the original group's modification time
+    groups[static_cast<size_t>(gid)].last_modification_time.store(now);
+
+    return true;
+}
+
+template<typename Clock>
+std::optional<group_id>
+scheduler_context<Clock>::find_buddy_group(group_id gid) const {
+    // Find the last shard in this group
+    size_t last_shard_in_group = 0;
+    bool found = false;
+    for (size_t i = 0; i < shards.size(); i++) {
+        if (shard_to_group[i].load() == gid) {
+            last_shard_in_group = i;
+            found = true;
+        }
+    }
+    if (!found) {
+        return std::nullopt;
+    }
+
+    // The buddy group starts at the next shard
+    size_t buddy_first_shard = last_shard_in_group + 1;
+    if (buddy_first_shard >= shards.size()) {
+        return std::nullopt;
+    }
+
+    // Return the group ID of that shard
+    return shard_to_group[buddy_first_shard].load();
+}
+
+template<typename Clock>
+bool scheduler_context<Clock>::try_merge_group(group_id gid) {
+    auto buddy = find_buddy_group(gid);
+    if (!buddy.has_value()) {
+        return false;
+    }
+
+    group_id buddy_gid = buddy.value();
+
+    // Can only merge if buddy is a different group
+    if (buddy_gid == gid) {
+        return false;
+    }
+
+    // Move all shards from buddy group to this group
+    for (size_t i = 0; i < shards.size(); i++) {
+        if (shard_to_group[i].load() == buddy_gid) {
+            shard_to_group[i].store(gid);
+        }
+    }
+
+    // Reset this group's round-robin counter and update modification time
+    auto now = Clock::now();
+    groups[static_cast<size_t>(gid)].ix.store(0);
+    groups[static_cast<size_t>(gid)].last_modification_time.store(now);
+
+    return true;
+}
+
+template<typename Clock>
+schedule_result<Clock> scheduler_context<Clock>::try_schedule_upload(
+  ss::shard_id shard,
+  size_t max_buffer_size,
+  std::chrono::milliseconds scheduling_interval,
+  time_point now) {
+    // Get group info for this shard
+    auto gid = shard_to_group[shard].load();
+    auto& group = groups[static_cast<size_t>(gid)];
+
+    // First check round-robin: is it this shard's turn within the group?
+    auto grp_size = get_group_size(gid);
+    auto current_ix = group.ix.load();
+    auto shard_index_in_group = get_shard_index_in_group(shard, gid);
+
+    if ((current_ix % grp_size) != shard_index_in_group) {
+        // Not this shard's turn - wait for next cycle
+        return {schedule_action::skip, std::nullopt, gid};
+    }
+
+    // Check if this shard should evaluate group splitting or merging.
+    // Only the first shard in the group (shard_index_in_group == 0) checks.
+    // Rate-limit split/merge decisions to avoid group churn - only allow
+    // modifications if enough time has passed since the last split/merge.
+    if (shard_index_in_group == 0) {
+        auto last_mod_time = group.last_modification_time.load();
+        auto cooldown = scheduling_interval * 2;
+        bool can_modify = (now - last_mod_time) >= cooldown;
+
+        if (can_modify) {
+            auto next_stage_bytes = get_group_next_stage_bytes(gid);
+            // Calculate dynamic split threshold based on group size
+            size_t group_split_threshold = max_buffer_size * grp_size;
+            if (grp_size > 1 && next_stage_bytes > group_split_threshold) {
+                // Split: next stage is overloaded, work more independently
+                if (try_split_group(gid)) {
+                    vlog(cd_log.trace, "Split group {}", gid);
+                } else {
+                    vlog(cd_log.info, "Failed to split group {}", gid);
+                }
+            } else if (next_stage_bytes == 0) {
+                // Merge: next stage is empty, can work together with buddy
+                // But only if buddy's next stage is also empty
+                auto buddy = find_buddy_group(gid);
+                if (buddy.has_value()) {
+                    auto buddy_next_stage_bytes = get_group_next_stage_bytes(
+                      buddy.value());
+                    if (buddy_next_stage_bytes == 0) {
+                        if (try_merge_group(gid)) {
+                            // After merge, re-evaluate group info for this
+                            // shard (gid stays the same since we absorbed
+                            // the buddy)
+                            grp_size = get_group_size(gid);
+                            vlog(
+                              cd_log.trace,
+                              "Merged group {}, group size: {}",
+                              gid,
+                              grp_size);
+                        }
+                    } else {
+                        vlog(
+                          cd_log.info,
+                          "Failed to merge group {}, group size: {}",
+                          gid,
+                          grp_size);
+                    }
+                }
+            }
+        }
+    }
+
+    // It's this shard's turn - check upload conditions based on group state
+    auto group_bytes = get_group_bytes(gid);
+    auto last_upload_time
+      = groups[static_cast<size_t>(gid)].last_upload_time.load();
+    auto deadline = last_upload_time + scheduling_interval;
+
+    // Check if upload conditions are met (group size threshold or deadline)
+    if (
+      group_bytes == 0 || (group_bytes < max_buffer_size && deadline >= now)) {
+        return {schedule_action::wait, std::nullopt, gid};
+    }
+
+    // Try to acquire group mutex (non-blocking)
+    std::unique_lock<std::mutex> lock(
+      groups[static_cast<size_t>(gid)].mutex, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        // Some other shard in the group is busy
+        return {schedule_action::wait, std::nullopt, gid};
+    }
+
+    // Re-check conditions after acquiring lock to handle races
+    group_bytes = get_group_bytes(gid);
+    deadline = groups[static_cast<size_t>(gid)].last_upload_time.load()
+               + scheduling_interval;
+    now = Clock::now();
+
+    if (group_bytes < max_buffer_size && deadline >= now) {
+        return {schedule_action::wait, std::nullopt, gid};
+    }
+
+    // Create schedule_request RAII object - it will increment ix when destroyed
+    auto& ix = groups[static_cast<size_t>(gid)].ix;
+    return {
+      schedule_action::upload,
+      schedule_request<Clock>(std::move(lock), ix),
+      gid};
+}
+
+template<typename Clock>
+void scheduler_context<Clock>::record_upload_time(
+  group_id gid, time_point upload_time) {
+    groups[static_cast<size_t>(gid)].last_upload_time.store(upload_time);
+}
 
 template<typename Clock>
 write_request_scheduler<Clock>::write_request_scheduler(
@@ -55,19 +337,64 @@ write_request_scheduler<Clock>::write_request_scheduler(
         .cloud_topics_produce_cardinality_threshold.bind())
   , _scheduling_interval(
       config::shard_local_cfg().cloud_topics_produce_upload_interval.bind())
-  , _probe(config::shard_local_cfg().disable_metrics()) {}
+  , _probe(config::shard_local_cfg().disable_metrics())
+  , _context(nullptr) {}
 
 template<typename Clock>
 ss::future<> write_request_scheduler<Clock>::start() {
-    // Start the background time based fallback loop on shard 0
-    if (
-      ss::this_shard_id() == ss::shard_id(0)
-      && !_test_only_disable_time_based_fallback) {
-        ssx::spawn_with_gate(
-          _gate, [this] { return bg_time_based_fallback(); });
+    // Collect counters across all shards
+    struct counter_shard {
+        const std::atomic<size_t>* count;
+        const std::atomic<size_t>* next_stage_count;
+        ss::shard_id shard;
+    };
+
+    if (ss::this_shard_id() == ss::shard_id(0)) {
+        auto shard_bytes = co_await this->container().map(
+          [](write_request_scheduler<Clock>& s) {
+              // Get the next stage bytes reference. This works even if the next
+              // stage hasn't been registered yet because the counters are
+              // pre-allocated.
+              auto next_ref = s._stage.next_stage_bytes_ref();
+              return counter_shard{
+                .count = s._stage.stage_bytes_ref(),
+                .next_stage_count = next_ref ? next_ref : &zero_counter,
+                .shard = ss::this_shard_id(),
+              };
+          });
+        // Create scheduler context on shard 0.
+        // The context is shared between all shards.
+        // FixedArrays are sized at construction time.
+        _shard_zero_context.emplace(ss::smp::count);
+
+        // Initialize shards with their backlog size references.
+        // shard_to_group and groups are already default-initialized by
+        // the FixedArray constructor (padded_atomic_group_id defaults to
+        // group_id{0}, shard_group default-constructs with current time).
+        for (unsigned ix = 0; ix < ss::smp::count; ix++) {
+            for (const counter_shard& sc : shard_bytes) {
+                if (sc.shard == ix) {
+                    _shard_zero_context->shards[ix] = shard_state<Clock>(
+                      std::ref(*sc.count), std::ref(*sc.next_stage_count));
+                    break;
+                }
+            }
+        }
+
+        auto ref = &_shard_zero_context.value();
+
+        // Install initialized context on all shards
+        co_await this->container().invoke_on_all([ref](auto& service) {
+            service._context = ref;
+            service._init_barrier.signal();
+        });
+    } else {
+        // Wait for shard 0 to initialize _context
+        co_await _init_barrier.wait();
     }
-    if (!_test_only_disable_data_threshold) {
-        ssx::spawn_with_gate(_gate, [this] { return bg_data_threshold(); });
+
+    if (!_test_only_disable_background_loop) {
+        ssx::spawn_with_gate(_gate, [this] { return bg_handler(); });
     }
     co_return;
 }
@@ -75,69 +402,105 @@ ss::future<> write_request_scheduler<Clock>::start() {
 template<typename Clock>
 ss::future<> write_request_scheduler<Clock>::stop() {
     _as.request_abort();
+    _init_barrier.broken();
     co_await _gate.close();
 }
 
 template<typename Clock>
-size_t write_request_scheduler<Clock>::shard_bytes() noexcept {
-    // Count bytes but take limits into account. We intentionally don't use
-    // stage_bytes() here because we need to respect _max_cardinality and
-    // _max_buffer_size limits.
-    size_t total_bytes = 0;
-    size_t total_requests = 0;
-    _stage.process(
-      [&total_bytes, &total_requests, this](
-        const l0::write_request<Clock>& req) noexcept
-        -> std::expected<l0::request_processing_result, errc> {
-          total_bytes += req.size_bytes();
-          total_requests++;
-          return total_requests < _max_cardinality()
-                     && total_bytes < _max_buffer_size()
-                   ? request_processing_result::ignore_and_continue
-                   : request_processing_result::ignore_and_stop;
-      });
-    return total_bytes;
+ss::future<typename Clock::time_point>
+write_request_scheduler<Clock>::run_once() {
+    // This is a scheduler's "tick" which happens every
+    // 5-20ms.
+    auto this_shard = ss::this_shard_id();
+    auto now = Clock::now();
+
+    // Update active groups metric (only shard 0 owns the context data)
+    if (this_shard == 0) {
+        _probe.set_active_groups(_context->count_active_groups());
+    }
+
+    // Let scheduler_context make the scheduling decision
+    auto result = _context->try_schedule_upload(
+      this_shard, _max_buffer_size(), _scheduling_interval(), now);
+
+    switch (result.action) {
+    case schedule_action::skip:
+        // Not this shard's turn
+        co_return get_next_wakeup_time(false);
+
+    case schedule_action::wait:
+        // Conditions not met or mutex busy
+        co_return get_next_wakeup_time(true);
+
+    case schedule_action::upload: {
+        // Collect shard info for shards in this group
+        std::vector<shard_info> shard_bytes;
+        shard_bytes.resize(ss::smp::count);
+        _context->get_shard_bytes_vec(shard_bytes, result.gid);
+
+        // Only shutdown exceptions are expected here
+        co_await pull_and_roundtrip(
+          std::move(shard_bytes), std::move(result.request));
+        co_return get_next_wakeup_time(true);
+    }
+    }
+    __builtin_unreachable();
 }
 
 template<typename Clock>
-ss::future<> write_request_scheduler<Clock>::bg_data_threshold() {
-    vassert(
-      !_test_only_disable_data_threshold, "Data threshold is not disabled");
+ss::future<> write_request_scheduler<Clock>::bg_handler() {
+    auto projected_wakeup_time = get_next_wakeup_time(true);
     while (!_as.abort_requested()) {
-        auto req = co_await _stage.wait_until(
-          _max_buffer_size(), Clock::time_point::max(), &_as);
-        if (!req.has_value()) {
-            if (req.error() == errc::shutting_down) {
-                vlog(cd_log.debug, "bg_data_threshold: shutting down");
+        // Wait until max bytes or projected wake up time is reached. Check how
+        // much data we have and was the deadline reached.
+        auto event = co_await _stage.wait_until(
+          _max_buffer_size(), projected_wakeup_time, &_as);
+        if (!event.has_value()) {
+            if (event.error() == errc::shutting_down) {
+                vlog(cd_log.debug, "bg_handler: shutting down");
                 co_return;
             } else {
                 vlog(
                   cd_log.error,
-                  "bg_data_threshold: error waiting for write requests: {}",
-                  req.error());
+                  "bg_handler: error waiting for write requests: {}",
+                  event.error());
             }
             co_return;
         }
-        vlog(
-          cd_log.debug,
-          "bg_data_threshold: pending bytes: {}, total bytes: "
-          "{}",
-          req.value().pending_write_bytes,
-          req.value().total_write_bytes);
-
-        // Propagate to the next stage
-        _stage.process(
-          [this](const l0::write_request<Clock>& r) noexcept
-            -> std::expected<l0::request_processing_result, errc> {
-              _probe.register_data_threshold(r.size_bytes());
-              return l0::request_processing_result::advance_and_continue;
-          });
+        projected_wakeup_time = co_await run_once();
     }
 }
 
 template<typename Clock>
+write_request_scheduler<Clock>::time_point
+write_request_scheduler<Clock>::get_next_wakeup_time(bool long_duration) {
+    simple_time_jitter<Clock> jitter(
+      long_duration ? scheduler_long_sleep_interval
+                    : scheduler_short_sleep_interval,
+      scheduler_sleep_jitter);
+    auto now = Clock::now();
+    auto soft_deadline = now + jitter.next_duration();
+
+    // Use group's last upload time
+    auto gid = _context->shard_to_group[ss::this_shard_id()].load();
+    auto hard_deadline
+      = _context->groups[static_cast<size_t>(gid)].last_upload_time.load()
+        + jitter.next_jitter_duration();
+    auto target = std::min(soft_deadline, hard_deadline);
+    if (target < now) {
+        // Special case. The upload failed so last upload time is
+        // far in the past. If we will use "target" to schedule
+        // next iteration we will be spin waiting for new data.
+        // To avoid this always use soft deadline here.
+        return soft_deadline;
+    }
+    return target;
+}
+
+template<typename Clock>
 ss::future<> write_request_scheduler<Clock>::pull_and_roundtrip(
-  std::vector<shard_info> infos) {
+  std::vector<shard_info> infos,
+  std::optional<schedule_request<Clock>> request) {
     // This method is invoked by the target shard to pull requests from
     // other shards and forward them to its own pipeline.
     std::vector<ss::future<>> in_flight;
@@ -187,152 +550,40 @@ ss::future<> write_request_scheduler<Clock>::pull_and_roundtrip(
     // cloud storage and then it acknowledges the source write requests (which
     // were proxied).
     co_await target_gate.close();
+    auto gid = _context->shard_to_group[ss::this_shard_id()].load();
+    _context->groups[static_cast<size_t>(gid)].last_upload_time.store(
+      Clock::now());
+    if (request.has_value()) {
+        // Unlock will increment ix and release the mutex
+        request.value().unlock();
+    } else {
+        vlog(cd_log.warn, "The cross shard state is not locked");
+    }
+
     // Submit own requests to the pipeline
     bool signaled = false;
     for (const auto& info : infos) {
         if (ss::this_shard_id() == info.shard && info.bytes > 0) {
             // Fast path: process requests locally
-            // This shard is the one that has the most data.
+            // This shard is the target shard selected by round-robin.
             _stage.process(
               [this, &signaled](const write_request<Clock>& r) noexcept {
                   signaled = true;
-                  _probe.register_time_fallback(r.size_bytes());
+                  _probe.register_request(r.size_bytes());
                   return request_processing_result::advance_and_continue;
               });
             break;
         }
     }
     if (!signaled) {
-        // It is guaranteed that the shard that has the most data will become
-        // the target shard. But it is also possible that the data threshold
-        // policy will trigger the upload on this shard. In this case the loop
+        // The target shard is selected by round-robin. It is possible that the
+        // selected shard has no local write requests. In this case the loop
         // above will see no write requests. Other shards are depositing their
         // requests to the target shard without signalling the next stage. So we
         // need to signal it here.
         _stage.signal_next_stage();
     }
     co_await ss::when_all_succeed(in_flight.begin(), in_flight.end());
-}
-
-template<typename Clock>
-ss::future<> write_request_scheduler<Clock>::apply_time_based_fallback() {
-    // The time based fallback works in three stages:
-    // 1. Collect information about the requests from every shard.
-    // 2. Decide which shard should handle the requests.
-    // 3. Tell every shard to forward its requests to the target shard.
-    // The whole process is triggered on shard 0. The end to end latency
-    // of the process is relatively high (up to 1ms) but it's fine. The
-    // method is invoked periodically (e.g. every 500ms) so the
-    // additional latency is not significant. If we have very high tput
-    // on some shards they will be excluded from the time based fallback
-    // because they will trigger the data threshold based uploads.
-    auto shard_bytes = co_await this->container().map(
-      [](write_request_scheduler<Clock>& s) {
-          return shard_info{
-            .shard = ss::this_shard_id(), .bytes = s.shard_bytes()};
-      });
-
-    // NOTE: the heuristic is based on cache behavior. The shard that
-    // uploads the data has to read it. If the write request originates
-    // from the same shard it will be hot in the CPU cache. Otherwise
-    // it will be cold. So the main heuristic is to use the shard
-    // that has the most write requests in the pipeline (by size).
-    // In the future more complex partitioning can be used. E.g. we can
-    // select more than one shard as a target and take NUMA mapping into
-    // account. We can also take into account the load and resources
-    // available for upload. For now it's assumed that the client pool
-    // will always be able to handle the addition L0 upload (e.g. it has
-    // borrowing mechanism to do this).
-
-    if (cd_log.is_enabled(ss::log_level::trace)) {
-        for (auto& req : shard_bytes) {
-            vlog(
-              cd_log.trace,
-              "map result: {} requests, {} bytes",
-              req.shard,
-              req.bytes);
-        }
-    }
-
-    // Find the shard with the most bytes to write
-    auto target_shard = ss::shard_id(0);
-    auto max_shard_bytes = std::numeric_limits<size_t>::min();
-    for (auto& info : shard_bytes) {
-        if (info.bytes > max_shard_bytes) {
-            max_shard_bytes = info.bytes;
-            target_shard = info.shard;
-        }
-    }
-    vlog(
-      cd_log.debug,
-      "bg_time_based_fallback: target shard for write requests: {}, "
-      "bytes: {}",
-      target_shard,
-      max_shard_bytes);
-
-    // We can forward write requests to the target shard now
-    // Every shards forwards its own requests.
-    //
-    // The information flow:
-    // shard 0:      collect information -> decide target shard
-    // target shard: call 'pull_and_roundtrip' and pass the gate holder
-    // target shard: invoke 'forward_to' on every shard that has data
-    // shard[i]:     call 'roundtrip' method on shard[i], pass gate holder
-    // shard[i]:     invoke 'proxy_write_request' on target shard, pass gate
-    //               holder
-    // target shard: enqueue shard[i] requests to the target shard's pipeline
-    //               and dispose the gate holder that belongs to the
-    //               target shard
-    // target shard: wait until all requests are enqueued by waiting
-    //               on the gate
-    // target shard: process own requests and wait until all
-    //               'proxy_write_request' calls are done on all shards
-    //               by waiting on the gate.
-
-    if (max_shard_bytes > 0) {
-        co_await this->container().invoke_on(
-          target_shard,
-          [shard_bytes](write_request_scheduler<Clock>& scheduler) {
-              return scheduler.pull_and_roundtrip(shard_bytes);
-          });
-    }
-}
-
-template<typename Clock>
-ss::future<> write_request_scheduler<Clock>::bg_time_based_fallback() {
-    // This is the background fiber that runs only on shard 0
-    // It is waking up every N ms and forces uploads on all shards
-    // to be aggregated and uploaded to the cloud storage on a single
-    // "target" shard.
-    //
-    // It handles the case when there is not enough updates on every
-    // shards to trigger the upload within N ms.
-    try {
-        vassert(
-          ss::this_shard_id() == ss::shard_id(0),
-          "bg_time_based_fallback: should only run on shard 0");
-        vassert(
-          !_test_only_disable_time_based_fallback,
-          "time based fallback is not disabled");
-        vlog(
-          cd_log.debug,
-          "Starting write_request_scheduler time based fallback background "
-          "loop");
-        while (!_as.abort_requested() && !_stage.stopped()) {
-            // Sleep before next iteration
-            co_await ss::sleep_abortable(_scheduling_interval(), _as);
-            co_await apply_time_based_fallback();
-        }
-    } catch (...) {
-        if (ssx::is_shutdown_exception(std::current_exception())) {
-            vlog(cd_log.debug, "bg_time_based_fallback: shutting down");
-        } else {
-            vlog(
-              cd_log.error,
-              "bg_time_based_fallback: failed: {}",
-              std::current_exception());
-        }
-    }
 }
 
 /// Get a single write request which was created on another shard
@@ -349,13 +600,16 @@ write_request_scheduler<Clock>::proxy_write_request(
     // it will be destroyed on the target shard as well.
     auto h = _gate.hold();
     _probe.register_receive_xshard(req->size_bytes());
+    // Create proxy for the foreign request. The bytes were already accounted
+    // for on the source shard, so we use enqueue_foreign_request to place it
+    // directly at the next stage without byte accounting.
     write_request<Clock> proxy(
       req->ntp,
       req->topic_start_epoch,
       shallow_copy(req->data_chunk),
       req->expiration_time);
     auto fut = proxy.response.get_future();
-    _stage.push_next_stage(proxy, false);
+    _stage.enqueue_foreign_request(proxy, false);
     target_gate_holder.release();
     auto extents_fut = co_await ss::coroutine::as_future(std::move(fut));
     if (extents_fut.failed()) {
@@ -457,5 +711,8 @@ ss::future<> write_request_scheduler<Clock>::forward_to(
 
 template class write_request_scheduler<seastar::lowres_clock>;
 template class write_request_scheduler<seastar::manual_clock>;
+
+template struct scheduler_context<seastar::lowres_clock>;
+template struct scheduler_context<seastar::manual_clock>;
 
 } // namespace cloud_topics::l0

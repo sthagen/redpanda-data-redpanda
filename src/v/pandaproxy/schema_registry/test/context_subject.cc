@@ -45,13 +45,15 @@ TEST_F(ContextSubjectTest, FromString) {
       context_subject::from_string(":.ctx:a:b:c"),
       (context_subject{context{".ctx"}, subject{"a:b:c"}}));
 
-    // Invalid qualified syntax falls back to unqualified
+    // Invalid qualified syntax (no dot after colon) falls back to unqualified
     EXPECT_EQ(
       context_subject::from_string(":no-dot"),
       (context_subject{default_context, subject{":no-dot"}}));
+
+    // Context-only form without trailing colon: ":.ctx" (empty subject)
     EXPECT_EQ(
       context_subject::from_string(":.no-second-colon"),
-      (context_subject{default_context, subject{":.no-second-colon"}}));
+      (context_subject{context{".no-second-colon"}, subject{""}}));
 }
 
 TEST_F(ContextSubjectTest, ToStringAndRoundTrip) {
@@ -135,13 +137,11 @@ TEST_F(ContextSubjectReferenceTest, FromString) {
       (context_subject{default_context, subject{"subject-for-C"}}));
     EXPECT_TRUE(default_qual.qualified);
 
-    // Subject in the default context with dot prefix is unqualified
-    auto default_ctx_with_dot = context_subject_reference::from_string(
-      ":.something");
-    EXPECT_EQ(default_ctx_with_dot.qualified, is_qualified::no);
+    // Context-only form without second colon: :.something is qualified
+    auto ctx_only = context_subject_reference::from_string(":.something");
+    EXPECT_EQ(ctx_only.qualified, is_qualified::yes);
     EXPECT_EQ(
-      default_ctx_with_dot.sub,
-      (context_subject{default_context, subject{":.something"}}));
+      ctx_only.sub, (context_subject{context{".something"}, subject{""}}));
 }
 
 TEST_F(ContextSubjectReferenceTest, Resolve) {
@@ -165,7 +165,7 @@ TEST_F(ContextSubjectReferenceTest, ToStringRoundTrip) {
       "simple-subject",
       ":.:default-context-subject",
       ":.ctx:qualified-subject",
-      ":.default-context-with-dot",
+      ":.ctx-only:",
     };
     // Unqualified round-trip
     for (const auto& input : inputs) {

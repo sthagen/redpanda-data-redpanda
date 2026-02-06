@@ -90,7 +90,7 @@ iobuf aggregator<Clock>::get_stream() {
     iobuf concat;
     for (auto& p : _aggregated) {
         if (p->ref != nullptr) {
-            concat.append(std::move(p->ref->data_chunk.payload));
+            concat.append_fragments(std::move(p->ref->data_chunk.payload));
         }
     }
     return concat;

@@ -122,7 +122,7 @@ public:
       bool iceberg_enabled = false,
       bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
-      bool use_lsm_metastore = false) {
+      cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
         return std::make_unique<redpanda_thread_fixture>(
           node_id,
           kafka_port,
@@ -142,7 +142,7 @@ public:
           iceberg_enabled,
           cloud_topics_enabled,
           cluster_linking_enabled,
-          use_lsm_metastore);
+          ct_test_cfg);
     }
 
     void add_node(
@@ -163,7 +163,7 @@ public:
       bool iceberg_enabled = false,
       bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
-      bool use_lsm_metastore = true) {
+      cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
         _instances.emplace(
           node_id,
           make_redpanda_fixture(
@@ -182,7 +182,7 @@ public:
             iceberg_enabled,
             cloud_topics_enabled,
             cluster_linking_enabled,
-            use_lsm_metastore));
+            ct_test_cfg));
     }
 
     application* get_node_application(model::node_id id) {
@@ -225,7 +225,7 @@ public:
       bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
       model::node_id seed_node_id = model::node_id{0},
-      bool use_lsm_metastore = true) {
+      cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
         std::vector<config::seed_server> seeds = {};
         if (!empty_seed_starts_cluster_val || node_id != 0) {
             seeds.push_back(
@@ -250,7 +250,7 @@ public:
           iceberg_enabled,
           cloud_topics_enabled,
           cluster_linking_enabled,
-          use_lsm_metastore);
+          ct_test_cfg);
         return get_node_application(node_id);
     }
 

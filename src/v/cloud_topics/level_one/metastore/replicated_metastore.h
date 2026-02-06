@@ -38,6 +38,9 @@ public:
     ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) override;
 
+    ss::future<std::expected<size_response, errc>>
+    get_size(const model::topic_id_partition&) override;
+
     ss::future<std::expected<add_response, errc>> add_objects(
       const object_metadata_builder&, const term_offset_map_t&) override;
 

@@ -28,7 +28,11 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
         "//src/v/cloud_topics/level_zero/pipeline:write_request",
         "//src/v/config",
+        "//src/v/random:time_jitter",
         "//src/v/ssx:future_util",
+        "//src/v/ssx:semaphore",
+        "//src/v/utils:named_type",
+        "@abseil-cpp//absl/container:fixed_array",
         "@seastar",
     ],
 )

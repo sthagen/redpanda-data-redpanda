@@ -235,6 +235,7 @@ struct configuration final : public config_store {
     // same as log.retention.ms in kafka
     retention_duration_property log_retention_ms;
     property<std::chrono::milliseconds> log_compaction_interval_ms;
+    property<std::chrono::milliseconds> log_compaction_max_priority_wait_ms;
     // same as delete.retention.ms in kafka
     property<std::optional<std::chrono::milliseconds>> tombstone_retention_ms;
     bounded_property<std::optional<double>, numeric_bounds>
@@ -332,6 +333,7 @@ struct configuration final : public config_store {
       controller_backend_housekeeping_interval_ms;
     property<uint32_t> kafka_request_max_bytes;
     property<uint32_t> kafka_batch_max_bytes;
+    enterprise<property<bool>> delete_topic_enable;
     property<std::vector<ss::sstring>> kafka_nodelete_topics;
     property<std::vector<ss::sstring>> kafka_noproduce_topics;
     property<std::optional<uint32_t>> kafka_topics_max;
@@ -790,6 +792,7 @@ public:
     bounded_property<uint64_t> cloud_topics_compaction_key_map_memory;
     property<std::chrono::milliseconds>
       cloud_topics_long_term_garbage_collection_interval;
+    property<std::chrono::milliseconds> cloud_topics_long_term_flush_interval;
     property<std::chrono::milliseconds>
       cloud_topics_epoch_service_epoch_increment_interval;
     property<std::chrono::milliseconds>

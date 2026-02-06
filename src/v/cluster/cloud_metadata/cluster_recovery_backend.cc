@@ -14,6 +14,9 @@
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_file.h"
 #include "cloud_storage/types.h"
+#include "cloud_topics/level_one/metastore/metastore.h"
+#include "cloud_topics/level_one/metastore/retry.h"
+#include "cloud_topics/state_accessors.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/cloud_metadata/manifest_downloads.h"
 #include "cluster/cloud_metadata/offsets_recovery_rpc_types.h"
@@ -68,7 +71,8 @@ cluster_recovery_backend::cluster_recovery_backend(
   ss::shared_ptr<producer_id_recovery_manager> producer_id_recovery,
   ss::shared_ptr<offsets_recovery_requestor> offsets_recovery,
   ss::sharded<cluster_recovery_table>& recovery_table,
-  consensus_ptr raft0)
+  consensus_ptr raft0,
+  ss::sharded<cloud_topics::state_accessors>* ct_state)
   : _recovery_manager(mgr)
   , _raft_group_manager(raft_mgr)
   , _remote(remote)
@@ -86,7 +90,8 @@ cluster_recovery_backend::cluster_recovery_backend(
   , _producer_id_recovery(std::move(producer_id_recovery))
   , _offsets_recovery(std::move(offsets_recovery))
   , _recovery_table(recovery_table)
-  , _raft0(std::move(raft0)) {
+  , _raft0(std::move(raft0))
+  , _ct_state(ct_state) {
     vassert(_producer_id_recovery, "expected initialized producer_id_recovery");
     vassert(_offsets_recovery, "expected initialized offsets_recovery");
 }
@@ -238,6 +243,142 @@ ss::future<cluster::errc> cluster_recovery_backend::do_action(
               roles_retry.get_deadline());
             if (err != make_error_code(errc::success)) {
                 co_return cluster::errc::replication_error;
+            }
+        }
+        break;
+    }
+    case recovery_stage::recovered_cloud_topics_metastore: {
+        // If the current metastore has the same remote label as the desired
+        // one, we are done. Maybe we finished in a previous term.
+        auto metastore_meta = _topics.get_topic_metadata(
+          model::l1_metastore_nt);
+        if (metastore_meta.has_value()) {
+            const auto& metastore_conf = metastore_meta->get_configuration();
+            const auto metastore_label = metastore_conf.properties.remote_label;
+            if (
+              metastore_label
+              == actions.ct_metastore_topic->properties.remote_label) {
+                // We're done!
+                break;
+            }
+            // Otherwise, proceed to calling restore.
+        }
+        if (!_ct_state) {
+            vlog(
+              clusterlog.error,
+              "Cloud topics not enabled for metastore recovery");
+            co_return cluster::errc::invalid_configuration_update;
+        }
+
+        auto& desired_label
+          = actions.ct_metastore_topic->properties.remote_label;
+        if (!desired_label.has_value()) {
+            vlog(
+              clusterlog.error,
+              "No remote_label in topic config for metastore recovery");
+            co_return cluster::errc::invalid_configuration_update;
+        }
+        for (const auto& [nt, meta] : _topics.topics_map()) {
+            const auto& conf = meta.get_metadata().get_configuration();
+            if (
+              conf.is_cloud_topic()
+              && conf.properties.remote_label != desired_label) {
+                vlog(
+                  clusterlog.error,
+                  "Cloud topic {} has remote label {}; cannot proceed with "
+                  "metastore restore with label {}",
+                  nt,
+                  conf.properties.remote_label,
+                  desired_label);
+                co_return cluster::errc::invalid_configuration_update;
+            }
+        }
+
+        // Restore on the metastore with our desired remote label. This will
+        // create the underlying topic if it doesn't already exist. Retry on
+        // transport errors since leadership may be unstable during recovery.
+        auto* metastore = _ct_state->local().get_l1_metastore();
+        retry_chain_node metastore_retry(60s, 1s, &parent_retry);
+        auto restore_res = co_await cloud_topics::l1::retry_metastore_op(
+          [metastore, &desired_label] {
+              return metastore->restore(*desired_label);
+          },
+          metastore_retry);
+        if (!restore_res.has_value()) {
+            vlog(
+              clusterlog.error,
+              "Metastore restore failed: {}",
+              restore_res.error());
+            co_return cluster::errc::replication_error;
+        }
+
+        // Update the topic config for the metastore topic so further cloud
+        // topics on this cluster get its remote label.
+        retry_chain_node ct_retry(&parent_retry);
+        topic_properties_update update(model::l1_metastore_nt);
+        update.properties.remote_label.op = incremental_update_operation::set;
+        update.properties.remote_label.value = *desired_label;
+        auto update_results = co_await _topics_frontend.update_topic_properties(
+          {std::move(update)}, ct_retry.get_deadline());
+        for (const auto& res : update_results) {
+            if (res.ec != make_error_code(errc::success)) {
+                vlog(
+                  clusterlog.error,
+                  "Failed to update metastore topic properties: {}",
+                  res.ec);
+                co_return res.ec;
+            }
+        }
+        break;
+    }
+    case recovery_stage::recovered_cloud_topic_data: {
+        // Go through each of the cloud topics. If any of them have different
+        // remote_labels than the current metastore, that is problematic.
+        auto metastore_meta = _topics.get_topic_metadata(
+          model::l1_metastore_nt);
+        if (!metastore_meta.has_value()) {
+            vlog(
+              clusterlog.error,
+              "Expected to have restored metastore topic {} before restoring "
+              "cloud topics",
+              model::l1_metastore_nt);
+            co_return cluster::errc::topic_not_exists;
+        }
+        const auto& metastore_conf = metastore_meta->get_configuration();
+        const auto metastore_label = metastore_conf.properties.remote_label;
+        topic_configuration_vector topics;
+        for (auto& topic_cfg : actions.cloud_topics) {
+            if (topic_cfg.is_read_replica()) {
+                topics.emplace_back(std::move(topic_cfg));
+                vlog(
+                  clusterlog.debug,
+                  "Creating read replica cloud topic {}: {}",
+                  topics.back().tp_ns,
+                  topics.back());
+            } else {
+                auto& topic_label = topic_cfg.properties.remote_label;
+                if (topic_cfg.properties.remote_label != metastore_label) {
+                    vlog(
+                      clusterlog.error,
+                      "Cannot create a recovery cloud topic with label {} when "
+                      "metastore label is {}",
+                      topic_label,
+                      metastore_label);
+                }
+                topics.emplace_back(std::move(topic_cfg));
+                vlog(
+                  clusterlog.debug,
+                  "Creating recovery cloud topic {}: {}",
+                  topics.back().tp_ns,
+                  topics.back());
+            }
+        }
+        retry_chain_node ct_retry(&parent_retry);
+        auto results = co_await _topics_frontend.autocreate_topics(
+          std::move(topics), ct_retry.get_timeout());
+        for (const auto& res : results) {
+            if (res.ec != make_error_code(errc::success)) {
+                co_return res.ec;
             }
         }
         break;

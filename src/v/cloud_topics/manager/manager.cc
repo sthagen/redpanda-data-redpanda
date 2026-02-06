@@ -42,6 +42,11 @@ void cloud_topics_manager::on_l1_domain_leader(notification_cb_t cb) noexcept {
     l1_callbacks_.push_back(std::move(cb));
 }
 
+void cloud_topics_manager::on_ctp_leader_properties_change(
+  notification_cb_t cb) noexcept {
+    ctp_prop_change_callbacks_.push_back(std::move(cb));
+}
+
 ss::future<> cloud_topics_manager::start() {
     using notify_current_state
       = cluster::partition_change_notifier::notify_current_state;
@@ -49,7 +54,7 @@ ss::future<> cloud_topics_manager::start() {
     using partition_state = cluster::partition_change_notifier::partition_state;
     notification_ = notifier_->register_partition_notifications(
       [this](
-        notif_type,
+        notif_type t,
         const model::ntp& ntp,
         std::optional<partition_state> state) noexcept {
           auto is_leader = state
@@ -96,7 +101,16 @@ ss::future<> cloud_topics_manager::start() {
           }
           model::topic_id_partition tidp{
             config->tp_id.value(), ntp.tp.partition};
-          on_leadership_change(ntp, tidp, is_leader);
+          switch (t) {
+          case notif_type::leadership_change:
+          case notif_type::partition_replica_assigned:
+          case notif_type::partition_replica_unassigned:
+              on_leadership_change(ntp, tidp, is_leader);
+              [[fallthrough]];
+          case notif_type::partition_properties_change:
+              on_leadership_or_properties_change(ntp, tidp, is_leader);
+              break;
+          }
       },
       notify_current_state::yes);
     co_return;
@@ -124,6 +138,21 @@ void cloud_topics_manager::on_leadership_change(
         }
     } else {
         for (const auto& cb : ctp_callbacks_) {
+            cb(ntp, tidp, partition);
+        }
+    }
+}
+
+void cloud_topics_manager::on_leadership_or_properties_change(
+  const model::ntp& ntp,
+  const model::topic_id_partition& tidp,
+  bool is_leader) noexcept {
+    ss::optimized_optional<ss::lw_shared_ptr<cluster::partition>> partition;
+    if (is_leader) {
+        partition = partition_manager_->local().get(ntp);
+    }
+    if (model::l1_metastore_nt != model::topic_namespace_view(ntp)) {
+        for (const auto& cb : ctp_prop_change_callbacks_) {
             cb(ntp, tidp, partition);
         }
     }

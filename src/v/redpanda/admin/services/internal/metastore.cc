@@ -60,4 +60,27 @@ metastore_service_impl::get_offsets(
     co_return response;
 }
 
+seastar::future<proto::admin::metastore::get_size_response>
+metastore_service_impl::get_size(
+  serde::pb::rpc::context, proto::admin::metastore::get_size_request req) {
+    const auto& topic_metadata = _topic_table->local().get_topic_metadata_ref(
+      model::topic_namespace{
+        model::kafka_namespace, model::topic{req.get_partition().get_topic()}});
+    if (!topic_metadata) {
+        throw serde::pb::rpc::not_found_exception("topic not found");
+    }
+    auto topic_id = topic_metadata->get().get_configuration().tp_id;
+    if (!topic_id) {
+        throw serde::pb::rpc::not_found_exception("topic missing id");
+    }
+    proto::admin::metastore::get_size_response response;
+    auto result = co_await _metastore->local().get_size(
+      {*topic_id, model::partition_id{req.get_partition().get_partition()}});
+    if (!result) {
+        check_errc(result.error());
+    }
+    response.set_size_bytes(result.value().size);
+    co_return response;
+}
+
 } // namespace admin

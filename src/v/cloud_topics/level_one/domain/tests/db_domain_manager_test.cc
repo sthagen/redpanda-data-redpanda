@@ -881,3 +881,66 @@ TEST_F(DbDomainManagerTest, TestGarbageCollectionAfterRemoveTopic) {
     RPTEST_REQUIRE_EVENTUALLY(
       30s, [&] { return all_objects_missing(object_ids); });
 }
+
+TEST_F(DbDomainManagerTest, TestGetSizeBasic) {
+    auto tp = make_tp();
+    // Add 3 objects, each with an extent of size 512 bytes.
+    {
+        l1_rpc::add_objects_request req;
+        req.new_objects = make_new_objects(tp, kafka::offset(0), 3, 10);
+        req.new_terms = make_terms(tp, kafka::offset(0), model::term_id(1));
+        auto reply = initial_manager->add_objects(std::move(req)).get();
+        ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+    }
+
+    // Query size - should be 3 * 512 = 1536 bytes.
+    l1_rpc::get_size_request size_req{.tp = tp};
+    auto size_reply = initial_manager->get_size(std::move(size_req)).get();
+    ASSERT_EQ(size_reply.ec, l1_rpc::errc::ok);
+    ASSERT_EQ(size_reply.size, 3 * 512);
+}
+
+TEST_F(DbDomainManagerTest, TestGetSizeAfterReplace) {
+    auto tp = make_tp();
+    // Add 5 objects, each with an extent of size 512 bytes.
+    for (int i = 0; i < 5; ++i) {
+        l1_rpc::add_objects_request req;
+        req.new_objects = make_new_objects(tp, kafka::offset(i), 1, 1);
+        req.new_terms = make_terms(tp, kafka::offset(i), model::term_id(1));
+        auto reply = initial_manager->add_objects(std::move(req)).get();
+        ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+    }
+
+    // Initial size should be 5 * 512 = 2560 bytes.
+    {
+        l1_rpc::get_size_request size_req{.tp = tp};
+        auto size_reply = initial_manager->get_size(std::move(size_req)).get();
+        ASSERT_EQ(size_reply.ec, l1_rpc::errc::ok);
+        ASSERT_EQ(size_reply.size, 5 * 512);
+    }
+
+    // Replace all 5 extents with 1 extent (also 512 bytes).
+    l1_rpc::replace_objects_request replace_req{
+      .metastore_partition = model::partition_id(0),
+      .new_objects = make_new_objects(tp, kafka::offset(0), 1, 5),
+    };
+    auto replace_reply
+      = initial_manager->replace_objects(std::move(replace_req)).get();
+    ASSERT_EQ(replace_reply.ec, l1_rpc::errc::ok);
+
+    // Size should now be 1 * 512 = 512 bytes.
+    {
+        l1_rpc::get_size_request size_req{.tp = tp};
+        auto size_reply = initial_manager->get_size(std::move(size_req)).get();
+        ASSERT_EQ(size_reply.ec, l1_rpc::errc::ok);
+        ASSERT_EQ(size_reply.size, 512);
+    }
+}
+
+TEST_F(DbDomainManagerTest, TestGetSizeMissingPartition) {
+    auto tp = make_tp();
+    // Query size for a partition that doesn't exist.
+    l1_rpc::get_size_request size_req{.tp = tp};
+    auto size_reply = initial_manager->get_size(std::move(size_req)).get();
+    ASSERT_EQ(size_reply.ec, l1_rpc::errc::missing_ntp);
+}

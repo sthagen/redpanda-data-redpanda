@@ -159,117 +159,123 @@ ss::future<consensus_ptr> partition_manager::manage(
     // be used at runtime by the partition. The latter is owned by the archival
     // metadata STM and its lifecycle is therefore tied to the partition, which
     // hasn't been constructed yet.
-    cloud_storage::remote_path_provider path_provider(
-      std::move(remote_label), std::move(remote_topic_namespace_override));
-    auto dl_result = co_await maybe_download_log(ntp_cfg, rtp, path_provider);
+    // TODO: implement a recovery primitive for cloud topics
+    if (!ntp_cfg.cloud_topic_enabled()) {
+        cloud_storage::remote_path_provider path_provider(
+          std::move(remote_label), std::move(remote_topic_namespace_override));
+        auto dl_result = co_await maybe_download_log(
+          ntp_cfg, rtp, path_provider);
 
-    auto& [logs_recovered, clean_download, min_offset, max_offset, manifest, ot_state]
-      = dl_result;
-    if (logs_recovered) {
-        vlog(
-          clusterlog.info,
-          "Log download complete, ntp: {}, rev: {}, "
-          "min_offset: {}, max_offset: {}",
-          ntp_cfg.ntp(),
-          ntp_cfg.get_revision(),
-          min_offset,
-          max_offset);
-        if (!clean_download) {
-            vlog(
-              clusterlog.error,
-              "{} partition recovery is not clean, try to delete the topic "
-              "and retry recovery",
-              ntp_cfg.ntp());
-            manifest.disable_permanently();
-        }
-
-        if (min_offset == max_offset && min_offset == model::offset{0}) {
-            // Here two cases are possible:
-            // - Recover failed and we didn't download anything.
-            //   In this case we need to create empty partition and disable
-            //   updates to archival STM to preserve data.
-            // - The manifest was empty. We don't need to do anything, just
-            //   start from an empty slate.
+        auto& [logs_recovered, clean_download, min_offset, max_offset, manifest, ot_state]
+          = dl_result;
+        if (logs_recovered) {
             vlog(
               clusterlog.info,
-              "{} no data in the downloaded segments, empty partition will be "
-              "created",
-              ntp_cfg.ntp());
-
-            if (!clean_download) {
-                // No data was downloaded because of error, in this case it's
-                // not safe to upload data to the cloud. The snapshot should be
-                // created to disable uploads.
-                co_await archival_metadata_stm::make_snapshot(
-                  ntp_cfg, manifest, max_offset);
-            }
-        } else {
-            // Manifest is not empty since we were able to recover some data.
-            auto last_segment = manifest.last_segment();
-            vassert(last_segment.has_value(), "Manifest is empty");
-            auto last_included_term = last_segment->archiver_term;
-
-            vlog(
-              clusterlog.info,
-              "Bootstrap on-disk state for pre existing partition {}. "
-              "Group: {}, "
-              "Min offset: {}, "
-              "Max offset: {}, "
-              "Last included term: {}, ",
+              "Log download complete, ntp: {}, rev: {}, "
+              "min_offset: {}, max_offset: {}",
               ntp_cfg.ntp(),
-              group,
+              ntp_cfg.get_revision(),
               min_offset,
-              max_offset,
-              last_included_term);
-
-            if (min_offset > max_offset) {
-                // No data was downloaded. In this case we're doing shallow
-                // recovery. The dl_result is not populated with data yet so we
-                // have to provide initial delta value.
-                vassert(
-                  manifest.last_segment().has_value(), "Manifest is empty");
-
-                min_offset = model::next_offset(manifest.get_last_offset());
-                max_offset = min_offset;
-                co_await seastar::recursive_touch_directory(
-                  ntp_cfg.work_directory());
+              max_offset);
+            if (!clean_download) {
+                vlog(
+                  clusterlog.error,
+                  "{} partition recovery is not clean, try to delete the topic "
+                  "and retry recovery",
+                  ntp_cfg.ntp());
+                manifest.disable_permanently();
             }
 
-            dl_result.ot_state->add_absolute_delta(
-              model::next_offset(manifest.get_last_offset()),
-              manifest.last_segment()->delta_offset_end);
-
-            co_await raft::details::bootstrap_pre_existing_partition(
-              _storage,
-              ntp_cfg,
-              group,
-              min_offset,
-              max_offset,
-              last_included_term,
-              initial_nodes,
-              dl_result.ot_state);
-
-            // Initialize archival snapshot
-            /*
-             [segment 1] [segment 2] [segment 3]
-                       ^                 ^
-                       |                 |
-                   last_offset      in-sync offset
-
-            Here the ISO is no longer correct because
-            it belongs to the old cluster. We're using last uploaded
-            offset to set up the snapshot.
-            */
-            if (max_offset != model::offset(0)) {
+            if (min_offset == max_offset && min_offset == model::offset{0}) {
+                // Here two cases are possible:
+                // - Recover failed and we didn't download anything.
+                //   In this case we need to create empty partition and disable
+                //   updates to archival STM to preserve data.
+                // - The manifest was empty. We don't need to do anything, just
+                //   start from an empty slate.
                 vlog(
                   clusterlog.info,
-                  "Creating snapshot for {} partition, "
-                  "min_offset: {}, max_offset: {}",
+                  "{} no data in the downloaded segments, empty partition will "
+                  "be "
+                  "created",
+                  ntp_cfg.ntp());
+
+                if (!clean_download) {
+                    // No data was downloaded because of error, in this case
+                    // it's not safe to upload data to the cloud. The snapshot
+                    // should be created to disable uploads.
+                    co_await archival_metadata_stm::make_snapshot(
+                      ntp_cfg, manifest, max_offset);
+                }
+            } else {
+                // Manifest is not empty since we were able to recover some
+                // data.
+                auto last_segment = manifest.last_segment();
+                vassert(last_segment.has_value(), "Manifest is empty");
+                auto last_included_term = last_segment->archiver_term;
+
+                vlog(
+                  clusterlog.info,
+                  "Bootstrap on-disk state for pre existing partition {}. "
+                  "Group: {}, "
+                  "Min offset: {}, "
+                  "Max offset: {}, "
+                  "Last included term: {}, ",
                   ntp_cfg.ntp(),
+                  group,
                   min_offset,
-                  max_offset);
-                co_await archival_metadata_stm::make_snapshot(
-                  ntp_cfg, manifest, model::prev_offset(max_offset));
+                  max_offset,
+                  last_included_term);
+
+                if (min_offset > max_offset) {
+                    // No data was downloaded. In this case we're doing shallow
+                    // recovery. The dl_result is not populated with data yet so
+                    // we have to provide initial delta value.
+                    vassert(
+                      manifest.last_segment().has_value(), "Manifest is empty");
+
+                    min_offset = model::next_offset(manifest.get_last_offset());
+                    max_offset = min_offset;
+                    co_await seastar::recursive_touch_directory(
+                      ntp_cfg.work_directory());
+                }
+
+                dl_result.ot_state->add_absolute_delta(
+                  model::next_offset(manifest.get_last_offset()),
+                  manifest.last_segment()->delta_offset_end);
+
+                co_await raft::details::bootstrap_pre_existing_partition(
+                  _storage,
+                  ntp_cfg,
+                  group,
+                  min_offset,
+                  max_offset,
+                  last_included_term,
+                  initial_nodes,
+                  dl_result.ot_state);
+
+                // Initialize archival snapshot
+                /*
+                 [segment 1] [segment 2] [segment 3]
+                           ^                 ^
+                           |                 |
+                       last_offset      in-sync offset
+
+                Here the ISO is no longer correct because
+                it belongs to the old cluster. We're using last uploaded
+                offset to set up the snapshot.
+                */
+                if (max_offset != model::offset(0)) {
+                    vlog(
+                      clusterlog.info,
+                      "Creating snapshot for {} partition, "
+                      "min_offset: {}, max_offset: {}",
+                      ntp_cfg.ntp(),
+                      min_offset,
+                      max_offset);
+                    co_await archival_metadata_stm::make_snapshot(
+                      ntp_cfg, manifest, model::prev_offset(max_offset));
+                }
             }
         }
     }
@@ -345,6 +351,11 @@ partition_manager::maybe_download_log(
           "Logs can't be downloaded because cloud storage is not configured. "
           "Continue creating {} without downloading the logs.",
           ntp_cfg);
+        co_return cloud_storage::log_recovery_result{};
+    }
+
+    // TODO: implement a recovery primitive for cloud topics.
+    if (ntp_cfg.cloud_topic_enabled()) {
         co_return cloud_storage::log_recovery_result{};
     }
 

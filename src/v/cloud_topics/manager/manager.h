@@ -76,6 +76,21 @@ public:
     // These callbacks are invoked until the cloud topics manager is stopped.
     void on_ctp_partition_leader(notification_cb_t) noexcept;
 
+    // Register for notifications to kafka namespaced partitions with cloud
+    // topics enabled. The provided callback will be invoked when leadership is
+    // confirmed for a given leader or when topic properties are changed while
+    // the partition is already a leader.
+    //
+    // This method should be called *before* start is called on the
+    // cloud_topics_manager.
+    //
+    // The provided callback will be invoked for all
+    // existing shards once `start` has been called for the
+    // `cloud_topics_manager`.
+    //
+    // These callbacks are invoked until the cloud topics manager is stopped.
+    void on_ctp_leader_properties_change(notification_cb_t) noexcept;
+
     // Register for notifications to our metastore domain partition leadership
     // changes. These partitions are colocated with a domain (which is a
     // partition of the metastore). The provided callback will be invoked when
@@ -108,10 +123,16 @@ private:
       const model::topic_id_partition& tidp,
       bool is_leader) noexcept;
 
+    void on_leadership_or_properties_change(
+      const model::ntp& ntp,
+      const model::topic_id_partition& tidp,
+      bool is_leader) noexcept;
+
     ss::sharded<cluster::partition_manager>* partition_manager_;
     ss::sharded<cluster::topic_table>* topic_table_;
     std::unique_ptr<cluster::partition_change_notifier> notifier_;
     std::vector<notification_cb_t> ctp_callbacks_;
+    std::vector<notification_cb_t> ctp_prop_change_callbacks_;
     std::vector<notification_cb_t> l1_callbacks_;
     std::optional<cluster::notification_id_type> notification_;
     // In the case of a topic being deleted, we no longer have the
