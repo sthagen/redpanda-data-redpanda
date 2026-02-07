@@ -192,6 +192,9 @@ public:
     /// created.
     virtual bool is_valid() const noexcept = 0;
 
+    /// Format human-readable representation of the client.
+    virtual fmt::iterator format_to(fmt::iterator it) const = 0;
+
 protected:
     ss::weak_ptr<upstream> _upstream_ptr;
 };

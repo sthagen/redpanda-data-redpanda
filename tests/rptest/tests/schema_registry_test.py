@@ -5864,6 +5864,616 @@ class SchemaRegistryContextTest(SchemaRegistryEndpoints):
         )
         self.assert_equal(result.status_code, requests.codes.not_found)
 
+    def _get_schema_count_by_context(self):
+        """
+        Query schema_count metrics and return a dict of context -> count.
+        Only reports contexts that have schemas (count > 0).
+        """
+        samples = self.redpanda.metrics_samples(
+            sample_patterns=["schema_count"],
+            metrics_endpoint=MetricsEndpoint.METRICS,
+            nodes=[random.choice(self.redpanda.nodes)],
+        )
+
+        self.logger.info(f"Got metrics samples: {samples}")
+
+        if "schema_count" not in samples:
+            return {}
+
+        metrics = samples["schema_count"]
+
+        context_counts = {}
+
+        for sample in metrics.samples:
+            if "context" in sample.labels:
+                context = sample.labels["context"]
+                context_counts[context] = context_counts.get(context, 0) + sample.value
+
+        return context_counts
+
+    def _refresh_cache(self):
+        for n in self.redpanda.nodes:
+            self.sr_client.get_subjects(hostname=n.account.hostname)
+
+    def _schemas_in_context(self, context: str, expected_count: int):
+        counts = self._get_schema_count_by_context()
+        self.logger.info(
+            f'Counts in context "{context}": {counts.get(context, 0)}, expected: {expected_count}'
+        )
+        return expected_count == counts.get(context, 0)
+
+    @cluster(num_nodes=3)
+    def test_schema_count_context_labels(self):
+        """
+        Test that schema_count metric includes context labels and correctly
+        tracks schemas per context.
+        """
+        # Check metrics - should see 2 schemas in default context "."
+        self.logger.info("Testing schema_count metric with context labels")
+
+        # Initially should have no schemas in any context
+        counts = self._get_schema_count_by_context()
+        self.logger.info(f"Initial counts: {counts}")
+        assert len(counts) == 0 or all(c == 0 for c in counts.values()), (
+            f"Expected no schemas initially, got {counts}"
+        )
+
+        # Create schemas in default context (unqualified subjects)
+        schema1 = json.dumps({"schema": schema1_def})
+        schema2 = json.dumps({"schema": schema2_def})
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-1", data=schema1
+        )
+        assert result.status_code == requests.codes.ok
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-2", data=schema2
+        )
+        assert result.status_code == requests.codes.ok
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._schemas_in_context(".", 2),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for two schemas in default context",
+        )
+
+        # Create schemas in custom context
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:my-subject-1", data=schema1
+        )
+        assert result.status_code == requests.codes.ok
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:my-subject-2", data=schema2
+        )
+        assert result.status_code == requests.codes.ok
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._schemas_in_context(".prod", 2),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for two schemas in .prod context",
+        )
+
+        # Check metrics - should see schemas in both contexts
+        counts = self._get_schema_count_by_context()
+        self.logger.info(f"Counts after prod context: {counts}")
+        assert "." in counts, f"Default context '.' not found in {counts}"
+        assert counts["."] == 2, (
+            f"Expected 2 schemas in default context, got {counts['.']}"
+        )
+        assert ".prod" in counts, f"Context '.prod' not found in {counts}"
+        assert counts[".prod"] == 2, (
+            f"Expected 2 schemas in .prod context, got {counts['.prod']}"
+        )
+
+        # Create schema in another context
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=":.dev:test-subject", data=schema1
+        )
+        assert result.status_code == requests.codes.ok
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._schemas_in_context(".dev", 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one schema in .dev context",
+        )
+
+        # Check metrics - should see schemas in all three contexts
+        counts = self._get_schema_count_by_context()
+        self.logger.info(f"Counts after dev context: {counts}")
+        assert counts["."] == 2
+        assert counts[".prod"] == 2
+        assert ".dev" in counts, f"Context '.dev' not found in {counts}"
+        assert counts[".dev"] == 1, (
+            f"Expected 1 schema in .dev context, got {counts['.dev']}"
+        )
+
+    @cluster(num_nodes=3)
+    def test_schema_count_context_labels_empty_contexts(self):
+        """
+        Test that empty contexts (no schemas) are not reported in metrics.
+        """
+        self.logger.info("Testing empty context behavior")
+
+        # Create a context by creating and then deleting all schemas
+        schema1 = json.dumps({"schema": schema1_def})
+
+        # Create schema in a context
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=":.temp:subject-1", data=schema1
+        )
+        assert result.status_code == requests.codes.ok
+
+        self._refresh_cache()
+
+        # Verify it shows up in metrics
+        wait_until(
+            lambda: self._schemas_in_context(".temp", 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one schema in .temp context",
+        )
+
+        # Delete the subject
+        result = self.sr_client.delete_subject(subject=":.temp:subject-1")
+        assert result.status_code == requests.codes.ok
+
+        # Permanently delete it
+        result = self.sr_client.delete_subject(
+            subject=":.temp:subject-1", params={"permanent": "true"}
+        )
+        assert result.status_code == requests.codes.ok
+
+        self._refresh_cache()
+
+        # Context should now have 0 schemas
+        wait_until(
+            lambda: self._schemas_in_context(".temp", 0),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one schema in .temp context",
+        )
+
+    @cluster(num_nodes=3)
+    def test_schema_count_context_labels_after_restart(self):
+        """
+        Test that schema_count metrics are correctly recomputed after restart.
+        """
+        self.logger.info("Testing schema_count metrics after restart")
+
+        # Create schemas in multiple contexts
+        schema1 = json.dumps({"schema": schema1_def})
+        schema2 = json.dumps({"schema": schema2_def})
+
+        # Default context
+        self.sr_client.post_subjects_subject_versions(
+            subject="default-subject", data=schema1
+        )
+
+        # Custom contexts
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:prod-subject-1", data=schema1
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:prod-subject-2", data=schema2
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.dev:dev-subject", data=schema1
+        )
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._schemas_in_context(".", 1)
+            and self._schemas_in_context(".prod", 2)
+            and self._schemas_in_context(".dev", 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for schemas to be registered in all contexts",
+        )
+
+        # Get counts before restart
+        counts_before = self._get_schema_count_by_context()
+        self.logger.info(f"Counts before restart: {counts_before}")
+
+        # Restart all nodes
+        self.logger.info("Restarting all nodes")
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._schemas_in_context(".", 1)
+            and self._schemas_in_context(".prod", 2)
+            and self._schemas_in_context(".dev", 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for schemas to be registered in all contexts post restart",
+        )
+
+        # Get counts after restart
+        counts_after = self._get_schema_count_by_context()
+        self.logger.info(f"Counts after restart: {counts_after}")
+
+        # Verify counts are the same
+        assert counts_after["."] == 1, (
+            f"Default context count changed after restart: {counts_before['.']} -> {counts_after['.']}"
+        )
+        assert counts_after[".prod"] == 2, (
+            f".prod context count changed after restart: {counts_before['.prod']} -> {counts_after['.prod']}"
+        )
+        assert counts_after[".dev"] == 1, (
+            f".dev context count changed after restart: {counts_before['.dev']} -> {counts_after['.dev']}"
+        )
+
+    def _get_subject_count_by_context(self):
+        """
+        Query subject_count metrics and return a dict of (context, deleted) -> count.
+        """
+        samples = self.redpanda.metrics_samples(
+            sample_patterns=["subject_count"],
+            metrics_endpoint=MetricsEndpoint.METRICS,
+            nodes=[random.choice(self.redpanda.nodes)],
+        )
+
+        self.logger.info(f"Subject count samples: {samples}")
+
+        if "subject_count" not in samples:
+            return {}
+
+        metrics = samples["subject_count"]
+
+        context_counts = {}
+        for sample in metrics.samples:
+            if "context" in sample.labels:
+                context = sample.labels["context"]
+                deleted = sample.labels["deleted"]
+                key = (context, deleted)
+                context_counts[key] = context_counts.get(key, 0) + sample.value
+
+        return context_counts
+
+    def _subjects_in_context(self, context: str, deleted: bool, expected_count: int):
+        counts = self._get_subject_count_by_context()
+        key = (context, "true" if deleted else "false")
+        self.logger.info(
+            f'Counts for context="{context}", deleted="{deleted}": {counts.get(key, 0)}, expected: {expected_count}'
+        )
+        return expected_count == counts.get(key, 0)
+
+    @cluster(num_nodes=3)
+    def test_subject_count_context_labels(self):
+        """
+        Test that subject_count metric includes both context and deleted labels.
+        """
+        self.logger.info("Testing subject_count metric with context and deleted labels")
+
+        # Initially should have no subjects
+        counts = self._get_subject_count_by_context()
+        self.logger.info(f"Initial counts: {counts}")
+
+        # Create subjects in default context
+        schema1 = json.dumps({"schema": schema1_def})
+        schema2 = json.dumps({"schema": schema2_def})
+
+        self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-1", data=schema1
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-2", data=schema2
+        )
+
+        self._refresh_cache()
+
+        # Check metrics - should see 2 not-deleted subjects in default context
+        wait_until(
+            lambda: self._subjects_in_context(".", False, 2),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for two not-deleted subjects in default context",
+        )
+
+        # Create subjects in custom contexts
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:subject-1", data=schema1
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:subject-2", data=schema2
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.dev:subject-1", data=schema1
+        )
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._subjects_in_context(".prod", False, 2)
+            and self._subjects_in_context(".dev", False, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for subjects in .prod and .dev contexts",
+        )
+
+        # Soft delete a subject in default context
+        self.sr_client.delete_subject(subject="default-subject-1")
+
+        self._refresh_cache()
+
+        # Check metrics - should move from not-deleted to deleted
+        wait_until(
+            lambda: self._subjects_in_context(".", False, 1)
+            and self._subjects_in_context(".", True, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one deleted and one not-deleted subject in default context",
+        )
+
+        # Revive the deleted subject
+        self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-1", data=schema1
+        )
+
+        self._refresh_cache()
+        wait_until(
+            lambda: self._subjects_in_context(".", False, 2),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for two not-deleted subjects in default context after reviving",
+        )
+
+    @cluster(num_nodes=3)
+    def test_subject_count_permanent_delete(self):
+        """
+        Test that permanent delete decrements the subject count correctly.
+        """
+        self.logger.info("Testing subject_count with permanent delete")
+
+        schema1 = json.dumps({"schema": schema1_def})
+
+        # Create a subject
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.temp:subject-1", data=schema1
+        )
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one not-deleted subject in .temp context",
+        )
+
+        # Soft delete it
+        self.sr_client.delete_subject(subject=":.temp:subject-1")
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 0)
+            and self._subjects_in_context(".temp", True, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one deleted subject in .temp context",
+        )
+
+        # Permanently delete it
+        self.sr_client.delete_subject(
+            subject=":.temp:subject-1", params={"permanent": "true"}
+        )
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 0)
+            and self._subjects_in_context(".temp", True, 0),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for zero subjects in .temp context after permanent delete",
+        )
+
+    @cluster(num_nodes=3)
+    def test_subject_soft_delete_versions(self):
+        """
+        Test that verifies that a subject shows up in deleted after
+        all of the versions are soft deleted
+        """
+
+        schema1 = json.dumps({"schema": schema1_def})
+        schema2 = json.dumps({"schema": schema2_def})
+
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.temp:subject-1", data=schema1
+        )
+
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.temp:subject-1", data=schema2
+        )
+
+        version_schema_1 = self.sr_client.post_subjects_subject(
+            subject=":.temp:subject-1", data=schema1
+        ).json()["version"]
+        version_schema_2 = self.sr_client.post_subjects_subject(
+            subject=":.temp:subject-1", data=schema2
+        ).json()["version"]
+
+        self.logger.info(
+            f"Registered schema1 with version {version_schema_1} and schema2 with version {version_schema_2}"
+        )
+
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 1)
+            and self._subjects_in_context(".temp", True, 0),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one not-deleted subjects in .temp context",
+        )
+
+        # Now delete version 1 and verify that we don't see the subject as deleted
+        self.sr_client.delete_subject_version(
+            subject=":.temp:subject-1", version=version_schema_1
+        )
+
+        self._refresh_cache()
+
+        subjects = self.sr_client.get_subjects(deleted=False).json()
+        self.logger.info(f"Non-deleted Subjects: {subjects}")
+        self.assert_in(":.temp:subject-1", subjects)
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 1)
+            and self._subjects_in_context(".temp", True, 0),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one not-deleted subjects in .temp context post soft delete",
+        )
+
+        # Now delete version 2 and verify that the subject is now reported as deleted
+        self.sr_client.delete_subject_version(
+            subject=":.temp:subject-1", version=version_schema_2
+        )
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 0)
+            and self._subjects_in_context(".temp", True, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one deleted subjects in .temp context",
+        )
+
+        # Now resurrect verison 2 and verify we now see the subject back in the context
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.temp:subject-1", data=schema2
+        )
+        self._refresh_cache()
+
+        wait_until(
+            lambda: self._subjects_in_context(".temp", False, 1)
+            and self._subjects_in_context(".temp", True, 0),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for one not-deleted subjects in .temp context post resurrection",
+        )
+
+    @cluster(num_nodes=3)
+    def test_subject_count_context_after_restart(self):
+        """
+        Verifies that after restart that the subject count metrics are correct
+        for both deleted and undeleted subjects across contexts.
+        """
+        self.logger.info("Testing subject_count metrics after restart")
+
+        schema1 = json.dumps({"schema": schema1_def})
+        schema2 = json.dumps({"schema": schema2_def})
+
+        # Create subjects in default context
+        self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-1", data=schema1
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject="default-subject-2", data=schema2
+        )
+
+        # Create subjects in .prod context
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:prod-subject-1", data=schema1
+        )
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.prod:prod-subject-2", data=schema2
+        )
+
+        # Create subjects in .dev context
+        self.sr_client.post_subjects_subject_versions(
+            subject=":.dev:dev-subject-1", data=schema1
+        )
+
+        self._refresh_cache()
+
+        # Verify initial state - all subjects should be undeleted
+        wait_until(
+            lambda: self._subjects_in_context(".", False, 2)
+            and self._subjects_in_context(".prod", False, 2)
+            and self._subjects_in_context(".dev", False, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for subjects to be registered in all contexts",
+        )
+
+        # Soft delete one subject in each context
+        self.sr_client.delete_subject(subject="default-subject-1")
+        self.sr_client.delete_subject(subject=":.prod:prod-subject-1")
+
+        self._refresh_cache()
+
+        # Verify we have both deleted and undeleted subjects
+        wait_until(
+            lambda: self._subjects_in_context(".", False, 1)
+            and self._subjects_in_context(".", True, 1)
+            and self._subjects_in_context(".prod", False, 1)
+            and self._subjects_in_context(".prod", True, 1)
+            and self._subjects_in_context(".dev", False, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for deleted subjects in contexts",
+        )
+
+        # Get counts before restart
+        counts_before = self._get_subject_count_by_context()
+        self.logger.info(f"Counts before restart: {counts_before}")
+
+        # Restart all nodes
+        self.logger.info("Restarting all nodes")
+        self.redpanda.restart_nodes(self.redpanda.nodes)
+
+        self._refresh_cache()
+
+        # Verify counts are restored after restart
+        wait_until(
+            lambda: self._subjects_in_context(".", False, 1)
+            and self._subjects_in_context(".", True, 1)
+            and self._subjects_in_context(".prod", False, 1)
+            and self._subjects_in_context(".prod", True, 1)
+            and self._subjects_in_context(".dev", False, 1),
+            timeout_sec=30,
+            retry_on_exc=True,
+            err_msg="Timed out waiting for subjects to be restored after restart",
+        )
+
+        # Get counts after restart
+        counts_after = self._get_subject_count_by_context()
+        self.logger.info(f"Counts after restart: {counts_after}")
+
+        # Verify counts match before and after restart
+        assert counts_after[(".", "false")] == 1, (
+            f"Default context undeleted count changed after restart: "
+            f"{counts_before.get(('.', 'false'), 0)} -> {counts_after.get(('.', 'false'), 0)}"
+        )
+        assert counts_after[(".", "true")] == 1, (
+            f"Default context deleted count changed after restart: "
+            f"{counts_before.get(('.', 'true'), 0)} -> {counts_after.get(('.', 'true'), 0)}"
+        )
+        assert counts_after[(".prod", "false")] == 1, (
+            f".prod context undeleted count changed after restart: "
+            f"{counts_before.get(('.prod', 'false'), 0)} -> {counts_after.get(('.prod', 'false'), 0)}"
+        )
+        assert counts_after[(".prod", "true")] == 1, (
+            f".prod context deleted count changed after restart: "
+            f"{counts_before.get(('.prod', 'true'), 0)} -> {counts_after.get(('.prod', 'true'), 0)}"
+        )
+        assert counts_after[(".dev", "false")] == 1, (
+            f".dev context undeleted count changed after restart: "
+            f"{counts_before.get(('.dev', 'false'), 0)} -> {counts_after.get(('.dev', 'false'), 0)}"
+        )
+
 
 class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
     """

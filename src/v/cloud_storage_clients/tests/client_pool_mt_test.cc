@@ -24,6 +24,7 @@
 
 #include <boost/test/tools/old/interface.hpp>
 
+#include <algorithm>
 #include <deque>
 #include <random>
 
@@ -48,7 +49,7 @@ static cloud_storage_clients::s3_configuration client_configuration() {
     conf.secret_key = cloud_roles::private_key_str("secret-key");
     conf.region = cloud_roles::aws_region_name("us-east-1");
     conf.service = cloud_roles::aws_service_name("s3");
-    conf.url_style = cloud_storage_clients::s3_url_style::virtual_host;
+    conf.url_style = cloud_storage_clients::s3_url_style::path;
     conf.server_addr = server_addr;
     return conf;
 }
@@ -426,4 +427,145 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_concurrent_acquire_release) {
           }
       })
       .get();
+}
+
+SEASTAR_THREAD_TEST_CASE(test_client_pool_multiple_upstreams) {
+    // Smoke test for multiple upstreams support in the client pool.
+
+    constexpr size_t num_connections_per_shard = 4;
+
+    ss::sharded<cloud_storage_clients::client_pool> pool;
+    auto pool_stop = test_pool_builder.copy()
+                       .connections_per_shard(num_connections_per_shard)
+                       .build(pool)
+                       .get();
+
+    struct shard_stats {
+        size_t current{0};
+        size_t max{0};
+
+        void acquired() {
+            ++current;
+            max = std::max(max, current);
+        }
+        void released() { --current; }
+    };
+    ss::sharded<shard_stats> stats;
+    stats.start().get();
+    auto stats_stop = ss::defer([&stats] { stats.stop().get(); });
+
+    cloud_storage_clients::bucket_name_parts bucket1{
+      .name = cloud_storage_clients::plain_bucket_name("test-bucket-1"),
+      .params = {{"region", "us-east-1"}, {"endpoint", "my-east-1.localhost"}},
+    };
+
+    cloud_storage_clients::bucket_name_parts bucket2{
+      .name = cloud_storage_clients::plain_bucket_name("test-bucket-2"),
+      .params = {{"region", "us-west-2"}, {"endpoint", "my-west-2.localhost"}},
+    };
+
+    // Acquire concurrently
+    // - from multiple shards
+    // - from multiple upstreams
+    pool
+      .invoke_on_all([&](cloud_storage_clients::client_pool& p) {
+          return ss::async([&] {
+              ss::abort_source as;
+              auto fut1 = p.acquire(test_bucket, as);
+              auto fut2 = p.acquire(bucket1, as);
+              auto fut3 = p.acquire(bucket2, as);
+
+              auto r = ss::when_all_succeed(
+                         std::move(fut1), std::move(fut2), std::move(fut3))
+                         .get();
+
+              BOOST_REQUIRE_EQUAL(
+                fmt::format("{}", std::get<0>(r).client),
+                "S3Client{{host: localhost, port: 4434}}");
+              BOOST_REQUIRE_EQUAL(
+                fmt::format("{}", std::get<1>(r).client),
+                "S3Client{{host: my-east-1.localhost, port: 4434}}");
+              BOOST_REQUIRE_EQUAL(
+                fmt::format("{}", std::get<2>(r).client),
+                "S3Client{{host: my-west-2.localhost, port: 4434}}");
+          });
+      })
+      .get();
+
+    std::vector<cloud_storage_clients::bucket_name_parts> concurrent_requests{};
+    concurrent_requests.reserve(1000);
+    for (size_t i = 0; i < 1000; i++) {
+        cloud_storage_clients::bucket_name_parts bucket;
+        switch (i % 3) {
+        case 0:
+            // Default upstream (no params).
+            bucket.name = cloud_storage_clients::plain_bucket_name(
+              fmt::format("test-bucket-{}", i));
+            break;
+        case 1:
+            bucket.name = cloud_storage_clients::plain_bucket_name(
+              fmt::format("test-bucket-{}", i));
+            bucket.params = {
+              {"region", "us-east-1"}, {"endpoint", "my-east-1.localhost"}};
+            break;
+        case 2:
+            bucket.name = cloud_storage_clients::plain_bucket_name(
+              fmt::format("test-bucket-{}", i));
+            bucket.params = {
+              {"region", "us-west-2"}, {"endpoint", "my-west-2.localhost"}};
+            break;
+        }
+        concurrent_requests.push_back(std::move(bucket));
+    }
+
+    auto expected_host =
+      [](const cloud_storage_clients::bucket_name_parts& b) -> std::string {
+        if (b.params.empty()) {
+            return "localhost";
+        }
+        auto it = std::ranges::find_if(
+          b.params, [](const auto& kv) { return kv.first == "endpoint"; });
+        if (it != b.params.end()) {
+            return it->second;
+        }
+        throw std::runtime_error("endpoint param not found");
+    };
+
+    for (int i = 0; i < 3; i++) {
+        pool
+          .invoke_on_all([&](cloud_storage_clients::client_pool& p) {
+              return ss::parallel_for_each(
+                concurrent_requests,
+                [&](cloud_storage_clients::bucket_name_parts& bucket) {
+                    return ss::async([&] {
+                        ss::abort_source as;
+                        auto lease = p.acquire(bucket, as).get();
+                        stats.local().acquired();
+                        auto release_guard = ss::defer(
+                          [&] { stats.local().released(); });
+
+                        BOOST_REQUIRE_EQUAL(
+                          fmt::format("{}", lease.client),
+                          fmt::format(
+                            "S3Client{{{{host: {}, port: 4434}}}}",
+                            expected_host(bucket)));
+
+                        // Hold the lease for a bit to increase
+                        // chance of contention.
+                        ss::sleep(random_generators::get_int(3) * 1ms).get();
+                    });
+                });
+          })
+          .get();
+
+        ss::yield().get();
+    }
+
+    stats
+      .invoke_on_all([=](shard_stats& s) {
+          BOOST_REQUIRE_LE(s.max, num_connections_per_shard);
+      })
+      .get();
+
+    BOOST_REQUIRE_EQUAL(pool.local().idle_count(), pool.local().capacity());
 }

@@ -176,6 +176,16 @@ public:
         throw std::runtime_error("unimplemented");
     }
 
+    size_t local_size_bytes() const override {
+        throw std::runtime_error("unimplemented");
+    }
+    ss::future<std::optional<size_t>> cloud_size_bytes() const override {
+        throw std::runtime_error("unimplemented");
+    }
+    model::offset offset_lag() const override {
+        throw std::runtime_error("unimplemented");
+    }
+
 private:
     model::offset latest_offset() {
         auto o = model::offset(0);

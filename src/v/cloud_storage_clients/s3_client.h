@@ -218,6 +218,8 @@ public:
 
     bool is_valid() const noexcept override;
 
+    fmt::iterator format_to(fmt::iterator it) const override;
+
 private:
     ss::future<head_object_result> do_head_object(
       const plain_bucket_name& name,
@@ -300,6 +302,8 @@ public:
       const plain_bucket_name& bucket,
       const chunked_vector<object_key>& keys,
       ss::lowres_clock::duration timeout) override;
+
+    fmt::iterator format_to(fmt::iterator it) const override;
 
 private:
     ss::future<delete_objects_result> do_delete_objects(

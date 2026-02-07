@@ -9,6 +9,7 @@
 from typing import List, NamedTuple, Optional
 
 from ducktape.mark import matrix
+from ducktape.mark._mark import Mark
 from ducktape.tests.test import TestContext
 
 from rptest.clients.default import DefaultClient
@@ -22,6 +23,7 @@ from rptest.services.redpanda import (
     MetricsEndpoint,
     RedpandaService,
     SISettings,
+    get_cloud_provider,
     get_cloud_storage_type,
     get_cloud_storage_type_and_url_style,
     make_redpanda_service,
@@ -128,6 +130,47 @@ def create_read_replica_topic(dst_cluster, topic_name, bucket_name) -> None:
     )
 
 
+class CrossRegionRRRTestMark(Mark):
+    """
+    This mark uses the current cloud provider (via get_cloud_provider)
+    to decide whether a test should be skipped: tests are only executed
+    when running on supported providers (docker and aws), and are marked
+    as ignored on other providers.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def apply(self, seed_context, context_list):
+        assert len(context_list) > 0, (
+            "ignore annotation is not being applied to any test cases"
+        )
+
+        should_ignore_test = False
+        if get_cloud_provider() not in ["docker", "aws"]:
+            seed_context.logger.info(
+                "Skipping cross-region read-replica test outside of docker and aws"
+            )
+            should_ignore_test = True
+
+        for ctx in context_list:
+            ctx.ignore = ctx.ignore or should_ignore_test
+
+        return context_list
+
+
+def cross_region_rrr_test(func, /):
+    """
+    Decorator to mark a test as a cross region remote read replica test.
+    These tests run only in docker and aws. For GCS overrides aren't necessary
+    and we don't allow them. ABS has a different model and needs additional
+    work.
+    """
+
+    Mark.mark(func, CrossRegionRRRTestMark())
+    return func
+
+
 class TestReadReplicaService(EndToEndTest):
     log_segment_size = 1048576  # 5MB
     topic_name = "panda-topic"
@@ -164,6 +207,7 @@ class TestReadReplicaService(EndToEndTest):
             cloud_storage_segment_max_upload_interval_sec=5,
             cloud_storage_housekeeping_interval_ms=10,
         )
+        self.rr_topic_bucket = self.si_settings.cloud_storage_bucket
         self.second_cluster = None
 
     def start_second_cluster(self, num_brokers=3) -> None:
@@ -179,7 +223,7 @@ class TestReadReplicaService(EndToEndTest):
 
     def create_read_replica_topic(self) -> None:
         create_read_replica_topic(
-            self.second_cluster, self.topic_name, self.si_settings.cloud_storage_bucket
+            self.second_cluster, self.topic_name, self.rr_topic_bucket
         )
 
     def start_consumer(self) -> None:
@@ -227,6 +271,7 @@ class TestReadReplicaService(EndToEndTest):
         producer_timeout=None,
         num_source_brokers=3,
         num_rrr_brokers=3,
+        replication_factor=3,
     ) -> None:
         if producer_timeout is None:
             producer_timeout = 30
@@ -239,7 +284,9 @@ class TestReadReplicaService(EndToEndTest):
         # Create original topic
         self.start_redpanda(num_source_brokers, si_settings=self.si_settings)
         spec = TopicSpec(
-            name=self.topic_name, partition_count=partition_count, replication_factor=3
+            name=self.topic_name,
+            partition_count=partition_count,
+            replication_factor=replication_factor,
         )
 
         DefaultClient(self.redpanda).create_topic(spec)
@@ -489,6 +536,37 @@ class TestReadReplicaService(EndToEndTest):
         if delta:
             m = f"S3 Bucket usage changed during read replica test: {delta}"
             assert False, m
+
+    # fips on S3 is not compatible with path-style urls. TODO remove this once get_cloud_storage_type_and_url_style is fips aware
+    @skip_fips_mode
+    @cross_region_rrr_test
+    @cluster(num_nodes=4, log_allow_list=READ_REPLICA_LOG_ALLOW_LIST)
+    @matrix(
+        cloud_storage_type=[CloudStorageType.S3],
+        cloud_storage_url_style=["path", "virtual_host"],
+    )
+    def test_cross_region_end_to_end(
+        self, cloud_storage_type: CloudStorageType, cloud_storage_url_style: str
+    ):
+        bucket_region = self.rr_settings.cloud_storage_region
+        bucket_endpoint = self.rr_settings.cloud_storage_api_endpoint
+        self.rr_topic_bucket = f"{self.si_settings.cloud_storage_bucket}?region={bucket_region}&endpoint={bucket_endpoint}"
+
+        # Bogus region and endpoint to test overrides take effect.
+        self.rr_settings.cloud_storage_region = "unknown-region-1"
+        self.rr_settings.cloud_storage_api_endpoint = "nonexistent.localhost"
+
+        self._setup_read_replica(
+            num_messages=100000,
+            partition_count=3,
+            producer_timeout=300,
+            num_source_brokers=1,
+            num_rrr_brokers=1,
+            replication_factor=1,
+        )
+
+        self.start_consumer()
+        self.run_validation(consumer_timeout_sec=300)
 
     def _get_node_assignments(self, admin, topic, partition):
         def try_get_partitions():

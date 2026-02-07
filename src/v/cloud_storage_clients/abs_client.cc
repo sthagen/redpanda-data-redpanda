@@ -1151,6 +1151,10 @@ bool abs_client::is_valid() const noexcept {
     return _upstream_ptr.get() != nullptr;
 }
 
+fmt::iterator abs_client::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "ABSClient{{{}}}", _client.server_address());
+}
+
 ss::future<result<abs_client::list_bucket_result, error_outcome>>
 abs_client::list_objects(
   const plain_bucket_name& name,

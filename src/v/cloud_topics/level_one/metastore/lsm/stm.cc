@@ -84,6 +84,10 @@ ss::future<std::expected<model::term_id, stm::errc>> stm::sync(
 
 ss::future<std::expected<model::offset, stm::errc>> stm::replicate_and_wait(
   model::term_id term, model::record_batch batch, ss::abort_source& as) {
+    auto gh = _gate.try_hold();
+    if (!gh) {
+        co_return std::unexpected(errc::shutting_down);
+    }
     constexpr auto replicate_timeout = 10s;
     auto opts = raft::replicate_options(
       raft::consistency_level::quorum_ack,

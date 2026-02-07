@@ -33,6 +33,10 @@ ss::future<> credential_manager::start() {
         _upstream.load_credentials(
           _auth_refresh_bg_op.build_static_credentials());
     } else {
+        const ss::sstring metrics_tag = _upstream.key() == default_upstream_key
+                                          ? ""
+                                          : ssx::sformat("{}", _upstream.key());
+
         // Launch background operation to fetch credentials on
         // auth_refresh_shard_id, and copy them to other shards. We do not wait
         // for this operation here, the wait is done in client_pool::acquire to
@@ -43,7 +47,8 @@ ss::future<> credential_manager::start() {
                 [c = std::move(credentials)](upstream& svc) {
                     svc.load_credentials(std::move(c));
                 });
-          });
+          },
+          metrics_tag);
     }
 
     _azure_shared_key_binding.watch([this] {

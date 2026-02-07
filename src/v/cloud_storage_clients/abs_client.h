@@ -275,6 +275,8 @@ public:
       object_key path,
       ss::lowres_clock::duration timeout);
 
+    fmt::iterator format_to(fmt::iterator it) const override;
+
 private:
     template<typename T>
     ss::future<result<T, error_outcome>> send_request(

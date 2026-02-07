@@ -11,6 +11,8 @@ package quotas
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,8 +51,8 @@ This command allows you to add or delete a client quota.
 A client quota consists of an entity (to whom the quota is applied) and a quota 
 type (what is being applied).
 
-There are two entity types supported by Redpanda: client ID and client ID 
-prefix.
+There are three entity types supported by Redpanda: user, client ID, and 
+client ID prefix.
 
 Assigning quotas to default entity types is possible using the '--default' flag.
 
@@ -95,8 +97,8 @@ Remove quota (producer_byte_rate) from client ID 'foo':
 				}
 				k, v := split[0], split[1]
 				k = strings.ToLower(k)
-				if !anyValidTypes[k] {
-					out.Die("name type %q is invalid (allowed: client-id, client-id-prefix)", split[0])
+				if _, ok := anyValidTypes[k]; !ok {
+					out.Die("name type %q is invalid (allowed: %v)", k, strings.Join(slices.Collect(maps.Keys(anyValidTypes)), ", "))
 				}
 				nameMap[k] = true
 				entity = append(entity, kadm.ClientQuotaEntityComponent{
@@ -105,8 +107,8 @@ Remove quota (producer_byte_rate) from client ID 'foo':
 				})
 			}
 			for _, def := range defaults {
-				if !defaultValidTypes[def] {
-					out.Die("default type %q is invalid (allowed: client-id)", def)
+				if _, ok := defaultValidTypes[def]; !ok {
+					out.Die("default type %q is invalid (allowed: %v)", def, strings.Join(slices.Collect(maps.Keys(defaultValidTypes)), ", "))
 				}
 				if nameMap[def] {
 					out.Die("default type %q was previously defined in --name, you can only set it once", def)

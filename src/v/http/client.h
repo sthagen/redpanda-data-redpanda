@@ -273,6 +273,9 @@ public:
     /// Whether the client has a valid connection.
     using net::base_transport::is_valid;
 
+    /// Server address.
+    using net::base_transport::server_address;
+
     /**
      * Dispatch a request with the provided headers and body.
      *

@@ -1505,6 +1505,10 @@ bool s3_client::is_valid() const noexcept {
     return _upstream_ptr.get() != nullptr;
 }
 
+fmt::iterator s3_client::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "S3Client{{{}}}", _client.server_address());
+}
+
 gcs_client::gcs_client(
   ss::weak_ptr<upstream> upstream_ptr,
   const s3_configuration& conf,
@@ -1597,4 +1601,9 @@ auto gcs_client::do_delete_objects(
     }
     co_return std::move(result).value();
 }
+
+fmt::iterator gcs_client::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "GCSClient{{{}}}", _client.server_address());
+}
+
 } // namespace cloud_storage_clients

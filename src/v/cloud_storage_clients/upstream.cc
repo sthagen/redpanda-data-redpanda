@@ -26,10 +26,12 @@ constexpr auto self_configure_backoff = 1s;
 } // namespace
 
 upstream::upstream(
+  upstream_key key,
   client_configuration config,
   ss::shared_ptr<ss::tls::certificate_credentials> tls_credentials,
   ss::shared_ptr<client_probe> probe)
-  : _config(std::move(config))
+  : _key(std::move(key))
+  , _config(std::move(config))
   , _transport_config(build_transport_configuration(_config, tls_credentials))
   , _probe(std::move(probe))
   , _credential_manager(
@@ -97,17 +99,18 @@ void upstream::prepare_stop() {
     _credentials_var.broken();
 }
 
-upstream::client_ptr upstream::make_client() noexcept {
+upstream::client_ptr
+upstream::make_client(ss::abort_source& client_as) noexcept {
     return ss::visit(
       _config,
-      [this](const s3_configuration& cfg) -> client_ptr {
+      [this, &client_as](const s3_configuration& cfg) -> client_ptr {
           if (cfg.is_gcs) {
               return ss::make_shared<gcs_client>(
                 weak_from_this(),
                 cfg,
                 _transport_config,
                 _probe,
-                _as,
+                client_as,
                 _apply_credentials);
           }
           return ss::make_shared<s3_client>(
@@ -115,16 +118,16 @@ upstream::client_ptr upstream::make_client() noexcept {
             cfg,
             _transport_config,
             _probe,
-            _as,
+            client_as,
             _apply_credentials);
       },
-      [this](const abs_configuration& cfg) -> client_ptr {
+      [this, &client_as](const abs_configuration& cfg) -> client_ptr {
           return ss::make_shared<abs_client>(
             weak_from_this(),
             cfg,
             _transport_config,
             _probe,
-            _as,
+            client_as,
             _apply_credentials);
       });
 }
@@ -172,7 +175,7 @@ ss::future<> upstream::client_self_configure() {
           pool_log.info,
           "Client requires self configuration step. Proceeding ...");
 
-        auto client = make_client();
+        auto client = make_client(_as);
         auto shutdown_on_abort = _as.subscribe(
           [client]() noexcept { client->shutdown(); });
         auto result = co_await do_client_self_configure(client);

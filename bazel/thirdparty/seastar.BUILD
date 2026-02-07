@@ -727,6 +727,33 @@ cc_library(
     ],
 )
 
+[
+    cc_binary(
+        name = name,
+        testonly = True,
+        srcs = ["tests/perf/" + name + ".cc"],
+        tags = ["seastar_perf"],
+        visibility = ["//visibility:public"],
+        deps = [":benchmark"] + extra_deps,
+    )
+    for name, extra_deps in [
+        ("allocator_perf", []),
+        (
+            "container_perf",
+            ["@boost//:container"],
+        ),
+        ("coroutine_perf", []),
+        ("fair_queue_perf", []),
+        (
+            "future_util_perf",
+            ["@boost//:range"],
+        ),
+        ("metrics_perf", []),
+        ("perf_tests_perf", []),
+        ("rpc_perf", []),
+    ]
+]
+
 cc_binary(
     name = "iotune",
     srcs = [

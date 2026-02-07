@@ -95,6 +95,10 @@ public:
         virtual size_t estimate_size_between(kafka::offset, kafka::offset) const
           = 0;
         virtual cluster::partition_probe& probe() = 0;
+
+        virtual size_t local_size_bytes() const = 0;
+        virtual ss::future<std::optional<size_t>> cloud_size_bytes() const = 0;
+        virtual model::offset offset_lag() const = 0;
     };
 
     explicit partition_proxy(std::unique_ptr<impl> impl) noexcept
@@ -183,6 +187,30 @@ public:
       raft::replicate_options opts) {
         return _impl->replicate(bi, std::move(batch), opts);
     }
+
+    /*
+     * Returns the local on-disk size of the partition.
+     */
+    size_t local_size_bytes() const { return _impl->local_size_bytes(); }
+
+    /*
+     * Returns the size of the partition in cloud storage. For example if this
+     * partition is a tiered storage partition the manifest will be used to
+     * compute the size of all segments. This method is used to drive
+     * dashboards, so it should reflect the addressable size of a partition, and
+     * generally should not include data that is unreadable (e.g. data that has
+     * been logically deleted by retention but not yet garbage collected).
+     */
+    ss::future<std::optional<size_t>> cloud_size_bytes() const {
+        return _impl->cloud_size_bytes();
+    }
+
+    /*
+     * This returns the distance between the largest offset fully replicated and
+     * the end of the log. With acks=all the expectation is that this should be
+     * zero. It's calculated as the highwater mark minus the dirty offset.
+     */
+    model::offset offset_lag() const { return _impl->offset_lag(); }
 
 private:
     std::unique_ptr<impl> _impl;

@@ -246,3 +246,37 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_self_configure_abortable) {
 
     BOOST_REQUIRE_THROW(f.get(), ss::abort_requested_exception);
 }
+
+SEASTAR_THREAD_TEST_CASE(test_client_pool_max_upstreams_limit) {
+    // The upstream registry enforces a maximum of 10 upstreams. The default
+    // upstream (empty endpoint/region) counts as one, leaving room for 9
+    // dynamic upstreams.
+
+    ss::sharded<cloud_storage_clients::client_pool> pool;
+    auto stop_guard = test_pool_builder.build(pool).get();
+
+    ss::abort_source as;
+
+    // Create 9 dynamic upstreams (default upstream already exists)
+    for (size_t i = 0; i < 9; ++i) {
+        cloud_storage_clients::bucket_name_parts bucket{
+          .name = cloud_storage_clients::plain_bucket_name("test-bucket"),
+          .params = {{"endpoint", fmt::format("endpoint-{}.localhost", i)}},
+        };
+        auto lease = pool.local().acquire(bucket, as).get();
+    }
+
+    // The 10th dynamic upstream should fail
+    cloud_storage_clients::bucket_name_parts bucket_over_limit{
+      .name = cloud_storage_clients::plain_bucket_name("test-bucket"),
+      .params = {{"endpoint", "endpoint-over-limit.localhost"}},
+    };
+
+    BOOST_REQUIRE_EXCEPTION(
+      pool.local().acquire(bucket_over_limit, as).get(),
+      std::exception,
+      [](const std::exception& e) {
+          return std::string_view(e.what()).find("registry entry limit")
+                 != std::string_view::npos;
+      });
+}

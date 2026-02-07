@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/format_to.h"
+#include "cloud_storage_clients/bucket_name_parts.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_storage_clients/detail/registry.h"
 #include "cloud_storage_clients/upstream.h"
@@ -19,17 +20,8 @@
 
 namespace cloud_storage_clients {
 
-/// A reasonable upper limit on the number of upstreams.
-constexpr size_t max_upstreams = 10;
-
-/// Key identifying an upstream service instance.
-struct upstream_key {
-    auto operator<=>(const upstream_key&) const = default;
-
-    fmt::iterator format_to(fmt::iterator it) const {
-        return fmt::format_to(it, "upstream_key{{}}");
-    }
-};
+upstream_key make_upstream_key(
+  const client_configuration& config, const bucket_name_parts& bucket);
 
 /// Registry for upstream cloud storage clients.
 class upstream_registry final

@@ -38,22 +38,18 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 }
 
 // anyValidTypes are the types allowed in --name and --any flags.
-var anyValidTypes = map[string]bool{
-	// Supported by Redpanda.
-	"client-id":        true,
-	"client-id-prefix": true,
-	// Not supported by Redpanda yet.
-	"user": true,
-	"ip":   true,
+var anyValidTypes = map[string]struct{}{
+	"client-id":        {},
+	"client-id-prefix": {},
+	"user":             {},
+	// IP is not supported by Redpanda yet.
 }
 
 // defaultValidTypes are the types allowed in --default flag.
-var defaultValidTypes = map[string]bool{
-	// Supported by Redpanda.
-	"client-id": true,
-	// Not supported by Redpanda yet.
-	"user": true,
-	"ip":   true,
+var defaultValidTypes = map[string]struct{}{
+	"client-id": {},
+	"user":      {},
+	// IP is not supported by Redpanda yet.
 }
 
 type entityData struct {

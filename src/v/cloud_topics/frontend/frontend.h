@@ -150,6 +150,8 @@ public:
 
     ss::future<std::error_code> linearizable_barrier();
 
+    ss::future<size_t> size_bytes();
+
 private:
     // All timequeries work by first getting a coarse grained timequery result
     // from metadata indexes, then getting an exact answer using the datapath.

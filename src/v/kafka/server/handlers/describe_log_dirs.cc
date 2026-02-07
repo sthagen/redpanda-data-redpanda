@@ -35,17 +35,17 @@ struct log_partition_data {
 using partition_dir_set
   = chunked_hash_map<model::topic, chunked_vector<log_partition_data>>;
 
-static log_partition_data describe_partition(cluster::partition& p) {
+static ss::future<log_partition_data>
+describe_partition(kafka::partition_proxy& p) {
     auto result = log_partition_data{
       .local = describe_log_dirs_partition{
         .partition_index = p.ntp().tp.partition(),
-        .partition_size = static_cast<int64_t>(p.size_bytes()),
-        .offset_lag = std::max(
-          p.high_watermark()() - p.dirty_offset()(), int64_t(0)),
+        .partition_size = static_cast<int64_t>(p.local_size_bytes()),
+        .offset_lag = std::max(p.offset_lag()(), int64_t(0)),
         .is_future_key = false,
       }};
 
-    auto cloud_space = p.cloud_log_size();
+    auto cloud_space = co_await p.cloud_size_bytes();
     if (
       cloud_space.has_value()
       && config::shard_local_cfg()
@@ -53,16 +53,15 @@ static log_partition_data describe_partition(cluster::partition& p) {
         result.remote = describe_log_dirs_partition{
           .partition_index = p.ntp().tp.partition(),
           .partition_size = static_cast<int64_t>(cloud_space.value()),
-          .offset_lag = std::max(
-            p.high_watermark()() - p.dirty_offset()(), int64_t(0)),
+          .offset_lag = std::max(p.offset_lag()(), int64_t(0)),
           .is_future_key = false,
         };
     }
 
-    return result;
+    co_return result;
 }
 
-static partition_dir_set collect_mapper(
+static ss::future<partition_dir_set> collect_mapper(
   cluster::partition_manager& pm,
   const std::optional<std::vector<describable_log_dir_topic>>& topics) {
     partition_dir_set ret;
@@ -72,13 +71,16 @@ static partition_dir_set collect_mapper(
      */
     if (!topics) {
         for (const auto& partition : pm.partitions()) {
-            if (partition.first.ns != model::kafka_namespace) {
-                continue;
+            auto ktp = model::ktp(
+              partition.second->ntp().tp.topic,
+              partition.second->ntp().tp.partition);
+            auto proxy = make_partition_proxy(ktp, pm);
+            if (proxy) {
+                ret[partition.first.tp.topic].push_back(
+                  co_await describe_partition(*proxy));
             }
-            ret[partition.first.tp.topic].push_back(
-              describe_partition(*partition.second));
         }
-        return ret;
+        co_return ret;
     }
 
     /*
@@ -86,13 +88,14 @@ static partition_dir_set collect_mapper(
      */
     for (const auto& topic : *topics) {
         for (auto p_id : topic.partition_index) {
-            model::ntp ntp(model::kafka_namespace, topic.topic, p_id);
-            if (auto p = pm.get(ntp); p) {
-                ret[topic.topic].push_back(describe_partition(*p));
+            auto ktp = model::ktp(topic.topic, p_id);
+            auto proxy = make_partition_proxy(ktp, pm);
+            if (proxy) {
+                ret[topic.topic].push_back(co_await describe_partition(*proxy));
             }
         }
     }
-    return ret;
+    co_return ret;
 }
 
 /*

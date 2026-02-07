@@ -36,9 +36,12 @@ class RpkClusterQuotaTest(RedpandaTest):
         self._rpk.alter_cluster_quotas(
             name=["client-id-prefix=foo-"], add=["consumer_byte_rate=2222"]
         )
+        self._rpk.alter_cluster_quotas(
+            name=["user=bar"], add=["controller_mutation_rate=512"]
+        )
 
         q2 = self._rpk.describe_cluster_quotas()
-        assert len(q2["quotas"]) == 2  # Quick check, just that we have something.
+        assert len(q2["quotas"]) == 3  # Quick check, just that we have something.
 
         # Same values, NoOp:
         import1 = """
@@ -71,14 +74,28 @@ class RpkClusterQuotaTest(RedpandaTest):
                "value":"11111"
             }
          ]
-      }
+      },
+      {
+         "entity":[
+            {
+               "name":"bar",
+               "type":"user"
+            }
+         ],
+         "values":[
+            {
+               "key":"controller_mutation_rate",
+               "value":"512"
+            }
+         ]
+      },
    ]
 }
 """
         out = self._rpk.import_cluster_quota(import1, output_format="text")
         assert "No changes detected from import" in out
 
-        # Remove 1 (default client-id), Add 1 (producer byte rate).
+        # Remove 2 (default client-id and user), Add 1 (producer byte rate).
         import2 = """
 {
    "quotas":[
@@ -121,6 +138,9 @@ class RpkClusterQuotaTest(RedpandaTest):
             assertChanges(
                 out, "client-id=<default>", "producer_byte_rate", old="11111", new="-"
             )  # New Value as '-' means it was deleted
+            assertChanges(
+                out, "user=bar", "controller_mutation_rate", old="512", new="-"
+            )
             assertChanges(
                 out, "client-id-prefix=foo-", "producer_byte_rate", old="-", new="3333"
             )

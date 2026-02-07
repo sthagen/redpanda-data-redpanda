@@ -11,6 +11,8 @@ package quotas
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -88,8 +90,8 @@ Describe client quotas for a given client ID prefix 'bar.':
 				}
 				k, v := split[0], split[1]
 				k = strings.ToLower(k)
-				if !anyValidTypes[k] {
-					out.Die("name type %q is invalid (allowed: client-id, client-id-prefix)", split[0])
+				if _, ok := anyValidTypes[k]; !ok {
+					out.Die("name type %q is invalid (allowed: %v)", k, strings.Join(slices.Collect(maps.Keys(anyValidTypes)), ", "))
 				}
 				reqQuotas = append(reqQuotas, kadm.DescribeClientQuotaComponent{
 					Type:      k,
@@ -99,8 +101,8 @@ Describe client quotas for a given client ID prefix 'bar.':
 			}
 			for _, def := range defaults {
 				k := strings.ToLower(def)
-				if !defaultValidTypes[k] {
-					out.Die("default type %q is invalid (allowed: client-id)", def)
+				if _, ok := defaultValidTypes[k]; !ok {
+					out.Die("default type %q is invalid (allowed: %v)", def, strings.Join(slices.Collect(maps.Keys(defaultValidTypes)), ", "))
 				}
 				reqQuotas = append(reqQuotas, kadm.DescribeClientQuotaComponent{
 					Type:      k,
@@ -109,8 +111,8 @@ Describe client quotas for a given client ID prefix 'bar.':
 			}
 			for _, a := range anyFlag {
 				k := strings.ToLower(a)
-				if !anyValidTypes[k] {
-					out.Die("'any' type %q is invalid (allowed: client-id, client-id-prefix)", a)
+				if _, ok := anyValidTypes[k]; !ok {
+					out.Die("'any' type %q is invalid (allowed: %v)", a, strings.Join(slices.Collect(maps.Keys(anyValidTypes)), ", "))
 				}
 				reqQuotas = append(reqQuotas, kadm.DescribeClientQuotaComponent{
 					Type:      k,

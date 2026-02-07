@@ -14,6 +14,7 @@
 #include "cloud_storage_clients/client.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_storage_clients/credential_manager.h"
+#include "cloud_storage_clients/upstream_key.h"
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/sharded.hh>
@@ -34,6 +35,7 @@ public:
     using client_ptr = ss::shared_ptr<client>;
 
     explicit upstream(
+      upstream_key key,
       client_configuration config,
       ss::shared_ptr<ss::tls::certificate_credentials> tls_credentials,
       ss::shared_ptr<client_probe> probe);
@@ -45,7 +47,22 @@ public:
     void prepare_stop();
     /// @}
 
-    client_ptr make_client() noexcept;
+    const upstream_key& key() const noexcept { return _key; }
+
+    /// Create a client using the provided abort source.
+    ///
+    /// Client lifetime is decoupled from the upstream so that clients can
+    /// complete in-flight operations even if the upstream is evicted from the
+    /// registry.
+    ///
+    /// A client that outlives the upstream can finish in-flight operations but
+    /// new ones might fail i.e. because of outdated credentials.
+    /// client::is_valid can be used to check if the client is still valid for
+    /// new operations.
+    ///
+    /// Abort source must outlive the client. Abort status is checked
+    /// asynchronously.
+    client_ptr make_client(ss::abort_source& client_as) noexcept;
 
     void maybe_refresh_credentials();
     uint64_t token_refresh_count() const noexcept;
@@ -67,6 +84,8 @@ private:
 
     ss::abort_source _as;
     ss::gate _gate;
+
+    upstream_key _key;
 
     client_configuration _config;
     net::base_transport::configuration _transport_config;

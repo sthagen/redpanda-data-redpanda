@@ -101,6 +101,10 @@ public:
 
     size_t estimate_size_between(kafka::offset, kafka::offset) const final;
 
+    size_t local_size_bytes() const override;
+    ss::future<std::optional<size_t>> cloud_size_bytes() const override;
+    model::offset offset_lag() const override;
+
 private:
     // Returns the Kafka offset corresponding to the lowest offset in the
     // log, including local and cloud storage. Doesn't take into account any

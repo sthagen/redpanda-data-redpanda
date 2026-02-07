@@ -341,6 +341,24 @@ frontend::make_l0_reader(const cloud_topic_log_reader_config& cfg) const {
       cfg, _partition, _data_plane);
 }
 
+ss::future<size_t> frontend::size_bytes() {
+    auto ct_state = _partition->get_cloud_topics_state();
+    auto l1_metastore = ct_state->local().get_l1_metastore();
+
+    auto tidp = topic_id_partition();
+    auto size_res = co_await l1_metastore->get_size(tidp);
+    if (!size_res.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Could not fetch L1 partition size for {}: {}",
+          tidp,
+          size_res.error());
+        co_return 0;
+    }
+
+    co_return size_res.value().size;
+}
+
 std::unique_ptr<model::record_batch_reader::impl>
 frontend::make_l1_reader(const cloud_topic_log_reader_config& cfg) const {
     auto ct_state = _partition->get_cloud_topics_state();
