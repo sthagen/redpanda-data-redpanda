@@ -48,7 +48,7 @@ func newAddPartitionsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			defer adm.Close()
 
 			if num <= 0 {
-				out.Die("--num (-n) should be a positive value, exiting!")
+				out.Die("--num (-n) should be a positive value")
 			}
 
 			resps, err := adm.CreatePartitions(context.Background(), num, topics...)

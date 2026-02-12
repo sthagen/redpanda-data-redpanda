@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/httpapi",
-        "//src/go/rpk/pkg/os",
+        "//src/go/rpk/pkg/osutil",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v3//:yaml_v3",

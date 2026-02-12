@@ -116,10 +116,11 @@ ss::future<> fetch_handler::process_single_request(l0::read_request<>* req) {
             req->rtc_logger));
 
         if (extent.failed()) {
+            auto ex = extent.get_exception();
             vlog(
               req->rtc_logger.warn,
               "Failed to materialize placeholders, error: {}",
-              extent.get_exception());
+              ex);
             req->set_value(errc::download_failure);
             auto_dispose.cancel();
             co_return;

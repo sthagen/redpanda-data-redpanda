@@ -16,7 +16,7 @@ go_library(
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/fips",
         "//src/go/rpk/pkg/httpapi",
-        "//src/go/rpk/pkg/os",
+        "//src/go/rpk/pkg/osutil",
         "//src/go/rpk/pkg/out",
         "//src/go/rpk/pkg/plugin",
         "//src/go/rpk/pkg/redpanda",

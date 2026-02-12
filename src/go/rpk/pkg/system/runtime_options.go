@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 )
 
@@ -24,7 +24,7 @@ type RuntimeOptions struct {
 
 func ReadRuntineOptions(fs afero.Fs, path string) (*RuntimeOptions, error) {
 	optionsMap := make(map[string]bool)
-	lines, err := utils.ReadFileLines(fs, path)
+	lines, err := rpkutil.ReadFileLines(fs, path)
 	if err != nil {
 		return nil, err
 	}
@@ -60,5 +60,5 @@ func (r *RuntimeOptions) GetActive() string {
 }
 
 func (r *RuntimeOptions) GetAvailable() []string {
-	return utils.GetKeys(r.optionsMap)
+	return rpkutil.GetKeys(r.optionsMap)
 }

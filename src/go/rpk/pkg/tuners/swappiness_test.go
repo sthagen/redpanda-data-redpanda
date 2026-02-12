@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ func TestChecker(t *testing.T) {
 		{
 			name: "It should return true if the value is correct",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte(fmt.Sprint(tuners.ExpectedSwappiness)),
 					tuners.File,
@@ -44,7 +44,7 @@ func TestChecker(t *testing.T) {
 		{
 			name: "It should return false if the file exists but the value iswrong",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("120"),
 					tuners.File,
@@ -87,7 +87,7 @@ func TestTuner(t *testing.T) {
 		{
 			name: "It should leave the same value if it was correct",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte(fmt.Sprint(tuners.ExpectedSwappiness)),
 					tuners.File,
@@ -98,7 +98,7 @@ func TestTuner(t *testing.T) {
 		{
 			name: "It should change the value if it was different",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("120"),
 					tuners.File,
@@ -125,7 +125,7 @@ func TestTuner(t *testing.T) {
 				return
 			}
 			require.NoError(t, res.Error())
-			lines, err := utils.ReadFileLines(fs, tuners.File)
+			lines, err := rpkutil.ReadFileLines(fs, tuners.File)
 			require.NoError(t, err)
 			require.Len(t, lines, 1)
 			require.Equal(t, fmt.Sprint(tuners.ExpectedSwappiness), lines[0])

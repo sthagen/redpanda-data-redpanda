@@ -14,7 +14,7 @@ go_library(
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/kafka",
         "//src/go/rpk/pkg/out",
-        "//src/go/rpk/pkg/utils",
+        "//src/go/rpk/pkg/rpkutil",
         "@com_github_cespare_xxhash//:xxhash",
         "@com_github_lithammer_go_jump_consistent_hash//:go-jump-consistent-hash",
         "@com_github_spf13_afero//:afero",

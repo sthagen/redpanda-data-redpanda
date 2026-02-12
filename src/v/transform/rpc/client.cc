@@ -500,10 +500,8 @@ ss::future<bool> client::try_create_wasm_binary_ntp() {
         topic_props,
         /*partition_count=*/1));
     if (fut.failed()) {
-        vlog(
-          log.warn,
-          "unable to create internal wasm binary topic: {}",
-          std::move(fut).get_exception());
+        auto ex = std::move(fut).get_exception();
+        vlog(log.warn, "unable to create internal wasm binary topic: {}", ex);
         co_return false;
     }
     cluster::errc ec = fut.get();
@@ -529,11 +527,12 @@ ss::future<bool> client::try_create_transform_offsets_topic() {
       _kafka_client->local().try_create_topic(
         model::transform_offsets_nt, std::move(properties), 1));
     if (fut.failed()) {
+        auto ex = std::move(fut).get_exception();
         vlog(
           log.warn,
           "unable to create internal offset tracking topic {}: {}",
           model::transform_offsets_nt,
-          std::move(fut).get_exception());
+          ex);
         co_return false;
     }
     cluster::errc ec = fut.get();
@@ -866,10 +865,9 @@ ss::future<> client::update_wasm_binary_size() {
                 cluster::incremental_topic_custom_updates()));
         }));
     if (fut.failed()) {
+        auto ex = fut.get_exception();
         vlog(
-          log.warn,
-          "unable to update internal wasm binary topic size: {}",
-          fut.get_exception());
+          log.warn, "unable to update internal wasm binary topic size: {}", ex);
     }
     cluster::errc ec = fut.get();
     if (ec == cluster::errc::success) {

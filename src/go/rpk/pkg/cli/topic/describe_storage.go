@@ -100,7 +100,7 @@ func newDescribeStorageCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				out.Die(err.Error())
 			}
 			if len(report) == 0 {
-				out.Die("error: could not get any status report from cloud storage.")
+				out.Die("could not get any status report from cloud storage")
 			}
 			sort.Slice(report, func(i, j int) bool {
 				return report[i].Partition < report[j].Partition

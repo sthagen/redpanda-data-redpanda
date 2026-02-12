@@ -303,6 +303,9 @@ public:
                                  : std::nullopt;
     }
 
+    /// \return Subschemas in the "oneOf" keyword if specified.
+    const_list_view one_of() const { return const_list_view(one_of_); }
+
     /// \return Format of this schema object if specified.
     /// See https://www.learnjsonschema.com/2020-12/validation/format
     const std::optional<format>& format() const { return format_; }
@@ -332,6 +335,8 @@ private:
 
     items_t items_;
     ss::shared_ptr<subschema> additional_items_;
+
+    std::vector<ss::shared_ptr<subschema>> one_of_;
 
     std::optional<enum format> format_;
 

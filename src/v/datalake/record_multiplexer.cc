@@ -378,7 +378,8 @@ ss::future<writer_error> record_multiplexer::flush_writers() {
       ss::max_concurrent_for_each(
         _writers, 10, [](auto& entry) { return entry.second->flush(); }));
     if (result.failed()) {
-        vlog(_log.warn, "Error flushing writers: {}", result.get_exception());
+        auto ex = result.get_exception();
+        vlog(_log.warn, "Error flushing writers: {}", ex);
         _error = writer_error::flush_error;
         co_return _error.value();
     }

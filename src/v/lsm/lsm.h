@@ -205,6 +205,15 @@ public:
     // the database being closed.
     write_batch create_write_batch();
 
+    // Reload the manifest from disk, picking up changes made by other writers.
+    //
+    // Returns true if the manifest was updated, false if no change. Throws if
+    // the database is not read-only, or if the downloaded manifest would
+    // regress the file ID or sequence number.
+    //
+    // REQUIRES: Database must be opened in read-only mode.
+    ss::future<bool> refresh();
+
 private:
     std::unique_ptr<db::impl> _impl;
 };

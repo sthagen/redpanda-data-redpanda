@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
@@ -123,7 +123,7 @@ func NewNetTuner(
 	irqProcFile irq.ProcFile,
 	ethtool ethtool.EthtoolWrapper,
 	executor executors.Executor,
-	proc os.Proc,
+	proc osutil.Proc,
 	statePath string,
 ) Tunable {
 	factory := NewNetTunersFactory(
@@ -156,7 +156,7 @@ type netTunersFactory struct {
 	cpuMasks        irq.CPUMasks
 	checkersFactory NetCheckersFactory
 	executor        executors.Executor
-	proc            os.Proc
+	proc            osutil.Proc
 	statePath       string
 }
 
@@ -169,7 +169,7 @@ func NewNetTunersFactory(
 	balanceService irq.BalanceService,
 	cpuMasks irq.CPUMasks,
 	executor executors.Executor,
-	proc os.Proc,
+	proc osutil.Proc,
 	statePath string,
 ) NetTunersFactory {
 	return &netTunersFactory{

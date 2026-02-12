@@ -11,7 +11,7 @@
 
 package irq
 
-import "github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+import "github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 
 func GetAllIRQs(deviceIRQs map[string][]int) []int {
 	irqsSet := map[int]bool{}
@@ -20,5 +20,5 @@ func GetAllIRQs(deviceIRQs map[string][]int) []int {
 			irqsSet[irq] = true
 		}
 	}
-	return utils.GetIntKeys(irqsSet)
+	return rpkutil.GetIntKeys(irqsSet)
 }

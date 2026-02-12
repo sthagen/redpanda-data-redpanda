@@ -124,10 +124,8 @@ public:
         auto u_fut = co_await ss::coroutine::as_future(
           seastar::get_units(delete_sem_, 1, as_));
         if (u_fut.failed()) {
-            vlog(
-              cd_log.debug,
-              "Failed to get units in delete worker: {}",
-              u_fut.get_exception());
+            auto ex = u_fut.get_exception();
+            vlog(cd_log.debug, "Failed to get units in delete worker: {}", ex);
             co_return;
         }
         if (gate_.is_closed()) {

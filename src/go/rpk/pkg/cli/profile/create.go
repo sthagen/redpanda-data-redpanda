@@ -19,7 +19,7 @@ import (
 
 	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
-	container "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
+	container "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cobraext"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/authtoken"
@@ -253,7 +253,7 @@ func CreateFlow(
 		if err != nil {
 			return fmt.Errorf("unable to create docker client: %v", err)
 		}
-		err = container.CreateProfile(fs, c, yAct) //nolint:contextcheck // No need to pass the context, the underlying functions use a context with timeout.
+		err = container.CreateProfile(ctx, fs, c, yAct)
 		if err != nil {
 			return fmt.Errorf("unable to create profile from rpk container: %v", err)
 		}
@@ -292,8 +292,8 @@ func CreateFlow(
 		}
 
 	case fromProfile != "":
-		switch {
-		case fromProfile == "current":
+		switch fromProfile {
+		case "current":
 			dup := *cfg.VirtualProfile()
 			p = &dup
 		default:
@@ -327,8 +327,8 @@ func CreateFlow(
 
 	case fromRedpanda != "":
 		var nodeCfg config.RpkNodeConfig
-		switch {
-		case fromRedpanda == "current":
+		switch fromRedpanda {
+		case "current":
 			nodeCfg = cfg.VirtualRedpandaYaml().Rpk
 		default:
 			raw, err := afero.ReadFile(fs, fromRedpanda)

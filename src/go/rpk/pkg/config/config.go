@@ -84,7 +84,7 @@ type Config struct {
 // ALLOW_RPK_CLOUD_ADMIN override.
 func CheckExitCloudAdmin(p *RpkProfile) {
 	if p.FromCloud && !p.DevOverrides().AllowRpkCloudAdmin {
-		out.Die("This admin API based command is not supported on Redpanda Cloud clusters.")
+		out.Die("this admin API based command is not supported on Redpanda Cloud clusters")
 	}
 }
 
@@ -92,7 +92,7 @@ func CheckExitCloudAdmin(p *RpkProfile) {
 // cluster is a Serverless cluster.
 func CheckExitServerlessAdmin(p *RpkProfile) {
 	if p.FromCloud && p.CloudCluster.IsServerless() {
-		out.Die("This admin API based command is not supported on Redpanda Cloud serverless clusters.")
+		out.Die("this admin API based command is not supported on Redpanda Cloud serverless clusters")
 	}
 }
 
@@ -100,7 +100,7 @@ func CheckExitServerlessAdmin(p *RpkProfile) {
 // cluster is NOT a Serverless cluster.
 func CheckExitNotServerlessAdmin(p *RpkProfile) {
 	if p.FromCloud && !p.CloudCluster.IsServerless() {
-		out.Die("This admin API based command is not supported on Redpanda Cloud clusters.")
+		out.Die("this admin API based command is not supported on Redpanda Cloud clusters")
 	}
 }
 

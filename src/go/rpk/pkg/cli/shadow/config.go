@@ -19,7 +19,7 @@ import (
 	adminv2comments "github.com/redpanda-data/redpanda/src/go/rpk/gen/protocomments/admin/v2"
 	commonv1comments "github.com/redpanda-data/redpanda/src/go/rpk/gen/protocomments/common/v1"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -365,7 +365,7 @@ func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor,
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
 			if line != "" {
-				sb.WriteString(fmt.Sprintf("%s# %s\n", indentStr, line))
+				fmt.Fprintf(sb, "%s# %s\n", indentStr, line)
 			}
 		}
 	}
@@ -374,7 +374,7 @@ func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor,
 	fieldName := string(field.Name())
 
 	// Write the field name
-	sb.WriteString(fmt.Sprintf("%s%s:", indentStr, fieldName))
+	fmt.Fprintf(sb, "%s%s:", indentStr, fieldName)
 
 	// Handle different field types
 	if field.IsMap() {
@@ -477,9 +477,9 @@ func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor,
 				// Strip enum prefix to match rpk command expectations
 				strippedName := stripEnumPrefix(enumValue)
 				if enumComment != "" {
-					sb.WriteString(fmt.Sprintf(" %s  # %s\n", strippedName, enumComment))
+					fmt.Fprintf(sb, " %s  # %s\n", strippedName, enumComment)
 				} else {
-					sb.WriteString(fmt.Sprintf(" %s\n", strippedName))
+					fmt.Fprintf(sb, " %s\n", strippedName)
 				}
 			} else {
 				sb.WriteString(" 0\n")

@@ -587,11 +587,12 @@ ss::future<> datalake_manager::handle_translator_state_change(
         auto remove_f = co_await ss::coroutine::as_future(
           _scheduler.remove_translator(ntp));
         if (remove_f.failed()) {
+            auto ex = remove_f.get_exception();
             vlog(
               datalake_log.warn,
               "removing existing translator for {} failed {}, retrying in 10s.",
               ntp,
-              remove_f.get_exception());
+              ex);
             if (!_gate.is_closed()) {
                 _queue.submit_delayed(
                   10s,

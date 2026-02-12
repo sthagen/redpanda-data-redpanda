@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil"
 	"github.com/spf13/cobra"
 )
 
@@ -25,19 +25,19 @@ func newStopCommand() *cobra.Command {
 		Short: "Stop an existing local container cluster",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			c, err := common.NewDockerClient(cmd.Context())
+			c, err := containerutil.NewDockerClient(cmd.Context())
 			if err != nil {
 				return err
 			}
 			defer c.Close()
-			return common.WrapIfConnErr(stopCluster(c))
+			return containerutil.WrapIfConnErr(stopCluster(cmd.Context(), c))
 		},
 	}
 	return command
 }
 
-func stopCluster(c common.Client) error {
-	nodes, err := common.GetExistingNodes(c)
+func stopCluster(ctx context.Context, c containerutil.Client) error {
+	nodes, err := containerutil.GetExistingNodes(ctx, c)
 	if err != nil {
 		return err
 	}
@@ -54,18 +54,17 @@ func stopCluster(c common.Client) error {
 			defer mu.Unlock()
 			fmt.Printf(msg+"\n", args...)
 		}
-		go func(state *common.NodeState) {
+		go func(state *containerutil.NodeState) {
 			defer wg.Done()
-			name := common.RedpandaName(state.ID)
+			name := containerutil.RedpandaName(state.ID)
 			if state.Console {
-				name = common.ConsoleContainerName
+				name = containerutil.ConsoleContainerName
 			}
 			// If the node was stopped already, do nothing.
 			if !state.Running {
 				printf("%s was stopped already.", name)
 				return
 			}
-			ctx := context.Background()
 			// Redpanda sometimes takes a while to stop, so 20
 			// seconds is a safe estimate
 			timeout := 20 // seconds

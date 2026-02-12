@@ -14,7 +14,7 @@ package irq
 import (
 	"testing"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +70,7 @@ PIW:          0   Posted-interrupt wakeup event
 func TestProcFile_GetIRQProcFileLinesMap(t *testing.T) {
 	// given
 	fs := afero.NewMemMapFs()
-	_ = utils.WriteFileLines(fs, procFileLines, "/proc/interrupts")
+	_ = rpkutil.WriteFileLines(fs, procFileLines, "/proc/interrupts")
 	procFile := NewProcFile(fs)
 	// when
 	procFileLinesMap, err := procFile.GetIRQProcFileLinesMap()

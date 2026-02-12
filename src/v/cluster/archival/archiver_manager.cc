@@ -435,12 +435,10 @@ public:
               next.reset_units.has_value(), "Reset units are not acquired");
             auto completion = [&fsm](ss::future<> fut) {
                 if (fut.failed()) {
+                    auto ex = fut.get_exception();
                     vlog(
-                      fsm._ctxlog.error,
-                      "ntp_archiver shutdown failed {}",
-                      fut.get_exception());
-                    fsm.process_event(
-                      ev_archiver_failure{.error = fut.get_exception()});
+                      fsm._ctxlog.error, "ntp_archiver shutdown failed {}", ex);
+                    fsm.process_event(ev_archiver_failure{.error = ex});
                 } else {
                     fsm.process_event(ev_archiver_stopped{});
                 }

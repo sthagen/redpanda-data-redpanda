@@ -94,11 +94,11 @@ Notes:
 			out.MaybeDie(err, "unable to request brokers: %v", err)
 
 			if len(brokers) == 0 {
-				out.Die("No brokers found. Check broker address configuration.")
+				out.Die("no brokers found; check broker address configuration")
 			}
 
 			if brokers[0].Maintenance == nil {
-				out.Die("Maintenance mode is not supported in this cluster")
+				out.Die("maintenance mode is not supported in this cluster")
 			}
 
 			table := newMaintenanceReportTable()

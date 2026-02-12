@@ -359,7 +359,7 @@ func (c *consumer) parseOffset(
 	// (a) list the start offsets to know what to consume from,
 	// (b) list the end offsets to define what to consume to,
 	// (c) filter partitions that have nothing to consume.
-	if !(hasEnd || currentEnd) {
+	if !hasEnd && !currentEnd {
 		return nil
 	}
 

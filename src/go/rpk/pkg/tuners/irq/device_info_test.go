@@ -15,7 +15,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -64,7 +64,7 @@ func Test_DeviceInfo_GetIRQs(t *testing.T) {
 		{
 			name: "Shall return the IRQs when device is using INT#x IRQs",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs, []string{"1", "2", "5", "8"},
+				_ = rpkutil.WriteFileLines(fs, []string{"1", "2", "5", "8"},
 					"/irq_config/dev1/irq")
 			},
 			irqConfigDir: "/irq_config/dev1",
@@ -82,10 +82,10 @@ func Test_DeviceInfo_GetIRQs(t *testing.T) {
 				},
 			},
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{"virtio:v00008086d000024DBsv0000103Csd0000006Abc01sc01i8A"},
 					"/irq_config/dev1/modalias")
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{},
 					"/irq_config/dev1/driver/drv-virtio-1")
 			},
@@ -105,10 +105,10 @@ func Test_DeviceInfo_GetIRQs(t *testing.T) {
 				},
 			},
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{"xen:v00008086d000024DBsv0000103Csd0000006Abc01sc01i8A"},
 					"/irq_config/dev1/modalias")
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{},
 					"/irq_config/dev1/driver/drv-virtio-1")
 			},

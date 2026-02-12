@@ -345,12 +345,12 @@ public:
         auto [fi, fo] = co_await ss::when_all(
           std::move(input_close), std::move(output_close));
         if (fi.failed()) {
-            vlog(
-              stlog.error, "Input stram close error: {}", fi.get_exception());
+            auto ex = fi.get_exception();
+            vlog(stlog.error, "Input stram close error: {}", ex);
         }
         if (fo.failed()) {
-            vlog(
-              stlog.error, "Output stram close error: {}", fo.get_exception());
+            auto ex = fo.get_exception();
+            vlog(stlog.error, "Output stram close error: {}", ex);
         }
         if (fo.failed()) {
             std::rethrow_exception(fo.get_exception());

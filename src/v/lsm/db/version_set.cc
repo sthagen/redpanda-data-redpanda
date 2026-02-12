@@ -564,7 +564,42 @@ ss::future<> version_set::recover() {
     _last_seqno = m->last_seqno;
 }
 
+ss::future<bool> version_set::refresh() {
+    auto m = co_await read_manifest();
+    if (!m) {
+        co_return false;
+    }
+
+    if (m->next_file_id < _next_file_id) {
+        throw corruption_exception(
+          "manifest next_file_id {} is less than current {}",
+          m->next_file_id(),
+          _next_file_id());
+    }
+    if (_last_seqno.has_value() && m->last_seqno < _last_seqno.value()) {
+        throw corruption_exception(
+          "manifest last_seqno {} is less than current {}",
+          m->last_seqno(),
+          _last_seqno.value()());
+    }
+
+    if (m->next_file_id == _next_file_id && m->last_seqno == _last_seqno) {
+        co_return false;
+    }
+
+    finalize(m->version.get());
+    set_current(std::move(m->version));
+    _next_file_id = m->next_file_id;
+    _last_seqno = m->last_seqno;
+    co_return true;
+}
+
 void version_set::finalize(version* v) {
+    if (_options->readonly) {
+        // No need to compute any compaction states, as we won't run compaction
+        // in read-only mode.
+        return;
+    }
     // Precompute the best level for the next compaction
     internal::level best_level = 0_level;
     double best_score = static_cast<double>(v->_files[0_level].size())

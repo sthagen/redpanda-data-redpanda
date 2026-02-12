@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -56,7 +56,7 @@ func (deviceInfo *deviceInfo) GetIRQs(
 	var irqs []int
 	if exists, _ := afero.Exists(deviceInfo.fs, msiIRQsDirName); exists {
 		zap.L().Sugar().Debugf("Device '%s' uses MSI IRQs", irqConfigDir)
-		files := utils.ListFilesInPath(deviceInfo.fs, msiIRQsDirName)
+		files := rpkutil.ListFilesInPath(deviceInfo.fs, msiIRQsDirName)
 		for _, file := range files {
 			irq, err := strconv.Atoi(file)
 			if err != nil {
@@ -71,7 +71,7 @@ func (deviceInfo *deviceInfo) GetIRQs(
 		irqFileName := path.Join(irqConfigDir, "irq")
 		if exists, _ := afero.Exists(deviceInfo.fs, irqFileName); exists {
 			zap.L().Sugar().Debugf("Device '%s' uses INT#x IRQs", irqConfigDir)
-			lines, err := utils.ReadFileLines(deviceInfo.fs, irqFileName)
+			lines, err := rpkutil.ReadFileLines(deviceInfo.fs, irqFileName)
 			if err != nil {
 				return nil, err
 			}
@@ -87,7 +87,7 @@ func (deviceInfo *deviceInfo) GetIRQs(
 			if err != nil {
 				return nil, fmt.Errorf("unable to find device info in %q: %v", irqConfigDir, err)
 			}
-			lines, err := utils.ReadFileLines(deviceInfo.fs, modAliasFileName)
+			lines, err := rpkutil.ReadFileLines(deviceInfo.fs, modAliasFileName)
 			if err != nil {
 				return nil, err
 			}
@@ -99,7 +99,7 @@ func (deviceInfo *deviceInfo) GetIRQs(
 			}
 			if strings.Contains(modAlias, "virtio") {
 				zap.L().Sugar().Debugf("Device '%s' is a virtio device type", irqConfigDir)
-				fileNames := utils.ListFilesInPath(deviceInfo.fs, path.Join(irqConfigDir, "driver"))
+				fileNames := rpkutil.ListFilesInPath(deviceInfo.fs, path.Join(irqConfigDir, "driver"))
 				for _, name := range fileNames {
 					if strings.Contains(name, "virtio") {
 						irqs = append(irqs,

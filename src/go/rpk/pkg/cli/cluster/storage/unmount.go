@@ -62,7 +62,7 @@ Unmount topic 'my-topic' from the cluster in the 'my-namespace'
 			var id int
 			if p.CheckFromCloud() {
 				if ns != "" && strings.ToLower(ns) != "kafka" {
-					out.Die("Namespace %q not allowed. Only kafka topics can be unmounted in Redpanda Cloud clusters", ns)
+					out.Die("namespace %q not allowed; only kafka topics can be unmounted in Redpanda Cloud clusters", ns)
 				}
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)

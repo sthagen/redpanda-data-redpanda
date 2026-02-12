@@ -11,11 +11,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = select({
         "@rules_go//go/platform:android": [
-            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/osutil",
             "@org_uber_go_zap//:zap",
         ],
         "@rules_go//go/platform:linux": [
-            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/osutil",
             "@org_uber_go_zap//:zap",
         ],
         "//conditions:default": [],

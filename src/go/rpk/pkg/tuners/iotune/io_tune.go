@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"go.uber.org/zap"
 )
 
@@ -41,7 +41,7 @@ type IoTune interface {
 	Run(IoTuneArgs) ([]string, error)
 }
 
-func NewIoTune(proc os.Proc, iotunePath string, timeout time.Duration) IoTune {
+func NewIoTune(proc osutil.Proc, iotunePath string, timeout time.Duration) IoTune {
 	return &ioTune{
 		proc:    proc,
 		path:    iotunePath,
@@ -51,7 +51,7 @@ func NewIoTune(proc os.Proc, iotunePath string, timeout time.Duration) IoTune {
 
 type ioTune struct {
 	IoTune
-	proc    os.Proc
+	proc    osutil.Proc
 	path    string
 	timeout time.Duration
 }

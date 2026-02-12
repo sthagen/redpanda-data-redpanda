@@ -434,11 +434,12 @@ ss::future<> manager<ClockType>::create_processor(
       _processor_factory->create_processor(
         id, ntp, meta, std::move(cb), p.get(), _memory_limits.get()));
     if (fut.failed()) {
+        auto ex = fut.get_exception();
         vlog(
           tlog.warn,
           "failed to create transform processor {}: {}, retrying...",
           meta.name,
-          fut.get_exception());
+          ex);
         // Delay some time before attempting to recreate a processor
         // TODO: Should we have more sophisticated backoff mechanisms?
         constexpr auto recreate_attempt_delay = 30s;

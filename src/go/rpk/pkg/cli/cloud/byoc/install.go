@@ -22,7 +22,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/plugin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"

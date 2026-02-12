@@ -238,6 +238,59 @@ TEST(frontend_test, duplicate_properties_def) {
         StrEq("Duplicate keyword: properties")));
 }
 
+TEST(frontend_test, banned_keywords) {
+    for (const auto& kw : {
+           "$dynamicRef",
+           "default",
+           "patternProperties",
+           "dependencies",
+           "if",
+           "then",
+           "else",
+           "allOf",
+           "anyOf",
+         }) {
+        SCOPED_TRACE(fmt::format("Testing banned keyword: {}", kw));
+        EXPECT_THAT(
+          [&]() {
+              frontend{}.compile(
+                parse_json(
+                  fmt::format(
+                    R"({{
+                    "$id": "https://example.com/root.json",
+                    "{}": {{ "type": "string" }}
+                  }})",
+                    kw)),
+                "https://example.com/irrelevant-base.json",
+                dialect::draft7);
+          },
+          ThrowsMessage<std::runtime_error>(
+            StrEq(fmt::format("The {} keyword is not allowed", kw))));
+    }
+}
+
+TEST(frontend_test, duplicate_non_adjacent_keyword) {
+    EXPECT_THAT(
+      []() {
+          frontend{}.compile(
+            parse_json(R"({
+              "$id": "https://example.com/root.json",
+              "type": "object",
+              "properties": {
+                  "name": { "type": "string" }
+              },
+              "additionalProperties": false,
+              "properties": {
+                  "name": { "type": "integer" }
+              }
+            })"),
+            "https://example.com/irrelevant-base.json",
+            dialect::draft7);
+      },
+      ThrowsMessage<std::runtime_error>(
+        StrEq("Duplicate keyword: properties")));
+}
+
 TEST(frontend_test, object_additional_properties) {
     frontend f;
     auto schema = f.compile(
@@ -921,6 +974,87 @@ TEST(frontend_test, non_object_or_boolean_subschema) {
       },
       ThrowsMessage<std::runtime_error>(
         StrEq("Subschema must be an object or a boolean")));
+}
+
+TEST(frontend_test, one_of) {
+    auto schema = frontend{}.compile(
+      parse_json(R"({
+        "$id": "https://example.com/root.json",
+        "oneOf": [
+            { "type": "null" },
+            { "type": "string" },
+            { "type": "integer" }
+        ]
+      })"),
+      "https://example.com/irrelevant-base.json",
+      dialect::draft7);
+
+    auto expected = R"(# (document root)
+  base uri: https://example.com/root.json
+  dialect: http://json-schema.org/draft-07/schema#
+#/oneOf/0
+  base uri: https://example.com/root.json
+  dialect: http://json-schema.org/draft-07/schema#
+  types: [null]
+#/oneOf/1
+  base uri: https://example.com/root.json
+  dialect: http://json-schema.org/draft-07/schema#
+  types: [string]
+#/oneOf/2
+  base uri: https://example.com/root.json
+  dialect: http://json-schema.org/draft-07/schema#
+  types: [integer]
+)";
+
+    ASSERT_EQ(expected, ir_tree_printer::to_string(schema));
+    ASSERT_EQ(schema.root().one_of().size(), 3);
+}
+
+TEST(frontend_test, duplicate_one_of) {
+    // Not required by json schema but we disallow duplicate keywords to reduce
+    // ambiguity.
+    EXPECT_THAT(
+      []() {
+          frontend{}.compile(
+            parse_json(R"({
+              "$id": "https://example.com/root.json",
+              "oneOf": [{ "type": "string" }],
+              "oneOf": [{ "type": "integer" }]
+            })"),
+            "https://example.com/irrelevant-base.json",
+            dialect::draft7);
+      },
+      ThrowsMessage<std::runtime_error>(StrEq("Duplicate keyword: oneOf")));
+}
+
+TEST(frontend_test, one_of_empty_array) {
+    EXPECT_THAT(
+      []() {
+          frontend{}.compile(
+            parse_json(R"({
+              "$id": "https://example.com/root.json",
+              "oneOf": []
+            })"),
+            "https://example.com/irrelevant-base.json",
+            dialect::draft7);
+      },
+      ThrowsMessage<std::runtime_error>(
+        StrEq("The oneOf keyword must be a non-empty array")));
+}
+
+TEST(frontend_test, one_of_non_array) {
+    EXPECT_THAT(
+      []() {
+          frontend{}.compile(
+            parse_json(R"({
+              "$id": "https://example.com/root.json",
+              "oneOf": "not an array"
+            })"),
+            "https://example.com/irrelevant-base.json",
+            dialect::draft7);
+      },
+      ThrowsMessage<std::runtime_error>(
+        StrEq("Invalid type for keyword oneOf. Expected one of: [array].")));
 }
 
 TEST(frontend_test, non_string_dialect) {

@@ -26,7 +26,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/authtoken"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
@@ -61,14 +61,14 @@ Writes an mcpServer entry with name "redpandaCloud" into the appropriate config 
 		Args: cobra.NoArgs,
 		Run: func(_ *cobra.Command, _ []string) {
 			cfg, err := p.Load(fs)
-			out.MaybeDie(err, "Failed to load rpk config: %w", err)
+			out.MaybeDie(err, "failed to load rpk config: %w", err)
 
 			args := []string{"cloud", "mcp", "stdio"}
 			if allowDelete {
 				args = append(args, "--allow-delete")
 			}
 			configFile, err := installMCPConfig(cfg, mcpClient, "redpandaCloud", args)
-			out.MaybeDie(err, "Failed to install MCP configuration: %v", err)
+			out.MaybeDie(err, "failed to install MCP configuration: %v", err)
 			fmt.Printf("Successfully installed Redpanda Cloud MCP server to %s.\n", makePathPretty(configFile))
 		},
 	}
@@ -90,14 +90,14 @@ func newStdioCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run: func(_ *cobra.Command, _ []string) {
 			cfg, err := p.Load(fs)
-			out.MaybeDie(err, "Failed to load config: %w", err)
+			out.MaybeDie(err, "failed to load config: %w", err)
 
 			// Start out with empty token, and use the maybeReloadToken function to update.
 			cl := publicapi.NewCloudClientSet(cfg.DevOverrides().PublicAPIURL, "")
 
 			// Create dataplane client set with dynamic transport for MCP
 			dataplaneClientSet, err := publicapi.NewDataPlaneClientSet("", "")
-			out.MaybeDie(err, "Failed to create dataplane client set: %v", err)
+			out.MaybeDie(err, "failed to create dataplane client set: %v", err)
 			var m sync.RWMutex
 			var tokenOK bool
 
@@ -228,7 +228,7 @@ Use --install to configure the MCP client instead of serving stdio.`,
 		},
 		Run: func(cmd *cobra.Command, _ []string) {
 			cfg, err := p.Load(fs)
-			out.MaybeDie(err, "Failed to load config: %w", err)
+			out.MaybeDie(err, "failed to load config: %w", err)
 
 			authToken := cfg.VirtualProfile().CurrentAuth().AuthToken
 
@@ -243,30 +243,30 @@ Use --install to configure the MCP client instead of serving stdio.`,
 				cluster, err := cl.Cluster.GetCluster(cmd.Context(), connect.NewRequest(&controlplanev1.GetClusterRequest{
 					Id: clusterID,
 				}))
-				out.MaybeDie(err, "Failed to get cluster: %v", err)
+				out.MaybeDie(err, "failed to get cluster: %v", err)
 
 				dataplaneURL = cluster.Msg.GetCluster().GetDataplaneApi().GetUrl()
 				actualClusterID = clusterID
 				if dataplaneURL == "" {
-					out.Die("Cluster %s does not have a dataplane API URL", clusterID)
+					out.Die("cluster %s does not have a dataplane API URL", clusterID)
 				}
 			} else {
 				// Serverless cluster
 				serverlessCluster, err := cl.Serverless.GetServerlessCluster(cmd.Context(), connect.NewRequest(&controlplanev1.GetServerlessClusterRequest{
 					Id: serverlessClusterID,
 				}))
-				out.MaybeDie(err, "Failed to get serverless cluster: %v", err)
+				out.MaybeDie(err, "failed to get serverless cluster: %v", err)
 
 				dataplaneURL = serverlessCluster.Msg.GetServerlessCluster().GetDataplaneApi().GetUrl()
 				actualClusterID = serverlessClusterID
 				if dataplaneURL == "" {
-					out.Die("Serverless cluster %s does not have a dataplane API URL", serverlessClusterID)
+					out.Die("serverless cluster %s does not have a dataplane API URL", serverlessClusterID)
 				}
 			}
 
 			// Create a dataplane client set for this specific dataplane
 			dataplaneClient, err := publicapi.NewDataPlaneClientSet(dataplaneURL, authToken)
-			out.MaybeDie(err, "Failed to create dataplane client: %v", err)
+			out.MaybeDie(err, "failed to create dataplane client: %v", err)
 
 			var m sync.RWMutex
 			var tokenOK bool
@@ -312,7 +312,7 @@ Use --install to configure the MCP client instead of serving stdio.`,
 			mcpServer, err := dataplaneClient.MCPServer.GetMCPServer(cmd.Context(), connect.NewRequest(&dataplanev1alpha3.GetMCPServerRequest{
 				Id: mcpServerID,
 			}))
-			out.MaybeDie(err, "Failed to get MCP server: %v", err)
+			out.MaybeDie(err, "failed to get MCP server: %v", err)
 
 			mcpServerURL := mcpServer.Msg.GetMcpServer().GetUrl()
 			if mcpServerURL == "" {
@@ -336,7 +336,7 @@ Use --install to configure the MCP client instead of serving stdio.`,
 				args = append(args, "--mcp-server-id", mcpServerID)
 
 				configFile, err := installMCPConfig(cfg, mcpClient, mcpServerName, args)
-				out.MaybeDie(err, "Failed to install MCP configuration: %v", err)
+				out.MaybeDie(err, "failed to install MCP configuration: %v", err)
 				fmt.Printf("Successfully installed MCP server for '%s' (cluster: %s, server: %s) to %s.\n", mcpServerName, actualClusterID, mcpServerID, makePathPretty(configFile))
 				return
 			}
@@ -353,13 +353,13 @@ Use --install to configure the MCP client instead of serving stdio.`,
 					}
 				}),
 			)
-			out.MaybeDie(err, "Failed to create remote MCP client: %v", err)
+			out.MaybeDie(err, "failed to create remote MCP client: %v", err)
 			defer remoteClient.Close()
 
 			// Initialize the remote client
 			fmt.Fprintf(os.Stderr, "Starting remote MCP client\n")
 			if err := remoteClient.Start(cmd.Context()); err != nil {
-				out.MaybeDie(err, "Failed to start remote MCP client: %v", err)
+				out.MaybeDie(err, "failed to start remote MCP client: %v", err)
 			}
 
 			initRequest := mcp.InitializeRequest{}
@@ -372,7 +372,7 @@ Use --install to configure the MCP client instead of serving stdio.`,
 
 			fmt.Fprintf(os.Stderr, "Initializing remote MCP client\n")
 			_, err = remoteClient.Initialize(cmd.Context(), initRequest)
-			out.MaybeDie(err, "Failed to initialize remote MCP client: %v", err)
+			out.MaybeDie(err, "failed to initialize remote MCP client: %v", err)
 
 			// Create local MCP server that will proxy to the remote client
 			var clusterType string
@@ -397,7 +397,7 @@ Use --install to configure the MCP client instead of serving stdio.`,
 			// Add all tools from remote server to local server
 			// Currently this is static and will not add/remove tools at runtime.
 			if err := addRemoteToolsToServer(cmd.Context(), remoteClient, localServer); err != nil {
-				out.MaybeDie(err, "Failed to register remote tools: %v", err)
+				out.MaybeDie(err, "failed to register remote tools: %v", err)
 			}
 
 			fmt.Fprintf(os.Stderr, "Proxy server ready, starting stdio server\n")

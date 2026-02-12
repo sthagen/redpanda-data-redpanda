@@ -17,14 +17,14 @@ import (
 	"time"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/hwloc"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/network"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -34,7 +34,7 @@ func mockNetTunersFactory(
 	fs afero.Fs, exec executors.Executor,
 ) (tuners.NetTunersFactory, error) {
 	procFile := irq.NewProcFile(fs)
-	proc := os.NewProc()
+	proc := osutil.NewProc()
 	timeout := 1 * time.Second
 	hwlocCmd := hwloc.NewHwLocCmd(proc, timeout)
 	eth, err := ethtool.NewEthtoolWrapper()
@@ -66,7 +66,7 @@ func TestSynBacklogTuner(t *testing.T) {
 		{
 			name: "it shouldn't do anything if current >= reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("20000000"),
 					network.SynBacklogFile,
@@ -77,7 +77,7 @@ func TestSynBacklogTuner(t *testing.T) {
 		{
 			name: "it shouldn't do anything if current == reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("4096"),
 					network.SynBacklogFile,
@@ -88,7 +88,7 @@ func TestSynBacklogTuner(t *testing.T) {
 		{
 			name: "it should set the value if current < reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("12"),
 					network.SynBacklogFile,
@@ -148,7 +148,7 @@ func TestListenBacklogTuner(t *testing.T) {
 		{
 			name: "it shouldn't do anything if current >= reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("20000000"),
 					network.ListenBacklogFile,
@@ -159,7 +159,7 @@ func TestListenBacklogTuner(t *testing.T) {
 		{
 			name: "it shouldn't do anything if current == reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("4096"),
 					network.ListenBacklogFile,
@@ -170,7 +170,7 @@ func TestListenBacklogTuner(t *testing.T) {
 		{
 			name: "it should set the value if current < reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("12"),
 					network.ListenBacklogFile,

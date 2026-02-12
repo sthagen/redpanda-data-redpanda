@@ -65,7 +65,7 @@ output, use the 'edit' and 'export' commands respectively.`,
 
 			val, exists := currentConfig[key]
 			if !exists {
-				out.Die("Property '%s' not found", key)
+				out.Die("property '%s' not found", key)
 			} else {
 				// currentConfig is the result of json.Unmarshal into a
 				// map[string]interface{}. Due to json rules, all numbers
@@ -81,7 +81,7 @@ output, use the 'edit' and 'export' commands respectively.`,
 				// Intentionally bare output, so that the output can be readily
 				// consumed in a script.
 				bytes, err := yaml.Marshal(val)
-				out.MaybeDie(err, "Unexpected non-YAML-encodable value %v", val)
+				out.MaybeDie(err, "unexpected non-YAML-encodable value %v", val)
 				fmt.Print(string(bytes))
 			}
 		},

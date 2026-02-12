@@ -8,7 +8,7 @@ import (
 	"github.com/redpanda-data/common-go/rpsr"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/authtoken"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
 	"github.com/spf13/afero"
@@ -27,7 +27,7 @@ func NewClient(fs afero.Fs, p *config.RpkProfile) (*rpsr.Client, error) {
 
 	urls := p.SR.Addresses
 	for i, u := range p.SR.Addresses {
-		scheme, _, err := net.ParseHostMaybeScheme(u)
+		scheme, _, err := netutil.ParseHostMaybeScheme(u)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse your schema registry address %q: %v", u, err)
 		}

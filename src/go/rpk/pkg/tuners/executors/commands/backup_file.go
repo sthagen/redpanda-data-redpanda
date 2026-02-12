@@ -15,7 +15,7 @@ import (
 	"bufio"
 	"fmt"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -35,7 +35,7 @@ func NewBackupFileCmd(fs afero.Fs, path string) Command {
 
 func (c *backupFileCommand) Execute() error {
 	zap.L().Sugar().Debugf("Creating backup of '%s'", c.path)
-	bckFile, err := utils.BackupFile(c.fs, c.path)
+	bckFile, err := rpkutil.BackupFile(c.fs, c.path)
 	if err == nil {
 		zap.L().Sugar().Debugf("Backup created '%s'", bckFile)
 	}

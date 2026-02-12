@@ -79,11 +79,12 @@ ss::future<bool> commit_batcher<ClockType>::assign_coordinators() {
           result<model::partition_id, cluster::errc>>(
           _offset_committer->find_coordinator(key));
         if (fut.failed()) {
+            auto ex = fut.get_exception();
             vlog(
               tlog.warn,
               "unable to determine key ({}) coordinator: {}",
               key,
-              fut.get_exception());
+              ex);
             it = _unbatched.upper_bound(key);
             continue;
         }
@@ -188,11 +189,12 @@ ss::future<> commit_batcher<ClockType>::do_flush(
     auto fut = co_await ss::coroutine::as_future<cluster::errc>(
       _offset_committer->batch_commit(coordinator, std::move(batch)));
     if (fut.failed()) {
+        auto ex = fut.get_exception();
         vlog(
           tlog.warn,
           "unable to commit batch (coordinator={}): {}",
           coordinator,
-          fut.get_exception());
+          ex);
         co_return;
     }
     cluster::errc ec = fut.get();

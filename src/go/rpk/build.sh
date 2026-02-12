@@ -22,7 +22,7 @@ out_dir="$(go env GOOS)-$(go env GOARCH)"
 mkdir -p "${out_dir}"
 
 ver_pkg='github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/version'
-cont_pkg='github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common'
+cont_pkg='github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil'
 
 go build \
   -ldflags "-X ${ver_pkg}.version=${version} -X ${ver_pkg}.rev=${rev} -X ${cont_pkg}.tag=${img_tag} -X ${ver_pkg}.buildTime=${buildTime} -X ${ver_pkg}.hostOs=${hostOs} -X ${ver_pkg}.hostArch=${hostArch}" \

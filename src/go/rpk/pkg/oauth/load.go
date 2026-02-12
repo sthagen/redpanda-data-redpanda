@@ -16,7 +16,7 @@ import (
 	iamv1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"

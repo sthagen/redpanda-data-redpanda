@@ -19,7 +19,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/kafka"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -418,5 +418,5 @@ func regexGroups(adm *kadm.Client, expressions []string) ([]string, error) {
 		return nil, fmt.Errorf("unable to list groups: 	%w", err)
 	}
 
-	return utils.RegexListedItems(groups.Groups(), expressions)
+	return rpkutil.RegexListedItems(groups.Groups(), expressions)
 }

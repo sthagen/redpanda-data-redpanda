@@ -15,7 +15,7 @@ import (
 	"os"
 	"runtime"
 
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/plugin"
 	"github.com/spf13/afero"

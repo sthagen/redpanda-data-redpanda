@@ -31,7 +31,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/httpapi"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/spf13/afero"
 )
 

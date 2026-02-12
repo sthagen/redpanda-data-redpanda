@@ -204,10 +204,8 @@ void segment_chunks::resolve_prefetch_futures() {
             vassert(
               f.available(), "future not available when resolving prefetches");
             if (f.failed()) {
-                vlog(
-                  _ctxlog.trace,
-                  "failed prefetch download: {}",
-                  f.get_exception());
+                auto ex = f.get_exception();
+                vlog(_ctxlog.trace, "failed prefetch download: {}", ex);
             }
         }
     }
@@ -400,10 +398,11 @@ ss::future<> chunk_eviction_strategy::close_files(
     auto close_results = co_await ss::when_all(fs.begin(), fs.end());
     for (auto& result : close_results) {
         if (result.failed()) {
+            auto ex = result.get_exception();
             vlog(
               rtc.warn,
               "failed to close a chunk file handle during eviction: {}",
-              result.get_exception());
+              ex);
         }
     }
 }

@@ -309,11 +309,12 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
     const bool needs_inflight_reset = inflight_last_offset_needs_reset(
       current_insync_term);
     if (r_fut.failed()) {
+        auto ex = r_fut.get_exception();
         vlog(
           _log.warn,
           "Replication failed with exception: {}, needs inflight offset reset: "
           "{}, inflight last offset: {}",
-          r_fut.get_exception(),
+          ex,
           needs_inflight_reset,
           _inflight_last_offset);
         if (needs_inflight_reset) {

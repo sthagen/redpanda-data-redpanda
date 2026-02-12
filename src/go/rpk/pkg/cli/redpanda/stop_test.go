@@ -20,8 +20,8 @@ import (
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/redpanda"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -67,7 +67,7 @@ func TestStopCommand(t *testing.T) {
 			require.NotNil(t, ecmd.Process)
 
 			pid := ecmd.Process.Pid
-			_, err = utils.WriteBytes(
+			_, err = rpkutil.WriteBytes(
 				fs,
 				[]byte(strconv.Itoa(pid)),
 				conf.PIDFile(),
@@ -85,7 +85,7 @@ func TestStopCommand(t *testing.T) {
 			err = c.Execute()
 			require.NoError(t, err)
 
-			isStillRunning, err := os.IsRunningPID(
+			isStillRunning, err := osutil.IsRunningPID(
 				fs,
 				ecmd.Process.Pid,
 			)

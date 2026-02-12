@@ -77,16 +77,17 @@ func (masks *cpuMasks) CPUMaskForComputations(
 	zap.L().Sugar().Debugf("Computing CPU mask for '%s' mode and input CPU mask '%s'", mode, cpuMask)
 	computationsMask := ""
 	var err error
-	if mode == Sq {
+	switch mode {
+	case Sq:
 		// all but CPU0
 		computationsMask, err = masks.hwloc.Calc(cpuMask, "~PU:0")
-	} else if mode == SqSplit {
+	case SqSplit:
 		// all but CPU0 and its HT siblings
 		computationsMask, err = masks.hwloc.Calc(cpuMask, "~core:0")
-	} else if mode == Mq {
+	case Mq:
 		// all available cores
 		computationsMask = cpuMask
-	} else if mode == Dedicated {
+	case Dedicated:
 		numOfPUs, err := masks.GetNumberOfPUs(cpuMask)
 		if err != nil {
 			return "", err
@@ -101,7 +102,7 @@ func (masks *cpuMasks) CPUMaskForComputations(
 		if err != nil {
 			return "", err
 		}
-	} else {
+	default:
 		err = fmt.Errorf("unsupported mode: '%s'", mode)
 	}
 
@@ -144,9 +145,9 @@ func (masks *cpuMasks) SetMask(path string, mask string) error {
 	if _, err := masks.fs.Stat(path); err != nil {
 		return fmt.Errorf("SMP affinity file '%s' not exist", path)
 	}
-	formattedMask := strings.Replace(mask, "0x", "", -1)
+	formattedMask := strings.ReplaceAll(mask, "0x", "")
 	for strings.Contains(formattedMask, ",,") {
-		formattedMask = strings.Replace(formattedMask, ",,", ",0,", -1)
+		formattedMask = strings.ReplaceAll(formattedMask, ",,", ",0,")
 	}
 
 	zap.L().Sugar().Debugf("Setting mask '%s' in '%s'", formattedMask, path)
@@ -207,7 +208,7 @@ func (masks *cpuMasks) ReadMask(path string) (string, error) {
 	}
 	rawMask := strings.TrimSpace(string(content))
 
-	rawMask = strings.Replace(rawMask, ",0,", ",,", -1)
+	rawMask = strings.ReplaceAll(rawMask, ",0,", ",,")
 	parts := strings.Split(rawMask, ",")
 	var newMaskParts []string
 	for _, part := range parts {

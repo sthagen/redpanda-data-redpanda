@@ -63,7 +63,7 @@ Validate a specific profile:
 
 			y, ok := cfg.ActualRpkYaml()
 			if !ok {
-				out.Die("No rpk.yaml configuration file found")
+				out.Die("no rpk.yaml configuration file found")
 			}
 
 			// Determine which profile to validate
@@ -75,12 +75,12 @@ Validate a specific profile:
 			}
 
 			if profileName == "" {
-				out.Die("No profile specified and no current profile set")
+				out.Die("no profile specified and no current profile set")
 			}
 
 			profile := y.Profile(profileName)
 			if profile == nil {
-				out.Die("Profile %q not found", profileName)
+				out.Die("profile %q not found", profileName)
 			}
 
 			auth := profile.ActualAuth()

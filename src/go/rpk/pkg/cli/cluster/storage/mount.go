@@ -62,10 +62,10 @@ with my-new-topic as the new topic name
 			var id int
 			if p.CheckFromCloud() {
 				if ns != "" && strings.ToLower(ns) != "kafka" {
-					out.Die("Namespace %q not allowed. Only kafka topics can be mounted in Redpanda Cloud clusters", ns)
+					out.Die("namespace %q not allowed; only kafka topics can be mounted in Redpanda Cloud clusters", ns)
 				}
 				if an != "" && strings.ToLower(an) != "kafka" {
-					out.Die("Failed to parse '--to' flag: namespace %q not allowed. Only kafka topics can be mounted in Redpanda Cloud clusters", an)
+					out.Die("failed to parse '--to' flag: namespace %q not allowed; only kafka topics can be mounted in Redpanda Cloud clusters", an)
 				}
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)

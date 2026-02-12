@@ -15,7 +15,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -28,14 +28,14 @@ func NewNtpQuery(timeout time.Duration, fs afero.Fs) NtpQuery {
 	return &ntpQuery{
 		timeout: timeout,
 		fs:      fs,
-		proc:    os.NewProc(),
+		proc:    osutil.NewProc(),
 	}
 }
 
 type ntpQuery struct {
 	timeout time.Duration
 	fs      afero.Fs
-	proc    os.Proc
+	proc    osutil.Proc
 }
 
 func (q *ntpQuery) IsNtpSynced() (bool, error) {

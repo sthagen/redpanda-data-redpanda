@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -40,7 +40,7 @@ type BalanceService interface {
 }
 
 func NewBalanceService(
-	fs afero.Fs, proc os.Proc, executor executors.Executor, timeout time.Duration,
+	fs afero.Fs, proc osutil.Proc, executor executors.Executor, timeout time.Duration,
 ) BalanceService {
 	return &balanceService{
 		fs:       fs,
@@ -52,7 +52,7 @@ func NewBalanceService(
 
 type balanceService struct {
 	fs       afero.Fs
-	proc     os.Proc
+	proc     osutil.Proc
 	executor executors.Executor
 	timeout  time.Duration
 }
@@ -80,7 +80,7 @@ func (balanceService *balanceService) BanIRQsAndRestart(
 		return err
 	}
 
-	configLines, err := utils.ReadFileLines(balanceService.fs, serviceInfo.configFile)
+	configLines, err := rpkutil.ReadFileLines(balanceService.fs, serviceInfo.configFile)
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (balanceService *balanceService) GetBannedIRQs() ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	configLines, err := utils.ReadFileLines(balanceService.fs, serviceInfo.configFile)
+	configLines, err := rpkutil.ReadFileLines(balanceService.fs, serviceInfo.configFile)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (balanceService *balanceService) getBalanceServiceInfo() (
 		} else {
 			configFile = "/etc/conf.d/irqbalance"
 			optionsKey = "IRQBALANCE_OPTS"
-			lines, err := utils.ReadFileLines(fs, "/proc/1/comm")
+			lines, err := rpkutil.ReadFileLines(fs, "/proc/1/comm")
 			if err != nil {
 				return nil, err
 			}

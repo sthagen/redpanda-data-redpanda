@@ -170,7 +170,7 @@ func tune(
 			// We exit with code 1 when it's enabled and not supported except
 			// for disk_write_cache since it's only supported for GCP.
 			// We also allow clocksource to fail, see #6444.
-			exit1 = exit1 || enabled && !supported && !(tunerName == "disk_write_cache" || tunerName == "clocksource")
+			exit1 = exit1 || enabled && !supported && tunerName != "disk_write_cache" && tunerName != "clocksource"
 			continue
 		}
 		zap.L().Sugar().Debugf("Tuner parameters %+v", params)

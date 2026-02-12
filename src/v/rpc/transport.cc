@@ -375,18 +375,16 @@ void transport::dispatch_send() {
         return;
     }
     auto holder = _dispatch_gate.hold();
-    ssx::background = ssx::ignore_shutdown_exceptions(do_dispatch_send())
-                        .then_wrapped(
-                          [this, h = std::move(holder)](ss::future<> fut) {
-                              if (fut.failed()) {
-                                  vlog(
-                                    rpclog.info,
-                                    "Error dispatching socket write:{}",
-                                    fut.get_exception());
-                                  _probe->request_error();
-                                  fail_outstanding_futures();
-                              }
-                          });
+    ssx::background
+      = ssx::ignore_shutdown_exceptions(do_dispatch_send())
+          .then_wrapped([this, h = std::move(holder)](ss::future<> fut) {
+              if (fut.failed()) {
+                  auto ex = fut.get_exception();
+                  vlog(rpclog.info, "Error dispatching socket write:{}", ex);
+                  _probe->request_error();
+                  fail_outstanding_futures();
+              }
+          });
 }
 
 ss::future<> transport::do_reads() {

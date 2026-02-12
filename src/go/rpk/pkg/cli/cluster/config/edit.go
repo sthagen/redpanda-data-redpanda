@@ -116,7 +116,7 @@ func executeEdit(
 	if err != nil {
 		return fmt.Errorf("error opening file %s on editor %s: %v", filename, editor, err)
 	}
-	child := exec.Command(eArgs[0], eArgs[1:]...)
+	child := exec.CommandContext(ctx, eArgs[0], eArgs[1:]...)
 	child.Stdout = os.Stdout
 	child.Stderr = os.Stderr
 	child.Stdin = os.Stdin

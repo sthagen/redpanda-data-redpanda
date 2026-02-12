@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +37,7 @@ func TestGrubAddCommandLineOptions(t *testing.T) {
 			opt:              []string{"noht"},
 			check: func(fs afero.Fs, grubCfg []string) {
 				backupName := "/etc/default/grub.vectorized.9be9f2dfe19f13b03e09fcc75648d4ec.bk"
-				backup, err := utils.ReadFileLines(fs, backupName)
+				backup, err := rpkutil.ReadFileLines(fs, backupName)
 				require.NoError(t, err)
 				require.Equal(t, grubCfg, backup)
 			},
@@ -49,7 +49,7 @@ func TestGrubAddCommandLineOptions(t *testing.T) {
 			opt:              []string{"some_opt=2"},
 			check: func(fs afero.Fs, grubCfg []string) {
 				backupName := "/etc/default/grub.vectorized.9be9f2dfe19f13b03e09fcc75648d4ec.bk"
-				backup, err := utils.ReadFileLines(fs, backupName)
+				backup, err := rpkutil.ReadFileLines(fs, backupName)
 				require.NoError(t, err)
 				require.Equal(t, grubCfg, backup)
 			},
@@ -72,7 +72,7 @@ func TestGrubAddCommandLineOptions(t *testing.T) {
 			opt:              []string{"some_opt=2"},
 			check: func(fs afero.Fs, grubCfg []string) {
 				backupName := "/etc/default/grub.vectorized.f88adb8d4d821d657e1d24d1d87a854e.bk"
-				backup, err := utils.ReadFileLines(fs, backupName)
+				backup, err := rpkutil.ReadFileLines(fs, backupName)
 				require.NoError(t, err)
 				require.Equal(t, grubCfg, backup)
 			},
@@ -83,15 +83,15 @@ func TestGrubAddCommandLineOptions(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			grub := NewGrub(nil, nil, fs, executors.NewDirectExecutor(), time.Duration(10)*time.Second)
 			osfs := afero.NewOsFs()
-			grubCfg, err := utils.ReadFileLines(osfs, tt.grubInitFilename)
+			grubCfg, err := rpkutil.ReadFileLines(osfs, tt.grubInitFilename)
 			require.NoError(t, err)
-			utils.WriteFileLines(fs, grubCfg, "/etc/default/grub")
+			rpkutil.WriteFileLines(fs, grubCfg, "/etc/default/grub")
 			err = grub.AddCommandLineOptions(tt.opt)
 			require.NoError(t, err)
 			tt.check(fs, grubCfg)
-			grubGot, err := utils.ReadFileLines(fs, "/etc/default/grub")
+			grubGot, err := rpkutil.ReadFileLines(fs, "/etc/default/grub")
 			require.NoError(t, err)
-			grubWant, err := utils.ReadFileLines(osfs, tt.grubWantFilename)
+			grubWant, err := rpkutil.ReadFileLines(osfs, tt.grubWantFilename)
 			require.NoError(t, err)
 			require.Equal(t, grubWant, grubGot)
 		})

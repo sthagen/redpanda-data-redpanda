@@ -9,8 +9,8 @@ go_library(
         "@rules_go//go/platform:android": [
             "//src/go/rpk/pkg/cloud/gcp",
             "//src/go/rpk/pkg/config",
-            "//src/go/rpk/pkg/net",
-            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/netutil",
+            "//src/go/rpk/pkg/osutil",
             "//src/go/rpk/pkg/system",
             "//src/go/rpk/pkg/tuners",
             "//src/go/rpk/pkg/tuners/ballast",
@@ -27,8 +27,8 @@ go_library(
         "@rules_go//go/platform:linux": [
             "//src/go/rpk/pkg/cloud/gcp",
             "//src/go/rpk/pkg/config",
-            "//src/go/rpk/pkg/net",
-            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/netutil",
+            "//src/go/rpk/pkg/osutil",
             "//src/go/rpk/pkg/system",
             "//src/go/rpk/pkg/tuners",
             "//src/go/rpk/pkg/tuners/ballast",

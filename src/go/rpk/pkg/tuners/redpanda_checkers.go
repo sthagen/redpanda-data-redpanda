@@ -20,8 +20,8 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cloud"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cloud/gcp"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system/filesystem"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/disk"
@@ -204,7 +204,7 @@ func RedpandaCheckers(
 	y *config.RedpandaYaml,
 	timeout time.Duration,
 ) (map[CheckerID][]Checker, error) {
-	proc := os.NewProc()
+	proc := osutil.NewProc()
 	ethtool, err := ethtool.NewEthtoolWrapper()
 	if err != nil {
 		return nil, err
@@ -227,7 +227,7 @@ func RedpandaCheckers(
 	for _, address := range y.Redpanda.KafkaAPI {
 		addrs = append(addrs, address.Address)
 	}
-	interfaces, err := net.GetInterfacesByIps(
+	interfaces, err := netutil.GetInterfacesByIps(
 		addrs...,
 	)
 	if err != nil {

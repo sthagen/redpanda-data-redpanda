@@ -249,7 +249,7 @@ func importConfig(
 	fmt.Printf("Successfully updated configuration. New configuration version is %d.\n", result.ConfigVersion)
 
 	status, err := client.ClusterConfigStatus(ctx, true)
-	out.MaybeDie(err, "unable to check if the cluster needs to be restarted: %v\nCheck the status with 'rpk cluster config status'.", err)
+	out.MaybeDie(err, "unable to check if the cluster needs to be restarted: %v; check the status with 'rpk cluster config status'", err)
 	for _, value := range status {
 		if value.Restart {
 			fmt.Print("\nCluster needs to be restarted. See more details with 'rpk cluster config status'.\n")
@@ -325,7 +325,7 @@ from the YAML file, it is reset to its default value.  `,
 			err = importConfig(cmd.Context(), client, filename, currentConfig, currentFullConfig, schema, all)
 			if fe := (*formattedError)(nil); errors.As(err, &fe) {
 				fmt.Fprint(os.Stderr, err)
-				out.Die("No changes were made")
+				out.Die("no changes were made")
 			}
 			out.MaybeDie(err, "error updating config: %v", err)
 		},

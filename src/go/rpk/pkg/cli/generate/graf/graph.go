@@ -34,7 +34,7 @@ func (*GraphPanel) Type() string {
 }
 
 func (p *GraphPanel) GetGridPos() *GridPos {
-	return &p.BasePanel.GridPos
+	return &p.GridPos
 }
 
 func (p GraphPanel) MarshalJSON() ([]byte, error) {

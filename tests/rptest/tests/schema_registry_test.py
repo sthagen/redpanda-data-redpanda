@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import copy
 import http.client
 import json
 import random
@@ -568,6 +569,13 @@ schema_proto_b64 = (
     "AAUSAwMCBwoMCgUEAAIAARIDAwgJCgwKBQQAAgADEgMDDA1iBnByb3RvMw=="
 )
 
+schema_proto2_def = """
+syntax = "proto3";
+
+message ProtoType2 {
+  string s = 2;
+}"""
+
 schema_avro_def = (
     '{"type":"record","name":"myrecord","fields":[{"name":"f1","type":"string"}]}'
 )
@@ -578,6 +586,17 @@ syntax = "proto3";
 import "schema_proto.proto";
 message Dependee {
   ProtoType p =  1;
+}"""
+
+schema_proto_dependee2_def = """
+syntax = "proto3";
+
+import "schema_proto.proto";
+import "schema_proto2.proto";
+
+message Dependee {
+    ProtoType p1 = 1;
+    ProtoType2 p2 = 2;
 }"""
 
 schema_avro_dependee_def = """
@@ -608,6 +627,14 @@ base_schemas = {
         "schema": schema_avro_def,
         "type": "AVRO",
     },
+}
+
+base2_schemas = {
+    "proto": {
+        "subject": "schema_proto2",
+        "schema": schema_proto2_def,
+        "type": "PROTOBUF",
+    }
 }
 
 not_dependent_schemas = {
@@ -653,6 +680,18 @@ dependent_schemas = {
         "type": "AVRO",
         "id": 6,
     },
+}
+
+multi_dependent_schemas = {
+    "proto": {
+        "subject": "schema_proto_multi_dependee_schema",
+        "schema": schema_proto_dependee2_def,
+        "references": [
+            {"name": "schema_proto.proto", "subject": "schema_proto", "version": 1},
+            {"name": "schema_proto2.proto", "subject": "schema_proto2", "version": 1},
+        ],
+        "type": "PROTOBUF",
+    }
 }
 
 log_config = LoggingConfig(
@@ -842,6 +881,11 @@ def get_normalize_dataset(type: SchemaType) -> TestNormalizeDataset:
             ),
         )
     assert False, f"Unsupported schema {type=}"
+
+
+class ReferenceFormat(str, Enum):
+    NONE = ""
+    QUALIFIED = "qualified"
 
 
 class SchemaRegistryRedpandaClient:
@@ -1107,11 +1151,19 @@ class SchemaRegistryRedpandaClient:
         )
 
     def get_subjects_subject_versions_version(
-        self, subject, version, format=None, headers=HTTP_GET_HEADERS, **kwargs
+        self,
+        subject,
+        version,
+        format=None,
+        reference_format: ReferenceFormat | None = None,
+        headers=HTTP_GET_HEADERS,
+        **kwargs,
     ):
         params = {}
         if format is not None:
             params["format"] = format
+        if reference_format and reference_format != ReferenceFormat.NONE:
+            params["referenceFormat"] = reference_format.value
         return self.request(
             "GET",
             f"subjects/{subject}/versions/{version}",
@@ -6472,6 +6524,129 @@ class SchemaRegistryContextTest(SchemaRegistryEndpoints):
         assert counts_after[(".dev", "false")] == 1, (
             f".dev context undeleted count changed after restart: "
             f"{counts_before.get(('.dev', 'false'), 0)} -> {counts_after.get(('.dev', 'false'), 0)}"
+        )
+
+    def _post_new_schema(self, subject: str, schema: str, context: str | None = None):
+        subject = subject if context is None else f":.{context}:{subject}"
+
+        result = self.sr_client.post_subjects_subject_versions(
+            subject=subject, data=schema
+        )
+
+        self.logger.info(f"result: {result}, {result.text}")
+
+        self.assert_equal(result.status_code, requests.codes.ok)
+
+    @cluster(num_nodes=1)
+    def test_context_reference_format(self):
+        """
+        This test verifies the behavior of the new paramater to
+        GET /subjects/{subject}/versions/{version} that will make unqualified references
+        qualified.
+        """
+        schema_type = "proto"
+
+        base = base_schemas[schema_type]
+        base2 = base2_schemas[schema_type]
+        multi_dependent = multi_dependent_schemas[schema_type]
+
+        ctx = f"ctx-{schema_type}"
+        base_subject = "base"
+        base2_subject = "base2"
+        multi_dependent_subject = "multi-dependent"
+
+        base_data = json.dumps({"schema": base["schema"], "schemaType": base["type"]})
+        base2_data = json.dumps(
+            {"schema": base2["schema"], "schemaType": base2["type"]}
+        )
+
+        self._post_new_schema(subject=base_subject, schema=base_data)
+        self._post_new_schema(subject=base2_subject, schema=base2_data)
+
+        self._post_new_schema(subject=base_subject, schema=base_data, context=ctx)
+        self._post_new_schema(subject=base2_subject, schema=base2_data, context=ctx)
+
+        multi_dependent_default = {
+            "schema": multi_dependent["schema"],
+            "schemaType": multi_dependent["type"],
+            "references": copy.deepcopy(multi_dependent["references"]),
+        }
+        multi_dependent_default["references"][0]["subject"] = base_subject
+        multi_dependent_default["references"][1]["subject"] = base2_subject
+
+        multi_dependent_default_json = json.dumps(multi_dependent_default)
+
+        multi_dependent_context = {
+            "schema": multi_dependent["schema"],
+            "schemaType": multi_dependent["type"],
+            "references": copy.deepcopy(multi_dependent["references"]),
+        }
+        multi_dependent_context["references"][0]["subject"] = f":.{ctx}:{base_subject}"
+        multi_dependent_context["references"][1]["subject"] = base2_subject
+
+        multi_dependent_context_json = json.dumps(multi_dependent_context)
+
+        self._post_new_schema(
+            subject=multi_dependent_subject, schema=multi_dependent_default_json
+        )
+        self._post_new_schema(
+            subject=multi_dependent_subject,
+            schema=multi_dependent_context_json,
+            context=ctx,
+        )
+
+        result = self.sr_client.get_subjects_subject_versions_version(
+            subject=multi_dependent_subject,
+            version=1,
+            reference_format=ReferenceFormat.NONE,
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        result_json = result.json()
+        self.logger.info(f"result_json: {result_json}")
+        self.assert_equal(len(result_json["references"]), 2)
+        self.assert_equal(result_json["references"][0]["subject"], base_subject)
+        self.assert_equal(result_json["references"][1]["subject"], base2_subject)
+
+        result = self.sr_client.get_subjects_subject_versions_version(
+            subject=multi_dependent_subject,
+            version=1,
+            reference_format=ReferenceFormat.QUALIFIED,
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        result_json = result.json()
+        self.logger.info(f"result_json: {result_json}")
+        self.assert_equal(len(result_json["references"]), 2)
+        self.assert_equal(result_json["references"][0]["subject"], base_subject)
+        self.assert_equal(result_json["references"][1]["subject"], base2_subject)
+
+        result = self.sr_client.get_subjects_subject_versions_version(
+            subject=f":.{ctx}:{multi_dependent_subject}",
+            version=1,
+            reference_format=ReferenceFormat.NONE,
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        result_json = result.json()
+        self.logger.info(f"result_json: {result_json}")
+        self.assert_equal(len(result_json["references"]), 2)
+        self.assert_equal(
+            result_json["references"][0]["subject"], f":.{ctx}:{base_subject}"
+        )
+        self.assert_equal(result_json["references"][1]["subject"], base2_subject)
+
+        result = self.sr_client.get_subjects_subject_versions_version(
+            subject=f":.{ctx}:{multi_dependent_subject}",
+            version=1,
+            reference_format=ReferenceFormat.QUALIFIED,
+        )
+        self.assert_equal(result.status_code, requests.codes.ok)
+        result_json = result.json()
+        self.logger.info(f"result_json: {result_json}")
+        self.assert_equal(len(result_json["references"]), 2)
+        self.assert_equal(
+            result_json["references"][0]["subject"], f":.{ctx}:{base_subject}"
+        )
+        self.assert_equal(
+            result_json["references"][1]["subject"], f":.{ctx}:{base2_subject}"
         )
 
 

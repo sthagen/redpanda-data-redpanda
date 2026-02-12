@@ -135,7 +135,7 @@ To see a list of all available dashboards, use the '--dashboard help' flag.
 			switch {
 			case dashboard == "legacy":
 				if datasource == "" {
-					out.Die(`Error: required legacy flag "datasource" not set; please set the flag to the redpanda metrics endpoint where rpk should get the metrics metadata. i.e. redpanda_host:9644/public_metrics`)
+					out.Die(`required legacy flag "datasource" not set; please set the flag to the redpanda metrics endpoint where rpk should get the metrics metadata, e.g. redpanda_host:9644/public_metrics`)
 				}
 				jsonOut, err := executeGrafanaDashboard(metricsEndpoint, datasource)
 				out.MaybeDie(err, "unable to generate the grafana dashboard: %v", err)
@@ -223,8 +223,7 @@ func decompressAndPrint(fs fs.FS, path string, writer io.Writer) error {
 }
 
 func executeGrafanaDashboard(metricsEndpoint string, datasource string) (string, error) {
-	if !(strings.HasPrefix(metricsEndpoint, "http://") ||
-		strings.HasPrefix(metricsEndpoint, "https://")) {
+	if !strings.HasPrefix(metricsEndpoint, "http://") && !strings.HasPrefix(metricsEndpoint, "https://") {
 		metricsEndpoint = fmt.Sprintf("http://%s", metricsEndpoint)
 	}
 

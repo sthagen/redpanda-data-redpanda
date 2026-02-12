@@ -300,11 +300,12 @@ compaction_coordinator::get_remote_replica_offsets(vnode node_id) {
           .node_id = _self, .target_node_id = node_id, .group = _group},
         rpc::client_opts{timeout}));
     if (rpc_future.failed()) {
+        auto ex = rpc_future.get_exception();
         vlog(
           _logger.debug,
           "failed to get max cleanly compacted offset from node {}: {}",
           node_id,
-          rpc_future.get_exception());
+          ex);
         co_return std::nullopt;
     }
     auto reply = rpc_future.get();
@@ -382,11 +383,12 @@ compaction_coordinator::send_group_offsets_to_follower(vnode node_id) {
           .mxro = _mxro},
         rpc::client_opts{timeout}));
     if (rpc_future.failed()) {
+        auto ex = rpc_future.get_exception();
         vlog(
           _logger.debug,
           "failed to send group offsets to node {}: {}",
           node_id,
-          rpc_future.get_exception());
+          ex);
         co_return ss::stop_iteration::no;
     }
     auto reply = rpc_future.get();

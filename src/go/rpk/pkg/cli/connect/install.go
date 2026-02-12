@@ -16,7 +16,7 @@ import (
 	"regexp"
 	"strings"
 
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/plugin"
 	"github.com/spf13/afero"
@@ -51,10 +51,10 @@ You may force the installation of Redpanda Connect using the --force flag.
 				if version != "latest" {
 					out.Exit("Redpanda connect is already installed. Use --force to force installation, or delete current version with 'rpk connect uninstall' first")
 				}
-				out.Exit("Redpanda connect is already installed.\nIf you want to upgrade to the latest version, please run 'rpk connect upgrade'.")
+				out.Exit("Redpanda connect is already installed.\nIf you want to upgrade to the latest version, please run 'rpk connect upgrade'")
 			}
 			_, installedVersion, err := installConnect(cmd.Context(), fs, version)
-			out.MaybeDie(err, "unable to install Redpanda Connect: %v; if running on an air-gapped environment you may install 'redpanda-connect' with your package manager.", err)
+			out.MaybeDie(err, "unable to install Redpanda Connect: %v; if running in an air-gapped environment you may install 'redpanda-connect' with your package manager", err)
 
 			fmt.Printf("Redpanda Connect %v successfully installed.\n", installedVersion)
 		},

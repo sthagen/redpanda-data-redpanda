@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -37,7 +37,7 @@ uncomment it and provide a value.
 `,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: ValidProfiles(fs, p),
-		Run: func(_ *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			y, err := cfg.ActualRpkYamlOrEmpty()
@@ -59,7 +59,7 @@ uncomment it and provide a value.
 			original := *p
 			preFromCloud := p.FromCloud
 			preCloudDetails := p.CloudCluster
-			update, err := rpkos.EditTmpYAMLFileWithEncoder(fs, *p, config.ProfileToDocumentedYAML)
+			update, err := rpkos.EditTmpYAMLFileWithEncoder(cmd.Context(), fs, *p, config.ProfileToDocumentedYAML)
 			out.MaybeDieErr(err)
 
 			if preFromCloud {

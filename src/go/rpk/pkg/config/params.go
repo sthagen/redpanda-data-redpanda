@@ -34,7 +34,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	rpknet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
+	rpknet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 )
 

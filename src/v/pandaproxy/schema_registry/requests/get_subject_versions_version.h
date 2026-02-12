@@ -13,11 +13,13 @@
 
 #include "json/iobuf_writer.h"
 #include "pandaproxy/schema_registry/rjson.h"
+#include "pandaproxy/schema_registry/types.h"
 
 namespace pandaproxy::schema_registry {
 
 struct get_subject_versions_version_response {
     stored_schema stored_schema;
+    reference_format format{reference_format::none};
 };
 
 template<typename Buffer>
@@ -25,6 +27,7 @@ void rjson_serialize(
   ::json::iobuf_writer<Buffer>& w,
   const get_subject_versions_version_response& res) {
     w.StartObject();
+    bool is_qualified = res.stored_schema.schema.sub().ctx != default_context;
     w.Key("subject");
     w.String(res.stored_schema.schema.sub().to_string());
     w.Key("version");
@@ -36,7 +39,13 @@ void rjson_serialize(
     ::json::rjson_serialize(w, to_string_view(type));
     if (!res.stored_schema.schema.def().refs().empty()) {
         w.Key("references");
-        ::json::rjson_serialize(w, res.stored_schema.schema.def().refs());
+        ::json::rjson_serialize(
+          w,
+          res.stored_schema.schema.def().refs(),
+          is_qualified && res.format == reference_format::qualified
+            ? std::make_optional<std::reference_wrapper<const context>>(
+                res.stored_schema.schema.sub().ctx)
+            : std::nullopt);
     }
     ::json::rjson_serialize(w, res.stored_schema.schema.def().meta());
     w.Key("schema");

@@ -95,7 +95,8 @@ rpc_client::compute_output_partition(model::transform_name_view name) {
 ss::future<errc> rpc_client::initialize() {
     auto fut = co_await ss::coroutine::as_future<errc>(create_topic());
     if (fut.failed()) {
-        vlog(tlg_log.warn, "Init error: {}", fut.get_exception());
+        auto ex = fut.get_exception();
+        vlog(tlg_log.warn, "Init error: {}", ex);
         co_return errc::topic_creation_failure;
     }
     co_return fut.get();

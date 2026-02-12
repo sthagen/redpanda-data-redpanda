@@ -22,8 +22,8 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/system",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/go/rpk/pkg/os",
-        "//src/go/rpk/pkg/utils",
+        "//src/go/rpk/pkg/osutil",
+        "//src/go/rpk/pkg/rpkutil",
         "@com_github_docker_go_units//:go-units",
         "@com_github_spf13_afero//:afero",
         "@org_uber_go_zap//:zap",
@@ -134,12 +134,12 @@ go_test(
         "@com_github_stretchr_testify//require",
     ] + select({
         "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/rpkutil",
             "//src/go/rpk/pkg/tuners/executors",
-            "//src/go/rpk/pkg/utils",
         ],
         "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/rpkutil",
             "//src/go/rpk/pkg/tuners/executors",
-            "//src/go/rpk/pkg/utils",
         ],
         "//conditions:default": [],
     }),

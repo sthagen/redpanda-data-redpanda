@@ -275,9 +275,10 @@ func splitPromptParens(s string) ([]string, error) {
 		}
 
 		if inQuote {
-			if c == '\\' {
+			switch c {
+			case '\\':
 				inEsc = true
-			} else if c == '"' {
+			case '"':
 				inQuote = false
 			}
 			current = append(current, c)

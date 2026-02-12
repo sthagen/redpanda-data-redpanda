@@ -49,7 +49,12 @@ public:
     static type_set none() { return type_set{}; }
 
     void set(json_type t) { bits_.set(index(t)); }
+    void intersect(const type_set& other) { bits_ &= other.bits_; }
     bool test(json_type t) const { return bits_.test(index(t)); }
+
+    bool is_null_only() const {
+        return bits_.count() == 1 && bits_.test(index(json_type::null));
+    }
 
     /// Returns the single non-null type if exactly one is set.
     std::optional<json_type> single_non_null_type() const {
@@ -113,12 +118,56 @@ struct constraint {
 
     // Object properties, keyed by name.
     std::map<std::string, constraint> properties = {};
+    bool additional_properties_allowed = true;
 
     // Array item constraints.
     // - nullopt: no "items" keyword
     // - empty vector: "items": []
     // - non-empty: item schema(s) to validate
     std::optional<std::vector<constraint>> items = std::nullopt;
+
+    conversion_outcome<void> intersect(const constraint& other) {
+        types.intersect(other.types);
+
+        if (format.has_value() && other.format.has_value()) {
+            if (format != other.format) {
+                return conversion_exception(
+                  "Conflicting format annotations across branches");
+            }
+        } else if (other.format.has_value()) {
+            format = other.format;
+        }
+
+        if (!properties.empty() && !other.properties.empty()) {
+            return conversion_exception(
+              "Intersecting constraints with properties on both sides "
+              "is not supported");
+        } else if (!other.properties.empty()) {
+            if (!additional_properties_allowed) {
+                return conversion_exception(
+                  "additionalProperties: false conflicts with properties "
+                  "defined in another branch");
+            }
+            properties = other.properties;
+        } else if (
+          !properties.empty() && !other.additional_properties_allowed) {
+            return conversion_exception(
+              "additionalProperties: false conflicts with properties "
+              "defined in another branch");
+        }
+        additional_properties_allowed = additional_properties_allowed
+                                        && other.additional_properties_allowed;
+
+        if (items.has_value() && other.items.has_value()) {
+            return conversion_exception(
+              "Intersecting constraints with items on both sides is not "
+              "supported");
+        } else if (other.items.has_value()) {
+            items = other.items;
+        }
+
+        return outcome::success();
+    }
 };
 
 /// Context for the resolution phase.
@@ -148,6 +197,48 @@ conversion_outcome<constraint>
 collect(collect_context& ctx, const conversion::json_schema::subschema&);
 
 conversion_outcome<field_type> resolve(resolution_context&, const constraint&);
+
+// This is not full fidelity oneOf support - only T|null is supported.
+// In the general case, oneOf is a XOR over multiple schemas. For T|null
+// it is reduced to OR.
+conversion_outcome<constraint> collect_one_of_t_xor_null(
+  collect_context& ctx,
+  const conversion::json_schema::const_list_view& one_of) {
+    constexpr std::string_view unsupported_one_of_msg
+      = "oneOf keyword is supported only for exclusive T|null structures";
+    if (one_of.size() != 2) {
+        return conversion_exception(std::string{unsupported_one_of_msg});
+    }
+
+    auto c1 = collect(ctx, one_of.at(0));
+    if (c1.has_error()) {
+        return c1.error();
+    }
+    auto c2 = collect(ctx, one_of.at(1));
+    if (c2.has_error()) {
+        return c2.error();
+    }
+
+    // Accept only exclusive oneOf(T, null):
+    // - exactly one branch is null-only
+    // - the non-null branch must not include null
+    const bool c1_is_null_only = c1.value().types.is_null_only();
+    const bool c2_is_null_only = c2.value().types.is_null_only();
+
+    if (c1_is_null_only == c2_is_null_only) {
+        return conversion_exception(std::string{unsupported_one_of_msg});
+    }
+
+    const constraint& non_null_branch = c1_is_null_only ? c2.value()
+                                                        : c1.value();
+    if (non_null_branch.types.test(json_type::null)) {
+        return conversion_exception(std::string{unsupported_one_of_msg});
+    }
+
+    auto c = non_null_branch;
+    c.types.set(json_type::null);
+    return c;
+}
 
 /// Collect item constraints from a JSON Schema array.
 conversion_outcome<std::optional<std::vector<constraint>>> collect_items(
@@ -232,12 +323,14 @@ collect(collect_context& ctx, const conversion::json_schema::subschema& s) {
             c.properties[name] = std::move(prop_constraint.value());
         }
 
-        if (
-          s.additional_properties()
-          && s.additional_properties()->get().boolean_subschema() != false) {
-            return conversion_exception(
-              "Only 'false' subschema is supported "
-              "for additionalProperties keyword");
+        if (s.additional_properties()) {
+            if (s.additional_properties()->get().boolean_subschema() == false) {
+                c.additional_properties_allowed = false;
+            } else {
+                return conversion_exception(
+                  "Only 'false' subschema is supported "
+                  "for additionalProperties keyword");
+            }
         }
     }
 
@@ -248,6 +341,17 @@ collect(collect_context& ctx, const conversion::json_schema::subschema& s) {
             return items_result.error();
         }
         c.items = std::move(items_result.value());
+    }
+
+    if (!s.one_of().empty()) {
+        auto one_of_constraint = collect_one_of_t_xor_null(ctx, s.one_of());
+        if (one_of_constraint.has_error()) {
+            return one_of_constraint.error();
+        }
+        auto intersect_result = c.intersect(one_of_constraint.value());
+        if (intersect_result.has_error()) {
+            return intersect_result.error();
+        }
     }
 
     return c;

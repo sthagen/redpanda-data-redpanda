@@ -116,7 +116,7 @@ func getScopeNames() []string {
 	var scopeNames []string
 	for name := range dataplanev1.Scope_value {
 		if name != dataplanev1.Scope_SCOPE_UNSPECIFIED.String() {
-			s := strings.Replace(name, "SCOPE_", "", -1)
+			s := strings.ReplaceAll(name, "SCOPE_", "")
 			s = strings.ToLower(s)
 			scopeNames = append(scopeNames, s)
 		}
@@ -128,7 +128,7 @@ func mapNameToScope() map[string]dataplanev1.Scope {
 	nameByScope := make(map[string]dataplanev1.Scope)
 	for name, enum := range dataplanev1.Scope_value {
 		if name != dataplanev1.Scope_SCOPE_UNSPECIFIED.String() {
-			s := strings.Replace(name, "SCOPE_", "", -1)
+			s := strings.ReplaceAll(name, "SCOPE_", "")
 			s = strings.ToLower(s)
 			nameByScope[s] = dataplanev1.Scope(enum)
 		}
@@ -141,7 +141,7 @@ func mapScopeToName() map[dataplanev1.Scope]string {
 
 	for name, enum := range dataplanev1.Scope_value {
 		if name != dataplanev1.Scope_SCOPE_UNSPECIFIED.String() {
-			s := strings.Replace(name, "SCOPE_", "", -1)
+			s := strings.ReplaceAll(name, "SCOPE_", "")
 			s = strings.ToLower(s)
 			scopeByName[dataplanev1.Scope(enum)] = s
 		}

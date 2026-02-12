@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/docker/go-units"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/debugbundle"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/kafka"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
@@ -61,7 +61,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		outFile   string
 		uploadURL string
 		timeout   time.Duration
-		opts      common.DebugBundleSharedOptions
+		opts      debugbundle.DebugBundleSharedOptions
 	)
 	cmd := &cobra.Command{
 		Use:   "bundle",
@@ -144,7 +144,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			}
 			out.MaybeDie(err, "unable to create bundle: %v", err)
 			if uploadURL != "" {
-				err = common.UploadBundle(cmd.Context(), path, uploadURL)
+				err = debugbundle.UploadBundle(cmd.Context(), path, uploadURL)
 				out.MaybeDie(err, "unable to upload bundle: %v", err)
 				fmt.Println("Successfully uploaded the bundle")
 			}

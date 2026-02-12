@@ -30,7 +30,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/debugbundle"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
@@ -259,7 +259,7 @@ func adminAddressesFromK8S(ctx context.Context, namespace string) ([]string, err
 		return nil, fmt.Errorf("unable to list pods in the service %q: %v", svc.Name, err)
 	}
 
-	clusterDomain := getClusterDomain()
+	clusterDomain := getClusterDomain(ctx)
 	// Get the admin addresses from ContainerPort.
 	var adminAddresses []string
 	for _, p := range pods.Items {
@@ -281,10 +281,10 @@ func adminAddressesFromK8S(ctx context.Context, namespace string) ([]string, err
 
 // getClusterDomain returns Kubernetes cluster domain, default to
 // "cluster.local.".
-func getClusterDomain() string {
+func getClusterDomain(ctx context.Context) string {
 	const apiSvc = "kubernetes.default.svc"
 
-	cname, err := net.LookupCNAME(apiSvc)
+	cname, err := net.DefaultResolver.LookupCNAME(ctx, apiSvc)
 	if err != nil {
 		return "cluster.local."
 	}
@@ -417,7 +417,7 @@ func saveSingleAdminAPICalls(ctx context.Context, ps *stepParams, fs afero.Fs, p
 				continue
 			}
 
-			aName := common.SanitizeName(a)
+			aName := debugbundle.SanitizeName(a)
 			r := []func() error{
 				func() error {
 					return requestAndSave(ctx, ps, fmt.Sprintf("admin/node_config_%v.json", aName), cl.RawNodeConfig)
@@ -494,7 +494,7 @@ func saveMetricsAPICalls(ctx context.Context, ps *stepParams, fs afero.Fs, p *co
 				"public_metrics": metricStream(cl, "/public_metrics"),
 			}
 
-			aName := common.SanitizeName(a)
+			aName := debugbundle.SanitizeName(a)
 			for endpointName, endpoint := range endpoints {
 				endpointPoller := func() error {
 					err := requestAndSave(ctx, ps, fmt.Sprintf("metrics/%v/t0_%s.txt", aName, endpointName), endpoint)

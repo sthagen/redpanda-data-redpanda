@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/oauth/authtoken",
-        "//src/go/rpk/pkg/os",
+        "//src/go/rpk/pkg/osutil",
         "//src/go/rpk/pkg/publicapi",
         "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/iam/v1:iam",
         "@com_connectrpc_connect//:connect",

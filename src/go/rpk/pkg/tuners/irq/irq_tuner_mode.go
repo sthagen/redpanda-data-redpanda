@@ -53,15 +53,16 @@ const (
 )
 
 func ModeFromString(modeString string) Mode {
-	if modeString == "mq" {
+	switch modeString {
+	case "mq":
 		return Mq
-	} else if modeString == "sq" {
+	case "sq":
 		return Sq
-	} else if modeString == "sq-split" {
+	case "sq-split":
 		return SqSplit
-	} else if modeString == "dedicated" {
+	case "dedicated":
 		return Dedicated
+	default:
+		return Default
 	}
-
-	return Default
 }

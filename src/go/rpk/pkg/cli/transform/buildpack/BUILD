@@ -7,8 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/go/rpk/pkg/httpapi",
-        "//src/go/rpk/pkg/os",
-        "//src/go/rpk/pkg/utils",
+        "//src/go/rpk/pkg/osutil",
+        "//src/go/rpk/pkg/rpkutil",
         "@com_github_schollz_progressbar_v3//:progressbar",
         "@com_github_spf13_afero//:afero",
         "@org_golang_x_sync//errgroup",

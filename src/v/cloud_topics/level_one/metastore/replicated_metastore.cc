@@ -920,11 +920,8 @@ replicated_metastore::flush() {
         auto reply_fut = co_await ss::coroutine::as_future(
           fe_.flush_domain(std::move(req)));
         if (reply_fut.failed()) {
-            vlog(
-              cd_log.warn,
-              "Error flushing partition {}: {}",
-              pid,
-              reply_fut.get_exception());
+            auto ex = reply_fut.get_exception();
+            vlog(cd_log.warn, "Error flushing partition {}: {}", pid, ex);
             co_return std::unexpected(errc::transport_error);
         }
         auto reply = reply_fut.get();
@@ -1037,11 +1034,8 @@ replicated_metastore::restore(const cloud_storage::remote_label& source_label) {
         auto reply_fut = co_await ss::coroutine::as_future(
           fe_.restore_domain(std::move(req)));
         if (reply_fut.failed()) {
-            vlog(
-              cd_log.warn,
-              "Error restoring partition {}: {}",
-              pid,
-              reply_fut.get_exception());
+            auto ex = reply_fut.get_exception();
+            vlog(cd_log.warn, "Error restoring partition {}: {}", pid, ex);
             co_return std::unexpected(errc::transport_error);
         }
         auto reply = reply_fut.get();

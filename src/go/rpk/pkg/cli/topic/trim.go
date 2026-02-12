@@ -86,10 +86,10 @@ Trim records from a JSON file
 				}
 			} else {
 				if len(args) == 0 {
-					out.Die("Error: required arg 'topic' not set\n%v", cmd.UsageString())
+					out.Die("required arg 'topic' not set\n%v", cmd.UsageString())
 				}
 				if offset == "" {
-					out.Die("Error: required flag 'offset' not set\n%v", cmd.UsageString())
+					out.Die("required flag 'offset' not set\n%v", cmd.UsageString())
 				}
 				topic := args[0]
 				o, err = parseOffsetArgs(cmd.Context(), adm, topic, offset, partitions)

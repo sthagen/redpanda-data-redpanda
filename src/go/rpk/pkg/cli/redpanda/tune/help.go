@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +43,7 @@ func newHelpCommand() *cobra.Command {
 			}
 			tuner := args[0]
 			tunerList := strings.Join(
-				utils.GetKeysFromStringMap(tunersHelp),
+				rpkutil.GetKeysFromStringMap(tunersHelp),
 				", ",
 			)
 			if _, contains := tunersHelp[tuner]; !contains {

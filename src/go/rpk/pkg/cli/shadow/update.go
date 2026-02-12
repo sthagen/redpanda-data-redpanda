@@ -22,7 +22,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
@@ -106,14 +106,14 @@ Update a Shadow Link configuration:
 			}
 
 			// Second part: open editor and get updated configuration.
-			updatedCfg, err := rpkos.EditTmpYAMLFile(fs, originalCfg)
+			updatedCfg, err := rpkos.EditTmpYAMLFile(cmd.Context(), fs, originalCfg)
 			out.MaybeDie(err, "unable to edit Shadow Link configuration: %v", err)
 
 			err = validateParsedShadowLinkConfig(updatedCfg)
 			out.MaybeDie(err, "invalid Shadow Link configuration: %v", err)
 
 			if updatedCfg.Name != originalCfg.Name {
-				out.Die("Shadow Link name cannot be changed; if you need to rename, please delete and recreate the shadow link")
+				out.Die("shadow link name cannot be changed; if you need to rename, please delete and recreate the shadow link")
 			}
 
 			// Third part: calculate diff.

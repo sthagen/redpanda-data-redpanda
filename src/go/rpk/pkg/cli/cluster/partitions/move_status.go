@@ -45,14 +45,14 @@ func newPartitionMovementsStatusCommand(fs afero.Fs, p *config.Params) *cobra.Co
 
 			// If partition(s) is specified but no topic(s) is specified, exit.
 			if len(topics) <= 0 && len(partitions) > 0 {
-				out.Die("specify at least one topic when --partition is used, exiting.")
+				out.Die("specify at least one topic when --partition is used, exiting")
 			}
 
 			cl, err := adminapi.NewClient(cmd.Context(), fs, p)
 			out.MaybeDie(err, "unable to initialize admin client: %v", err)
 
 			response, err = cl.Reconfigurations(cmd.Context())
-			out.MaybeDie(err, "unable to list partition movements: %v\n", err)
+			out.MaybeDie(err, "unable to list partition movements: %v", err)
 
 			if len(response) == 0 {
 				out.Exit("There are no ongoing partition movements.")

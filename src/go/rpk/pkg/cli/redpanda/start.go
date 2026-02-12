@@ -23,8 +23,8 @@ import (
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cloud"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
-	vos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
+	vos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	rp "github.com/redpanda-data/redpanda/src/go/rpk/pkg/redpanda"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/factory"
@@ -857,11 +857,11 @@ func parseNamedAddress(
 	if addr == "" {
 		return nil, nil
 	}
-	scheme, hostport, err := net.ParseHostMaybeScheme(addr)
+	scheme, hostport, err := netutil.ParseHostMaybeScheme(addr)
 	if err != nil {
 		return nil, err
 	}
-	host, port := net.SplitHostPortDefault(hostport, defaultPort)
+	host, port := netutil.SplitHostPortDefault(hostport, defaultPort)
 
 	return &config.NamedSocketAddress{
 		Address: host,
@@ -896,11 +896,11 @@ func parseNamedAuthNAddress(
 	if err != nil {
 		return nil, err
 	}
-	scheme, hostport, err := net.ParseHostMaybeScheme(addr)
+	scheme, hostport, err := netutil.ParseHostMaybeScheme(addr)
 	if err != nil {
 		return nil, err
 	}
-	host, port := net.SplitHostPortDefault(hostport, defaultPort)
+	host, port := netutil.SplitHostPortDefault(hostport, defaultPort)
 
 	return &config.NamedAuthNSocketAddress{
 		Address: host,

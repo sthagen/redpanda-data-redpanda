@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"go.uber.org/zap"
 )
 
@@ -23,7 +23,7 @@ func UnameAndDistro(timeout time.Duration) (string, error) {
 		return "", err
 	}
 	cmd := "lsb_release"
-	p := os.NewProc()
+	p := osutil.NewProc()
 	ls, err := p.RunWithSystemLdPath(timeout, cmd, "-d", "-s")
 	if err != nil {
 		zap.L().Sugar().Debugf("%s failed", cmd)

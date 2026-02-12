@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/httpapi"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/afero"
 	"golang.org/x/sync/errgroup"
@@ -164,7 +164,7 @@ func (bp *Buildpack) IsUpToDate(fs afero.Fs) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	got, err := utils.ReadEnsureSingleLine(fs, path)
+	got, err := rpkutil.ReadEnsureSingleLine(fs, path)
 	return got == want, err
 }
 

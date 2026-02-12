@@ -28,9 +28,9 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	vnet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
+	vnet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -137,7 +137,7 @@ Start a three-broker cluster, selecting the Admin API port for each broker:
 			if nodes < 1 {
 				out.Die("--nodes should be 1 or greater")
 			}
-			c, err := common.NewDockerClient(cmd.Context())
+			c, err := containerutil.NewDockerClient(cmd.Context())
 			out.MaybeDie(err, "unable to create docker client: %v", err)
 			defer c.Close()
 
@@ -148,19 +148,19 @@ Start a three-broker cluster, selecting the Admin API port for each broker:
 			out.MaybeDie(err, "unable to parse container ports: %v", err)
 
 			configKvs := collectFlags(os.Args, "--set")
-			isRestarted, err := startCluster(c, nodes, checkBrokers, retries, image, consoleImage, pull, cPorts, configKvs, subnet, gateway)
+			isRestarted, err := startCluster(cmd.Context(), c, nodes, checkBrokers, retries, image, consoleImage, pull, cPorts, configKvs, subnet, gateway)
 			if err != nil {
 				if errors.As(err, &portInUseError{}) {
 					out.Die("unable to start cluster: %v\nYou may select different ports to start the cluster using our listener flags. Check '--help' text for more information", err)
 				}
-				out.Die("unable to start cluster: %v", common.WrapIfConnErr(err))
+				out.Die("unable to start cluster: %v", containerutil.WrapIfConnErr(err))
 			}
 
 			if noProfile || isRestarted {
 				return
 			}
 
-			dockerNodes, err := renderClusterInfo(c)
+			dockerNodes, err := renderClusterInfo(cmd.Context(), c)
 			out.MaybeDie(err, "unable to render cluster info: %v; you may run 'rpk container status' to retrieve the cluster info", err)
 
 			cfg, err := p.Load(fs)
@@ -169,18 +169,18 @@ Start a three-broker cluster, selecting the Admin API port for each broker:
 			y, err := cfg.ActualRpkYamlOrEmpty()
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
-			err = common.CreateProfile(fs, c, y)
+			err = containerutil.CreateProfile(cmd.Context(), fs, c, y)
 			if err == nil {
-				fmt.Printf("\nCreated %q profile.\n", common.ContainerProfileName)
+				fmt.Printf("\nCreated %q profile.\n", containerutil.ContainerProfileName)
 				renderClusterInteract(dockerNodes, true)
 				return
 			}
-			if errors.Is(err, common.ErrContainerProfileExists) {
+			if errors.Is(err, containerutil.ErrContainerProfileExists) {
 				fmt.Printf(`Unable to create a profile for the rpk container: %v.
 
 You can retry profile creation by running:
     rpk profile delete %s; rpk profile create --from-rpk-container
-`, err, common.ContainerProfileName)
+`, err, containerutil.ContainerProfileName)
 				return
 			} else {
 				out.Die("unable to create a profile for the rpk container: %v", err)
@@ -190,8 +190,8 @@ You can retry profile creation by running:
 
 	command.Flags().UintVarP(&nodes, "nodes", "n", 1, "The number of brokers (nodes) to start")
 	command.Flags().UintVar(&retries, "retries", 10, "The amount of times to check for the cluster before considering it unstable and exiting")
-	command.Flags().StringVar(&image, "image", common.DefaultRedpandaImage(), "An arbitrary Redpanda container image to use")
-	command.Flags().StringVar(&consoleImage, "console-image", common.DefaultConsoleImage(), "An arbitrary Redpanda Console container image to use")
+	command.Flags().StringVar(&image, "image", containerutil.DefaultRedpandaImage(), "An arbitrary Redpanda container image to use")
+	command.Flags().StringVar(&consoleImage, "console-image", containerutil.DefaultConsoleImage(), "An arbitrary Redpanda Console container image to use")
 	command.Flags().BoolVar(&pull, "pull", false, "Force pull the container image used")
 	command.Flags().BoolVar(&noProfile, "no-profile", false, "If true, rpk will not create an rpk profile after creating a cluster")
 	command.Flags().String("set", "", "Redpanda configuration property to set upon start. Follows 'rpk redpanda config set' format")
@@ -229,9 +229,10 @@ func collectFlags(args []string, flag string) []string {
 }
 
 func startCluster(
-	c common.Client,
+	ctx context.Context,
+	c containerutil.Client,
 	n uint,
-	check func([]node) func() error,
+	check func(context.Context, []node) func() error,
 	retries uint,
 	image, consoleImage string,
 	pull bool,
@@ -240,14 +241,14 @@ func startCluster(
 	subnet, gateway string,
 ) (isRestarted bool, rerr error) {
 	// Check if cluster exists and start it again.
-	restarted, err := restartCluster(c, check, retries)
+	restarted, err := restartCluster(ctx, c, check, retries)
 	if err != nil {
 		return false, err
 	}
 	// If a cluster was restarted, there's nothing else to do.
 	if len(restarted) != 0 {
 		fmt.Print("Found an existing cluster:\n\n")
-		renderClusterInfo(c)
+		renderClusterInfo(ctx, c)
 		if len(restarted) != int(n) {
 			fmt.Print("\nTo change the number of nodes, first purge the existing cluster with\n'rpk container purge'.\n\n")
 		}
@@ -256,33 +257,33 @@ func startCluster(
 
 	if pull {
 		fmt.Println("Force pulling images...")
-		err = common.PullImage(c, image)
+		err = containerutil.PullImage(ctx, c, image)
 		if err != nil {
 			return false, fmt.Errorf("unable to pull Redpanda image: %v", err)
 		}
-		err = common.PullImage(c, consoleImage)
+		err = containerutil.PullImage(ctx, c, consoleImage)
 		if err != nil {
 			return false, fmt.Errorf("unable to pull Redpanda Console image: %v", err)
 		}
 	} else {
 		fmt.Println("Checking for a local image...")
-		err := checkPresentAndPull(c, image)
+		err := checkPresentAndPull(ctx, c, image)
 		if err != nil {
 			return false, fmt.Errorf("unable to check Redpanda image: %v", err)
 		}
-		err = checkPresentAndPull(c, consoleImage)
+		err = checkPresentAndPull(ctx, c, consoleImage)
 		if err != nil {
 			return false, fmt.Errorf("unable to check Redpanda Console image: %v", err)
 		}
 	}
 
 	// Create the docker network if it doesn't exist already
-	netID, err := common.CreateNetwork(c, subnet, gateway)
+	netID, err := containerutil.CreateNetwork(ctx, c, subnet, gateway)
 	if err != nil {
 		return false, err
 	}
 
-	err = verifyPortsInUse(clusterPorts)
+	err = verifyPortsInUse(ctx, clusterPorts)
 	if err != nil {
 		return false, err
 	}
@@ -297,7 +298,8 @@ func startCluster(
 		seedAdminPort     = clusterPorts.adminPorts[0]
 	)
 
-	seedState, err := common.CreateNode(
+	seedState, err := containerutil.CreateNode(
+		ctx,
 		c,
 		seedID,
 		seedKafkaPort,
@@ -314,7 +316,7 @@ func startCluster(
 	}
 
 	fmt.Println("Starting cluster...")
-	err = startNode(c, seedState.ContainerID)
+	err = startNode(ctx, c, seedState.ContainerID)
 	if err != nil {
 		return false, err
 	}
@@ -331,7 +333,7 @@ func startCluster(
 
 	mu := sync.Mutex{}
 
-	grp, _ := errgroup.WithContext(context.Background())
+	grp, grpCtx := errgroup.WithContext(ctx)
 
 	for nodeID := uint(1); nodeID < n; nodeID++ {
 		id := nodeID
@@ -351,7 +353,8 @@ func startCluster(
 					strconv.Itoa(config.DevDefault().Redpanda.RPCServer.Port),
 				),
 			}
-			state, err := common.CreateNode(
+			state, err := containerutil.CreateNode(
+				grpCtx,
 				c,
 				id,
 				kafkaPort,
@@ -366,7 +369,7 @@ func startCluster(
 			if err != nil {
 				return err
 			}
-			err = startNode(c, state.ContainerID)
+			err = startNode(grpCtx, c, state.ContainerID)
 			if err != nil {
 				return err
 			}
@@ -388,11 +391,11 @@ func startCluster(
 		return false, fmt.Errorf("error restarting the cluster: %v", err)
 	}
 	fmt.Println("Waiting for the cluster to be ready...")
-	err = waitForCluster(check(nodes), retries)
+	err = waitForCluster(check(ctx, nodes), retries)
 	if err != nil {
-		var failedNodeState *common.NodeState
+		var failedNodeState *containerutil.NodeState
 		for _, n := range nodes {
-			state, sErr := common.GetState(c, n.id, false)
+			state, sErr := containerutil.GetState(ctx, c, n.id, false)
 			if sErr != nil {
 				return false, fmt.Errorf("%v\nunable to get Docker container (%v) logs: %v", n.id, err, sErr)
 			}
@@ -407,7 +410,7 @@ func startCluster(
 			return false, fmt.Errorf("unable to start the cluster on time: %v; you may run 'rpk container purge' and start again increasing the number of retries with the '--retries' flag", err)
 		}
 
-		errStr, cErr := getContainerErr(failedNodeState, c)
+		errStr, cErr := getContainerErr(ctx, failedNodeState, c)
 		if cErr != nil {
 			return false, fmt.Errorf("%v\nunable to get Docker container logs: %v", err, cErr)
 		}
@@ -419,22 +422,22 @@ func startCluster(
 
 	fmt.Println("Starting Redpanda Console...")
 	consoleID := uint(len(nodes))
-	consoleState, err := common.CreateConsoleNode(c, consoleID, netID, consoleImage, clusterPorts.consolePort, kafkaAddr, srAddr, adminAddr)
+	consoleState, err := containerutil.CreateConsoleNode(ctx, c, consoleID, netID, consoleImage, clusterPorts.consolePort, kafkaAddr, srAddr, adminAddr)
 	if err != nil {
 		return false, err
 	}
-	if err := startNode(c, consoleState.ContainerID); err != nil {
+	if err := startNode(ctx, c, consoleState.ContainerID); err != nil {
 		return false, err
 	}
 	consoleNode := node{consoleID, nodeAddr(consoleState.HostConsolePort)}
 	fmt.Println("Waiting for Redpanda Console to be ready...")
-	err = waitForCluster(checkConsole(consoleNode), retries)
+	err = waitForCluster(checkConsole(ctx, consoleNode), retries)
 	if err != nil {
-		state, sErr := common.GetState(c, consoleNode.id, true)
+		state, sErr := containerutil.GetState(ctx, c, consoleNode.id, true)
 		if sErr != nil {
 			return false, fmt.Errorf("%v\nunable to get Docker container logs: %v", err, sErr)
 		}
-		errStr, cErr := getContainerErr(state, c)
+		errStr, cErr := getContainerErr(ctx, state, c)
 		if cErr != nil {
 			return false, fmt.Errorf("%v\nunable to get Docker container logs: %v", err, cErr)
 		}
@@ -447,10 +450,10 @@ func startCluster(
 }
 
 func restartCluster(
-	c common.Client, check func([]node) func() error, retries uint,
+	ctx context.Context, c containerutil.Client, check func(context.Context, []node) func() error, retries uint,
 ) ([]node, error) {
 	// Check if a cluster is running
-	states, err := common.GetExistingNodes(c)
+	states, err := containerutil.GetExistingNodes(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -462,27 +465,27 @@ func restartCluster(
 	if len(states) == 1 && states[0].Console {
 		return nil, fmt.Errorf("stranded Redpanda Console container detected; please run 'rpk container purge' and try again")
 	}
-	grp, _ := errgroup.WithContext(context.Background())
+	grp, grpCtx := errgroup.WithContext(ctx)
 	mu := sync.Mutex{}
 	var (
 		rpNodes      []node
 		consoleNode  node
-		consoleState *common.NodeState
+		consoleState *containerutil.NodeState
 	)
 
 	for _, s := range states {
 		state := s
 		grp.Go(func() error {
 			if !state.Running {
-				ctx, _ := common.DefaultCtx()
 				// Console node needs to start after the Redpanda nodes start.
 				if !state.Console {
-					err = c.ContainerStart(ctx, state.ContainerID, container.StartOptions{})
+					err := c.ContainerStart(grpCtx, state.ContainerID, container.StartOptions{})
 					if err != nil {
 						return err
 					}
 				}
-				state, err = common.GetState(c, state.ID, state.Console)
+				var err error
+				state, err = containerutil.GetState(grpCtx, c, state.ID, state.Console)
 				if err != nil {
 					return err
 				}
@@ -506,9 +509,9 @@ func restartCluster(
 		return nil, fmt.Errorf("error restarting the cluster: %v", err)
 	}
 	fmt.Printf("Waiting for the cluster to be ready...\n\n")
-	err = waitForCluster(check(rpNodes), retries)
+	err = waitForCluster(check(ctx, rpNodes), retries)
 	if err != nil {
-		errStr, cErr := getContainerErr(states[0], c)
+		errStr, cErr := getContainerErr(ctx, states[0], c)
 		if cErr != nil {
 			return nil, fmt.Errorf("%v\nunable to get Docker container logs: %v", err, cErr)
 		}
@@ -516,21 +519,20 @@ func restartCluster(
 	}
 
 	if consoleState != nil && !consoleState.Running {
-		ctx, _ := common.DefaultCtx()
 		err = c.ContainerStart(ctx, consoleState.ContainerID, container.StartOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("unable to start the Redpanda Console container: %v", err)
 		}
-		state, err := common.GetState(c, consoleState.ID, consoleState.Console)
+		state, err := containerutil.GetState(ctx, c, consoleState.ID, consoleState.Console)
 		if err != nil {
 			return nil, fmt.Errorf("unable to inspect Redpanda Console container after start: %v", err)
 		}
 		consoleNode = node{state.ID, nodeAddr(state.HostConsolePort)}
 	}
-	err = waitForCluster(checkConsole(consoleNode), retries)
+	err = waitForCluster(checkConsole(ctx, consoleNode), retries)
 	if err != nil {
 		if consoleState != nil {
-			errStr, cErr := getContainerErr(consoleState, c)
+			errStr, cErr := getContainerErr(ctx, consoleState, c)
 			if cErr != nil {
 				return nil, fmt.Errorf("%v\nunable to get Docker container logs: %v", err, cErr)
 			}
@@ -541,13 +543,12 @@ func restartCluster(
 	return rpNodes, nil
 }
 
-func startNode(c common.Client, containerID string) error {
-	ctx, _ := common.DefaultCtx()
+func startNode(ctx context.Context, c containerutil.Client, containerID string) error {
 	err := c.ContainerStart(ctx, containerID, container.StartOptions{})
 	return err
 }
 
-func checkBrokers(nodes []node) func() error {
+func checkBrokers(ctx context.Context, nodes []node) func() error {
 	return func() error {
 		addrs := make([]string, 0, len(nodes))
 		for _, n := range nodes {
@@ -557,7 +558,7 @@ func checkBrokers(nodes []node) func() error {
 		if err != nil {
 			return err
 		}
-		brokers, err := kadm.NewClient(cl).ListBrokers(context.Background())
+		brokers, err := kadm.NewClient(cl).ListBrokers(ctx)
 		if err != nil {
 			return err
 		}
@@ -572,7 +573,7 @@ func checkBrokers(nodes []node) func() error {
 	}
 }
 
-func checkConsole(node node) func() error {
+func checkConsole(ctx context.Context, node node) func() error {
 	return func() error {
 		cl := httpapi.NewClient(
 			httpapi.Host("http://"+node.addr),
@@ -580,7 +581,7 @@ func checkConsole(node node) func() error {
 		)
 		// We use the /admin/startup  to check if the console is healthy, if we
 		// receive a 200 then we are good. httpapi errs on != 2xx.
-		err := cl.Get(context.Background(), "/admin/startup", nil, nil)
+		err := cl.Get(ctx, "/admin/startup", nil, nil)
 		if err != nil {
 			return fmt.Errorf("console is not healthy; error while checking console status: %v", err)
 		}
@@ -598,8 +599,8 @@ func waitForCluster(check func() error, retries uint) error {
 	)
 }
 
-func renderClusterInfo(c common.Client) ([]*common.NodeState, error) {
-	nodes, err := common.GetExistingNodes(c)
+func renderClusterInfo(ctx context.Context, c containerutil.Client) ([]*containerutil.NodeState, error) {
+	nodes, err := containerutil.GetExistingNodes(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -609,7 +610,7 @@ func renderClusterInfo(c common.Client) ([]*common.NodeState, error) {
 	}
 
 	tw := out.NewTable("Node-ID", "Status", "Kafka-Address", "Admin-Address", "Proxy-Address", "Schema-Registry-Address")
-	var consoleNode *common.NodeState
+	var consoleNode *containerutil.NodeState
 	defer func() {
 		tw.Flush()
 		if consoleNode != nil && consoleNode.Running {
@@ -652,7 +653,7 @@ func renderClusterInfo(c common.Client) ([]*common.NodeState, error) {
 	return nodes, nil
 }
 
-func renderClusterInteract(nodes []*common.NodeState, withProfile bool) {
+func renderClusterInteract(nodes []*containerutil.NodeState, withProfile bool) {
 	var (
 		brokers    []string
 		adminAddrs []string
@@ -705,9 +706,7 @@ func nodeAddr(port uint) string {
 
 // getContainerErr attempts to fetch the latest stderr output from the first
 // Redpanda node. It may reveal reasons for failing to start.
-func getContainerErr(state *common.NodeState, c common.Client) (string, error) {
-	ctx, _ := common.DefaultCtx()
-
+func getContainerErr(ctx context.Context, state *containerutil.NodeState, c containerutil.Client) (string, error) {
 	json, err := c.ContainerInspect(ctx, state.ContainerID)
 	if err != nil {
 		return "", fmt.Errorf("could not inspect container: %v", err)
@@ -814,10 +813,11 @@ func parseContainerPortFlags(nNodes int, adminPorts, kafkaPorts, proxyPorts, rpc
 	}, nil
 }
 
-func verifyPortsInUse(cPorts clusterPorts) error {
+func verifyPortsInUse(ctx context.Context, cPorts clusterPorts) error {
 	check := func(ports []uint, listener string) error {
 		for _, p := range ports {
-			server, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+			var lc net.ListenConfig
+			server, err := lc.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", p))
 			// if it fails then the port might be in use
 			if err != nil {
 				return portInUseError{p, listener}
@@ -853,15 +853,15 @@ func (p portInUseError) Error() string {
 	return fmt.Sprintf("%v port %v already in use", p.listener, p.port)
 }
 
-func checkPresentAndPull(c common.Client, image string) error {
-	rpPresent, checkErr := common.CheckIfImgPresent(c, image)
+func checkPresentAndPull(ctx context.Context, c containerutil.Client, image string) error {
+	rpPresent, checkErr := containerutil.CheckIfImgPresent(ctx, c, image)
 	if checkErr != nil {
 		fmt.Printf("Error trying to list local images: %v\n", checkErr)
 	}
 	if !rpPresent {
 		// If the image isn't present locally, try to pull it.
 		fmt.Printf("Version %q not found locally\n", image)
-		err := common.PullImage(c, image)
+		err := containerutil.PullImage(ctx, c, image)
 		if err != nil {
 			return fmt.Errorf("could not pull image: %v", err)
 		}

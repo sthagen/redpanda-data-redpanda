@@ -99,12 +99,12 @@ Seek group G to the beginning of a topic it was not previously consuming:
 					n++
 				}
 			}
-			switch {
-			case n == 0:
-				out.Die("Must specify one --to flag.")
-			case n == 1:
+			switch n {
+			case 0:
+				out.Die("must specify one --to flag")
+			case 1:
 			default:
-				out.Die("Cannot specify multiple --to flags.")
+				out.Die("cannot specify multiple --to flags")
 			}
 
 			tset := make(map[string]bool)
@@ -221,7 +221,7 @@ func seek(
 		tps := current.TopicsSet()
 		for topic := range topics {
 			if _, exists := tps[topic]; !exists && !allowNewTopics {
-				out.Die("Cannot commit new topic %q without --allow-new-topics.", topic)
+				out.Die("cannot commit new topic %q without --allow-new-topics", topic)
 			}
 			tps[topic] = map[int32]struct{}{} // ensure exists
 		}

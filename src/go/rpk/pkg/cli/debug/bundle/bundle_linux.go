@@ -37,13 +37,13 @@ import (
 	"github.com/beevik/ntp"
 	"github.com/docker/go-units"
 	"github.com/hashicorp/go-multierror"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/debugbundle"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	osutil "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	osutil "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system/syslog"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -64,7 +64,7 @@ func determineFilepath(fs afero.Fs, rp *config.RedpandaYaml, path string, isFlag
 	if path == "" {
 		timestamp := time.Now().Unix()
 		if rp.Redpanda.AdvertisedRPCAPI != nil {
-			path = fmt.Sprintf("%v-%d-bundle.zip", common.SanitizeName(rp.Redpanda.AdvertisedRPCAPI.Address), timestamp)
+			path = fmt.Sprintf("%v-%d-bundle.zip", debugbundle.SanitizeName(rp.Redpanda.AdvertisedRPCAPI.Address), timestamp)
 		} else {
 			path = fmt.Sprintf("%d-bundle.zip", timestamp)
 		}
@@ -952,7 +952,7 @@ func saveIP(ctx context.Context, ps *stepParams) step {
 func saveEthtool(ctx context.Context, ps *stepParams) step {
 	return func() error {
 		netDir := "/sys/class/net"
-		interfaces := utils.ListFilesInPath(ps.fs, netDir)
+		interfaces := rpkutil.ListFilesInPath(ps.fs, netDir)
 		for _, iface := range interfaces {
 			if exists, err := afero.Exists(ps.fs, filepath.Join(netDir, iface, "device")); err != nil || !exists {
 				// skip virtual interfaces

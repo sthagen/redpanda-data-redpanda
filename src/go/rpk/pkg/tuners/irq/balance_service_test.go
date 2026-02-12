@@ -16,15 +16,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
 
 type procMock struct {
-	os.Proc
+	osutil.Proc
 	run       func(command string, args ...string) ([]string, error)
 	isRunning func(processName string) bool
 }
@@ -63,7 +63,7 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 	}
 	tests := []struct {
 		name                  string
-		proc                  os.Proc
+		proc                  osutil.Proc
 		bannedIRQs            []int
 		testadataInitFilename string
 		configFilename        string
@@ -91,7 +91,7 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			assert: func(fs afero.Fs, configFilename string, backupContent []string) {
 				require.Equal(t, 2, len(backupContent))
 				// Check if IRQs were banned in the file
-				fileContent, err := utils.ReadFileLines(fs, configFilename)
+				fileContent, err := rpkutil.ReadFileLines(fs, configFilename)
 				require.NoError(t, err)
 				require.Equal(t, 3, len(fileContent))
 				require.Equal(t, "IRQBALANCE_ARGS=\" --banirq=5 --banirq=12 --banirq=15\"", fileContent[2])
@@ -116,7 +116,7 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			assert: func(fs afero.Fs, configFilename string, backupContent []string) {
 				require.Equal(t, 3, len(backupContent))
 				// Check if IRQs were banned in the file
-				fileContent, err := utils.ReadFileLines(fs, configFilename)
+				fileContent, err := rpkutil.ReadFileLines(fs, configFilename)
 				require.NoError(t, err)
 				require.Equal(t, 3, len(fileContent))
 				require.Equal(t, "IRQBALANCE_ARGS=\" --banirq=5 --banirq=12 --banirq=15\"", fileContent[2])
@@ -141,7 +141,7 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			assert: func(fs afero.Fs, configFilename string, backupContent []string) {
 				require.Equal(t, 3, len(backupContent))
 				// Check if IRQs were banned in the file
-				fileContent, err := utils.ReadFileLines(fs, configFilename)
+				fileContent, err := rpkutil.ReadFileLines(fs, configFilename)
 				require.NoError(t, err)
 				require.Equal(t, 3, len(fileContent))
 				require.Equal(t, "IRQBALANCE_ARGS=\" --banirq=5 --banirq=12 --banirq=15\"", fileContent[2])
@@ -163,12 +163,12 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			configFilename:        "/etc/conf.d/irqbalance",
 			backupFilename:        "/etc/conf.d/irqbalance.vectorized.911727b5a516f8e315b36f97e54facda.bk",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs, []string{"systemd"}, "/proc/1/comm")
+				_ = rpkutil.WriteFileLines(fs, []string{"systemd"}, "/proc/1/comm")
 			},
 			assert: func(fs afero.Fs, configFilename string, backupContent []string) {
 				require.Equal(t, 2, len(backupContent))
 				// Check if IRQs were banned in the file
-				fileContent, err := utils.ReadFileLines(fs, configFilename)
+				fileContent, err := rpkutil.ReadFileLines(fs, configFilename)
 				require.NoError(t, err)
 				require.Equal(t, 3, len(fileContent))
 				require.Equal(t, "IRQBALANCE_OPTS=\" --banirq=5 --banirq=12 --banirq=15\"", fileContent[2])
@@ -190,12 +190,12 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			configFilename:        "/etc/default/irqbalance",
 			backupFilename:        "/etc/default/irqbalance.vectorized.911727b5a516f8e315b36f97e54facda.bk",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs, []string{""}, "/lib/systemd/system/irqbalance.service")
+				_ = rpkutil.WriteFileLines(fs, []string{""}, "/lib/systemd/system/irqbalance.service")
 			},
 			assert: func(fs afero.Fs, configFilename string, backupContent []string) {
 				require.Equal(t, 2, len(backupContent))
 				// Check if IRQs were banned in the file
-				fileContent, err := utils.ReadFileLines(fs, configFilename)
+				fileContent, err := rpkutil.ReadFileLines(fs, configFilename)
 				require.NoError(t, err)
 				require.Equal(t, 3, len(fileContent))
 				require.Equal(t, "IRQBALANCE_ARGS=\" --banirq=5 --banirq=12 --banirq=15\"", fileContent[2])
@@ -217,12 +217,12 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			configFilename:        "/etc/conf.d/irqbalance",
 			backupFilename:        "/etc/conf.d/irqbalance.vectorized.911727b5a516f8e315b36f97e54facda.bk",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs, []string{"init"}, "/proc/1/comm")
+				_ = rpkutil.WriteFileLines(fs, []string{"init"}, "/proc/1/comm")
 			},
 			assert: func(fs afero.Fs, configFilename string, backupContent []string) {
 				require.Equal(t, 2, len(backupContent))
 				// Check if IRQs were banned in the file
-				fileContent, err := utils.ReadFileLines(fs, configFilename)
+				fileContent, err := rpkutil.ReadFileLines(fs, configFilename)
 				require.NoError(t, err)
 				require.Equal(t, 3, len(fileContent))
 				require.Equal(t, "IRQBALANCE_OPTS=\" --banirq=5 --banirq=12 --banirq=15\"", fileContent[2])
@@ -234,9 +234,9 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 		t.Run(fmt.Sprintf("test %02d %s", i, tt.name), func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			osfs := afero.NewOsFs()
-			testdataLines, err := utils.ReadFileLines(osfs, tt.testadataInitFilename)
+			testdataLines, err := rpkutil.ReadFileLines(osfs, tt.testadataInitFilename)
 			require.NoError(t, err)
-			err = utils.WriteFileLines(fs, testdataLines, tt.configFilename)
+			err = rpkutil.WriteFileLines(fs, testdataLines, tt.configFilename)
 			require.NoError(t, err)
 			tt.before(fs)
 			balanceService := NewBalanceService(
@@ -248,7 +248,7 @@ func Test_BalanceService_BanIRQsAndRestart(t *testing.T) {
 			err = balanceService.BanIRQsAndRestart(tt.bannedIRQs)
 			require.NoError(t, err)
 			// Check if backup is created
-			backupFileContent, err := utils.ReadFileLines(fs, tt.backupFilename)
+			backupFileContent, err := rpkutil.ReadFileLines(fs, tt.backupFilename)
 			require.NoError(t, err)
 			tt.assert(fs, tt.configFilename, backupFileContent)
 		})
@@ -264,7 +264,7 @@ func Test_balanceService_GetBannedIRQs(t *testing.T) {
 		{
 			name: "Shall return all banned irq",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{
 						"ONE_SHOT=true",
 						"#IRQBALANCE_BANNED_CPUS=",
@@ -278,7 +278,7 @@ func Test_balanceService_GetBannedIRQs(t *testing.T) {
 		{
 			name: "Shall return empty list as there are none banned IRQs",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{
 						"ONE_SHOT=true",
 						"#IRQBALANCE_BANNED_CPUS=",
@@ -290,7 +290,7 @@ func Test_balanceService_GetBannedIRQs(t *testing.T) {
 		{
 			name: "Shall return empty list as there are no custom options line",
 			before: func(fs afero.Fs) {
-				_ = utils.WriteFileLines(fs,
+				_ = rpkutil.WriteFileLines(fs,
 					[]string{
 						"ONE_SHOT=true",
 						"#IRQBALANCE_BANNED_CPUS=",

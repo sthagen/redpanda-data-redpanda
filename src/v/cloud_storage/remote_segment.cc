@@ -1749,12 +1749,13 @@ ss::future<bool> hydration_loop_state::materialize() {
     for (size_t i = 0; i < rs.size(); ++i) {
         auto& r = rs[i];
         if (r.failed()) {
+            auto ex = r.get_exception();
             vlog(
               _ctxlog.warn,
               "Failed to materialize {} {}: {}",
               _states[i].path_kind,
               _states[i].path,
-              r.get_exception());
+              ex);
             accum &= false;
         } else {
             accum &= r.get();

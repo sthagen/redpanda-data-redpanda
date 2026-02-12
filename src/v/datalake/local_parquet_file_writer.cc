@@ -50,11 +50,12 @@ local_parquet_file_writer::initialize(const iceberg::struct_type& schema) {
       ss::make_file_output_stream(std::move(output_file)));
 
     if (fut.failed()) {
+        auto ex = fut.get_exception();
         vlog(
           datalake_log.error,
           "Error making output stream for file {} - {}",
           _output_file_path,
-          fut.get_exception());
+          ex);
         co_return writer_error::file_io_error;
     }
 

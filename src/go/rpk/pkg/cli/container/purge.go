@@ -17,7 +17,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/profile"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
@@ -32,12 +32,12 @@ func newPurgeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Short: "Stop and remove an existing local container cluster's data",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
-			c, err := common.NewDockerClient(cmd.Context())
+			c, err := containerutil.NewDockerClient(cmd.Context())
 			out.MaybeDie(err, "unable to create docker client: %v", err)
 			defer c.Close()
 
-			purged, err := purgeCluster(c)
-			out.MaybeDieErr(common.WrapIfConnErr(err))
+			purged, err := purgeCluster(cmd.Context(), c)
+			out.MaybeDieErr(containerutil.WrapIfConnErr(err))
 
 			if !purged {
 				return
@@ -46,16 +46,16 @@ func newPurgeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
 			y, ok := cfg.ActualRpkYaml()
-			if !ok || y.Profile(common.ContainerProfileName) == nil {
+			if !ok || y.Profile(containerutil.ContainerProfileName) == nil {
 				// rpk.yaml file nor profile exist, we exit.
 				return
 			}
-			cleared, err := profile.DeleteProfile(fs, y, common.ContainerProfileName)
+			cleared, err := profile.DeleteProfile(fs, y, containerutil.ContainerProfileName)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "unable to delete %q profile: %v; you may delete the profile manually running 'rpk profile delete %v'", common.ContainerProfileName, err, common.ContainerProfileName)
+				fmt.Fprintf(os.Stderr, "unable to delete %q profile: %v; you may delete the profile manually running 'rpk profile delete %v'", containerutil.ContainerProfileName, err, containerutil.ContainerProfileName)
 				return
 			}
-			fmt.Printf("Deleted profile %q.\n", common.ContainerProfileName)
+			fmt.Printf("Deleted profile %q.\n", containerutil.ContainerProfileName)
 			if cleared {
 				fmt.Println("This was the selected profile; rpk will use defaults until a new profile is selected or a new container is created.")
 			}
@@ -65,8 +65,8 @@ func newPurgeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	return command
 }
 
-func purgeCluster(c common.Client) (purged bool, rerr error) {
-	nodes, err := common.GetExistingNodes(c)
+func purgeCluster(ctx context.Context, c containerutil.Client) (purged bool, rerr error) {
+	nodes, err := containerutil.GetExistingNodes(ctx, c)
 	if err != nil {
 		return false, err
 	}
@@ -74,11 +74,11 @@ func purgeCluster(c common.Client) (purged bool, rerr error) {
 		fmt.Print("No nodes to remove.\nYou may start a new local cluster with 'rpk container start'\n")
 		return false, nil
 	}
-	err = stopCluster(c)
+	err = stopCluster(ctx, c)
 	if err != nil {
 		return false, err
 	}
-	grp, _ := errgroup.WithContext(context.Background())
+	grp, grpCtx := errgroup.WithContext(ctx)
 	for _, node := range nodes {
 		node := node
 		id := node.ID
@@ -89,13 +89,12 @@ func purgeCluster(c common.Client) (purged bool, rerr error) {
 			fmt.Printf(msg+"\n", args...)
 		}
 		grp.Go(func() error {
-			ctx, _ := common.DefaultCtx()
-			name := common.RedpandaName(id)
+			name := containerutil.RedpandaName(id)
 			if node.Console {
-				name = common.ConsoleContainerName
+				name = containerutil.ConsoleContainerName
 			}
 			err := c.ContainerRemove(
-				ctx,
+				grpCtx,
 				name,
 				container.RemoveOptions{
 					RemoveVolumes: true,
@@ -117,7 +116,7 @@ func purgeCluster(c common.Client) (purged bool, rerr error) {
 	if err != nil {
 		return false, err
 	}
-	err = common.RemoveNetwork(c)
+	err = containerutil.RemoveNetwork(ctx, c)
 	if err != nil {
 		return false, err
 	}

@@ -46,7 +46,7 @@ func newDisableCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			out.MaybeDie(err, "unable to initialize admin client: %v", err)
 
 			b, err := client.Broker(cmd.Context(), nodeID)
-			out.MaybeDie(err, "error retrieving broker status. The node %d is likely dead?: %v\n", nodeID, err)
+			out.MaybeDie(err, "error retrieving broker status; the node %d is likely dead: %v", nodeID, err)
 
 			if b.Maintenance == nil {
 				out.Die("maintenance mode not supported or upgrade in progress?")
@@ -57,7 +57,7 @@ func newDisableCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				if he.Response.StatusCode == 404 {
 					body, bodyErr := he.DecodeGenericErrorBody()
 					if bodyErr == nil {
-						out.Die("Not found: %s", body.Message)
+						out.Die("not found: %s", body.Message)
 					}
 				}
 			}

@@ -71,11 +71,12 @@ cloud_data_io::upload_data_file(
       ss::open_file_dma(local_file.path().string(), ss::open_flags::ro));
 
     if (file_fut.failed()) {
+        auto ex = file_fut.get_exception();
         vlog(
           datalake_log.error,
           "Failed to open file for upload {}: {}",
           local_file.path(),
-          file_fut.get_exception());
+          ex);
         co_return errc::file_io_error;
     }
     ss::file file = std::move(file_fut.get());
@@ -101,11 +102,12 @@ cloud_data_io::upload_data_file(
         "datalake data file",
         std::nullopt));
     if (upload_result_fut.failed()) {
+        auto ex = upload_result_fut.get_exception();
         vlog(
           datalake_log.warn,
           "Uploading file {} failed with an exception - {}",
           remote_path,
-          upload_result_fut.get_exception());
+          ex);
         co_return errc::cloud_op_error;
     }
     auto upload_result = upload_result_fut.get();
@@ -137,10 +139,11 @@ cloud_data_io::delete_data_files(
     auto r_fut = co_await ss::coroutine::as_future(_cloud_io->delete_objects(
       _bucket, std::move(keys), rcn_parent, [](size_t) {}));
     if (r_fut.failed()) {
+        auto ex = r_fut.get_exception();
         vlog(
           datalake_log.warn,
           "Exception thrown while removing remote data files - {}",
-          r_fut.get_exception());
+          ex);
         co_return errc::cloud_op_error;
     }
 

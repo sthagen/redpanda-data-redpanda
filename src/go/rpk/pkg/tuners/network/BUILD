@@ -12,18 +12,18 @@ go_library(
     deps = select({
         "@rules_go//go/platform:android": [
             "//src/go/rpk/pkg/config",
+            "//src/go/rpk/pkg/rpkutil",
             "//src/go/rpk/pkg/tuners/ethtool",
             "//src/go/rpk/pkg/tuners/irq",
-            "//src/go/rpk/pkg/utils",
             "@com_github_safchain_ethtool//:ethtool",
             "@com_github_spf13_afero//:afero",
             "@org_uber_go_zap//:zap",
         ],
         "@rules_go//go/platform:linux": [
             "//src/go/rpk/pkg/config",
+            "//src/go/rpk/pkg/rpkutil",
             "//src/go/rpk/pkg/tuners/ethtool",
             "//src/go/rpk/pkg/tuners/irq",
-            "//src/go/rpk/pkg/utils",
             "@com_github_safchain_ethtool//:ethtool",
             "@com_github_spf13_afero//:afero",
             "@org_uber_go_zap//:zap",

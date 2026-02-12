@@ -96,6 +96,13 @@ output_format parse_output_format(const ss::http::request& req) {
       .value_or(output_format::none);
 }
 
+reference_format parse_reference_format(const ss::http::request& req) {
+    return parse::query_param<std::optional<ss::sstring>>(
+             req, "referenceFormat")
+      .and_then(&from_string_view<reference_format>)
+      .value_or(reference_format::none);
+}
+
 template<ppj::impl::RjsonParseHandler Handler>
 typename ss::future<typename Handler::rjson_parse_result>
 rjson_parse(ss::http::request& req, Handler handler) {
@@ -1046,6 +1053,7 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version(
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
     const auto format = parse_output_format(*rq.req);
+    const auto reference_format = parse_reference_format(*rq.req);
 
     co_await rq.service().writer().read_sync();
 
@@ -1061,12 +1069,14 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version(
       std::move(def), format);
 
     auto resp = ppj::rjson_serialize_iobuf(
-      get_subject_versions_version_response{.stored_schema{
-        .schema = {std::move(subject), std::move(formatted_schema)},
-        .version = get_res.version,
-        .id = get_res.id,
-        .deleted = get_res.deleted,
-      }});
+      get_subject_versions_version_response{
+        .stored_schema{
+          .schema = {std::move(subject), std::move(formatted_schema)},
+          .version = get_res.version,
+          .id = get_res.id,
+          .deleted = get_res.deleted,
+        },
+        .format = reference_format});
     log_response(*rq.req, resp);
     rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;

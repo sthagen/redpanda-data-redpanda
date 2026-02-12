@@ -20,7 +20,7 @@ import (
 
 	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"github.com/fatih/color"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -482,7 +482,7 @@ func (c *RpkCloudCluster) CheckClusterURL() (string, error) {
 
 // MarshalText implements encoding.TextMarshaler.
 func (d Duration) MarshalText() ([]byte, error) {
-	return []byte(d.Duration.String()), nil
+	return []byte(d.String()), nil
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.

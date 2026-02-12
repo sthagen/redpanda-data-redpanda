@@ -44,7 +44,7 @@ using the '--dry' flag.
 		Run: func(cmd *cobra.Command, _ []string) {
 			f := p.Formatter
 			if f.Kind != "text" && f.Kind != "help" && !dry {
-				out.Die("Format type %q is only valid for dry runs (--dry)", f.Kind)
+				out.Die("format type %q is only valid for dry runs (--dry)", f.Kind)
 			}
 			if h, ok := f.Help([]rpadmin.MajorityLostPartitions{}); ok {
 				out.Exit(h)

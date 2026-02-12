@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func Test_deviceFromSystemPath(t *testing.T) {
 			before: func(fs afero.Fs, syspath string) {
 				ueventFileLines := []string{"DEVNAME=node-name"}
 				fs.MkdirAll(syspath, 0o755)
-				utils.WriteFileLines(fs, ueventFileLines,
+				rpkutil.WriteFileLines(fs, ueventFileLines,
 					filepath.Join(syspath, "uevent"))
 			},
 			want: &blockDevice{
@@ -48,11 +48,11 @@ func Test_deviceFromSystemPath(t *testing.T) {
 			before: func(fs afero.Fs, syspath string) {
 				ueventFileLines := []string{"DEVNAME=child"}
 				fs.MkdirAll(syspath, 0o755)
-				utils.WriteFileLines(fs, ueventFileLines,
+				rpkutil.WriteFileLines(fs, ueventFileLines,
 					filepath.Join(syspath, "uevent"))
 				parentPath := "/sys/devices/pci0000:00/0000:00:1d.0/nvme/nvme0"
 				parentUeventFileLines := []string{"DEVNAME=parent"}
-				utils.WriteFileLines(fs, parentUeventFileLines,
+				rpkutil.WriteFileLines(fs, parentUeventFileLines,
 					filepath.Join(parentPath, "uevent"))
 			},
 			want: &blockDevice{

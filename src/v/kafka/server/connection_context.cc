@@ -1058,10 +1058,8 @@ ss::future<> connection_context::client_protocol_state::process_request(
     auto dispatch = co_await ss::coroutine::as_future(
       std::move(res.dispatched));
     if (dispatch.failed()) {
-        vlog(
-          klog.info,
-          "Detected error dispatching request: {}",
-          dispatch.get_exception());
+        auto ex = dispatch.get_exception();
+        vlog(klog.info, "Detected error dispatching request: {}", ex);
         try {
             co_await std::move(res.response);
         } catch (...) {

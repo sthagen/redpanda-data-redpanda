@@ -19,7 +19,7 @@ import (
 	"github.com/twmb/tlscfg"
 	"gopkg.in/yaml.v3"
 
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 )
 
 // DefaultRedpandaYamlPath is where redpanda's configuration is located by

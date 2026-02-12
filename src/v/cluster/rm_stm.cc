@@ -1179,10 +1179,11 @@ ss::future<result<kafka_result>> rm_stm::do_idempotent_replicate(
     auto req_enqueued = co_await ss::coroutine::as_future(
       std::move(stages.request_enqueued));
     if (req_enqueued.failed()) {
+        auto ex = req_enqueued.get_exception();
         vlog(
           _ctx_log.warn,
           "replication failed, request enqueue returned error: {}",
-          req_enqueued.get_exception());
+          ex);
         req_ptr->set_error(cluster::errc::replication_error);
         co_return cluster::errc::replication_error;
     }
@@ -1191,8 +1192,8 @@ ss::future<result<kafka_result>> rm_stm::do_idempotent_replicate(
     auto replicated = co_await ss::coroutine::as_future(
       std::move(stages.replicate_finished));
     if (replicated.failed()) {
-        vlog(
-          _ctx_log.warn, "replication failed: {}", replicated.get_exception());
+        auto ex = replicated.get_exception();
+        vlog(_ctx_log.warn, "replication failed: {}", ex);
         req_ptr->set_error(cluster::errc::replication_error);
         co_return cluster::errc::replication_error;
     }

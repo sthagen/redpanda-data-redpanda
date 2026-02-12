@@ -30,7 +30,7 @@ VER := $(or $(VERSION),local-dev)
 IMG_TAG:= $(or $(VERSION),latest)
 BUILD_TIME=$(shell date -Iseconds)
 VER_PKG='github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/version'
-CONT_PKG='github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common'
+CONT_PKG='github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil'
 
 LDFLAGS=-X $(VER_PKG).version=$(VER) -X $(VER_PKG).rev=$(REV) -X $(CONT_PKG).tag=$(IMG_TAG) -X ${VER_PKG}.hostOs=${GOOS} -X ${VER_PKG}.hostArch=${GOARCH} -X ${VER_PKG}.buildTime=${BUILD_TIME}
 
@@ -64,7 +64,7 @@ run_gofumpt:
 	$(GOFUMPT_OS_CMD)
 
 install_golangci_lint:
-	@which $(GOLANGCILINTCMD) || (if [ $$? -eq 1 ]; then  echo "golangci-lint not found, installing..."; curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.64.8; fi)
+	@which $(GOLANGCILINTCMD) || (if [ $$? -eq 1 ]; then  echo "golangci-lint not found, installing..."; curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v2.8.0; fi)
 
 run_linter:
 	$(GOLANGCILINTCMD) run

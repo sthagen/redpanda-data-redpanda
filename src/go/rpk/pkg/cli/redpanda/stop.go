@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -51,7 +51,7 @@ running.`,
 
 func executeStop(fs afero.Fs, y *config.RedpandaYaml, timeout time.Duration) error {
 	pidFile := y.PIDFile()
-	isLocked, err := os.CheckLocked(pidFile)
+	isLocked, err := osutil.CheckLocked(pidFile)
 	if err != nil {
 		zap.L().Sugar().Debugf("error checking if the PID file is locked: %v", err)
 	}
@@ -64,7 +64,7 @@ func executeStop(fs afero.Fs, y *config.RedpandaYaml, timeout time.Duration) err
 		)
 		return nil
 	}
-	pidStr, err := utils.ReadEnsureSingleLine(fs, pidFile)
+	pidStr, err := rpkutil.ReadEnsureSingleLine(fs, pidFile)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func poll(pid int, stop <-chan bool, stoppedRunning chan<- bool) {
 		case <-stop:
 			return
 		default:
-			isRunning, err := os.IsRunningPID(afero.NewOsFs(), pid)
+			isRunning, err := osutil.IsRunningPID(afero.NewOsFs(), pid)
 			if err != nil {
 				zap.L().Sugar().Error(err)
 			} else if !isRunning {

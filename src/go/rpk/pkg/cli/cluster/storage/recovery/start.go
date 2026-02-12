@@ -56,15 +56,16 @@ to restore from. For more information, visit https://docs.redpanda.com/current/m
 			_, err = client.StartAutomatedRecovery(ctx, uuidOverride)
 			var he *rpadmin.HTTPResponseError
 			if errors.As(err, &he) {
-				if he.Response.StatusCode == 404 {
+				switch he.Response.StatusCode {
+				case 404:
 					body, bodyErr := he.DecodeGenericErrorBody()
 					if bodyErr == nil {
-						out.Die("Not found: %s", body.Message)
+						out.Die("not found: %s", body.Message)
 					}
-				} else if he.Response.StatusCode == 400 {
+				case 400:
 					body, bodyErr := he.DecodeGenericErrorBody()
 					if bodyErr == nil {
-						out.Die("Cannot start topic recovery: %s", body.Message)
+						out.Die("cannot start topic recovery: %s", body.Message)
 					}
 				}
 			}

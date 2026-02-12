@@ -13,7 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/go/rpk/pkg/adminapi",
-        "//src/go/rpk/pkg/cli/debug/common",
+        "//src/go/rpk/pkg/cli/debug/debugbundle",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/out",
         "@com_github_docker_go_units//:go-units",

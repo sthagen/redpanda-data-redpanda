@@ -80,11 +80,11 @@ cluster is unreachable), use the --skip-liveness-check flag.
 					// Old brokers (< v22.1) don't have maintenance mode, so we must
 					// check if b.Maintenance is not nil.
 					if b.Maintenance != nil && b.Maintenance.Draining {
-						out.Die(`Node cannot be decommissioned while it is in maintenance mode.
-Take the node out of maintenance mode first by running: 
+						out.Die(`node cannot be decommissioned while it is in maintenance mode
+take the node out of maintenance mode first by running:
     rpk cluster maintenance disable %v
-To bypass the node version check re-run this with --skip-liveness-check; see this command's
-help text for more details on why.`, broker)
+to bypass the node version check re-run this with --skip-liveness-check; see this command's
+help text for more details on why`, broker)
 					}
 				}
 			}

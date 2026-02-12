@@ -21,7 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/debugbundle"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
@@ -176,11 +176,7 @@ Waiting for collection to complete...
 						fmt.Printf("%sJob-ID %v status: %v/%v ready (%v errored)...", statusCR, jobID, len(ready), len(status), len(errorred))
 						if len(ready)+len(errorred) == len(status) {
 							if len(ready) == 0 {
-								out.Die(`
-The debug bundle collection process with Job-ID %v has completed, but no bundles were successfully created.
-To check the status, run:
-	rpk debug remote-bundle status
-`, jobID)
+								out.Die(`the debug bundle collection process with Job-ID %v has completed, but no bundles were successfully created; to check the status, run 'rpk debug remote-bundle status'`, jobID)
 							}
 							fmt.Printf(`
 The debug bundle collection process with Job-ID %v has completed. To download the bundles, run:
@@ -212,7 +208,7 @@ status, run:
 }
 
 type remoteBundleOptions struct {
-	common.DebugBundleSharedOptions
+	debugbundle.DebugBundleSharedOptions
 	controllerLogsSizeLimitBytes int32
 	logsSizeLimitBytes           int32
 	labelSelectorMap             map[string]string

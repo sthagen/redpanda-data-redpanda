@@ -890,38 +890,6 @@ TEST(JsonSchema, RefInfiniteRecursion) {
       result.error().what());
 }
 
-TEST(JsonSchema, BannedKeywords) {
-    for (const auto& keyword : {
-           "patternProperties",
-           "dependencies",
-           "allOf",
-           "anyOf",
-           "oneOf",
-           "if",
-           "then",
-           "else",
-           "default",
-         }) {
-        SCOPED_TRACE(fmt::format("Testing banned keyword: {}", keyword));
-
-        constexpr std::string_view schema_template = R"({{
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "$id": "https://example.com/root.json",
-          "{}": {{ "type": "string" }}
-        }})";
-
-        auto schema = fmt::format(fmt::runtime(schema_template), keyword);
-        auto result = to_iceberg_type(schema);
-        ASSERT_TRUE(result.has_error());
-        ASSERT_STREQ(
-          fmt::format(
-            "Failed to convert JSON schema: The {} keyword is not allowed",
-            keyword)
-            .c_str(),
-          result.error().what());
-    }
-}
-
 TEST(JsonSchema, RequiresDraft7Schema) {
     // Test without $schema keyword
     constexpr std::string_view schema_without_schema = R"({
@@ -1296,6 +1264,488 @@ TEST_CORO(IcebergValues, ValueObjectNesting) {
             )),
           // key20
           OptionalIcebergPrimitive<string_value>("value2"))));
+}
+
+TEST(JsonSchema, OneOfNullable) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "nullable_field": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "nullable_field",
+      iceberg::string_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfTypeRefinement) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": ["number", "string", "null"],
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::date_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfArbitraryTypes) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "oneOf keyword is supported only for exclusive T|null structures",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfThreeBranches) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer" },
+            { "type": "null" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "oneOf keyword is supported only for exclusive T|null structures",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfConflictingTypes) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "number",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Type constraint is not sufficient for transforming. Types: []",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfRedundantNull) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": ["string", "null"] }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "oneOf keyword is supported only for exclusive T|null structures",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfNullableFormatInside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::date_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfNullableFormatOutside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ],
+          "format": "date"
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::date_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfNullableFormatInsideAndOutside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date" }
+          ],
+          "format": "date"
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::date_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfFormatConflict) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date" }
+          ],
+          "format": "date-time"
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Conflicting format annotations across branches", result.error().what());
+}
+
+TEST(JsonSchema, OneOfProperties) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "nested_field": { "type": "string" }
+              }
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    auto expected_field = iceberg::struct_type{};
+    expected_field.fields.push_back(
+      iceberg::nested_field::create(
+        0,
+        "nested_field",
+        iceberg::field_required::no,
+        iceberg::string_type{}));
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::field_type(std::move(expected_field)),
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfPropertiesBothSides) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "properties": {
+            "nested_field": { "type": "string" }
+          },
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "other_field": { "type": "integer" }
+              }
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Intersecting constraints with properties on both sides is not supported",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfPropertiesOutside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "properties": {
+            "nested_field": { "type": "string" }
+          },
+          "oneOf": [
+            { "type": "null" },
+            { "type": "object" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    auto expected_field = iceberg::struct_type{};
+    expected_field.fields.push_back(
+      iceberg::nested_field::create(
+        0,
+        "nested_field",
+        iceberg::field_required::no,
+        iceberg::string_type{}));
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::field_type(std::move(expected_field)),
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfAdditionalPropertiesOutside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "nested_field": { "type": "string" }
+              }
+            }
+          ],
+          "additionalProperties": false
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "additionalProperties: false conflicts with properties defined in "
+      "another branch",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfItems) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::list_type::create(
+        0, iceberg::field_required::yes, iceberg::string_type{}),
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfItemsOutside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "items": { "type": "string" },
+          "oneOf": [
+            { "type": "null" },
+            { "type": "array" }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field",
+      iceberg::list_type::create(
+        0, iceberg::field_required::yes, iceberg::string_type{}),
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, OneOfItemsBothSides) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "items": { "type": "integer" },
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Intersecting constraints with items on both sides is not supported",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfAdditionalPropertiesInside) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false
+            }
+          ],
+          "properties": {
+            "nested_field": { "type": "string" }
+          }
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "additionalProperties: false conflicts with properties defined in "
+      "another branch",
+      result.error().what());
 }
 
 TEST_CORO(IcebergValues, Format) {

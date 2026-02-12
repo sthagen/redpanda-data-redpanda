@@ -111,7 +111,7 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 					confirmed, err := out.Confirm("Warning: disabling Tiered Storage may lead to data loss. If you only want to pause Tiered Storage temporarily, use the 'cloud_storage_enable_segment_uploads' option. Abort?")
 					out.MaybeDie(err, "unable to read user input: %v", err)
 					if confirmed {
-						out.Die("Aborted by user.")
+						out.Die("aborted by user")
 					}
 				}
 			}

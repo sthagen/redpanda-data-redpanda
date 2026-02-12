@@ -95,7 +95,7 @@ func exportConfig(
 					fmt.Fprintf(&sb, "%s: []", name)
 				}
 			default:
-				out.Die("Unexpected property value type: %s: %T", name, curValue)
+				out.Die("unexpected property value type: %s: %T", name, curValue)
 			}
 		} else {
 			scalarVal := ""
@@ -109,7 +109,7 @@ func exportConfig(
 			case nil:
 				// Leave scalarVal empty
 			default:
-				out.Die("Unexpected property value type: %s: %T", name, curValue)
+				out.Die("unexpected property value type: %s: %T", name, curValue)
 			}
 
 			if len(scalarVal) > 0 {

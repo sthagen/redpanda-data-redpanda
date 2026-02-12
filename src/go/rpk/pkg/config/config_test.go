@@ -12,7 +12,7 @@ package config
 import (
 	"testing"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -749,7 +749,7 @@ schema_registry: {}
 			path := tt.conf().FileLocation()
 			fs := afero.NewMemMapFs()
 			if tt.existingConf != "" {
-				_, err := utils.WriteBytes(fs, []byte(tt.existingConf), path)
+				_, err := rpkutil.WriteBytes(fs, []byte(tt.existingConf), path)
 				require.NoError(t, err)
 			}
 

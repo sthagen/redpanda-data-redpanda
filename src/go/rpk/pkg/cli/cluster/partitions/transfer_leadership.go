@@ -68,12 +68,12 @@ brokers automatically.
 
 			if len(topicArg) > 0 { // foo -p 0:1
 				_, _, partition, target, err := extractNTPTarget(topicArg[0], partitionArg)
-				out.MaybeDie(err, "failed to extract topic/partition: %s\n", err)
+				out.MaybeDie(err, "failed to extract topic/partition: %s", err)
 
 				ns, topic := formatNT(topicArg[0])
 
 				partDetails, err := cl.GetPartition(cmd.Context(), ns, topic, partition)
-				out.MaybeDie(err, "failed to get partition details: %s\n", err)
+				out.MaybeDie(err, "failed to get partition details: %s", err)
 
 				source := partDetails.LeaderID
 
@@ -85,10 +85,10 @@ brokers automatically.
 				}
 			} else { // -p foo/0:1
 				ns, topic, partition, target, err := extractNTPTarget("", partitionArg)
-				out.MaybeDie(err, "failed to extract topic/partition: %s\n", err)
+				out.MaybeDie(err, "failed to extract topic/partition: %s", err)
 
 				partDetails, err := cl.GetPartition(cmd.Context(), ns, topic, partition)
-				out.MaybeDie(err, "failed to get partition details: %s\n", err)
+				out.MaybeDie(err, "failed to get partition details: %s", err)
 
 				source := partDetails.LeaderID
 

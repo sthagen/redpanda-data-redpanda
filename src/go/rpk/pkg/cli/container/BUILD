@@ -12,11 +12,11 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/go/rpk/pkg/cli/container/common",
+        "//src/go/rpk/pkg/cli/container/containerutil",
         "//src/go/rpk/pkg/cli/profile",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/httpapi",
-        "//src/go/rpk/pkg/net",
+        "//src/go/rpk/pkg/netutil",
         "//src/go/rpk/pkg/out",
         "@com_github_avast_retry_go//:retry-go",
         "@com_github_docker_docker//api/types/container",

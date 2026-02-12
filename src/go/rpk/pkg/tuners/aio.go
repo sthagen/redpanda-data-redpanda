@@ -14,9 +14,9 @@ package tuners
 import (
 	"fmt"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -38,7 +38,7 @@ func NewMaxAIOEventsChecker(fs afero.Fs) Checker {
 			return fmt.Sprintf(">= %d", maxAIOEvents)
 		},
 		func() (int, error) {
-			return utils.ReadIntFromFile(fs, maxAIOEventsFile)
+			return rpkutil.ReadIntFromFile(fs, maxAIOEventsFile)
 		},
 	)
 }

@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -112,7 +112,7 @@ func (n *nic) Name() string {
 // NICs.
 func getLowerNames(fs afero.Fs, nicName string) []string {
 	nicDir := fmt.Sprintf("/sys/class/net/%s", nicName)
-	files := utils.ListFilesInPath(fs, nicDir)
+	files := rpkutil.ListFilesInPath(fs, nicDir)
 
 	lowers := []string{}
 	for _, file := range files {
@@ -337,7 +337,7 @@ func (n *nic) GetMaxRxQueueCount() (int, error) {
 func (n *nic) GetRxQueueCount() (int, error) {
 	rpsCpus, err := n.GetRpsCPUFiles()
 	if err != nil {
-		return 0, utils.ChainedError(err, "Unable to get the RPS number")
+		return 0, rpkutil.ChainedError(err, "Unable to get the RPS number")
 	}
 	rxQueuesCount := len(rpsCpus)
 	zap.L().Sugar().Debugf("Getting number of Rx queues for '%s'", n.name)

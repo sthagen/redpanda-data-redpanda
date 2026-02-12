@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"go.uber.org/zap"
 )
 
@@ -28,11 +28,11 @@ const (
 
 type hwLocCmd struct {
 	HwLoc
-	proc    os.Proc
+	proc    osutil.Proc
 	timeout time.Duration
 }
 
-func NewHwLocCmd(proc os.Proc, timeout time.Duration) HwLoc {
+func NewHwLocCmd(proc osutil.Proc, timeout time.Duration) HwLoc {
 	return &hwLocCmd{
 		proc:    proc,
 		timeout: timeout,

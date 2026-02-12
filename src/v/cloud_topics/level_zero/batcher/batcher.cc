@@ -178,10 +178,8 @@ ss::future<std::expected<std::monostate, errc>> batcher<Clock>::run_once(
           _cluster_services->current_epoch(&_as));
 
         if (epoch_fut.failed()) {
-            vlog(
-              _logger.warn,
-              "Failed to get cluster epoch: {}",
-              epoch_fut.get_exception());
+            auto ex = epoch_fut.get_exception();
+            vlog(_logger.warn, "Failed to get cluster epoch: {}", ex);
             while (!list.requests.empty()) {
                 auto& wr = list.requests.back();
                 wr.set_value(errc::failed_to_get_epoch);
@@ -271,10 +269,8 @@ ss::future<> batcher<Clock>::bg_controller_loop() {
         bool complete = list.complete;
 
         if (units_fut.failed()) {
-            vlog(
-              _logger.info,
-              "Batcher upload loop is shutting down: {}",
-              units_fut.get_exception());
+            auto ex = units_fut.get_exception();
+            vlog(_logger.info, "Batcher upload loop is shutting down: {}", ex);
             co_return;
         }
         auto units = std::move(units_fut.get());

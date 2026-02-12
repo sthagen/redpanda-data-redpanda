@@ -63,15 +63,16 @@ node exists that is already in maintenance mode then an error will be returned.
 			err = client.EnableMaintenanceMode(cmd.Context(), nodeID)
 			var he *rpadmin.HTTPResponseError
 			if errors.As(err, &he) {
-				if he.Response.StatusCode == 404 {
+				switch he.Response.StatusCode {
+				case 404:
 					body, bodyErr := he.DecodeGenericErrorBody()
 					if bodyErr == nil {
-						out.Die("Not found: %s", body.Message)
+						out.Die("not found: %s", body.Message)
 					}
-				} else if he.Response.StatusCode == 400 {
+				case 400:
 					body, bodyErr := he.DecodeGenericErrorBody()
 					if bodyErr == nil {
-						out.Die("Cannot enable maintenance mode: %s", body.Message)
+						out.Die("cannot enable maintenance mode: %s", body.Message)
 					}
 				}
 			}
@@ -101,7 +102,7 @@ node exists that is already in maintenance mode then an error will be returned.
 				}
 				if err != nil {
 					if retries <= 0 {
-						out.Die("Error retrieving broker status while watching the progress: %v", err)
+						out.Die("error retrieving broker status while watching the progress: %v", err)
 					}
 					retries--
 					time.Sleep(time.Second * 2)

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
@@ -35,7 +35,7 @@ func (m *irqProcFileMock) GetIRQProcFileLinesMap() (map[int]string, error) {
 }
 
 type procMock struct {
-	os.Proc
+	osutil.Proc
 }
 
 func Test_blockDevices_getDeviceControllerPath(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 )
 
@@ -119,7 +119,7 @@ func readCgroupFile(fs afero.Fs, v1Subpath, v2Subpath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ls, err := utils.ReadFileLines(fs, filePath)
+	ls, err := rpkutil.ReadFileLines(fs, filePath)
 	if err != nil {
 		return "", err
 	}
@@ -133,7 +133,7 @@ func readCgroupFile(fs afero.Fs, v1Subpath, v2Subpath string) (string, error) {
 }
 
 func v2CgroupPath(fs afero.Fs) (string, error) {
-	ls, err := utils.ReadFileLines(fs, "/proc/self/cgroup")
+	ls, err := rpkutil.ReadFileLines(fs, "/proc/self/cgroup")
 	if err != nil {
 		return "", err
 	}

@@ -21,8 +21,10 @@
 
 #include <seastar/util/defer.hh>
 
+#include <algorithm>
 #include <array>
 #include <memory>
+#include <ranges>
 #include <unordered_set>
 #include <variant>
 
@@ -42,10 +44,100 @@ dialect dialect_from_schema_id(std::string_view schema_id) {
     return details::string_switch_table(schema_id, dialect_by_schema_id);
 }
 
-// Prefer using this instead of using `FindMember` directly, as it checks for
-// duplicate keywords and throws an exception if a duplicate is found.
+constexpr auto banned_keywords = std::to_array({
+  // Do not allow $dynamicRef keywords as would change the semantics of
+  // the schema but we haven't implemented them yet.
+  // Note for implementer: you'll also need to add encoding for fields when the
+  // subschemas map is built. Make sure to add test cases with refs containing
+  // characters that need escaping.
+  "$dynamicRef",
+
+  // Not implementing for now for simplicity and because I don't think anyone
+  // relies on it due to peculiarities of what this keyword does.
+  // See: https://github.com/json-schema-org/json-schema-spec/issues/867
+  "default",
+
+  // We can't use this in iceberg so don't spend time implementing it for now.
+  "patternProperties",
+  "dependencies",
+  "if",
+  "then",
+  "else",
+  "allOf",
+  "anyOf",
+});
+
+enum class keyword : uint8_t {
+    schema,                // "$schema"
+    id,                    // "$id"
+    id_draft4,             // "id"
+    ref,                   // "$ref"
+    type,                  // "type"
+    definitions,           // "definitions"
+    properties,            // "properties"
+    additional_properties, // "additionalProperties"
+    items,                 // "items"
+    additional_items,      // "additionalItems"
+    format,                // "format"
+    one_of,                // "oneOf"
+};
+
+constexpr auto keyword_table
+  = std::to_array<std::pair<std::string_view, keyword>>({
+    {"$schema", keyword::schema},
+    {"$id", keyword::id},
+    {"id", keyword::id_draft4},
+    {"$ref", keyword::ref},
+    {"type", keyword::type},
+    {"definitions", keyword::definitions},
+    {"properties", keyword::properties},
+    {"additionalProperties", keyword::additional_properties},
+    {"items", keyword::items},
+    {"additionalItems", keyword::additional_items},
+    {"format", keyword::format},
+    {"oneOf", keyword::one_of},
+  });
+
+// The size assert below references the last enumerator explicitly. If you add
+// a new keyword after one_of, update the assert. Together with the ordering
+// assert (which guarantees keyword_table[i] maps to enum value i), these two
+// checks ensure a 1:1 mapping between the enum and the table.
+static_assert(
+  keyword_table.size() == static_cast<size_t>(keyword::one_of) + 1,
+  "keyword_table must have an entry for every keyword enum value");
+
+static_assert(
+  []() consteval {
+      for (size_t i = 0; i < keyword_table.size(); ++i) {
+          if (static_cast<size_t>(keyword_table[i].second) != i) {
+              return false;
+          }
+      }
+      return true;
+  }(),
+  "keyword_table entries must be ordered by enum value");
+
+static_assert(
+  []() consteval {
+      for (const auto& [name, _] : keyword_table) {
+          for (const auto& banned : banned_keywords) {
+              if (name == banned) {
+                  return false;
+              }
+          }
+      }
+      return true;
+  }(),
+  "keyword_table and banned_keywords must be disjoint");
+
+constexpr std::string_view keyword_name(keyword kw) {
+    return keyword_table[static_cast<size_t>(kw)].first;
+}
+
+// Indexes known JSON Schema keywords from a single pass over a node's members.
+// Detects duplicate and banned keywords during construction.
 //
-// This is important as user validator might have different behavior for how
+// This is important as user validators might have different behavior for how
 // duplicate object keys are handled and we might infer a schema which would
 // not fit user's data.
 //
@@ -65,41 +157,60 @@ dialect dialect_from_schema_id(std::string_view schema_id) {
 // Without rejecting schemas with duplicate keywords, we would end up with a
 // schema that accepts strings but the user data will contain integers if
 // data was validated with i.e. sourcemeta's validator.
-const json::Value* find_keyword(
-  const json::Value& node,
-  const char* keyword,
-  std::vector<json_value_type> types = {}) {
-    auto it = node.FindMember(keyword);
-    if (it != node.MemberEnd()) {
-        auto next = std::next(it);
-        if (next != node.MemberEnd() && next->name == keyword) {
-            throw std::runtime_error(
-              fmt::format("Duplicate keyword: {}", keyword));
+class keyword_index {
+public:
+    explicit keyword_index(const json::Value& node) {
+        for (auto it = node.MemberBegin(); it != node.MemberEnd(); ++it) {
+            std::string_view name{
+              it->name.GetString(), it->name.GetStringLength()};
+            auto entry = std::ranges::find(
+              keyword_table,
+              name,
+              &std::pair<std::string_view, keyword>::first);
+            if (entry != keyword_table.end()) {
+                auto& slot = index_[static_cast<size_t>(entry->second)];
+                if (slot != nullptr) {
+                    throw std::runtime_error(
+                      fmt::format("Duplicate keyword: {}", name));
+                }
+                slot = &it->value;
+            } else if (std::ranges::contains(banned_keywords, name)) {
+                throw std::runtime_error(
+                  fmt::format("The {} keyword is not allowed", name));
+            }
         }
-        if (!types.empty()) {
+    }
+
+    const json::Value*
+    find(keyword kw, std::initializer_list<json_value_type> types = {}) const {
+        auto* val = index_[static_cast<size_t>(kw)];
+        if (!val) {
+            return nullptr;
+        }
+        if (types.size() > 0) {
             bool valid_type = false;
             for (const auto& type : types) {
                 switch (type) {
                 case json_value_type::object:
-                    valid_type |= it->value.IsObject();
+                    valid_type |= val->IsObject();
                     break;
                 case json_value_type::array:
-                    valid_type |= it->value.IsArray();
+                    valid_type |= val->IsArray();
                     break;
                 case json_value_type::string:
-                    valid_type |= it->value.IsString();
+                    valid_type |= val->IsString();
                     break;
                 case json_value_type::boolean:
-                    valid_type |= it->value.IsBool();
+                    valid_type |= val->IsBool();
                     break;
                 case json_value_type::integer:
-                    valid_type |= it->value.IsInt() || it->value.IsInt64();
+                    valid_type |= val->IsInt() || val->IsInt64();
                     break;
                 case json_value_type::number:
-                    valid_type |= it->value.IsNumber();
+                    valid_type |= val->IsNumber();
                     break;
                 case json_value_type::null:
-                    valid_type |= it->value.IsNull();
+                    valid_type |= val->IsNull();
                     break;
                 }
             }
@@ -107,14 +218,18 @@ const json::Value* find_keyword(
                 throw std::runtime_error(
                   fmt::format(
                     "Invalid type for keyword {}. Expected one of: [{}].",
-                    keyword,
+                    keyword_name(kw),
                     fmt::join(types, ", ")));
             }
         }
-        return &it->value;
+        return val;
     }
-    return nullptr;
-}
+
+private:
+    /// Pointers to the values of keywords in the same order as the `keyword`
+    /// enum. `nullptr` means the keyword is not present in the indexed node.
+    std::array<const json::Value*, keyword_table.size()> index_{};
+};
 
 class compile_context {
 public:
@@ -238,13 +353,16 @@ private:
     size_t depth_{0};
 };
 
-bool maybe_push_context(compile_context& ctx, const json::Value& node) {
+bool maybe_push_context(
+  compile_context& ctx,
+  const json::Value& node,
+  const keyword_index& keywords) {
     // Identify the dialect first so we know which keyword is used for base URI,
     // i.e. `id` (draft-04) or `$id` (draft-6).
-    auto dialect_at_node = [&ctx, &node]() {
+    auto dialect_at_node = [&ctx, &keywords]() {
         if (
-          auto dialect_node = find_keyword(
-            node, "$schema", {json_value_type::string})) {
+          auto dialect_node = keywords.find(
+            keyword::schema, {json_value_type::string})) {
             return dialect_from_schema_id(dialect_node->GetString());
         } else {
             // If the $schema keyword is not present, we use the dialect of the
@@ -258,10 +376,9 @@ bool maybe_push_context(compile_context& ctx, const json::Value& node) {
           fmt::format("Unsupported JSON Schema dialect: {}", dialect_at_node));
     }
 
-    auto id_keyword = dialect_at_node == dialect::draft4 ? "id" : "$id";
-    if (
-      auto id_node = find_keyword(
-        node, id_keyword, {json_value_type::string})) {
+    auto id_kw = dialect_at_node == dialect::draft4 ? keyword::id_draft4
+                                                    : keyword::id;
+    if (auto id_node = keywords.find(id_kw, {json_value_type::string})) {
         // The $id keyword starts a new resource context.
         ctx.push(
           parse_base_uri(id_node->GetString()).Resolve(ctx.base_uri()),
@@ -278,30 +395,6 @@ bool maybe_push_context(compile_context& ctx, const json::Value& node) {
         return false;
     }
 }
-
-constexpr auto banned_keywords = std::to_array({
-  // Do not allow $dynamicRef keywords as would change the semantics of
-  // the schema but we haven't implemented them yet.
-  // Note for implementer: you'll also need to add encoding for fields when the
-  // subschemas map is built. Make sure to add test cases with refs containing
-  // characters that need escaping.
-  "$dynamicRef",
-
-  // Not implementing for now for simplicity and because I don't think anyone
-  // relies on it due to peculiarities of what this keyword does.
-  // See: https://github.com/json-schema-org/json-schema-spec/issues/867
-  "default",
-
-  // We can't use this in iceberg so don't spend time implementing it for now.
-  "patternProperties",
-  "dependencies",
-  "if",
-  "then",
-  "else",
-  "allOf",
-  "anyOf",
-  "oneOf",
-});
 
 }; // namespace
 
@@ -442,9 +535,11 @@ public:
             return sub;
         }
 
+        keyword_index keywords(node);
+
         if (
-          const auto ref_node = find_keyword(
-            node, "$ref", {json_value_type::string})) {
+          const auto ref_node = keywords.find(
+            keyword::ref, {json_value_type::string})) {
             if (ctx.empty()) {
                 throw std::runtime_error(
                   "$ref at the root of the schema in draft-07 is not allowed "
@@ -457,26 +552,18 @@ public:
             return sub;
         }
 
-        auto new_ctx = maybe_push_context(ctx, node);
+        auto new_ctx = maybe_push_context(ctx, node, keywords);
 
         auto sub = new_ctx
                      ? ss::dynamic_pointer_cast<subschema>(ctx.top().schema())
                      : ss::make_shared<subschema>();
 
-        // Check for banned keywords.
-        for (const auto& keyword : banned_keywords) {
-            if (node.HasMember(keyword)) {
-                throw std::runtime_error(
-                  fmt::format("The {} keyword is not allowed", keyword));
-            }
-        }
-
-        if (auto types_node = find_keyword(node, "type")) {
+        if (auto types_node = keywords.find(keyword::type)) {
             compile_types(ctx, *sub, *types_node);
         }
 
-        if (const auto defs_node = find_keyword(
-              node, "definitions", {json_value_type::object});
+        if (const auto defs_node = keywords.find(
+              keyword::definitions, {json_value_type::object});
             new_ctx && defs_node) {
             for (const auto& [k, v] : defs_node->GetObject()) {
                 if (!v.IsObject()) {
@@ -496,26 +583,27 @@ public:
         }
 
         if (
-          auto props = find_keyword(
-            node, "properties", {json_value_type::object})) {
+          auto props = keywords.find(
+            keyword::properties, {json_value_type::object})) {
             for (const auto& [k, v] : props->GetObject()) {
                 compile_property(ctx, *sub, k.GetString(), v);
             }
         }
 
         if (
-          const auto additional_properties_node = find_keyword(
-            node, "additionalProperties")) {
+          const auto additional_properties_node = keywords.find(
+            keyword::additional_properties)) {
             compile_additional_properties(
               ctx, *sub, *additional_properties_node);
         }
 
-        if (auto items_node = find_keyword(node, "items")) {
+        if (auto items_node = keywords.find(keyword::items)) {
             compile_items(ctx, *sub, *items_node);
         }
 
         if (
-          const auto additional_items = find_keyword(node, "additionalItems")) {
+          const auto additional_items = keywords.find(
+            keyword::additional_items)) {
             sub->additional_items_ = compile_subschema(ctx, *additional_items);
             auto [it, inserted] = sub->subschemas_.emplace(
               "additionalItems", sub->additional_items_);
@@ -526,8 +614,14 @@ public:
         }
 
         if (
-          const auto format_node = find_keyword(
-            node, "format", {json_value_type::string})) {
+          const auto one_of_node = keywords.find(
+            keyword::one_of, {json_value_type::array})) {
+            compile_one_of(ctx, *sub, *one_of_node);
+        }
+
+        if (
+          const auto format_node = keywords.find(
+            keyword::format, {json_value_type::string})) {
             if (unlikely(ctx.dialect() != dialect::draft7)) {
                 // When support for more dialects is added format parsing should
                 // be revisited. We should explicitly handle all known formats
@@ -656,6 +750,33 @@ public:
             throw std::runtime_error(
               "The items keyword must be an object or an array of objects");
         }
+    }
+
+    void compile_one_of(
+      compile_context& ctx, subschema& sub, const json::Value& node) const {
+        vassert(
+          sub.one_of_.empty(),
+          "oneOf subschema vector should be empty at this point");
+
+        if (!node.IsArray() || node.GetArray().Empty()) {
+            throw std::runtime_error(
+              "The oneOf keyword must be a non-empty array");
+        }
+
+        std::vector<ss::shared_ptr<subschema>> one_of_subschemas;
+        one_of_subschemas.reserve(node.GetArray().Size());
+        for (const auto& item : node.GetArray()) {
+            one_of_subschemas.push_back(compile_subschema(ctx, item));
+        }
+
+        for (size_t i = 0; i < one_of_subschemas.size(); ++i) {
+            auto& one_of_subschema = one_of_subschemas[i];
+            auto [it, inserted] = sub.subschemas_.emplace(
+              fmt::format("oneOf/{}", i), one_of_subschema);
+            vassert(inserted, "unique insertion should have succeeded");
+        }
+
+        sub.one_of_ = std::move(one_of_subschemas);
     }
 };
 

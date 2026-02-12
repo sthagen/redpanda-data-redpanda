@@ -47,7 +47,7 @@ func (*SingleStatPanel) Type() string {
 }
 
 func (p *SingleStatPanel) GetGridPos() *GridPos {
-	return &p.BasePanel.GridPos
+	return &p.GridPos
 }
 
 func (p *SingleStatPanel) MarshalJSON() ([]byte, error) {

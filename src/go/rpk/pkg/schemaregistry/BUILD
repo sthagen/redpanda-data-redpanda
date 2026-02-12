@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//src/go/rpk/pkg/adminapi",
         "//src/go/rpk/pkg/config",
-        "//src/go/rpk/pkg/net",
+        "//src/go/rpk/pkg/netutil",
         "//src/go/rpk/pkg/oauth/authtoken",
         "//src/go/rpk/pkg/oauth/providers/auth0",
         "@com_github_redpanda_data_common_go_rpsr//:rpsr",

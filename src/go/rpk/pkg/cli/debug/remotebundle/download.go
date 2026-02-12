@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/redpanda-data/common-go/rpadmin"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/debug/debugbundle"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
@@ -68,7 +68,7 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.
 			}
 			ready, _ := filterCompletedBrokers(status)
 			if len(ready) == 0 {
-				out.Die("There are no bundles ready for download; to check status run 'rpk debug remote-bundle status'")
+				out.Die("there are no bundles ready for download; to check status run 'rpk debug remote-bundle status'")
 			}
 			if len(ready) != len(status) {
 				fmt.Printf("WARNING: There are (%d) bundles not ready to download; to check the status run 'rpk debug remote-bundle status'\n", len(status)-len(ready))
@@ -106,7 +106,7 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.
 			fmt.Printf("\nSuccessfully downloaded remote debug bundle to %v\n", downloadPath)
 
 			if uploadURL != "" {
-				err = common.UploadBundle(cmd.Context(), downloadPath, uploadURL)
+				err = debugbundle.UploadBundle(cmd.Context(), downloadPath, uploadURL)
 				out.MaybeDie(err, "unable to upload bundle: %v", err)
 				fmt.Println("Successfully uploaded the bundle")
 			}
@@ -148,7 +148,7 @@ func downloadBundle(ctx context.Context, fs afero.Fs, downloadPath string, statu
 			wr, err := w.CreateHeader(&zip.FileHeader{
 				// Each individual zip file will be stored under a directory
 				// with the broker address.
-				Name:     filepath.Join(downloadRoot, common.SanitizeName(broker), jobID+".zip"),
+				Name:     filepath.Join(downloadRoot, debugbundle.SanitizeName(broker), jobID+".zip"),
 				Method:   zip.Deflate,
 				Modified: time.Now(),
 			})

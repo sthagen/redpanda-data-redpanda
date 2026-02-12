@@ -34,14 +34,14 @@ func upgradeCommand(fs afero.Fs) *cobra.Command {
 			out.MaybeDie(err, "unable to determine managed plugin path: %w", err)
 			connect, pluginExists := plugin.ListPlugins(fs, plugin.UserPaths()).Find("connect")
 			if !pluginExists {
-				out.Die("Redpanda Connect plugin not found. You may install it running 'rpk connect install'")
+				out.Die("unable to find Redpanda Connect plugin. You may install it running 'rpk connect install'")
 			}
 			// A user may have installed version of 'rpk connect' either
 			// manually or using a package manager (air-gapped). An attempt to
 			// upgrade can result in having multiple copies of connect. Instead,
 			// we kindly ask to re-install.
 			if !connect.Managed {
-				out.Die("Found a self-managed Redpanda Connect plugin; unfortunately, we cannot upgrade it with this installation. Run rpk connect uninstall && rpk connect install, or to continue managing Connect manually, use our redpanda-connect package.")
+				out.Die("found a self-managed Redpanda Connect plugin; unfortunately, we cannot upgrade it with this installation. Run rpk connect uninstall && rpk connect install, or to continue managing Connect manually, use our redpanda-connect package")
 			}
 			art, version, err := getConnectArtifact(cmd.Context(), "latest")
 			out.MaybeDieErr(err)

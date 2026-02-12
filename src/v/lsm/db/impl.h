@@ -88,6 +88,10 @@ public:
     // Flush with no deadline.
     ss::future<> flush();
 
+    // Reload the manifest from disk, adding a new version to the version set.
+    // Only valid if in read-only mode.
+    ss::future<bool> refresh();
+
     // Close the database, no more operations should happen to the database at
     // this point.
     //

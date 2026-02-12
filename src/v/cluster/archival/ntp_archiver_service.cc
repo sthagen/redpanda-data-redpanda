@@ -1681,7 +1681,8 @@ ss::future<> ntp_archiver::upload_index(
       _conf->bucket_name, cloud_storage_clients::object_key{path}, index, rtc));
 
     if (fut.failed()) {
-        vlog(ctxlog.warn, "Index upload failed: {}", fut.get_exception());
+        auto ex = fut.get_exception();
+        vlog(ctxlog.warn, "Index upload failed: {}", ex);
     }
 }
 
@@ -2097,7 +2098,8 @@ ntp_archiver::schedule_uploads(std::vector<upload_context> loop_contexts) {
               inflight_uploads.begin(), inflight_uploads.end());
             for (auto& f : futs) {
                 if (f.failed()) {
-                    vlog(_rtclog.warn, "Upload failed: {}", f.get_exception());
+                    auto ex = f.get_exception();
+                    vlog(_rtclog.warn, "Upload failed: {}", ex);
                 }
             }
             std::rethrow_exception(ep);

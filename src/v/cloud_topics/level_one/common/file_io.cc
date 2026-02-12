@@ -136,8 +136,8 @@ file_io::put_object(object_id oid, staging_file* file, ss::abort_source* as) {
           "l1_file_upload",
           std::nullopt));
     if (result_fut.failed()) {
-        vlog(
-          cd_log.warn, "Error uploading file: {}", result_fut.get_exception());
+        auto ex = result_fut.get_exception();
+        vlog(cd_log.warn, "Error uploading file: {}", ex);
         co_return std::unexpected(io::errc::cloud_op_error);
     }
     switch (result_fut.get()) {
@@ -187,11 +187,9 @@ file_io::read_object(object_extent extent, ss::abort_source* as) {
           std::optional<cloud_io::cache_item_stream>>(
           _cache->get_stream(cache_key));
         if (stream_fut.failed()) {
+            auto ex = stream_fut.get_exception();
             vlog(
-              cd_log.warn,
-              "Error reading from cache for {}: {}",
-              extent,
-              stream_fut.get_exception());
+              cd_log.warn, "Error reading from cache for {}: {}", extent, ex);
             co_return std::unexpected(io::errc::file_io_error);
         }
         auto stream = stream_fut.get();
@@ -203,11 +201,12 @@ file_io::read_object(object_extent extent, ss::abort_source* as) {
           cloud_io::space_reservation_guard>(
           _cache->reserve_space(extent.size, 1));
         if (reservation_fut.failed()) {
+            auto ex = reservation_fut.get_exception();
             vlog(
               cd_log.warn,
               "Error reserving cache space for download of {}: {}",
               extent,
-              reservation_fut.get_exception());
+              ex);
             co_return std::unexpected(io::errc::file_io_error);
         }
         cloud_io::try_consume_stream consumer =
@@ -230,11 +229,8 @@ file_io::read_object(object_extent extent, ss::abort_source* as) {
               cloud_storage_clients::http_byte_range{
                 extent.position, extent.position + extent.size - 1}));
         if (result_fut.failed()) {
-            vlog(
-              cd_log.warn,
-              "Error downloading object {}: {}",
-              extent,
-              result_fut.get_exception());
+            auto ex = result_fut.get_exception();
+            vlog(cd_log.warn, "Error downloading object {}: {}", extent, ex);
             co_return std::unexpected(io::errc::cloud_op_error);
         }
         switch (result_fut.get()) {
@@ -267,10 +263,8 @@ file_io::delete_objects(chunked_vector<object_id> ids, ss::abort_source* as) {
               std::ignore = retry_count;
           }));
     if (result_fut.failed()) {
-        vlog(
-          cd_log.warn,
-          "Error deleting objects: {}",
-          result_fut.get_exception());
+        auto ex = result_fut.get_exception();
+        vlog(cd_log.warn, "Error deleting objects: {}", ex);
         co_return std::unexpected(io::errc::cloud_op_error);
     }
     switch (result_fut.get()) {

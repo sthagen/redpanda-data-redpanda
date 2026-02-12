@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -121,7 +121,7 @@ func (tuner *tuner) getMaxCState() (uint, error) {
 	zap.L().Sugar().Debugf("Getting max allowed CState")
 	// Possible errors while reading max_cstate:
 	// File doesn't exist or reading error.
-	lines, err := utils.ReadFileLines(tuner.fs,
+	lines, err := rpkutil.ReadFileLines(tuner.fs,
 		"/sys/module/intel_idle/parameters/max_cstate")
 	// We return maxCstate = 0 when any of the above errors occurred.
 	if err != nil {
@@ -149,7 +149,7 @@ func (tuner *tuner) disableCStates() error {
 
 func (tuner *tuner) checkIfPStateIsEnabled() (bool, error) {
 	zap.L().Sugar().Debugf("Checking if Intel P-States are enabled")
-	lines, err := utils.ReadFileLines(tuner.fs,
+	lines, err := rpkutil.ReadFileLines(tuner.fs,
 		"/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver")
 	if err != nil {
 		return false, err

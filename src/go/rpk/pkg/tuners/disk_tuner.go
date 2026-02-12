@@ -12,8 +12,8 @@
 package tuners
 
 import (
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/disk"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -77,7 +77,7 @@ func (tuner *diskTuner) createDeviceTuners() ([]Tunable, error) {
 	for _, device := range tuner.devices {
 		disksSetMap[device] = true
 	}
-	devices := utils.GetKeys(disksSetMap)
+	devices := rpkutil.GetKeys(disksSetMap)
 	var tuners []Tunable
 	for _, device := range devices {
 		zap.L().Sugar().Debugf("Creating disk tuner for '%s'", device)

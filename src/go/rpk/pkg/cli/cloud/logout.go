@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"

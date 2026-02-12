@@ -221,12 +221,13 @@ func checkDedicatedCompatibleConfig(cpuMask string, cpuMasks irq.CPUMasks, rnc c
 func getEffectiveMode(mode irq.Mode, nic Nic, effectiveCPUMask string, cpuMasks irq.CPUMasks, rnc config.RpkNodeConfig) (irq.Mode, error) {
 	var err error
 	effectiveMode := mode
-	if mode == irq.Default {
+	switch mode {
+	case irq.Default:
 		effectiveMode, err = GetDefaultMode(nic, effectiveCPUMask, cpuMasks, rnc)
 		if err != nil {
 			return "", err
 		}
-	} else if mode == irq.Dedicated {
+	case irq.Dedicated:
 		// dedicated specified via cli arg --mode dedicated
 		err := checkDedicatedCompatibleConfig(effectiveCPUMask, cpuMasks, rnc)
 		if err != nil {

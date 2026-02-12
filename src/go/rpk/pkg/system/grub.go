@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -37,8 +37,8 @@ type Grub interface {
 }
 
 func NewGrub(
-	commands os.Commands,
-	proc os.Proc,
+	commands osutil.Commands,
+	proc osutil.Proc,
 	fs afero.Fs,
 	executor executors.Executor,
 	timeout time.Duration,
@@ -53,8 +53,8 @@ func NewGrub(
 }
 
 type grub struct {
-	commands os.Commands
-	proc     os.Proc
+	commands osutil.Commands
+	proc     osutil.Proc
 	fs       afero.Fs
 	executor executors.Executor
 	timeout  time.Duration
@@ -79,11 +79,11 @@ func (g *grub) AddCommandLineOptions(opt []string) error {
 		fmt.Println("GRUB options are up to date, doing nothing")
 		return nil
 	}
-	lines, err := utils.ReadFileLines(g.fs, grubCfg)
+	lines, err := rpkutil.ReadFileLines(g.fs, grubCfg)
 	if err != nil {
 		return err
 	}
-	backupFile, err := utils.BackupFile(g.fs, grubCfg)
+	backupFile, err := rpkutil.BackupFile(g.fs, grubCfg)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (g *grub) AddCommandLineOptions(opt []string) error {
 }
 
 func (g *grub) cmdLineCfgNeedChange(requestedOpts []string) (bool, error) {
-	lines, err := utils.ReadFileLines(g.fs, grubCfg)
+	lines, err := rpkutil.ReadFileLines(g.fs, grubCfg)
 	if err != nil {
 		return false, err
 	}

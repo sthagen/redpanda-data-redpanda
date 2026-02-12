@@ -133,10 +133,8 @@ produce_partition_fixture::run_test(size_t data_size, measured_region region) {
 
     auto fut = co_await ss::coroutine::as_future(std::move(stages.dispatched));
     if (fut.failed()) {
-        vlog(
-          plog.error,
-          "unable to dispatch produce request: {}",
-          fut.get_exception());
+        auto ex = fut.get_exception();
+        vlog(plog.error, "unable to dispatch produce request: {}", ex);
         co_return;
     }
 
@@ -147,10 +145,8 @@ produce_partition_fixture::run_test(size_t data_size, measured_region region) {
     auto produced_fut = co_await ss::coroutine::as_future(
       std::move(stages.produced));
     if (produced_fut.failed()) {
-        vlog(
-          plog.error,
-          "unable to produce records: {}",
-          produced_fut.get_exception());
+        auto ex = produced_fut.get_exception();
+        vlog(plog.error, "unable to produce records: {}", ex);
         co_return;
     }
 

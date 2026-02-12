@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/iotune"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
@@ -63,7 +63,7 @@ func (tuner *ioTuner) CheckIfSupported() (bool, string) {
 }
 
 func (tuner *ioTuner) Tune() TuneResult {
-	ioTune := iotune.NewIoTune(os.NewProc(), tuner.getIotunePath(), tuner.timeout)
+	ioTune := iotune.NewIoTune(osutil.NewProc(), tuner.getIotunePath(), tuner.timeout)
 	args := iotune.IoTuneArgs{
 		Dirs:           tuner.evalDirectories,
 		Format:         iotune.Seastar,

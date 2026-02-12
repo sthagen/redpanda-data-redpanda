@@ -17,10 +17,10 @@ import (
 
 	"github.com/lorenzosaino/go-sysctl"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/network"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -257,7 +257,7 @@ func (f *netCheckersFactory) NewNicRfsChecker(nic network.Nic, effectiveConfig n
 					return false, err
 				}
 				for _, limitFile := range limits {
-					setLimit, err := utils.ReadIntFromFile(f.fs, limitFile)
+					setLimit, err := rpkutil.ReadIntFromFile(f.fs, limitFile)
 					if err != nil {
 						return false, err
 					}
@@ -373,7 +373,7 @@ func (f *netCheckersFactory) NewListenBacklogChecker() Checker {
 			return fmt.Sprintf(">= %d", network.ListenBacklogSize)
 		},
 		func() (int, error) {
-			return utils.ReadIntFromFile(f.fs, network.ListenBacklogFile)
+			return rpkutil.ReadIntFromFile(f.fs, network.ListenBacklogFile)
 		},
 	)
 }
@@ -390,7 +390,7 @@ func (f *netCheckersFactory) NewSynBacklogChecker() Checker {
 			return fmt.Sprintf(">= %d", network.SynBacklogSize)
 		},
 		func() (int, error) {
-			return utils.ReadIntFromFile(f.fs, network.SynBacklogFile)
+			return rpkutil.ReadIntFromFile(f.fs, network.SynBacklogFile)
 		},
 	)
 }

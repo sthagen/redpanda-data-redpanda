@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -28,13 +28,13 @@ func newEditGlobalsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 This command opens your default editor to edit the rpk global configurations.
 `,
 		Args: cobra.ExactArgs(0),
-		Run: func(*cobra.Command, []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
 			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			y, err := cfg.ActualRpkYamlOrEmpty()
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
-			y.Globals, err = rpkos.EditTmpYAMLFile(fs, y.Globals)
+			y.Globals, err = rpkos.EditTmpYAMLFile(cmd.Context(), fs, y.Globals)
 			out.MaybeDieErr(err)
 
 			err = y.Write(fs)

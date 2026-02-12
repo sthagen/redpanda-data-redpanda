@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -47,7 +47,7 @@ func (d *blockDevice) Parent() BlockDevice {
 
 func deviceFromSystemPath(syspath string, fs afero.Fs) (BlockDevice, error) {
 	zap.L().Sugar().Debugf("Reading block device details from '%s'", syspath)
-	lines, err := utils.ReadFileLines(fs, filepath.Join(syspath, "uevent"))
+	lines, err := rpkutil.ReadFileLines(fs, filepath.Join(syspath, "uevent"))
 	if err != nil {
 		return nil, err
 	}

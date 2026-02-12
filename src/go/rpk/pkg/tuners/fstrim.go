@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system/systemd"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
@@ -63,7 +63,7 @@ func (*fstrimTuner) CheckIfSupported() (bool, string) {
 	}
 	defer c.Shutdown()
 
-	_, err = whichFstrim(os.NewProc(), timeout)
+	_, err = whichFstrim(osutil.NewProc(), timeout)
 	if err != nil {
 		return false, err.Error()
 	}
@@ -76,11 +76,11 @@ func (t *fstrimTuner) Tune() TuneResult {
 		return NewTuneError(err)
 	}
 	defer c.Shutdown()
-	return tuneFstrim(t.fs, t.executor, c, os.NewProc())
+	return tuneFstrim(t.fs, t.executor, c, osutil.NewProc())
 }
 
 func tuneFstrim(
-	fs afero.Fs, exe executors.Executor, c systemd.Client, proc os.Proc,
+	fs afero.Fs, exe executors.Executor, c systemd.Client, proc osutil.Proc,
 ) TuneResult {
 	// Check if the default timer (fstrim.timer) is available.
 	defaultAvailable, err := startIfAvailable(exe, c, timerName)
@@ -200,8 +200,8 @@ func startSystemdUnit(
 	return executor.Execute(cmd)
 }
 
-func whichFstrim(proc os.Proc, timeout time.Duration) (string, error) {
-	cmd := os.NewCommands(proc)
+func whichFstrim(proc osutil.Proc, timeout time.Duration) (string, error) {
+	cmd := osutil.NewCommands(proc)
 	return cmd.Which(fstrim, timeout)
 }
 

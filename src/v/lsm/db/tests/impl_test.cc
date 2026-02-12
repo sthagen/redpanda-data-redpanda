@@ -10,6 +10,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "lsm/core/exceptions.h"
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/options.h"
 #include "lsm/db/impl.h"
@@ -126,7 +127,17 @@ public:
     void SetUp() override {
         // Make a smaller sized database so we get some actual leveling
         // happening.
-        _options = ss::make_lw_shared<lsm::internal::options>({
+        _options = make_options();
+        _underlying_data_persistence = lsm::io::make_memory_data_persistence();
+        _meta_persistence = lsm::io::make_memory_metadata_persistence(
+          &_meta_persistence_controller);
+        _tracking_data = std::make_unique<tracking_data_persistence>(
+          _underlying_data_persistence.get());
+        open();
+    }
+
+    ss::lw_shared_ptr<lsm::internal::options> make_options() {
+        return ss::make_lw_shared<lsm::internal::options>({
           .levels = lsm::internal::options::make_levels(
             {.max_total_bytes = 1_MiB, .max_file_size = 256_KiB},
             /*multiplier=*/2,
@@ -136,22 +147,22 @@ public:
           .write_buffer_size = 256_KiB,
           .level_one_compaction_trigger = 2,
         });
-        _underlying_data_persistence = lsm::io::make_memory_data_persistence();
-        _meta_persistence = lsm::io::make_memory_metadata_persistence(
-          &_meta_persistence_controller);
-        _tracking_data = std::make_unique<tracking_data_persistence>(
-          _underlying_data_persistence.get());
-        open();
     }
 
     void TearDown() override {
         _db->close().get();
+        for (auto& db : _other_dbs) {
+            db->close().get();
+        }
         _underlying_data_persistence->close().get();
         _meta_persistence->close().get();
         _shadow.clear();
     }
 
-    void write_at_least(size_t size) {
+    void write_at_least(size_t size, lsm::db::impl* db = nullptr) {
+        if (!db) {
+            db = _db.get();
+        }
         auto batch = ss::make_lw_shared<lsm::db::memtable>();
         decltype(_shadow) shadow_batch;
         auto seqno = _db->max_applied_seqno().value_or(0_seqno);
@@ -168,15 +179,15 @@ public:
               shadow_entry(value.share(), key.seqno()));
             batch->put(key, value.share());
         }
-        _db->apply(std::move(batch)).get();
+        db->apply(std::move(batch)).get();
         // Only apply writes if db write was a success
         for (auto& [k, v] : shadow_batch) {
             _shadow.insert_or_assign(k, std::move(v));
         }
     }
 
-    testing::AssertionResult matches_shadow() {
-        return matches_shadow(_shadow, nullptr);
+    testing::AssertionResult matches_shadow(lsm::db::impl* db = nullptr) {
+        return matches_shadow(_shadow, nullptr, db);
     }
 
     shadow_map clone_shadow_map() {
@@ -187,9 +198,14 @@ public:
         return s;
     }
 
-    testing::AssertionResult
-    matches_shadow(const shadow_map& shadow, lsm::db::snapshot* snapshot) {
-        auto iter = _db->create_iterator({.snapshot = snapshot}).get();
+    testing::AssertionResult matches_shadow(
+      const shadow_map& shadow,
+      lsm::db::snapshot* snapshot,
+      lsm::db::impl* db = nullptr) {
+        if (!db) {
+            db = _db.get();
+        }
+        auto iter = db->create_iterator({.snapshot = snapshot}).get();
         auto it = shadow.begin();
         std::vector<std::string> errors;
         for (iter->seek_to_first().get(); iter->valid(); iter->next().get()) {
@@ -232,16 +248,24 @@ public:
         _db->close().get();
         _tracking_data->reset_tracking();
     }
-    void open() {
-        _db = lsm::db::impl::open(
-                _options,
-                {
-                  .data = std::make_unique<proxy_data_persistence>(
-                    _tracking_data.get()),
-                  .metadata = std::make_unique<proxy_metadata_persistence>(
-                    _meta_persistence.get()),
-                })
-                .get();
+    void open() { _db = do_open(_options); }
+
+    lsm::db::impl* open(ss::lw_shared_ptr<lsm::internal::options> opts) {
+        _other_dbs.emplace_back(do_open(std::move(opts)));
+        return _other_dbs.back().get();
+    }
+
+    std::unique_ptr<lsm::db::impl>
+    do_open(ss::lw_shared_ptr<lsm::internal::options> opts) {
+        return lsm::db::impl::open(
+                 opts,
+                 {
+                   .data = std::make_unique<proxy_data_persistence>(
+                     _tracking_data.get()),
+                   .metadata = std::make_unique<proxy_metadata_persistence>(
+                     _meta_persistence.get()),
+                 })
+          .get();
     }
 
     auto max_applied_seqno() { return _db->max_applied_seqno(); }
@@ -268,6 +292,7 @@ protected:
     std::unique_ptr<lsm::io::metadata_persistence> _meta_persistence;
     std::unique_ptr<tracking_data_persistence> _tracking_data;
     std::unique_ptr<lsm::db::impl> _db;
+    std::vector<std::unique_ptr<lsm::db::impl>> _other_dbs;
 };
 
 TEST_F(ImplTest, MemtableIsFlushed) {
@@ -525,6 +550,127 @@ TEST_F(ImplTest, GetFindsKeysWithDifferentSeqno) {
     // This would previously skip the file containing "aaa" at seqno 1.
     auto result = _db->get("aaa@2"_key).get();
     EXPECT_FALSE(result.is_missing());
+}
+
+TEST_F(ImplTest, RefreshOnWritableDbThrows) {
+    EXPECT_THROW(_db->refresh().get(), lsm::invalid_argument_exception);
+}
+
+TEST_F(ImplTest, RefreshEmpty) {
+    auto read_opts = make_options();
+    read_opts->readonly = true;
+
+    // Sanity check that the read-only database sees nothing.
+    auto* read_db = open(read_opts);
+    EXPECT_TRUE(matches_shadow(read_db));
+
+    // Refresh shouldn't have issues with the persistence being empty.
+    read_db->refresh().get();
+    EXPECT_TRUE(matches_shadow(read_db));
+    EXPECT_FALSE(read_db->max_applied_seqno().has_value());
+}
+
+TEST_F(ImplTest, RefreshNoOp) {
+    write_at_least(512_KiB);
+    _db->flush().get();
+
+    auto read_opts = make_options();
+    read_opts->readonly = true;
+    auto* read_db = open(read_opts);
+    EXPECT_TRUE(matches_shadow(read_db));
+
+    auto max_persisted = _db->max_persisted_seqno();
+    write_at_least(512_KiB);
+
+    // Without flushing, refreshing should be a no-op.
+    EXPECT_FALSE(read_db->refresh().get());
+    EXPECT_LT(read_db->max_applied_seqno(), _db->max_applied_seqno());
+    EXPECT_EQ(read_db->max_persisted_seqno(), max_persisted);
+}
+
+TEST_F(ImplTest, RefreshSeesChanges) {
+    write_at_least(512_KiB);
+    _db->flush().get();
+    write_at_least(512_KiB);
+    _db->flush().get();
+
+    auto read_opts = make_options();
+    read_opts->readonly = true;
+    auto* read_db = open(read_opts);
+    EXPECT_TRUE(matches_shadow(read_db));
+    EXPECT_EQ(read_db->max_applied_seqno(), _db->max_applied_seqno());
+    EXPECT_EQ(read_db->max_persisted_seqno(), _db->max_persisted_seqno());
+
+    // Write new data.
+    write_at_least(512_KiB);
+    EXPECT_FALSE(matches_shadow(read_db));
+
+    // Even when flushing the data shouldn't be visible.
+    _db->flush().get();
+    EXPECT_FALSE(matches_shadow(read_db));
+    EXPECT_NE(read_db->max_applied_seqno(), _db->max_applied_seqno());
+    EXPECT_NE(read_db->max_persisted_seqno(), _db->max_persisted_seqno());
+
+    // But once we refresh it should match.
+    EXPECT_TRUE(read_db->refresh().get());
+    EXPECT_TRUE(matches_shadow(read_db));
+    EXPECT_EQ(read_db->max_applied_seqno(), _db->max_applied_seqno());
+    EXPECT_EQ(read_db->max_persisted_seqno(), _db->max_persisted_seqno());
+}
+
+TEST_F(ImplTest, RefreshWithSnapshot) {
+    write_at_least(512_KiB);
+    _db->flush().get();
+
+    auto read_opts = make_options();
+    read_opts->readonly = true;
+    auto* read_db = open(read_opts);
+    EXPECT_TRUE(matches_shadow(read_db));
+
+    auto snap = read_db->create_snapshot();
+    auto shadow = clone_shadow_map();
+    EXPECT_TRUE(matches_shadow(shadow, snap->get(), read_db));
+
+    write_at_least(512_KiB);
+    _db->flush().get();
+
+    // We should only match one we refresh.
+    EXPECT_FALSE(matches_shadow(read_db));
+    EXPECT_TRUE(read_db->refresh().get());
+    EXPECT_TRUE(matches_shadow(read_db));
+
+    // The snapshot should still match.
+    EXPECT_TRUE(matches_shadow(shadow, snap->get(), read_db));
+}
+
+TEST_F(ImplTest, RefreshFailsForLowerSeqno) {
+    write_at_least(512_KiB);
+    _db->flush().get();
+
+    // Nefarious case: open another database so it gets a low seqno and we can
+    // flush a seqno lower than the refreshed database below.
+    auto* another_db = open(make_options());
+
+    // Flush a couple more times to bump the seqno.
+    write_at_least(512_KiB);
+    _db->flush().get();
+    write_at_least(512_KiB);
+    _db->flush().get();
+
+    // Open a read-only database.
+    auto read_opts = make_options();
+    read_opts->readonly = true;
+    auto* read_db = open(read_opts);
+
+    // Write some data to the other database and flush, lowering the sequence
+    // number.
+    write_at_least(512_KiB, another_db);
+    another_db->flush().get();
+
+    // Refreshing shouldn't work.
+    auto before_refresh = read_db->max_applied_seqno();
+    EXPECT_ANY_THROW(read_db->refresh().get());
+    EXPECT_EQ(read_db->max_applied_seqno(), before_refresh);
 }
 
 } // namespace

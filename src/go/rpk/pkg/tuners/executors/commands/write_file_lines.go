@@ -15,7 +15,7 @@ import (
 	"bufio"
 	"fmt"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -37,7 +37,7 @@ func NewWriteFileLinesCmd(fs afero.Fs, path string, lines []string) Command {
 
 func (c *writeFileLinesCommand) Execute() error {
 	zap.L().Sugar().Debugf("Writing '%v' to file '%s'", c.lines, c.path)
-	return utils.WriteFileLines(c.fs, c.lines, c.path)
+	return rpkutil.WriteFileLines(c.fs, c.lines, c.path)
 }
 
 func (c *writeFileLinesCommand) RenderScript(w *bufio.Writer) error {

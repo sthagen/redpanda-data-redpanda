@@ -1,0 +1,36 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "osutil",
+    srcs = [
+        "commands.go",
+        "directory.go",
+        "file.go",
+        "file_all.go",
+        "file_windows.go",
+        "lock.go",
+        "proc.go",
+    ],
+    importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/go/rpk/pkg/rpkutil",
+        "@com_github_spf13_afero//:afero",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "osutil_test",
+    srcs = [
+        "file_test.go",
+        "proc_test.go",
+    ],
+    embed = [":osutil"],
+    deps = [
+        "//src/go/rpk/pkg/rpkutil",
+        "@com_github_spf13_afero//:afero",
+        "@com_github_stretchr_testify//require",
+    ],
+)

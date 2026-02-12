@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +43,7 @@ func TestMaxAIOEventsCheck(t *testing.T) {
 		{
 			name: "it shouldn't do anything if current >= reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("20000000"),
 					maxAIOEventsFile,
@@ -54,7 +54,7 @@ func TestMaxAIOEventsCheck(t *testing.T) {
 		{
 			name: "it shouldn't do anything if current == reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("10000137"),
 					maxAIOEventsFile,
@@ -65,7 +65,7 @@ func TestMaxAIOEventsCheck(t *testing.T) {
 		{
 			name: "it should set the value if current < reference",
 			before: func(fs afero.Fs) error {
-				_, err := utils.WriteBytes(
+				_, err := rpkutil.WriteBytes(
 					fs,
 					[]byte("10000136"),
 					maxAIOEventsFile,

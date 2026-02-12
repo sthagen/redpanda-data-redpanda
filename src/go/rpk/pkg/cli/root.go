@@ -56,10 +56,10 @@ func Execute() {
 	p := new(config.Params)
 	runXHelp := func() {
 		for _, o := range p.FlagOverrides {
-			switch {
-			case o == "help":
+			switch o {
+			case "help":
 				fmt.Print(config.ParamsHelp())
-			case o == "list":
+			case "list":
 				fmt.Print(config.ParamsList())
 			default:
 				return

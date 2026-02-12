@@ -78,11 +78,12 @@ ss::future<kafka::coordinator_response> partition_to_coordinator(
     auto leader_future = co_await ss::coroutine::as_future(
       ctx->metadata_cache().get_leader(consumer_offsets_ntp, timeout));
     if (leader_future.failed()) {
+        auto ex = leader_future.get_exception();
         vlog(
           klog.info,
           "exception while waiting for leader on ntp {}: {}",
           consumer_offsets_ntp,
-          leader_future.get_exception());
+          ex);
         co_return return_element;
     }
     co_return leader_to_coordinator(ctx, group_id, leader_future.get());

@@ -346,10 +346,8 @@ ss::future<int64_t> caching_runtime::do_gc() {
       ss::when_all_succeed(gc_factories(), gc_engines()));
     _gc_timer.rearm(ss::lowres_clock::now() + _gc_interval);
     if (fut.failed()) {
-        vlog(
-          wasm_log.warn,
-          "wasm caching runtime gc failed: {}",
-          fut.get_exception());
+        auto ex = fut.get_exception();
+        vlog(wasm_log.warn, "wasm caching runtime gc failed: {}", ex);
         co_return -1;
     }
     co_return std::apply(std::plus<>(), fut.get());

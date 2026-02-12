@@ -124,6 +124,31 @@ from_string_view<output_format>(std::string_view sv) {
 
 std::ostream& operator<<(std::ostream& os, const output_format& of);
 
+enum class reference_format { none = 0, qualified };
+
+constexpr std::string_view to_string_view(reference_format rf) {
+    switch (rf) {
+    case reference_format::qualified:
+        return "qualified";
+    case reference_format::none:
+        break;
+    }
+    return "";
+}
+
+template<>
+inline std::optional<reference_format>
+from_string_view<reference_format>(std::string_view sv) {
+    return string_switch<std::optional<reference_format>>(sv)
+      .match(to_string_view(reference_format::none), reference_format::none)
+      .match(
+        to_string_view(reference_format::qualified),
+        reference_format::qualified)
+      .default_match(std::nullopt);
+}
+
+std::ostream& operator<<(std::ostream& os, const reference_format& rf);
+
 ///\brief Type representing a global resource for ACLs.
 using registry_resource = named_type<ss::sstring, struct registry_resource_tag>;
 

@@ -16,19 +16,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 )
 
 type executeCommand struct {
 	Command
 	cmd     string
 	args    []string
-	proc    os.Proc
+	proc    osutil.Proc
 	timeout time.Duration
 }
 
 func NewLaunchCmd(
-	proc os.Proc, timeout time.Duration, cmd string, args ...string,
+	proc osutil.Proc, timeout time.Duration, cmd string, args ...string,
 ) Command {
 	return &executeCommand{
 		cmd:     cmd,

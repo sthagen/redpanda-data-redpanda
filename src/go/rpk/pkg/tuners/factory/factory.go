@@ -19,8 +19,8 @@ import (
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cloud/gcp"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ballast"
@@ -74,14 +74,14 @@ type tunersFactory struct {
 	irqBalanceService irq.BalanceService
 	irqProcFile       irq.ProcFile
 	blockDevices      disk.BlockDevices
-	proc              os.Proc
+	proc              osutil.Proc
 	grub              system.Grub
 	executor          executors.Executor
 }
 
 func NewDirectExecutorTunersFactory(fs afero.Fs, rnc config.RpkNodeConfig, timeout time.Duration) TunersFactory {
 	irqProcFile := irq.NewProcFile(fs)
-	proc := os.NewProc()
+	proc := osutil.NewProc()
 	irqDeviceInfo := irq.NewDeviceInfo(fs, irqProcFile)
 	executor := executors.NewDirectExecutor()
 	return newTunersFactory(fs, rnc, irqProcFile, proc, irqDeviceInfo, executor, timeout)
@@ -89,7 +89,7 @@ func NewDirectExecutorTunersFactory(fs afero.Fs, rnc config.RpkNodeConfig, timeo
 
 func NewScriptRenderingTunersFactory(fs afero.Fs, rnc config.RpkNodeConfig, out string, timeout time.Duration) TunersFactory {
 	irqProcFile := irq.NewProcFile(fs)
-	proc := os.NewProc()
+	proc := osutil.NewProc()
 	irqDeviceInfo := irq.NewDeviceInfo(fs, irqProcFile)
 	executor := executors.NewScriptRenderingExecutor(fs, out)
 	return newTunersFactory(fs, rnc, irqProcFile, proc, irqDeviceInfo, executor, timeout)
@@ -99,7 +99,7 @@ func newTunersFactory(
 	fs afero.Fs,
 	rnc config.RpkNodeConfig,
 	irqProcFile irq.ProcFile,
-	proc os.Proc,
+	proc osutil.Proc,
 	irqDeviceInfo irq.DeviceInfo,
 	executor executors.Executor,
 	timeout time.Duration,
@@ -112,7 +112,7 @@ func newTunersFactory(
 		cpuMasks:          irq.NewCPUMasks(fs, hwloc.NewHwLocCmd(proc, timeout), executor),
 		irqBalanceService: irq.NewBalanceService(fs, proc, executor, timeout),
 		blockDevices:      disk.NewBlockDevices(fs, irqDeviceInfo, irqProcFile, proc, timeout),
-		grub:              system.NewGrub(os.NewCommands(proc), proc, fs, executor, timeout),
+		grub:              system.NewGrub(osutil.NewCommands(proc), proc, fs, executor, timeout),
 		proc:              proc,
 		executor:          executor,
 	}
@@ -301,7 +301,7 @@ func MergeTunerParamsConfig(params *TunerParams, y *config.RedpandaYaml) (*Tuner
 		for _, address := range y.Redpanda.KafkaAPI {
 			addrs = append(addrs, address.Address)
 		}
-		nics, err := net.GetInterfacesByIps(
+		nics, err := netutil.GetInterfacesByIps(
 			addrs...,
 		)
 		if err != nil {
@@ -320,7 +320,7 @@ func FillTunerParamsWithValuesFromConfig(params *TunerParams, y *config.Redpanda
 	for _, address := range y.Redpanda.KafkaAPI {
 		addrs = append(addrs, address.Address)
 	}
-	nics, err := net.GetInterfacesByIps(
+	nics, err := netutil.GetInterfacesByIps(
 		addrs...,
 	)
 	if err != nil {

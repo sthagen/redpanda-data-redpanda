@@ -216,10 +216,8 @@ static ss::future<size_t> write_until_threshold(
     bool failure = false;
     for (auto& r : results) {
         if (r.failed()) {
-            vlog(
-              test_log.error,
-              "Unexpected write failure: {}",
-              r.get_exception());
+            auto ex = r.get_exception();
+            vlog(test_log.error, "Unexpected write failure: {}", ex);
             failure = true;
         }
     }

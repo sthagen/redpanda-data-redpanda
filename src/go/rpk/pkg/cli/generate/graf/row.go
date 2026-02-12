@@ -21,7 +21,7 @@ func (*RowPanel) Type() string {
 }
 
 func (p *RowPanel) GetGridPos() *GridPos {
-	return &p.BasePanel.GridPos
+	return &p.GridPos
 }
 
 func (p *RowPanel) MarshalJSON() ([]byte, error) {

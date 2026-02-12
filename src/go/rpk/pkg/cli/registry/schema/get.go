@@ -80,15 +80,15 @@ To print schema metadata properties, use the '--print-metadata' flag.
 			if schemaFile != "" {
 				n++
 			}
-			switch {
-			case n == 0:
-				out.Die("Must specify at least one of --schema-version, --id, or --schema.")
-			case n == 1:
+			switch n {
+			case 0:
+				out.Die("must specify at least one of --schema-version, --id, or --schema")
+			case 1:
 			default:
-				out.Die("Must specify only one of --schema-version, --id, or --schema.")
+				out.Die("must specify only one of --schema-version, --id, or --schema")
 			}
 			if len(args) == 0 && (sversion != "" || schemaFile != "") {
-				out.Die("Subject must be specified for --schema-version or --schema.")
+				out.Die("subject must be specified for --schema-version or --schema")
 			}
 
 			var ss []sr.SubjectSchema

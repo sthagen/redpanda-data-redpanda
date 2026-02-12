@@ -69,7 +69,7 @@ WARNING: this should only be used when redpanda is not running.
 
 			// Encode output
 			outBytes, err := yaml.Marshal(content)
-			out.MaybeDie(err, "Serialization error: %v", configCacheFile, err)
+			out.MaybeDie(err, "serialization error writing %q: %v", configCacheFile, err)
 
 			// Write back output
 			err = afero.WriteFile(fs, configCacheFile, outBytes, 0o755)

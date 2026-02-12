@@ -533,10 +533,11 @@ ss::future<> partition_translator::init(
                   return _translation_ctx->discard().then_wrapped(
                     [this](ss::future<> f) {
                         if (f.failed()) {
+                            auto ex = f.get_exception();
                             vlog(
                               _logger.warn,
                               "Exception cleaning up inflight translation: {}",
-                              f.get_exception());
+                              ex);
                         }
                         return ss::make_ready_future();
                     });

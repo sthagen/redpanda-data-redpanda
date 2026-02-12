@@ -8,10 +8,14 @@
 # by the Apache License, Version 2.0
 
 import collections
+from enum import Enum
+from dataclasses import dataclass
 import math
 import random
 import time
+from typing import Dict
 
+from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 
 from rptest.clients.kafka_cat import KafkaCat
@@ -361,6 +365,26 @@ class AutomaticLeadershipBalancingTest(RedpandaTest):
             )
 
 
+class Ordering(str, Enum):
+    ordered = "ordered"
+    unordered = "unordered"
+
+
+@dataclass
+class LeaderPinningConfig:
+    ordering: Ordering
+
+    @property
+    def is_ordered(self) -> bool:
+        return self.ordering == Ordering.ordered
+
+    @property
+    def preference_str(self) -> str:
+        if self.is_ordered:
+            return "ordered_racks"
+        return "racks"
+
+
 class LeadershipPinningTest(RedpandaTest):
     def __init__(self, test_context):
         super(LeadershipPinningTest, self).__init__(
@@ -414,10 +438,49 @@ class LeadershipPinningTest(RedpandaTest):
         }
 
     def wait_for_racks(
-        self, partition_counts, topic2expected_racks, check_balance=True, timeout_sec=60
-    ):
+        self,
+        partition_counts: Dict[str, int],
+        topic2expected_racks: Dict[str, list[str]],
+        is_ordered: bool,
+        check_balance: bool = True,
+        timeout_sec: int = 60,
+    ) -> None:
+        """
+        wait for leadership balance with rack placement.
+        balance is:
+        1. LEADER COUNT: all partitions in all topics have leaders
+
+        2. RACK PLACEMENT: leadership is on a favored rack
+
+        3. LOAD BALANCE (optional): checked when check_balance is true. once ntp leaders are on their preferred rack, check that it balances the number of leaders per node within the rack
+
+        Args:
+            partition_counts: Dict mapping topic names to expected partition counts
+                             e.g., {"foo": 60, "bar": 20}
+            topic2expected_racks: Dict mapping topic names to lists of expected rack IDs
+                                 e.g., {"foo": ["A"], "bar": ["C"]}
+            is_ordered: swaps the validation logic from spread across all provided racks (false)
+                        to preference the first rack in the list proided (true)
+            check_balance: If True, also verify even distribution within racks
+            timeout_sec: Maximum time to wait for conditions to be met (default: 60)
+
+        Raises:
+            TimeoutError: If the conditions are not met within timeout_sec
+        """
+
         def predicate():
             t2n2l = self._get_topic2node2leaders()
+
+            def check_leader_placement(
+                is_ordered: bool, rack_preference: list[str], found_racks: set[str]
+            ) -> bool:
+                if not is_ordered:
+                    # all found racks should be within the rack preference
+                    return found_racks == set(rack_preference)
+                else:
+                    # otherwise, all leaders should accumulate on the first rack
+                    highest_priority = rack_preference[0]
+                    return len(found_racks) == 1 and highest_priority in found_racks
 
             for topic, expected_count in partition_counts.items():
                 node2leaders = t2n2l.get(topic, dict())
@@ -430,13 +493,15 @@ class LeadershipPinningTest(RedpandaTest):
                     )
                     return False
 
-                expected_racks = topic2expected_racks.get(topic, {})
+                expected_racks = topic2expected_racks.get(topic, list())
                 rack2leaders = self._rack_counts(node2leaders)
 
-                if expected_racks != rack2leaders.keys():
+                if not check_leader_placement(
+                    is_ordered, expected_racks, set(rack2leaders.keys())
+                ):
                     self.logger.debug(
-                        f"leader rack sets for topic {topic} differ, "
-                        f"expected: {expected_racks}, actual counts: {rack2leaders}"
+                        f"leader rack expectations failed for topic {topic}, is_ordered: {is_ordered} "
+                        f"expected: {expected_racks}, actual: {list(rack2leaders.keys())}"
                     )
                     return False
 
@@ -454,7 +519,30 @@ class LeadershipPinningTest(RedpandaTest):
         wait_until(predicate, timeout_sec=timeout_sec, backoff_sec=5)
 
     @cluster(num_nodes=6, log_allow_list=RESTART_LOG_ALLOW_LIST)
-    def test_leadership_pinning(self):
+    @matrix(ordering=[Ordering.ordered, Ordering.unordered])
+    def test_leadership_pinning(self, ordering: Ordering):
+        """
+        test overview:
+        1. set a default of A
+        2.
+            foo: default, bar: C
+            check foo on A bar on C
+        3.
+            foo: default, bar: B -> C
+            check foo on A, bar matches ordered or unordered behavior
+        4.
+            kill all nodes in rack B
+            check foo on A, bar on C
+        5.
+            foo: default, bar: default
+            check foo and bar on A
+        6. restart B
+        7.
+            default is now none
+            check foo and bar spread across A, B, C
+        """
+        config = LeaderPinningConfig(ordering)
+
         for ix, node in enumerate(self.redpanda.nodes):
             self.redpanda.set_extra_node_conf(
                 node,
@@ -462,7 +550,9 @@ class LeadershipPinningTest(RedpandaTest):
                     "rack": self.RACK_LAYOUT[ix],
                 },
             )
-        self.redpanda.add_extra_rp_conf({"default_leaders_preference": "racks: A"})
+        self.redpanda.add_extra_rp_conf(
+            {"default_leaders_preference": f"{config.preference_str}: A"}
+        )
         self.redpanda.start()
 
         rpk = RpkTool(self.redpanda)
@@ -471,25 +561,36 @@ class LeadershipPinningTest(RedpandaTest):
 
         self.logger.info("creating topics")
 
+        # foo receives default preference which is A
         rpk.create_topic("foo", partitions=60, replicas=3)
+
+        # bar receives a preference of C
         rpk.create_topic(
             "bar",
             partitions=20,
             replicas=3,
-            config={"redpanda.leaders.preference": "racks: C"},
+            config={"redpanda.leaders.preference": f"{config.preference_str}: C"},
         )
 
         # bigger timeout to allow balancer to activate, health reports to propagate, etc.
         self.wait_for_racks(
-            partition_counts, {"foo": {"A"}, "bar": {"C"}}, timeout_sec=90
+            partition_counts,
+            {"foo": ["A"], "bar": ["C"]},
+            is_ordered=config.is_ordered,
+            timeout_sec=90,
         )
 
         self.logger.info("altering topic preference")
 
-        rpk.alter_topic_config("bar", "redpanda.leaders.preference", "racks: B, C")
+        rpk.alter_topic_config(
+            "bar", "redpanda.leaders.preference", f"{config.preference_str}: B, C"
+        )
 
         self.wait_for_racks(
-            partition_counts, {"foo": {"A"}, "bar": {"B", "C"}}, timeout_sec=60
+            partition_counts,
+            {"foo": ["A"], "bar": ["B", "C"]},
+            is_ordered=config.is_ordered,
+            timeout_sec=60,
         )
 
         # Decrease idle timeout to not wait too long after nodes are killed
@@ -504,7 +605,10 @@ class LeadershipPinningTest(RedpandaTest):
                 self.redpanda.stop_node(node)
 
         self.wait_for_racks(
-            partition_counts, {"foo": {"A"}, "bar": {"C"}}, timeout_sec=60
+            partition_counts,
+            {"foo": ["A"], "bar": ["C"]},
+            is_ordered=config.is_ordered,
+            timeout_sec=60,
         )
 
         self.logger.info("explicitly disabling for topic")
@@ -514,18 +618,23 @@ class LeadershipPinningTest(RedpandaTest):
         # require balanced counts.
         self.wait_for_racks(
             partition_counts,
-            {"foo": {"A", "C"}, "bar": {"C"}},
+            {"foo": ["A", "C"], "bar": ["C"]},
+            is_ordered=config.is_ordered,
             check_balance=False,
             timeout_sec=60,
         )
 
         self.logger.info("unset topic configs")
 
+        # default preference is governing which is still A
         rpk.delete_topic_config("foo", "redpanda.leaders.preference")
         rpk.delete_topic_config("bar", "redpanda.leaders.preference")
 
         self.wait_for_racks(
-            partition_counts, {"foo": {"A"}, "bar": {"A"}}, timeout_sec=60
+            partition_counts,
+            {"foo": ["A"], "bar": ["A"]},
+            is_ordered=config.is_ordered,
+            timeout_sec=60,
         )
 
         self.logger.info("unset default preference")
@@ -534,16 +643,20 @@ class LeadershipPinningTest(RedpandaTest):
             if self.RACK_LAYOUT[ix] == "B":
                 self.redpanda.start_node(node)
 
+        # regardless of test config, no preference is semantically equivalent to unordered with all racks defined, check as such
         self.redpanda.set_cluster_config({"default_leaders_preference": "none"})
         self.wait_for_racks(
             partition_counts,
-            {"foo": {"A", "B", "C"}, "bar": {"A", "B", "C"}},
+            {"foo": ["A", "B", "C"], "bar": ["A", "B", "C"]},
+            is_ordered=False,
             check_balance=False,
             timeout_sec=90,
         )
 
     @cluster(num_nodes=6, log_allow_list=RESTART_LOG_ALLOW_LIST)
-    def test_leadership_pinning_reporting(self):
+    @matrix(ordering=[Ordering.ordered, Ordering.unordered])
+    def test_leadership_pinning_reporting(self, ordering: Ordering):
+        config = LeaderPinningConfig(ordering)
         for ix, node in enumerate(self.redpanda.nodes):
             self.redpanda.set_extra_node_conf(
                 node,
@@ -589,16 +702,18 @@ class LeadershipPinningTest(RedpandaTest):
             "foo",
             partitions=60,
             replicas=3,
-            config={"redpanda.leaders.preference": "racks: C"},
+            config={"redpanda.leaders.preference": f"{config.preference_str}: C"},
         )
 
         assert get_leadership_pinning_status(), (
             "Leadership pinning reported disabled while is it enabled"
         )
 
-        # default leaders preference defined
+        # default leaders preference defined as A
         self.redpanda.start()
-        self.redpanda.set_cluster_config({"default_leaders_preference": "racks: A"})
+        self.redpanda.set_cluster_config(
+            {"default_leaders_preference": f"{config.preference_str}: A"}
+        )
         rpk.create_topic("foo", partitions=60, replicas=3)
 
         assert get_leadership_pinning_status(), (
@@ -606,7 +721,9 @@ class LeadershipPinningTest(RedpandaTest):
         )
 
     @cluster(num_nodes=6, log_allow_list=RESTART_LOG_ALLOW_LIST)
-    def test_leadership_pinning_sanctions(self):
+    @matrix(ordering=[Ordering.ordered, Ordering.unordered])
+    def test_leadership_pinning_sanctions(self, ordering: Ordering):
+        config = LeaderPinningConfig(ordering)
         for ix, node in enumerate(self.redpanda.nodes):
             self.redpanda.set_extra_node_conf(
                 node,
@@ -614,7 +731,9 @@ class LeadershipPinningTest(RedpandaTest):
                     "rack": self.RACK_LAYOUT[ix],
                 },
             )
-        self.redpanda.add_extra_rp_conf({"default_leaders_preference": "racks: A"})
+        self.redpanda.add_extra_rp_conf(
+            {"default_leaders_preference": f"{config.preference_str}: A"}
+        )
         self.redpanda.start()
 
         rpk = RpkTool(self.redpanda)
@@ -632,12 +751,15 @@ class LeadershipPinningTest(RedpandaTest):
             "bar",
             partitions=20,
             replicas=3,
-            config={"redpanda.leaders.preference": "racks: C"},
+            config={"redpanda.leaders.preference": f"{config.preference_str}: C"},
         )
 
         # bigger timeout to allow balancer to activate, health reports to propagate, etc.
         self.wait_for_racks(
-            partition_counts, {"foo": {"A"}, "bar": {"C"}}, timeout_sec=90
+            partition_counts,
+            {"foo": ["A"], "bar": ["C"]},
+            is_ordered=config.is_ordered,
+            timeout_sec=90,
         )
 
         # restart redpanda without an active license
@@ -647,11 +769,11 @@ class LeadershipPinningTest(RedpandaTest):
 
         # validate cluster and topic state
         cluster_config = rpk.cluster_config_get("default_leaders_preference")
-        assert cluster_config == "racks:A", (
+        assert cluster_config == f"{config.preference_str}:A", (
             f"Failed to properly load cluster's config on restart. Got '{cluster_config}')."
         )
         topic_config = get_leaders_preference("bar")
-        assert topic_config == "racks:C", (
+        assert topic_config == f"{config.preference_str}:C", (
             f"Failed to load topic's preferences on restart. Got '{topic_config}'."
         )
 

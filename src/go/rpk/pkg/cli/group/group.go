@@ -121,7 +121,7 @@ The STATE columns shows which state the group is in:
 				})
 
 				if vsi == -1 {
-					out.Die("Invalid group state argument: %s", state)
+					out.Die("invalid group state argument: %s", state)
 				}
 
 				normalizedFilterStates[i] = validStates[vsi]

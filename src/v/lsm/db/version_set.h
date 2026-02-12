@@ -162,6 +162,10 @@ public:
     // layer.
     ss::future<> recover();
 
+    // Reload the manifest from disk. Returns true if the manifest was updated,
+    // false if no change. Throws if the manifest would regress state.
+    ss::future<bool> refresh();
+
     // The latest seqno applied to the LSM tree.
     std::optional<internal::sequence_number> last_seqno() const {
         return _last_seqno;

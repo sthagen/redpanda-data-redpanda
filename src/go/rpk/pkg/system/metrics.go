@@ -22,7 +22,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 	"github.com/tklauser/go-sysconf"
 )
@@ -61,7 +61,7 @@ func GatherMetrics(
 		errs = multierror.Append(errs, err)
 	}
 
-	pidStr, err := utils.ReadEnsureSingleLine(fs, y.PIDFile())
+	pidStr, err := rpkutil.ReadEnsureSingleLine(fs, y.PIDFile())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return metrics, errRedpandaDown
@@ -124,7 +124,7 @@ func redpandaCPUPercentage(
 
 func readStat(fs afero.Fs, pid int) (*stat, error) {
 	statFilePath := fmt.Sprintf("/proc/%d/stat", pid)
-	line, err := utils.ReadEnsureSingleLine(fs, statFilePath)
+	line, err := rpkutil.ReadEnsureSingleLine(fs, statFilePath)
 	if err != nil {
 		return nil, err
 	}

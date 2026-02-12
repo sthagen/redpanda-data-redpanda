@@ -13,7 +13,7 @@ import (
 	"context"
 
 	"github.com/coreos/go-systemd/v22/dbus"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/spf13/afero"
 )
 
@@ -57,7 +57,7 @@ func (c *dbusClient) UnitState(name string) (LoadState, ActiveState, error) {
 }
 
 func (c *dbusClient) LoadUnit(fs afero.Fs, body, name string) error {
-	_, err := utils.WriteBytes(fs, []byte(body), UnitPath(name))
+	_, err := rpkutil.WriteBytes(fs, []byte(body), UnitPath(name))
 	if err != nil {
 		return err
 	}

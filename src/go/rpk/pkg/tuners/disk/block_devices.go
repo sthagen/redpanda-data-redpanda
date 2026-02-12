@@ -21,9 +21,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -48,7 +48,7 @@ type BlockDevices interface {
 }
 
 type blockDevices struct {
-	proc          os.Proc
+	proc          osutil.Proc
 	fs            afero.Fs
 	irqDeviceInfo irq.DeviceInfo
 	irqProcFile   irq.ProcFile
@@ -59,7 +59,7 @@ func NewBlockDevices(
 	fs afero.Fs,
 	irqDeviceInfo irq.DeviceInfo,
 	irqProcFile irq.ProcFile,
-	proc os.Proc,
+	proc osutil.Proc,
 	timeout time.Duration,
 ) BlockDevices {
 	return &blockDevices{
@@ -253,7 +253,7 @@ func (b *blockDevices) GetDiskInfoByType(
 		}
 	}
 
-	if utils.IsAWSi3MetalInstance() {
+	if rpkutil.IsAWSi3MetalInstance() {
 		for IRQ := range nvmeIRQs {
 			isNvmFastPath, err := b.isIRQNvmeFastPathIRQ(IRQ, runtime.NumCPU())
 			if err != nil {
@@ -265,12 +265,12 @@ func (b *blockDevices) GetDiskInfoByType(
 		}
 	}
 	diskInfoByType[Nvme] = DevicesIRQs{
-		utils.GetKeys(nvmeDisks),
-		utils.GetIntKeys(nvmeIRQs),
+		rpkutil.GetKeys(nvmeDisks),
+		rpkutil.GetIntKeys(nvmeIRQs),
 	}
 	diskInfoByType[NonNvme] = DevicesIRQs{
-		utils.GetKeys(nonNvmeDisks),
-		utils.GetIntKeys(nonNvmeIRQs),
+		rpkutil.GetKeys(nonNvmeDisks),
+		rpkutil.GetIntKeys(nonNvmeIRQs),
 	}
 	return diskInfoByType, nil
 }

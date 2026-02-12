@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/twmb/franz-go/pkg/kadm"
 )
 
@@ -57,7 +57,7 @@ func regexTopics(adm *kadm.Client, expressions []string) ([]string, error) {
 		return nil, fmt.Errorf("unable to list topics: %w", err)
 	}
 
-	return utils.RegexListedItems(topics.Names(), expressions)
+	return rpkutil.RegexListedItems(topics.Names(), expressions)
 }
 
 func regexTopicDetails(adm *kadm.Client, expressions []string) (kadm.TopicDetails, error) {
@@ -66,14 +66,14 @@ func regexTopicDetails(adm *kadm.Client, expressions []string) (kadm.TopicDetail
 		return nil, fmt.Errorf("unable to list topics: %w", err)
 	}
 
-	compiled, err := utils.CompileRegexExpressions(expressions)
+	compiled, err := rpkutil.CompileRegexExpressions(expressions)
 	if err != nil {
 		return nil, fmt.Errorf("unable to compile regex expressions: %w", err)
 	}
 
 	result := make(kadm.TopicDetails)
 	for name, topic := range topics {
-		if utils.MatchesAnyRegex(name, compiled) {
+		if rpkutil.MatchesAnyRegex(name, compiled) {
 			result[name] = topic
 		}
 	}

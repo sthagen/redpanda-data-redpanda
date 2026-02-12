@@ -19,10 +19,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = select({
         "@rules_go//go/platform:android": [
-            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/osutil",
+            "//src/go/rpk/pkg/rpkutil",
             "//src/go/rpk/pkg/system/systemd",
             "//src/go/rpk/pkg/tuners/ethtool",
-            "//src/go/rpk/pkg/utils",
             "@com_github_lorenzosaino_go_sysctl//:go-sysctl",
             "@com_github_safchain_ethtool//:ethtool",
             "@com_github_spf13_afero//:afero",
@@ -30,10 +30,10 @@ go_library(
             "@org_uber_go_zap//:zap",
         ],
         "@rules_go//go/platform:linux": [
-            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/osutil",
+            "//src/go/rpk/pkg/rpkutil",
             "//src/go/rpk/pkg/system/systemd",
             "//src/go/rpk/pkg/tuners/ethtool",
-            "//src/go/rpk/pkg/utils",
             "@com_github_lorenzosaino_go_sysctl//:go-sysctl",
             "@com_github_safchain_ethtool//:ethtool",
             "@com_github_spf13_afero//:afero",

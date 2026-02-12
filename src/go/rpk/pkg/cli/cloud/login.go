@@ -12,7 +12,7 @@ package cloud
 import (
 	"fmt"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/containerutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/profile"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
@@ -137,7 +137,7 @@ rpk will talk to a localhost:9092 cluster until you swap to a different profile.
 			// unless the user used --no-profile.
 			if noProfile {
 				// The current profile is seemingly pointing to a container cluster.
-				if p.Name == common.ContainerProfileName {
+				if p.Name == containerutil.ContainerProfileName {
 					fmt.Printf("You are talking to a localhost 'rpk container' cluster (rpk profile name: %q)\n", p.Name)
 					fmt.Println("To talk to a cloud cluster, use 'rpk cloud cluster select'.")
 					return
@@ -158,7 +158,7 @@ rpk will talk to a localhost:9092 cluster until you swap to a different profile.
 				return
 			}
 
-			if p.Name == common.ContainerProfileName {
+			if p.Name == containerutil.ContainerProfileName {
 				fmt.Printf("You are talking to a localhost 'rpk container' cluster (rpk profile name: %q)\n", p.Name)
 			} else {
 				fmt.Printf("You are talking to a self hosted cluster (rpk profile name: %q)\n", p.Name)

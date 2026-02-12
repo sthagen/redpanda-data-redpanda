@@ -11,7 +11,7 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/plugin",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/go/rpk/pkg/os",
+        "//src/go/rpk/pkg/osutil",
         "//src/go/rpk/pkg/out",
         "//src/go/rpk/pkg/plugin",
         "@com_github_spf13_afero//:afero",

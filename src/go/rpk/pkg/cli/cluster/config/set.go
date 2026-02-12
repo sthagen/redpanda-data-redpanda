@@ -124,9 +124,10 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 				// Handle the result based on state
 				state := finalOp.GetState()
 				if completedInTime {
-					if state == controlplanev1.Operation_STATE_COMPLETED {
+					switch state {
+					case controlplanev1.Operation_STATE_COMPLETED:
 						fmt.Printf("Configuration update completed successfully. Operation ID: %s\n", operationID)
-					} else if state == controlplanev1.Operation_STATE_FAILED {
+					case controlplanev1.Operation_STATE_FAILED:
 						fmt.Printf("Configuration update failed. Operation ID: %s\n", operationID)
 					}
 				} else {
@@ -151,7 +152,7 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 					if he.Response.StatusCode == 400 {
 						ve, err := formatValidationError(err, he)
 						out.MaybeDie(err, "error setting config: %v", err)
-						out.Die("No changes were made: %v", ve)
+						out.Die("no changes were made: %v", ve)
 					}
 				}
 
@@ -159,7 +160,7 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 				fmt.Printf("Successfully updated configuration. New configuration version is %d.\n", result.ConfigVersion)
 
 				status, err := client.ClusterConfigStatus(cmd.Context(), true)
-				out.MaybeDie(err, "unable to check if the cluster needs to be restarted: %v\nCheck the status with 'rpk cluster config status'.", err)
+				out.MaybeDie(err, "unable to check if the cluster needs to be restarted: %v; check the status with 'rpk cluster config status'", err)
 				for _, value := range status {
 					if value.Restart {
 						fmt.Print("\nCluster needs to be restarted. See more details with 'rpk cluster config status'.\n")
@@ -189,7 +190,7 @@ func validateConfigSelfHosted(schema rpadmin.ConfigSchema, args []string, noConf
 				confirmed, err := out.Confirm("Warning: disabling Tiered Storage may lead to data loss. If you only want to pause Tiered Storage temporarily, use the 'cloud_storage_enable_segment_uploads' option. Abort?")
 				out.MaybeDie(err, "unable to read user input: %v", err)
 				if confirmed {
-					out.Die("Aborted by user.")
+					out.Die("aborted by user")
 				}
 			}
 		}

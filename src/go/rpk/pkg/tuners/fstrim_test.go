@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/osutil"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/rpkutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/system/systemd"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +72,7 @@ func TestTuneFstrimDirectExecutorRollback(t *testing.T) {
 		if name == "redpanda-fstrim.timer" {
 			return errors.New(errMsg)
 		}
-		_, err := utils.WriteBytes(
+		_, err := rpkutil.WriteBytes(
 			fs,
 			[]byte(body),
 			systemd.UnitPath(name),
@@ -95,7 +95,7 @@ func TestTuneFstrimScriptExecutor(t *testing.T) {
 		startUnit      func(string) error
 		unitState      func(string) (systemd.LoadState, systemd.ActiveState, error)
 		loadUnit       func(afero.Fs, string, string) error
-		proc           os.Proc
+		proc           osutil.Proc
 		expected       string
 		expectedErrMsg string
 	}{
@@ -260,7 +260,7 @@ sudo systemctl start redpanda-fstrim.timer
 				unitState,
 				loadUnit,
 			)
-			var proc os.Proc = &mockProc{}
+			var proc osutil.Proc = &mockProc{}
 			if tt.proc != nil {
 				proc = tt.proc
 			}

@@ -761,10 +761,8 @@ ss::future<> service::cleanup_wasm_binary(uuid_t key) {
     auto result = co_await ss::coroutine::as_future<cluster::errc>(
       _rpc_client->local().delete_wasm_binary(key, wasm_binary_timeout));
     if (result.failed()) {
-        vlog(
-          tlog.debug,
-          "cleaning up wasm binary failed: {}",
-          result.get_exception());
+        auto ex = result.get_exception();
+        vlog(tlog.debug, "cleaning up wasm binary failed: {}", ex);
         co_return;
     }
     auto ec = result.get();

@@ -22,7 +22,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cobraext"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	vnet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
+	vnet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/netutil"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"

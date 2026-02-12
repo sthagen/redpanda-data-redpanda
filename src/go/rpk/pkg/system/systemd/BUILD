@@ -10,7 +10,7 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/system/systemd",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/go/rpk/pkg/utils",
+        "//src/go/rpk/pkg/rpkutil",
         "@com_github_coreos_go_systemd_v22//dbus",
         "@com_github_spf13_afero//:afero",
     ],

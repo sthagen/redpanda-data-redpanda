@@ -461,6 +461,13 @@
             "required": false,
             "type": "string",
             "description": "Optional qualified subject to search for the schema under. Use <:.context:> for context-only lookup, or <:.context:subject> to also verify the schema is associated with that subject. Defaults to searching the default context if unspecified."
+          },
+          {
+            "name": "referenceFormat",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "If set to 'qualified', schema references are returned in context-qualified form. Otherwise, unqualified references are returned."
           }
         ],
         "produces": [

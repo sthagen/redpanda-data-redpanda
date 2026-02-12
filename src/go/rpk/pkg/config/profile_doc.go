@@ -149,8 +149,8 @@ func writeDocumentedStruct(buf *bytes.Buffer, v reflect.Value, t reflect.Type, p
 		} else {
 			// Hack: Add warning before cloud-managed fields.
 			if fullPath == "from_cloud" {
-				buf.WriteString(fmt.Sprintf("%s# The following fields are managed by rpk. Altering them manually may\n", indentStr))
-				buf.WriteString(fmt.Sprintf("%s# result in unexpected behavior.\n", indentStr))
+				fmt.Fprintf(buf, "%s# The following fields are managed by rpk. Altering them manually may\n", indentStr)
+				fmt.Fprintf(buf, "%s# result in unexpected behavior.\n", indentStr)
 			}
 			if err := writeValueField(buf, fieldName, fieldValue, doc, fullPath, indentStr); err != nil {
 				return err
@@ -219,7 +219,7 @@ func isEmptyValue(v reflect.Value) bool {
 func writeCommentedField(buf *bytes.Buffer, name string, t reflect.Type, doc, fullPath, indent string) {
 	// Write documentation comment
 	if doc != "" {
-		buf.WriteString(fmt.Sprintf("%s# %s\n", indent, doc))
+		fmt.Fprintf(buf, "%s# %s\n", indent, doc)
 	}
 
 	// Handle pointer types
@@ -231,16 +231,16 @@ func writeCommentedField(buf *bytes.Buffer, name string, t reflect.Type, doc, fu
 	switch t.Kind() {
 	case reflect.Struct:
 		// Write struct template as comment
-		buf.WriteString(fmt.Sprintf("%s# %s:\n", indent, name))
+		fmt.Fprintf(buf, "%s# %s:\n", indent, name)
 		writeCommentedStructTemplate(buf, t, fullPath, indent+"  ")
 	case reflect.Slice:
-		buf.WriteString(fmt.Sprintf("%s# %s: []\n", indent, name))
+		fmt.Fprintf(buf, "%s# %s: []\n", indent, name)
 	case reflect.Bool:
-		buf.WriteString(fmt.Sprintf("%s# %s: false\n", indent, name))
+		fmt.Fprintf(buf, "%s# %s: false\n", indent, name)
 	case reflect.String:
-		buf.WriteString(fmt.Sprintf("%s# %s: \"\"\n", indent, name))
+		fmt.Fprintf(buf, "%s# %s: \"\"\n", indent, name)
 	default:
-		buf.WriteString(fmt.Sprintf("%s# %s:\n", indent, name))
+		fmt.Fprintf(buf, "%s# %s:\n", indent, name)
 	}
 }
 
@@ -277,7 +277,7 @@ func writeCommentedStructTemplate(buf *bytes.Buffer, t reflect.Type, pathPrefix,
 
 		doc := profileFieldDocs[fullPath]
 		if doc != "" {
-			buf.WriteString(fmt.Sprintf("%s# %s\n", indent, doc))
+			fmt.Fprintf(buf, "%s# %s\n", indent, doc)
 		}
 
 		fieldType := field.Type
@@ -287,16 +287,16 @@ func writeCommentedStructTemplate(buf *bytes.Buffer, t reflect.Type, pathPrefix,
 
 		switch fieldType.Kind() {
 		case reflect.Struct:
-			buf.WriteString(fmt.Sprintf("%s# %s:\n", indent, fieldName))
+			fmt.Fprintf(buf, "%s# %s:\n", indent, fieldName)
 			writeCommentedStructTemplate(buf, fieldType, fullPath, indent+"  ")
 		case reflect.Slice:
-			buf.WriteString(fmt.Sprintf("%s# %s: []\n", indent, fieldName))
+			fmt.Fprintf(buf, "%s# %s: []\n", indent, fieldName)
 		case reflect.Bool:
-			buf.WriteString(fmt.Sprintf("%s# %s: false\n", indent, fieldName))
+			fmt.Fprintf(buf, "%s# %s: false\n", indent, fieldName)
 		case reflect.String:
-			buf.WriteString(fmt.Sprintf("%s# %s: \"\"\n", indent, fieldName))
+			fmt.Fprintf(buf, "%s# %s: \"\"\n", indent, fieldName)
 		default:
-			buf.WriteString(fmt.Sprintf("%s# %s:\n", indent, fieldName))
+			fmt.Fprintf(buf, "%s# %s:\n", indent, fieldName)
 		}
 	}
 }
@@ -313,23 +313,23 @@ func writeValueField(buf *bytes.Buffer, name string, v reflect.Value, doc, fullP
 
 	// Write documentation comment on top (if present)
 	if doc != "" {
-		buf.WriteString(fmt.Sprintf("%s# %s\n", indent, doc))
+		fmt.Fprintf(buf, "%s# %s\n", indent, doc)
 	}
 
 	switch v.Kind() {
 	case reflect.Struct:
 		// If struct is empty, write as {} to preserve semantics. (e.g., tls: {})
 		if isStructAllEmpty(v) {
-			buf.WriteString(fmt.Sprintf("%s%s: {}\n", indent, name))
+			fmt.Fprintf(buf, "%s%s: {}\n", indent, name)
 		} else {
-			buf.WriteString(fmt.Sprintf("%s%s:\n", indent, name))
+			fmt.Fprintf(buf, "%s%s:\n", indent, name)
 			if err := writeDocumentedStruct(buf, v, v.Type(), fullPath, len(indent)/2+1); err != nil {
 				return err
 			}
 		}
 
 	case reflect.Slice:
-		buf.WriteString(fmt.Sprintf("%s%s:\n", indent, name))
+		fmt.Fprintf(buf, "%s%s:\n", indent, name)
 		for i := 0; i < v.Len(); i++ {
 			elem := v.Index(i)
 			if err := writeSliceElement(buf, elem, indent+"  "); err != nil {
@@ -342,17 +342,17 @@ func writeValueField(buf *bytes.Buffer, name string, v reflect.Value, doc, fullP
 		if needsQuoting(val) {
 			val = fmt.Sprintf("%q", val)
 		}
-		buf.WriteString(fmt.Sprintf("%s%s: %s\n", indent, name, val))
+		fmt.Fprintf(buf, "%s%s: %s\n", indent, name, val)
 
 	case reflect.Bool:
 		val := "false"
 		if v.Bool() {
 			val = "true"
 		}
-		buf.WriteString(fmt.Sprintf("%s%s: %s\n", indent, name, val))
+		fmt.Fprintf(buf, "%s%s: %s\n", indent, name, val)
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		buf.WriteString(fmt.Sprintf("%s%s: %d\n", indent, name, v.Int()))
+		fmt.Fprintf(buf, "%s%s: %d\n", indent, name, v.Int())
 
 	default:
 		// Use yaml.Marshal for other types.
@@ -361,7 +361,7 @@ func writeValueField(buf *bytes.Buffer, name string, v reflect.Value, doc, fullP
 			return fmt.Errorf("marshal field %q: %w", name, err)
 		}
 		val := strings.TrimSpace(string(valBytes))
-		buf.WriteString(fmt.Sprintf("%s%s: %s\n", indent, name, val))
+		fmt.Fprintf(buf, "%s%s: %s\n", indent, name, val)
 	}
 	return nil
 }
@@ -380,7 +380,7 @@ func writeSliceElement(buf *bytes.Buffer, v reflect.Value, indent string) error 
 		if needsQuoting(val) {
 			val = fmt.Sprintf("%q", val)
 		}
-		buf.WriteString(fmt.Sprintf("%s- %s\n", indent, val))
+		fmt.Fprintf(buf, "%s- %s\n", indent, val)
 
 	case reflect.Struct:
 		// First field on same line as dash, rest indented
@@ -404,14 +404,14 @@ func writeSliceElement(buf *bytes.Buffer, v reflect.Value, indent string) error 
 			}
 
 			if first {
-				buf.WriteString(fmt.Sprintf("%s- %s: ", indent, fieldName))
+				fmt.Fprintf(buf, "%s- %s: ", indent, fieldName)
 				if err := writeInlineValue(buf, fieldValue); err != nil {
 					return err
 				}
 				buf.WriteString("\n")
 				first = false
 			} else {
-				buf.WriteString(fmt.Sprintf("%s  %s: ", indent, fieldName))
+				fmt.Fprintf(buf, "%s  %s: ", indent, fieldName)
 				if err := writeInlineValue(buf, fieldValue); err != nil {
 					return err
 				}
@@ -420,7 +420,7 @@ func writeSliceElement(buf *bytes.Buffer, v reflect.Value, indent string) error 
 		}
 		if first {
 			// Empty struct
-			buf.WriteString(fmt.Sprintf("%s- {}\n", indent))
+			fmt.Fprintf(buf, "%s- {}\n", indent)
 		}
 
 	default:
@@ -428,7 +428,7 @@ func writeSliceElement(buf *bytes.Buffer, v reflect.Value, indent string) error 
 		if err != nil {
 			return fmt.Errorf("marshal slice element: %w", err)
 		}
-		buf.WriteString(fmt.Sprintf("%s- %s", indent, strings.TrimSpace(string(valBytes))))
+		fmt.Fprintf(buf, "%s- %s", indent, strings.TrimSpace(string(valBytes)))
 		if !strings.HasSuffix(string(valBytes), "\n") {
 			buf.WriteString("\n")
 		}
@@ -449,7 +449,7 @@ func writeInlineValue(buf *bytes.Buffer, v reflect.Value) error {
 	case reflect.String:
 		val := v.String()
 		if needsQuoting(val) {
-			buf.WriteString(fmt.Sprintf("%q", val))
+			fmt.Fprintf(buf, "%q", val)
 		} else {
 			buf.WriteString(val)
 		}
@@ -460,7 +460,7 @@ func writeInlineValue(buf *bytes.Buffer, v reflect.Value) error {
 			buf.WriteString("false")
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		buf.WriteString(fmt.Sprintf("%d", v.Int()))
+		fmt.Fprintf(buf, "%d", v.Int())
 	default:
 		valBytes, err := yaml.Marshal(v.Interface())
 		if err != nil {

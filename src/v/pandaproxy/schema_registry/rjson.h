@@ -26,15 +26,38 @@ void rjson_serialize(
 
 template<typename Writer>
 void rjson_serialize(
-  Writer& w, const pandaproxy::schema_registry::schema_reference& ref) {
+  Writer& w,
+  const pandaproxy::schema_registry::schema_reference& ref,
+  std::optional<
+    std::reference_wrapper<const pandaproxy::schema_registry::context>> ctx
+  = std::nullopt) {
     w.StartObject();
     w.Key("name");
     ::json::rjson_serialize(w, ref.name);
     w.Key("subject");
-    w.String(ref.sub.to_string());
+    if (ctx.has_value()) {
+        w.String(ref.sub.resolve(ctx->get()).to_string());
+    } else {
+        w.String(ref.sub.to_string());
+    }
+
     w.Key("version");
     ::json::rjson_serialize(w, ref.version);
     w.EndObject();
+}
+
+template<typename Writer>
+void rjson_serialize(
+  Writer& w,
+  const pandaproxy::schema_registry::schema_definition::references& refs,
+  std::optional<
+    std::reference_wrapper<const pandaproxy::schema_registry::context>> ctx
+  = std::nullopt) {
+    w.StartArray();
+    for (const auto& ref : refs) {
+        rjson_serialize(w, ref, ctx);
+    }
+    w.EndArray();
 }
 
 template<typename Writer>
