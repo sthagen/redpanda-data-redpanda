@@ -91,6 +91,12 @@ linters:
         - name: useless-break
         - name: var-declaration
         - name: var-naming
+          # This rule accepts two slices of strings and one optional slice containing a single map with named parameters
+          # https://revive.run/r#var-naming
+          arguments:
+            - []
+            - []
+            - - skip-package-name-checks: true
         - name: waitgroup-by-value
   exclusions:
     generated: lax
