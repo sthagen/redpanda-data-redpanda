@@ -2061,7 +2061,11 @@ ss::future<response_ptr> create_acls_handler::handle(
                     error_code::invalid_config, "GBAC feature not yet active");
               } else {
                   response.data.results.emplace_back(
-                    map_topic_error_code(results[i]));
+                    map_topic_error_code(results[i]),
+                    results[i] == cluster::errc::success
+                      ? std::nullopt
+                      : std::make_optional<ss::sstring>(
+                          fmt::format("{}", results[i])));
               }
           },
           [&response](creatable_acl_result r) {

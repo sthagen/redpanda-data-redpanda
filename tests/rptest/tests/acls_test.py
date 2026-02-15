@@ -724,11 +724,16 @@ class AccessControlListTestUpgrade(AccessControlListTest):
         acl_input.operation = ["all"]
         acl_input.cluster = True
 
-        result = self.get_super_client().acl_create(acl=acl_input)
-        self.logger.debug(f"Result: {result}")
+        def wait_for_gbac_feature_response():
+            result = self.get_super_client().acl_create(acl=acl_input)
+            self.logger.debug(f"result: {result}")
+            return "INVALID_CONFIG: GBAC feature not yet active" in result
 
-        assert "INVALID_CONFIG: GBAC feature not yet active" in result, (
-            f"Unexpected result: {result}"
+        wait_until(
+            wait_for_gbac_feature_response,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Timed out waiting for GBAC feature response",
         )
 
         # Upgrade remaining nodes

@@ -606,7 +606,10 @@ cc_library(
     implementation_deps = [
         "@c-ares",
         "@openssl",
-    ],
+    ] + select({
+        ":use_hwloc": ["@hwloc"],
+        "//conditions:default": [],
+    }),
     includes = [
         "include",
         "src",
@@ -662,9 +665,6 @@ cc_library(
         "@protobuf",
         "@yaml-cpp",
     ] + select({
-        ":use_hwloc": ["@hwloc"],
-        "//conditions:default": [],
-    }) + select({
         ":use_io_uring": ["@liburing"],
         "//conditions:default": [],
     }),
