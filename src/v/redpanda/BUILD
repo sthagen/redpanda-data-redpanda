@@ -124,20 +124,6 @@ redpanda_cc_library(
     ],
 )
 
-# Enable or disable (thin) LTO for the redpanda binary (only)
-bool_flag(
-    name = "lto",
-    build_setting_default = False,
-)
-
-config_setting(
-    name = "use_lto",
-    flag_values = {
-        ":lto": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
 # Enable or disable --emit-relocs for the redpanda binary (only)
 bool_flag(
     name = "emit_relocs",
@@ -158,14 +144,6 @@ redpanda_cc_binary(
         "main.cc",
     ],
     linkopts =
-        select({
-            ":use_lto": [
-                "-flto=thin",
-                "-ffat-lto-objects",
-            ],
-            "//conditions:default": [
-            ],
-        }) +
         select({
             ":use_emit_relocs": [
                 "-Wl,--emit-relocs",
