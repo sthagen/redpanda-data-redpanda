@@ -3923,6 +3923,7 @@ TEST_F(storage_test_fixture, test_bytes_eviction_overrides) {
         if (tc.cloud_storage) {
             have_overrides = true;
             overrides.shadow_indexing_mode = model::shadow_indexing_mode::full;
+            overrides.storage_mode = model::redpanda_storage_mode::tiered;
         }
 
         if (
@@ -6559,6 +6560,7 @@ TEST_F(storage_test_fixture, delete_retention_ms_with_ts) {
     ov.delete_retention_ms = tristate<std::chrono::milliseconds>(
       delete_retention_ms);
     ov.shadow_indexing_mode = model::shadow_indexing_mode::full;
+    ov.storage_mode = model::redpanda_storage_mode::tiered;
     auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
     auto ntp = model::ntp("default", "test", 0);
 

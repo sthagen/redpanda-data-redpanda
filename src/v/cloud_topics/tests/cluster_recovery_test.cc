@@ -116,7 +116,7 @@ public:
 
     ss::future<> create_cloud_topic(model::topic t = topic) {
         cluster::topic_properties props;
-        props.cloud_topic_enabled = true;
+        props.storage_mode = model::redpanda_storage_mode::cloud;
         props.shadow_indexing = model::shadow_indexing_mode::disabled;
         co_await create_topic(
           {model::kafka_namespace, t}, num_partitions, 3, props);

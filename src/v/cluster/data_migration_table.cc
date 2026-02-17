@@ -17,6 +17,7 @@
 #include "cluster/logger.h"
 #include "cluster/topic_table.h"
 #include "container/chunked_vector.h"
+#include "model/fundamental.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
@@ -89,10 +90,14 @@ bool migrations_table::is_empty_migration(const data_migration& m) {
 
 ss::future<std::error_code>
 migrations_table::apply_update(model::record_batch batch) {
+    model::revision_id revision_id{batch.base_offset()};
     auto cmd = co_await deserialize(std::move(batch), commands);
 
     co_return co_await std::visit(
-      [this](auto cmd) { return apply(std::move(cmd)); }, std::move(cmd));
+      [this, revision_id](auto cmd) {
+          return apply(std::move(cmd), revision_id);
+      },
+      std::move(cmd));
 }
 
 ss::future<>
@@ -177,8 +182,8 @@ void migrations_table::unregister_notification(notification_id id) {
     _callbacks.unregister_cb(id);
 }
 
-ss::future<std::error_code>
-migrations_table::apply(create_data_migration_cmd cmd) {
+ss::future<std::error_code> migrations_table::apply(
+  create_data_migration_cmd cmd, model::revision_id revision_id) {
     auto migration = std::move(cmd.value.migration);
     const auto id = cmd.value.id;
     vlog(dm_log.debug, "applying create data migration: {}", cmd.value);
@@ -209,7 +214,8 @@ migrations_table::apply(create_data_migration_cmd cmd) {
       migration_metadata{
         .id = id,
         .migration = std::move(migration),
-        .created_timestamp = cmd.value.op_timestamp});
+        .created_timestamp = cmd.value.op_timestamp,
+        .revision_id = revision_id});
 
     if (!success) {
         // TODO: consider explaining to the client that we had an internal race
@@ -264,10 +270,14 @@ migrations_table::validate_migrated_resources(
         }
     }
 
-    if (!idm.groups.empty() && _resources.local().is_any_group_migrated()) {
-        return {
-          {errc::resource_is_being_migrated,
-           "cannot migrate groups when there are active group migrations"}};
+    for (const auto& group : idm.groups) {
+        if (_resources.local().is_already_migrated(group)) {
+            return {
+              {errc::resource_is_being_migrated,
+               ssx::sformat(
+                 "group with name {} is already part of active migration",
+                 group)}};
+        }
     }
 
     return std::nullopt;
@@ -302,9 +312,7 @@ migrations_table::validate_migrated_resources(
                  t)}};
         }
 
-        if (!model::is_archival_enabled(
-              maybe_topic_cfg->properties.shadow_indexing.value_or(
-                model::shadow_indexing_mode::disabled))) {
+        if (!maybe_topic_cfg->properties.is_archival_enabled()) {
             return {
               {errc::data_migration_invalid_resources,
                ssx::sformat(
@@ -319,10 +327,14 @@ migrations_table::validate_migrated_resources(
         }
     }
 
-    if (!odm.groups.empty() && _resources.local().is_any_group_migrated()) {
-        return {
-          {errc::resource_is_being_migrated,
-           "cannot migrate groups when there are active group migrations"}};
+    for (const auto& group : odm.groups) {
+        if (_resources.local().is_already_migrated(group)) {
+            return {
+              {errc::resource_is_being_migrated,
+               ssx::sformat(
+                 "group with name {} is already part of active migration",
+                 group)}};
+        }
     }
 
     return std::nullopt;
@@ -350,8 +362,8 @@ void migrations_table::fill_topic_locations(outbound_migration& odm) const {
     }
 }
 
-ss::future<std::error_code>
-migrations_table::apply(update_data_migration_state_cmd cmd) {
+ss::future<std::error_code> migrations_table::apply(
+  update_data_migration_state_cmd cmd, model::revision_id revision_id) {
     const auto id = cmd.value.id;
     const auto requested_state = cmd.value.requested_state;
     vlog(dm_log.debug, "applying update data migration state {}", cmd.value);
@@ -384,6 +396,7 @@ migrations_table::apply(update_data_migration_state_cmd cmd) {
       || requested_state == state::cancelled) {
         it->second.completed_timestamp = cmd.value.op_timestamp;
     }
+    it->second.revision_id = revision_id;
     // notify callbacks after resources, see comment in migrations_table::apply
     co_await _resources.invoke_on_all(
       [&meta = it->second](migrated_resources& resources) {
@@ -395,7 +408,7 @@ migrations_table::apply(update_data_migration_state_cmd cmd) {
 }
 
 ss::future<std::error_code>
-migrations_table::apply(remove_data_migration_cmd cmd) {
+migrations_table::apply(remove_data_migration_cmd cmd, model::revision_id) {
     const auto id = cmd.value.id;
     auto it = _migrations.find(id);
     vlog(dm_log.debug, "applying remove migration {} command", id);

@@ -24,7 +24,8 @@ namespace kafka {
 
 struct group_recovery_consumer_state {
     absl::node_hash_map<kafka::group_id, group_stm> groups;
-    chunked_hash_set<kafka::group_id> blocked_groups;
+    group_block_info_map group_blocks;
+
     /*
      * recovered committed offsets are by default non-reclaimable, and marked as
      * reclaimable if this flag is set to true. the flag is set to true if and
@@ -38,8 +39,6 @@ struct group_recovery_consumer_state {
 
 class group_recovery_consumer
   : public group_data_parser<group_recovery_consumer> {
-    using base_t = group_data_parser<group_recovery_consumer>;
-
 public:
     /*
      * This batch consumer is used during partition recovery to read, index, and
@@ -68,7 +67,9 @@ public:
       model::record_batch_header, kafka::group_tx::commit_metadata);
     ss::future<> handle_version_fence(features::feature_table::version_fence);
     void handle_group_block(kafka::group_block);
-    bool is_group_blocked(kafka::group_id) const;
+
+    group_block_info_map& group_blocks();
+    const group_block_info_map& group_blocks() const;
 
 private:
     void handle_record(model::record);

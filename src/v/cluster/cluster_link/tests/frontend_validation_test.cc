@@ -985,7 +985,7 @@ TEST_F_CORO(
         m1.configuration.topic_metadata_mirroring_cfg.topic_properties_to_mirror
           = ::cluster_link::model::topic_metadata_mirroring_config::
             properties_set{
-              ss::sstring{kafka::topic_property_cloud_topic_enabled}};
+              ss::sstring{kafka::topic_property_redpanda_storage_mode}};
 
         EXPECT_EQ(
           co_await upsert_cluster_link(std::move(m1)),

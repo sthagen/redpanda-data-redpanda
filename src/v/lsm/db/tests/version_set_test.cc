@@ -471,6 +471,51 @@ TEST_F(VersionSetTest, GetOverlappingUserKey) {
     EXPECT_THAT(result, IsMissing());
 }
 
+TEST_F(VersionSetTest, IteratorsKeepVersionFilesLive) {
+    // When add_iterators is called on a version with only L0 files, the
+    // version_lifetime_iterator keeps the version alive. This means
+    // get_live_files() must still report those files even after a new version
+    // is installed that removes them.
+    add_sst({
+      .id = 1_file_id,
+      .level = 0_level,
+      .keys = {"a@1"_key, "b@1"_key},
+    });
+    add_sst({
+      .id = 2_file_id,
+      .level = 0_level,
+      .keys = {"c@1"_key, "d@1"_key},
+    });
+
+    // Create iterators for the current version. Since we only have L0 files,
+    // add_iterators will insert a version_lifetime_iterator that holds a
+    // reference to this version.
+    chunked_vector<std::unique_ptr<lsm::internal::iterator>> iters;
+    version_set().current()->add_iterators(&iters).get();
+
+    // Create a new version that removes both files.
+    auto edit = version_set().new_edit();
+    edit->remove_file(0_level, {.id = 1_file_id});
+    edit->remove_file(0_level, {.id = 2_file_id});
+    edit->set_last_seqno(1_seqno);
+    version_set().log_and_apply(std::move(edit)).get();
+
+    // The current version should have no files.
+    EXPECT_EQ(version_set().current()->num_files(0_level), 0);
+
+    // But get_live_files must still include the old files because the
+    // iterators keep the old version alive.
+    auto live = version_set().get_live_files();
+    EXPECT_TRUE(live.contains({.id = 1_file_id}));
+    EXPECT_TRUE(live.contains({.id = 2_file_id}));
+
+    // Drop the iterators, releasing the version reference.
+    iters.clear();
+
+    // Now the files should no longer be considered live.
+    EXPECT_THAT(version_set().get_live_files(), IsEmpty());
+}
+
 TEST_F(CompactionTest, PickCompactionLevel0ToLevel1) {
     // Add 4 files to L0 to trigger compaction
     add_file(0_level, 1_file_id, "a"_key, "d"_key);

@@ -33,7 +33,7 @@ namespace cluster {
  */
 struct topic_properties
   : serde::
-      envelope<topic_properties, serde::version<12>, serde::compat_version<0>> {
+      envelope<topic_properties, serde::version<13>, serde::compat_version<0>> {
     topic_properties() noexcept = default;
     topic_properties(
       std::optional<model::compression> compression,
@@ -74,7 +74,6 @@ struct topic_properties
       std::optional<size_t> flush_bytes,
       model::iceberg_mode iceberg_mode,
       std::optional<config::leaders_preference> leaders_preference,
-      bool cloud_topic_enabled,
       tristate<std::chrono::milliseconds> delete_retention_ms,
       std::optional<bool> iceberg_delete,
       std::optional<ss::sstring> iceberg_partition_spec,
@@ -86,7 +85,8 @@ struct topic_properties
       std::optional<std::chrono::milliseconds> max_compaction_lag_ms,
       std::optional<bool> remote_topic_allow_gaps,
       std::optional<std::chrono::milliseconds> message_timestamp_before_max_ms,
-      std::optional<std::chrono::milliseconds> message_timestamp_after_max_ms)
+      std::optional<std::chrono::milliseconds> message_timestamp_after_max_ms,
+      model::redpanda_storage_mode storage_mode)
       : compression(compression)
       , cleanup_policy_bitflags(cleanup_policy_bitflags)
       , compaction_strategy(compaction_strategy)
@@ -127,7 +127,6 @@ struct topic_properties
       , flush_bytes(flush_bytes)
       , iceberg_mode(iceberg_mode)
       , leaders_preference(std::move(leaders_preference))
-      , cloud_topic_enabled(cloud_topic_enabled)
       , delete_retention_ms(delete_retention_ms)
       , iceberg_delete(iceberg_delete)
       , iceberg_partition_spec(std::move(iceberg_partition_spec))
@@ -137,7 +136,8 @@ struct topic_properties
       , min_compaction_lag_ms(min_compaction_lag_ms)
       , max_compaction_lag_ms(max_compaction_lag_ms)
       , message_timestamp_before_max_ms(message_timestamp_before_max_ms)
-      , message_timestamp_after_max_ms(message_timestamp_after_max_ms) {}
+      , message_timestamp_after_max_ms(message_timestamp_after_max_ms)
+      , storage_mode(storage_mode) {}
 
     std::optional<model::compression> compression;
     std::optional<model::cleanup_policy_bitflags> cleanup_policy_bitflags;
@@ -212,8 +212,6 @@ struct topic_properties
 
     std::optional<config::leaders_preference> leaders_preference;
 
-    bool cloud_topic_enabled{storage::ntp_config::default_cloud_topic_enabled};
-
     tristate<std::chrono::milliseconds> delete_retention_ms{disable_tristate};
     // Should we delete the corresponding iceberg table when deleting the topic.
     std::optional<bool> iceberg_delete;
@@ -233,9 +231,31 @@ struct topic_properties
     std::optional<std::chrono::milliseconds> message_timestamp_before_max_ms{};
     std::optional<std::chrono::milliseconds> message_timestamp_after_max_ms{};
 
+    // Storage mode for the topic: local, tiered, or cloud
+    model::redpanda_storage_mode storage_mode{
+      storage::ntp_config::default_storage_mode};
+
     bool is_compacted() const;
     bool has_overrides() const;
-    bool requires_remote_erase() const;
+    // Returns true if this topic is a tiered topic that requires
+    // deletion of Redpanda data in cloud storage.
+    bool requires_tiered_remote_erase() const;
+    // Returns true if this topic is a cloud topic that requires
+    // deletion of Redpanda data in cloud storage.
+    bool requires_cloud_topic_remote_erase() const;
+    // Returns true if this topic is an iceberg-enabled topic that requires
+    // deletion of Iceberg data in cloud storage.
+    bool requires_iceberg_remote_erase() const;
+
+    // Returns true if the topic has archival (remote write on a tiered topic)
+    // enabled. This checks both storage_mode and shadow_indexing to ensure the
+    // topic is configured for tiered storage with archival.
+    bool is_archival_enabled() const;
+
+    // Returns true if the topic has remote fetch (remote read on a tiered
+    // topic) enabled. This checks both storage_mode and shadow_indexing to
+    // ensure the topic is configured for tiered storage with remote fetch.
+    bool is_remote_fetch_enabled() const;
 
     storage::ntp_config::default_overrides get_ntp_cfg_overrides() const;
 
@@ -277,7 +297,7 @@ struct topic_properties
           remote_topic_namespace_override,
           iceberg_mode,
           leaders_preference,
-          cloud_topic_enabled,
+          deprecated_cloud_topic_enabled,
           delete_retention_ms,
           iceberg_delete,
           iceberg_partition_spec,
@@ -288,11 +308,17 @@ struct topic_properties
           min_compaction_lag_ms,
           max_compaction_lag_ms,
           message_timestamp_before_max_ms,
-          message_timestamp_after_max_ms);
+          message_timestamp_after_max_ms,
+          storage_mode);
     }
 
     friend bool operator==(const topic_properties&, const topic_properties&)
       = default;
+
+private:
+    // This was deprecated in favour of redpanda.storage.mode, but is kept here
+    // for backwards compatible serde purposes.
+    bool deprecated_cloud_topic_enabled{false};
 };
 
 } // namespace cluster

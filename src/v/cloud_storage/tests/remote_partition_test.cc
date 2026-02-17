@@ -1114,9 +1114,10 @@ FIXTURE_TEST(test_remote_partition_read_cached_index, cloud_storage_fixture) {
         auto headers_read
           = reader.consume(slow_consumer(), model::timeout_clock::now() + 10ms)
               .get();
-        // We expect the consumer to consume the first batch, then stall
-        // then consume the second batch and bail out due to timeout.
-        BOOST_REQUIRE_EQUAL(headers_read.size(), 2);
+        // We expect the consumer to consume the first batch, then stall,
+        // then _maybe_ consume the second batch before bailing out due to
+        // timeout.
+        BOOST_REQUIRE_GT(headers_read.size(), 0);
     }
 }
 

@@ -51,6 +51,7 @@ public:
 
         cluster::topic_properties props;
         props.shadow_indexing = model::shadow_indexing_mode::full;
+        props.storage_mode = model::redpanda_storage_mode::tiered;
         props.retention_local_target_bytes = tristate<size_t>(1);
         props.cleanup_policy_bitflags
           = model::cleanup_policy_bitflags::deletion;

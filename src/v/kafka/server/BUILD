@@ -35,6 +35,7 @@ redpanda_cc_library(
     hdrs = [
         "handlers/configs/config_response_utils.h",
         "handlers/configs/config_utils.h",
+        "handlers/configs/storage_mode_properties.h",
         "handlers/topics/topic_utils.h",
         "handlers/topics/types.h",
         "handlers/topics/validators.h",
@@ -65,6 +66,7 @@ redpanda_cc_library(
         "@boost//:algorithm",
         "@boost//:container",
         "@boost//:lexical_cast",
+        "@fmt",
         "@seastar",
     ],
 )
@@ -371,6 +373,7 @@ redpanda_cc_library(
         "//src/v/serde:iobuf",
         "//src/v/serde:map",
         "//src/v/serde:optional",
+        "//src/v/serde:pair",
         "//src/v/serde:set",
         "//src/v/serde:vector",
         "//src/v/ssx:abort_source",

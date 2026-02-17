@@ -92,7 +92,9 @@ class NodesDecommissioningTest(PreallocNodesTest):
             spec = TopicSpec(
                 partition_count=partitions,
                 replication_factor=random.choice(replication_factors),
-                cloud_topics_enabled=cloud_topic,
+                redpanda_storage_mode=TopicSpec.STORAGE_MODE_CLOUD
+                if cloud_topic
+                else None,
             )
             topics.append(spec)
             total_partitions += partitions
@@ -103,10 +105,10 @@ class NodesDecommissioningTest(PreallocNodesTest):
                 "redpanda.remote.read": "false",
                 "redpanda.remote.write": "false",
             }
-            if spec.cloud_topics_enabled:
+            if spec.redpanda_storage_mode == "cloud":
                 config.update(
                     {
-                        "redpanda.cloud_topic.enabled": "true",
+                        TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
                     }
                 )
             rpk = RpkTool(self.redpanda)

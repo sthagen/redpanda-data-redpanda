@@ -48,7 +48,8 @@ public:
     abort_partition_work(model::ntp&& ntp, id migration_id, state sought_state);
 
 private:
-    struct ntp_state_t {
+    // state of an ntp in a migration
+    struct mntp_state_t {
         struct requested_t {
             ss::lw_shared_ptr<partition_work> work;
             ss::promise<errc> promise;
@@ -58,6 +59,7 @@ private:
             requested_t& operator=(const requested_t&) = delete;
             requested_t(requested_t&&) = default;
             requested_t& operator=(requested_t&&) = default;
+            ~requested_t() = default;
         };
         struct running_t {
             ss::lw_shared_ptr<partition_work> work;
@@ -73,57 +75,87 @@ private:
             ~running_t() = default;
         };
 
-        bool is_leader;
-        notification_id_type leadership_subscription;
-
-        // `last_requested` or `running` must be set. `running->work` and
-        // `last_requested->work` of the same ntp_state may or may not point to
-        // the same object. For different NTPs they all must be distinct.
+        // At least one of `last_requested` and `running` must be set. If both,
+        // `running->work` and `last_requested->work` of the same mntp_state may
+        // or may not point to the same object. For different keys (where a key
+        // is NTP + migration id) they all must be distinct.
         std::optional<requested_t> last_requested;
         // set iff `work_fiber` is running
         std::optional<running_t> running;
 
-        ntp_state_t(
-          bool is_leader,
-          notification_id_type leadership_subscription,
-          partition_work&& work);
+        explicit mntp_state_t(partition_work&& work);
 
         [[nodiscard]] bool still_needed() const;
         void report_back(errc ec);
     };
-    using managed_ntps_map_t
-      = chunked_hash_map<model::ntp, std::unique_ptr<ntp_state_t>>;
-    using managed_ntp_it = managed_ntps_map_t::iterator;
-    using managed_ntp_cit = managed_ntps_map_t::const_iterator;
+
+    using mntp_state_ptr = std::unique_ptr<mntp_state_t>;
+
+    // For offset partitions the key is migration id, as their works may run
+    // concurrently; for data partitions the key is nullopt, as these must run
+    // exclusively. This helper function creates such keys to be used in a map
+    // that tracks running and requested works for an ntp.
+    //
+    // Since revision ids are passed and checked for partition operations, using
+    // nullopt for them as a key (i.e. making them kick out each other as
+    // requests come) is not necessary for correctness, but rather serves as an
+    // optimization agains excessive work.
+    using migration_id_key = std::optional<id>;
+    static migration_id_key
+    make_migration_id_key(const model::ntp& ntp, id migration_id);
+
+    using mntps_map_t = chunked_hash_map<migration_id_key, mntp_state_ptr>;
+    struct ntp_state_t {
+        bool is_leader;
+        notification_id_type leadership_subscription;
+        mntps_map_t migration_states;
+
+        ntp_state_t(
+          bool is_leader, notification_id_type leadership_subscription);
+    };
+
+    using ntp_state_ptr = std::unique_ptr<ntp_state_t>;
+    using managed_ntps_map_t = chunked_hash_map<model::ntp, ntp_state_ptr>;
 
     void abort_all() noexcept;
     void handle_leadership_update(const model::ntp& ntp, bool is_leader);
-    void unmanage_ntp(const model::ntp& ntp);
-    managed_ntp_it unmanage_ntp(managed_ntp_cit it);
-    void spawn_work_fiber_if_needed(managed_ntp_it it);
-    ss::future<> work_fiber(model::ntp ntp, ntp_state_t& ntp_state);
+    void unmanage_ntp(const model::ntp& ntp, migration_id_key midkey);
+    void unmanage_ntp(
+      managed_ntps_map_t::iterator ntp_state_it,
+      mntps_map_t::const_iterator it);
+    void spawn_work_fiber_if_needed(
+      const model::ntp& ntp,
+      migration_id_key midkey,
+      ntp_state_t& ntp_state,
+      mntp_state_t& mntp_state);
+    ss::future<> work_fiber(
+      model::ntp ntp,
+      migration_id_key midkey,
+      ntp_state_t& ntp_state,
+      mntp_state_t& mntp_state);
 
     // also resulting future cannot throw when co_awaited
     ss::future<errc> do_work(
-      const model::ntp& ntp, ntp_state_t::running_t& running_work) noexcept;
+      const model::ntp& ntp, mntp_state_t::running_t& running_work) noexcept;
     ss::future<errc> do_work(
       const model::ntp& ntp,
-      state sought_state,
-      const inbound_partition_work_info& pwi,
-      ss::abort_source& as);
+      mntp_state_t::running_t& running_work,
+      const inbound_partition_work_info& itwi);
     ss::future<errc> do_work(
       const model::ntp& ntp,
-      state sought_state,
-      const outbound_partition_work_info&,
-      ss::abort_source& as);
+      mntp_state_t::running_t& running_work,
+      const outbound_partition_work_info& otwi);
 
-    ss::future<result<model::offset, errc>>
-    block_partition(ss::lw_shared_ptr<partition> partition, bool block);
+    ss::future<result<model::offset, errc>> block_partition(
+      ss::lw_shared_ptr<partition> partition,
+      bool block,
+      model::revision_id revision_id);
 
     ss::future<result<model::offset, errc>> block_groups(
       const model::ntp& ntp,
       const chunked_vector<kafka::group_id>& groups,
-      bool block);
+      bool block,
+      model::revision_id revision_id);
 
     model::node_id _self;
     partition_leaders_table& _leaders_table;

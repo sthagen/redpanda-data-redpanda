@@ -52,8 +52,6 @@ public:
     bool is_already_migrated(const consumer_group& cg) const {
         return _groups.contains(cg);
     }
-    /// Checks if any group is already migrated
-    bool is_any_group_migrated() const { return !_groups.empty(); }
 
 private:
     void apply_snapshot(

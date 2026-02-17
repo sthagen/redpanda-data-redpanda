@@ -79,6 +79,7 @@ TEST_F(TopicRecoveryFixture, TestTopicNamespaceOverrideRecovery) {
 
     cluster::topic_properties src_props;
     src_props.shadow_indexing = model::shadow_indexing_mode::full;
+    src_props.storage_mode = model::redpanda_storage_mode::tiered;
     src_props.retention_local_target_bytes = tristate<size_t>(1);
 
     add_topic(src_tp_ns, 1, src_props).get();
@@ -158,6 +159,7 @@ TEST_F(TopicRecoveryFixture, TestTopicNamespaceOverrideRecovery) {
 
     cluster::topic_properties dest_props;
     dest_props.shadow_indexing = model::shadow_indexing_mode::full;
+    dest_props.storage_mode = model::redpanda_storage_mode::tiered;
     dest_props.retention_local_target_bytes = tristate<size_t>(1);
     dest_props.remote_topic_namespace_override = src_tp_ns;
     dest_props.recovery = true;

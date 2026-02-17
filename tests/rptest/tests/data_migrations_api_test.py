@@ -8,6 +8,7 @@
 # by the Apache License, Version 2.0
 
 import random
+import threading
 import time
 import typing
 from contextlib import contextmanager, nullcontext
@@ -49,6 +50,13 @@ MIGRATION_LOG_ALLOW_LIST = [
     "Error during log recovery: cloud_storage::missing_partition_exception",
     "skipping group metadata, group is blocked",
 ] + Finjector.LOG_ALLOW_LIST
+
+MIGRATION_LOG_ALLOW_LIST_W_LEADERSHIP_TRANSFERS = MIGRATION_LOG_ALLOW_LIST + [
+    # dropping a topic while transferring its leadership
+    "/transfer_leadership\] reason - seastar::abort_requested_exception",
+    "/transfer_leadership\] reason - seastar::broken_named_semaphore",
+    "/transfer_leadership\] reason - seastar::gate_closed_exception",
+]
 
 
 def make_namespaced_topic(topic: str) -> NamespacedTopic:
@@ -300,7 +308,7 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         self.create_and_wait(out1)
         self.assure_not_migratable(
             topic=None,
-            group="group2",
+            group="group1",
             expected_response={
                 "message": "Requested operation can not be executed as the resource is undergoing data migration",
                 "code": 400,
@@ -1121,18 +1129,49 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
 
     @cluster(
         num_nodes=4,
-        log_allow_list=MIGRATION_LOG_ALLOW_LIST
-        + [
-            # dropping a topic while transferring its leadership
-            "/transfer_leadership\] reason - seastar::abort_requested_exception",
-            "/transfer_leadership\] reason - seastar::broken_named_semaphore",
-            "/transfer_leadership\] reason - seastar::gate_closed_exception",
-        ],
+        log_allow_list=MIGRATION_LOG_ALLOW_LIST_W_LEADERSHIP_TRANSFERS,
     )
     @matrix(
         params=generate_tmptpdi_params(),
     )
     def test_migrated_topic_data_integrity(self, params: TmtpdiParams):
+        self.do_test_migrated_topic_data_integrity(params)
+
+    @cluster(
+        num_nodes=6,
+        log_allow_list=MIGRATION_LOG_ALLOW_LIST_W_LEADERSHIP_TRANSFERS,
+    )
+    @matrix(transfer_leadership=[True, False])
+    def test_concurrent_migrations_with_data_integrity(self, transfer_leadership: bool):
+        def spawn_migration_thread(migration_roundtrip_id: int):
+            def migrate_roundtrip(migration_roundtrip_id: int):
+                self.do_test_migrated_topic_data_integrity(
+                    TmtpdiParams(
+                        cancellation=None,
+                        use_alias=True,
+                        transfer_leadership=transfer_leadership,
+                        include_groups=True,
+                    ),
+                    topic_name=f"workload-topic-{migration_roundtrip_id}",
+                )
+
+            thread = threading.Thread(
+                target=migrate_roundtrip, args=(migration_roundtrip_id,)
+            )
+            thread.daemon = True
+            thread.start()
+            return thread
+
+        running_threads = [
+            spawn_migration_thread(migration_roundtrip_id)
+            for migration_roundtrip_id in range(3)
+        ]
+        for thread in running_threads:
+            thread.join()
+
+    def do_test_migrated_topic_data_integrity(
+        self, params: TmtpdiParams, topic_name: str | None = None
+    ):
         cancellation = params["cancellation"]
         use_alias = params["use_alias"]
         rpk = RpkTool(self.redpanda)
@@ -1140,13 +1179,17 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             {"ntr_no_topic_manifest", "missing_segments"}
         )
 
-        workload_topic = TopicSpec(partition_count=32)
+        workload_topic = TopicSpec(name=topic_name, partition_count=32)
 
         self.client().create_topic(workload_topic)
 
         with self.start_producer(workload_topic.name) as producer:
             with_consumer_groups = params["include_groups"]
-            group = "consumer-group-id" if with_consumer_groups else None
+            group = (
+                f"consumer-group-for-{workload_topic.name}"
+                if with_consumer_groups
+                else None
+            )
             groups = [group] if group else []
             entities = {
                 "topic": workload_topic.name,
@@ -1502,7 +1545,7 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             topic_name,
             partitions=3,
             replicas=3,
-            config={"redpanda.cloud_topic.enabled": "true"},
+            config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
         )
 
         # Verify the topic was created

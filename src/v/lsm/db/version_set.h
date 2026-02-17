@@ -258,6 +258,8 @@ public:
     // before processing "internal_key".
     bool should_stop_before(internal::key_view key);
 
+    fmt::iterator format_to(fmt::iterator) const;
+
 private:
     friend class version;
     friend class version_set;
@@ -268,7 +270,7 @@ private:
       internal::level level)
       : _level(level)
       , _edit(std::move(edit))
-      , _level_ptrs(options->levels.size()) {}
+      , _level_ptrs(/*n=*/options->levels.size(), /*val=*/0) {}
 
     internal::level _level;
     uint64_t _max_output_file_size = 0;

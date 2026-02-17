@@ -1450,7 +1450,7 @@ class RpkTool:
         ]
         return self._execute(cmd).strip()
 
-    def cluster_config_set(self, key: str, value):
+    def cluster_config_set(self, key: str, value: Any) -> Any:
         """
         Note: This method returns without waiting for the configuration to be
         applied to all shards/nodes. If you get the configuration immediately

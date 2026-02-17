@@ -119,9 +119,12 @@ private:
     friend class frontend;
     friend testing_details::data_migration_table_test_accessor;
 
-    ss::future<std::error_code> apply(create_data_migration_cmd);
-    ss::future<std::error_code> apply(update_data_migration_state_cmd);
-    ss::future<std::error_code> apply(remove_data_migration_cmd);
+    ss::future<std::error_code>
+      apply(create_data_migration_cmd, model::revision_id);
+    ss::future<std::error_code>
+      apply(update_data_migration_state_cmd, model::revision_id);
+    ss::future<std::error_code>
+      apply(remove_data_migration_cmd, model::revision_id);
 
     id get_next_id() { return _next_id++; }
 

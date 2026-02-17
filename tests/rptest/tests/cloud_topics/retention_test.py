@@ -144,7 +144,7 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
             partitions=1,
             replicas=3,
             config={
-                "redpanda.cloud_topic.enabled": "true",
+                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
                 "cleanup.policy": TopicSpec.CLEANUP_DELETE,
                 "retention.bytes": str(initial_retention),
             },
@@ -228,7 +228,7 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
             partitions=1,
             replicas=3,
             config={
-                "redpanda.cloud_topic.enabled": "true",
+                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
                 "cleanup.policy": TopicSpec.CLEANUP_DELETE,
                 "retention.ms": str(3600000),  # 1 hour - data won't be deleted yet
             },

@@ -88,24 +88,14 @@ bool is_supported(std::string_view name) {
        topic_property_max_compaction_lag_ms,
        topic_property_remote_allow_gaps,
        topic_property_message_timestamp_before_max_ms,
-       topic_property_message_timestamp_after_max_ms});
+       topic_property_message_timestamp_after_max_ms,
+       topic_property_redpanda_storage_mode});
 
     if (std::any_of(
           supported_configs.begin(),
           supported_configs.end(),
           [name](std::string_view p) { return name == p; })) {
         return true;
-    }
-
-    /*
-     * check development features below. if a development feature is not
-     * enabled, the system should behave as if the feature does not exist.
-     */
-
-    if (config::shard_local_cfg().cloud_topics_enabled()) {
-        if (name == topic_property_cloud_topic_enabled) {
-            return true;
-        }
     }
 
     return false;
@@ -131,9 +121,9 @@ using validators = make_validator_types<
   write_caching_configs_validator,
   iceberg_config_validator,
   iceberg_invalid_record_action_validator,
-  cloud_topic_config_validator,
   iceberg_target_lag_ms_validator,
-  min_max_compaction_lag_ms_validator>;
+  min_max_compaction_lag_ms_validator,
+  storage_mode_config_validator>;
 
 static void
 append_topic_configs(request_context& ctx, create_topics_response& response) {

@@ -653,6 +653,7 @@ struct incremental_topic_updates
       message_timestamp_before_max_ms;
     property_update<std::optional<std::chrono::milliseconds>>
       message_timestamp_after_max_ms;
+    property_update<std::optional<model::redpanda_storage_mode>> storage_mode;
 
     // Not a regular topic property. Used to assign topic UUIDs to pre-25-2
     // topics that were created without one.
@@ -715,7 +716,8 @@ struct incremental_topic_updates
           max_compaction_lag_ms,
           message_timestamp_before_max_ms,
           message_timestamp_after_max_ms,
-          remote_label);
+          remote_label,
+          storage_mode);
     }
 
     friend std::ostream&

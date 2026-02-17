@@ -37,15 +37,16 @@ TEST(ctp_stm_state_test, advance_max_seen_epoch) {
     ct::cluster_epoch epoch1(10);
     ct::cluster_epoch epoch2(20);
     ct::cluster_epoch epoch3(5);
+    model::term_id term(1);
 
-    state.advance_max_seen_epoch(epoch1);
+    state.advance_max_seen_epoch(term, epoch1);
     EXPECT_EQ(state.get_max_seen_epoch().value(), epoch1);
 
-    state.advance_max_seen_epoch(epoch2);
+    state.advance_max_seen_epoch(term, epoch2);
     EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
 
     // Should not go backwards
-    state.advance_max_seen_epoch(epoch3);
+    state.advance_max_seen_epoch(term, epoch3);
     EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
 }
 
@@ -57,26 +58,29 @@ TEST(ctp_stm_state_test, advance_epoch) {
 
     state.advance_epoch(epoch1, model::offset(1));
     EXPECT_EQ(state.get_max_applied_epoch().value(), epoch1);
-    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch1);
+    // advance_epoch does not update the seen window
+    EXPECT_FALSE(state.get_max_seen_epoch().has_value());
 
     state.advance_epoch(epoch2, model::offset(2));
     EXPECT_EQ(state.get_max_applied_epoch().value(), epoch2);
-    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
+    EXPECT_FALSE(state.get_max_seen_epoch().has_value());
 
     // Should not go backwards
     state.advance_epoch(epoch3, model::offset(3));
     EXPECT_EQ(state.get_max_applied_epoch().value(), epoch2);
-    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
+    EXPECT_FALSE(state.get_max_seen_epoch().has_value());
 }
 
 TEST(ctp_stm_state_test, advance_epoch_on_a_follower) {
-    // On a follower the max_seen_epoch should also be updated
+    // On a follower, advance_epoch only updates the applied window,
+    // not the seen window. The seen window is only managed through
+    // advance_max_seen_epoch on the leader path.
     ct::ctp_stm_state state;
     ct::cluster_epoch advance_epoch(20);
 
     state.advance_epoch(advance_epoch, model::offset(1));
 
-    EXPECT_EQ(state.get_max_seen_epoch().value(), advance_epoch);
+    EXPECT_FALSE(state.get_max_seen_epoch().has_value());
     EXPECT_EQ(state.get_max_applied_epoch().value(), advance_epoch);
 }
 
@@ -171,6 +175,7 @@ kafka::offset operator""_offset(unsigned long long v) {
 
 TEST(ctp_stm_state_test, sliding_window_issue) {
     ct::ctp_stm_state state;
+    model::term_id term(1);
 
     kafka::offset hwm = 0_offset;
 
@@ -193,17 +198,17 @@ TEST(ctp_stm_state_test, sliding_window_issue) {
     // get the write lock before we can start our window
     EXPECT_EQ(estimate_inactive_epoch(), std::nullopt);
     // Start our epochs at 2
-    EXPECT_FALSE(state.epoch_in_window(2_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 2_epoch));
 
     // Write lock grabbed, max epoch can be advanced!
-    state.advance_max_seen_epoch(2_epoch);
+    state.advance_max_seen_epoch(term, 2_epoch);
 
     // Now epoch 0 is in the window
-    EXPECT_TRUE(state.epoch_in_window(2_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 2_epoch));
     // Epoch 1 is not in the window
-    EXPECT_FALSE(state.epoch_in_window(1_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 1_epoch));
     // Nor is 3
-    EXPECT_FALSE(state.epoch_in_window(3_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 3_epoch));
 
     // Now the batch that was replicated with offset 0
     apply_replicated(2_epoch);
@@ -213,7 +218,7 @@ TEST(ctp_stm_state_test, sliding_window_issue) {
     EXPECT_EQ(estimate_inactive_epoch(), 1_epoch);
 
     // Let's now add another batch at epoch 2
-    EXPECT_TRUE(state.epoch_in_window(2_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 2_epoch));
     apply_replicated(2_epoch);
 
     // Reconciler now runs
@@ -222,19 +227,19 @@ TEST(ctp_stm_state_test, sliding_window_issue) {
     // Our epoch window hasn't moved
     EXPECT_EQ(estimate_inactive_epoch(), 1_epoch);
 
-    EXPECT_FALSE(state.epoch_in_window(5_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 5_epoch));
 
     // Epoch is bumped, our window should now be [2, 5]
-    state.advance_max_seen_epoch(5_epoch);
+    state.advance_max_seen_epoch(term, 5_epoch);
 
     // This is our new epoch
-    EXPECT_TRUE(state.epoch_in_window(5_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 5_epoch));
     // Our previous epoch is good still
-    EXPECT_TRUE(state.epoch_in_window(2_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 2_epoch));
     // And so is something in between (unlikely in real life, but just to show)
-    EXPECT_TRUE(state.epoch_in_window(3_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 3_epoch));
     // Something below is still bad
-    EXPECT_FALSE(state.epoch_in_window(1_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 1_epoch));
 
     // Still not safe to GC, we accept stuff at epoch 0
     EXPECT_EQ(estimate_inactive_epoch(), 1_epoch);
@@ -250,12 +255,12 @@ TEST(ctp_stm_state_test, sliding_window_issue) {
     EXPECT_EQ(estimate_inactive_epoch(), 1_epoch);
 
     // Now we start to replicate to the epoch to 10 (write lock grabbed)
-    state.advance_max_seen_epoch(10_epoch);
-    EXPECT_TRUE(state.epoch_in_window(10_epoch));
-    EXPECT_TRUE(state.epoch_in_window(5_epoch));
-    EXPECT_TRUE(state.epoch_in_window(8_epoch));
-    EXPECT_FALSE(state.epoch_in_window(0_epoch));
-    EXPECT_FALSE(state.epoch_in_window(4_epoch));
+    state.advance_max_seen_epoch(term, 10_epoch);
+    EXPECT_TRUE(state.epoch_in_window(term, 10_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 5_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 8_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 0_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 4_epoch));
 
     apply_replicated(10_epoch);
 
@@ -268,11 +273,11 @@ TEST(ctp_stm_state_test, sliding_window_issue) {
     EXPECT_EQ(estimate_inactive_epoch(), 4_epoch);
 
     // Now we bump the window again, but haven't replicated it yet.
-    state.advance_max_seen_epoch(15_epoch);
-    EXPECT_TRUE(state.epoch_in_window(10_epoch));
-    EXPECT_TRUE(state.epoch_in_window(15_epoch));
-    EXPECT_TRUE(state.epoch_in_window(12_epoch));
-    EXPECT_FALSE(state.epoch_in_window(9_epoch));
+    state.advance_max_seen_epoch(term, 15_epoch);
+    EXPECT_TRUE(state.epoch_in_window(term, 10_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 15_epoch));
+    EXPECT_TRUE(state.epoch_in_window(term, 12_epoch));
+    EXPECT_FALSE(state.epoch_in_window(term, 9_epoch));
 
     EXPECT_EQ(estimate_inactive_epoch(), 4_epoch);
 
@@ -356,6 +361,7 @@ TEST(ctp_stm_state_test, l0_simulation) {
     };
     // We simulate the operations for a single partition in l0
     l0_simulation_state universe;
+    model::term_id term(1);
 
     {
         std::vector<uploaded_l0_file_batch> batches{
@@ -399,12 +405,13 @@ TEST(ctp_stm_state_test, l0_simulation) {
         std::vector<std::function<void()>> possible_operations;
         // If there are batches to upload, let's do it.
         if (!universe.uploaded_batches.empty()) {
-            possible_operations.emplace_back([&universe, &oplog] {
+            possible_operations.emplace_back([&universe, &oplog, term] {
                 auto batch = universe.uploaded_batches.front();
                 universe.uploaded_batches.pop_front();
-                if (!universe.stm.epoch_in_window(batch.epoch)) {
-                    universe.stm.advance_max_seen_epoch(batch.epoch);
-                    ASSERT_TRUE(universe.stm.epoch_in_window(batch.epoch));
+                if (!universe.stm.epoch_in_window(term, batch.epoch)) {
+                    universe.stm.advance_max_seen_epoch(term, batch.epoch);
+                    ASSERT_TRUE(
+                      universe.stm.epoch_in_window(term, batch.epoch));
                 }
                 placeholder_batch placeholder{
                   .epoch = batch.epoch, .offset = universe.hwm++};

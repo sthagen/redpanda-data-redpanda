@@ -14,6 +14,7 @@
 #include "cluster/tests/topic_properties_generator.h"
 #include "cluster/types.h"
 #include "model/fundamental.h"
+#include "model/metadata.h"
 #include "raft/consensus.h"
 #include "security/acl.h"
 #include "storage/types.h"
@@ -65,6 +66,8 @@ inline topic_properties uploadable_topic_properties() {
     props.recovery = false;
     props.read_replica = false;
     props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion;
+    // Set storage_mode to tiered, to match the shadow_indexing setting.
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     return props;
 }
 
@@ -79,7 +82,7 @@ inline topic_properties non_remote_topic_properties() {
 
 inline topic_properties cloud_topic_properties() {
     topic_properties props;
-    props.cloud_topic_enabled = true;
+    props.storage_mode = model::redpanda_storage_mode::cloud;
     props.shadow_indexing = model::shadow_indexing_mode::disabled;
     props.recovery = std::nullopt;
     props.read_replica = std::nullopt;

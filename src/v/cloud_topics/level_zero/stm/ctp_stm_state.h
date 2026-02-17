@@ -48,7 +48,8 @@ public:
 
     /// This is invoked in the write path before the batch with new
     /// epoch value is even replicated.
-    void advance_max_seen_epoch(cluster_epoch epoch) noexcept;
+    void
+    advance_max_seen_epoch(model::term_id term, cluster_epoch epoch) noexcept;
 
     // Set the new start offset for the partition.
     //
@@ -91,9 +92,11 @@ public:
     std::optional<cluster_epoch> estimate_min_epoch() const noexcept;
 
     /// Return true if the epoch can be replicated
-    bool epoch_in_window(cluster_epoch epoch) const noexcept;
+    bool
+    epoch_in_window(model::term_id term, cluster_epoch epoch) const noexcept;
     /// Return true if the epoch is above the current window
-    bool epoch_above_window(cluster_epoch epoch) const noexcept;
+    bool
+    epoch_above_window(model::term_id term, cluster_epoch epoch) const noexcept;
 
     /// Estimate inactive epoch
     std::optional<cluster_epoch> estimate_inactive_epoch() const noexcept;
@@ -135,6 +138,10 @@ public:
     fmt::iterator format_to(fmt::iterator) const;
 
 private:
+    /// The term at which the *_seen_epochs are for, due to the sliding window
+    /// having the ability to diverge, we only track it within a single term,
+    /// then reset the window to avoid nasty edge cases when leadership changes.
+    model::term_id _seen_window_term;
     /// The max epoch after the current in flight requests are applied.
     ///
     /// This is required because of the pipelining of requests in the STM.

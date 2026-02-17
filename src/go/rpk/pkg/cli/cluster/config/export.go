@@ -76,7 +76,7 @@ func exportConfig(
 		if len(commentTokens) > 0 {
 			commentDetails = fmt.Sprintf(" (%s)", strings.Join(commentTokens, ", "))
 		}
-		sb.WriteString(fmt.Sprintf("\n# %s%s\n", meta.Description, commentDetails))
+		fmt.Fprintf(&sb, "\n# %s%s\n", meta.Description, commentDetails)
 
 		// Compose a YAML representation of the property: this is
 		// done with simple prints rather than the yaml module, because

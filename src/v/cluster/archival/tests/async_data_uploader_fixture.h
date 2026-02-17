@@ -93,15 +93,14 @@ public:
     }
 
     void create_topic(bool compacted = false) {
-        std::optional<cluster::topic_properties> props;
+        cluster::topic_properties p;
+        p.storage_mode = model::redpanda_storage_mode::tiered;
         if (compacted) {
-            cluster::topic_properties p;
             p.cleanup_policy_bitflags
               = model::cleanup_policy_bitflags::compaction;
             p.compaction_strategy = model::compaction_strategy::header;
-            props = p;
         }
-        add_topic(model::topic_namespace(test_namespace, test_topic), 1, props)
+        add_topic(model::topic_namespace(test_namespace, test_topic), 1, p)
           .get();
         wait_for_leader(test_ntp).get();
     }

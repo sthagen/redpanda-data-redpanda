@@ -13,6 +13,7 @@
 #include "cluster/archival/tests/archival_service_fixture.h"
 #include "datalake/coordinator/frontend.h"
 #include "datalake/coordinator/state_machine.h"
+#include "model/metadata.h"
 
 static ss::logger logger{"datalake-test-logger"};
 namespace datalake::tests {
@@ -55,6 +56,7 @@ public:
       model::topic topic, int num_partitions = 1, int16_t num_replicas = 3) {
         cluster::topic_properties props;
         props.iceberg_mode = model::iceberg_mode::key_value;
+        props.storage_mode = model::redpanda_storage_mode::tiered;
         return cluster_test_fixture::create_topic(
           {model::kafka_namespace, topic},
           num_partitions,

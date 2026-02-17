@@ -141,7 +141,7 @@ def read_topic_properties_serde(rdr: Reader, version):
         topic_properties |= {
             "iceberg_mode": read_iceberg_mode(rdr),
             "leaders_preference": rdr.read_optional(read_leaders_preference),
-            "cloud_topic_enabled": rdr.read_bool(),
+            "deprecated_cloud_topic_enabled": rdr.read_bool(),
             "delete_retention_ms": rdr.read_tristate(Reader.read_int64),
             "iceberg_delete": rdr.read_optional(Reader.read_bool),
         }
@@ -156,6 +156,19 @@ def read_topic_properties_serde(rdr: Reader, version):
     if version >= 11:
         topic_properties |= {
             "remote_topic_allow_gaps": rdr.read_optional(Reader.read_bool),
+        }
+
+    if version >= 12:
+        topic_properties |= {
+            "min_compaction_lag_ms": rdr.read_optional(Reader.read_int64),
+            "max_compaction_lag_ms": rdr.read_optional(Reader.read_int64),
+        }
+
+    if version >= 13:
+        topic_properties |= {
+            "message_timestamp_before_max_ms": rdr.read_optional(Reader.read_int64),
+            "message_timestamp_after_max_ms": rdr.read_optional(Reader.read_int64),
+            "storage_mode": rdr.read_serde_enum(),
         }
 
     return topic_properties

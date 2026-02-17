@@ -12,10 +12,12 @@
 #include "lsm/db/version_set.h"
 
 #include "absl/container/btree_set.h"
+#include "base/vlog.h"
 #include "container/chunked_vector.h"
 #include "lsm/core/exceptions.h"
 #include "lsm/core/internal/files.h"
 #include "lsm/core/internal/keys.h"
+#include "lsm/core/internal/logger.h"
 #include "lsm/core/internal/merging_iterator.h"
 #include "lsm/core/internal/two_level_iterator.h"
 #include "lsm/db/file_utils.h"
@@ -26,6 +28,7 @@
 #include <seastar/coroutine/as_future.hh>
 
 #include <exception>
+#include <memory>
 
 namespace lsm::db {
 
@@ -35,7 +38,7 @@ using internal::operator""_level;
 
 // An internal iterator. For a given version/level pair, yields information
 // about the files in the level. For a given entry, key() is the largest key
-// that occurs in teh file, and value()  is an 16-byte value containing the file
+// that occurs in the file, and value()  is an 16-byte value containing the file
 // number and file size, both encoded using 64bit fixed encoding.
 //
 // NOTE: It's up to the user of this class to ensure the files pointer is kept
@@ -109,6 +112,49 @@ private:
     chunked_vector<ss::lw_shared_ptr<file_meta_data>>* _files;
     uint32_t _index;
     iobuf _value_buf;
+};
+
+// An iterator that keeps a `version` pointer reference alive.
+//
+// This is needed because we use versions that are still alive as
+// knowledge of whether a version is safe to GC. Some cases, like L0 iteration,
+// can use file iterators directly, so in those cases we need some kind of
+// reference to keep L0 files alive.
+class version_lifetime_iterator : public internal::iterator {
+public:
+    explicit version_lifetime_iterator(ss::lw_shared_ptr<version> version)
+      : _version(std::move(version)) {}
+
+    bool valid() const override { return false; }
+
+    ss::future<> seek_to_first() override { return ss::now(); }
+
+    ss::future<> seek_to_last() override { return ss::now(); }
+
+    ss::future<> seek(internal::key_view) override { return ss::now(); }
+
+    ss::future<> next() override {
+        throw invalid_argument_exception(
+          "next() called on version lifetime iterator");
+    }
+
+    ss::future<> prev() override {
+        throw invalid_argument_exception(
+          "prev() called on version lifetime iterator");
+    }
+
+    internal::key_view key() override {
+        throw invalid_argument_exception(
+          "key() called on version lifetime iterator");
+    }
+
+    iobuf value() override {
+        throw invalid_argument_exception(
+          "value() called on version lifetime iterator");
+    }
+
+private:
+    ss::lw_shared_ptr<version> _version;
 };
 
 } // namespace
@@ -234,11 +280,20 @@ ss::future<> version::add_iterators(
     // For levels > 0, we can use a concatenating iterator that sequentially
     // walks through the non-overlapping files in the level, opening them
     // lazily.
+    int non_empty_levels = 0;
     for (const auto& level : std::span(_vset->_options->levels).subspan(1)) {
         if (_files[level.number].empty()) {
             continue;
         }
+        ++non_empty_levels;
         iters->push_back(create_concatenating_iterator(level.number));
+    }
+    // If there are no files outside of L0, we need to keep a reference to
+    // this version to prevent GC from running and assuming there are no files
+    // being used in this version anymore.
+    if (non_empty_levels == 0) {
+        iters->push_back(
+          std::make_unique<version_lifetime_iterator>(shared_from_this()));
     }
 }
 
@@ -483,15 +538,16 @@ ss::future<> version::for_each_overlapping(
 fmt::iterator version::format_to(fmt::iterator it) const {
     // For example:
     //   --- level 1 ---
-    //   17:234['a' .. 'e']
-    //   20:31['a' .. 'e']
+    //   0-17:234['a' .. 'e']
+    //   3-20:31['a' .. 'e']
     for (size_t level = 0; level < _files.size(); ++level) {
         it = fmt::format_to(it, "--- level {} ---\n", level);
         for (const auto& file : _files[level]) {
             it = fmt::format_to(
               it,
-              "{}:{}['{}' .. '{}']\n",
-              file->handle,
+              "{}-{}:{}['{}' .. '{}']\n",
+              file->handle.epoch,
+              file->handle.id,
               file->file_size,
               file->smallest,
               file->largest);
@@ -512,6 +568,7 @@ version_set::version_set(
 }
 
 void version_set::set_current(ss::lw_shared_ptr<version> new_version) {
+    vlog(log.trace, "installing_new_version version=\n{}", *new_version);
     weak_intrusive_list<version>::push_front(&_current, std::move(new_version));
 }
 
@@ -787,6 +844,7 @@ std::optional<compaction> version_set::pick_compaction() {
     // key range next time.
     _compact_pointer[level] = largest;
     c->_edit->set_compact_pointer(level, largest);
+    vlog(log.trace, "picked_compaction compaction={}", *c);
     return c;
 }
 
@@ -805,6 +863,9 @@ version_set::make_input_iterator(compaction* c) {
         }
         if (&inputs == &c->_inputs.front() && c->level() == 0_level) {
             for (auto& file : inputs) {
+                // NOTE: in version::add_iterators we have to ensure that L0
+                // only iterators keep a ref to their version, in this case we
+                // rely on compaction for that.
                 list.push_back(
                   co_await _table_cache->create_iterator(
                     file->handle, file->file_size));
@@ -911,6 +972,26 @@ bool compaction::should_stop_before(internal::key_view key) {
     } else {
         return false;
     }
+}
+
+fmt::iterator compaction::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "level={} input_level_files={{{}}} "
+      "output_level_files={{{}}} grandparents={{{}}}",
+      _level,
+      fmt::join(
+        std::views::transform(
+          _inputs[0], [](const auto& file) { return file->handle; }),
+        ","),
+      fmt::join(
+        std::views::transform(
+          _inputs[1], [](const auto& file) { return file->handle; }),
+        ","),
+      fmt::join(
+        std::views::transform(
+          _grandparents, [](const auto& file) { return file->handle; }),
+        ","));
 }
 
 } // namespace lsm::db

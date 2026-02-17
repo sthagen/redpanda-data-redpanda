@@ -47,7 +47,7 @@ class CloudTopicsTest(RedpandaTest):
                 spec.name,
                 spec.partition_count,
                 spec.replication_factor,
-                config={"redpanda.cloud_topic.enabled": "true"},
+                config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
             )
 
     # Ignored because it's flaky but the test is still useful locally.

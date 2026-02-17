@@ -75,8 +75,8 @@ public:
 
     const ctp_stm_state& state() const noexcept { return _state; }
 
-    void advance_max_seen_epoch(cluster_epoch epoch) {
-        _state.advance_max_seen_epoch(epoch);
+    void advance_max_seen_epoch(model::term_id term, cluster_epoch epoch) {
+        _state.advance_max_seen_epoch(term, epoch);
     }
 
     ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>

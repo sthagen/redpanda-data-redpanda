@@ -109,14 +109,11 @@ ss::future<ss::lw_shared_ptr<version_edit>> do_run_compaction_task(
     }
     compaction_state state{
       // We need to preserve intermediate data between snapshots so we can
-      // surface the correct snapshot isolation. So we use the oldest
-      // snapshot,
-      // otherwise the lastest sequence number because we don't have to
-      // preserve
+      // surface the correct snapshot isolation. So we use the oldest snapshot,
+      // otherwise the lastest sequence number because we don't have to preserve
       // any intermediate versions.
       // Note we can call `value` on `last_seqno` because we have to have
-      // some
-      // data in the database in order to trigger compaction.
+      // some data in the database in order to trigger compaction.
       .smallest_snapshot = snapshots->oldest_seqno().value_or(
         versions->last_seqno().value()),
     };

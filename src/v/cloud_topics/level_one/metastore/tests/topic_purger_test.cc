@@ -65,7 +65,7 @@ public:
       model::topic_id tp_id) {
         auto topic_cfg = cluster::topic_configuration(
           model::kafka_namespace, topic, 1, 1, tp_id);
-        topic_cfg.properties.cloud_topic_enabled = true;
+        topic_cfg.properties.storage_mode = model::redpanda_storage_mode::cloud;
         topic_cfg.properties.remote_delete = true;
         co_return co_await topic_table->apply(
           cluster::create_topic_cmd{

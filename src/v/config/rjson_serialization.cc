@@ -321,4 +321,9 @@ void rjson_serialize(
     stringize(w, ngb);
 }
 
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w, const model::redpanda_storage_mode& m) {
+    stringize(w, m);
+}
+
 } // namespace json

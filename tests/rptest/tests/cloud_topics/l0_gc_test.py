@@ -64,7 +64,7 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
                 spec.name,
                 spec.partition_count,
                 spec.replication_factor,
-                config={"redpanda.cloud_topic.enabled": "true"},
+                config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
             )
 
     def get_num_objects_deleted(self, nodes: list[ClusterNode] | None = None):

@@ -21,6 +21,7 @@
 #include "kafka/server/coordinator_ntp_mapper.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_manager.h"
+#include "kafka/server/group_metadata.h"
 #include "kafka/server/handlers/offset_fetch.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -426,16 +427,15 @@ FIXTURE_TEST(block_test, consumer_offsets_fixture) {
         return false;
     };
 
-    auto set_blocked = [&](bool blocked) {
-        auto res = app._group_manager.local()
-                     .set_blocked_for_groups(
-                       gntp,
-                       // triggering a bug where the wrong group gets unblocked
-                       blocked ? chunked_vector<kafka::group_id>{ug1, g, ug2}
-                               : chunked_vector<kafka::group_id>{g},
-                       blocked)
-                     .get();
-        BOOST_REQUIRE(res.has_value());
+    auto set_blocked = [&](group_block_info block_info) {
+        return app._group_manager.local()
+          .set_blocked_for_groups(
+            gntp,
+            // triggering a bug where the wrong group gets unblocked
+            block_info.is_blocked ? chunked_vector<kafka::group_id>{ug1, g, ug2}
+                                  : chunked_vector<kafka::group_id>{g},
+            block_info)
+          .get();
     };
 
     auto restart = [&] {
@@ -450,21 +450,69 @@ FIXTURE_TEST(block_test, consumer_offsets_fixture) {
 
     BOOST_REQUIRE(can_commit_offset());
 
-    // block
-    set_blocked(true);
+    // attempt to unblock without a prior block - should fail
+    auto res = set_blocked({.is_blocked = false, .revision_id{1}});
+    BOOST_REQUIRE_EQUAL(
+      res.error(),
+      make_error_code(cluster::errc::invalid_data_migration_state));
+    BOOST_REQUIRE(can_commit_offset());
+
+    // block with legit revision id
+    res = set_blocked({.is_blocked = true, .revision_id{1}});
+    BOOST_REQUIRE(res);
     BOOST_REQUIRE(!can_commit_offset());
 
-    // make sure retart keeps it blocked
+    // block again with the same revision id (no-op)
+    res = set_blocked({.is_blocked = true, .revision_id{1}});
+    BOOST_REQUIRE(res);
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // and again with a lower revision id
+    res = set_blocked({.is_blocked = true, .revision_id{0}});
+    BOOST_REQUIRE_EQUAL(
+      res.error(),
+      make_error_code(cluster::errc::invalid_data_migration_state));
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // and again with a higher revision id
+    res = set_blocked({.is_blocked = true, .revision_id{3}});
+    BOOST_REQUIRE(res);
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // make sure restart keeps it blocked
     restart();
     BOOST_REQUIRE(!can_commit_offset());
 
-    // unblock
-    set_blocked(false);
+    // attempt to unblock with lower revision id - should fail
+    res = set_blocked({.is_blocked = false, .revision_id{2}});
+    BOOST_REQUIRE_EQUAL(
+      res.error(),
+      make_error_code(cluster::errc::invalid_data_migration_state));
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // unblock with a higher revision id
+    res = set_blocked({.is_blocked = false, .revision_id{4}});
+    BOOST_REQUIRE(res);
     BOOST_REQUIRE(can_commit_offset());
 
     // make sure retart keeps it unblocked
     restart();
     BOOST_REQUIRE(can_commit_offset());
+
+    // block with no revision id (legacy)
+    res = set_blocked({.is_blocked = true, .revision_id{}});
+    BOOST_REQUIRE(res);
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // unblock without a revision id
+    res = set_blocked({.is_blocked = false, .revision_id{}});
+    BOOST_REQUIRE(res);
+    BOOST_REQUIRE(can_commit_offset());
+
+    // block with low revision id
+    res = set_blocked({.is_blocked = true, .revision_id{0}});
+    BOOST_REQUIRE(res);
+    BOOST_REQUIRE(!can_commit_offset());
 }
 
 FIXTURE_TEST(conditional_retention_test, consumer_offsets_fixture) {

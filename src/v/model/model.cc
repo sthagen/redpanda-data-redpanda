@@ -578,6 +578,45 @@ write_caching_mode_from_string(std::string_view s) {
       .default_match(std::nullopt);
 }
 
+std::ostream& operator<<(std::ostream& o, redpanda_storage_mode mode) {
+    o << redpanda_storage_mode_to_string(mode);
+    return o;
+}
+
+std::istream& operator>>(std::istream& i, redpanda_storage_mode& mode) {
+    ss::sstring s;
+    i >> s;
+    auto value = redpanda_storage_mode_from_string(s);
+    if (!value) {
+        i.setstate(std::ios::failbit);
+        return i;
+    }
+    mode = *value;
+    return i;
+}
+
+std::optional<redpanda_storage_mode>
+redpanda_storage_mode_from_string(std::string_view s) {
+    return string_switch<std::optional<redpanda_storage_mode>>(s)
+      .match(
+        model::redpanda_storage_mode_to_string(
+          model::redpanda_storage_mode::local),
+        model::redpanda_storage_mode::local)
+      .match(
+        model::redpanda_storage_mode_to_string(
+          model::redpanda_storage_mode::tiered),
+        model::redpanda_storage_mode::tiered)
+      .match(
+        model::redpanda_storage_mode_to_string(
+          model::redpanda_storage_mode::cloud),
+        model::redpanda_storage_mode::cloud)
+      .match(
+        model::redpanda_storage_mode_to_string(
+          model::redpanda_storage_mode::unset),
+        model::redpanda_storage_mode::unset)
+      .default_match(std::nullopt);
+}
+
 std::ostream& operator<<(std::ostream& os, recovery_validation_mode vm) {
     using enum recovery_validation_mode;
     switch (vm) {

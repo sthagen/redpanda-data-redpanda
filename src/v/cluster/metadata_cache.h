@@ -217,6 +217,7 @@ public:
     get_default_message_timestamp_before_max_ms() const;
     std::chrono::milliseconds
     get_default_message_timestamp_after_max_ms() const;
+    model::redpanda_storage_mode get_default_storage_mode() const;
 
     topic_properties get_default_properties() const;
     std::optional<partition_assignment>

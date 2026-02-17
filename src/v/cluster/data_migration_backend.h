@@ -108,10 +108,14 @@ private:
     using partition_consumer_group_map_t
       = chunked_hash_map<model::partition_id, chunked_vector<consumer_group>>;
     struct migration_reconciliation_state {
-        explicit migration_reconciliation_state(work_scope scope)
+        explicit migration_reconciliation_state(
+          work_scope scope, model::revision_id revision_id)
           : scope(scope)
+          , revision_id(revision_id)
           , entities_ready(!scope.needs_entity_state_update) {}
         work_scope scope;
+        // comes from the same raft0 record as `scope`
+        model::revision_id revision_id;
         topic_map_t outstanding_topics;
         bool entities_ready;
         // may not stay unfilled between scheduling points
@@ -119,19 +123,44 @@ private:
     };
     using migration_reconciliation_states_t
       = absl::flat_hash_map<id, migration_reconciliation_state>;
+    using mrstate_it_t = migration_reconciliation_states_t::iterator;
+    using mrstate_cit_t = migration_reconciliation_states_t::const_iterator;
 
     struct replica_work_state {
-        id migration_id;
         state sought_state;
-        // shard may only be assigned if replica_status is can_run
+        // shard may only be assigned if replica_status is `can_run`
         std::optional<seastar::shard_id> shard;
         migrated_replica_status status;
+        // empty if status is `waiting_for_rpc`; otherwise it has a value
+        // which is in sync with `sought_state`, i.e. they come from the same
+        // raft0 record creating or updating the migration
+        std::optional<model::revision_id> revision_id;
 
         replica_work_state(
-          id migration_id, state sought_state, migrated_replica_status status)
-          : migration_id(migration_id)
-          , sought_state(sought_state)
-          , status(status) {}
+          state sought_state,
+          std::optional<model::revision_id> revision_id,
+          migrated_replica_status status)
+          : sought_state(sought_state)
+          , status(status)
+          , revision_id(revision_id) {
+            vassert(
+              (status != migrated_replica_status::waiting_for_controller_update)
+                == this->revision_id.has_value(),
+              "Inconsistent replica work state: sought_state {}, status {}, "
+              "revision_id {}",
+              sought_state,
+              status,
+              this->revision_id);
+        }
+
+        model::revision_id get_revision_id() const {
+            vassert(
+              status == migrated_replica_status::can_run
+                && revision_id.has_value(),
+              "Cannot get revision_id for replica work state in status {}",
+              status);
+            return *revision_id;
+        }
     };
 
     friend std::ostream& operator<<(std::ostream&, const replica_work_state&);
@@ -178,6 +207,20 @@ private:
     using tsws_lwptr_t = ss::lw_shared_ptr<topic_scoped_work_state>;
 
 private:
+    using partition_work_state_t = chunked_hash_map<id, replica_work_state>;
+    using rwstate_entry = partition_work_state_t::value_type;
+    struct topic_namespace_migration {
+        model::topic_namespace nt;
+        id migration;
+
+        bool operator==(const topic_namespace_migration& other) const;
+
+        template<class H>
+        friend H AbslHashValue(H h, const topic_namespace_migration& tnm) {
+            return H::combine(std::move(h), tnm.nt, tnm.migration);
+        }
+    };
+
     /* loop management */
     ss::future<> loop_once();
     ss::future<> work_once();
@@ -193,16 +236,14 @@ private:
     ss::future<> send_rpc(model::node_id node_id);
     ss::future<check_ntp_states_reply>
     check_ntp_states_locally(check_ntp_states_request&& req);
-    void
-    to_advance_if_done(migration_reconciliation_states_t::const_iterator it);
+    void to_advance_if_done(mrstate_cit_t it);
     ss::future<> advance(id migration_id, state sought_state);
     void spawn_advances();
 
     /* topic work */
     void schedule_topic_work_if_partitions_ready(
-      const model::topic_namespace& nt,
-      const migration_reconciliation_state& mrstate);
-    void schedule_topic_work(model::topic_namespace nt);
+      const model::topic_namespace& nt, mrstate_cit_t rs_it);
+    void schedule_topic_work(topic_namespace_migration tnm);
     ss::future<topic_work_result>
     // also resulting future cannot throw when co_awaited
     do_topic_work(model::topic_namespace nt, topic_work tw) noexcept;
@@ -260,9 +301,10 @@ private:
     do_unmount_topic(const model::topic_namespace& nt, retry_chain_node& rcn);
 
     /* communication with partition workers */
-    void start_partition_work(
-      const model::ntp& ntp, const replica_work_state& rwstate);
-    void stop_partition_work(model::ntp ntp, const replica_work_state& rwstate);
+    void
+    start_partition_work(const model::ntp& ntp, const rwstate_entry& rwstate);
+    void
+    stop_partition_work(const model::ntp ntp, const rwstate_entry& rwstate);
     void
     on_partition_work_completed(model::ntp&& ntp, id migration, state state);
 
@@ -271,25 +313,26 @@ private:
     ss::future<> process_delta(cluster::topic_table_ntp_delta&& delta);
 
     /* helpers */
-    std::optional<backend::migration_reconciliation_states_t::iterator>
+    std::optional<mrstate_it_t>
     get_rstate(id migration, state expected_sought_state);
 
     void update_partition_shard(
       const model::ntp& ntp,
-      replica_work_state& rwstate,
+      rwstate_entry& rwstate,
       std::optional<ss::shard_id> new_shard);
-    void mark_migration_step_done_for_ntp(
-      migration_reconciliation_state& rs, const model::ntp& ntp);
+    void
+    mark_migration_step_done_for_ntp(mrstate_it_t rs_it, const model::ntp& ntp);
     void mark_migration_step_done_for_nt(
-      migration_reconciliation_state& rs, const model::topic_namespace& nt);
-    ss::future<> drop_migration_reconciliation_rstate(
-      migration_reconciliation_states_t::const_iterator rs_it);
-    ss::future<> clear_tstate(const topic_map_t::value_type& topic_map_entry);
+      mrstate_it_t rs_it, const model::topic_namespace& nt);
+    ss::future<> drop_migration_reconciliation_rstate(mrstate_cit_t rs_it);
+    ss::future<> clear_tstate(
+      id migration_id, const topic_map_t::value_type& topic_map_entry);
     void clear_tstate_belongings(
-      const model::topic_namespace& nt,
+      const topic_namespace_migration& tnm,
       const topic_reconciliation_state& tstate);
-    void erase_tstate_if_done(
-      migration_reconciliation_state& mrstate, topic_map_t::iterator it);
+    void remove_from_topic_migration_map(
+      const model::topic_namespace& nt, id migration);
+    void erase_tstate_if_done(mrstate_it_t rs_it, topic_map_t::iterator it);
     result<partition_consumer_group_map_t, errc>
     build_migration_group_map(const migration_metadata& metadata) const;
 
@@ -311,10 +354,11 @@ private:
       topic_reconciliation_state& tstate,
       id migration,
       work_scope scope,
+      model::revision_id revision_id,
       bool schedule_local_partition_work);
 
-    std::optional<std::reference_wrapper<replica_work_state>>
-    get_replica_work_state(const model::ntp& ntp);
+    std::optional<std::reference_wrapper<partition_work_state_t>>
+    get_replica_work_states(const model::ntp& ntp);
     bool has_local_replica(const model::ntp& ntp);
     const inbound_topic& get_inbound_topic(
       const model::topic_namespace_view& nt,
@@ -390,13 +434,28 @@ private:
      */
     migration_reconciliation_states_t _migration_states;
     // reverse map for topics in mrstates
-    using topic_migration_map_t = chunked_hash_map<model::topic_namespace, id>;
+    using topic_migration_map_t
+      = chunked_hash_map<model::topic_namespace, chunked_hash_set<id>>;
     topic_migration_map_t _topic_migration_map;
-    using node_state = chunked_hash_map<model::ntp, id>;
+
+    struct ntp_migration {
+        model::ntp ntp;
+        id migration;
+
+        bool operator==(const ntp_migration& other) const;
+
+        template<class H>
+        friend H AbslHashValue(H h, const ntp_migration& nm) {
+            return H::combine(std::move(h), nm.ntp, nm.migration);
+        };
+    };
+
+    using node_state = chunked_hash_set<ntp_migration>;
     chunked_hash_map<model::node_id, node_state> _node_states;
     using deadline_t = model::timeout_clock::time_point;
     chunked_hash_map<model::node_id, deadline_t> _nodes_to_retry;
-    chunked_hash_map<model::topic_namespace, deadline_t> _topic_work_to_retry;
+    chunked_hash_map<topic_namespace_migration, deadline_t>
+      _topic_work_to_retry;
     struct advance_info {
         state sought_state;
         bool sent = false;
@@ -409,7 +468,7 @@ private:
 
     /* Node-local data for partition-scoped work */
     using topic_work_state_t
-      = chunked_hash_map<model::partition_id, replica_work_state>;
+      = chunked_hash_map<model::partition_id, partition_work_state_t>;
     chunked_hash_map<
       model::topic_namespace,
       topic_work_state_t,

@@ -10,6 +10,7 @@
 #include "cluster/topic_properties.h"
 
 #include "model/adl_serde.h"
+#include "model/metadata.h"
 #include "reflection/adl.h"
 
 namespace cluster {
@@ -49,9 +50,10 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       "iceberg_target_lag_ms: {}, "
       "min_cleanable_dirty_ratio: {}, "
       "min_compaction_lag_ms: {}, "
-      "max_compaction_lag_ms: {},"
-      "message_timestamp_before_max_ms: {},"
-      "message_timestamp_after_max_ms: {}",
+      "max_compaction_lag_ms: {}, "
+      "message_timestamp_before_max_ms: {}, "
+      "message_timestamp_after_max_ms: {}, "
+      "redpanda_storage_mode: {}",
       properties.compression,
       properties.cleanup_policy_bitflags,
       properties.compaction_strategy,
@@ -97,12 +99,8 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       properties.min_compaction_lag_ms,
       properties.max_compaction_lag_ms,
       properties.message_timestamp_before_max_ms,
-      properties.message_timestamp_after_max_ms);
-
-    if (config::shard_local_cfg().cloud_topics_enabled()) {
-        fmt::print(
-          o, ", cloud_topic_enabled: {}", properties.cloud_topic_enabled);
-    }
+      properties.message_timestamp_after_max_ms,
+      properties.storage_mode);
 
     o << "}";
 
@@ -151,24 +149,77 @@ bool topic_properties::has_overrides() const {
         || max_compaction_lag_ms.has_value()
         || remote_topic_allow_gaps.has_value()
         || message_timestamp_before_max_ms.has_value()
-        || message_timestamp_after_max_ms.has_value();
-
-    if (config::shard_local_cfg().cloud_topics_enabled()) {
-        return overrides
-               || (cloud_topic_enabled != storage::ntp_config::default_cloud_topic_enabled);
-    }
+        || message_timestamp_after_max_ms.has_value()
+        || storage_mode != storage::ntp_config::default_storage_mode;
 
     return overrides;
 }
 
-bool topic_properties::requires_remote_erase() const {
-    // A topic requires remote erase if it matches all of:
-    // * Using tiered storage
+bool topic_properties::requires_tiered_remote_erase() const {
+    // A tiered topic requires remote erase if it matches all of:
+    // * Using tiered storage (explicit or inferred via shadow_indexing)
     // * Not a read replica
     // * Has redpanda.remote.delete=true
+    if (read_replica.value_or(false) || !remote_delete) {
+        return false;
+    }
+    // Explicit tiered = requires remote erase
+    if (storage_mode == model::redpanda_storage_mode::tiered) {
+        return true;
+    }
+    // Explicit local or cloud = no remote erase for tiered
+    if (storage_mode != model::redpanda_storage_mode::unset) {
+        return false;
+    }
+    // Unset = check if shadow_indexing indicates tiered storage
     auto mode = shadow_indexing.value_or(model::shadow_indexing_mode::disabled);
-    return mode != model::shadow_indexing_mode::disabled
+    return mode != model::shadow_indexing_mode::disabled;
+}
+
+bool topic_properties::requires_cloud_topic_remote_erase() const {
+    // A cloud topic requires remote erase if it matches all of:
+    // * Using cloud topics
+    // * Not a read replica
+    // * Has redpanda.remote.delete=true
+    return storage_mode == model::redpanda_storage_mode::cloud
            && !read_replica.value_or(false) && remote_delete;
+}
+
+bool topic_properties::requires_iceberg_remote_erase() const {
+    // An iceberg-enabled topic requires remote erase if it matches all of:
+    // * Using iceberg
+    // * Has redpanda.iceberg.delete=true
+    return iceberg_mode != model::iceberg_mode::disabled
+           && iceberg_delete.value_or(
+             config::shard_local_cfg().iceberg_delete());
+}
+
+bool topic_properties::is_archival_enabled() const {
+    // Explicit tiered
+    if (storage_mode == model::redpanda_storage_mode::tiered) {
+        return true;
+    }
+    // Explicit local or cloud
+    if (storage_mode != model::redpanda_storage_mode::unset) {
+        return false;
+    }
+    // Unset = fall back to legacy shadow_indexing
+    return shadow_indexing.has_value()
+           && model::is_archival_enabled(shadow_indexing.value());
+}
+
+bool topic_properties::is_remote_fetch_enabled() const {
+    // Explicit tiered
+    if (storage_mode == model::redpanda_storage_mode::tiered) {
+        return true;
+    }
+    // Explicit local or cloud
+    if (storage_mode != model::redpanda_storage_mode::unset) {
+        return false;
+    }
+    // Unset = fall back to legacy shadow_indexing
+    return shadow_indexing.has_value()
+           && model::is_fetch_enabled(shadow_indexing.value());
 }
 
 storage::ntp_config::default_overrides
@@ -192,12 +243,12 @@ topic_properties::get_ntp_cfg_overrides() const {
     ret.flush_ms = flush_ms;
     ret.flush_bytes = flush_bytes;
     ret.iceberg_mode = iceberg_mode;
-    ret.cloud_topic_enabled = cloud_topic_enabled;
     ret.delete_retention_ms = delete_retention_ms;
     ret.min_cleanable_dirty_ratio = min_cleanable_dirty_ratio;
     ret.min_compaction_lag_ms = min_compaction_lag_ms;
     ret.max_compaction_lag_ms = max_compaction_lag_ms;
     ret.remote_allow_gaps = remote_topic_allow_gaps;
+    ret.storage_mode = storage_mode;
     return ret;
 }
 
@@ -288,7 +339,6 @@ adl<cluster::topic_properties>::from(iobuf_parser& parser) {
       std::nullopt,
       model::iceberg_mode::disabled,
       std::nullopt,
-      false,
       tristate<std::chrono::milliseconds>{disable_tristate},
       std::nullopt,
       std::nullopt,
@@ -300,6 +350,7 @@ adl<cluster::topic_properties>::from(iobuf_parser& parser) {
       std::nullopt,
       std::nullopt,
       std::nullopt,
+      model::redpanda_storage_mode::local,
     };
 }
 

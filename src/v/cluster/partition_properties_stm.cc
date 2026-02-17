@@ -14,6 +14,7 @@
 #include "base/vassert.h"
 #include "cluster/errc.h"
 #include "cluster/logger.h"
+#include "cluster/types.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -43,7 +44,8 @@ partition_properties_stm::partition_properties_stm(
   , _sync_timeout(std::move(sync_timeout))
   , _state_snapshots({state_snapshot{
       .writes_disabled = writes_disabled::no,
-      .update_offset = model::offset{}}}) {}
+      .update_offset = model::offset{},
+      .writes_revision_id{}}}) {}
 
 ss::future<iobuf>
 partition_properties_stm::take_raft_snapshot(model::offset o) {
@@ -89,7 +91,9 @@ partition_properties_stm::take_raft_snapshot(model::offset o) {
       it->update_offset,
       o);
     co_return serde::to_iobuf(
-      raft_snapshot{.writes_disabled = it->writes_disabled});
+      raft_snapshot{
+        .writes_disabled = it->writes_disabled,
+        .writes_revision_id = it->writes_revision_id});
 }
 
 ss::future<raft::local_snapshot_applied>
@@ -172,14 +176,28 @@ void partition_properties_stm::apply_record(
       "Applying update {} at offset: {}",
       update,
       r.offset_delta() + batch_begin_offset);
-    bool differs = are_writes_disabled() != update.writes_disabled;
+    const auto current_state = _state_snapshots.back();
+    bool is_legacy_command = update.writes_revision_id == model::revision_id{};
+    bool is_newer_revision = update.writes_revision_id
+                             > current_state.writes_revision_id;
+    if (!is_newer_revision && !is_legacy_command) {
+        vlog(
+          _log.error,
+          "Ignoring out-of-order update: {}, current state: {}",
+          update,
+          _state_snapshots.back());
+        return;
+    }
+    bool differs = update.writes_disabled != current_state.writes_disabled
+                   || update.writes_revision_id
+                        != current_state.writes_revision_id;
     if (differs) {
         _state_snapshots.push_back(
           state_snapshot{
             .writes_disabled = update.writes_disabled,
             .update_offset = model::offset(
               r.offset_delta() + batch_begin_offset),
-          });
+            .writes_revision_id = update.writes_revision_id});
     }
 }
 
@@ -198,7 +216,7 @@ partition_properties_stm::apply_raft_snapshot(const iobuf& buffer) {
       state_snapshot{
         .writes_disabled = snapshot.writes_disabled,
         .update_offset = model::prev_offset(_raft->start_offset()),
-      });
+        .writes_revision_id = snapshot.writes_revision_id});
     co_return;
 }
 
@@ -206,12 +224,49 @@ ss::future<result<model::offset>>
 partition_properties_stm::replicate_properties_update(
   model::timeout_clock::duration timeout, update_writes_disabled_cmd cmd) {
     auto holder = _gate.hold();
+    auto units = co_await _writes_mutex.get_units();
     if (!co_await sync(timeout)) {
         co_return errc::not_leader;
     }
 
+    // sync'ed and holding mutex, check revision
+    vassert(
+      !_state_snapshots.empty(),
+      "The invariant of state snapshot containing at least one element is "
+      "broken");
+    auto current_state = _state_snapshots.back();
+    if (
+      cmd.writes_revision_id == current_state.writes_revision_id
+      && cmd.writes_disabled == current_state.writes_disabled) [[unlikely]] {
+        // no-op
+        co_return current_state.update_offset;
+    }
+    if (
+      cmd.writes_revision_id != model::revision_id{}
+      && cmd.writes_revision_id <= current_state.writes_revision_id)
+      [[unlikely]] {
+        vlog(
+          _log.warn,
+          "Skipping replicate_properties_update with out-of-order cmd: {}, "
+          "current state: {}",
+          cmd,
+          current_state);
+        co_return errc::invalid_data_migration_state;
+    }
+    if (
+      cmd.writes_revision_id == current_state.writes_revision_id
+      && cmd.writes_disabled != current_state.writes_disabled) [[unlikely]] {
+        vlog(
+          _log.error,
+          "Conflicting writes_disabled state for the same revision: {}, "
+          "current state: {}",
+          cmd,
+          current_state);
+        co_return errc::invalid_data_migration_state;
+    }
+
+    // replicate the command
     auto b = make_update_partitions_batch(cmd);
-    auto deadline = timeout + model::timeout_clock::now();
     vlog(
       _log.debug, "replicating update partition properties command: {}", cmd);
     raft::replicate_options r_opts(
@@ -233,8 +288,12 @@ partition_properties_stm::replicate_properties_update(
     }
 
     auto message_offset = r.value().last_offset;
-    if (!co_await wait_no_throw(message_offset, deadline)) {
-        co_return errc::timeout;
+    // we cannot return errc::timeout, as we must get to a consistent state by
+    // the time we unlock the mutex
+    if (!co_await wait_no_throw(
+          message_offset, model::timeout_clock::time_point::max())) {
+        co_await _raft->step_down("partition_properties_stm/replication_error");
+        co_return errc::shutting_down;
     }
     co_return message_offset;
 }
@@ -258,18 +317,24 @@ model::record_batch partition_properties_stm::make_update_partitions_batch(
     return std::move(builder).build();
 }
 
-ss::future<result<model::offset>> partition_properties_stm::disable_writes() {
+ss::future<result<model::offset>>
+partition_properties_stm::disable_writes(model::revision_id revision_id) {
     vlog(_log.info, "disabling partition writes");
     return replicate_properties_update(
       _sync_timeout(),
-      update_writes_disabled_cmd{.writes_disabled = writes_disabled::yes});
+      update_writes_disabled_cmd{
+        .writes_disabled = writes_disabled::yes,
+        .writes_revision_id = revision_id});
 }
 
-ss::future<result<model::offset>> partition_properties_stm::enable_writes() {
+ss::future<result<model::offset>>
+partition_properties_stm::enable_writes(model::revision_id revision_id) {
     vlog(_log.info, "enabling partition writes");
     return replicate_properties_update(
       _sync_timeout(),
-      update_writes_disabled_cmd{.writes_disabled = writes_disabled::no});
+      update_writes_disabled_cmd{
+        .writes_disabled = writes_disabled::no,
+        .writes_revision_id = revision_id});
 }
 
 ss::future<result<partition_properties_stm::writes_disabled>>
@@ -304,14 +369,22 @@ void partition_properties_stm_factory::create(
 
 std::ostream& operator<<(
   std::ostream& o, const partition_properties_stm::raft_snapshot& snap) {
-    fmt::print(o, "{{writes_disabled: {}}}", snap.writes_disabled);
+    fmt::print(
+      o,
+      "{{writes_disabled: {}, writes_revision_id: {}}}",
+      snap.writes_disabled,
+      snap.writes_revision_id);
     return o;
 }
 
 std::ostream& operator<<(
   std::ostream& o,
   const partition_properties_stm::update_writes_disabled_cmd& update) {
-    fmt::print(o, "{{writes_disabled: {}}}", update.writes_disabled);
+    fmt::print(
+      o,
+      "{{writes_disabled: {}, writes_revision_id: {}}}",
+      update.writes_disabled,
+      update.writes_revision_id);
     return o;
 }
 
@@ -325,9 +398,10 @@ std::ostream& operator<<(
   std::ostream& o, const partition_properties_stm::state_snapshot& update) {
     fmt::print(
       o,
-      "{{update_offset: {}, writes_disabled: {}}}",
+      "{{update_offset: {}, writes_disabled: {}, writes_revision_id: {}}}",
       update.update_offset,
-      update.writes_disabled);
+      update.writes_disabled,
+      update.writes_revision_id);
     return o;
 }
 

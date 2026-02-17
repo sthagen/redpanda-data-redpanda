@@ -140,7 +140,7 @@ class EndToEndCloudTopicsIcebergCompactionTest(EndToEndCloudTopicsIcebergTestBas
                 self.topic_name,
                 iceberg_mode="key_value",
                 config={
-                    "redpanda.cloud_topic.enabled": "true",
+                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
                     "cleanup.policy": TopicSpec.CLEANUP_COMPACT,
                 },
             )
@@ -236,7 +236,7 @@ class EndToEndCloudTopicsIcebergDeletionTest(EndToEndCloudTopicsIcebergTestBase)
                 self.topic_name,
                 iceberg_mode="key_value",
                 config={
-                    "redpanda.cloud_topic.enabled": "true",
+                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
                     "retention.ms": 500,
                     "retention.bytes": 1024,
                 },

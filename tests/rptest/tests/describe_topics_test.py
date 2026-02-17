@@ -327,6 +327,15 @@ class DescribeTopicsTest(RedpandaTest):
                 "`message.timestamp.after.max.ms` overrides the value of "
                 "`log_message_timestamp_after_max_ms` at the topic level.",
             ),
+            "redpanda.storage.mode": ConfigProperty(
+                config_type="STRING",
+                value="unset",
+                doc_string="Default storage mode for newly-created topics. Determines how topic "
+                "data is stored: `local` for broker-local storage only, `tiered` for "
+                "both local and object storage, `cloud` for object-only storage using "
+                "the Cloud Topics architecture, or `unset` to use legacy "
+                "remote.read/write configs for backwards compatibility.",
+            ),
         }
 
         tp_spec = TopicSpec()

@@ -33,6 +33,7 @@ FIXTURE_TEST(test_read_replica_basic_sync, read_replica_e2e_fixture) {
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     cluster::topic_properties props;
     props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     props.retention_local_target_bytes = tristate<size_t>(1);
     add_topic({model::kafka_namespace, topic_name}, 1, props).get();
     wait_for_leader(ntp).get();
@@ -55,6 +56,7 @@ FIXTURE_TEST(test_read_replica_basic_sync, read_replica_e2e_fixture) {
 
     cluster::topic_properties read_replica_props;
     read_replica_props.shadow_indexing = model::shadow_indexing_mode::fetch;
+    read_replica_props.storage_mode = model::redpanda_storage_mode::tiered;
     read_replica_props.read_replica = true;
     read_replica_props.read_replica_bucket = "test-bucket";
     rr_rp
@@ -93,6 +95,7 @@ FIXTURE_TEST(
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     cluster::topic_properties props;
     props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     props.retention_local_target_bytes = tristate<size_t>(1);
     add_topic({model::kafka_namespace, topic_name}, 1, props).get();
     wait_for_leader(ntp).get();
@@ -106,6 +109,7 @@ FIXTURE_TEST(
     auto rr_rp = start_read_replica_fixture();
     cluster::topic_properties read_replica_props;
     read_replica_props.shadow_indexing = model::shadow_indexing_mode::fetch;
+    read_replica_props.storage_mode = model::redpanda_storage_mode::tiered;
     read_replica_props.read_replica = true;
     read_replica_props.read_replica_bucket = "test-bucket";
     rr_rp
@@ -135,6 +139,7 @@ FIXTURE_TEST(test_read_replica_delete_records, read_replica_e2e_fixture) {
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     cluster::topic_properties props;
     props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     props.retention_local_target_bytes = tristate<size_t>(1);
     add_topic({model::kafka_namespace, topic_name}, 1, props).get();
     wait_for_leader(ntp).get();
@@ -160,6 +165,7 @@ FIXTURE_TEST(test_read_replica_delete_records, read_replica_e2e_fixture) {
     auto rr_rp = start_read_replica_fixture();
     cluster::topic_properties read_replica_props;
     read_replica_props.shadow_indexing = model::shadow_indexing_mode::fetch;
+    read_replica_props.storage_mode = model::redpanda_storage_mode::tiered;
     read_replica_props.read_replica = true;
     read_replica_props.read_replica_bucket = "test-bucket";
     rr_rp
@@ -235,6 +241,7 @@ FIXTURE_TEST(
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     cluster::topic_properties props;
     props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     props.retention_local_target_bytes = tristate<size_t>(1);
     add_topic({model::kafka_namespace, topic_name}, 1, props).get();
     wait_for_leader(ntp).get();
@@ -288,6 +295,7 @@ FIXTURE_TEST(
     auto rr_rp = start_read_replica_fixture();
     cluster::topic_properties read_replica_props;
     read_replica_props.shadow_indexing = model::shadow_indexing_mode::fetch;
+    read_replica_props.storage_mode = model::redpanda_storage_mode::tiered;
     read_replica_props.read_replica = true;
     read_replica_props.read_replica_bucket = "test-bucket";
     rr_rp

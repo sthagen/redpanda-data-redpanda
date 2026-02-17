@@ -148,20 +148,14 @@ bool maybe_append_update(
           topic_config.tp_ns,
           update.properties.remote_read,
           config_value,
-          topic_config.properties.shadow_indexing.has_value()
-            ? ::model::is_fetch_enabled(
-                topic_config.properties.shadow_indexing.value())
-            : false);
+          topic_config.properties.is_remote_fetch_enabled());
     }
     if (config_name == kafka::topic_property_remote_write) {
         return parse_and_set(
           topic_config.tp_ns,
           update.properties.remote_write,
           config_value,
-          topic_config.properties.shadow_indexing.has_value()
-            ? ::model::is_fetch_enabled(
-                topic_config.properties.shadow_indexing.value())
-            : false);
+          topic_config.properties.is_archival_enabled());
     }
     if (config_name == kafka::topic_property_remote_delete) {
         return parse_and_set(
@@ -247,13 +241,6 @@ bool maybe_append_update(
           config_value,
           topic_config.properties.leaders_preference,
           kafka::noop_validator<config::leaders_preference>{});
-    }
-    if (config_name == kafka::topic_property_cloud_topic_enabled) {
-        if (config::shard_local_cfg().cloud_topics_enabled()) {
-            throw kafka::validation_error(
-              "Cloud topics property cannot be changed");
-        }
-        throw kafka::validation_error("Cloud topics is not enabled");
     }
     if (config_name == kafka::topic_property_delete_retention_ms) {
         return parse_and_set(

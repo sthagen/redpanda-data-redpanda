@@ -35,7 +35,8 @@ public:
     static constexpr bool legacy_remote_delete{false};
     static inline model::iceberg_mode default_iceberg_mode
       = model::iceberg_mode{};
-    static constexpr bool default_cloud_topic_enabled{false};
+    static constexpr model::redpanda_storage_mode default_storage_mode{
+      model::redpanda_storage_mode::unset};
 
     static constexpr std::chrono::milliseconds read_replica_retention{3600000};
 
@@ -80,7 +81,6 @@ public:
         std::optional<std::chrono::milliseconds> flush_ms;
         std::optional<size_t> flush_bytes;
         model::iceberg_mode iceberg_mode{default_iceberg_mode};
-        bool cloud_topic_enabled{default_cloud_topic_enabled};
 
         tristate<std::chrono::milliseconds> delete_retention_ms;
 
@@ -91,6 +91,9 @@ public:
 
         // Controls behavior during pause
         std::optional<bool> remote_allow_gaps;
+
+        // Storage mode for the topic (local, tiered, or cloud)
+        model::redpanda_storage_mode storage_mode{default_storage_mode};
 
         friend std::ostream&
         operator<<(std::ostream&, const default_overrides&);
@@ -245,19 +248,37 @@ public:
     }
 
     bool is_archival_enabled() const {
-        if (cloud_topic_enabled()) {
+        if (_overrides == nullptr) {
             return false;
         }
-        return _overrides != nullptr && _overrides->shadow_indexing_mode
+        // Explicit tiered
+        if (_overrides->storage_mode == model::redpanda_storage_mode::tiered) {
+            return true;
+        }
+        // Explicit local or cloud
+        if (_overrides->storage_mode != model::redpanda_storage_mode::unset) {
+            return false;
+        }
+        // Unset, fall back to legacy shadow_indexing
+        return _overrides->shadow_indexing_mode
                && model::is_archival_enabled(
                  _overrides->shadow_indexing_mode.value());
     }
 
     bool is_remote_fetch_enabled() const {
-        if (cloud_topic_enabled()) {
+        if (_overrides == nullptr) {
             return false;
         }
-        return _overrides != nullptr && _overrides->shadow_indexing_mode
+        // Explicit tiered
+        if (_overrides->storage_mode == model::redpanda_storage_mode::tiered) {
+            return true;
+        }
+        // Explicit local or cloud
+        if (_overrides->storage_mode != model::redpanda_storage_mode::unset) {
+            return false;
+        }
+        // Unset, fall back to legacy shadow_indexing
+        return _overrides->shadow_indexing_mode
                && model::is_fetch_enabled(
                  _overrides->shadow_indexing_mode.value());
     }
@@ -284,13 +305,23 @@ public:
      * both reads and writes to S3, and is not a read replica.
      */
     bool is_tiered_storage() const {
-        if (cloud_topic_enabled()) {
+        if (_overrides == nullptr) {
             return false;
         }
-        return _overrides != nullptr
-               && !_overrides->read_replica.value_or(false)
-               && _overrides->shadow_indexing_mode
-                    == model::shadow_indexing_mode::full;
+        if (_overrides->read_replica.value_or(false)) {
+            return false;
+        }
+        // Explicit tiered
+        if (_overrides->storage_mode == model::redpanda_storage_mode::tiered) {
+            return true;
+        }
+        // Explicit local or cloud
+        if (_overrides->storage_mode != model::redpanda_storage_mode::unset) {
+            return false;
+        }
+        // Unset, fall back to legacy shadow_indexing
+        return _overrides->shadow_indexing_mode
+               == model::shadow_indexing_mode::full;
     }
 
     bool remote_delete() const {
@@ -362,10 +393,7 @@ public:
             // 2) this prefix is truncated away locally
             // 3) correspondent tombstone (or tx end marker) is compacted away
             // locally.
-            if (
-              _overrides->shadow_indexing_mode.has_value()
-              && _overrides->shadow_indexing_mode.value()
-                   != model::shadow_indexing_mode::disabled) {
+            if (is_archival_enabled() || is_remote_fetch_enabled()) {
                 return std::nullopt;
             }
         }
@@ -420,8 +448,9 @@ public:
         if (!config::shard_local_cfg().cloud_topics_enabled()) {
             return false;
         }
-        return _overrides ? _overrides->cloud_topic_enabled
-                          : default_cloud_topic_enabled;
+        return _overrides
+               && _overrides->storage_mode
+                    == model::redpanda_storage_mode::cloud;
     }
 
     std::optional<double> min_cleanable_dirty_ratio() const {

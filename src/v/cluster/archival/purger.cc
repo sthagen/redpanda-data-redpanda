@@ -370,7 +370,7 @@ ss::future<housekeeping_job::run_result> purger::run(run_quota_t quota) {
     }
     for (auto& [nt_revision, marker] : markers) {
         // Double check the topic config is elegible for remote deletion
-        if (!marker.config.properties.requires_remote_erase()) {
+        if (!marker.config.properties.requires_tiered_remote_erase()) {
             vlog(
               archival_log.warn,
               "Dropping lifecycle marker {}, is not suitable for remote purge",

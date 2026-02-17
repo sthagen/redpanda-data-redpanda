@@ -15,9 +15,16 @@
 
 namespace cloud_topics {
 
-void ctp_stm_state::advance_max_seen_epoch(cluster_epoch epoch) noexcept {
-    if (epoch > _max_seen_epoch) {
-        _previous_seen_epoch = _max_seen_epoch.value_or(epoch);
+void ctp_stm_state::advance_max_seen_epoch(
+  model::term_id term, cluster_epoch epoch) noexcept {
+    if (term >= _seen_window_term && epoch > _max_seen_epoch) {
+        if (term > _seen_window_term) {
+            // If this is a new term, reset the window.
+            _previous_seen_epoch = epoch;
+            _seen_window_term = term;
+        } else {
+            _previous_seen_epoch = _max_seen_epoch.value_or(epoch);
+        }
         _max_seen_epoch = epoch;
     }
 }
@@ -47,7 +54,14 @@ ctp_stm_state::get_previous_seen_epoch() const noexcept {
     return _previous_seen_epoch;
 }
 
-bool ctp_stm_state::epoch_in_window(cluster_epoch epoch) const noexcept {
+bool ctp_stm_state::epoch_in_window(
+  model::term_id term, cluster_epoch epoch) const noexcept {
+    // If the term is newer then treat the window as unset.
+    if (term > _seen_window_term) {
+        auto end = _max_applied_epoch.value_or(cluster_epoch::min());
+        auto begin = _previous_applied_epoch.value_or(end);
+        return epoch >= begin && epoch <= end;
+    }
     // NOTE: the window should move forward with _max_seen_epoch.
     // If _max_seen_epoch is greater than _max_applied_epoch then
     // the window should be [_previous_seen_epoch, _max_seen_epoch].
@@ -60,7 +74,13 @@ bool ctp_stm_state::epoch_in_window(cluster_epoch epoch) const noexcept {
     return epoch >= begin && epoch <= end;
 }
 
-bool ctp_stm_state::epoch_above_window(cluster_epoch epoch) const noexcept {
+bool ctp_stm_state::epoch_above_window(
+  model::term_id term, cluster_epoch epoch) const noexcept {
+    // If the term changed, treat it as unset.
+    if (term > _seen_window_term) {
+        auto end = _max_applied_epoch.value_or(cluster_epoch::min());
+        return epoch > end;
+    }
     auto end = _max_seen_epoch.value_or(
       _max_applied_epoch.value_or(cluster_epoch::min()));
     return epoch > end;
@@ -72,13 +92,6 @@ ctp_stm_state::estimate_inactive_epoch() const noexcept {
 }
 
 void ctp_stm_state::advance_epoch(cluster_epoch epoch, model::offset offset) {
-    // The STM works on both leader and followers, on a leader the
-    // max_seen_epoch epoch is updated by the fencing mechanism.
-    // On the follower the max_seen_epoch epoch has to follow the max epoch.
-    if (epoch > _max_seen_epoch) {
-        _previous_seen_epoch = _max_seen_epoch.value_or(epoch);
-        _max_seen_epoch = epoch;
-    }
     // Register new epoch
     if (epoch > _max_applied_epoch.value_or(cluster_epoch::min())) {
         // A new max epoch requires the sliding window of epoch values in flight

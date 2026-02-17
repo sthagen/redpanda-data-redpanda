@@ -12,6 +12,7 @@ import re
 from ducktape.mark import matrix
 
 from rptest.clients.rpk import RpkException, RpkTool
+from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import LoggingConfig, SISettings, CLOUD_TOPICS_CONFIG_STR
@@ -389,10 +390,11 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
         # even with the cluster property set.
         try:
             self.rpk.create_topic(
-                "test", config={"redpanda.cloud_topic.enabled": "true"}
+                "test",
+                config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
             )
             assert False, (
-                "Should have failed to create topic with redpanda.cloud_topic.enabled set"
+                "Should have failed to create topic with redpanda.storage.mode=cloud set"
             )
         except RpkException:
             pass

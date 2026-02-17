@@ -373,7 +373,8 @@ public:
 
     ss::future<result<model::offset>> set_writes_disabled(
       partition_properties_stm::writes_disabled disable,
-      model::timeout_clock::time_point deadline);
+      model::timeout_clock::time_point deadline,
+      model::revision_id revision_id);
 
     using flush_hook = ss::noncopyable_function<ss::future<errc>(
       model::offset,

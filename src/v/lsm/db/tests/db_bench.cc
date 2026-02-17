@@ -17,6 +17,7 @@
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/options.h"
 #include "lsm/db/impl.h"
+#include "lsm/db/tests/immutable_tree.h"
 #include "lsm/io/disk_persistence.h"
 #include "lsm/io/memory_persistence.h"
 #include "random/generators.h"
@@ -33,9 +34,9 @@
 
 #include <chrono>
 #include <exception>
-#include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace po = boost::program_options;
@@ -136,26 +137,17 @@ struct benchmark_stats {
 
 // Shadow map to track expected database state for verification
 struct shadow_state {
-    std::map<ss::sstring, std::optional<iobuf>> data;
+    using tree_type
+      = lsm::db::immutable_tree<ss::sstring, std::optional<iobuf>>;
+    tree_type data;
 
     void put(ss::sstring key, iobuf value) {
-        data[std::move(key)] = std::move(value);
+        data = data.insert(
+          std::move(key), std::optional<iobuf>(std::move(value)));
     }
 
-    void remove(const ss::sstring& key) { data[key] = std::nullopt; }
-
-    std::optional<iobuf> get(const ss::sstring& key) const {
-        auto it = data.find(key);
-        if (it == data.end()) {
-            return std::nullopt;
-        }
-        return it->second ? std::optional<iobuf>(it->second->copy())
-                          : std::nullopt;
-    }
-
-    bool exists(const ss::sstring& key) const {
-        auto it = data.find(key);
-        return it != data.end() && it->second.has_value();
+    void remove(ss::sstring key) {
+        data = data.insert(std::move(key), std::optional<iobuf>{});
     }
 };
 
@@ -238,6 +230,7 @@ public:
     }
 
     ss::future<> teardown() {
+        co_await await_verification();
         if (_db) {
             co_await _db->close();
         }
@@ -310,12 +303,14 @@ private:
             co_await write_key(key, value.copy(), stats);
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -333,12 +328,14 @@ private:
             co_await write_key(key, value.copy(), stats);
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -364,12 +361,14 @@ private:
             co_await write_key(key, std::move(value), stats);
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -393,12 +392,14 @@ private:
             co_await delete_key(key, stats);
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -425,12 +426,14 @@ private:
             co_await delete_key(key, stats);
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -462,12 +465,14 @@ private:
             co_await read_key(key, stats);
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -503,17 +508,16 @@ private:
 
             if (_cfg.verify) {
                 stats.verification_checks++;
-                // Check if key exists in shadow map
-                auto it = _shadow.data.find(key);
-                if (it == _shadow.data.end()) {
+                auto* shadow_val = _shadow.data.get(key);
+                if (!shadow_val) {
                     bench_log.error(
                       "Verification failed for key {}: not in shadow map", key);
                     stats.verification_failures++;
-                } else if (!it->second.has_value()) {
+                } else if (!shadow_val->has_value()) {
                     bench_log.error(
                       "Verification failed for key {}: expected deleted", key);
                     stats.verification_failures++;
-                } else if (it->second.value() != value) {
+                } else if (shadow_val->value() != value) {
                     bench_log.error(
                       "Verification failed for key {}: value mismatch", key);
                     stats.verification_failures++;
@@ -525,7 +529,9 @@ private:
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -578,12 +584,14 @@ private:
             }
 
             if (_cfg.verify && (i % _cfg.verify_interval == 0)) {
-                co_await verify_all(stats);
+                co_await maybe_verify(stats);
             }
         }
 
         if (_cfg.verify) {
-            co_await verify_all(stats);
+            co_await await_verification();
+            auto iter = co_await _db->create_iterator({});
+            co_await verify_all(std::move(iter), _shadow.data, stats);
         }
     }
 
@@ -640,9 +648,9 @@ private:
 
         if (_cfg.verify) {
             stats.verification_checks++;
-            auto it = _shadow.data.find(key);
+            auto* shadow_val = _shadow.data.get(key);
 
-            if (it == _shadow.data.end()) {
+            if (!shadow_val) {
                 // Key not in shadow map
                 if (result_value) {
                     bench_log.error(
@@ -651,7 +659,7 @@ private:
                       key);
                     stats.verification_failures++;
                 }
-            } else if (!it->second.has_value()) {
+            } else if (!shadow_val->has_value()) {
                 // Key was deleted
                 if (!result.is_missing() && !result.is_tombstone()) {
                     bench_log.error(
@@ -665,7 +673,7 @@ private:
                     bench_log.error(
                       "Verification failed: key {} missing from DB", key);
                     stats.verification_failures++;
-                } else if (it->second.value() != result_value.value()) {
+                } else if (shadow_val->value() != result_value.value()) {
                     bench_log.error(
                       "Verification failed: key {} value mismatch", key);
                     stats.verification_failures++;
@@ -674,67 +682,110 @@ private:
         }
     }
 
-    ss::future<> verify_all(benchmark_stats& stats) {
+    ss::future<> maybe_verify(benchmark_stats& stats) {
+        if (!_verify_fut.available()) {
+            co_return;
+        }
+        auto iter = co_await _db->create_iterator({});
+        auto snapshot = _shadow.data;
+        _verify_fut = verify_all(std::move(iter), std::move(snapshot), stats)
+                        .then_wrapped([](ss::future<> f) {
+                            if (f.failed()) {
+                                auto ep = f.get_exception();
+                                bench_log.error(
+                                  "Background verification failed: {}", ep);
+                            }
+                        });
+    }
+
+    ss::future<> await_verification() {
+        return std::exchange(_verify_fut, ss::make_ready_future<>());
+    }
+
+    ss::future<> verify_all(
+      std::unique_ptr<lsm::internal::iterator> iter,
+      shadow_state::tree_type shadow,
+      benchmark_stats& stats) {
         bench_log.debug("Performing full verification scan");
 
-        // Build a set of all keys from iterator
-        std::map<ss::sstring, iobuf> db_keys;
-        auto iter = co_await _db->create_iterator({});
         co_await iter->seek_to_first();
 
+        // Both the shadow tree and DB iterator produce entries in sorted
+        // order. Walk the shadow tree and advance the DB iterator in
+        // lockstep so we never need to copy the database into a map.
+        co_await shadow.for_each(
+          [&](
+            this auto,
+            const ss::sstring& shadow_key,
+            const std::optional<iobuf>& shadow_val) -> ss::future<> {
+              if (_as.abort_requested()) {
+                  co_return;
+              }
+              // Drain DB entries that sort before this shadow key.
+              while (iter->valid()) {
+                  auto db_key = ss::sstring(iter->key().user_key());
+                  if (db_key >= shadow_key) {
+                      break;
+                  }
+                  stats.verification_checks++;
+                  bench_log.error(
+                    "Verification failed: key {} exists in DB but not in "
+                    "shadow map",
+                    db_key);
+                  stats.verification_failures++;
+                  co_await iter->next();
+              }
+
+              stats.verification_checks++;
+              if (!iter->valid()) {
+                  // DB exhausted; live shadow entries are missing.
+                  if (shadow_val.has_value()) {
+                      bench_log.error(
+                        "Verification failed: key {} missing from DB",
+                        shadow_key);
+                      stats.verification_failures++;
+                  }
+                  co_return;
+              }
+
+              auto db_key = ss::sstring(iter->key().user_key());
+              if (db_key == shadow_key) {
+                  if (!shadow_val.has_value()) {
+                      bench_log.error(
+                        "Verification failed: deleted key {} still exists "
+                        "in DB",
+                        shadow_key);
+                      stats.verification_failures++;
+                  } else if (shadow_val.value() != iter->value()) {
+                      bench_log.error(
+                        "Verification failed: key {} value mismatch",
+                        shadow_key);
+                      stats.verification_failures++;
+                  }
+                  co_await iter->next();
+              } else {
+                  // db_key > shadow_key: shadow entry missing from DB.
+                  if (shadow_val.has_value()) {
+                      bench_log.error(
+                        "Verification failed: key {} missing from DB",
+                        shadow_key);
+                      stats.verification_failures++;
+                  }
+              }
+          });
+
+        // Remaining DB entries not tracked by shadow.
         while (iter->valid()) {
             if (_as.abort_requested()) {
                 co_return;
             }
-            auto key = ss::sstring(iter->key().user_key());
-            auto value = iter->value();
-            db_keys[key] = value.copy();
-            co_await iter->next();
-        }
-
-        // Verify shadow map matches database
-        for (const auto& [key, expected_value_opt] : _shadow.data) {
-            if (_as.abort_requested()) {
-                co_return;
-            }
             stats.verification_checks++;
-
-            if (!expected_value_opt.has_value()) {
-                // Should be deleted
-                if (db_keys.contains(key)) {
-                    bench_log.error(
-                      "Verification failed: deleted key {} still exists in DB",
-                      key);
-                    stats.verification_failures++;
-                }
-            } else {
-                // Should exist with value
-                auto it = db_keys.find(key);
-                if (it == db_keys.end()) {
-                    bench_log.error(
-                      "Verification failed: key {} missing from DB", key);
-                    stats.verification_failures++;
-                } else if (it->second != expected_value_opt.value()) {
-                    bench_log.error(
-                      "Verification failed: key {} value mismatch", key);
-                    stats.verification_failures++;
-                }
-            }
-        }
-
-        // Verify database doesn't have extra keys
-        for (const auto& [key, _] : db_keys) {
-            if (_as.abort_requested()) {
-                co_return;
-            }
-            if (!_shadow.data.contains(key)) {
-                stats.verification_checks++;
-                bench_log.error(
-                  "Verification failed: key {} exists in DB but not in shadow "
-                  "map",
-                  key);
-                stats.verification_failures++;
-            }
+            bench_log.error(
+              "Verification failed: key {} exists in DB but not in "
+              "shadow map",
+              ss::sstring(iter->key().user_key()));
+            stats.verification_failures++;
+            co_await iter->next();
         }
 
         bench_log.debug("Verification scan complete");
@@ -749,6 +800,7 @@ private:
     std::unique_ptr<lsm::db::impl> _db;
     ss::abort_source _as;
     shadow_state _shadow;
+    ss::future<> _verify_fut = ss::make_ready_future<>();
     lsm::internal::sequence_number _seqno;
 };
 

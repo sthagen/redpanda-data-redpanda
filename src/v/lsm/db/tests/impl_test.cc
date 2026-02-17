@@ -186,6 +186,36 @@ public:
         }
     }
 
+    void delete_random_keys(lsm::db::impl* db = nullptr) {
+        if (_shadow.empty()) {
+            return;
+        }
+        if (!db) {
+            db = _db.get();
+        }
+        auto batch = ss::make_lw_shared<lsm::db::memtable>();
+        auto seqno = db->max_applied_seqno().value_or(0_seqno);
+        std::vector<ss::sstring> keys_to_delete;
+        for (auto& [k, _] : _shadow) {
+            if (random_generators::get_int(0, 3) == 0) {
+                auto key = lsm::internal::key::encode({
+                  .key = lsm::user_key_view(k),
+                  .seqno = ++seqno,
+                  .type = lsm::internal::value_type::tombstone,
+                });
+                batch->remove(std::move(key));
+                keys_to_delete.push_back(k);
+            }
+        }
+        if (keys_to_delete.empty()) {
+            return;
+        }
+        db->apply(std::move(batch)).get();
+        for (auto& k : keys_to_delete) {
+            _shadow.erase(k);
+        }
+    }
+
     testing::AssertionResult matches_shadow(lsm::db::impl* db = nullptr) {
         return matches_shadow(_shadow, nullptr, db);
     }
@@ -343,6 +373,20 @@ TEST_F(ImplTest, Randomized) {
 #endif
     for (int i = 0; i < rounds; ++i) {
         write_at_least(128_KiB);
+        EXPECT_TRUE(matches_shadow());
+    }
+}
+
+TEST_F(ImplTest, RandomizedWithDeletes) {
+#ifndef NDEBUG
+    int rounds = 100;
+#else
+    int rounds = 1000;
+#endif
+    for (int i = 0; i < rounds; ++i) {
+        write_at_least(128_KiB);
+        EXPECT_TRUE(matches_shadow());
+        delete_random_keys();
         EXPECT_TRUE(matches_shadow());
     }
 }

@@ -350,18 +350,17 @@ cluster::topic_configuration to_topic_config(
         topic_property_message_timestamp_after_max_ms,
         /*clamp_to_duration_max=*/true);
 
+    cfg.properties.storage_mode
+      = get_enum_value<model::redpanda_storage_mode>(
+          config_entries, topic_property_redpanda_storage_mode)
+          .value_or(config::shard_local_cfg().default_redpanda_storage_mode());
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};
 
     for (const auto& [name, value] : config_entries) {
         schema_id_validation_config_parser(
           name, value, kafka::config_resource_operation::set);
-    }
-
-    if (config::shard_local_cfg().cloud_topics_enabled()) {
-        cfg.properties.cloud_topic_enabled
-          = get_bool_value(config_entries, topic_property_cloud_topic_enabled)
-              .value_or(storage::ntp_config::default_cloud_topic_enabled);
     }
 
     return cfg;

@@ -454,6 +454,29 @@ validate_cloud_topics_reconciliation_intervals(const configuration& config) {
 }
 
 std::optional<ss::sstring>
+validate_default_redpanda_storage_mode(const configuration& config) {
+    auto mode = config.default_redpanda_storage_mode();
+
+    if (
+      mode == model::redpanda_storage_mode::tiered
+      && !config.cloud_storage_enabled()) {
+        return fmt::format(
+          "default_redpanda_storage_mode cannot be set to tiered when "
+          "cloud_storage_enabled is false");
+    }
+
+    if (
+      mode == model::redpanda_storage_mode::cloud
+      && !config.cloud_topics_enabled()) {
+        return fmt::format(
+          "default_redpanda_storage_mode cannot be set to cloud when "
+          "cloud_topics_enabled is false");
+    }
+
+    return std::nullopt;
+}
+
+std::optional<ss::sstring>
 validate_sane_partition_balancer_timeouts(const configuration& config) {
     // how often node status sends an rpc
     auto node_status = config.node_status_interval();

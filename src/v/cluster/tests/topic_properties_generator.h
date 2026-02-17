@@ -74,6 +74,10 @@ inline cluster::topic_properties random_topic_properties() {
     properties.flush_bytes = tests::random_optional(
       [] { return random_generators::get_int<size_t>(); });
     properties.iceberg_mode = model::iceberg_mode::disabled;
+    properties.storage_mode = random_generators::random_choice(
+      {model::redpanda_storage_mode::local,
+       model::redpanda_storage_mode::tiered,
+       model::redpanda_storage_mode::cloud});
 
     return properties;
 }

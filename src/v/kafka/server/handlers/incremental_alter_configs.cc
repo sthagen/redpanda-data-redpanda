@@ -17,6 +17,7 @@
 #include "kafka/protocol/schemata/incremental_alter_configs_request.h"
 #include "kafka/protocol/schemata/incremental_alter_configs_response.h"
 #include "kafka/server//handlers/configs/config_utils.h"
+#include "kafka/server/handlers/configs/storage_mode_properties.h"
 #include "kafka/server/handlers/details/alter_config_utils.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/request_context.h"
@@ -131,6 +132,13 @@ create_topic_properties_update(
       model::kafka_namespace, model::topic(resource.resource_name));
     cluster::topic_properties_update update(tp_ns);
 
+    // Get the topic's current storage mode for validation warnings
+    auto topic_cfg = ctx.metadata_cache().get_topic_cfg(tp_ns);
+    std::optional<model::redpanda_storage_mode> current_storage_mode;
+    if (topic_cfg) {
+        current_storage_mode = topic_cfg->properties.storage_mode;
+    }
+
     if (!ctx.is_topic_mutable(tp_ns.tp)) {
         return make_error_alter_config_resource_response<resp_resource_t>(
           resource,
@@ -170,6 +178,23 @@ create_topic_properties_update(
             // error case
             return *err;
         }
+
+        // Log warning if property is not relevant for the topic's storage mode
+        if (
+          current_storage_mode
+          && !is_property_valid_for_storage_mode(
+            cfg.name, *current_storage_mode)) {
+            vlog(
+              klog.warn,
+              "{} is not a relevant property for topic {} with "
+              "redpanda.storage.mode={} - it is only supported for "
+              "topics of redpanda.storage.mode={{{}}}",
+              cfg.name,
+              tp_ns.tp,
+              *current_storage_mode,
+              get_valid_storage_modes_string(cfg.name));
+        }
+
         try {
             if (cfg.name == topic_property_cleanup_policy) {
                 parse_and_set_optional(
@@ -366,13 +391,6 @@ create_topic_properties_update(
                   config::leaders_preference::parse);
                 continue;
             }
-            if (cfg.name == topic_property_cloud_topic_enabled) {
-                if (config::shard_local_cfg().cloud_topics_enabled()) {
-                    throw validation_error(
-                      "Cloud topics property cannot be changed");
-                }
-                throw validation_error("Cloud topics is not enabled");
-            }
             if (cfg.name == topic_property_delete_retention_ms) {
                 parse_and_set_tristate(
                   update.properties.delete_retention_ms, cfg.value, op);
@@ -460,6 +478,15 @@ create_topic_properties_update(
                   op,
                   message_timestamp_after_max_ms_validator,
                   /*clamp_to_duration_max=*/true);
+                continue;
+            }
+
+            if (cfg.name == topic_property_redpanda_storage_mode) {
+                parse_and_set_optional(
+                  update.properties.storage_mode,
+                  cfg.value,
+                  op,
+                  storage_mode_validator{current_storage_mode});
                 continue;
             }
         } catch (const validation_error& e) {

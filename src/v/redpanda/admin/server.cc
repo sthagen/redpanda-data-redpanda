@@ -2054,6 +2054,14 @@ void config_multi_property_validation(
     if (pbp_err.has_value()) {
         errors[ss::sstring{"partition_balancer_planner"}] = *pbp_err;
     }
+
+    // Validate default_redpanda_storage_mode dependencies
+    auto storage_mode_err = config::validate_default_redpanda_storage_mode(
+      updated_config);
+    if (storage_mode_err.has_value()) {
+        errors[ss::sstring{updated_config.default_redpanda_storage_mode.name()}]
+          = storage_mode_err.value();
+    }
 }
 } // namespace
 

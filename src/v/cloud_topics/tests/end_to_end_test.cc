@@ -45,7 +45,7 @@ public:
 
     void SetUp() override {
         cluster::topic_properties props;
-        props.cloud_topic_enabled = true;
+        props.storage_mode = model::redpanda_storage_mode::cloud;
         props.shadow_indexing = model::shadow_indexing_mode::disabled;
         add_topic({model::kafka_namespace, topic_name}, 1, props).get();
         wait_for_leader(ntp).get();

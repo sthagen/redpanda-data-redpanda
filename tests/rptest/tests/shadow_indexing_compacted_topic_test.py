@@ -335,8 +335,15 @@ class TSWithAlreadyCompactedTopic(EndToEndTest):
         )
 
         # enable TS for the topic
-        self._rpk_client.alter_topic_config(topic_name, "redpanda.remote.read", "true")
-        self._rpk_client.alter_topic_config(topic_name, "redpanda.remote.write", "true")
+        self._rpk_client.alter_topic_config(
+            topic_name, TopicSpec.PROPERTY_REMOTE_READ, "true"
+        )
+        self._rpk_client.alter_topic_config(
+            topic_name, TopicSpec.PROPERTY_REMOTE_WRITE, "true"
+        )
+        self._rpk_client.alter_topic_config(
+            topic_name, TopicSpec.PROPERTY_STORAGE_MODE, TopicSpec.STORAGE_MODE_TIERED
+        )
 
         # Transfer leadership while the data is uploaded.
         for _ in range(0, 10):

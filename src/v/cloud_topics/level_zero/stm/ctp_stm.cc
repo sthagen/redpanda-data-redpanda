@@ -406,17 +406,17 @@ ctp_stm::fence_epoch(cluster_epoch e) {
     }
     auto term = _raft->confirmed_term();
     while (true) {
-        if (_state.epoch_in_window(e)) {
+        if (_state.epoch_in_window(term, e)) {
             // Case 1.1. Same epoch, need to acquire read-lock.
             // Case 1.2. This epoch is out of order. We can accept it if it lies
             //           in [previous-epoch, max-seen-epoch) range. We also need
             //           to acquire a read fence as in 1.1.
             auto unit = co_await ss::get_units(_lock, 1, _as);
-            if (_state.epoch_in_window(e)) {
+            if (_state.epoch_in_window(term, e)) {
                 co_return cluster_epoch_fence{
                   .unit = std::move(unit), .term = term};
             }
-        } else if (_state.epoch_above_window(e)) {
+        } else if (_state.epoch_above_window(term, e)) {
             // Case 2. New epoch, need to acquire write-lock.
             auto epoch_update_lock = _epoch_update_lock.try_get_units();
             if (!epoch_update_lock) {
@@ -431,9 +431,11 @@ ctp_stm::fence_epoch(cluster_epoch e) {
               _lock, ss::semaphore::max_counter(), _as);
 
             std::optional<cluster_epoch_fence> epoch_fence_opt;
-            if (_state.epoch_in_window(e) || _state.epoch_above_window(e)) {
+            if (
+              _state.epoch_in_window(term, e)
+              || _state.epoch_above_window(term, e)) {
                 vlog(_log.debug, "Bumping max seen epoch to {}", e);
-                _state.advance_max_seen_epoch(e);
+                _state.advance_max_seen_epoch(term, e);
                 // Demote to reader lock after max_seen_epoch is updated.
                 unit.return_units(unit.count() - 1);
                 epoch_fence_opt.emplace(std::move(unit), term);

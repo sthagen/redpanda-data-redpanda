@@ -71,4 +71,14 @@ public:
       : base_exception(fmt::format(msg, std::forward<T>(args)...)) {}
 };
 
+inline bool is_abort_exception(const std::exception_ptr& e) {
+    try {
+        std::rethrow_exception(e);
+    } catch (const abort_requested_exception&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 } // namespace lsm

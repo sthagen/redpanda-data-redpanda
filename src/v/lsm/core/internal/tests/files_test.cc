@@ -21,13 +21,13 @@ using ::testing::Optional;
 
 TEST(Files, SstFileName) {
     EXPECT_EQ(
-      "00000000000000000001-00000000000000000000.sst",
+      "00000000000000000000-00000000000000000001.sst",
       std::string(sst_file_name({1_file_id, 0_db_epoch})));
     EXPECT_EQ(
-      "00000000000000000123-00000000000000000001.sst",
+      "00000000000000000001-00000000000000000123.sst",
       std::string(sst_file_name({123_file_id, 1_db_epoch})));
     EXPECT_EQ(
-      "00000000000000000000-00000000000000000123.sst",
+      "00000000000000000123-00000000000000000000.sst",
       std::string(sst_file_name({0_file_id, 123_db_epoch})));
     EXPECT_EQ(
       "18446744073709551615-18446744073709551615.sst",

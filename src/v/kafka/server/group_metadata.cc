@@ -21,6 +21,7 @@
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 #include "reflection/adl.h"
+#include "serde/rw/rw.h"
 #include "utils/to_string.h"
 
 #include <fmt/core.h>
@@ -334,31 +335,39 @@ iobuf maybe_unwrap_from_iobuf(iobuf buffer) {
 }
 } // namespace
 
-std::ostream& operator<<(std::ostream& o, const group_block& block) {
+std::ostream& operator<<(std::ostream& o, const group_block_info& gbi) {
     fmt::print(
-      o, "{{group_id: {}, is_blocked: {}}}", block.group_id, block.is_blocked);
+      o,
+      "{{is_blocked: {}, revision_id: {}}}",
+      gbi.is_blocked,
+      gbi.revision_id);
     return o;
 }
 
-group_block::group_block(kafka::group_id group_id, bool is_blocked)
+std::ostream& operator<<(std::ostream& o, const group_block& block) {
+    fmt::print(o, "{{group_id: {}, info: {}}}", block.group_id, block.info);
+    return o;
+}
+
+group_block::group_block(kafka::group_id group_id, group_block_info info)
   : group_id(std::move(group_id))
-  , is_blocked(is_blocked) {}
+  , info(std::move(info)) {}
+
 group_block::group_block(model::record record)
   : group_id(protocol::decoder(record.release_key()).read_string())
-  , is_blocked(!record.is_tombstone()) {}
+  , info(
+      record.is_tombstone() || record.value().empty()
+        // pre-serde legacy record
+        ? group_block_info{.is_blocked = record.is_tombstone(), .revision_id = model::revision_id{}}
+        // serde-encoded value
+        : serde::from_iobuf<group_block_info>(record.release_value())) {}
 
 void group_block::add_to_batch_builder(storage::record_batch_builder& b) const {
     iobuf key;
     protocol::encoder ke{key};
     ke.write(group_id);
 
-    // unblock to act as a tombstone
-    std::optional<iobuf> value;
-    if (is_blocked) {
-        value.emplace();
-    }
-
-    b.add_raw_kv(std::move(key), std::move(value));
+    b.add_raw_kv(std::move(key), serde::to_iobuf(info));
 }
 
 namespace group_metadata_serializer {

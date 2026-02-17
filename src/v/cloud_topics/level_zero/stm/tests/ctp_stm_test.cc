@@ -150,11 +150,8 @@ TEST_F_CORO(ctp_stm_fixture, test_basic) {
     ASSERT_TRUE_CORO(res.has_value());
 
     auto max_epoch = api(node(*get_leader())).get_max_epoch();
-    auto max_seen_epoch = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
     ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{1});
-    ASSERT_EQ_CORO(max_seen_epoch.value(), ct::cluster_epoch{1});
 
     gc_epoch = co_await api(node(*get_leader())).get_inactive_epoch();
     ASSERT_TRUE_CORO(gc_epoch);
@@ -178,11 +175,8 @@ TEST_F_CORO(ctp_stm_fixture, test_fencing) {
     ASSERT_TRUE_CORO(res.has_value());
 
     auto max_epoch = api(node(*get_leader())).get_max_epoch();
-    auto max_seen_epoch = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
     ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{2});
-    ASSERT_EQ_CORO(max_seen_epoch.value(), ct::cluster_epoch{2});
 
     // Acquire the fence for epoch 2 (should succeed)
     {
@@ -240,11 +234,8 @@ TEST_F_CORO(ctp_stm_fixture, test_last_reconciled_offset) {
     ASSERT_TRUE_CORO(res2.has_value());
 
     auto max_epoch = api(node(*get_leader())).get_max_epoch();
-    auto max_seen_epoch = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
     ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{2});
-    ASSERT_EQ_CORO(max_seen_epoch.value(), ct::cluster_epoch{2});
 
     auto gc_epoch_before
       = co_await api(node(*get_leader())).get_inactive_epoch();
@@ -258,13 +249,10 @@ TEST_F_CORO(ctp_stm_fixture, test_last_reconciled_offset) {
     co_await api(node(*get_leader()))
       .advance_reconciled_offset(kafka::offset{0}, model::no_timeout, as);
 
-    // Check that max and max_seen_epochs remain the same
+    // Check that max applied epoch remains the same
     auto max_epoch_after = api(node(*get_leader())).get_max_epoch();
-    auto max_seen_epoch_after = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch_after.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch_after.has_value());
     ASSERT_EQ_CORO(max_epoch_after.value(), ct::cluster_epoch{2});
-    ASSERT_EQ_CORO(max_seen_epoch_after.value(), ct::cluster_epoch{2});
 
     // Check that first epoch to remove has moved forward
     auto gc_epoch_after
@@ -279,9 +267,7 @@ TEST_F_CORO(ctp_stm_fixture, test_last_reconciled_offset) {
       .advance_reconciled_offset(kafka::offset{1}, model::no_timeout, as);
 
     max_epoch_after = api(node(*get_leader())).get_max_epoch();
-    max_seen_epoch_after = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch_after.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch_after.has_value());
 
     // We know that b2 started epoch 2 but we don't yet know where it ends
     gc_epoch_after = co_await api(node(*get_leader())).get_inactive_epoch();
@@ -314,11 +300,8 @@ TEST_F_CORO(ctp_stm_fixture, test_truncate_all_epochs) {
     }
 
     auto max_epoch = api(node(*get_leader())).get_max_epoch();
-    auto max_seen_epoch = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
     ASSERT_EQ_CORO(max_epoch.value(), last_epoch);
-    ASSERT_EQ_CORO(max_seen_epoch.value(), last_epoch);
     // Nothing yet reconciled
     auto inactive_epoch
       = co_await api(node(*get_leader())).get_inactive_epoch();
@@ -473,11 +456,8 @@ TEST_F_CORO(ctp_stm_fixture, test_snapshot) {
     ASSERT_TRUE_CORO(res.has_value());
 
     auto max_epoch = api(node(*get_leader())).get_max_epoch();
-    auto max_seen_epoch = api(node(*get_leader())).get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
     ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{2});
-    ASSERT_EQ_CORO(max_seen_epoch.value(), ct::cluster_epoch{2});
 
     auto& leader = node(*get_leader());
     auto stm = get_stm<0>(leader);
@@ -600,11 +580,8 @@ TEST_F_CORO(ctp_stm_fixture, test_previous_epoch_fencing_with_lro) {
 
     // Verify epochs are established
     auto max_epoch = leader_api.get_max_epoch();
-    auto max_seen_epoch = leader_api.get_max_seen_epoch();
     ASSERT_TRUE_CORO(max_epoch.has_value());
-    ASSERT_TRUE_CORO(max_seen_epoch.has_value());
     ASSERT_EQ_CORO(max_epoch.value(), ct::cluster_epoch{3});
-    ASSERT_EQ_CORO(max_seen_epoch.value(), ct::cluster_epoch{3});
 
     // Get the previous epoch (should be epoch 2, the previous
     // max_applied_epoch)
@@ -860,4 +837,96 @@ TEST_F_CORO(
       << " incorrectly accepted stale epoch 11. "
       << "This indicates the bug where in-memory _max_seen_epoch "
       << "is stale after regaining leadership.";
+}
+
+TEST_F_CORO(
+  ctp_stm_fixture,
+  test_unfenced_high_epoch_causes_stale_window_after_leadership_change) {
+    // Bug reproduction: a leader that fences a high epoch but doesn't
+    // replicate a batch for it, then loses leadership, retains a stale
+    // _max_seen_epoch. When it regains leadership the window is
+    // artificially wide and old (now-invalid) epochs are accepted.
+    //
+    // Scenario:
+    // 1. Node0 (leader) fences+replicates epochs 0-5
+    // 2. Node0 fences epoch 100 (bumps _max_seen_epoch to 100)
+    //    but does NOT replicate a batch for it
+    // 3. Leadership transfers to Node1
+    // 4. Node1 fences+replicates epochs 6, 7, 8
+    // 5. Node0 (follower) applies 6, 7, 8 via STM but _max_seen_epoch
+    //    stays at 100 because 8 < 100
+    // 6. Leadership transfers back to Node0
+    // 7. Node0 tries to fence epoch 5:
+    //    BUG:   seen window [5, 100] → accepted
+    //    FIXED: falls back to applied window [7, 8] → rejected
+
+    co_await start();
+    co_await wait_for_leader(raft::default_timeout());
+
+    auto initial_leader_id = get_leader().value();
+    vlog(ct::cd_log.info, "Initial leader: {}", initial_leader_id);
+    auto& node0 = node(initial_leader_id);
+
+    // Step 1: Fence and replicate epochs 0 through 5
+    for (int i = 0; i <= 5; i++) {
+        bool success = co_await replicate_with_epoch(
+          node0, ct::cluster_epoch{i}, model::offset{i}, i);
+        ASSERT_TRUE_CORO(success);
+    }
+
+    // Step 2: Fence epoch 100 but do NOT replicate a batch for it.
+    // This bumps _max_seen_epoch to 100 on Node0 making the seen
+    // window [5, 100].
+    {
+        auto fence_100 = co_await api(node0).fence_epoch(
+          ct::cluster_epoch{100});
+        ASSERT_TRUE_CORO(fence_100.has_value());
+        // Let the fence guard drop without replicating.
+    }
+
+    auto max_seen = api(node0).get_max_seen_epoch();
+    ASSERT_TRUE_CORO(max_seen.has_value());
+    ASSERT_EQ_CORO(max_seen.value(), ct::cluster_epoch{100});
+
+    // Step 3: Transfer leadership to a different node.
+    node0.raft()->block_new_leadership();
+    co_await node0.raft()->step_down("test_induced_failover");
+    co_await wait_for_leader(10s);
+    auto new_leader_id = get_leader().value();
+    ASSERT_NE_CORO(new_leader_id, initial_leader_id);
+    vlog(ct::cd_log.info, "New leader: {}", new_leader_id);
+
+    auto& node1 = node(new_leader_id);
+
+    // Step 4: Fence and replicate epochs 6, 7, 8 on the new leader.
+    for (int i = 6; i <= 8; i++) {
+        bool success = co_await replicate_with_epoch(
+          node1, ct::cluster_epoch{i}, model::offset{i}, i);
+        ASSERT_TRUE_CORO(success);
+    }
+
+    // Step 5: Node0 (follower) applies 6, 7, 8. Because 8 < 100
+    // the stale _max_seen_epoch is never overwritten.
+
+    // Step 6: Transfer leadership back to Node0.
+    node0.raft()->unblock_new_leadership();
+    co_await node1.raft()->transfer_leadership(
+      raft::transfer_leadership_request{
+        .group = node1.raft()->group(),
+        .target = initial_leader_id,
+        .timeout = 10s});
+
+    co_await wait_for_leader(10s);
+    ASSERT_EQ_CORO(*get_leader(), initial_leader_id);
+
+    // Step 7: Try to fence epoch 5 on the returned leader.
+    // Applied window is now [7, 8] so this must be rejected.
+    auto stale_fence
+      = co_await api(node(initial_leader_id)).fence_epoch(ct::cluster_epoch{5});
+
+    ASSERT_FALSE_CORO(stale_fence.has_value())
+      << "Leader " << initial_leader_id
+      << " incorrectly accepted stale epoch 5. "
+      << "The in-memory seen window [5, 100] survived the leadership "
+      << "change, allowing an epoch that is below the applied window [7, 8].";
 }

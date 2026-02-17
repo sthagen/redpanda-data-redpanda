@@ -186,6 +186,7 @@ redpanda_cc_library(
     implementation_deps = [
         ":file_utils",
         "//src/v/lsm/core:exceptions",
+        "//src/v/lsm/core/internal:logger",
         "//src/v/lsm/core/internal:merging_iterator",
         "//src/v/lsm/core/internal:two_level_iterator",
         "//src/v/lsm/proto:manifest_redpanda_proto",

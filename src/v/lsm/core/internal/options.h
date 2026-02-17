@@ -36,7 +36,8 @@ struct options {
     // The scheduling group for background operations in the LSM tree, such as
     // memtable flushing and compaction. Note that this is unused if the
     // database is in readonly mode.
-    ss::scheduling_group compaction_scheduling_group;
+    ss::scheduling_group compaction_scheduling_group
+      = ss::default_scheduling_group();
 
     struct level_config {
         // The level number in the database.

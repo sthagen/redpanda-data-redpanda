@@ -15,6 +15,7 @@
 #include "cluster/offsets_snapshot.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/types.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/timestamp.h"
 #include "serde/rw/enum.h"
@@ -322,6 +323,7 @@ using partition_work_info
 struct partition_work {
     id migration_id;
     state sought_state;
+    model::revision_id revision_id;
     partition_work_info info;
 };
 
@@ -349,7 +351,7 @@ std::ostream& operator<<(std::ostream& o, const topic_work& tw);
 struct migration_metadata
   : serde::envelope<
       migration_metadata,
-      serde::version<1>,
+      serde::version<2>,
       serde::compat_version<0>> {
     id id;
     data_migration migration;
@@ -361,6 +363,8 @@ struct migration_metadata
     model::timestamp created_timestamp{};
     // populated once finished or cancelled state is reached
     model::timestamp completed_timestamp{};
+    // last controller revision id that modified this migration
+    model::revision_id revision_id{};
 
     migration_metadata copy() const {
         return migration_metadata{
@@ -368,12 +372,18 @@ struct migration_metadata
           .migration = copy_migration(migration),
           .state = state,
           .created_timestamp = created_timestamp,
-          .completed_timestamp = completed_timestamp};
+          .completed_timestamp = completed_timestamp,
+          .revision_id = revision_id};
     }
 
     auto serde_fields() {
         return std::tie(
-          id, migration, state, created_timestamp, completed_timestamp);
+          id,
+          migration,
+          state,
+          created_timestamp,
+          completed_timestamp,
+          revision_id);
     }
 
     friend bool operator==(const migration_metadata&, const migration_metadata&)

@@ -272,10 +272,11 @@ struct cg_recovery_test_fixture : seastar_test {
     void add_block_batch(
       chunked_circular_buffer<model::record_batch>& batches,
       kafka::group_id group_id,
-      bool blocked) {
+      group_block_info req) {
         storage::record_batch_builder block_builder(
           model::record_batch_type::group_block, model::offset{0});
-        group_block{group_id, blocked}.add_to_batch_builder(block_builder);
+        group_block{std::move(group_id), req}.add_to_batch_builder(
+          block_builder);
         batches.push_back(std::move(block_builder).build());
     }
 };
@@ -523,15 +524,41 @@ TEST_F_CORO(cg_recovery_test_fixture, recover_blocked) {
       }));
 
     auto state = co_await recover_from_batches(copy_batches(batches));
-    EXPECT_FALSE(state.blocked_groups.contains(gr_1));
+    EXPECT_FALSE(state.group_blocks.contains(gr_1));
 
     // block
-    add_block_batch(batches, gr_1, true);
+    add_block_batch(batches, gr_1, {.is_blocked = true, .revision_id{2}});
     state = co_await recover_from_batches(copy_batches(batches));
-    EXPECT_TRUE(state.blocked_groups.contains(gr_1));
+    group_block_info expected{.is_blocked = true, .revision_id{2}};
+    EXPECT_EQ(state.group_blocks.at(gr_1), expected);
+
+    // re-block
+    add_block_batch(batches, gr_1, {.is_blocked = true, .revision_id{3}});
+    state = co_await recover_from_batches(copy_batches(batches));
+    expected = {.is_blocked = true, .revision_id{3}};
+    EXPECT_EQ(state.group_blocks.at(gr_1), expected);
 
     // unblock
-    add_block_batch(batches, gr_1, false);
+    add_block_batch(batches, gr_1, {.is_blocked = false, .revision_id{4}});
     state = co_await recover_from_batches(copy_batches(batches));
-    EXPECT_FALSE(state.blocked_groups.contains(gr_1));
+    expected = {.is_blocked = false, .revision_id{4}};
+    EXPECT_EQ(state.group_blocks.at(gr_1), expected);
+
+    // re-block without revision id (legacy)
+    add_block_batch(batches, gr_1, {.is_blocked = true, .revision_id{}});
+    state = co_await recover_from_batches(copy_batches(batches));
+    expected = {.is_blocked = true, .revision_id{}};
+    EXPECT_EQ(state.group_blocks.at(gr_1), expected);
+
+    // unblock without revision id (legacy)
+    add_block_batch(batches, gr_1, {.is_blocked = false, .revision_id{}});
+    state = co_await recover_from_batches(copy_batches(batches));
+    expected = {.is_blocked = false, .revision_id{}};
+    EXPECT_EQ(state.group_blocks.at(gr_1), expected);
+
+    // re-block with revision id
+    add_block_batch(batches, gr_1, {.is_blocked = true, .revision_id{1}});
+    state = co_await recover_from_batches(copy_batches(batches));
+    expected = {.is_blocked = true, .revision_id{1}};
+    EXPECT_EQ(state.group_blocks.at(gr_1), expected);
 }

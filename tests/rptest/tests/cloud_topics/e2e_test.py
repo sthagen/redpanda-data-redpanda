@@ -97,7 +97,7 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         self.redpanda.start()
         for topic in self.topics:
             config = {
-                "redpanda.cloud_topic.enabled": "true",
+                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
                 "cleanup.policy": topic.cleanup_policy,
             }
             if topic.min_cleanable_dirty_ratio is not None:

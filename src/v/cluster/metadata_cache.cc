@@ -360,6 +360,10 @@ metadata_cache::get_default_message_timestamp_after_max_ms() const {
     return config::shard_local_cfg().log_message_timestamp_after_max_ms();
 }
 
+model::redpanda_storage_mode metadata_cache::get_default_storage_mode() const {
+    return config::shard_local_cfg().default_redpanda_storage_mode();
+}
+
 topic_properties metadata_cache::get_default_properties() const {
     topic_properties tp;
     tp.compression = {get_default_compression()};
@@ -387,6 +391,7 @@ topic_properties metadata_cache::get_default_properties() const {
       = get_default_message_timestamp_before_max_ms();
     tp.message_timestamp_after_max_ms
       = get_default_message_timestamp_after_max_ms();
+    tp.storage_mode = get_default_storage_mode();
 
     return tp;
 }

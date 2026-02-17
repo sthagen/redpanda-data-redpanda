@@ -38,10 +38,10 @@ public:
 
     // Updates partition properties to disable writes;
     // returns the offset of the blocking message
-    ss::future<result<model::offset>> disable_writes();
+    ss::future<result<model::offset>> disable_writes(model::revision_id);
     // Updates partition properties to enable writes;
     // returns the offset of the unblocking message
-    ss::future<result<model::offset>> enable_writes();
+    ss::future<result<model::offset>> enable_writes(model::revision_id);
     // Waits for the state to be up to date and returns an up to date state of
     // write disabled property, this method may return an error and is only
     // intended to be called on the current leader.
@@ -65,11 +65,14 @@ private:
     struct update_writes_disabled_cmd
       : serde::envelope<
           update_writes_disabled_cmd,
-          serde::version<0>,
+          serde::version<1>,
           serde::compat_version<0>> {
         writes_disabled writes_disabled = writes_disabled::no;
+        model::revision_id writes_revision_id;
 
-        auto serde_fields() { return std::tie(writes_disabled); }
+        auto serde_fields() {
+            return std::tie(writes_disabled, writes_revision_id);
+        }
         friend bool operator==(
           const update_writes_disabled_cmd&, const update_writes_disabled_cmd&)
           = default;
@@ -78,22 +81,30 @@ private:
     struct state_snapshot
       : serde::envelope<
           state_snapshot,
-          serde::version<0>,
+          serde::version<1>,
           serde::compat_version<0>> {
+        // todo: in a major release we can change it to use a local_snapshot +
+        // update_offset
         writes_disabled writes_disabled;
         model::offset update_offset;
+        model::revision_id writes_revision_id;
 
-        auto serde_fields() { return std::tie(writes_disabled, update_offset); }
+        auto serde_fields() {
+            return std::tie(writes_disabled, update_offset, writes_revision_id);
+        }
         friend bool operator==(const state_snapshot&, const state_snapshot&)
           = default;
     };
 
     struct raft_snapshot
       : serde::
-          envelope<raft_snapshot, serde::version<0>, serde::compat_version<0>> {
+          envelope<raft_snapshot, serde::version<1>, serde::compat_version<0>> {
         writes_disabled writes_disabled = writes_disabled::no;
+        model::revision_id writes_revision_id;
 
-        auto serde_fields() { return std::tie(writes_disabled); }
+        auto serde_fields() {
+            return std::tie(writes_disabled, writes_revision_id);
+        }
 
         friend bool operator==(const raft_snapshot&, const raft_snapshot&)
           = default;
@@ -145,6 +156,9 @@ private:
     // are intermittent events, the updates are ordered by offsets and they are
     // cleaned when the local snapshot is taken.
     chunked_vector<state_snapshot> _state_snapshots;
+
+    // For linearizing access to writes_disabled state on the leader
+    ssx::mutex _writes_mutex{"c/partition_properties_stm::writes_mutex"};
 };
 
 class partition_properties_stm_factory : public state_machine_factory {

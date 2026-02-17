@@ -187,12 +187,13 @@ std::ostream& operator<<(std::ostream& o, const migration_metadata& m) {
     fmt::print(
       o,
       "{{id: {}, migration: {}, state: {}, created_timestamp: {}, "
-      "completed_timestamp: {}}}",
+      "completed_timestamp: {}, revision_id: {}}}",
       m.id,
       print_migration(m.migration),
       m.state,
       m.created_timestamp,
-      m.completed_timestamp);
+      m.completed_timestamp,
+      m.revision_id);
     return o;
 }
 

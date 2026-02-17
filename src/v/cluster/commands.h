@@ -609,7 +609,7 @@ deserialize(model::record_batch b, commands_type_list<Commands...>) {
         v_parser.skip(1);
     }
 
-    // chose deserializer
+    // choose deserializer
     auto cmd_type = reflection::adl<command_type>{}.from(v_parser);
     std::optional<std::variant<internal::deserializer<Commands>...>> ret;
     (void)((ret = internal::make_deserializer<Commands>(cmd_type), ret) || ...);

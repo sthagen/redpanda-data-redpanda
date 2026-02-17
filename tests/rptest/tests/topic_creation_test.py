@@ -78,7 +78,7 @@ class RapidTopicRecreateTest(RedpandaTest):
             topic=self.cloud_topic_name,
             partitions=self._current_partitions,
             replicas=replication_factor,
-            config={TopicSpec.PROPERTY_CLOUD_TOPIC_ENABLE: "true"},
+            config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
         )
 
     def delete(self):
@@ -215,7 +215,7 @@ class TopicRecreateTest(RedpandaTest):
         rpk.create_topic(
             topic=topic,
             partitions=partition_count,
-            config={TopicSpec.PROPERTY_CLOUD_TOPIC_ENABLE: "true"},
+            config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
         )
 
         producer_properties = {
@@ -251,7 +251,7 @@ class TopicRecreateTest(RedpandaTest):
                 topic=topic,
                 partitions=partition_count,
                 replicas=rf,
-                config={TopicSpec.PROPERTY_CLOUD_TOPIC_ENABLE: "true"},
+                config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
             )
             wait_until(topic_is_healthy, 30, 2, err_msg=f"Topic {topic} health")
             sleep(5)

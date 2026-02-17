@@ -349,6 +349,77 @@ struct batch_max_bytes_limits_validator {
     }
 };
 
+// Check if a storage mode transition is permitted.
+// Returns true if the transition is allowed, false otherwise.
+//
+// Permitted transitions:
+//   local -> tiered: Permitted
+//   tiered -> local: Permitted (with caution)
+//   unset -> local: Permitted (with caution)
+//   unset -> tiered: Permitted
+// Not permitted:
+//   local -> unset: Not permitted
+//   local -> cloud: Not permitted
+//   tiered -> unset: Not permitted
+//   tiered -> cloud: Not permitted
+//   cloud -> local: Not permitted
+//   cloud -> tiered: Not permitted
+//   unset <-> cloud: Not permitted (cloud requires explicit choice)
+inline bool is_storage_mode_transition_permitted(
+  model::redpanda_storage_mode from, model::redpanda_storage_mode to) {
+    using sm = model::redpanda_storage_mode;
+
+    // No-op transitions are fine.
+    if (from == to) {
+        return true;
+    }
+
+    // Permitted transitions:
+    //   local -> tiered: Permitted
+    //   tiered -> local: Permitted (with caution)
+    //   unset -> local: Permitted (with caution)
+    //   unset -> tiered: Permitted
+    if (from == sm::local && to == sm::tiered) {
+        return true;
+    }
+    if (from == sm::tiered && to == sm::local) {
+        return true;
+    }
+    if (from == sm::unset && to == sm::local) {
+        return true;
+    }
+    if (from == sm::unset && to == sm::tiered) {
+        return true;
+    }
+
+    // All other transitions are not permitted
+    return false;
+}
+
+/// Validator for redpanda.storage.mode property.
+/// Validates that the transition from current storage mode to the new value is
+/// permitted.
+struct storage_mode_validator {
+    std::optional<model::redpanda_storage_mode> current_mode;
+
+    std::optional<ss::sstring>
+    operator()(const ss::sstring&, const model::redpanda_storage_mode& value) {
+        // If we don't have a current mode (new topic), allow any value
+        if (!current_mode) {
+            return std::nullopt;
+        }
+
+        if (!is_storage_mode_transition_permitted(*current_mode, value)) {
+            return fmt::format(
+              "Cannot alter redpanda.storage.mode from {} to {} - this "
+              "transition is not permitted",
+              *current_mode,
+              value);
+        }
+        return std::nullopt;
+    }
+};
+
 template<typename T, typename... ValidatorTypes>
 requires requires(
   model::topic_namespace_view tns,

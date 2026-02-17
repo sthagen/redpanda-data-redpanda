@@ -11,7 +11,11 @@
 
 #include "kafka/server/group_tx_tracker_stm.h"
 
+#include "kafka/server/group.h"
+#include "serde/rw/envelope.h"
 #include "ssx/future-util.h"
+
+#include <ranges>
 
 namespace kafka {
 
@@ -136,8 +140,22 @@ group_tx_tracker_stm::apply_local_snapshot(
     iobuf_parser parser(std::move(snap_buf));
     auto snap = co_await serde::read_async<snapshot>(parser);
     _all_txs = std::move(snap.transactions);
-    _blocked_groups.insert(
-      snap.blocked_groups.cbegin(), snap.blocked_groups.cend());
+    if (!snap.blocked_groups.empty() && snap.group_blocks.empty())
+      [[unlikely]] {
+        // legacy snapshot from version 1, reconstruct the map
+        _group_blocks = chunked_hash_map_from_range(
+          snap.blocked_groups
+          | std::views::transform([](const kafka::group_id& gid) {
+                return std::make_pair(
+                  gid,
+                  group_block_info{
+                    .is_blocked = true, .revision_id = model::revision_id{}});
+            })
+          | std::views::as_rvalue);
+    } else {
+        _group_blocks = chunked_hash_map_from_range(
+          snap.group_blocks | std::views::as_rvalue);
+    }
     co_return raft::local_snapshot_applied::yes;
 }
 
@@ -147,7 +165,11 @@ group_tx_tracker_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
     auto offset = last_applied_offset();
     snapshot snap{
       .transactions{_all_txs},
-      .blocked_groups{std::from_range, _blocked_groups},
+      .blocked_groups{
+        std::from_range, _group_blocks | std::views::filter([](const auto& e) {
+                             return e.second.is_blocked;
+                         }) | std::views::keys},
+      .group_blocks{std::from_range, _group_blocks},
     };
     apply_units.return_all();
     iobuf snap_buf;
@@ -274,17 +296,19 @@ ss::future<> group_tx_tracker_stm::handle_version_fence(
 }
 
 void group_tx_tracker_stm::handle_group_block(kafka::group_block gb) {
-    if (gb.is_blocked) {
-        _blocked_groups.insert(gb.group_id);
+    base_t::do_handle_group_block(gb);
+    if (gb.info.is_blocked) {
         // there shouldn't be any transactions in progress, doing just in case
         _all_txs.erase(gb.group_id);
-    } else {
-        _blocked_groups.erase(gb.group_id);
     }
 }
 
-bool group_tx_tracker_stm::is_group_blocked(kafka::group_id group_id) const {
-    return _blocked_groups.contains(group_id);
+group_block_info_map& group_tx_tracker_stm::group_blocks() {
+    return _group_blocks;
+}
+
+const group_block_info_map& group_tx_tracker_stm::group_blocks() const {
+    return _group_blocks;
 }
 
 bool group_tx_tracker_stm_factory::is_applicable_for(

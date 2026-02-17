@@ -191,7 +191,6 @@ controller_snapshot_reconciler::get_actions(
         const auto& snap_tables = snap.topics.topics;
         for (const auto& [tp_ns, meta] : snap_tables) {
             const auto& tp_config = meta.metadata.configuration;
-            auto& si_props = tp_config.properties.shadow_indexing;
             if (_topic_table.contains(tp_ns)) {
                 continue;
             }
@@ -210,9 +209,8 @@ controller_snapshot_reconciler::get_actions(
                 actions.cloud_topics.emplace_back(std::move(new_config));
                 continue;
             }
-            if (
-              si_props.has_value()
-              && model::is_archival_enabled(si_props.value())) {
+
+            if (tp_config.properties.is_archival_enabled()) {
                 // We expect to create the topic with tiered storage data.
                 auto new_config = tp_config;
                 if (!new_config.properties.remote_topic_properties

@@ -15,6 +15,7 @@ from ducktape.tests.test import TestContext
 
 from rptest.context.cloud_storage import CloudStorageType
 from rptest.clients.rpk import RpkTool
+from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     SISettings,
@@ -99,7 +100,7 @@ class TxVerifierTest(RedpandaTest):
 
         # 2 cloud topics
         cloud_topic_config = {
-            "redpanda.cloud_topic.enabled": "true",
+            TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
         }
         specs.append(("topic1-ct", "topic2-ct", "groupId-ct"))
         rpk.create_topic(specs[-1][0], config=cloud_topic_config)

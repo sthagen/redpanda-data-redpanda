@@ -147,7 +147,7 @@ concept supported_stm_snapshot = requires(T s, stm_snapshot&& snapshot) {
  *
  *   - reject commands without wasting resources on replication
  *   - be sure that the state can't be changed between a command
- *     received and its replication finished so we it's possible
+ *     received and its replication finished so it's possible
  *     to ack commands after they're replicated but before they're
  *     applied
  *

@@ -664,6 +664,7 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         exclude_settings.add("cloud_storage_enabled")
         exclude_settings.add(CLOUD_TOPICS_CONFIG_STR)
         exclude_settings.add("iceberg_enabled")
+        exclude_settings.add("default_redpanda_storage_mode")
 
         # Partition balancer relies on relative sizes of these values
         exclude_settings.update(

@@ -505,7 +505,6 @@ SEASTAR_THREAD_TEST_CASE(test_topic_manifest_serde_feature_table) {
       std::nullopt,
       model::iceberg_mode::disabled,
       std::nullopt,
-      false,
       tristate<std::chrono::milliseconds>{},
       std::nullopt,
       std::nullopt,
@@ -517,6 +516,7 @@ SEASTAR_THREAD_TEST_CASE(test_topic_manifest_serde_feature_table) {
       std::nullopt,
       std::nullopt,
       std::nullopt,
+      model::redpanda_storage_mode::tiered,
     };
 
     auto random_initial_revision_id

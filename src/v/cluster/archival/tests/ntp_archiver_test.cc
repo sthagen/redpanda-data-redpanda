@@ -1586,6 +1586,7 @@ FIXTURE_TEST(test_flush_not_leader, cloud_storage_manual_multinode_test_base) {
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     cluster::topic_properties props;
     props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion;
     props.segment_size = 64_KiB;
     props.retention_local_target_bytes = tristate<size_t>(1);
@@ -1643,6 +1644,7 @@ FIXTURE_TEST(test_flush_leader, cloud_storage_manual_multinode_test_base) {
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     cluster::topic_properties props;
     props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.storage_mode = model::redpanda_storage_mode::tiered;
     props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion;
     props.segment_size = 64_KiB;
     props.retention_local_target_bytes = tristate<size_t>(1);

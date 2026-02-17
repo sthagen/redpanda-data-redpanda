@@ -177,14 +177,29 @@ inline group_metadata_version read_metadata_version(protocol::decoder& reader) {
     return group_metadata_version{reader.read_int16()};
 }
 
+struct group_block_info
+  : serde::
+      envelope<group_block_info, serde::version<0>, serde::compat_version<0>> {
+    bool is_blocked;
+    // model::revision_id{} indicates that the request is coming from an older
+    // node and should be applied unconditionally
+    model::revision_id revision_id;
+
+    auto serde_fields() { return std::tie(is_blocked, revision_id); }
+    friend bool operator==(const group_block_info&, const group_block_info&)
+      = default;
+
+    friend std::ostream& operator<<(std::ostream&, const group_block_info&);
+};
 struct group_block {
     kafka::group_id group_id;
-    bool is_blocked;
-    friend std::ostream& operator<<(std::ostream&, const group_block&);
+    group_block_info info;
 
-    group_block(kafka::group_id group_id, bool is_blocked);
+    group_block(kafka::group_id group_id, group_block_info info);
     explicit group_block(model::record record);
     void add_to_batch_builder(storage::record_batch_builder&) const;
+
+    friend std::ostream& operator<<(std::ostream&, const group_block&);
 };
 namespace group_metadata_serializer {
 struct key_value {

@@ -157,4 +157,7 @@ void rjson_serialize(
 void rjson_serialize(
   json::Writer<json::StringBuffer>&, security::oidc::nested_group_behavior);
 
+void rjson_serialize(
+  json::Writer<json::StringBuffer>&, const model::redpanda_storage_mode&);
+
 } // namespace json

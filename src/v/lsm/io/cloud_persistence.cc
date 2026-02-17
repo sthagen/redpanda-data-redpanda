@@ -17,11 +17,13 @@
 #include "lsm/core/internal/files.h"
 #include "lsm/io/file_io.h"
 #include "lsm/io/persistence.h"
+#include "ssx/future-util.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/fstream.hh>
 #include <seastar/core/reactor.hh>
 
+#include <exception>
 #include <memory>
 
 namespace lsm::io {
@@ -126,8 +128,12 @@ public:
         } catch (const std::system_error& err) {
             throw io_error_exception(err.code(), "io error closing: {}", err);
         } catch (...) {
-            throw io_error_exception(
-              "io error closing: {}", std::current_exception());
+            auto ex = std::current_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                throw abort_requested_exception(
+                  "shutdown exception while closing: {}", ex);
+            }
+            throw io_error_exception("io error closing: {}", ex);
         }
     }
 
@@ -218,8 +224,12 @@ public:
             throw io_error_exception(
               e.code(), "io error downloading file: {}", e);
         } catch (...) {
-            throw io_error_exception(
-              "io error downloading file: {}", std::current_exception());
+            auto ex = std::current_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                throw abort_requested_exception(
+                  "shutdown exception while downloading file: {}", ex);
+            }
+            throw io_error_exception("io error downloading file: {}", ex);
         }
         if (check_result(result)) {
             co_return co_await open_local_reader(filepath);
@@ -255,8 +265,12 @@ public:
             throw io_error_exception(
               e.code(), "io error opening file writer: {}", e);
         } catch (...) {
-            throw io_error_exception(
-              "io error opening file writer: {}", std::current_exception());
+            auto ex = std::current_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                throw abort_requested_exception(
+                  "shutdown exception while opening file writer: {}", ex);
+            }
+            throw io_error_exception("io error opening file writer: {}", ex);
         }
     }
 
@@ -279,8 +293,12 @@ public:
                   e.code(), "io error removing file: {}", e);
             }
         } catch (...) {
-            throw io_error_exception(
-              "io error removing file: {}", std::current_exception());
+            auto ex = std::current_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                throw abort_requested_exception(
+                  "shutdown exception while removing file: {}", ex);
+            }
+            throw io_error_exception("io error removing file: {}", ex);
         }
         check_result(result);
     }
@@ -296,8 +314,12 @@ public:
         try {
             result = co_await _remote->list_objects(_bucket, rtc, _prefix);
         } catch (...) {
-            throw io_error_exception(
-              "io error listing files: {}", std::current_exception());
+            auto ex = std::current_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                throw abort_requested_exception(
+                  "shutdown exception while listing files: {}", ex);
+            }
+            throw io_error_exception("io error listing files: {}", ex);
         }
         if (result.has_error()) {
             throw io_error_exception(
@@ -342,9 +364,13 @@ private:
             throw io_error_exception(
               e.code(), "io error opening file reader: {}", e);
         } catch (...) {
+            auto ex = std::current_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                throw abort_requested_exception(
+                  "shutdown exception while listing files: {}", ex);
+            }
             throw io_error_exception(
-              "io error opening staging file reader: {}",
-              std::current_exception());
+              "io error opening staging file reader: {}", ex);
         }
     }
     ss::future<uint64_t> save_locally(

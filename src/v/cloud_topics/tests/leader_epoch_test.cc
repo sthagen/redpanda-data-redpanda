@@ -43,7 +43,7 @@ public:
         wait_for_all_members(5s).get();
 
         cluster::topic_properties props;
-        props.cloud_topic_enabled = true;
+        props.storage_mode = model::redpanda_storage_mode::cloud;
         props.shadow_indexing = model::shadow_indexing_mode::disabled;
 
         create_topic({model::kafka_namespace, topic_name}, 1, 3, props).get();

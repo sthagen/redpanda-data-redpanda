@@ -582,6 +582,37 @@ std::optional<write_caching_mode>
 std::ostream& operator<<(std::ostream&, write_caching_mode);
 std::istream& operator>>(std::istream&, write_caching_mode&);
 
+// Storage mode for a Redpanda topic
+// unset (255) enables fallback to legacy shadow_indexing behavior during
+// deprecation. When storage_mode is explicit (local/tiered/cloud), it is
+// authoritative. When unset, legacy shadow_indexing configs are used.
+enum class redpanda_storage_mode : uint8_t {
+    local = 0,
+    tiered = 1,
+    cloud = 2,
+    unset = 255
+};
+
+constexpr const char* redpanda_storage_mode_to_string(redpanda_storage_mode m) {
+    switch (m) {
+    case redpanda_storage_mode::local:
+        return "local";
+    case redpanda_storage_mode::tiered:
+        return "tiered";
+    case redpanda_storage_mode::cloud:
+        return "cloud";
+    case redpanda_storage_mode::unset:
+        return "unset";
+    }
+    throw std::invalid_argument("unknown redpanda_storage_mode");
+}
+
+std::optional<redpanda_storage_mode>
+  redpanda_storage_mode_from_string(std::string_view);
+
+std::ostream& operator<<(std::ostream&, redpanda_storage_mode);
+std::istream& operator>>(std::istream&, redpanda_storage_mode&);
+
 enum class recovery_validation_mode : std::uint16_t {
     // ensure that either the manifest is in TS or that no manifest is present.
     // download issues will fail the validation

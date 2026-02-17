@@ -11,6 +11,7 @@
 
 #include "lsm/core/internal/keys.h"
 
+#include "absl/strings/escaping.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "base/vassert.h"
@@ -57,37 +58,27 @@ value_type key::type() const { return key_view{*this}.type(); }
 fmt::iterator key::parts::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it,
-      "internal_key_parts={{key={},seqno={},type={}}}",
-      key,
+      "{{key={},seqno={},type={}}}",
+      absl::Utf8SafeCHexEscape(key()),
       seqno,
-      std::to_underlying(type));
+      type == value_type::tombstone ? "tombstone" : "value");
 }
 
 fmt::iterator key_view::parts::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it,
-      "internal_key_parts={{key={},seqno={},type={}}}",
-      key,
+      "{{key={},seqno={},type={}}}",
+      absl::Utf8SafeCHexEscape(key()),
       seqno,
-      std::to_underlying(type));
+      type == value_type::tombstone ? "tombstone" : "value");
 }
 
 fmt::iterator key::format_to(fmt::iterator it) const {
-    uint64_t encoded; // NOLINT
-    std::memcpy(
-      &encoded, &_value[_value.size() - sizeof(encoded)], sizeof(encoded));
-    encoded = ~ss::be_to_cpu(encoded);
-    return fmt::format_to(
-      it, "internal_key={{user={},suffix=o{:08o}}}", user_key(), encoded);
+    return fmt::format_to(it, "{}", key_view{*this});
 }
 
 fmt::iterator key_view::format_to(fmt::iterator it) const {
-    uint64_t encoded; // NOLINT
-    std::memcpy(
-      &encoded, &_value[_value.size() - sizeof(encoded)], sizeof(encoded));
-    encoded = ~ss::be_to_cpu(encoded);
-    return fmt::format_to(
-      it, "internal_key_view={{user={},suffix=o{:08o}}}", user_key(), encoded);
+    return fmt::format_to(it, "{}", decode());
 }
 
 key::parts key::parts::value(user_key_view key, sequence_number seq_num) {

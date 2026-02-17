@@ -36,12 +36,13 @@ class FetchFrom(str, Enum):
 def make_topic_config(fetch_from):
     if fetch_from == FetchFrom.CLOUD_TOPIC:
         config = {
-            "redpanda.cloud_topic.enabled": "true",
+            TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
         }
     elif fetch_from == FetchFrom.TIERED_STORAGE:
         config = {
-            "redpanda.remote.read": "true",
-            "redpanda.remote.write": "true",
+            TopicSpec.PROPERTY_REMOTE_READ: "true",
+            TopicSpec.PROPERTY_REMOTE_WRITE: "true",
+            TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED,
         }
     else:
         config = {}

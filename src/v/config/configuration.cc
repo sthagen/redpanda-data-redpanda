@@ -2021,6 +2021,22 @@ configuration::configuration()
       "Default remote write value for new topics",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
+  , default_redpanda_storage_mode(
+      *this,
+      "default_redpanda_storage_mode",
+      "Default storage mode for newly-created topics. Determines how topic "
+      "data is stored: `local` for broker-local storage only, `tiered` for "
+      "both local and object storage, `cloud` for object-only storage using "
+      "the Cloud Topics architecture, or `unset` to use legacy "
+      "remote.read/write configs for backwards compatibility.",
+      {.needs_restart = needs_restart::no,
+       .example = "tiered",
+       .visibility = visibility::user},
+      model::redpanda_storage_mode::unset,
+      {model::redpanda_storage_mode::local,
+       model::redpanda_storage_mode::tiered,
+       model::redpanda_storage_mode::cloud,
+       model::redpanda_storage_mode::unset})
   , cloud_storage_disable_archiver_manager(
       *this,
       "cloud_storage_disable_archiver_manager",

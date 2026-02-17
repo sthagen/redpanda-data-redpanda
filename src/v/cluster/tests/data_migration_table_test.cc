@@ -119,10 +119,17 @@ struct data_migration_table_fixture : public seastar_test {
             topic_configuration cfg(tp_ns.ns, tp_ns.tp, p_cnt, 3);
             // Cloud topics don't use tiered storage, but regular topics need it
             // enabled for unmount to work.
-            cfg.properties.shadow_indexing
-              = cloud_topic_enabled ? model::shadow_indexing_mode::disabled
-                                    : model::shadow_indexing_mode::full;
-            cfg.properties.cloud_topic_enabled = cloud_topic_enabled;
+            if (cloud_topic_enabled) {
+                cfg.properties.shadow_indexing
+                  = model::shadow_indexing_mode::disabled;
+                cfg.properties.storage_mode
+                  = model::redpanda_storage_mode::cloud;
+            } else {
+                cfg.properties.shadow_indexing
+                  = model::shadow_indexing_mode::full;
+                cfg.properties.storage_mode
+                  = model::redpanda_storage_mode::tiered;
+            }
             ss::chunked_fifo<partition_assignment> assignments;
             for (auto i = 0; i < p_cnt; ++i) {
                 assignments.push_back(
@@ -287,7 +294,12 @@ TEST_F_CORO(data_migration_table_fixture, test_crud_operations) {
         cluster::data_migrations::create_migration_cmd_data{
           .id = id_2,
           .migration = cluster::data_migrations::inbound_migration{
-            .topics = create_inbound_topics({"in-t-1"}), .groups = {}}}));
+            .topics = create_inbound_topics({"in-t-1"}),
+            .groups = create_groups({"g-3", "g-4"})}}));
+
+    validate_group_resource_state(
+      {{"g-3", data_migrations::migrated_resource_state::metadata_locked},
+       {"g-4", data_migrations::migrated_resource_state::metadata_locked}});
 
     validate_topic_resource_state(
       {{"in-t-1", data_migrations::migrated_resource_state::metadata_locked}});
@@ -505,7 +517,8 @@ TEST_F_CORO(data_migration_table_fixture, test_resource_validation) {
     inbound_topics[0].alias = model::topic_namespace(
       model::kafka_namespace, model::topic("alias-of-topic-1"));
     data_migrations::inbound_migration idm_with_alias{
-      .topics = inbound_topics.copy(), .groups = {}};
+      .topics = inbound_topics.copy(),
+      .groups = create_groups({"gr-4", "gr-5"})};
 
     /**
      * Requested topics do not exists, migration creation should fail

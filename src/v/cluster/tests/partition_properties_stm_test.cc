@@ -64,22 +64,34 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
         }
     }
 
-    ss::future<> disable_writes() {
-        std::ignore = co_await retry_with_leader(
-          raft::default_timeout(),
-          2s,
-          [](raft::raft_node_instance& leader_node) {
-              return get_stm(leader_node)->disable_writes();
-          });
+    ss::future<> check_res(result<model::offset> res, bool expect_success) {
+        ASSERT_TRUE_CORO(expect_success == res.has_value());
+        if (!expect_success) {
+            // we don;t
+            ASSERT_EQ_CORO(res.error(), errc::invalid_data_migration_state);
+        }
     }
 
-    ss::future<> enable_writes() {
-        std::ignore = co_await retry_with_leader(
+    ss::future<>
+    disable_writes(model::revision_id revision_id, bool expect_success = true) {
+        auto res = co_await retry_with_leader(
           raft::default_timeout(),
           2s,
-          [](raft::raft_node_instance& leader_node) {
-              return get_stm(leader_node)->enable_writes();
+          [revision_id](raft::raft_node_instance& leader_node) {
+              return get_stm(leader_node)->disable_writes(revision_id);
           });
+        co_await check_res(res, expect_success);
+    }
+
+    ss::future<>
+    enable_writes(model::revision_id revision_id, bool expect_success = true) {
+        auto res = co_await retry_with_leader(
+          raft::default_timeout(),
+          2s,
+          [revision_id](raft::raft_node_instance& leader_node) {
+              return get_stm(leader_node)->enable_writes(revision_id);
+          });
+        co_await check_res(res, expect_success);
     }
 
     static ss::shared_ptr<stm_t> get_stm(raft::raft_node_instance& rni) {
@@ -136,15 +148,28 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
 
     ss::future<bool> generate_random_data() {
         bool disabled = false;
+        model::revision_id revision_id{1};
         for (int i = 0; i < 200; ++i) {
             auto o = co_await replicate_random_batches();
             vlog(tstlog.info, "last batches offset offset: {}", o);
+
+            // 10% chance to create a legacy record
+            if (random_generators::get_int(10) == 0) {
+                revision_id = model::revision_id{};
+            }
+
             if (random_generators::random_choice({true, false})) {
-                co_await enable_writes();
+                co_await enable_writes(revision_id);
                 disabled = false;
             } else {
-                co_await disable_writes();
+                co_await disable_writes(revision_id);
                 disabled = true;
+            }
+
+            if (revision_id == model::revision_id{}) {
+                revision_id = model::revision_id{1};
+            } else {
+                ++revision_id;
             }
         }
         co_return disabled;
@@ -199,30 +224,76 @@ struct partition_properties_stm_accessor {
 TEST_F_CORO(partition_properties_stm_fixture, test_basic_operations) {
     co_await initialize_state_machines();
     // disable writes and validate outcome
-    co_await disable_writes();
+    co_await disable_writes(model::revision_id{1});
     co_await assert_writes(stm_t::writes_disabled::yes);
-    // disable writes operation is idempotent
-    co_await disable_writes();
+    // check idempotent with the same revision id
+    co_await disable_writes(model::revision_id{1});
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // check idempotent with a higher revision id
+    co_await disable_writes(model::revision_id{2});
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // the same operation is disallowed with a lower revision id
+    co_await disable_writes(model::revision_id{1}, false);
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // the opposite operation is disallowed with a lower revision id
+    co_await enable_writes(model::revision_id{1}, false);
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // the opposite operation is disallowed with the same revision id
+    co_await enable_writes(model::revision_id{2}, false);
     co_await assert_writes(stm_t::writes_disabled::yes);
 
     // enable writes back, and verify that the state is updated
-    co_await enable_writes();
+    co_await enable_writes(model::revision_id{3});
     co_await assert_writes(stm_t::writes_disabled::no);
-    // check idempotent
-    co_await enable_writes();
+    // check idempotent with the same revision id
+    co_await enable_writes(model::revision_id{3});
     co_await assert_writes(stm_t::writes_disabled::no);
+    // check idempotent with a higher revision id
+    co_await enable_writes(model::revision_id{4});
+    co_await assert_writes(stm_t::writes_disabled::no);
+    // the same operation is disallowed with a lower revision id
+    co_await enable_writes(model::revision_id{3}, false);
+    co_await assert_writes(stm_t::writes_disabled::no);
+    // the opposite operation is disallowed with a lower revision id
+    co_await disable_writes(model::revision_id{3}, false);
+    co_await assert_writes(stm_t::writes_disabled::no);
+    // the opposite operation is disallowed with the same revision id
+    co_await disable_writes(model::revision_id{4}, false);
+    co_await assert_writes(stm_t::writes_disabled::no);
+
+    // empty revision id always works and resets the internal revision counter
+    // state change with empty revision id
+    co_await disable_writes(model::revision_id{});
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // idempotent with empty revision id
+    co_await disable_writes(model::revision_id{});
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // after reset, even revision id 1 works
+    co_await enable_writes(model::revision_id{1});
+    co_await assert_writes(stm_t::writes_disabled::no);
+    // state change with empty revision id for enable
+    co_await disable_writes(model::revision_id{5});
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    co_await enable_writes(model::revision_id{});
+    co_await assert_writes(stm_t::writes_disabled::no);
+    // idempotent with empty revision id for enable
+    co_await enable_writes(model::revision_id{});
+    co_await assert_writes(stm_t::writes_disabled::no);
+    // after reset, even revision id 1 works for disable
+    co_await disable_writes(model::revision_id{1});
+    co_await assert_writes(stm_t::writes_disabled::yes);
 }
 
 TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
     co_await initialize_state_machines();
 
     auto before_disabled = co_await replicate_random_batches();
-    co_await disable_writes();
+    co_await disable_writes(model::revision_id{1});
     // it may be confusing that we replicate after the writes are disabled
     // however we only going to block writes of Kafka batches while metadata
     // batches will still be writable
     auto before_enabled = co_await replicate_random_batches();
-    co_await enable_writes();
+    co_await enable_writes(model::revision_id{2});
     auto after_enabled = co_await replicate_random_batches();
     auto leader_id = get_leader();
     EXPECT_TRUE(leader_id.has_value());
@@ -242,13 +313,15 @@ TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
         co_await get_leader_stm()->take_raft_snapshot(o));
     ASSERT_EQ_CORO(
       snap_before_disabled.writes_disabled, stm_t::writes_disabled::no);
+    ASSERT_EQ_CORO(
+      snap_before_disabled.writes_revision_id, model::revision_id{});
     // take snapshot at disable command offset
     auto snap_at_disabled = partition_properties_stm_accessor::snap_from_iobuf(
       co_await get_leader_stm()->take_raft_snapshot(
         model::next_offset(before_disabled.value())));
     ASSERT_EQ_CORO(
       snap_at_disabled.writes_disabled, stm_t::writes_disabled::yes);
-
+    ASSERT_EQ_CORO(snap_at_disabled.writes_revision_id, model::revision_id{1});
     // take snapshot after disable command but before enable
     o = co_await leader_node.random_batch_base_offset(
       before_enabled.value(), before_disabled.value() + model::offset(2));
@@ -257,11 +330,13 @@ TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
         co_await get_leader_stm()->take_raft_snapshot(o));
     ASSERT_EQ_CORO(
       snap_before_enabled.writes_disabled, stm_t::writes_disabled::yes);
-
+    ASSERT_EQ_CORO(
+      snap_before_enabled.writes_revision_id, model::revision_id{1});
     auto snap_at_enabled = partition_properties_stm_accessor::snap_from_iobuf(
       co_await get_leader_stm()->take_raft_snapshot(
         model::next_offset(before_enabled.value())));
     ASSERT_EQ_CORO(snap_at_enabled.writes_disabled, stm_t::writes_disabled::no);
+    ASSERT_EQ_CORO(snap_at_enabled.writes_revision_id, model::revision_id{2});
 
     o = co_await leader_node.random_batch_base_offset(
       leader_node.raft()->dirty_offset(),
@@ -272,6 +347,8 @@ TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
           model::next_offset(before_enabled.value())));
     ASSERT_EQ_CORO(
       snap_after_enabled.writes_disabled, stm_t::writes_disabled::no);
+    ASSERT_EQ_CORO(
+      snap_after_enabled.writes_revision_id, model::revision_id{2});
 }
 
 TEST_F_CORO(

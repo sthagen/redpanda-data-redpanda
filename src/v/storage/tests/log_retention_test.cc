@@ -293,6 +293,7 @@ TEST_F(gc_fixture, retention_by_size_with_remote_write) {
 
     storage::ntp_config::default_overrides overrides;
     overrides.shadow_indexing_mode = model::shadow_indexing_mode::full;
+    overrides.storage_mode = model::redpanda_storage_mode::tiered;
     overrides.retention_local_target_bytes = tristate<size_t>{size_limit};
     config.set_overrides(overrides);
 
@@ -364,6 +365,7 @@ TEST_F(gc_fixture, retention_by_time_with_remote_write) {
 
     storage::ntp_config::default_overrides overrides;
     overrides.shadow_indexing_mode = model::shadow_indexing_mode::full;
+    overrides.storage_mode = model::redpanda_storage_mode::tiered;
     config.set_overrides(overrides);
 
     auto log_creation_time = model::timestamp{
@@ -397,6 +399,7 @@ TEST_F(gc_fixture, retention_by_time_with_remote_write) {
     // Override the local target retention.
     storage::ntp_config::default_overrides time_override;
     time_override.shadow_indexing_mode = model::shadow_indexing_mode::full;
+    time_override.storage_mode = model::redpanda_storage_mode::tiered;
     time_override.retention_local_target_ms
       = tristate<std::chrono::milliseconds>{0ms};
     builder.update_configuration(time_override).get();

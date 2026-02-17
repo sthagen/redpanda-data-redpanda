@@ -86,7 +86,7 @@ DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
     "redpanda.remote.allowgaps",
     "redpanda.virtual.cluster.id",
     "redpanda.leaders.preference",
-    "redpanda.cloud_topic.enabled",
+    "redpanda.storage.mode",
 ]
 
 CONTROLLER_LOCKED_TASKS = [

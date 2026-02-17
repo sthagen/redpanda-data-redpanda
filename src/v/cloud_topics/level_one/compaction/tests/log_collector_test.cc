@@ -54,7 +54,7 @@ struct log_collector_test_fixture : public seastar_test {
         cluster::topic_configuration_assignment tca;
         tca.cfg = cluster::topic_configuration(
           model::kafka_namespace, tp, partition_count, 1, tp_id);
-        tca.cfg.properties.cloud_topic_enabled = true;
+        tca.cfg.properties.storage_mode = model::redpanda_storage_mode::cloud;
         // Explicitly NOT setting compaction - topic is not compacted.
 
         for (auto p = 0; p < partition_count; ++p) {
@@ -193,7 +193,7 @@ TEST_F_CORO(
     cluster::topic_configuration_assignment tca;
     tca.cfg = cluster::topic_configuration(
       model::kafka_namespace, tp, 1, 1, tp_id);
-    tca.cfg.properties.cloud_topic_enabled = true;
+    tca.cfg.properties.storage_mode = model::redpanda_storage_mode::cloud;
     tca.cfg.properties.cleanup_policy_bitflags
       = model::cleanup_policy_bitflags::compaction;
     tca.assignments.push_back(
@@ -247,7 +247,7 @@ TEST_F_CORO(
     cluster::topic_configuration_assignment tca;
     tca.cfg = cluster::topic_configuration(
       model::kafka_namespace, tp, 1, 1, tp_id);
-    tca.cfg.properties.cloud_topic_enabled = true;
+    tca.cfg.properties.storage_mode = model::redpanda_storage_mode::cloud;
     tca.cfg.properties.cleanup_policy_bitflags
       = model::cleanup_policy_bitflags::compaction;
     tca.assignments.push_back(

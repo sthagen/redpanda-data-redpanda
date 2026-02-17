@@ -1031,7 +1031,7 @@ class SIPartitionMovementTest(PartitionMovementMixin, EndToEndTest):
         self.topic = "topic"
         config = dict[str, Any]()
         if with_cloud_topics:
-            config[TopicSpec.PROPERTY_CLOUD_TOPIC_ENABLE] = "true"
+            config[TopicSpec.PROPERTY_STORAGE_MODE] = TopicSpec.STORAGE_MODE_CLOUD
         self.rpk_client().create_topic(
             self.topic,
             partitions=partitions,
@@ -1100,7 +1100,7 @@ class SIPartitionMovementTest(PartitionMovementMixin, EndToEndTest):
         self.topic = "topic"
         config = dict[str, Any]()
         if with_cloud_topics:
-            config[TopicSpec.PROPERTY_CLOUD_TOPIC_ENABLE] = "true"
+            config[TopicSpec.PROPERTY_STORAGE_MODE] = TopicSpec.STORAGE_MODE_CLOUD
         self.rpk_client().create_topic(
             self.topic,
             partitions=partitions,

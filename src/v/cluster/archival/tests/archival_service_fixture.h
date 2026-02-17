@@ -101,6 +101,9 @@ public:
         cluster::topic_configuration cfg(
           model::kafka_namespace, id, num_partitions, (int16_t)replicas.size());
 
+        // Enable tiered storage for the topic
+        cfg.properties.storage_mode = model::redpanda_storage_mode::tiered;
+
         cluster::custom_assignable_topic_configuration cat_cfg{cfg};
         for (int i = 0; i < num_partitions; i++) {
             cat_cfg.custom_assignments.emplace_back(

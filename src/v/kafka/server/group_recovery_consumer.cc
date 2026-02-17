@@ -167,15 +167,15 @@ ss::future<> group_recovery_consumer::handle_version_fence(
 }
 
 void group_recovery_consumer::handle_group_block(kafka::group_block gb) {
-    if (gb.is_blocked) {
-        _state.blocked_groups.insert(gb.group_id);
-    } else {
-        _state.blocked_groups.erase(gb.group_id);
-    }
+    base_t::do_handle_group_block(gb);
 }
 
-bool group_recovery_consumer::is_group_blocked(kafka::group_id group_id) const {
-    return _state.blocked_groups.contains(group_id);
+group_block_info_map& group_recovery_consumer::group_blocks() {
+    return _state.group_blocks;
+}
+
+const group_block_info_map& group_recovery_consumer::group_blocks() const {
+    return _state.group_blocks;
 }
 
 ss::future<ss::stop_iteration>

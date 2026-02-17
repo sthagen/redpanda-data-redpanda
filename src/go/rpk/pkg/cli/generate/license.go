@@ -238,21 +238,21 @@ func printLicense(apply bool, savePath, expirationDate string) string {
 		builder.WriteString("\nThe license was successfully applied.\n")
 	}
 
-	builder.WriteString(fmt.Sprintf("\nSuccessfully saved license to %q.\n", savePath))
+	fmt.Fprintf(&builder, "\nSuccessfully saved license to %q.\n", savePath)
 
 	if !apply {
-		builder.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&builder, `
 Upload this license in Redpanda Console, or run:
   rpk cluster license set --path %q
-`, savePath))
+`, savePath)
 	}
 
-	builder.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&builder, `
 This license expires on %s.
 
 For more information, see:
   https://docs.redpanda.com/current/get-started/licensing/overview/#license-keys\
-`, expirationDate))
+`, expirationDate)
 
 	return builder.String()
 }
@@ -282,28 +282,28 @@ func printNotStoredLicense(errSave, errApply error, apply bool, license, expirat
 
 	// Add error details if any.
 	if errSave != nil {
-		sb.WriteString(fmt.Sprintf("\n\n- Error saving your license to file: %v", errSave))
+		fmt.Fprintf(&sb, "\n\n- Error saving your license to file: %v", errSave)
 	}
 	if errApply != nil {
-		sb.WriteString(fmt.Sprintf("\n- Error applying the license to the cluster: %v", errApply))
+		fmt.Fprintf(&sb, "\n- Error applying the license to the cluster: %v", errApply)
 	}
 
 	// Add license and expiration info.
-	sb.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&sb, `
 
 License: %v
 
 WARNING: Save your license key. It cannot be accessed later.
 
 This license expires on %v.
-`, license, expirationDate))
+`, license, expirationDate)
 
 	// Add apply instructions if needed.
 	if !apply || errApply != nil {
-		sb.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&sb, `
 Upload this license in Redpanda Console, or run:
   rpk cluster license set %v
-`, license))
+`, license)
 	}
 
 	sb.WriteString(`
