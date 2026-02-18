@@ -70,12 +70,12 @@ void stm_manager::set_max_tx_end_remove_offset(model::offset o) {
     _max_tx_end_remove_offset = o;
 }
 
-bool stm_manager::is_last_batch_for_idempotent_producer(
+bool stm_manager::is_batch_in_idempotent_window(
   const model::record_batch_header& hdr) const {
     if (!_tx_stm) {
         return false;
     }
-    return _tx_stm->is_last_batch_for_idempotent_producer(hdr);
+    return _tx_stm->is_batch_in_idempotent_window(hdr);
 }
 
 fmt::iterator local_log_reader_config::format_to(fmt::iterator it) const {

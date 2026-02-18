@@ -40,8 +40,17 @@ public:
         auto _ = _gate.hold();
         auto term_result = co_await _stm->sync(std::chrono::seconds(30), _as);
         if (!term_result.has_value()) {
-            throw lsm::io_error_exception(
-              "Failed to sync when loading manifest");
+            using enum stm::errc;
+            switch (term_result.error()) {
+            case shutting_down:
+                throw lsm::abort_requested_exception(
+                  "shutting down while syncing STM when loading manifest");
+            case not_leader:
+            case raft_error:
+                throw lsm::io_error_exception(
+                  "failed to sync STM when loading manifest: {}",
+                  term_result.error());
+            }
         }
         if (_stm->state().domain_uuid != _expected_domain_uuid) {
             // Caller needs to rebuild the metadata persistence with the
@@ -71,6 +80,7 @@ public:
 
     ss::future<>
     write_manifest(lsm::internal::database_epoch epoch, iobuf b) override {
+        _as.check();
         auto h = _gate.hold();
         co_await _cloud_persistence->write_manifest(epoch, b.share());
 
@@ -98,16 +108,25 @@ public:
 
         auto replicate_result = co_await _stm->replicate_and_wait(
           _stm->state().to_term(epoch), std::move(batch), _as);
-
         if (!replicate_result.has_value()) {
-            throw lsm::io_error_exception(
-              "Replication error after persisting manifest: {}",
-              int(replicate_result.error()));
+            using enum stm::errc;
+            switch (replicate_result.error()) {
+            case shutting_down:
+                throw lsm::abort_requested_exception(
+                  "shutting down while replicating manifest after persisting");
+            case not_leader:
+            case raft_error:
+                throw lsm::io_error_exception(
+                  "replication error after persisting manifest: {}",
+                  replicate_result.error());
+            }
         }
     }
 
     ss::future<> close() override {
-        _as.request_abort();
+        _as.request_abort_ex(
+          lsm::abort_requested_exception(
+            "replicated_persistence shutting down"));
         auto fut = _gate.close();
         auto persistence_fut = _cloud_persistence->close();
         co_await std::move(persistence_fut);

@@ -1,6 +1,6 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
-load(":packaging.bzl", "native_package", "redpanda_package")
+load(":packaging.bzl", "native_package", "redpanda_deb_package", "redpanda_package")
 
 # this is the real binary. the rpk alias at the root //:rpk is a wrapper.
 alias(
@@ -57,6 +57,61 @@ redpanda_package(
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
     rpk_binary = ":rpk",
+)
+
+redpanda_deb_package(
+    name = "redpanda_deb",
+    package_name = "redpanda",
+    out = "redpanda.deb",
+    depends = [
+        "redpanda-rpk",
+        "redpanda-tuner",
+    ],
+    install_path = "/opt/redpanda",
+    package_dirs = [
+        "/var/lib/redpanda",
+        "/etc/redpanda",
+    ],
+    postinst = "scripts/redpanda.postinst",
+    postrm = "scripts/redpanda.postrm",
+    preinst = "scripts/redpanda.preinst",
+    prerm = "scripts/redpanda.prerm",
+    redpanda_binary = "//:redpanda",
+    systemd_service = "scripts/redpanda.service",
+    systemd_slice = "scripts/redpanda.slice",
+)
+
+redpanda_deb_package(
+    name = "redpanda_rpk_deb",
+    package_name = "redpanda-rpk",
+    out = "redpanda-rpk.deb",
+    description = "Redpanda CLI & toolbox",
+    include_sysroot_libs = False,
+    install_path = "/opt/redpanda",
+    package_symlinks = {
+        "/usr/bin/rpk": "/opt/redpanda/bin/rpk",
+    },
+    rpk_binary = "//src/go/rpk/cmd/rpk:rpk",
+)
+
+redpanda_deb_package(
+    name = "redpanda_tuner_deb",
+    package_name = "redpanda-tuner",
+    out = "redpanda-tuner.deb",
+    description = "Redpanda tuner",
+    include_sysroot_libs = False,
+    install_path = "/usr",
+    systemd_service = "scripts/redpanda-tuner.service",
+)
+
+filegroup(
+    name = "all_debs",
+    srcs = [
+        ":redpanda_deb",
+        ":redpanda_rpk_deb",
+        ":redpanda_tuner_deb",
+    ],
+    visibility = ["//visibility:public"],
 )
 
 native_package(
@@ -118,4 +173,9 @@ go_library(
     srcs = ["tool.go"],
     importpath = "github.com/redpanda-data/redpanda/bazel/packaging",
     visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_goreleaser_nfpm_v2//:nfpm",
+        "@com_github_goreleaser_nfpm_v2//deb",
+        "@com_github_goreleaser_nfpm_v2//files",
+    ],
 )

@@ -12,6 +12,7 @@
 #include "kafka/server/handlers/produce_validation.h"
 
 #include "kafka/protocol/logger.h"
+#include "model/record_utils.h"
 #include "ssx/sformat.h"
 
 namespace {
@@ -148,12 +149,14 @@ void maybe_set_max_timestamp(
 // `INVALID_RECORD` error code and message are returned.
 std::optional<error_code_and_msg> iterate_over_records(
   const model::record_batch& b,
-  ss::noncopyable_function<ss::stop_iteration(model::record)> f) {
+  ss::noncopyable_function<ss::stop_iteration(model::record_metadata)>&& f,
+  bool is_strict_validation = false) {
     dassert(
       !b.compressed(),
       "Cannot iterate over records within a compressed batch.");
+
     try {
-        b.for_each_record(std::move(f));
+        b.for_each_record_metadata(std::move(f), is_strict_validation);
     } catch (const std::exception& e) {
         vlog(
           klog.error,
@@ -175,7 +178,7 @@ std::expected<model::timestamp, error_code_and_msg>
 compute_max_timestamp(const model::record_batch& b) {
     int64_t max_timestamp_delta = 0;
 
-    auto res = iterate_over_records(b, [&](model::record r) mutable {
+    auto res = iterate_over_records(b, [&](model::record_metadata r) mutable {
         max_timestamp_delta = std::max(
           r.timestamp_delta(), max_timestamp_delta);
         return ss::stop_iteration::no;
@@ -203,11 +206,13 @@ validate_records_and_compute_max_timestamp(
   std::chrono::milliseconds message_timestamp_before_max_ms,
   std::chrono::milliseconds message_timestamp_after_max_ms,
   kafka::kafka_probe& probe,
-  const model::ntp& ntp) {
+  const model::ntp& ntp,
+  bool is_strict_validation = false) {
     std::optional<error_code_and_msg> res;
     int64_t max_timestamp = -1;
     auto iterable_res = iterate_over_records(
-      iterable_batch_ref, [&](model::record r) mutable {
+      iterable_batch_ref,
+      [&](model::record_metadata r) mutable {
           auto timestamp = model::timestamp{
             b.header().first_timestamp() + r.timestamp_delta()};
           auto offset = b.base_offset() + model::offset_delta(r.offset_delta());
@@ -224,7 +229,8 @@ validate_records_and_compute_max_timestamp(
 
           return res.has_value() ? ss::stop_iteration::yes
                                  : ss::stop_iteration::no;
-      });
+      },
+      is_strict_validation);
 
     if (iterable_res.has_value()) {
         // Prefer to return an error describing an invalid format rather than an
@@ -431,7 +437,8 @@ std::optional<error_code_and_msg> validate_batch(
           message_timestamp_before_max_ms,
           message_timestamp_after_max_ms,
           probe,
-          ntp);
+          ntp,
+          true);
 
         if (!max_ts_res.has_value()) {
             return max_ts_res.error();

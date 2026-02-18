@@ -35,7 +35,7 @@ constexpr std::string_view schema_key_sv{
 const auto expected_schema_key = schema_key{
   .seq{model::offset{42}},
   .node{model::node_id{2}},
-  .sub{context_subject{"my-kafka-value"}},
+  .sub{context_subject::unqualified("my-kafka-value")},
   .version{schema_version{1}},
   .magic{topic_key_magic{1}}};
 
@@ -52,7 +52,7 @@ constexpr std::string_view schema_value_sv{
 })"};
 const auto expected_schema_value = schema_value{
   .schema{
-    subject{"my-kafka-value"},
+    context_subject::unqualified("my-kafka-value"),
     schema_definition{
       R"({"type":"string"})",
       schema_type::avro,
@@ -89,7 +89,7 @@ constexpr std::string_view config_key_sub_sv{
 const auto expected_config_key_sub = config_key{
   .seq{model::offset{0}},
   .node{model::node_id{0}},
-  .sub{context_subject{"my-kafka-value"}},
+  .sub{context_subject::unqualified("my-kafka-value")},
   .magic{topic_key_magic{0}}};
 
 constexpr std::string_view config_value_sv{
@@ -106,7 +106,7 @@ constexpr std::string_view config_value_sub_sv{
 })"};
 const auto expected_config_value_sub = config_value{
   .compat = compatibility_level::forward_transitive,
-  .sub{context_subject{"my-kafka-value"}}};
+  .sub{context_subject::unqualified("my-kafka-value")}};
 
 constexpr std::string_view delete_subject_key_sv{
   R"({
@@ -119,14 +119,14 @@ constexpr std::string_view delete_subject_key_sv{
 const auto expected_delete_subject_key = delete_subject_key{
   .seq{model::offset{42}},
   .node{model::node_id{2}},
-  .sub{subject{"my-kafka-value"}}};
+  .sub{context_subject::unqualified("my-kafka-value")}};
 
 constexpr std::string_view delete_subject_value_sv{
   R"({
   "subject": "my-kafka-value"
 })"};
 const auto expected_delete_subject_value = delete_subject_value{
-  .sub{subject{"my-kafka-value"}}};
+  .sub{context_subject::unqualified("my-kafka-value")}};
 
 constexpr std::string_view context_key_sv{
   R"({
@@ -584,7 +584,7 @@ TEST_F(StorageTest, SerdeContextSubject) {
         const auto expected_mode_key_legacy = mode_key{
           .seq{model::offset{22}},
           .node{model::node_id{1}},
-          .sub{context_subject{"my-kafka-value"}},
+          .sub{context_subject::unqualified("my-kafka-value")},
           .magic{topic_key_magic{0}}};
 
         auto key = ppj::impl::rjson_parse(

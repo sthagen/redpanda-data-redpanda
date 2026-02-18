@@ -33,7 +33,7 @@ std::string sanitize(
     auto psch = pps::make_canonical_protobuf_schema(
                   s.store(),
                   pps::subject_schema{
-                    pps::subject{"foo"},
+                    pps::context_subject::unqualified("foo"),
                     pps::schema_definition{
                       raw_proto, pps::schema_type::protobuf, {}, {}}},
                   norm,

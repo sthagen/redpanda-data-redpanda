@@ -1,0 +1,29 @@
+[Unit]
+Description=Redpanda, the fastest queue in the West.
+After=local-fs.target network-online.target redpanda-tuner.service
+Requires=local-fs.target network-online.target
+
+[Service]
+PermissionsStartOnly=true
+Type=notify
+LimitMEMLOCK=infinity
+LimitNOFILE=800000
+LimitAS=infinity
+LimitNPROC=8096
+LimitCORE=infinity
+EnvironmentFile=/etc/default/redpanda
+EnvironmentFile=-/etc/redpanda.d/*.conf
+ExecStart=/usr/bin/rpk redpanda start $START_ARGS $CPUSET
+TimeoutStartSec=900
+ExecStop=/usr/bin/rpk redpanda stop --timeout 5s
+TimeoutStopSec=11s
+KillMode=process
+Restart=on-abnormal
+User=redpanda
+OOMScoreAdjust=-950
+SyslogLevelPrefix=false
+Slice=redpanda.slice
+AmbientCapabilities=CAP_SYS_NICE
+
+[Install]
+WantedBy=multi-user.target

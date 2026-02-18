@@ -47,10 +47,14 @@ pps::compatibility_result check_compatible_verbose(
     pps::sharded_store s;
     return check_compatible(
       pps::make_json_schema_definition(
-        s, {pps::subject("r"), {r.shared_raw(), pps::schema_type::json}})
+        s,
+        {pps::context_subject::unqualified("r"),
+         {r.shared_raw(), pps::schema_type::json}})
         .get(),
       pps::make_json_schema_definition(
-        s, {pps::subject("w"), {w.shared_raw(), pps::schema_type::json}})
+        s,
+        {pps::context_subject::unqualified("w"),
+         {w.shared_raw(), pps::schema_type::json}})
         .get(),
       pps::verbose::yes);
 }
@@ -184,7 +188,8 @@ SEASTAR_THREAD_TEST_CASE(test_make_invalid_json_schema) {
             try {
                 pps::make_canonical_json_schema(
                   f.store(),
-                  {pps::subject{"test"}, {data.def, pps::schema_type::json}})
+                  {pps::context_subject::unqualified("test"),
+                   {data.def, pps::schema_type::json}})
                   .get();
                 BOOST_CHECK_MESSAGE(
                   false, "terminated without an exception for invalid schema");
@@ -282,7 +287,8 @@ SEASTAR_THREAD_TEST_CASE(test_make_valid_json_schema) {
                   f.store(),
                   pps::make_canonical_json_schema(
                     f.store(),
-                    {pps::subject{"test"}, {data, pps::schema_type::json}})
+                    {pps::context_subject::unqualified("test"),
+                     {data, pps::schema_type::json}})
                     .get())
                   .get();
             } catch (...) {
@@ -304,7 +310,7 @@ struct test_references_data {
 };
 
 const auto referenced = pps::subject_schema{
-  pps::subject{"referenced"},
+  pps::context_subject::unqualified("referenced"),
   pps::schema_definition{
     R"({
   "description": "A base schema that defines a number",
@@ -320,7 +326,7 @@ const auto referenced = pps::subject_schema{
     {}}};
 
 const auto referencer = pps::subject_schema{
-  pps::subject{"referencer"},
+  pps::context_subject::unqualified("referencer"),
   pps::schema_definition{
     R"({
   "description": "A schema that references the base schema",
@@ -2190,7 +2196,8 @@ SEASTAR_THREAD_TEST_CASE(test_compatibility_check) {
                  f.store(),
                  pps::make_canonical_json_schema(
                    f.store(),
-                   {pps::subject{"test"}, {schema, pps::schema_type::json}})
+                   {pps::context_subject::unqualified("test"),
+                    {schema, pps::schema_type::json}})
                    .get())
           .get();
     };
@@ -2367,7 +2374,8 @@ SEASTAR_THREAD_TEST_CASE(test_object_recursion_depths) {
                  f.store(),
                  pps::make_canonical_json_schema(
                    f.store(),
-                   {pps::subject{"test"}, {schema, pps::schema_type::json}})
+                   {pps::context_subject::unqualified("test"),
+                    {schema, pps::schema_type::json}})
                    .get())
           .get();
     };
@@ -2468,7 +2476,7 @@ SEASTAR_THREAD_TEST_CASE(test_refs_fixing) {
           f.store(),
           pps::make_canonical_json_schema(
             f.store(),
-            {pps::subject{"test"},
+            {pps::context_subject::unqualified("test"),
              {fmt::format("{}", jsoncons::print(input_schema)),
               pps::schema_type::json}})
             .get())

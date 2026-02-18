@@ -161,7 +161,7 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
     if (
       (batch.header().type == model::record_batch_type::compaction_placeholder)
       && !is_last_batch_in_segment
-      && !_stm_mgr->is_last_batch_for_idempotent_producer(batch.header())) {
+      && !_stm_mgr->is_batch_in_idempotent_window(batch.header())) {
         co_return std::nullopt;
     }
 
@@ -183,9 +183,9 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
       });
 
     if (offset_deltas.empty() && _compaction_placeholder_enabled) {
-        auto is_last_batch_for_producer
-          = _stm_mgr->is_last_batch_for_idempotent_producer(batch.header());
-        if (is_last_batch_in_segment || is_last_batch_for_producer) {
+        auto is_batch_in_idempotent_window
+          = _stm_mgr->is_batch_in_idempotent_window(batch.header());
+        if (is_last_batch_in_segment || is_batch_in_idempotent_window) {
             // last batch in the segment or for the producer has been compacted
             // away. This is most likely caused by aborted data batches getting
             // compacted away during self compaction of the segment if they are

@@ -49,7 +49,8 @@ ss::sstring make_payload(
 }
 
 pps::context_subject make_subject(int i_sub) {
-    return pps::context_subject{ss::format("TestSubject{}", i_sub)};
+    return pps::context_subject::unqualified(
+      ss::format("TestSubject{}", i_sub));
 }
 
 pps::schema_version middle_version(int n_versions) {

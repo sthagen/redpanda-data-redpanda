@@ -36,7 +36,8 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_cross_shard_def) {
     // subject names and IDs, so they should hash to different shards.
     for (int i = 1; i <= id_n; ++i) {
         auto referenced_schema = pps::subject_schema{
-          pps::subject{fmt::format("simple_{}.proto", i)}, simple.share()};
+          pps::context_subject::unqualified(fmt::format("simple_{}.proto", i)),
+          simple.share()};
         store
           .upsert(
             pps::seq_marker{
@@ -51,7 +52,11 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_cross_shard_def) {
           .get();
     }
 
-    BOOST_REQUIRE(store.has_schema(pps::schema_id{id_n}).get());
+    BOOST_REQUIRE(
+      store
+        .has_schema(
+          pps::context_schema_id{pps::default_context, pps::schema_id{id_n}})
+        .get());
 
     // for each upserted schema, submit a number of concurrent
     // get_schema_definition requests, spreading the requests across cores. the
@@ -67,7 +72,10 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_cross_shard_def) {
           boost::irange(0, num_parallel_requests),
           [&store, i](auto shrd) {
               return ss::smp::submit_to(shrd % ss::smp::count, [&store, i]() {
-                  return store.get_schema_definition(pps::schema_id{i})
+                  return store
+                    .get_schema_definition(
+                      pps::context_schema_id{
+                        pps::default_context, pps::schema_id{i}})
                     .discard_result();
               });
           })

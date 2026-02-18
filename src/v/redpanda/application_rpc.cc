@@ -176,8 +176,8 @@ void application::add_runtime_rpc_services(
     if (config::shard_local_cfg().cloud_topics_enabled() && cloud_topics_app) {
         runtime_services.push_back(
           std::make_unique<cloud_topics::l1::rpc::service>(
-            scheduling_groups::instance().datalake_sg(),
-            smp_service_groups.datalake_sg(),
+            scheduling_groups::instance().cloud_topics_metastore_sg(),
+            smp_service_groups.cloud_topics_metastore_smp_sg(),
             cloud_topics_app->get_sharded_l1_metastore_router()));
     }
     runtime_services.push_back(

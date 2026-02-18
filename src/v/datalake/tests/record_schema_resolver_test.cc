@@ -94,42 +94,42 @@ public:
     void SetUp() override {
         auto avro_schema_id = sr->create_schema(
                                   subject_schema{
-                                    subject{"foo-value"},
+                                    context_subject::unqualified("foo-value"),
                                     schema_definition{
                                       avro_record_schema, schema_type::avro}})
                                 .get();
         ASSERT_EQ(1, avro_schema_id.id());
         auto pb_schema_id = sr->create_schema(
                                 subject_schema{
-                                  subject{"foo-value"},
+                                  context_subject::unqualified("foo-value"),
                                   schema_definition{
                                     pb_record_schema, schema_type::protobuf}})
                               .get();
         ASSERT_EQ(2, pb_schema_id.id());
         auto json_schema_id = sr->create_schema(
                                   subject_schema{
-                                    subject{"foo-value"},
+                                    context_subject::unqualified("foo-value"),
                                     schema_definition{
                                       json_record_schema, schema_type::json}})
                                 .get();
         ASSERT_EQ(3, json_schema_id.id());
         avro_schema_id = sr->create_schema(
                              subject_schema{
-                               subject{"latest-avro"},
+                               context_subject::unqualified("latest-avro"),
                                schema_definition{
                                  avro_record_schema, schema_type::avro}})
                            .get();
         ASSERT_EQ(1, avro_schema_id.id());
         pb_schema_id = sr->create_schema(
                            subject_schema{
-                             subject{"latest-proto"},
+                             context_subject::unqualified("latest-proto"),
                              schema_definition{
                                pb_record_schema, schema_type::protobuf}})
                          .get();
         ASSERT_EQ(2, pb_schema_id.id());
         json_schema_id = sr->create_schema(
                              subject_schema{
-                               subject{"latest-json"},
+                               context_subject::unqualified("latest-json"),
                                schema_definition{
                                  json_record_schema, schema_type::json}})
                            .get();
@@ -257,14 +257,14 @@ message NestedMessage {
 )";
     auto pb_schema_id = sr->create_schema(
                             subject_schema{
-                              subject{"simple_schema"},
+                              context_subject::unqualified("simple_schema"),
                               schema_definition{
                                 pb_simple_schema, schema_type::protobuf}})
                           .get();
     ASSERT_EQ(7, pb_schema_id.id());
     pb_schema_id = sr->create_schema(
                        subject_schema{
-                         subject{"references_schema"},
+                         context_subject::unqualified("references_schema"),
                          schema_definition{
                            pb_references_schema,
                            schema_type::protobuf,
@@ -537,9 +537,8 @@ namespace {
 struct counting_store : public pandaproxy::schema_registry::schema_getter {
     counting_store(
       schema::fake_registry& registry,
-      absl::flat_hash_map<
-        pandaproxy::schema_registry::context_schema_id,
-        size_t>& counts)
+      absl::flat_hash_map<pandaproxy::schema_registry::schema_id, size_t>&
+        counts)
       : registry(registry)
       , counts(counts) {}
 
@@ -554,7 +553,8 @@ struct counting_store : public pandaproxy::schema_registry::schema_getter {
     ss::future<pandaproxy::schema_registry::schema_definition>
     get_schema_definition(
       pandaproxy::schema_registry::context_schema_id id) final {
-        counts[id] += 1;
+        vassert(id.ctx == default_context, "unexpected context {}", id.ctx);
+        counts[id.id] += 1;
         auto* getter = co_await registry.getter();
         co_return co_await getter->get_schema_definition(id);
     }
@@ -562,14 +562,14 @@ struct counting_store : public pandaproxy::schema_registry::schema_getter {
     ss::future<std::optional<pandaproxy::schema_registry::schema_definition>>
     maybe_get_schema_definition(
       pandaproxy::schema_registry::context_schema_id id) final {
-        counts[id] += 1;
+        vassert(id.ctx == default_context, "unexpected context {}", id.ctx);
+        counts[id.id] += 1;
         auto* getter = co_await registry.getter();
         co_return co_await getter->maybe_get_schema_definition(id);
     }
 
     schema::fake_registry& registry;
-    absl::flat_hash_map<pandaproxy::schema_registry::context_schema_id, size_t>&
-      counts;
+    absl::flat_hash_map<pandaproxy::schema_registry::schema_id, size_t>& counts;
 };
 
 class counting_registry : public schema::registry {
@@ -610,7 +610,7 @@ public:
         return _registry.get_all();
     }
 
-    size_t get_count(pandaproxy::schema_registry::context_schema_id id) {
+    size_t get_count(pandaproxy::schema_registry::schema_id id) {
         return _counts[id];
     }
 
@@ -618,7 +618,7 @@ public:
 
 private:
     schema::fake_registry _registry{};
-    absl::flat_hash_map<pandaproxy::schema_registry::context_schema_id, size_t>
+    absl::flat_hash_map<pandaproxy::schema_registry::schema_id, size_t>
       _counts{};
     mutable counting_store _store{_registry, _counts};
 };
@@ -632,14 +632,14 @@ std::unique_ptr<counting_registry> make_counting_sr() {
 
     auto avro_schema_id = sr->create_schema(
                               subject_schema{
-                                subject{"foo-value"},
+                                context_subject::unqualified("foo-value"),
                                 schema_definition{
                                   avro_record_schema, schema_type::avro}})
                             .get();
     vassert(1 == avro_schema_id.id(), "failed to registry avro schema");
     auto pb_schema_id = sr->create_schema(
                             subject_schema{
-                              subject{"foo-value"},
+                              context_subject::unqualified("foo-value"),
                               schema_definition{
                                 pb_record_schema, schema_type::protobuf}})
                           .get();
@@ -656,7 +656,7 @@ std::unique_ptr<counting_registry> make_counting_sr() {
     for (auto i = 3; i < 10; i++) {
         auto pb_schema_id = sr->create_schema(
                                 subject_schema{
-                                  subject{"foo-value"},
+                                  context_subject::unqualified("foo-value"),
                                   schema_definition{
                                     get_simple_schema(i),
                                     schema_type::protobuf}})
@@ -665,7 +665,7 @@ std::unique_ptr<counting_registry> make_counting_sr() {
     }
     auto json_schema_id = sr->create_schema(
                               subject_schema{
-                                subject{"foo-value"},
+                                context_subject::unqualified("foo-value"),
                                 schema_definition{
                                   json_record_schema, schema_type::json}})
                             .get();

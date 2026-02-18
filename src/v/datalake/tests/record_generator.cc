@@ -43,7 +43,8 @@ record_generator::register_avro_schema(
     using namespace pandaproxy::schema_registry;
     auto id_fut = co_await ss::coroutine::as_future(_sr->create_schema(
       subject_schema{
-        subject{"foo"}, schema_definition{schema, schema_type::avro}}));
+        context_subject::unqualified("foo"),
+        schema_definition{schema, schema_type::avro}}));
     if (id_fut.failed()) {
         co_return error{fmt::format(
           "Error creating schema {}: {}", name, id_fut.get_exception())};
@@ -62,7 +63,8 @@ record_generator::register_protobuf_schema(
     using namespace pandaproxy::schema_registry;
     auto id = co_await ss::coroutine::as_future(_sr->create_schema(
       subject_schema{
-        subject{"foo"}, schema_definition{schema, schema_type::protobuf}}));
+        context_subject::unqualified("foo"),
+        schema_definition{schema, schema_type::protobuf}}));
     if (id.failed()) {
         co_return error{fmt::format(
           "Error creating schema {}: {}", name, id.get_exception())};
@@ -221,7 +223,8 @@ record_generator::register_json_schema(
     using namespace pandaproxy::schema_registry;
     auto id = co_await ss::coroutine::as_future(_sr->create_schema(
       subject_schema{
-        subject{"foo"}, schema_definition{schema, schema_type::json}}));
+        context_subject::unqualified("foo"),
+        schema_definition{schema, schema_type::json}}));
     if (id.failed()) {
         co_return error{fmt::format(
           "Error creating schema {}: {}", name, id.get_exception())};

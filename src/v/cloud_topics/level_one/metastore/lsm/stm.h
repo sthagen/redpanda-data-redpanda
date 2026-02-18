@@ -100,4 +100,6 @@ public:
       const cluster::stm_instance_config&) final;
 };
 
+std::ostream& operator<<(std::ostream& os, stm::errc e);
+
 } // namespace cloud_topics::l1

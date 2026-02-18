@@ -1034,7 +1034,8 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
           .id = insert_result.id,
           .version = insert_result.version};
     } else {
-        response.schema = co_await st.get_schema_definition(response.id);
+        response.schema = co_await st.get_schema_definition(
+          {ctx_sub.ctx, response.id});
     }
 
     auto resp = ppj::rjson_serialize_iobuf(std::move(response));

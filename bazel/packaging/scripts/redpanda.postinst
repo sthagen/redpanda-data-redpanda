@@ -1,0 +1,47 @@
+#!/bin/bash
+
+set -e
+
+#DEBHELPER#
+
+. /etc/os-release
+
+if [[ "$1" = configure ]]; then
+    getent passwd redpanda || NOUSR=1
+    getent group redpanda || NOGRP=1
+
+    if [[ $NOGRP ]]; then
+        groupadd --system redpanda
+    fi
+    if [[ $NOUSR ]]; then
+        useradd --system \
+                --home-dir /var/lib/redpanda \
+                --no-create-home \
+                --gid redpanda \
+                redpanda
+    fi
+    chown -R redpanda:redpanda /var/lib/redpanda
+fi
+
+chown -R redpanda:redpanda /etc/redpanda
+
+ln -sfT /etc/redpanda /var/lib/redpanda/conf
+
+# need to specify the shell via `-s /bin/sh` because redpanda has no login shell
+su redpanda -s /bin/sh -c "/opt/redpanda/bin/rpk config init >/dev/null 2>&1"
+
+__post_install="
+To get the most out of the fastest queue in the west, enable production mode by
+running the following:
+
+    sudo rpk redpanda mode production
+
+followed by:
+
+    sudo rpk redpanda tune all
+    sudo systemctl start redpanda
+
+This will autotune your system to give you the best performance from Redpanda.
+You can get more information on the tuning parameters here:
+https://docs.redpanda.com/docs/introduction/autotune/"
+echo "$__post_install"

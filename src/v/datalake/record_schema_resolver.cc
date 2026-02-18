@@ -257,7 +257,7 @@ ss::future<checked<shared_schema_t, type_resolver::errc>> get_schema(
         }
     }
     auto schema_fut = co_await ss::coroutine::as_future(
-      sr->get_valid_schema(id));
+      sr->get_valid_schema({ppsr::default_context, id}));
     if (schema_fut.failed()) {
         auto ex = schema_fut.get_exception();
         vlog(datalake_log.warn, "Error getting schema from registry: {}", ex);
@@ -493,7 +493,8 @@ latest_subject_schema_resolver::resolve_buf_type(std::optional<iobuf> b) const {
 
     auto latest_schema_fut
       = co_await ss::coroutine::as_future<ppsr::stored_schema>(
-        sr_->get_subject_schema(subject_, /*subject_version=*/std::nullopt));
+        sr_->get_subject_schema(
+          {ppsr::default_context, subject_}, /*subject_version=*/std::nullopt));
     if (latest_schema_fut.failed()) {
         auto ex = latest_schema_fut.get_exception();
         vlog(

@@ -32,7 +32,7 @@ SEASTAR_THREAD_TEST_CASE(test_avro_basic_backwards_store_compat) {
     s.set_compatibility(
        dummy_marker, pps::default_context, pps::compatibility_level::backward)
       .get();
-    auto sub = pps::subject{"sub"};
+    auto sub = pps::context_subject::unqualified("sub");
     s.upsert(
        dummy_marker,
        pps::subject_schema{sub, schema1.share()},

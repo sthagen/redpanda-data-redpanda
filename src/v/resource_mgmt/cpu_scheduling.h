@@ -132,6 +132,11 @@ public:
          */
         _cloud_topics_reconciler = co_await ss::create_scheduling_group(
           "cloud_topics_reconciler", 150);
+        /**
+         * Cloud topics metastore scheduling group.
+         */
+        _cloud_topics_metastore = co_await ss::create_scheduling_group(
+          "cloud_topics_metastore", 1000);
     }
 
     ss::scheduling_group admin_sg() { return _admin; }
@@ -178,6 +183,9 @@ public:
     ss::scheduling_group cloud_topics_reconciler_sg() {
         return _cloud_topics_reconciler;
     }
+    ss::scheduling_group cloud_topics_metastore_sg() {
+        return _cloud_topics_metastore;
+    }
 
     std::vector<std::reference_wrapper<const ss::scheduling_group>>
     all_scheduling_groups() const {
@@ -200,7 +208,8 @@ public:
           std::cref(_ts_read),
           std::cref(_cluster_linking),
           std::cref(_cloud_topics_compaction),
-          std::cref(_cloud_topics_reconciler)};
+          std::cref(_cloud_topics_reconciler),
+          std::cref(_cloud_topics_metastore)};
     }
 
 private:
@@ -226,4 +235,5 @@ private:
     ss::scheduling_group _cluster_linking;
     ss::scheduling_group _cloud_topics_compaction;
     ss::scheduling_group _cloud_topics_reconciler;
+    ss::scheduling_group _cloud_topics_metastore;
 };

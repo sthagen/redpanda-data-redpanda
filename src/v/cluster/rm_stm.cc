@@ -2299,7 +2299,7 @@ ss::future<> rm_stm::apply_raft_snapshot(const iobuf&) {
     co_return;
 }
 
-bool rm_stm::is_last_batch_for_idempotent_producer(
+bool rm_stm::is_batch_in_idempotent_window(
   const model::record_batch_header& hdr) const {
     const auto bid = model::batch_identity::from(hdr);
     if (!bid.is_idempotent()) {
@@ -2310,18 +2310,20 @@ bool rm_stm::is_last_batch_for_idempotent_producer(
 
     auto it = _producers.find(pid.get_id());
     if (it == _producers.end()) {
-        // We cannot know for sure if this is the last batch for the
-        // producer or not. But we cannot retain placeholder batches forever
-        // either.
+        // We cannot know for sure if this batch is in the idempotent window
+        // or not. But we cannot retain placeholder batches forever either.
         return false;
     }
 
     const tx::producer_ptr& producer = it->second;
+    if (producer->id().get_epoch() != pid.get_epoch()) {
+        return false;
+    }
 
-    const auto last_seq = producer->last_sequence_number();
-    const auto producer_epoch = producer->id().get_epoch();
-
-    return last_seq == bid.last_seq && producer_epoch == pid.get_epoch();
+    // Check if the batch matches any request in the idempotent window
+    // (inflight or finished requests).
+    return producer->idempotent_request_state().has_request_for_seq_range(
+      bid.first_seq, bid.last_seq);
 }
 
 void rm_stm::setup_metrics() {

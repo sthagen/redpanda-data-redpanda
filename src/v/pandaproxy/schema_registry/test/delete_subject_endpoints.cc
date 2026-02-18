@@ -31,14 +31,17 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
     {
         info("Post a schema as key");
         auto res = post_schema(
-          client, pps::subject{"test-key"}, avro_int_payload);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          avro_int_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }
 
     {
         info("Expect version 1");
-        auto res = get_subject_versions(client, pps::subject{"test-key"});
+        auto res = get_subject_versions(
+          client, pps::context_subject::unqualified("test-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
 
@@ -50,14 +53,17 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
     {
         info("Delete version 1");
         auto res = delete_subject_version(
-          client, pps::subject{"test-key"}, pps::schema_version{1});
+          client,
+          pps::context_subject::unqualified("test-key"),
+          pps::schema_version{1});
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }
 
     {
         info("Expect subject not_found");
-        auto res = get_subject_versions(client, pps::subject{"test-key"});
+        auto res = get_subject_versions(
+          client, pps::context_subject::unqualified("test-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::not_found);
     }
@@ -65,7 +71,9 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
     {
         info("Expect deleted version 1");
         auto res = get_subject_versions(
-          client, pps::subject{"test-key"}, pps::include_deleted::yes);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          pps::include_deleted::yes);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
 
@@ -78,7 +86,7 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
         info("Hard delete version 1");
         auto res = delete_subject_version(
           client,
-          pps::subject{"test-key"},
+          pps::context_subject::unqualified("test-key"),
           pps::schema_version{1},
           pps::permanent_delete::yes);
         BOOST_REQUIRE_EQUAL(
@@ -88,7 +96,9 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
     {
         info("Expect sub not found");
         auto res = get_subject_versions(
-          client, pps::subject{"test-key"}, pps::include_deleted::yes);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          pps::include_deleted::yes);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::not_found);
     }
@@ -96,14 +106,17 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
     {
         info("Repost a schema as key");
         auto res = post_schema(
-          client, pps::subject{"test-key"}, avro_int_payload);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          avro_int_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }
 
     {
         info("Expect version 1");
-        auto res = get_subject_versions(client, pps::subject{"test-key"});
+        auto res = get_subject_versions(
+          client, pps::context_subject::unqualified("test-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
 
@@ -114,7 +127,8 @@ FIXTURE_TEST(test_delete_subject, pandaproxy_test_fixture) {
 
     {
         info("Delete subject");
-        auto res = delete_subject(client, pps::subject{"test-key"});
+        auto res = delete_subject(
+          client, pps::context_subject::unqualified("test-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }
@@ -129,14 +143,17 @@ FIXTURE_TEST(test_delete_referenced_subject, pandaproxy_test_fixture) {
     {
         info("Post a schema as key");
         auto res = post_schema(
-          client, pps::subject{"int-key"}, avro_int_payload);
+          client,
+          pps::context_subject::unqualified("int-key"),
+          avro_int_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }
 
     {
         info("Expect version 1");
-        auto res = get_subject_versions(client, pps::subject{"int-key"});
+        auto res = get_subject_versions(
+          client, pps::context_subject::unqualified("int-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
 
@@ -149,7 +166,7 @@ FIXTURE_TEST(test_delete_referenced_subject, pandaproxy_test_fixture) {
         info("Post a schema as key, which references the first");
         auto res = post_schema(
           client,
-          pps::subject{"reference-key"},
+          pps::context_subject::unqualified("reference-key"),
           ss::sstring{
             R"(
 {
@@ -170,7 +187,9 @@ FIXTURE_TEST(test_delete_referenced_subject, pandaproxy_test_fixture) {
     {
         info("Delete version 1, expect failure 42206");
         auto res = delete_subject_version(
-          client, pps::subject{"int-key"}, pps::schema_version{1});
+          client,
+          pps::context_subject::unqualified("int-key"),
+          pps::schema_version{1});
         BOOST_REQUIRE_EQUAL(
           res.headers.result(),
           boost::beast::http::status::unprocessable_entity);
@@ -179,7 +198,8 @@ FIXTURE_TEST(test_delete_referenced_subject, pandaproxy_test_fixture) {
 
     {
         info("Delete subject int-key, expect failure 42206 (still referenced)");
-        auto res = delete_subject(client, pps::subject{"int-key"});
+        auto res = delete_subject(
+          client, pps::context_subject::unqualified("int-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(),
           boost::beast::http::status::unprocessable_entity);
@@ -188,14 +208,16 @@ FIXTURE_TEST(test_delete_referenced_subject, pandaproxy_test_fixture) {
 
     {
         info("Delete subject reference-key");
-        auto res = delete_subject(client, pps::subject{"reference-key"});
+        auto res = delete_subject(
+          client, pps::context_subject::unqualified("reference-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }
 
     {
         info("Delete subject int-key (not referenced - soft deleted)");
-        auto res = delete_subject(client, pps::subject{"int-key"});
+        auto res = delete_subject(
+          client, pps::context_subject::unqualified("int-key"));
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
     }

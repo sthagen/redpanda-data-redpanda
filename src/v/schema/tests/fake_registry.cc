@@ -58,7 +58,7 @@ ss::future<ppsr::stored_schema> schema::fake_store::get_subject_schema(
 ss::future<ppsr::schema_definition>
 schema::fake_store::get_schema_definition(ppsr::context_schema_id id) {
     for (const auto& s : schemas) {
-        if (s.id == id) {
+        if (s.context_id() == id) {
             co_return s.schema.def().share();
         }
     }
@@ -68,7 +68,7 @@ schema::fake_store::get_schema_definition(ppsr::context_schema_id id) {
 ss::future<std::optional<ppsr::schema_definition>>
 schema::fake_store::maybe_get_schema_definition(ppsr::context_schema_id id) {
     for (const auto& s : schemas) {
-        if (s.id == id) {
+        if (s.context_id() == id) {
             co_return s.schema.def().share();
         }
     }
@@ -103,7 +103,7 @@ schema::fake_registry::create_schema(ppsr::subject_schema unparsed) {
     for (const auto& s : _store.schemas) {
         if (
           same_schema(unparsed, s.schema) && s.schema.sub() == unparsed.sub()) {
-            co_return s.id;
+            co_return s.context_id();
         }
     }
     auto id = ppsr::schema_id(int32_t(_store.schemas.size() + 1));
@@ -123,7 +123,7 @@ schema::fake_registry::create_schema(ppsr::subject_schema unparsed) {
       .id = id,
       .deleted = ppsr::is_deleted::no,
     });
-    co_return _store.schemas.back().id;
+    co_return _store.schemas.back().context_id();
 }
 const std::vector<ppsr::stored_schema>& schema::fake_registry::get_all() {
     maybe_throw_injected_failure();

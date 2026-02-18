@@ -8,4 +8,5 @@ use (
 	src/transform-sdk/go/transform
 	src/transform-sdk/go/transform/internal/testdata
 	tests/go/kgo-verifier
+	bazel/packaging
 )

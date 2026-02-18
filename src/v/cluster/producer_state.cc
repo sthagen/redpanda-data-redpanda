@@ -235,6 +235,14 @@ void requests::stm_apply(
     }
 }
 
+bool requests::has_request_for_seq_range(seq_t first, seq_t last) const {
+    auto matches = [first, last](const request_ptr& req) {
+        return req->first_sequence() == first && req->last_sequence() == last;
+    };
+    return std::ranges::any_of(_inflight_requests, matches)
+           || std::ranges::any_of(_finished_requests, matches);
+}
+
 void requests::gc_requests_from_older_terms(model::term_id current_term) {
     while (!_inflight_requests.empty()
            && _inflight_requests.front()->_term < current_term) {

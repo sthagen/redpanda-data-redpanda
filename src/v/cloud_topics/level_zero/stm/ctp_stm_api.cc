@@ -45,9 +45,10 @@ ctp_stm_api::ctp_stm_api(ss::shared_ptr<ctp_stm> stm)
 ss::future<std::expected<model::offset, ctp_stm_api_errc>>
 ctp_stm_api::replicated_apply(
   model::record_batch&& batch,
+  std::optional<model::term_id> expected_term,
   model::timeout_clock::time_point deadline,
   ss::abort_source& as) {
-    model::term_id term = _stm->_raft->term();
+    model::term_id term = expected_term.value_or(_stm->_raft->term());
 
     vlog(_log.debug, "Replicating batch {} in term {}", batch.header(), term);
 
@@ -81,6 +82,55 @@ ctp_stm_api::replicated_apply(
 }
 
 ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
+ctp_stm_api::sync_to_next_placeholder(
+  model::timeout_clock::time_point deadline, ss::abort_source& as) {
+    kafka::offset curr_lro = get_last_reconciled_offset();
+    model::offset curr_lrlo = get_last_reconciled_log_offset();
+
+    // there might be an advance_epoch batch somewhere beyond LRO, as yet
+    // unreconciled, so we advance the LRLO as far as we safely can (i.e. up to
+    // the offset just before the next unreconciled placeholder batch). as a
+    // result, a previously applied epoch should make its way into the
+    // min_epoch_lower_bound, the estimate for inactive epoch.
+    model::offset max_safe_lrlo = model::prev_offset(
+      _stm->_raft->log()->to_log_offset(
+        kafka::offset_cast(kafka::next_offset(curr_lro))));
+
+    if (max_safe_lrlo <= curr_lrlo) {
+        vlog(
+          _log.debug,
+          "{}: No non-data batches between curr_lro {} and the next "
+          "placeholder batch. Nothing to do.",
+          _stm->ntp(),
+          curr_lro);
+        co_return std::monostate{};
+    }
+
+    vlog(
+      _log.debug,
+      "Replicating ctp_stm_cmd::advance_reconciled_offset to advance "
+      "LRLO {} -> {}",
+      curr_lrlo,
+      max_safe_lrlo);
+
+    storage::record_batch_builder builder(
+      model::record_batch_type::ctp_stm_command, model::offset{0});
+
+    builder.add_raw_kv(
+      serde::to_iobuf(advance_reconciled_offset_cmd::key),
+      serde::to_iobuf(advance_reconciled_offset_cmd(curr_lro, max_safe_lrlo)));
+
+    auto batch = std::move(builder).build();
+    auto apply_result = co_await replicated_apply(
+      std::move(batch), std::nullopt /* expected_term */, deadline, as);
+    if (!apply_result.has_value()) {
+        co_return std::unexpected{apply_result.error()};
+    }
+
+    co_return std::monostate{};
+}
+
+ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
 ctp_stm_api::advance_reconciled_offset(
   kafka::offset lro,
   model::timeout_clock::time_point deadline,
@@ -100,7 +150,7 @@ ctp_stm_api::advance_reconciled_offset(
 
     auto batch = std::move(builder).build();
     auto apply_result = co_await replicated_apply(
-      std::move(batch), deadline, as);
+      std::move(batch), std::nullopt /* expected_term */, deadline, as);
 
     if (!apply_result.has_value()) {
         co_return std::unexpected(apply_result.error());
@@ -132,7 +182,7 @@ ctp_stm_api::set_start_offset(
 
     auto batch = std::move(builder).build();
     auto apply_result = co_await replicated_apply(
-      std::move(batch), deadline, as);
+      std::move(batch), std::nullopt /* expected_term */, deadline, as);
 
     if (!apply_result.has_value()) {
         co_return std::unexpected(apply_result.error());
@@ -141,8 +191,66 @@ ctp_stm_api::set_start_offset(
     co_return std::monostate{};
 }
 
+ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
+ctp_stm_api::advance_epoch(
+  cluster_epoch new_epoch,
+  model::timeout_clock::time_point deadline,
+  ss::abort_source& as) {
+    if (new_epoch < get_max_epoch()) {
+        co_return std::monostate{};
+    }
+    auto fence_fut = co_await ss::coroutine::as_future(fence_epoch(new_epoch));
+    if (fence_fut.failed()) {
+        auto e = fence_fut.get_exception();
+        vlogl(
+          _log,
+          ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                        : ss::log_level::warn,
+          "Failed to fence epoch {} for ntp {}, error: {}",
+          new_epoch,
+          _stm->ntp(),
+          e);
+        co_return std::unexpected{ctp_stm_api_errc::failure};
+    }
+    auto fence = std::move(fence_fut).get();
+    if (!fence.has_value()) {
+        vlog(
+          _log.warn,
+          "Failed to fence epoch {} for ntp {}, ctp latest seen epoch is [{}, "
+          "{}]",
+          new_epoch,
+          _stm->ntp(),
+          fence.error().window_min,
+          fence.error().window_max);
+        co_return std::unexpected{ctp_stm_api_errc::failure};
+    }
+
+    vlog(_log.debug, "Replicating ctp_stm_cmd::advance_epoch{{{}}}", new_epoch);
+
+    storage::record_batch_builder builder(
+      model::record_batch_type::ctp_stm_command, model::offset(0));
+
+    builder.add_raw_kv(
+      serde::to_iobuf(advance_epoch_cmd::key),
+      serde::to_iobuf(advance_epoch_cmd(new_epoch)));
+
+    auto batch = std::move(builder).build();
+    auto apply_result = co_await replicated_apply(
+      std::move(batch), fence.value().term, deadline, as);
+
+    if (!apply_result.has_value()) {
+        co_return std::unexpected(apply_result.error());
+    }
+    co_return std::monostate{};
+}
+
 kafka::offset ctp_stm_api::get_last_reconciled_offset() const {
     return _stm->state().get_last_reconciled_offset().value_or(kafka::offset());
+}
+
+model::offset ctp_stm_api::get_last_reconciled_log_offset() const {
+    return _stm->state().get_last_reconciled_log_offset().value_or(
+      model::offset{});
 }
 
 kafka::offset ctp_stm_api::get_start_offset() const {
@@ -166,6 +274,11 @@ ctp_stm_api::get_inactive_epoch() const {
 std::optional<cluster_epoch>
 ctp_stm_api::estimate_inactive_epoch() const noexcept {
     return _stm->estimate_inactive_epoch();
+}
+
+std::optional<model::offset>
+ctp_stm_api::get_epoch_window_offset() const noexcept {
+    return _stm->state().current_epoch_window_offset();
 }
 
 ss::future<bool> ctp_stm_api::sync_in_term(

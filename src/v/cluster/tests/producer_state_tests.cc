@@ -558,3 +558,40 @@ FIXTURE_TEST(test_transaction_start_without_fence, test_fixture) {
       another_tx_state->status, partition_transaction_status::ongoing);
     BOOST_REQUIRE_EQUAL(another_tx_state->first, another_batch.base_offset());
 }
+
+FIXTURE_TEST(test_has_request_for_seq_range, test_fixture) {
+    create_producer_state_manager(1, 1);
+    auto producer = new_producer();
+    auto defer = ss::defer(
+      [&] { manager().deregister_producer(*producer, std::nullopt); });
+
+    model::test::record_batch_spec spec{
+      .offset = model::offset{10},
+      .allow_compression = true,
+      .count = 5,
+      .bt = model::record_batch_type::raft_data,
+      .enable_idempotence = true,
+      .producer_id = producer->id().id,
+      .producer_epoch = producer->id().epoch,
+      .base_sequence = 0,
+    };
+    auto batch = model::test::make_random_batch(spec);
+    auto bid = model::batch_identity::from(batch.header());
+    auto request = producer->try_emplace_request(bid, model::term_id{1}, true);
+    BOOST_REQUIRE(!request.has_error());
+
+    const auto& reqs = producer->idempotent_request_state();
+
+    // Inflight request with seq range [0, 4] should be found.
+    BOOST_REQUIRE(reqs.has_request_for_seq_range(0, 4));
+    // Non-matching ranges should not be found.
+    BOOST_REQUIRE(!reqs.has_request_for_seq_range(0, 3));
+    BOOST_REQUIRE(!reqs.has_request_for_seq_range(1, 4));
+    BOOST_REQUIRE(!reqs.has_request_for_seq_range(5, 9));
+
+    // Apply the batch to promote it to finished.
+    producer->apply_data(batch.header(), kafka::offset{10});
+
+    // Still found after apply - now in finished requests.
+    BOOST_REQUIRE(reqs.has_request_for_seq_range(0, 4));
+}

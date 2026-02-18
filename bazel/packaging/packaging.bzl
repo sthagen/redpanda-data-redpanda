@@ -228,7 +228,7 @@ def _common_redpanda_package_cfg(ctx, package_content, fips_enabled, base_path =
 
 def _dir_package_configuration(ctx, package_content, fips_enabled):
     cfg = _common_redpanda_package_cfg(ctx, package_content, fips_enabled)
-    cfg["directory_mode"] = True
+    cfg["package_type"] = "directory"
     if ctx.file.default_yaml_config != None:
         cfg["package_files"].append({
             "path": "config",
@@ -239,7 +239,7 @@ def _dir_package_configuration(ctx, package_content, fips_enabled):
 
 def _tarball_package_configuration(ctx, package_content, fips_enabled):
     cfg = _common_redpanda_package_cfg(ctx, package_content, fips_enabled, "opt/redpanda")
-    cfg["directory_mode"] = False
+    cfg["package_type"] = "tarball"
     cfg["package_dirs"].append("etc/redpanda")
     cfg["package_dirs"].append("var/lib/redpanda/data")
     if ctx.file.default_yaml_config != None:
@@ -403,7 +403,7 @@ def _create_package_config(ctx, package_content):
 
     return {
         "package_dirs": ["bin", "lib"],
-        "directory_mode": True,
+        "package_type": "directory",
         "owner": ctx.attr.owner,  # Default owner
         "package_files": package_files,
     }
@@ -413,7 +413,7 @@ def _native_pkg_impl(ctx):
     out = ctx.actions.declare_directory(ctx.attr.out) if use_dir else ctx.actions.declare_file(ctx.attr.out)
     package_content = _prepapare_package_conent(ctx)
     cfg = _create_package_config(ctx, package_content)
-    cfg["directory_mode"] = use_dir
+    cfg["package_type"] = "directory" if use_dir else "tarball"
 
     # Create the configuration file for the packaging tool
     cfg_file = ctx.actions.declare_file("%s.config.json" % ctx.attr.name)
@@ -455,6 +455,290 @@ native_package = rule(
         "install_path": attr.string(
             mandatory = True,
             doc = "The path where the package will be installed, used to set the interpreter path.",
+        ),
+        "_tool": attr.label(
+            executable = True,
+            allow_files = True,
+            cfg = "exec",
+            default = Label("//bazel/packaging:tool"),
+        ),
+        "_cc_toolchain": attr.label(
+            default = Label("@bazel_tools//tools/cpp:current_cc_toolchain"),
+        ),
+        "_patchelf": attr.label(
+            executable = True,
+            allow_files = True,
+            cfg = "exec",
+            default = Label("@patchelf"),
+        ),
+    },
+    toolchains = ["@bazel_tools//tools/cpp:toolchain_type"],
+)
+
+def _prepare_deb_package_content(ctx, dynamic_loader_path):
+    # Prepare list of binaries to process
+    binaries = []
+    binary_map = {}
+
+    if ctx.file.redpanda_binary != None:
+        binary_map["redpanda_binary"] = len(binaries)
+        binaries.append(struct(attr = ctx.attr.redpanda_binary, file = ctx.file.redpanda_binary))
+    if ctx.file.rp_util != None:
+        binary_map["rp_util"] = len(binaries)
+        binaries.append(struct(attr = ctx.attr.rp_util, file = ctx.file.rp_util))
+    if ctx.file.iotune != None:
+        binary_map["iotune"] = len(binaries)
+        binaries.append(struct(attr = ctx.attr.iotune, file = ctx.file.iotune))
+    if ctx.file.hwloc_calc != None:
+        binary_map["hwloc_calc"] = len(binaries)
+        binaries.append(struct(attr = ctx.attr.hwloc_calc, file = ctx.file.hwloc_calc))
+    if ctx.file.hwloc_distrib != None:
+        binary_map["hwloc_distrib"] = len(binaries)
+        binaries.append(struct(attr = ctx.attr.hwloc_distrib, file = ctx.file.hwloc_distrib))
+    if ctx.file.openssl != None:
+        binary_map["openssl"] = len(binaries)
+        binaries.append(struct(attr = ctx.attr.openssl, file = ctx.file.openssl))
+
+    package_binaries = _prepare_package_binaries(
+        ctx,
+        binaries,
+        dynamic_loader_path,
+    )
+
+    return struct(
+        redpanda_binary = package_binaries.binary_files[binary_map["redpanda_binary"]] if "redpanda_binary" in binary_map else None,
+        rp_util = package_binaries.binary_files[binary_map["rp_util"]] if "rp_util" in binary_map else None,
+        iotune = package_binaries.binary_files[binary_map["iotune"]] if "iotune" in binary_map else None,
+        hwloc_calc = package_binaries.binary_files[binary_map["hwloc_calc"]] if "hwloc_calc" in binary_map else None,
+        hwloc_distrib = package_binaries.binary_files[binary_map["hwloc_distrib"]] if "hwloc_distrib" in binary_map else None,
+        openssl = package_binaries.binary_files[binary_map["openssl"]] if "openssl" in binary_map else None,
+        rpk_binary = ctx.file.rpk_binary,
+        shared_libraries = package_binaries.shared_libraries,
+    )
+
+def _deb_package_impl(ctx):
+    out = ctx.actions.declare_file(ctx.attr.out)
+    package_content = _prepare_deb_package_content(ctx, "{}/lib".format(ctx.attr.install_path))
+
+    package_files = []
+    inputs = []
+
+    # Add redpanda binary
+    if package_content.redpanda_binary != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "redpanda",
+            "source": package_content.redpanda_binary.path,
+        })
+        inputs.append(package_content.redpanda_binary)
+
+    # Add rp_util
+    if package_content.rp_util != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "rp_util",
+            "source": package_content.rp_util.path,
+        })
+        inputs.append(package_content.rp_util)
+
+    # Add iotune
+    if package_content.iotune != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "iotune",
+            "source": package_content.iotune.path,
+        })
+        inputs.append(package_content.iotune)
+
+    # Add hwloc-calc
+    if package_content.hwloc_calc != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "hwloc-calc",
+            "source": package_content.hwloc_calc.path,
+        })
+        inputs.append(package_content.hwloc_calc)
+
+    # Add hwloc-distrib
+    if package_content.hwloc_distrib != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "hwloc-distrib",
+            "source": package_content.hwloc_distrib.path,
+        })
+        inputs.append(package_content.hwloc_distrib)
+
+    # Add openssl
+    if package_content.openssl != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "openssl",
+            "source": package_content.openssl.path,
+        })
+        inputs.append(package_content.openssl)
+
+    # Add rpk binary
+    if package_content.rpk_binary != None:
+        package_files.append({
+            "path": ctx.attr.install_path + "/bin",
+            "name": "rpk",
+            "source": package_content.rpk_binary.path,
+        })
+        inputs.append(package_content.rpk_binary)
+
+    # Add shared libraries
+    for sl in package_content.shared_libraries:
+        package_files.append({
+            "path": ctx.attr.install_path + "/lib",
+            "name": sl.basename,
+            "source": sl.path,
+        })
+        inputs.append(sl)
+
+    scripts = {}
+    if ctx.file.preinst != None:
+        scripts["preinst"] = ctx.file.preinst.path
+        inputs.append(ctx.file.preinst)
+    if ctx.file.postinst != None:
+        scripts["postinst"] = ctx.file.postinst.path
+        inputs.append(ctx.file.postinst)
+    if ctx.file.prerm != None:
+        scripts["prerm"] = ctx.file.prerm.path
+        inputs.append(ctx.file.prerm)
+    if ctx.file.postrm != None:
+        scripts["postrm"] = ctx.file.postrm.path
+        inputs.append(ctx.file.postrm)
+
+    deb_config = {
+        "depends": ctx.attr.depends,
+        "description": ctx.attr.description,
+        "scripts": scripts,
+    }
+    if ctx.file.systemd_service != None:
+        deb_config["systemd_service"] = ctx.file.systemd_service.path
+        inputs.append(ctx.file.systemd_service)
+    if ctx.file.systemd_slice != None:
+        deb_config["systemd_slice"] = ctx.file.systemd_slice.path
+        inputs.append(ctx.file.systemd_slice)
+
+    cfg = {
+        "name": ctx.attr.package_name,
+        "package_type": "deb",
+        "package_dirs": ctx.attr.package_dirs,
+        "package_symlinks": ctx.attr.package_symlinks,
+        "owner": ctx.attr.owner,
+        "package_files": package_files,
+        "deb": deb_config,
+    }
+
+    # Create the configuration file for the packaging tool
+    cfg_file = ctx.actions.declare_file("%s.config.json" % ctx.attr.name)
+    ctx.actions.write(cfg_file, content = json.encode_indent(cfg))
+
+    inputs = [cfg_file] + inputs
+
+    # run the packaging tool
+    ctx.actions.run(
+        outputs = [out],
+        inputs = inputs,
+        tools = [ctx.executable._tool],
+        executable = ctx.executable._tool,
+        arguments = [
+            "-config",
+            cfg_file.path,
+            "-output",
+            out.path,
+        ],
+        mnemonic = "BuildingDebPackage",
+        use_default_shell_env = False,
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+redpanda_deb_package = rule(
+    implementation = _deb_package_impl,
+    attrs = {
+        "package_name": attr.string(
+            mandatory = True,
+            doc = "The name of the debian package",
+        ),
+        "redpanda_binary": attr.label(
+            allow_single_file = True,
+        ),
+        "rp_util": attr.label(
+            allow_single_file = True,
+        ),
+        "iotune": attr.label(
+            allow_single_file = True,
+        ),
+        "hwloc_calc": attr.label(
+            allow_single_file = True,
+        ),
+        "hwloc_distrib": attr.label(
+            allow_single_file = True,
+        ),
+        "openssl": attr.label(
+            allow_single_file = True,
+        ),
+        "rpk_binary": attr.label(
+            allow_single_file = True,
+        ),
+        "out": attr.string(
+            mandatory = True,
+            doc = "Output .deb file name",
+        ),
+        "include_sysroot_libs": attr.bool(
+            default = True,
+        ),
+        "rpath_override": attr.string(
+            default = "$ORIGIN/../lib",
+        ),
+        "owner": attr.int(
+            default = 0,
+            doc = "Numeric owner ID for package files",
+        ),
+        "install_path": attr.string(
+            default = "/opt/redpanda",
+            doc = "The path where the package will be installed",
+        ),
+        "depends": attr.string_list(
+            default = [],
+            doc = "List of package dependencies",
+        ),
+        "description": attr.string(
+            default = "Redpanda, the fastest queue in the West",
+            doc = "Package description",
+        ),
+        "preinst": attr.label(
+            allow_single_file = True,
+            doc = "Preinst maintainer script",
+        ),
+        "postinst": attr.label(
+            allow_single_file = True,
+            doc = "Postinst maintainer script",
+        ),
+        "prerm": attr.label(
+            allow_single_file = True,
+            doc = "Prerm maintainer script",
+        ),
+        "postrm": attr.label(
+            allow_single_file = True,
+            doc = "Postrm maintainer script",
+        ),
+        "systemd_service": attr.label(
+            allow_single_file = True,
+            doc = "Systemd service file",
+        ),
+        "systemd_slice": attr.label(
+            allow_single_file = True,
+            doc = "Systemd slice file",
+        ),
+        "package_dirs": attr.string_list(
+            default = [],
+            doc = "Additional directories to create in the package",
+        ),
+        "package_symlinks": attr.string_dict(
+            default = {},
+            doc = "Symlinks to create in the package (destination -> source)",
         ),
         "_tool": attr.label(
             executable = True,

@@ -74,7 +74,7 @@ int_flag(
 
 int_flag(
     name = "scheduling_groups",
-    build_setting_default = 20,
+    build_setting_default = 21,
     make_variable = "SCHEDULING_GROUPS",
 )
 

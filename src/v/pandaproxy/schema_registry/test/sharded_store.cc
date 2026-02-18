@@ -32,7 +32,7 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
 
     // Insert simple
     auto referenced_schema = pps::subject_schema{
-      pps::subject{"simple.proto"}, simple.share()};
+      pps::context_subject::unqualified("simple.proto"), simple.share()};
     store
       .upsert(
         pps::seq_marker{
@@ -45,7 +45,7 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
 
     // Insert referenced
     auto importing_schema = pps::subject_schema{
-      pps::subject{"imported.proto"}, imported.share()};
+      pps::context_subject::unqualified("imported.proto"), imported.share()};
 
     store
       .upsert(
@@ -63,11 +63,15 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
     BOOST_REQUIRE_EQUAL(referenced_by.size(), 1);
     BOOST_REQUIRE_EQUAL(referenced_by[0].id, pps::schema_id{2});
 
-    BOOST_REQUIRE(
-      store.is_referenced(pps::subject{"simple.proto"}, pps::schema_version{1})
-        .get());
+    BOOST_REQUIRE(store
+                    .is_referenced(
+                      pps::context_subject::unqualified("simple.proto"),
+                      pps::schema_version{1})
+                    .get());
 
-    auto importing = store.get_schema_definition(pps::schema_id{2}).get();
+    auto importing
+      = store.get_schema_definition({pps::default_context, pps::schema_id{2}})
+          .get();
     BOOST_REQUIRE_EQUAL(importing.refs().size(), 1);
     BOOST_REQUIRE_EQUAL(importing.refs()[0].sub, imported.refs()[0].sub);
     BOOST_REQUIRE_EQUAL(
@@ -86,13 +90,17 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
       .get();
 
     // Soft-deleted should not partake in reference calculations
-    BOOST_REQUIRE(
-      store.referenced_by(pps::subject{"simple.proto"}, pps::schema_version{1})
-        .get()
-        .empty());
-    BOOST_REQUIRE(
-      !store.is_referenced(pps::subject{"simple.proto"}, pps::schema_version{1})
-         .get());
+    BOOST_REQUIRE(store
+                    .referenced_by(
+                      pps::context_subject::unqualified("simple.proto"),
+                      pps::schema_version{1})
+                    .get()
+                    .empty());
+    BOOST_REQUIRE(!store
+                     .is_referenced(
+                       pps::context_subject::unqualified("simple.proto"),
+                       pps::schema_version{1})
+                     .get());
 }
 
 SEASTAR_THREAD_TEST_CASE(test_sharded_store_find_unordered) {
@@ -101,13 +109,13 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_find_unordered) {
     auto stop_store = ss::defer([&store]() { store.stop().get(); });
 
     pps::subject_schema array_unsanitized{
-      pps::subject{"array"},
+      pps::context_subject::unqualified("array"),
       pps::schema_definition{
         R"({"type": "array", "default": [], "items" : "string"})",
         pps::schema_type::avro}};
 
     pps::subject_schema array_sanitized{
-      pps::subject{"array"},
+      pps::context_subject::unqualified("array"),
       pps::schema_definition{
         R"({"type":"array","items":"string","default":[]})",
         pps::schema_type::avro}};
@@ -116,7 +124,7 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_find_unordered) {
 
     // Insert an unsorted schema "onto the topic".
     auto referenced_schema = pps::subject_schema{
-      pps::subject{"simple.proto"}, simple.share()};
+      pps::context_subject::unqualified("simple.proto"), simple.share()};
     store
       .upsert(
         pps::seq_marker{

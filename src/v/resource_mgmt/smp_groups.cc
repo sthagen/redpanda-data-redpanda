@@ -28,6 +28,8 @@ ss::future<> smp_groups::create_groups(config cfg) {
       cfg.datalake_group_max_non_local_requests);
     _cluster_link = co_await create_service_group(
       cfg.cluster_link_group_max_non_local_requests);
+    _cloud_topics_metastore = co_await create_service_group(
+      cfg.cloud_topics_metastore_group_max_non_local_requests);
 }
 
 ss::future<> smp_groups::destroy_groups() {
@@ -38,6 +40,7 @@ ss::future<> smp_groups::destroy_groups() {
     co_await destroy_smp_service_group(*_transform);
     co_await destroy_smp_service_group(*_datalake);
     co_await destroy_smp_service_group(*_cluster_link);
+    co_await destroy_smp_service_group(*_cloud_topics_metastore);
 }
 
 uint32_t

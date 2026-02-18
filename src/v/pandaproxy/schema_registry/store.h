@@ -453,7 +453,8 @@ public:
         return std::ranges::any_of(_subjects, [&ids, inc_del](const auto& s) {
             return std::ranges::any_of(
               s.second.versions, [&ids, &s, inc_del](const auto& v) {
-                  return (inc_del || !s.second.deleted) && ids.contains(v.id);
+                  return (inc_del || !s.second.deleted)
+                         && ids.contains({s.first.ctx, v.id});
               });
         });
     }

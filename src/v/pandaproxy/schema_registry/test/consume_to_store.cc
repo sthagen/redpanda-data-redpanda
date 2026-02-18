@@ -35,7 +35,7 @@
 
 namespace pps = pandaproxy::schema_registry;
 
-const pps::subject subject0{"subject0"};
+const auto subject0 = pps::context_subject::unqualified("subject0");
 constexpr pps::topic_key_magic magic0{0};
 constexpr pps::topic_key_magic magic1{1};
 constexpr pps::topic_key_magic magic2{2};
@@ -56,7 +56,7 @@ const pps::schema_definition int_def0{
     {R"({"type": "int"})", pps::schema_type::avro})
     .value()};
 
-inline model::record_batch make_delete_subject_batch(pps::subject sub) {
+inline model::record_batch make_delete_subject_batch(pps::context_subject sub) {
     storage::record_batch_builder rb{
       model::record_batch_type::raft_data, model::offset{0}};
 
@@ -69,7 +69,8 @@ inline model::record_batch make_delete_subject_batch(pps::subject sub) {
 }
 
 inline model::record_batch make_delete_subject_permanently_batch(
-  pps::subject sub, const chunked_vector<pps::schema_version>& versions) {
+  pps::context_subject sub,
+  const chunked_vector<pps::schema_version>& versions) {
     storage::record_batch_builder rb{
       model::record_batch_type::raft_data, model::offset{0}};
 

@@ -24,9 +24,15 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
 	"testing/fstest"
 	"time"
+
+	"github.com/goreleaser/nfpm/v2"
+	"github.com/goreleaser/nfpm/v2/deb"
+	"github.com/goreleaser/nfpm/v2/files"
 )
 
 type fileConfig struct {
@@ -35,11 +41,30 @@ type fileConfig struct {
 	SourcePath string `json:"source"`
 }
 
+// directory, deb, or tarball
+type packageType string
+
+type debConfig struct {
+	Depends        []string `json:"depends"`
+	Description    string   `json:"description"`
+	SystemdService string   `json:"systemd_service,omitempty"`
+	SystemdSlice   string   `json:"systemd_slice,omitempty"`
+	Scripts        struct {
+		PreInst  string `json:"preinst,omitempty"`
+		PostInst string `json:"postinst,omitempty"`
+		PreRm    string `json:"prerm,omitempty"`
+		PostRm   string `json:"postrm,omitempty"`
+	} `json:"scripts,omitempty"`
+}
+
 type pkgConfig struct {
-	PackageDirectories []string     `json:"package_dirs"`
-	PackageFiles       []fileConfig `json:"package_files"`
-	DirectoryMode      bool         `json:"directory_mode"`
-	Owner              int          `json:"owner"`
+	Name               string            `json:"name"`
+	PackageDirectories []string          `json:"package_dirs"`
+	PackageFiles       []fileConfig      `json:"package_files"`
+	PackageSymlinks    map[string]string `json:"package_symlinks"`
+	PackageType        packageType       `json:"package_type"`
+	Owner              int               `json:"owner"`
+	Deb                debConfig         `json:"deb"`
 }
 
 const rootDir = "___root___"
@@ -54,7 +79,7 @@ func buildPackageStructure(cfg pkgConfig) (fstest.MapFS, error) {
 
 	// Add directories
 	for _, dir := range cfg.PackageDirectories {
-		path := filepath.Join(rootDir, dir)
+		path := path.Join(rootDir, dir)
 		mapFs[path] = &fstest.MapFile{
 			Mode: fs.ModeDir,
 		}
@@ -62,7 +87,7 @@ func buildPackageStructure(cfg pkgConfig) (fstest.MapFS, error) {
 
 	// Add package files
 	for _, file := range cfg.PackageFiles {
-		path := filepath.Join(rootDir, file.Path, file.Name)
+		path := path.Join(rootDir, file.Path, file.Name)
 		mapFs[path] = &fstest.MapFile{}
 	}
 
@@ -133,7 +158,7 @@ func createTarball(cfg pkgConfig, w io.Writer) error {
 			return err
 		}
 		err = tw.WriteHeader(&tar.Header{
-			Name:     filepath.Join(fileConfig.Path, fileConfig.Name),
+			Name:     path.Join(fileConfig.Path, fileConfig.Name),
 			Mode:     int64(info.Mode()),
 			Typeflag: tar.TypeReg,
 			ModTime:  time.Unix(0, 0),
@@ -192,21 +217,160 @@ func createPackageDir(cfg pkgConfig, output string) error {
 		return err
 	}
 
-	dir := func(path string) error {
-		if err := os.Mkdir(filepath.Join(output, path), 0755); err != nil {
-			return fmt.Errorf("error creating directory %s: %v", path, err)
+	dir := func(p string) error {
+		if err := os.Mkdir(path.Join(output, p), 0755); err != nil {
+			return fmt.Errorf("error creating directory %s: %v", p, err)
 		}
 		return nil
 	}
 
 	file := func(fileConfig fileConfig) error {
-		if err := copyFile(fileConfig.SourcePath, filepath.Join(output, fileConfig.Path, fileConfig.Name)); err != nil {
+		if err := copyFile(fileConfig.SourcePath, path.Join(output, fileConfig.Path, fileConfig.Name)); err != nil {
 			return fmt.Errorf("error copying file %s: %v", fileConfig.SourcePath, err)
 		}
 		return nil
 	}
 
 	return createPackage(cfg, dir, file)
+}
+
+func createDeb(cfg pkgConfig, output io.Writer) error {
+	pkgInfo := nfpm.WithDefaults(&nfpm.Info{
+		Name:     cfg.Name,
+		Arch:     runtime.GOARCH,
+		Platform: "linux",
+		// TODO: Wire in our version
+		Version:         "0.0.0",
+		Prerelease:      "dev",
+		Maintainer:      "Redpanda Data <hi@redpanda.com>",
+		Homepage:        "https://redpanda.com",
+		Priority:        "optional",
+		Section:         "misc",
+		Description:     cfg.Deb.Description,
+		DisableGlobbing: true,
+		Overridables: nfpm.Overridables{
+			Conflicts: nil, // TODO: fill this out
+			Depends:   cfg.Deb.Depends,
+			Deb: nfpm.Deb{
+				Arch: runtime.GOARCH,
+			},
+			Scripts: nfpm.Scripts{
+				PreInstall:  cfg.Deb.Scripts.PreInst,
+				PostInstall: cfg.Deb.Scripts.PostInst,
+				PreRemove:   cfg.Deb.Scripts.PreRm,
+				PostRemove:  cfg.Deb.Scripts.PostRm,
+			},
+		},
+	})
+	for _, file := range cfg.PackageFiles {
+		absPath, err := filepath.Abs(file.SourcePath)
+		if err != nil {
+			return fmt.Errorf("unable to resolve absolute path for %s: %w", file.SourcePath, err)
+		}
+		// If we don't resolve symlinks, then nfpm will override our Type to be a symlink
+		// Use EvalSymlinks to fully resolve all levels of symlinks
+		absPath, err = filepath.EvalSymlinks(absPath)
+		if err != nil {
+			return fmt.Errorf("unable to resolve symlinks for %s: %w", file.SourcePath, err)
+		}
+		fileInfo, err := os.Stat(absPath)
+		if err != nil {
+			return fmt.Errorf("unable to stat file %s: %w", absPath, err)
+		}
+		pkgInfo.Contents = append(pkgInfo.Contents, &files.Content{
+			Source:      absPath,
+			Destination: path.Join(file.Path, file.Name),
+			Type:        files.TypeFile,
+			FileInfo: &files.ContentFileInfo{
+				Owner: "root",
+				Group: "root",
+				Mode:  fileInfo.Mode(),
+				MTime: fileInfo.ModTime(),
+				Size:  fileInfo.Size(),
+			},
+		})
+	}
+
+	// Add directories
+	for _, dir := range cfg.PackageDirectories {
+		pkgInfo.Contents = append(pkgInfo.Contents, &files.Content{
+			Destination: dir,
+			Type:        files.TypeDir,
+			FileInfo: &files.ContentFileInfo{
+				Owner: "root",
+				Group: "root",
+				Mode:  0755,
+			},
+		})
+	}
+
+	// Add symlinks
+	for dest, source := range cfg.PackageSymlinks {
+		pkgInfo.Contents = append(pkgInfo.Contents, &files.Content{
+			Source:      source,
+			Destination: dest,
+			Type:        files.TypeSymlink,
+		})
+	}
+
+	// Add systemd service file if provided
+	if cfg.Deb.SystemdService != "" {
+		absPath, err := filepath.Abs(cfg.Deb.SystemdService)
+		if err != nil {
+			return fmt.Errorf("unable to resolve absolute path for systemd service %s: %w", cfg.Deb.SystemdService, err)
+		}
+		absPath, err = filepath.EvalSymlinks(absPath)
+		if err != nil {
+			return fmt.Errorf("unable to resolve symlinks for systemd service %s: %w", cfg.Deb.SystemdService, err)
+		}
+		fileInfo, err := os.Stat(absPath)
+		if err != nil {
+			return fmt.Errorf("unable to stat systemd service file %s: %w", absPath, err)
+		}
+		pkgInfo.Contents = append(pkgInfo.Contents, &files.Content{
+			Source:      absPath,
+			Destination: "/usr/lib/systemd/system/" + filepath.Base(absPath),
+			Type:        files.TypeFile,
+			FileInfo: &files.ContentFileInfo{
+				Owner: "root",
+				Group: "root",
+				Mode:  fileInfo.Mode(),
+				MTime: fileInfo.ModTime(),
+				Size:  fileInfo.Size(),
+			},
+		})
+	}
+
+	// Add systemd slice file if provided
+	if cfg.Deb.SystemdSlice != "" {
+		absPath, err := filepath.Abs(cfg.Deb.SystemdSlice)
+		if err != nil {
+			return fmt.Errorf("unable to resolve absolute path for systemd slice %s: %w", cfg.Deb.SystemdSlice, err)
+		}
+		absPath, err = filepath.EvalSymlinks(absPath)
+		if err != nil {
+			return fmt.Errorf("unable to resolve symlinks for systemd slice %s: %w", cfg.Deb.SystemdSlice, err)
+		}
+		fileInfo, err := os.Stat(absPath)
+		if err != nil {
+			return fmt.Errorf("unable to stat systemd slice file %s: %w", absPath, err)
+		}
+		pkgInfo.Contents = append(pkgInfo.Contents, &files.Content{
+			Source:      absPath,
+			Destination: "/lib/systemd/system/" + filepath.Base(absPath),
+			Type:        files.TypeFile,
+			FileInfo: &files.ContentFileInfo{
+				Owner: "root",
+				Group: "root",
+				Mode:  fileInfo.Mode(),
+				MTime: fileInfo.ModTime(),
+				Size:  fileInfo.Size(),
+			},
+		})
+	}
+
+	deb.Default.SetPackagerDefaults(pkgInfo)
+	return deb.Default.Package(pkgInfo, output)
 }
 
 func runTool() error {
@@ -220,26 +384,31 @@ func runTool() error {
 		return fmt.Errorf("unable to parse config: %w", err)
 	}
 
-	if cfg.DirectoryMode {
+	if cfg.PackageType == "directory" {
 		if err := createPackageDir(cfg, *output); err != nil {
 			return fmt.Errorf("unable to create package directory: %w", err)
 		}
-	} else {
-		file, err := os.OpenFile(*output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-		if err != nil {
-			return fmt.Errorf("unable to open output file: %w", err)
+		return nil
+	}
+
+	file, err := os.OpenFile(*output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("unable to open output file: %w", err)
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing output file %s: %v\n", *output, err)
 		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "error closing output file %s: %v\n", *output, err)
-			}
-		}()
-		bw := bufio.NewWriter(file)
-		defer func() {
-			if err := bw.Flush(); err != nil {
-				fmt.Fprintf(os.Stderr, "error flushing buffered writer: %v\n", err)
-			}
-		}()
+	}()
+	bw := bufio.NewWriter(file)
+	defer func() {
+		if err := bw.Flush(); err != nil {
+			fmt.Fprintf(os.Stderr, "error flushing buffered writer: %v\n", err)
+		}
+	}()
+
+	switch cfg.PackageType {
+	case "tarball":
 		gw := gzip.NewWriter(bw)
 		defer func() {
 			if err := gw.Close(); err != nil {
@@ -249,7 +418,14 @@ func runTool() error {
 		if err := createTarball(cfg, gw); err != nil {
 			return fmt.Errorf("unable to create tarball: %w", err)
 		}
+	case "deb":
+		if err := createDeb(cfg, bw); err != nil {
+			return fmt.Errorf("unable to create tarball: %w", err)
+		}
+	default:
+		return fmt.Errorf("unknown package type: %q", cfg.PackageType)
 	}
+
 	return nil
 }
 

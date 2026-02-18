@@ -79,7 +79,9 @@ FIXTURE_TEST(
     {
         info("Post a schema as key (expect schema_id=1)");
         auto res = post_schema(
-          client, pps::subject{"test-key"}, avro_int_payload);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          avro_int_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
         BOOST_REQUIRE_EQUAL(
@@ -93,7 +95,9 @@ FIXTURE_TEST(
     {
         info("Repost a schema as key (expect schema_id=1)");
         auto res = post_schema(
-          client, pps::subject{"test-key"}, avro_int_payload);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          avro_int_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
         BOOST_REQUIRE_EQUAL(
@@ -107,7 +111,9 @@ FIXTURE_TEST(
     {
         info("Repost a schema as value (expect schema_id=1)");
         auto res = post_schema(
-          client, pps::subject{"test-value"}, avro_int_payload);
+          client,
+          pps::context_subject::unqualified("test-value"),
+          avro_int_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
         BOOST_REQUIRE_EQUAL(
@@ -121,7 +127,9 @@ FIXTURE_TEST(
     {
         info("Post a new schema as key (expect schema_id=2)");
         auto res = post_schema(
-          client, pps::subject{"test-key"}, avro_long_payload);
+          client,
+          pps::context_subject::unqualified("test-key"),
+          avro_long_payload);
         BOOST_REQUIRE_EQUAL(
           res.headers.result(), boost::beast::http::status::ok);
         BOOST_REQUIRE_EQUAL(
@@ -162,7 +170,7 @@ FIXTURE_TEST(
   "schemaType": "AVRO"
 })"};
 
-    pps::subject subject{"in-version-order"};
+    auto subject = pps::context_subject::unqualified("in-version-order");
     put_config(client, subject, pps::compatibility_level::backward);
 
     {
@@ -214,7 +222,8 @@ FIXTURE_TEST(
 
     {
         info("Post an invalid payload");
-        auto res = post_schema(client, pps::subject{"test-key"}, R"(
+        auto res = post_schema(
+          client, pps::context_subject::unqualified("test-key"), R"(
 {
   "schema": "\"int\"",
   "InvalidField": "AVRO"
@@ -239,7 +248,8 @@ FIXTURE_TEST(
 
     {
         info("Post an invalid schema");
-        auto res = post_schema(client, pps::subject{"test-key"}, R"(
+        auto res = post_schema(
+          client, pps::context_subject::unqualified("test-key"), R"(
 {
   "schema": "not_json",
   "schemaType": "AVRO"
@@ -264,7 +274,8 @@ FIXTURE_TEST(
 
     for (auto i = 0; i < 10; ++i) {
         info("Post a schema as key (expect schema_id=1)");
-        auto res = post_schema(client, pps::subject{"test-key"}, R"(
+        auto res = post_schema(
+          client, pps::context_subject::unqualified("test-key"), R"(
 {
   "schema": "syntax = \"proto3\"; message Simple { string i = 1; }",
   "schemaType": "PROTOBUF"
@@ -280,7 +291,7 @@ FIXTURE_TEST(schema_registry_post_avro_references, pandaproxy_test_fixture) {
     using namespace std::chrono_literals;
 
     const auto company_req = request{pps::subject_schema{
-      pps::subject{"company-value"},
+      pps::context_subject::unqualified("company-value"),
       pps::schema_definition(
         R"({
   "namespace": "com.redpanda",
@@ -304,7 +315,7 @@ FIXTURE_TEST(schema_registry_post_avro_references, pandaproxy_test_fixture) {
         pps::schema_type::avro)}};
 
     const auto employee_req = request{pps::subject_schema{
-      pps::subject{"employee-value"},
+      pps::context_subject::unqualified("employee-value"),
       pps::schema_definition{
         R"({
   "namespace": "com.redpanda",
@@ -359,7 +370,7 @@ FIXTURE_TEST(
 
     const auto simple_req_id_invalid = request{
       pps::subject_schema{
-        pps::subject{"simple-value"},
+        pps::context_subject::unqualified("simple-value"),
         pps::schema_definition(
           R"({
 "namespace": "com.redpanda",
@@ -395,7 +406,7 @@ FIXTURE_TEST(
   schema_registry_post_subjects_version_zero, pandaproxy_test_fixture) {
     const auto simple_req_first = request{
       pps::subject_schema{
-        pps::subject{"simple-value"},
+        pps::context_subject::unqualified("simple-value"),
         pps::schema_definition(
           R"({
 "namespace": "com.redpanda",
@@ -414,7 +425,7 @@ FIXTURE_TEST(
 
     const auto simple_req_second = request{
       pps::subject_schema{
-        pps::subject{"simple-value"},
+        pps::context_subject::unqualified("simple-value"),
         pps::schema_definition(
           R"({
 "namespace": "com.redpanda",
@@ -459,7 +470,8 @@ FIXTURE_TEST(
       to_header_value(ppj::serialization_format::schema_registry_v1_json));
 
     info("Getting versions, expect ([1,2])");
-    res = get_subject_versions(client, pps::subject{"simple-value"});
+    res = get_subject_versions(
+      client, pps::context_subject::unqualified("simple-value"));
     BOOST_REQUIRE_EQUAL(res.headers.result(), boost::beast::http::status::ok);
     BOOST_REQUIRE_EQUAL(res.body, R"([1,2])");
     BOOST_REQUIRE_EQUAL(

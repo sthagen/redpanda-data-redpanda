@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/domain/domain_supervisor.h"
 #include "cloud_topics/level_one/metastore/leader_router.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
+#include "cloud_topics/level_zero/cluster_services_impl/cluster_services.h"
 #include "cloud_topics/reconciler/reconciler.h"
 #include "cloud_topics/state_accessors.h"
 #include "ssx/sharded_service_container.h"
@@ -80,6 +81,7 @@ public:
     ss::sharded<l1::replicated_metastore>* get_sharded_replicated_metastore();
     l1::compaction_scheduler* get_compaction_scheduler();
     ss::sharded<level_zero_gc>* get_level_zero_gc();
+    cluster_services& get_local_cluster_services();
 
     // TODO: add 'get_control_plane_api' etc
 
@@ -101,6 +103,7 @@ private:
     ss::sharded<housekeeper_manager> housekeeper_manager;
     ss::sharded<topic_manifest_upload_manager> topic_manifest_upload_mgr;
     std::unique_ptr<l1::compaction_scheduler> compaction_scheduler;
+    ss::sharded<l0::cluster_services> cluster_services;
 };
 
 } // namespace cloud_topics

@@ -1,0 +1,22 @@
+[Unit]
+Description=Redpanda Tuner
+After=local-fs.target network-online.target
+Requires=local-fs.target network-online.target
+
+[Service]
+Type=oneshot
+
+EnvironmentFile=/etc/default/redpanda
+
+
+EnvironmentFile=-/etc/redpanda.d/*.conf
+ExecStart=/usr/bin/rpk redpanda tune all $CPUSET
+RemainAfterExit=true
+TimeoutStartSec=900
+KillMode=process
+User=root
+SyslogLevelPrefix=false
+Slice=redpanda.slice
+
+[Install]
+WantedBy=multi-user.target

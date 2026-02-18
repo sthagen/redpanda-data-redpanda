@@ -18,6 +18,7 @@
 #include "cloud_topics/level_zero/common/producer_queue.h"
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/state_accessors.h"
@@ -1037,6 +1038,63 @@ ss::future<std::error_code> frontend::linearizable_barrier() {
         co_return raft::errc::success;
     }
     co_return r.error();
+}
+
+ss::future<std::expected<cloud_topics::cluster_epoch, frontend_errc>>
+frontend::get_current_epoch(ss::abort_source& as) noexcept {
+    auto new_epoch = co_await _data_plane->get_current_epoch(&as);
+    if (!new_epoch.has_value()) {
+        co_return std::unexpected{frontend_errc::timeout};
+    }
+    co_return new_epoch.value();
+}
+
+frontend::epoch_info frontend::get_epoch_info() const {
+    return epoch_info{
+      .estimated_inactive_epoch
+      = _ctp_stm_api->estimate_inactive_epoch().value_or(cluster_epoch::min()),
+      .max_applied_epoch = _ctp_stm_api->get_max_epoch().value_or(
+        cluster_epoch::min()),
+      .last_reconciled_log_offset
+      = _ctp_stm_api->get_last_reconciled_log_offset(),
+      .current_epoch_window_offset
+      = _ctp_stm_api->get_epoch_window_offset().value_or(model::offset{}),
+    };
+}
+
+auto frontend::advance_epoch(
+  cloud_topics::cluster_epoch new_epoch,
+  model::timeout_clock::time_point deadline)
+  -> ss::future<std::expected<epoch_info, frontend_errc>> {
+    vlog(cd_log.debug, "{}: advance epoch to {}", ntp(), new_epoch);
+
+    constexpr auto api_errc_to_fe_errc =
+      [](ctp_stm_api_errc ec) -> frontend_errc {
+        switch (ec) {
+            using enum ctp_stm_api_errc;
+        case not_leader:
+            return frontend_errc::not_leader_for_partition;
+        case shutdown:
+        case failure:
+        case timeout:
+            return frontend_errc::timeout;
+        }
+    };
+
+    ss::abort_source as;
+
+    auto result = co_await _ctp_stm_api->advance_epoch(new_epoch, deadline, as);
+    if (!result.has_value()) {
+        co_return std::unexpected{api_errc_to_fe_errc(result.error())};
+    }
+
+    auto adv_res = co_await _ctp_stm_api->sync_to_next_placeholder(
+      deadline, as);
+    if (!adv_res.has_value()) {
+        co_return std::unexpected{api_errc_to_fe_errc(adv_res.error())};
+    }
+
+    co_return get_epoch_info();
 }
 
 fmt::iterator

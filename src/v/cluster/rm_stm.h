@@ -225,7 +225,7 @@ public:
         return raft::stm_initial_recovery_policy::read_everything;
     }
 
-    bool is_last_batch_for_idempotent_producer(
+    bool is_batch_in_idempotent_window(
       const model::record_batch_header&) const override;
 
 protected:

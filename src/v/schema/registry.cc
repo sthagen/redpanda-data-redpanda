@@ -79,13 +79,14 @@ public:
     }
     ss::future<ppsr::context_schema_id>
     create_schema(ppsr::subject_schema schema) override {
+        auto ctx = schema.sub().ctx;
         auto [reader, writer] = co_await service();
         co_await writer->read_sync();
         _last_sync_time = ss::lowres_clock::now();
         auto parsed = co_await reader->make_canonical_schema(std::move(schema));
         auto result = co_await writer->write_subject_version(
           {.schema = std::move(parsed)});
-        co_return result.id;
+        co_return ppsr::context_schema_id{std::move(ctx), result.id};
     }
 
 private:
@@ -152,18 +153,20 @@ registry::get_valid_schema(ppsr::context_schema_id schema_id) const {
             co_return std::nullopt;
         }
     }
+    auto ctx_sub = ppsr::context_subject{
+      ppsr::default_context, ppsr::subject("r")};
     switch (schema_def_opt->type()) {
     case ppsr::schema_type::json: {
         co_return co_await ppsr::make_json_schema_definition(
-          *reader, {ppsr::subject("r"), std::move(*schema_def_opt)});
+          *reader, {std::move(ctx_sub), std::move(*schema_def_opt)});
     }
     case ppsr::schema_type::avro: {
         co_return co_await ppsr::make_avro_schema_definition(
-          *reader, {ppsr::subject("r"), std::move(*schema_def_opt)});
+          *reader, {std::move(ctx_sub), std::move(*schema_def_opt)});
     }
     case ppsr::schema_type::protobuf: {
         co_return co_await ppsr::make_protobuf_schema_definition(
-          *reader, {ppsr::subject("r"), std::move(*schema_def_opt)});
+          *reader, {std::move(ctx_sub), std::move(*schema_def_opt)});
     }
     }
 }

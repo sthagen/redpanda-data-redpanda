@@ -32,9 +32,9 @@ const pps::schema_definition string_def1{
 const pps::schema_definition int_def0{
   pps::make_schema_definition<json::UTF8<>>(sv_int_def0).value(),
   pps::schema_type::avro};
-const pps::subject subject0{"subject0"};
-const pps::subject subject1{"subject1"};
-const pps::subject subject2{"subject2"};
+const auto subject0 = pps::context_subject::unqualified("subject0");
+const auto subject1 = pps::context_subject::unqualified("subject1");
+const auto subject2 = pps::context_subject::unqualified("subject2");
 
 BOOST_AUTO_TEST_CASE(test_store_insert) {
     pps::store s;
@@ -73,13 +73,13 @@ BOOST_AUTO_TEST_CASE(test_store_insert) {
 /// Emulate how `sharded_store` does upserts on `store`
 bool upsert(
   pps::store& store,
-  pps::subject sub,
+  pps::context_subject sub,
   pps::schema_definition def,
   pps::schema_type,
   pps::schema_id id,
   pps::schema_version version,
   pps::is_deleted deleted) {
-    store.upsert_schema(id, std::move(def), false);
+    store.upsert_schema({sub.ctx, id}, std::move(def), false);
     return store.upsert_subject(
       pps::seq_marker{}, std::move(sub), version, id, deleted);
 }
@@ -185,7 +185,8 @@ BOOST_AUTO_TEST_CASE(test_store_upsert_override) {
 BOOST_AUTO_TEST_CASE(test_store_get_schema) {
     pps::store s;
 
-    auto res = s.get_schema_definition(pps::schema_id{1});
+    auto res = s.get_schema_definition(
+      {pps::default_context, pps::schema_id{1}});
     BOOST_REQUIRE(res.has_error());
     auto err = std::move(res).assume_error();
     BOOST_REQUIRE(err.code() == pps::error_code::schema_id_not_found);
@@ -196,7 +197,7 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema) {
     BOOST_REQUIRE_EQUAL(ins_res.id, pps::schema_id{1});
     BOOST_REQUIRE_EQUAL(ins_res.version, pps::schema_version{1});
 
-    res = s.get_schema_definition(ins_res.id);
+    res = s.get_schema_definition({pps::default_context, ins_res.id});
     BOOST_REQUIRE(res.has_value());
 
     auto def = std::move(res).assume_value();
@@ -214,12 +215,14 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema_subject_versions) {
     BOOST_REQUIRE_EQUAL(ins_res.id, pps::schema_id{1});
     BOOST_REQUIRE_EQUAL(ins_res.version, pps::schema_version{1});
 
-    auto versions = s.get_schema_subject_versions(pps::schema_id{1});
+    auto versions = s.get_schema_subject_versions(
+      {pps::default_context, pps::schema_id{1}});
     BOOST_REQUIRE_EQUAL(versions.size(), 1);
     BOOST_REQUIRE_EQUAL(versions[0].sub, subject0);
     BOOST_REQUIRE_EQUAL(versions[0].version, pps::schema_version{1});
 
-    versions = s.get_schema_subject_versions(pps::schema_id{2});
+    versions = s.get_schema_subject_versions(
+      {pps::default_context, pps::schema_id{2}});
     BOOST_REQUIRE(versions.empty());
 
     // Second insert, expect id{2}
@@ -229,7 +232,8 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema_subject_versions) {
     BOOST_REQUIRE_EQUAL(ins_res.version, pps::schema_version{2});
 
     // expect [{schema 2, version 2}]
-    versions = s.get_schema_subject_versions(pps::schema_id{2});
+    versions = s.get_schema_subject_versions(
+      {pps::default_context, pps::schema_id{2}});
     BOOST_REQUIRE_EQUAL(versions.size(), 1);
     BOOST_REQUIRE_EQUAL(versions[0].sub, subject0);
     BOOST_REQUIRE_EQUAL(versions[0].version, pps::schema_version{2});
@@ -243,7 +247,8 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema_subject_versions) {
       pps::is_deleted::yes);
 
     // expect [{{schema 2, version 2}]
-    versions = s.get_schema_subject_versions(pps::schema_id{2});
+    versions = s.get_schema_subject_versions(
+      {pps::default_context, pps::schema_id{2}});
     BOOST_REQUIRE_EQUAL(versions.size(), 1);
     BOOST_REQUIRE_EQUAL(versions[0].sub, subject0);
     BOOST_REQUIRE_EQUAL(versions[0].version, pps::schema_version{2});
@@ -265,7 +270,7 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema_subjects) {
     BOOST_REQUIRE_EQUAL(ins_res.version, pps::schema_version{1});
 
     auto subjects = s.get_schema_subjects(
-      pps::schema_id{1}, pps::include_deleted::no);
+      {pps::default_context, pps::schema_id{1}}, pps::include_deleted::no);
     BOOST_REQUIRE_EQUAL(subjects.size(), 1);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject0)), 1);
 
@@ -282,14 +287,14 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema_subjects) {
     BOOST_REQUIRE_EQUAL(ins_res.version, pps::schema_version{1});
 
     subjects = s.get_schema_subjects(
-      pps::schema_id{1}, pps::include_deleted::no);
+      {pps::default_context, pps::schema_id{1}}, pps::include_deleted::no);
     BOOST_REQUIRE_EQUAL(subjects.size(), 2);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject0)), 1);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject1)), 1);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject2)), 0);
 
     subjects = s.get_schema_subjects(
-      pps::schema_id{2}, pps::include_deleted::no);
+      {pps::default_context, pps::schema_id{2}}, pps::include_deleted::no);
     BOOST_REQUIRE_EQUAL(subjects.size(), 1);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject0)), 0);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject1)), 0);
@@ -305,12 +310,12 @@ BOOST_AUTO_TEST_CASE(test_store_get_schema_subjects) {
       pps::is_deleted::yes);
 
     subjects = s.get_schema_subjects(
-      pps::schema_id{1}, pps::include_deleted::no);
+      {pps::default_context, pps::schema_id{1}}, pps::include_deleted::no);
     BOOST_REQUIRE_EQUAL(subjects.size(), 1);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject1)), 1);
 
     subjects = s.get_schema_subjects(
-      pps::schema_id{1}, pps::include_deleted::yes);
+      {pps::default_context, pps::schema_id{1}}, pps::include_deleted::yes);
     BOOST_REQUIRE_EQUAL(subjects.size(), 2);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject0)), 1);
     BOOST_REQUIRE_EQUAL(std::ranges::count_if(subjects, is_equal(subject1)), 1);

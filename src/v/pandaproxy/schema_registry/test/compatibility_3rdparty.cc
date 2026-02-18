@@ -108,14 +108,16 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
     BOOST_REQUIRE_NO_THROW(
       c(make_record_batch(config_key_0, config_value_0, base_offset++)).get());
     BOOST_REQUIRE(
-      s.get_compatibility(pps::subject{"subject_0"}, pps::default_to_global::no)
+      s.get_compatibility(
+         pps::context_subject::unqualified("subject_0"),
+         pps::default_to_global::no)
         .get()
       == pps::compatibility_level::backward);
 
     BOOST_REQUIRE_NO_THROW(
       c(make_record_batch(schema_key_0, schema_value_0, base_offset++)).get());
     auto schema_1 = s.get_subject_schema(
-                       pps::subject{"subject_0"},
+                       pps::context_subject::unqualified("subject_0"),
                        pps::schema_version{1},
                        pps::include_deleted::no)
                       .get();
@@ -127,7 +129,10 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
       c(make_record_batch(del_sub_key_0, del_sub_value_0, base_offset++))
         .get());
     BOOST_REQUIRE_EXCEPTION(
-      s.get_versions(pps::subject{"subject_0"}, pps::include_deleted::no).get(),
+      s.get_versions(
+         pps::context_subject::unqualified("subject_0"),
+         pps::include_deleted::no)
+        .get(),
       pps::exception,
       [](const pps::exception& e) {
           return e.code() == pps::error_code::subject_not_found;
@@ -149,7 +154,10 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
 
     // Test mode no subject, no fallback
     BOOST_REQUIRE_EXCEPTION(
-      c._store.get_mode(pps::subject{"subject_0"}, pps::default_to_global::no)
+      c._store
+        .get_mode(
+          pps::context_subject::unqualified("subject_0"),
+          pps::default_to_global::no)
         .get(),
       pps::exception,
       [](const pps::exception& e) {
@@ -158,7 +166,10 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
 
     // Test mode no subject, with fallback
     BOOST_REQUIRE_EQUAL(
-      c._store.get_mode(pps::subject{"subject_0"}, pps::default_to_global::yes)
+      c._store
+        .get_mode(
+          pps::context_subject::unqualified("subject_0"),
+          pps::default_to_global::yes)
         .get(),
       pps ::mode::read_only);
 
@@ -172,13 +183,19 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
     BOOST_REQUIRE_NO_THROW(
       c(make_record_batch(mode_key_sub_0, mode_value_ro, base_offset++)).get());
     BOOST_REQUIRE_EQUAL(
-      c._store.get_mode(pps::subject{"subject_0"}, pps::default_to_global::no)
+      c._store
+        .get_mode(
+          pps::context_subject::unqualified("subject_0"),
+          pps::default_to_global::no)
         .get(),
       pps::mode::read_only);
 
     // test subject is not found
     BOOST_REQUIRE_EXCEPTION(
-      c._store.get_versions(pps::subject{"subject_0"}, pps::include_deleted::no)
+      c._store
+        .get_versions(
+          pps::context_subject::unqualified("subject_0"),
+          pps::include_deleted::no)
         .get(),
       pps::exception,
       [](const pps::exception& e) {
@@ -188,7 +205,9 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
     // test subject is not found
     BOOST_REQUIRE_EXCEPTION(
       c._store
-        .get_versions(pps::subject{"subject_0"}, pps::include_deleted::yes)
+        .get_versions(
+          pps::context_subject::unqualified("subject_0"),
+          pps::include_deleted::yes)
         .get(),
       pps::exception,
       [](const pps::exception& e) {
@@ -198,7 +217,10 @@ SEASTAR_THREAD_TEST_CASE(test_consume_to_store_3rdparty) {
     // clear mode subject override
     c(make_record_batch(mode_key_sub_0, std::nullopt, base_offset++)).get();
     BOOST_REQUIRE_EXCEPTION(
-      c._store.get_mode(pps::subject{"subject_0"}, pps::default_to_global::no)
+      c._store
+        .get_mode(
+          pps::context_subject::unqualified("subject_0"),
+          pps::default_to_global::no)
         .get(),
       pps::exception,
       [](const pps::exception& e) {

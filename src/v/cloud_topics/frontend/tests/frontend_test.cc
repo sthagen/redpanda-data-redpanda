@@ -80,6 +80,12 @@ public:
 
     MOCK_METHOD(size_t, materialize_max_bytes, (), (const, override));
 
+    MOCK_METHOD(
+      ss::future<std::optional<cloud_topics::cluster_epoch>>,
+      get_current_epoch,
+      (ss::abort_source*),
+      (noexcept, override));
+
     MOCK_METHOD(ss::future<>, start, (), (override));
 
     MOCK_METHOD(ss::future<>, stop, (), (override));
@@ -187,4 +193,64 @@ TEST_F(frontend_fixture, test_replicate_epoch) {
                      .get();
         ASSERT_FALSE(res.has_value());
     }
+}
+
+TEST_F(frontend_fixture, test_advance_epoch) {
+    // This test verifies that frontend::advance_epoch() correctly integrates
+    // with the underlying ctp_stm_api to advance the partition's epoch and
+    // return consistent epoch_info.
+    const model::topic topic_name("advance_epoch_test");
+    model::ntp ntp(model::kafka_namespace, topic_name, 0);
+
+    cluster::topic_properties props;
+    props.storage_mode = model::redpanda_storage_mode::cloud;
+    props.shadow_indexing = model::shadow_indexing_mode::disabled;
+
+    add_topic({model::kafka_namespace, topic_name}, 1, props).get();
+    wait_for_leader(ntp).get();
+
+    auto partition = app.partition_manager.local().get(ntp);
+    ASSERT_TRUE(
+      partition->raft()->stm_manager()->get<cloud_topics::ctp_stm>()
+      != nullptr);
+
+    cloud_topics::frontend frontend(std::move(partition), _data_plane.get());
+
+    // Initially, get_epoch_info should return min epochs (no data yet)
+    auto initial_info = frontend.get_epoch_info();
+    EXPECT_EQ(initial_info.max_applied_epoch, cluster_epoch::min());
+    EXPECT_EQ(initial_info.estimated_inactive_epoch, cluster_epoch::min());
+
+    // Call advance_epoch to establish epoch 5
+    auto first_advance
+      = frontend.advance_epoch(cluster_epoch(5), model::no_timeout).get();
+    ASSERT_TRUE(first_advance.has_value())
+      << "first advance_epoch should succeed";
+    EXPECT_EQ(first_advance.value().max_applied_epoch, cluster_epoch(5));
+    // first advance call reflects the new epoch right away because the stm
+    // state was empty
+    EXPECT_EQ(first_advance.value().estimated_inactive_epoch, cluster_epoch(4));
+
+    // Call advance_epoch with a higher epoch (10)
+    auto advance_result
+      = frontend.advance_epoch(cluster_epoch(10), model::no_timeout).get();
+    ASSERT_TRUE(advance_result.has_value())
+      << "advance_epoch should succeed on leader";
+
+    auto epoch_info = advance_result.value();
+    // max_applied_epoch should now be 10, inactive epoch is 4 because
+    // prev_applied_epoch is 5
+    EXPECT_EQ(epoch_info.max_applied_epoch, cluster_epoch(10));
+    EXPECT_EQ(epoch_info.estimated_inactive_epoch, cluster_epoch(4));
+
+    // advance the epoch one more time to observe lower bound sync behavior
+
+    auto final_result
+      = frontend.advance_epoch(cluster_epoch(15), model::no_timeout).get();
+    ASSERT_TRUE(final_result.has_value())
+      << "advance_epoch should succeed on leader";
+    auto final_info = final_result.value();
+    EXPECT_EQ(final_info.max_applied_epoch, cluster_epoch(15));
+    EXPECT_EQ(final_info.estimated_inactive_epoch, cluster_epoch(9));
+    EXPECT_EQ(final_info, frontend.get_epoch_info());
 }

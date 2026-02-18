@@ -33,10 +33,14 @@ bool check_compatible(
     pps::sharded_store s;
     return check_compatible(
              pps::make_avro_schema_definition(
-               s, {pps::subject("r"), {r.shared_raw(), pps::schema_type::avro}})
+               s,
+               {pps::context_subject::unqualified("r"),
+                {r.shared_raw(), pps::schema_type::avro}})
                .get(),
              pps::make_avro_schema_definition(
-               s, {pps::subject("w"), {w.shared_raw(), pps::schema_type::avro}})
+               s,
+               {pps::context_subject::unqualified("w"),
+                {w.shared_raw(), pps::schema_type::avro}})
                .get())
       .is_compat;
 }
@@ -46,10 +50,14 @@ pps::compatibility_result check_compatible_verbose(
     pps::sharded_store s;
     return check_compatible(
       pps::make_avro_schema_definition(
-        s, {pps::subject("r"), {r.shared_raw(), pps::schema_type::avro}})
+        s,
+        {pps::context_subject::unqualified("r"),
+         {r.shared_raw(), pps::schema_type::avro}})
         .get(),
       pps::make_avro_schema_definition(
-        s, {pps::subject("w"), {w.shared_raw(), pps::schema_type::avro}})
+        s,
+        {pps::context_subject::unqualified("w"),
+         {w.shared_raw(), pps::schema_type::avro}})
         .get(),
       pps::verbose::yes);
 }
@@ -266,7 +274,7 @@ SEASTAR_THREAD_TEST_CASE(test_avro_schema_definition) {
     pps::sharded_store s;
     auto valid = pps::make_avro_schema_definition(
                    s,
-                   {pps::subject("s2"),
+                   {pps::context_subject::unqualified("s2"),
                     {schema2.shared_raw(), pps::schema_type::avro}})
                    .get();
     static_assert(
@@ -292,7 +300,7 @@ SEASTAR_THREAD_TEST_CASE(test_avro_schema_definition_custom_attributes) {
     pps::sharded_store s;
     auto valid = pps::make_avro_schema_definition(
                    s,
-                   {pps::subject("s2"),
+                   {pps::context_subject::unqualified("s2"),
                     {avro_metadata_schema.shared_raw(),
                      pps::schema_type::avro}})
                    .get();

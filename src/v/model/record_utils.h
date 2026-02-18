@@ -19,6 +19,7 @@ namespace model {
 struct record_batch_header;
 class record_batch;
 class record;
+class record_metadata;
 
 void crc_record_batch_header(crc::crc32c&, const record_batch_header&);
 
@@ -32,5 +33,11 @@ uint32_t internal_header_only_crc(const record_batch_header&);
 model::record parse_one_record_from_buffer(iobuf_parser& parser);
 model::record parse_one_record_copy_from_buffer(iobuf_const_parser& parser);
 void append_record_to_buffer(iobuf& a, const model::record& r);
+
+// \brief Parses record metadata
+// If `fully_parse_record` is false then only a few fields are parsed from the
+// record. Otherwise all fields are fully parsed and validated.
+model::record_metadata parse_record_metadata_from_buffer(
+  iobuf_const_parser& p, bool fully_parse_record);
 
 } // namespace model

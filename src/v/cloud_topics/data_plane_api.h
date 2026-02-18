@@ -94,6 +94,10 @@ public:
     /// Retrieve materialized record batch from cache
     virtual std::optional<model::record_batch>
     cache_get(const model::topic_id_partition&, model::offset o) = 0;
+
+    /// Retrieve current cluster epoch
+    virtual ss::future<std::optional<cloud_topics::cluster_epoch>>
+    get_current_epoch(ss::abort_source* as) = 0;
 };
 
 } // namespace cloud_topics

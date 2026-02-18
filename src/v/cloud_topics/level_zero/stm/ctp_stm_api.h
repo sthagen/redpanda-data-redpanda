@@ -53,6 +53,9 @@ public:
     /// Get the last reconciled offset from the ctp_stm state.
     kafka::offset get_last_reconciled_offset() const;
 
+    /// Get the last reconciled log offset from the ctp_stm state
+    model::offset get_last_reconciled_log_offset() const;
+
     ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
     advance_reconciled_offset(
       kafka::offset last_reconciled_offset,
@@ -64,6 +67,18 @@ public:
       kafka::offset new_start_offset,
       model::timeout_clock::time_point deadline,
       ss::abort_source& as);
+
+    /// Fence and replicate an advance_epoch_cmd if new_epoch > max_epoch.
+    ss::future<std::expected<std::monostate, ctp_stm_api_errc>> advance_epoch(
+      cluster_epoch new_epoch,
+      model::timeout_clock::time_point deadline,
+      ss::abort_source& as);
+
+    /// Advance LRLO past any advance_epoch batches between current LRO and the
+    /// next placeholder, allowing min_epoch_lower_bound to update.
+    ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
+    sync_to_next_placeholder(
+      model::timeout_clock::time_point deadline, ss::abort_source& as);
 
     kafka::offset get_start_offset() const;
 
@@ -78,6 +93,9 @@ public:
     /// This method can return stale value but is guaranteed to eventually
     /// make forward progress.
     std::optional<cluster_epoch> estimate_inactive_epoch() const noexcept;
+
+    /// Return the log offset at which the current max applied epoch was set.
+    std::optional<model::offset> get_epoch_window_offset() const noexcept;
 
     /// Sync STM state with the log.
     ///
@@ -105,6 +123,7 @@ private:
     /// Returns the offset at which the batch was applied.
     ss::future<std::expected<model::offset, ctp_stm_api_errc>> replicated_apply(
       model::record_batch&& batch,
+      std::optional<model::term_id> expected_term,
       model::timeout_clock::time_point deadline,
       ss::abort_source&);
 

@@ -138,6 +138,10 @@ public:
         return _finished_requests;
     }
 
+    // Returns true if there exists an inflight or finished request that covers
+    // the provided sequence range.
+    bool has_request_for_seq_range(seq_t first, seq_t last) const;
+
 private:
     bool is_valid_sequence(seq_t incoming) const;
     std::optional<request_ptr> last_request() const;

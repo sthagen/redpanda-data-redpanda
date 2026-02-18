@@ -102,7 +102,8 @@ ss::future<std::optional<ss::sstring>> get_record_name(
         co_return "";
     }
 
-    subject_schema sub_schema{subject("r"), std::move(schema)};
+    subject_schema sub_schema{
+      context_subject{default_context, subject{"r"}}, std::move(schema)};
     switch (sub_schema.type()) {
     case schema_type::avro: {
         auto s = co_await make_avro_schema_definition(
@@ -222,7 +223,9 @@ public:
         // Determine the schema type
         std::optional<schema_definition> schema;
         try {
-            schema.emplace(co_await _api->_store->get_schema_definition(id));
+            schema.emplace(
+              co_await _api->_store->get_schema_definition(
+                {default_context, id}));
         } catch (const exception& ex) {
             vlog(
               srlog.debug,
@@ -273,7 +276,7 @@ public:
         auto sub = make_subject(sns, topic, field, *record_name);
 
         auto has_id = co_await _api->_store->has_version(
-          sub, id, include_deleted::yes);
+          context_subject{default_context, sub}, id, include_deleted::yes);
         if (!has_id) {
             vlog(
               srlog.debug,

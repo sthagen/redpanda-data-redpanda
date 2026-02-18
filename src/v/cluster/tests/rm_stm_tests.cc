@@ -1006,8 +1006,7 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
             if (
               b.header().type == model::record_batch_type::raft_data
               && !b.header().attrs.is_control()) {
-                BOOST_REQUIRE(
-                  stm.is_last_batch_for_idempotent_producer(b.header()));
+                BOOST_REQUIRE(stm.is_batch_in_idempotent_window(b.header()));
             }
         }
     }
@@ -1025,8 +1024,9 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
                          std::move(rdr), model::no_timeout)
                          .get();
 
-        // Expect the last non-control raft data batch to be the last batch for
-        // a producer.
+        // Expect the last non-control raft data batch to be in the idempotent
+        // window. The first batch is no longer in the window because
+        // begin_tx resets the request state.
         bool seen_first_batch = false;
         bool seen_last_batch = false;
         for (const auto& b : batches) {
@@ -1035,11 +1035,11 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
               && !b.header().attrs.is_control()) {
                 if (seen_first_batch) {
                     BOOST_REQUIRE(
-                      stm.is_last_batch_for_idempotent_producer(b.header()));
+                      stm.is_batch_in_idempotent_window(b.header()));
                     seen_last_batch = true;
                 } else {
                     BOOST_REQUIRE(
-                      !stm.is_last_batch_for_idempotent_producer(b.header()));
+                      !stm.is_batch_in_idempotent_window(b.header()));
                     seen_first_batch = true;
                 }
             }
@@ -1082,8 +1082,7 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
             if (
               b.header().type == model::record_batch_type::raft_data
               && !b.header().attrs.is_control()) {
-                BOOST_REQUIRE(
-                  stm.is_last_batch_for_idempotent_producer(b.header()));
+                BOOST_REQUIRE(stm.is_batch_in_idempotent_window(b.header()));
                 ++num_seen_raft_batches;
             }
         }
@@ -1119,8 +1118,7 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
             if (
               b.header().type
               == model::record_batch_type::compaction_placeholder) {
-                BOOST_REQUIRE(
-                  stm.is_last_batch_for_idempotent_producer(b.header()));
+                BOOST_REQUIRE(stm.is_batch_in_idempotent_window(b.header()));
                 if (b.header().producer_id == pid_zero.get_id()()) {
                     seen_placeholder_batch_pid_zero = true;
                 }

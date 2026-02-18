@@ -207,6 +207,18 @@ public:
         return _read_pipeline.local().memory_quota_capacity();
     }
 
+    ss::future<std::optional<cluster_epoch>>
+    get_current_epoch(ss::abort_source* as) noexcept final {
+        auto epoch_fut = co_await ss::coroutine::as_future(
+          _cluster_services.local().current_epoch(as));
+        if (epoch_fut.failed()) {
+            auto e = epoch_fut.get_exception();
+            vlog(_log.warn, "Failed to get cluster epoch: {}", e);
+            co_return std::nullopt;
+        }
+        co_return epoch_fut.get();
+    }
+
 private:
     ss::sharded<l0::cluster_services> _cluster_services;
     // Write path
