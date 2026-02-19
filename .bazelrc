@@ -81,6 +81,9 @@ build --per_file_copt=src/v/serde/protobuf/tests/round_trip_test.cc@-Wno-depreca
 build --per_file_copt=src/v/serde/protobuf/tests/parser_test.cc@-Wno-deprecated-declarations
 build --per_file_copt=src/v/iceberg/conversion/tests/iceberg_protobuf_tests.cc@-Wno-deprecated-declarations
 build --per_file_copt=src/v/pandaproxy/schema_registry/protobuf.cc@-Wno-deprecated-declarations
+# Suppress deprecated declarations in the protobuf external module itself
+build --per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
+build --host_per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
 
 # -base configs generally aren't meant to be used directly but are
 # helpers to DRY later user-facing configs

@@ -60,6 +60,16 @@ public:
        const download_metrics& metrics,
        std::optional<cloud_storage_clients::http_byte_range> byte_range),
       (override));
+    MOCK_METHOD(
+      (ss::future<result<
+         cloud_storage_clients::multipart_upload_ref,
+         cloud_storage_clients::error_outcome>>),
+      initiate_multipart_upload,
+      (const cloud_storage_clients::bucket_name& bucket,
+       const cloud_storage_clients::object_key& key,
+       size_t part_size,
+       retry_chain_node& parent),
+      (override));
 };
 
 ss::input_stream<char> make_report_stream(

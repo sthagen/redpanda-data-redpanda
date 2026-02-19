@@ -104,6 +104,20 @@ void client_probe::register_utilization(unsigned clients_in_use) {
 
 void client_probe::register_timeout() { _total_timeouts += 1; }
 
+void client_probe::register_multipart_create() {
+    _total_multipart_creates += 1;
+}
+
+void client_probe::register_multipart_upload() {
+    _total_multipart_uploads += 1;
+}
+
+void client_probe::register_multipart_complete() {
+    _total_multipart_completes += 1;
+}
+
+void client_probe::register_multipart_abort() { _total_multipart_aborts += 1; }
+
 void client_probe::setup_internal_metrics(
   net::metrics_disabled disable, std::span<raw_label> raw_labels) {
     namespace sm = ss::metrics;
@@ -216,6 +230,26 @@ void client_probe::setup_internal_metrics(
           sm::description(
             "Number of cloud storage client lease timeouts, usually indicating "
             "something stuck in the transport layer."),
+          labels),
+        sm::make_counter(
+          "multipart_creates",
+          [this] { return _total_multipart_creates; },
+          sm::description("Number of multipart uploads initiated"),
+          labels),
+        sm::make_counter(
+          "multipart_uploads",
+          [this] { return _total_multipart_uploads; },
+          sm::description("Number of multipart upload parts uploaded"),
+          labels),
+        sm::make_counter(
+          "multipart_completes",
+          [this] { return _total_multipart_completes; },
+          sm::description("Number of multipart uploads completed"),
+          labels),
+        sm::make_counter(
+          "multipart_aborts",
+          [this] { return _total_multipart_aborts; },
+          sm::description("Number of multipart uploads aborted"),
           labels),
       });
 }

@@ -11,6 +11,7 @@
 #pragma once
 
 #include "cloud_topics/level_one/metastore/metastore.h"
+#include "cloud_topics/types.h"
 #include "config/property.h"
 #include "model/fundamental.h"
 
@@ -59,6 +60,24 @@ public:
         virtual kafka::offset
         get_max_allowed_start_offset(const model::topic_id_partition&)
           = 0;
+
+        virtual std::optional<cloud_topics::cluster_epoch>
+        estimate_inactive_epoch(const model::topic_id_partition&) noexcept = 0;
+
+        virtual ss::future<std::optional<cloud_topics::cluster_epoch>>
+        get_current_cluster_epoch(
+          const model::topic_id_partition&, ss::abort_source*) noexcept
+          = 0;
+
+        virtual ss::future<> advance_epoch(
+          const model::topic_id_partition& tidp,
+          cloud_topics::cluster_epoch,
+          ss::abort_source*) noexcept
+          = 0;
+
+        virtual ss::future<> sync_to_next_placeholder(
+          const model::topic_id_partition& tidp, ss::abort_source*) noexcept
+          = 0;
     };
 
     // A wrapper around a source of configuration for a give topic id +
@@ -100,6 +119,8 @@ public:
     // Public for testing.
     ss::future<> do_housekeeping();
 
+    ss::future<> do_bump_epoch();
+
 private:
     ss::future<> do_loop();
     ss::future<kafka::offset> do_bytes_retention(size_t size);
@@ -116,6 +137,8 @@ private:
     config::binding<std::chrono::milliseconds> _loop_interval;
     ss::gate _gate;
     ss::abort_source _as;
+
+    std::optional<cloud_topics::cluster_epoch> _last_epoch;
 };
 
 } // namespace cloud_topics

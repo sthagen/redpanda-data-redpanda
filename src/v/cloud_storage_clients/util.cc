@@ -403,11 +403,15 @@ std::optional<iobuf> multipart_response_parser::get_part() {
             part_len = 1;
         }
     }
-    // we ran out of bytes before reaching the end delimiter OR/AND the complete
-    // boundary string appeared in the sub-response body (illegal per multipart
-    // grammar laid out in RFC 2046)
+    // We ran out of bytes before reaching the end delimiter, or the
+    // boundary string appeared inside body content without the required
+    // preceding CRLF. Per RFC 2046, boundary delimiters must be preceded
+    // by a CRLF (the CRLF is "conceptually attached to the boundary").
+    // Sub-responses that carry a body (e.g. 404 with XML error content)
+    // will have only a single CRLF between the body and the boundary,
+    // so requiring two CRLFs here would incorrectly reject valid parts.
     if (
-      delim_idx != _delim.size() || line_feed.count() < 2
+      delim_idx != _delim.size() || line_feed.count() < 1
       || _parser.bytes_left() < 2) {
         _done = true;
         return std::nullopt;
@@ -427,6 +431,14 @@ std::optional<iobuf> multipart_response_parser::get_part() {
 }
 
 void multipart_response_parser::advance_to_first_boundary() {
+    // Per RFC 2046, a multipart body may include a preamble before the first
+    // boundary delimiter. Additionally, per RFC 1341 the CRLF preceding the
+    // first boundary is part of the delimiter, meaning the body often starts
+    // with "\r\n--boundary" rather than "--boundary" directly. Azure Blob
+    // Storage batch responses are known to include such leading bytes.
+    //
+    // We scan forward through any preamble content until we find the boundary
+    // delimiter.
     size_t delim_idx = 0;
     while (!_found_first && _parser.bytes_left()) {
         auto c = _parser.consume_type<char>();
@@ -434,8 +446,15 @@ void multipart_response_parser::advance_to_first_boundary() {
             ++delim_idx;
             _found_first = delim_idx == _delim.size();
         } else {
-            // TODO(oren): I think ABS might actually put something here
-            break;
+            // Reset and keep scanning. If we had a partial match
+            // (delim_idx > 0), the current character might be the start of
+            // the real delimiter, so re-check it.
+            if (delim_idx > 0) {
+                delim_idx = 0;
+                if (c == _delim[0]) {
+                    delim_idx = 1;
+                }
+            }
         }
     }
 }

@@ -7,9 +7,11 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import json
 from typing import TypeAlias, cast
 
-from rptest.clients.admin.v2 import Admin, l0_gc_pb
+
+from rptest.clients.admin.v2 import Admin, l0_gc_pb, ntp_pb
 from rptest.context.cloud_storage import CloudStorageType
 from rptest.services.kgo_repeater_service import repeater_traffic
 from ducktape.mark import matrix
@@ -32,13 +34,18 @@ from rptest.util import expect_exception
 
 
 class CloudTopicsL0GCTestBase(RedpandaTest):
-    def __init__(self, test_context: TestContext):
+    def __init__(
+        self, test_context: TestContext, housekeeping_interval_ms: int | None = None
+    ):
         self.test_context = test_context
         si_settings = SISettings(
             test_context=test_context,
             cloud_storage_max_connections=10,
             cloud_storage_enable_remote_read=False,
             cloud_storage_enable_remote_write=False,
+            cloud_storage_housekeeping_interval_ms=housekeeping_interval_ms
+            if housekeeping_interval_ms is not None
+            else 1000,
             fast_uploads=True,
         )
         extra_rp_conf = {
@@ -74,7 +81,9 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
         )
         self.logger.info(samples)
         if samples is not None and samples.samples:
-            return int(sum(s.value for s in samples.samples))
+            deleted_total = int(sum(s.value for s in samples.samples))
+            self.logger.debug(f"{deleted_total=}")
+            return deleted_total
         return 0
 
     def produce_some(self, topics: list[str], n: int = 300):
@@ -108,15 +117,51 @@ class CloudTopicsL0GCTest(CloudTopicsL0GCTestBase):
             retry_on_exc=True,
         )
 
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=get_cloud_storage_type())
+    def test_idle_housekeeping(self, cloud_storage_type: CloudStorageType):
+        self.topics = [
+            TopicSpec(partition_count=2),
+            TopicSpec(
+                # more partitions to show per-partition epoch bump
+                partition_count=4
+            ),
+        ]
+        self.create_topics(self.topics)
+        self.logger.debug(
+            "Produce to only one topic, so only the housekeeping loop can progress the max collectible epoch"
+        )
+        self.produce_some(topics=[self.topics[0].name])
+
+        self.logger.debug(
+            f"GC should still make progress because the housekeeping loop kicks in and bumps the epoch on each {self.topics[1].name} partition"
+        )
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
+
 
 GcStatus: TypeAlias = l0_gc_pb.Status
 StatusReport: TypeAlias = dict[int, dict[int, GcStatus] | str]
+EpochInfo: TypeAlias = l0_gc_pb.EpochInfo
+EpochReport: TypeAlias = dict[str, dict[int, l0_gc_pb.EpochInfo | str]]
 
 
 class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
     """
     Integration: Admin API rpcs for starting and stopping level zero garbage collection.
     """
+
+    def __init__(self, test_context: TestContext):
+        # Use a long housekeeping interval so that the housekeeper does not
+        # auto-advance epochs during the test; we want to observe the effect
+        # of manually bumping a specific partition's epoch via Admin rpc.
+        super().__init__(
+            test_context=test_context, housekeeping_interval_ms=10 * 60 * 60 * 1000
+        )
 
     @property
     def l0_gc_client(self):
@@ -161,6 +206,43 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
             f"{len(response.results)=} != {expected_nodes=}"
         )
         return {r.node_id: r.error for r in response.results if r.error}
+
+    def gc_advance_epoch(self, topic: str, partition: int, new_epoch: int) -> EpochInfo:
+        self.logger.debug(f"Advance epoch for '{topic}/{partition}'")
+        response = self.l0_gc_client.advance_epoch(
+            l0_gc_pb.AdvanceEpochRequest(
+                partition=ntp_pb.TopicPartition(topic=topic, partition=partition),
+                new_epoch=new_epoch,
+            )
+        )
+        assert response is not None, "AdvanceEpochResponse should not be None"
+        return response.epoch
+
+    def gc_get_epoch_info(
+        self,
+        topic_partitions: list[tuple[str, int]] | None = None,
+    ) -> EpochReport:
+        if topic_partitions is None:
+            topic_partitions = [
+                (t.name, i) for t in self.topics for i in range(0, t.partition_count)
+            ]
+        self.logger.debug(f"Get epoch info for {topic_partitions=}")
+        result: dict[str, dict[int, l0_gc_pb.EpochInfo | str]] = {}
+        for topic, partition in topic_partitions:
+            if topic not in result:
+                result[topic] = {}
+            try:
+                response = self.l0_gc_client.get_epoch_info(
+                    l0_gc_pb.GetEpochInfoRequest(
+                        partition=ntp_pb.TopicPartition(
+                            topic=topic, partition=partition
+                        )
+                    )
+                )
+                result[topic][partition] = response.epoch
+            except Exception as e:
+                result[topic][partition] = str(e)
+        return result
 
     def check_statuses(
         self,
@@ -390,3 +472,133 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
         )
         errs = self.gc_pause(node_to_kill_id)
         assert len(errs) == 0, "Unexpected errors: {errs=}"
+
+    def _epoch_report_to_str(self, epochs: EpochReport, indent: int = 1) -> str:
+        def epoch_info_to_dict(info: l0_gc_pb.EpochInfo) -> dict[str, int]:
+            return {
+                "estimated_inactive_epoch": info.estimated_inactive_epoch,
+                "max_applied_epoch": info.max_applied_epoch,
+                "last_reconciled_log_offset": info.last_reconciled_log_offset,
+                "current_epoch_window_offset": info.current_epoch_window_offset,
+            }
+
+        serializable = {
+            t: {
+                p: (epoch_info_to_dict(e) if isinstance(e, l0_gc_pb.EpochInfo) else e)
+                for p, e in ps.items()
+            }
+            for t, ps in epochs.items()
+        }
+        return json.dumps(serializable, indent=indent)
+
+    def check_epochs(
+        self, epochs: EpochReport, active_topics: list[str], stalled_topics: list[str]
+    ):
+        self.logger.debug(self._epoch_report_to_str(epochs))
+        for t in self.topics:
+            assert t.name in epochs, f"Expected {t.name=} got {epochs=}"
+            ps = epochs[t.name]
+            assert all(p in ps for p in range(0, t.partition_count)), (
+                f"Expected partitions [0..{t.partition_count}] got {ps=}"
+            )
+            if t.name in active_topics:
+                # active topics should have EpochInfo with positive inactive epoch
+                assert all(
+                    isinstance(e, l0_gc_pb.EpochInfo) and e.estimated_inactive_epoch > 0
+                    for _, e in ps.items()
+                ), f"Expected EpochInfo with positive epochs for {t.name=}"
+            elif t.name in stalled_topics:
+                # Stalled topics should have EpochInfo with nonexistent estimated_inactive_epoch
+                # since no data has been reconciled
+                assert all(
+                    isinstance(e, l0_gc_pb.EpochInfo) and e.estimated_inactive_epoch < 0
+                    for _, e in ps.items()
+                ), f"Expected EpochInfo with min epoch for stalled {t.name=}"
+            else:
+                assert False, f"{t.name} not in {(active_topics + stalled_topics)=}"
+
+        return True
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_advance_epoch(self, cloud_storage_type: CloudStorageType):
+        self.topics = [
+            TopicSpec(partition_count=1),
+            TopicSpec(partition_count=1),
+        ]
+        self.create_topics(self.topics)
+        produce_topics = [t.name for t in self.topics[0:1]]
+        stalled_topic = self.topics[1].name
+        assert stalled_topic not in produce_topics, (
+            f"{stalled_topic=} in {produce_topics=}"
+        )
+
+        self.produce_some(topics=produce_topics, n=200)
+
+        # since we've produced nothing to stalled_topic, that partition will block GC
+        # from progressing. this block checks that the epoch report has the right shape
+        # and that it shows errors for all the partitions of stalled_topic
+        # NOTE: wait_until here so we don't race against reconciliation of produce_topics data.
+        # "monotonic epoch" invariant guarantees that epoch(stalled_topic) didn't advance then return to 0.
+        wait_until(
+            lambda: self.check_epochs(
+                self.gc_get_epoch_info(), produce_topics, [stalled_topic]
+            ),
+            timeout_sec=15,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+        epochs = self.gc_get_epoch_info()
+        self.check_epochs(epochs, produce_topics, [stalled_topic])
+
+        self.logger.debug(
+            f"Check that GC doesn't progress despite reconciliation making progress on {produce_topics=}"
+        )
+        with expect_exception(TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.get_num_objects_deleted() > 0,
+                timeout_sec=30,
+                backoff_sec=5,
+                retry_on_exc=True,
+            )
+
+        epochs = self.gc_get_epoch_info()
+        self.check_epochs(epochs, produce_topics, [stalled_topic])
+
+        self.logger.debug(
+            "Force the stalled topic's epoch up to the inactive epoch of the active topic. This should unstick GC"
+        )
+        target_epoch = cast(
+            EpochInfo, epochs[produce_topics[0]][0]
+        ).estimated_inactive_epoch
+
+        new_epoch = self.gc_advance_epoch(
+            topic=stalled_topic,
+            partition=0,
+            new_epoch=target_epoch,
+        )
+        self.logger.debug(f"New EpochInfo for {stalled_topic=}: {new_epoch}")
+
+        gc_epoch = new_epoch.estimated_inactive_epoch
+        max_epoch = new_epoch.max_applied_epoch
+        epoch_offset = new_epoch.current_epoch_window_offset
+        lrlo = new_epoch.last_reconciled_log_offset
+
+        assert gc_epoch == (target_epoch - 1) and gc_epoch < max_epoch, (
+            f"Expected {gc_epoch=} == {target_epoch-1=}"
+        )
+        assert epoch_offset == lrlo and epoch_offset > 0, (
+            f"Expected 0 < ({epoch_offset=}) == ({lrlo=}) on {stalled_topic=}"
+        )
+
+        self.logger.debug(
+            f"Now that we've advanced {stalled_topic=} epoch window, GC can make progress"
+        )
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )

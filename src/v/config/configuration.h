@@ -789,6 +789,7 @@ public:
     property<double> cloud_topics_reconciliation_slowdown_blend;
     property<size_t> cloud_topics_reconciliation_max_object_size;
     property<size_t> cloud_topics_compaction_max_object_size;
+    property<size_t> cloud_topics_l1_indexing_interval;
     property<std::chrono::milliseconds> cloud_topics_compaction_interval_ms;
     bounded_property<uint64_t> cloud_topics_compaction_key_map_memory;
     property<std::chrono::milliseconds>

@@ -89,6 +89,15 @@ public:
     /// Register client timeout
     void register_timeout();
 
+    /// Register multipart upload create
+    void register_multipart_create();
+    /// Register multipart upload part uploaded
+    void register_multipart_upload();
+    /// Register multipart upload completed
+    void register_multipart_complete();
+    /// Register multipart upload aborted
+    void register_multipart_abort();
+
 private:
     struct raw_label {
         ss::sstring key;
@@ -118,6 +127,14 @@ private:
     uint64_t _pool_utilization;
     /// Total client timeouts;
     uint64_t _total_timeouts{0};
+    /// Total multipart upload creates
+    uint64_t _total_multipart_creates{0};
+    /// Total multipart upload parts uploaded
+    uint64_t _total_multipart_uploads{0};
+    /// Total multipart uploads completed
+    uint64_t _total_multipart_completes{0};
+    /// Total multipart uploads aborted
+    uint64_t _total_multipart_aborts{0};
     metrics::internal_metric_groups _metrics;
     metrics::public_metric_groups _public_metrics;
 };

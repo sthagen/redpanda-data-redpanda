@@ -20,6 +20,7 @@
 #include "model/tests/randoms.h"
 #include "test_utils/metrics.h"
 
+#include <seastar/core/manual_clock.hh>
 #include <seastar/core/scheduling.hh>
 
 #include <gmock/gmock.h>
@@ -55,16 +56,22 @@ public:
         return src;
     }
 
-    void reconcile() { _reconciler.reconcile().get(); }
+    void reconcile() {
+        // Advance the clock to ensure all topics are due for reconciliation.
+        ss::manual_clock::advance(std::chrono::hours(1));
+        _reconciler.reconcile().get();
+    }
 
     unreliable_io& io() { return _io; }
     unreliable_metastore& metastore() { return _metastore; }
-    reconciler::reconciler& reconciler() { return _reconciler; }
+    reconciler::reconciler<ss::manual_clock>& reconciler() {
+        return _reconciler;
+    }
 
 private:
     unreliable_io _io;
     unreliable_metastore _metastore;
-    reconciler::reconciler _reconciler{
+    reconciler::reconciler<ss::manual_clock> _reconciler{
       &_io, &_metastore, ss::default_scheduling_group()};
 };
 

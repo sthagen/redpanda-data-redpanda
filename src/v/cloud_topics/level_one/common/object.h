@@ -65,9 +65,9 @@ namespace cloud_topics::l1 {
 // - 0x01: partition_marker - Marks start of new partition
 // - 0x02: footer - Contains object index metadata
 //
-// Index entries are created approximately every 4MiB to enable efficient seeking by
-// offset or timestamp within a partition. The index entries are recorded within the
-// footer.
+// Index entries are created at a configurable byte interval (default 4MiB, see
+// cloud_topics_l1_indexing_interval) to enable efficient seeking by offset or
+// timestamp within a partition. The index entries are recorded within the footer.
 //
 // clang-format on
 
@@ -105,9 +105,8 @@ struct footer
             fmt::iterator format_to(fmt::iterator) const;
         };
         // Index information for l1 data, this is a snapshot of the state at a
-        // periodic interval within the partition data. For example, we can
-        // generate an index entry every ~4MiB within the partition, and store
-        // it here in the footer.
+        // periodic interval within the partition data. The interval is
+        // configurable via cloud_topics_l1_indexing_interval (default ~4MiB).
         //
         // NOTE: we're working with variably sized batches, it may not be
         // precisely every 4MiB.
@@ -259,9 +258,9 @@ public:
 
     // Options for the object_builder
     struct options {
-        constexpr static size_t default_indexing_frequency = 4_MiB;
-        // The frequency at which to index the object, in bytes.
-        size_t indexing_frequency = default_indexing_frequency;
+        constexpr static size_t default_indexing_interval = 4_MiB;
+        // The byte interval at which to index the object.
+        size_t indexing_interval = default_indexing_interval;
     };
 
     // Create a new object_builder that writes to the given output stream.

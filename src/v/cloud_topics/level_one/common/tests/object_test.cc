@@ -237,7 +237,7 @@ TEST(L1Objects, OffsetSearch) {
     };
     // All batches end up being indexed this way.
     auto [index_one, object_one] = make_object(
-      specs_by_tidp, {.indexing_frequency = 1});
+      specs_by_tidp, {.indexing_interval = 1});
 
     model::topic_id_partition tidp{test_topic_id, model::partition_id(0)};
 
@@ -269,7 +269,7 @@ TEST(L1Objects, OffsetSearch) {
 
     // Index only the middle batches in partition 1
     auto [index_two, object_two] = make_object(
-      specs_by_tidp, {.indexing_frequency = 3_KiB});
+      specs_by_tidp, {.indexing_interval = 3_KiB});
 
     tidp.partition = model::partition_id(1);
 
@@ -338,7 +338,7 @@ TEST(L1Objects, TimestampSearch) {
     };
     // Every batch is indexed, except the first.
     auto [index_one, object_one] = make_object(
-      specs_by_tidp, {.indexing_frequency = 1});
+      specs_by_tidp, {.indexing_interval = 1});
 
     auto tidp = model::topic_id_partition(
       test_topic_id, model::partition_id(0));

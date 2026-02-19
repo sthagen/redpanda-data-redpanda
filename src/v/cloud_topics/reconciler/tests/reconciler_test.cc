@@ -20,6 +20,7 @@
 #include "model/tests/randoms.h"
 #include "test_utils/scoped_config.h"
 
+#include <seastar/core/manual_clock.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/util/defer.hh>
 
@@ -58,7 +59,14 @@ public:
         return src;
     }
 
-    void reconcile() { _reconciler.reconcile().get(); }
+    void reconcile() {
+        // Advance the clock to ensure all topics are due for reconciliation.
+        ss::manual_clock::advance(std::chrono::hours(1));
+        _reconciler.reconcile().get();
+    }
+
+    // Call reconcile without advancing the clock.
+    void reconcile_without_advancing_clock() { _reconciler.reconcile().get(); }
 
     std::optional<kafka::offset>
     metastore_next_offset(ss::shared_ptr<fake_source> src) {
@@ -72,10 +80,17 @@ public:
     unreliable_metastore& metastore() { return _metastore; }
     unreliable_io& io() { return _io; }
 
+    // Advance the manual clock to make topics due for reconciliation.
+    void advance_clock() {
+        // Advance past the max reconciliation interval to ensure topics are
+        // due.
+        ss::manual_clock::advance(std::chrono::hours(1));
+    }
+
 protected:
     unreliable_io _io;
     unreliable_metastore _metastore;
-    reconciler::reconciler _reconciler;
+    reconciler::reconciler<ss::manual_clock> _reconciler;
 };
 
 using ::testing::Optional;
@@ -575,4 +590,63 @@ TEST_F(ReconcilerTest, OffsetAndTimestampTracking) {
                            .get();
     EXPECT_FALSE(obj_beyond_ts.has_value());
     EXPECT_EQ(obj_beyond_ts.error(), l1::metastore::errc::out_of_range);
+}
+
+TEST_F(ReconcilerTest, TopicNotDueIsNotReconciled) {
+    auto src = add_source();
+    src->add_batch({.count = 10});
+
+    // First reconcile - topic is due because it's new (last_reconciled =
+    // time_point::min()).
+    reconcile();
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{9});
+
+    // Add more data.
+    src->add_batch({.count = 10});
+
+    // Reconcile without advancing clock - topic is not due yet.
+    reconcile_without_advancing_clock();
+
+    // LRO should not have advanced because the topic wasn't due.
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{9});
+
+    // Now advance clock and reconcile again.
+    reconcile();
+
+    // Now the data should be reconciled.
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{19});
+}
+
+TEST_F(ReconcilerTest, OnlyDueTopicIsReconciled) {
+    // Create topic1 and reconcile it.
+    const model::topic tp1{"topic1"};
+    const model::topic_id tid1 = model::topic_id::create();
+    auto src1 = add_source(tp1, tid1);
+    src1->add_batch({.count = 10});
+
+    reconcile();
+    EXPECT_EQ(src1->last_reconciled_offset(), kafka::offset{9});
+
+    // Add more data to topic1.
+    src1->add_batch({.count = 10});
+
+    // Now create topic2 - it will be immediately due since it's new.
+    const model::topic tp2{"topic2"};
+    const model::topic_id tid2 = model::topic_id::create();
+    auto src2 = add_source(tp2, tid2);
+    src2->add_batch({.count = 20});
+
+    // Reconcile without advancing clock.
+    // Topic2 should be reconciled (new topic, immediately due).
+    // Topic1 should NOT be reconciled (not due yet).
+    reconcile_without_advancing_clock();
+
+    // Topic1's LRO should not have advanced.
+    EXPECT_EQ(src1->last_reconciled_offset(), kafka::offset{9});
+    // Topic2 should be fully reconciled.
+    EXPECT_EQ(src2->last_reconciled_offset(), kafka::offset{19});
+
+    // Now advance clock and reconcile - topic1 should now be reconciled.
+    reconcile();
+    EXPECT_EQ(src1->last_reconciled_offset(), kafka::offset{19});
 }

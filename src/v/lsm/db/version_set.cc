@@ -288,9 +288,9 @@ ss::future<> version::add_iterators(
         ++non_empty_levels;
         iters->push_back(create_concatenating_iterator(level.number));
     }
-    // If there are no files outside of L0, we need to keep a reference to
-    // this version to prevent GC from running and assuming there are no files
-    // being used in this version anymore.
+    // L0 readers don't capture a reference to the version, but other levels do
+    // capture a reference. If we only collected L0 files then we need to add a
+    // dummy iterator to capture the reference.
     if (non_empty_levels == 0) {
         iters->push_back(
           std::make_unique<version_lifetime_iterator>(shared_from_this()));
@@ -982,11 +982,13 @@ fmt::iterator compaction::format_to(fmt::iterator it) const {
       _level,
       fmt::join(
         std::views::transform(
-          _inputs[0], [](const auto& file) { return file->handle; }),
+          _inputs[which::input_level],
+          [](const auto& file) { return file->handle; }),
         ","),
       fmt::join(
         std::views::transform(
-          _inputs[1], [](const auto& file) { return file->handle; }),
+          _inputs[which::output_level],
+          [](const auto& file) { return file->handle; }),
         ","),
       fmt::join(
         std::views::transform(

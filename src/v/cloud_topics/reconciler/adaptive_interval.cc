@@ -10,11 +10,15 @@
 
 #include "cloud_topics/reconciler/adaptive_interval.h"
 
+#include <seastar/core/lowres_clock.hh>
+#include <seastar/core/manual_clock.hh>
+
 #include <algorithm>
 
 namespace cloud_topics::reconciler {
 
-adaptive_interval::adaptive_interval(
+template<class Clock>
+adaptive_interval<Clock>::adaptive_interval(
   config::binding<std::chrono::milliseconds> min_interval,
   config::binding<std::chrono::milliseconds> max_interval,
   config::binding<double> target_fill_ratio,
@@ -29,14 +33,15 @@ adaptive_interval::adaptive_interval(
   , _max_object_size(std::move(max_object_size))
   , _current_interval(_min_interval()) {}
 
-void adaptive_interval::adapt(size_t max_bytes_produced) {
+template<class Clock>
+void adaptive_interval<Clock>::adapt(size_t max_bytes_produced) {
     auto target_object_size = static_cast<double>(_max_object_size())
                               * _target_fill_ratio();
 
     // Compute ideal interval based on how far off we were from target.
-    ss::lowres_clock::duration ideal_interval;
+    duration ideal_interval;
     if (max_bytes_produced == 0) {
-        ideal_interval = _max_interval();
+        ideal_interval = duration(_max_interval());
     } else {
         // If actual < target, ratio > 1, so interval increases.
         // If actual > target, ratio < 1, so interval decreases.
@@ -44,7 +49,7 @@ void adaptive_interval::adapt(size_t max_bytes_produced) {
                        / static_cast<double>(max_bytes_produced);
         auto current_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
           _current_interval);
-        ideal_interval = std::chrono::duration_cast<ss::lowres_clock::duration>(
+        ideal_interval = std::chrono::duration_cast<duration>(
           std::chrono::duration<double, std::milli>(
             current_ms.count() * ratio));
     }
@@ -61,16 +66,21 @@ void adaptive_interval::adapt(size_t max_bytes_produced) {
       ideal_interval);
     auto blended_ms = std::chrono::duration<double, std::milli>(
       (1.0 - blend) * current_ms.count() + blend * ideal_ms.count());
-    _current_interval = std::chrono::duration_cast<ss::lowres_clock::duration>(
-      blended_ms);
+    _current_interval = std::chrono::duration_cast<duration>(blended_ms);
 
-    auto min = ss::lowres_clock::duration(_min_interval());
-    auto max = ss::lowres_clock::duration(_max_interval());
+    auto min = duration(_min_interval());
+    auto max = duration(_max_interval());
     _current_interval = std::clamp(_current_interval, min, max);
 }
 
-ss::lowres_clock::duration adaptive_interval::current_interval() const {
+template<class Clock>
+typename adaptive_interval<Clock>::duration
+adaptive_interval<Clock>::current_interval() const {
     return _current_interval;
 }
+
+// Explicit template instantiations.
+template class adaptive_interval<ss::lowres_clock>;
+template class adaptive_interval<ss::manual_clock>;
 
 } // namespace cloud_topics::reconciler

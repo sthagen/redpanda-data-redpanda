@@ -32,7 +32,7 @@ constexpr double default_slowdown_blend = 0.4;
 // Number of rounds to run when expecting the interval to stabilize.
 constexpr int many_rounds = 10000;
 
-adaptive_interval make_test_scheduler(
+adaptive_interval<> make_test_scheduler(
   std::chrono::milliseconds min_interval = default_min_interval,
   std::chrono::milliseconds max_interval = default_max_interval,
   double target_fill = default_target_fill,
@@ -47,7 +47,7 @@ adaptive_interval make_test_scheduler(
       config::mock_binding<size_t>(max_object_size)};
 }
 
-double interval_ms(const adaptive_interval& scheduler) {
+double interval_ms(const adaptive_interval<>& scheduler) {
     return std::chrono::duration<double, std::milli>(
              scheduler.current_interval())
       .count();
@@ -55,7 +55,7 @@ double interval_ms(const adaptive_interval& scheduler) {
 
 // Run many adaptation rounds at a fixed data rate until interval stabilizes.
 // Each round produces bytes = data_rate * interval, capped at max_object_size.
-void stabilize(adaptive_interval& scheduler, double data_rate_mib_per_sec) {
+void stabilize(adaptive_interval<>& scheduler, double data_rate_mib_per_sec) {
     constexpr double MiB = 1024 * 1024;
     for (int i = 0; i < many_rounds; i++) {
         double interval_sec = interval_ms(scheduler) / 1000.0;

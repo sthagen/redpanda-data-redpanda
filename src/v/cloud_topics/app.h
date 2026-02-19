@@ -77,7 +77,7 @@ public:
     ss::sharded<l1::leader_router>* get_sharded_l1_metastore_router();
     ss::sharded<state_accessors>* get_state();
     ss::sharded<l1::domain_supervisor>* get_sharded_l1_domain_supervisor();
-    ss::sharded<reconciler::reconciler>* get_reconciler();
+    ss::sharded<reconciler::reconciler<>>* get_reconciler();
     ss::sharded<l1::replicated_metastore>* get_sharded_replicated_metastore();
     l1::compaction_scheduler* get_compaction_scheduler();
     ss::sharded<level_zero_gc>* get_level_zero_gc();
@@ -93,7 +93,7 @@ private:
     ss::sharded<state_accessors> state;
     ss::sharded<l1::file_io> l1_io;
     ss::sharded<l1::replicated_metastore> replicated_metastore;
-    ss::sharded<reconciler::reconciler> reconciler;
+    ss::sharded<reconciler::reconciler<>> reconciler;
     ss::sharded<l1::domain_supervisor> domain_supervisor;
     ss::sharded<l1::leader_router> l1_metastore_router;
     ss::sharded<l1::topic_purger_manager> topic_purge_manager;

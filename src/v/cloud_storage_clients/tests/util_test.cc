@@ -529,6 +529,89 @@ TEST(FullMultipartParsing, WithErrors) {
     EXPECT_TRUE(is_ok_results[2]);
 }
 
+TEST(FullMultipartParsing, WithErrorBodies) {
+    using namespace cloud_storage_clients;
+
+    // Reproduce the real Azure response format: successful 202 responses have
+    // no body, but 404 BlobNotFound responses include an XML error body. The
+    // XML body means only a single CRLF appears between the body content and
+    // the next boundary delimiter, which the parser must handle correctly.
+    std::string_view batch_response
+      = "--batchresponse_abc123\r\n"
+        "Content-Type: application/http\r\n"
+        "Content-ID: 0\r\n"
+        "\r\n"
+        "HTTP/1.1 202 Accepted\r\n"
+        "x-ms-delete-type-permanent: true\r\n"
+        "x-ms-request-id: req-0\r\n"
+        "x-ms-version: 2023-01-03\r\n"
+        "Server: Windows-Azure-Blob/1.0\r\n"
+        "\r\n"
+        "--batchresponse_abc123\r\n"
+        "Content-Type: application/http\r\n"
+        "Content-ID: 1\r\n"
+        "\r\n"
+        "HTTP/1.1 404 The specified blob does not exist.\r\n"
+        "x-ms-error-code: BlobNotFound\r\n"
+        "x-ms-request-id: req-1\r\n"
+        "x-ms-version: 2023-01-03\r\n"
+        "Content-Length: 216\r\n"
+        "Content-Type: application/xml\r\n"
+        "Server: Windows-Azure-Blob/1.0\r\n"
+        "\r\n"
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+        "<Error><Code>BlobNotFound</Code>"
+        "<Message>The specified blob does not exist.\n"
+        "RequestId:req-1\n"
+        "Time:2026-02-18T18:57:50.264Z</Message></Error>\r\n"
+        "--batchresponse_abc123\r\n"
+        "Content-Type: application/http\r\n"
+        "Content-ID: 2\r\n"
+        "\r\n"
+        "HTTP/1.1 202 Accepted\r\n"
+        "x-ms-delete-type-permanent: true\r\n"
+        "x-ms-request-id: req-2\r\n"
+        "x-ms-version: 2023-01-03\r\n"
+        "Server: Windows-Azure-Blob/1.0\r\n"
+        "\r\n"
+        "--batchresponse_abc123--\r\n";
+
+    auto buf = iobuf::from(batch_response);
+
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--batchresponse_abc123"));
+
+    std::vector<bool> is_ok_results;
+    std::vector<std::optional<int>> content_ids;
+
+    std::optional<iobuf> part;
+    while ((part = parser.get_part()).has_value()) {
+        iobuf_parser part_parser(std::move(part).value());
+
+        auto mime = util::mime_header::from(part_parser);
+        content_ids.push_back(mime.content_id<int>(convert_cid));
+
+        auto subresponse = util::multipart_subresponse::from(part_parser);
+        is_ok_results.push_back(subresponse.is_ok());
+    }
+
+    ASSERT_EQ(is_ok_results.size(), 3)
+      << "Expected 3 parts (parser must handle sub-responses with bodies)";
+    ASSERT_EQ(content_ids.size(), 3);
+
+    // First: 202 Accepted (no body)
+    EXPECT_EQ(content_ids[0].value(), 0);
+    EXPECT_TRUE(is_ok_results[0]);
+
+    // Second: 404 BlobNotFound (XML body)
+    EXPECT_EQ(content_ids[1].value(), 1);
+    EXPECT_TRUE(is_ok_results[1]) << "404 is OK for delete operations";
+
+    // Third: 202 Accepted (no body, after part with body)
+    EXPECT_EQ(content_ids[2].value(), 2);
+    EXPECT_TRUE(is_ok_results[2]);
+}
+
 // ----------------------------------------------------------------------------
 // Malformed MIME header tests
 // ----------------------------------------------------------------------------
@@ -759,10 +842,12 @@ TEST(MultipartMalformed, BoundaryWithExtraDashes) {
 TEST(MultipartMalformed, MissingCrlfBeforeBoundary) {
     using namespace cloud_storage_clients;
 
-    // Missing CRLF before boundary delimiter
+    // Boundary embedded in content without preceding CRLF. Per RFC 2046,
+    // the CRLF before the boundary is "conceptually attached to the
+    // boundary" and must be present. Without it, the boundary string
+    // is just part of the content.
     std::string_view multipart_data = "--boundary\r\n"
-                                      "First part\r\n"
-                                      "--boundary\r\n" // No CRLF before this
+                                      "First part--boundary\r\n"
                                       "Second part\r\n"
                                       "\r\n"
                                       "--boundary--\r\n";
@@ -772,8 +857,8 @@ TEST(MultipartMalformed, MissingCrlfBeforeBoundary) {
     util::multipart_response_parser parser(
       std::move(buf), ss::sstring("--boundary"));
 
-    // Missing CRLF before boundary is equivalent to finding the boundary in the
-    // message, which is illegal per RFC 2046
+    // The boundary in "First part--boundary" has no preceding CRLF, so the
+    // parser treats it as embedded content and does not split on it
     auto part1 = parser.get_part();
     EXPECT_FALSE(part1.has_value());
 }
@@ -953,4 +1038,165 @@ TEST(FindMultipartBoundary, EmptyBoundaryParameter) {
     EXPECT_FALSE(result.has_value()) << result.value();
     EXPECT_THAT(
       result.error(), testing::HasSubstr("Boundary missing from multipart"));
+}
+
+// ============================================================================
+// Preamble handling tests
+//
+// Per RFC 2046, a multipart body may include a "preamble" before the first
+// boundary delimiter. Per RFC 1341, the CRLF preceding the first boundary is
+// part of the delimiter, so the body often starts with "\r\n--boundary".
+// Azure Blob Storage batch responses and the Azure .NET SDK explicitly handle
+// this case.
+// ============================================================================
+
+TEST(MultipartPreamble, CrlfBeforeBoundary) {
+    using namespace cloud_storage_clients;
+
+    // Body starts with \r\n before the first --boundary (per RFC 1341)
+    std::string_view multipart_data = "\r\n--boundary\r\n"
+                                      "Content-Type: text/plain\r\n"
+                                      "\r\n"
+                                      "Hello World\r\n"
+                                      "\r\n"
+                                      "--boundary--\r\n";
+
+    auto buf = iobuf::from(multipart_data);
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--boundary"));
+
+    auto part = parser.get_part();
+    ASSERT_TRUE(part.has_value());
+
+    auto content = part.value().linearize_to_string();
+    EXPECT_THAT(content, testing::HasSubstr("Content-Type: text/plain"));
+    EXPECT_THAT(content, testing::HasSubstr("Hello World"));
+
+    EXPECT_FALSE(parser.get_part().has_value());
+}
+
+TEST(MultipartPreamble, MultipleCrlfBeforeBoundary) {
+    using namespace cloud_storage_clients;
+
+    // Multiple CRLFs before the boundary
+    std::string_view multipart_data = "\r\n\r\n\r\n--boundary\r\n"
+                                      "Content-ID: 0\r\n"
+                                      "\r\n"
+                                      "Part data\r\n"
+                                      "\r\n"
+                                      "--boundary--\r\n";
+
+    auto buf = iobuf::from(multipart_data);
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--boundary"));
+
+    auto part = parser.get_part();
+    ASSERT_TRUE(part.has_value());
+
+    auto content = part.value().linearize_to_string();
+    EXPECT_THAT(content, testing::HasSubstr("Part data"));
+
+    EXPECT_FALSE(parser.get_part().has_value());
+}
+
+TEST(MultipartPreamble, WhitespaceBeforeBoundary) {
+    using namespace cloud_storage_clients;
+
+    // Whitespace (spaces/tabs) before the boundary
+    std::string_view multipart_data = "  \t --boundary\r\n"
+                                      "Content-ID: 0\r\n"
+                                      "\r\n"
+                                      "Part data\r\n"
+                                      "\r\n"
+                                      "--boundary--\r\n";
+
+    auto buf = iobuf::from(multipart_data);
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--boundary"));
+
+    auto part = parser.get_part();
+    ASSERT_TRUE(part.has_value());
+
+    auto content = part.value().linearize_to_string();
+    EXPECT_THAT(content, testing::HasSubstr("Part data"));
+
+    EXPECT_FALSE(parser.get_part().has_value());
+}
+
+TEST(MultipartPreamble, TextPreambleBeforeBoundary) {
+    using namespace cloud_storage_clients;
+
+    // RFC 2046 allows arbitrary preamble text before the first boundary.
+    // "This is often used to include an explanatory note to non-MIME
+    // conformant readers."
+    std::string_view multipart_data = "This is a preamble.\r\n"
+                                      "--boundary\r\n"
+                                      "Content-ID: 0\r\n"
+                                      "\r\n"
+                                      "First part\r\n"
+                                      "\r\n"
+                                      "--boundary\r\n"
+                                      "Content-ID: 1\r\n"
+                                      "\r\n"
+                                      "Second part\r\n"
+                                      "\r\n"
+                                      "--boundary--\r\n";
+
+    auto buf = iobuf::from(multipart_data);
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--boundary"));
+
+    auto part1 = parser.get_part();
+    ASSERT_TRUE(part1.has_value());
+    EXPECT_THAT(
+      part1.value().linearize_to_string(), testing::HasSubstr("First part"));
+
+    auto part2 = parser.get_part();
+    ASSERT_TRUE(part2.has_value());
+    EXPECT_THAT(
+      part2.value().linearize_to_string(), testing::HasSubstr("Second part"));
+
+    EXPECT_FALSE(parser.get_part().has_value());
+}
+
+TEST(MultipartPreamble, CrlfBeforeBoundaryFullIntegration) {
+    using namespace cloud_storage_clients;
+
+    // Simulate a realistic Azure batch response with leading CRLF
+    std::string_view batch_response = "\r\n--batchresponse_abc123\r\n"
+                                      "Content-Type: application/http\r\n"
+                                      "Content-ID: 0\r\n"
+                                      "\r\n"
+                                      "HTTP/1.1 202 Accepted\r\n"
+                                      "x-ms-request-id: req-0\r\n"
+                                      "\r\n"
+                                      "--batchresponse_abc123\r\n"
+                                      "Content-Type: application/http\r\n"
+                                      "Content-ID: 1\r\n"
+                                      "\r\n"
+                                      "HTTP/1.1 202 Accepted\r\n"
+                                      "x-ms-request-id: req-1\r\n"
+                                      "\r\n"
+                                      "--batchresponse_abc123--\r\n";
+
+    auto buf = iobuf::from(batch_response);
+    util::multipart_response_parser parser(
+      std::move(buf), ss::sstring("--batchresponse_abc123"));
+
+    int successful_parts = 0;
+    std::optional<iobuf> part;
+    while ((part = parser.get_part()).has_value()) {
+        iobuf_parser part_parser(std::move(part).value());
+        auto mime = util::mime_header::from(part_parser);
+        auto content_id = mime.content_id<int>(convert_cid);
+        EXPECT_TRUE(content_id.has_value());
+
+        auto subresponse = util::multipart_subresponse::from(part_parser);
+        EXPECT_TRUE(subresponse.is_ok());
+        EXPECT_EQ(subresponse.result(), boost::beast::http::status::accepted);
+
+        successful_parts++;
+    }
+
+    EXPECT_EQ(successful_parts, 2);
 }

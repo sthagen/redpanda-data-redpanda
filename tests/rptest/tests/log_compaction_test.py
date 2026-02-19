@@ -1039,11 +1039,24 @@ class LogCompactionTxRemovalUpgradeTestBase(LogCompactionTxRemovalTestBase):
         super().__init__(test_context)
         self.initial_version: RedpandaVersion = initial_version
 
+    # Transaction timeout long enough to survive the upgrade phase which
+    # may involve downloading intermediate versions.
+    TX_TIMEOUT_MS = 300000
+
     def setUp(self):
         self.redpanda._installer.start()
         self.redpanda._installer.install(self.redpanda.nodes, self.initial_version)
         self.redpanda.start()
         self.admin = Admin(self.redpanda)
+
+    def make_tx_producer(self, transactional_id):
+        return ck.Producer(
+            {
+                "bootstrap.servers": self.redpanda.brokers(),
+                "transactional.id": transactional_id,
+                "transaction.timeout.ms": self.TX_TIMEOUT_MS,
+            }
+        )
 
     def upgrade_to_version(self, target_version):
         def logical_version():
@@ -1098,12 +1111,7 @@ class LogCompactionTxRemovalUpgradeTestBase(LogCompactionTxRemovalTestBase):
 
         # Produce multiple-segment transactional data without closing transactions.
         producers = [
-            ck.Producer(
-                {
-                    "bootstrap.servers": self.redpanda.brokers(),
-                    "transactional.id": f"tx_producer_{producer_id}",
-                }
-            )
+            self.make_tx_producer(f"tx_producer_{producer_id}")
             for producer_id in [0, 1]
         ]
         for p in producers:
@@ -1173,12 +1181,7 @@ class LogCompactionTxRemovalUpgradeTestBase(LogCompactionTxRemovalTestBase):
         )
 
         # produce tx data in segment 1 and commit around segment 9
-        tx_producer = ck.Producer(
-            {
-                "bootstrap.servers": self.redpanda.brokers(),
-                "transactional.id": "tx_producer",
-            }
-        )
+        tx_producer = self.make_tx_producer("tx_producer")
         tx_producer.init_transactions()
         tx_producer.begin_transaction()
 

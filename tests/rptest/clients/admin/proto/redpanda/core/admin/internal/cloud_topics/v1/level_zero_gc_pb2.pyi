@@ -21,6 +21,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+from ........ import proto
 import sys
 import typing
 if sys.version_info >= (3, 10):
@@ -255,3 +256,109 @@ class PauseResult(google.protobuf.message.Message):
     def WhichOneof(self, oneof_group: typing.Literal['_error', b'_error']) -> typing.Literal['error'] | None:
         ...
 Global___PauseResult: typing_extensions.TypeAlias = PauseResult
+
+@typing.final
+class AdvanceEpochRequest(google.protobuf.message.Message):
+    """Request to advance a partition to the current cluster epoch."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    PARTITION_FIELD_NUMBER: builtins.int
+    NEW_EPOCH_FIELD_NUMBER: builtins.int
+    new_epoch: builtins.int
+
+    @property
+    def partition(self) -> proto.redpanda.core.common.v1.ntp_pb2.TopicPartition:
+        ...
+
+    def __init__(self, *, partition: proto.redpanda.core.common.v1.ntp_pb2.TopicPartition | None=..., new_epoch: builtins.int=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['partition', b'partition']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['new_epoch', b'new_epoch', 'partition', b'partition']) -> None:
+        ...
+Global___AdvanceEpochRequest: typing_extensions.TypeAlias = AdvanceEpochRequest
+
+@typing.final
+class AdvanceEpochResponse(google.protobuf.message.Message):
+    """Response containing epoch state after a successful advance."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    EPOCH_FIELD_NUMBER: builtins.int
+
+    @property
+    def epoch(self) -> Global___EpochInfo:
+        ...
+
+    def __init__(self, *, epoch: Global___EpochInfo | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['epoch', b'epoch']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['epoch', b'epoch']) -> None:
+        ...
+Global___AdvanceEpochResponse: typing_extensions.TypeAlias = AdvanceEpochResponse
+
+@typing.final
+class GetEpochInfoRequest(google.protobuf.message.Message):
+    """Request epoch info for a single partition."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    PARTITION_FIELD_NUMBER: builtins.int
+
+    @property
+    def partition(self) -> proto.redpanda.core.common.v1.ntp_pb2.TopicPartition:
+        ...
+
+    def __init__(self, *, partition: proto.redpanda.core.common.v1.ntp_pb2.TopicPartition | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['partition', b'partition']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['partition', b'partition']) -> None:
+        ...
+Global___GetEpochInfoRequest: typing_extensions.TypeAlias = GetEpochInfoRequest
+
+@typing.final
+class GetEpochInfoResponse(google.protobuf.message.Message):
+    """Response with epoch info for the requested partition."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    EPOCH_FIELD_NUMBER: builtins.int
+
+    @property
+    def epoch(self) -> Global___EpochInfo:
+        ...
+
+    def __init__(self, *, epoch: Global___EpochInfo | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['epoch', b'epoch']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['epoch', b'epoch']) -> None:
+        ...
+Global___GetEpochInfoResponse: typing_extensions.TypeAlias = GetEpochInfoResponse
+
+@typing.final
+class EpochInfo(google.protobuf.message.Message):
+    """Epoch state snapshot for a cloud topic partition."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ESTIMATED_INACTIVE_EPOCH_FIELD_NUMBER: builtins.int
+    MAX_APPLIED_EPOCH_FIELD_NUMBER: builtins.int
+    LAST_RECONCILED_LOG_OFFSET_FIELD_NUMBER: builtins.int
+    CURRENT_EPOCH_WINDOW_OFFSET_FIELD_NUMBER: builtins.int
+    estimated_inactive_epoch: builtins.int
+    'Largest epoch no longer referenced by the partition.'
+    max_applied_epoch: builtins.int
+    'Highest epoch applied to the partition STM.'
+    last_reconciled_log_offset: builtins.int
+    'Log offset of the last reconciled record.'
+    current_epoch_window_offset: builtins.int
+    'Log offset at which max_applied_epoch was set.'
+
+    def __init__(self, *, estimated_inactive_epoch: builtins.int=..., max_applied_epoch: builtins.int=..., last_reconciled_log_offset: builtins.int=..., current_epoch_window_offset: builtins.int=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['current_epoch_window_offset', b'current_epoch_window_offset', 'estimated_inactive_epoch', b'estimated_inactive_epoch', 'last_reconciled_log_offset', b'last_reconciled_log_offset', 'max_applied_epoch', b'max_applied_epoch']) -> None:
+        ...
+Global___EpochInfo: typing_extensions.TypeAlias = EpochInfo

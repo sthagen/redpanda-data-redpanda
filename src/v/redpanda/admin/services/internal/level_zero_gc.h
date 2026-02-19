@@ -11,12 +11,17 @@
 #pragma once
 
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
+#include "cluster/fwd.h"
 #include "cluster/members_table.h"
 #include "proto/redpanda/core/admin/internal/cloud_topics/v1/level_zero_gc.proto.h"
 #include "redpanda/admin/proxy/client.h"
 #include "redpanda/admin/proxy/context.h"
 
 #include <seastar/core/sharded.hh>
+
+namespace cloud_topics {
+class frontend;
+}
 
 namespace admin {
 
@@ -48,7 +53,10 @@ public:
       model::node_id self,
       admin::proxy::client pc,
       ss::sharded<cloud_topics::level_zero_gc>* gc,
-      ss::sharded<cluster::members_table>* mt);
+      ss::sharded<cluster::members_table>* mt,
+      ss::sharded<cluster::partition_manager>* pm,
+      ss::sharded<cluster::partition_leaders_table>* pl,
+      ss::sharded<cluster::shard_table>* st);
 
     seastar::future<proto::admin::level_zero_gc::get_status_response>
       get_status(
@@ -62,6 +70,16 @@ public:
     seastar::future<proto::admin::level_zero_gc::pause_response> pause(
       serde::pb::rpc::context,
       proto::admin::level_zero_gc::pause_request) override;
+
+    seastar::future<proto::admin::level_zero_gc::advance_epoch_response>
+      advance_epoch(
+        serde::pb::rpc::context,
+        proto::admin::level_zero_gc::advance_epoch_request) override;
+
+    seastar::future<proto::admin::level_zero_gc::get_epoch_info_response>
+      get_epoch_info(
+        serde::pb::rpc::context,
+        proto::admin::level_zero_gc::get_epoch_info_request) override;
 
 private:
     using apply_local = ss::bool_class<struct apply_local_tag>;
@@ -162,6 +180,9 @@ private:
     admin::proxy::client _proxy_client;
     ss::sharded<cloud_topics::level_zero_gc>* _gc;
     ss::sharded<cluster::members_table>* _members_table;
+    ss::sharded<cluster::partition_manager>* _partition_manager;
+    ss::sharded<cluster::partition_leaders_table>* _partition_leaders;
+    ss::sharded<cluster::shard_table>* _shard_table;
 };
 
 } // namespace admin

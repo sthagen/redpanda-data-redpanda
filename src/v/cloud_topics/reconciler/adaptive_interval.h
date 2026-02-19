@@ -35,8 +35,11 @@ namespace cloud_topics::reconciler {
  *
  * To disable adaptive scheduling, set min_interval == max_interval.
  */
+template<class Clock = ss::lowres_clock>
 class adaptive_interval {
 public:
+    using duration = typename Clock::duration;
+
     adaptive_interval(
       config::binding<std::chrono::milliseconds> min_interval,
       config::binding<std::chrono::milliseconds> max_interval,
@@ -56,7 +59,7 @@ public:
     /**
      * Get the current interval to use for the next sleep.
      */
-    ss::lowres_clock::duration current_interval() const;
+    duration current_interval() const;
 
 private:
     config::binding<std::chrono::milliseconds> _min_interval;
@@ -66,7 +69,7 @@ private:
     config::binding<double> _slowdown_blend;
     config::binding<size_t> _max_object_size;
 
-    ss::lowres_clock::duration _current_interval;
+    duration _current_interval;
 };
 
 } // namespace cloud_topics::reconciler

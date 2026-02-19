@@ -60,14 +60,80 @@ public:
         return _max_allowed_start_offset;
     }
 
+    std::optional<cloud_topics::cluster_epoch> estimate_inactive_epoch(
+      const model::topic_id_partition&) noexcept override {
+        return _estimated_inactive_epoch;
+    }
+
+    ss::future<std::optional<cloud_topics::cluster_epoch>>
+    get_current_cluster_epoch(
+      const model::topic_id_partition&, ss::abort_source*) noexcept override {
+        co_return _current_cluster_epoch;
+    }
+
+    ss::future<> advance_epoch(
+      const model::topic_id_partition& tidp,
+      cloud_topics::cluster_epoch epoch,
+      ss::abort_source*) noexcept override {
+        if (tidp == _tidp) {
+            _advance_epoch_calls.push_back(epoch);
+        }
+        co_return;
+    }
+
+    ss::future<> sync_to_next_placeholder(
+      const model::topic_id_partition& tidp,
+      ss::abort_source*) noexcept override {
+        if (tidp == _tidp) {
+            ++_sync_to_next_placeholder_calls;
+        }
+        co_return;
+    }
+
     void set_max_allowed_start_offset(kafka::offset offset) {
         _max_allowed_start_offset = offset;
+    }
+
+    // Setters for epoch-related test configuration
+    void set_estimated_inactive_epoch(
+      std::optional<cloud_topics::cluster_epoch> epoch) {
+        _estimated_inactive_epoch = epoch;
+    }
+
+    void set_current_cluster_epoch(
+      std::optional<cloud_topics::cluster_epoch> epoch) {
+        _current_cluster_epoch = epoch;
+    }
+
+    // Accessors for verifying calls
+    const std::vector<cloud_topics::cluster_epoch>&
+    advance_epoch_calls() const {
+        return _advance_epoch_calls;
+    }
+
+    size_t sync_to_next_placeholder_calls() const {
+        return _sync_to_next_placeholder_calls;
+    }
+
+    void reset_call_tracking() {
+        _advance_epoch_calls.clear();
+        _sync_to_next_placeholder_calls = 0;
     }
 
 private:
     model::topic_id_partition _tidp;
     kafka::offset _start_offset;
     kafka::offset _max_allowed_start_offset;
+
+    // Epoch-related state
+    std::optional<cloud_topics::cluster_epoch> _estimated_inactive_epoch
+      = cloud_topics::cluster_epoch::min();
+    std::optional<cloud_topics::cluster_epoch> _current_cluster_epoch
+      = cloud_topics::cluster_epoch{1};
+
+    // Call tracking
+    std::vector<cloud_topics::cluster_epoch> _advance_epoch_calls;
+    size_t _sync_to_next_placeholder_calls{0};
 };
 
 struct simple_retention_config {
@@ -139,8 +205,8 @@ public:
           &_l0_metastore,
           &_l1_metastore,
           _config_impl.get(),
-          config::mock_binding(1ms)};
-    };
+          config::mock_binding<std::chrono::milliseconds>(1ms)};
+    }
 
     kafka::offset start_offset() const { return _l0_metastore.start_offset(); }
 
@@ -188,6 +254,28 @@ public:
         objects.push_back(std::move(obj));
         handle_error(_l1_metastore.add_objects(objects, term_map).get());
     }
+
+    // Epoch-related test helpers
+    void set_estimated_inactive_epoch(
+      std::optional<cloud_topics::cluster_epoch> epoch) {
+        _l0_metastore.set_estimated_inactive_epoch(epoch);
+    }
+
+    void set_current_cluster_epoch(
+      std::optional<cloud_topics::cluster_epoch> epoch) {
+        _l0_metastore.set_current_cluster_epoch(epoch);
+    }
+
+    const std::vector<cloud_topics::cluster_epoch>&
+    advance_epoch_calls() const {
+        return _l0_metastore.advance_epoch_calls();
+    }
+
+    size_t sync_to_next_placeholder_calls() const {
+        return _l0_metastore.sync_to_next_placeholder_calls();
+    }
+
+    void reset_epoch_call_tracking() { _l0_metastore.reset_call_tracking(); }
 
 private:
     model::topic_id_partition _tidp{
@@ -633,4 +721,122 @@ TEST_F(HousekeeperTest, MaxAllowedStartOffsetDoesNotLimitWhenHigher) {
     housekeeper.do_housekeeping().get();
     // Should advance to 50 as normal, not limited by max_allowed
     EXPECT_EQ(start_offset(), kafka::offset{50});
+}
+
+// Tests for do_bump_epoch()
+
+TEST_F(HousekeeperTest, BumpEpochProgressNaturally) {
+    // When the estimated_inactive_epoch changes between calls, the housekeeper
+    // should NOT force an epoch advance.
+    auto housekeeper = make_housekeeper({});
+
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{1});
+    set_current_cluster_epoch(cloud_topics::cluster_epoch{5});
+
+    // First call - epoch changes from initial (nullopt/min) to 1
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 0);
+
+    // Change the estimated epoch before next call
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{2});
+
+    // Second call - epoch changed again, so no forced advance
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 0);
+}
+
+TEST_F(HousekeeperTest, BumpEpochIdleTriggersAdvance) {
+    // When estimated_inactive_epoch stays the same across a housekeeping
+    // interval, housekeeper should force an epoch advance.
+    auto housekeeper = make_housekeeper({});
+
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{1});
+    set_current_cluster_epoch(cloud_topics::cluster_epoch{5});
+
+    // First call - initializes _last_epoch
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+
+    // Second call - same epoch, should trigger advance
+    housekeeper.do_bump_epoch().get();
+    ASSERT_EQ(advance_epoch_calls().size(), 1);
+    EXPECT_EQ(advance_epoch_calls()[0], cloud_topics::cluster_epoch{5});
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 1);
+}
+
+TEST_F(HousekeeperTest, BumpEpochGetCurrentEpochReturnsNullopt) {
+    // When get_current_cluster_epoch returns nullopt, we should not call
+    // advance_epoch even if the partition is idle.
+    auto housekeeper = make_housekeeper({});
+
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{1});
+    set_current_cluster_epoch(std::nullopt); // Simulate failure to get epoch
+
+    // First call - initializes _last_epoch
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+
+    // Second call - idle but get_current_cluster_epoch returns nullopt
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 0);
+}
+
+TEST_F(HousekeeperTest, BumpEpochForcedAdvanceKeepsLastEpoch) {
+    // After a forced epoch advance, _last_epoch is NOT updated. When the
+    // estimated epoch catches up to reflect the advance, the next call sees
+    // that as natural progress (no forced advance needed).
+    auto housekeeper = make_housekeeper({});
+
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{1});
+    set_current_cluster_epoch(cloud_topics::cluster_epoch{5});
+
+    // First call - initializes _last_epoch to 1
+    housekeeper.do_bump_epoch().get();
+
+    // Second call - same epoch, triggers forced advance
+    housekeeper.do_bump_epoch().get();
+    ASSERT_EQ(advance_epoch_calls().size(), 1);
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 1);
+
+    // Simulate the estimated epoch catching up (as would happen after advance)
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{5});
+    reset_epoch_call_tracking();
+
+    // Next call sees epoch progress (1 -> 5), so no forced advance
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 0);
+}
+
+TEST_F(HousekeeperTest, BumpEpochMultipleIdleCycles) {
+    // Test multiple idle cycles - after advancing, if the partition goes idle
+    // again, it should trigger another advance.
+    auto housekeeper = make_housekeeper({});
+
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{1});
+    set_current_cluster_epoch(cloud_topics::cluster_epoch{5});
+
+    // First cycle: init -> advance
+    housekeeper.do_bump_epoch().get();
+    housekeeper.do_bump_epoch().get();
+    ASSERT_EQ(advance_epoch_calls().size(), 1);
+    EXPECT_EQ(advance_epoch_calls()[0], cloud_topics::cluster_epoch{5});
+
+    // Simulate epoch catching up after forced advance, with new cluster epoch
+    set_estimated_inactive_epoch(cloud_topics::cluster_epoch{5});
+    set_current_cluster_epoch(cloud_topics::cluster_epoch{10});
+    reset_epoch_call_tracking();
+
+    // Sees progress (1 -> 5) since _last_epoch was preserved at 1
+    housekeeper.do_bump_epoch().get();
+    EXPECT_TRUE(advance_epoch_calls().empty());
+
+    // Second cycle: idle again (epoch 5 unchanged) -> advance to 10
+    housekeeper.do_bump_epoch().get();
+    ASSERT_EQ(advance_epoch_calls().size(), 1);
+    EXPECT_EQ(advance_epoch_calls()[0], cloud_topics::cluster_epoch{10});
+    EXPECT_EQ(sync_to_next_placeholder_calls(), 1);
 }

@@ -50,6 +50,7 @@ struct benchmark_config {
     std::string benchmarks = "fillseq";
     size_t value_size = 1024;
     bool verify = false;
+    bool verify_async = true;
     size_t verify_interval = 1000;
     size_t report_interval = 5; // Report progress every N seconds (0 = disable)
     std::string db_path = "/tmp/lsm_bench";
@@ -688,14 +689,19 @@ private:
         }
         auto iter = co_await _db->create_iterator({});
         auto snapshot = _shadow.data;
-        _verify_fut = verify_all(std::move(iter), std::move(snapshot), stats)
-                        .then_wrapped([](ss::future<> f) {
-                            if (f.failed()) {
-                                auto ep = f.get_exception();
-                                bench_log.error(
-                                  "Background verification failed: {}", ep);
-                            }
-                        });
+        auto fut = verify_all(std::move(iter), std::move(snapshot), stats)
+                     .then_wrapped([](ss::future<> f) {
+                         if (f.failed()) {
+                             auto ep = f.get_exception();
+                             bench_log.error(
+                               "Background verification failed: {}", ep);
+                         }
+                     });
+        if (_cfg.verify_async) {
+            _verify_fut = std::move(fut);
+        } else {
+            co_await std::move(fut);
+        }
     }
 
     ss::future<> await_verification() {
@@ -869,7 +875,12 @@ int main(int ac, char* av[]) {
       "value_size",
       po::value<size_t>(&cfg.value_size)->default_value(cfg.value_size),
       "Size of each value in bytes")(
-      "verify", po::bool_switch(&cfg.verify), "Enable verification mode")(
+      "verify",
+      po::bool_switch(&cfg.verify)->default_value(cfg.verify),
+      "Enable verification mode")(
+      "verify_async",
+      po::bool_switch(&cfg.verify_async)->default_value(cfg.verify_async),
+      "Make verification run asynchronously to the other operations in the db")(
       "verify_interval",
       po::value<size_t>(&cfg.verify_interval)
         ->default_value(cfg.verify_interval),

@@ -875,7 +875,10 @@
           "200": {
             "description": "OK",
             "schema": {
-              "$ref": "#/definitions/post_subject_versions_response"
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
             }
           },
           "404": {

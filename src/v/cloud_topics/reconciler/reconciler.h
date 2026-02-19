@@ -86,6 +86,7 @@ struct reconcile_error {
  * the L1 metastore. Finally, it updates the LRO, based on either
  * its own progress, or a corrected LRO returned from the metastore.
  */
+template<class Clock = ss::lowres_clock>
 class reconciler {
 public:
     reconciler(l1::io*, l1::metastore*, ss::scheduling_group);
@@ -121,6 +122,27 @@ private:
     // NB: Partition attachment is the only part using ntps instead of
     //     topic id partitions.
     chunked_hash_map<model::ntp, ss::shared_ptr<source>> _sources;
+
+    /*
+     * Per-topic scheduler state for adaptive reconciliation intervals.
+     * Each topic maintains its own interval that adapts independently
+     * based on that topic's data rate.
+     */
+    struct topic_scheduler_state {
+        adaptive_interval<Clock> scheduler;
+        typename Clock::time_point last_reconciled;
+        size_t partition_count{0};
+
+        topic_scheduler_state(
+          config::binding<std::chrono::milliseconds> min_interval,
+          config::binding<std::chrono::milliseconds> max_interval,
+          config::binding<double> target_fill_ratio,
+          config::binding<double> speedup_blend,
+          config::binding<double> slowdown_blend,
+          config::binding<size_t> max_object_size);
+    };
+
+    chunked_hash_map<model::topic_id, topic_scheduler_state> _topic_schedulers;
 
 private:
     /*
@@ -251,10 +273,25 @@ private:
       std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder);
 
     /*
-     * Partition sources into sets for reconciliation.
+     * Partition sources by topic for reconciliation.
      */
     chunked_vector<chunked_vector<ss::shared_ptr<source>>>
-    partition_sources_into_sets(chunked_vector<ss::shared_ptr<source>> sources);
+    partition_sources_by_topic(chunked_vector<ss::shared_ptr<source>> sources);
+
+    /*
+     * Get or create a scheduler state for the given topic.
+     * New topics are initialized with last_reconciled = time_point::min()
+     * making them immediately due for reconciliation.
+     */
+    topic_scheduler_state& get_or_create_topic_scheduler(model::topic_id tid);
+
+    /*
+     * Compute the time to wait until the next topic is due for reconciliation.
+     * Returns duration::zero() if any topic is already due.
+     * Returns min_interval if sources exist but no schedulers yet.
+     * Returns max_interval if no sources exist.
+     */
+    typename Clock::duration compute_next_wait() const;
 
     /*
      * Reconcile a set of sources. Creates a metadata builder, maps sources to
@@ -270,7 +307,6 @@ private:
     ss::gate _gate;
     ss::abort_source _as;
     reconciler_probe _probe;
-    adaptive_interval _scheduler;
     ss::scheduling_group _reconciler_sg;
 };
 

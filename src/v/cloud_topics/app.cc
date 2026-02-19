@@ -163,7 +163,7 @@ ss::future<> app::construct(
 
 ss::future<> app::start() {
     co_await data_plane->start();
-    co_await reconciler.invoke_on_all(&reconciler::reconciler::start);
+    co_await reconciler.invoke_on_all(&reconciler::reconciler<>::start);
     co_await domain_supervisor.invoke_on_all(
       [](auto& ds) { return ds.start(); });
     co_await housekeeper_manager.invoke_on_all(&housekeeper_manager::start);
@@ -276,7 +276,7 @@ ss::sharded<l1::domain_supervisor>* app::get_sharded_l1_domain_supervisor() {
     return &domain_supervisor;
 }
 
-ss::sharded<reconciler::reconciler>* app::get_reconciler() {
+ss::sharded<reconciler::reconciler<>>* app::get_reconciler() {
     return &reconciler;
 }
 

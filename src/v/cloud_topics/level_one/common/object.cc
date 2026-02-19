@@ -372,7 +372,7 @@ public:
           = _current_partition.indexes.empty()
               ? _current_partition.file_position
               : _current_partition.indexes.back().file_position;
-        if ((_offset - last_index_write_position) >= _opts.indexing_frequency) {
+        if ((_offset - last_index_write_position) >= _opts.indexing_interval) {
             _current_partition.indexes.push_back(
               footer::partition::index_entry{
                 .file_position = _offset,
