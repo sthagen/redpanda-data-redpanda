@@ -13,8 +13,12 @@
 #include "absl/container/btree_map.h"
 #include "cloud_topics/batch_cache/probe.h"
 #include "model/fundamental.h"
+#include "model/timeout_clock.h"
 #include "storage/api.h"
 #include "storage/batch_cache.h"
+#include "utils/offset_monitor.h"
+
+#include <seastar/core/abort_source.hh>
 
 #include <chrono>
 
@@ -64,19 +68,35 @@ public:
     std::optional<model::record_batch>
     get(const model::topic_id_partition& tidp, model::offset o);
 
+    /// Wait until a batch at or beyond \p offset has been added to the cache
+    /// for \p tidp, or until timeout/abort. \p last_known seeds a newly
+    /// created monitor so that offsets already committed resolve immediately.
+    ss::future<> wait_for_offset(
+      const model::topic_id_partition& tidp,
+      model::offset offset,
+      model::offset last_known,
+      model::timeout_clock::time_point deadline,
+      std::optional<std::reference_wrapper<ss::abort_source>> as);
+
 private:
     // Remove dead index entries
     ss::future<> cleanup_index_entries();
 
     std::chrono::milliseconds _gc_interval;
+    struct partition_cache_entry {
+        storage::batch_cache_index_ptr index;
+        // Heap-allocated to avoid alignment issues when nesting btree
+        // containers.
+        std::unique_ptr<offset_monitor<model::offset>> monitor;
+    };
+
     // NOTE: in the storage layer we have multiple indexes per partition (one
     // per segment). Here we only have one index per cloud storage partition.
     // From what I see it should be OK to use index this way. Likely even more
     // efficient compared to index per segment.
-    // The index is keyed by topic_id_partition to prevent batch resurrection
+    // The map is keyed by topic_id_partition to prevent batch resurrection
     // when topics are deleted and re-created with the same name.
-    absl::btree_map<model::topic_id_partition, storage::batch_cache_index_ptr>
-      _index;
+    absl::btree_map<model::topic_id_partition, partition_cache_entry> _entries;
     storage::log_manager* _lm;
     // Periodic cleanup of the index
     ss::timer<> _cleanup_timer;

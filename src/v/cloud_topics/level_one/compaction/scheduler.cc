@@ -26,7 +26,8 @@ namespace cloud_topics::l1 {
 compaction_scheduler::compaction_scheduler(
   compaction_cluster_state state,
   ss::sharded<file_io>* io,
-  ss::sharded<l1::replicated_metastore>* metastore)
+  ss::sharded<l1::replicated_metastore>* metastore,
+  ss::sharded<level_one_reader_probe>* l1_reader_probe)
   : _io(io)
   , _metastore(metastore)
   , _log_collector(make_default_log_collector(
@@ -51,7 +52,8 @@ compaction_scheduler::compaction_scheduler(
       metastore,
       &_committer,
       state.metadata_cache,
-      _probe)
+      _probe,
+      l1_reader_probe)
   , _compaction_interval(
       config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {
@@ -62,7 +64,13 @@ compaction_scheduler::compaction_scheduler(log_info_collector info_collector)
   : _log_info_collector(std::move(info_collector))
   , _scheduling_policy(make_default_scheduling_policy())
   , _worker_manager(
-      _compaction_queue, nullptr, nullptr, &_committer, nullptr, _probe)
+      _compaction_queue,
+      nullptr,
+      nullptr,
+      &_committer,
+      nullptr,
+      _probe,
+      nullptr)
   , _compaction_interval(
       config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {

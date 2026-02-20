@@ -46,7 +46,8 @@ public:
       ss::sharded<replicated_metastore>*,
       ss::sharded<compaction_committer>*,
       ss::sharded<cluster::metadata_cache>*,
-      compaction_scheduler_probe&);
+      compaction_scheduler_probe&,
+      ss::sharded<level_one_reader_probe>*);
 
     // Starts the pool of workers, making them available for compaction jobs.
     ss::future<> start();
@@ -109,6 +110,9 @@ private:
 
     // Owned by `scheduler`.
     compaction_scheduler_probe& _probe;
+
+    // Owned by `app`.
+    ss::sharded<level_one_reader_probe>* _l1_reader_probe;
 
     // A sharded pool of compaction workers.
     ss::sharded<compaction_worker> _workers;

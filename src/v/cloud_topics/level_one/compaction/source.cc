@@ -140,7 +140,8 @@ compaction_source::compaction_source(
   io* io,
   ss::abort_source& as,
   compaction_job_state& state,
-  compaction_worker_probe& probe)
+  compaction_worker_probe& probe,
+  level_one_reader_probe* level_one_reader_probe)
   : _ntp(std::move(ntp))
   , _tp(tp)
   , _dirty_range_intervals(dirty_range_intervals)
@@ -162,7 +163,8 @@ compaction_source::compaction_source(
   , _io(io)
   , _as(as)
   , _state(state)
-  , _probe(probe) {}
+  , _probe(probe)
+  , _l1_reader_probe(level_one_reader_probe) {}
 
 ss::future<> compaction_source::initialize() { co_return; }
 
@@ -210,7 +212,7 @@ ss::future<ss::stop_iteration> compaction_source::map_building_iteration() {
         cloud_topic_log_reader_config config(start_offset, max_offset, _as);
         auto rdr = model::record_batch_reader(
           std::make_unique<level_one_log_reader_impl>(
-            config, _ntp, _tp, _metastore, _io));
+            config, _ntp, _tp, _metastore, _io, _l1_reader_probe));
 
         auto res = co_await std::move(rdr).consume(
           map_building_reducer(*_map, start_offset), model::no_timeout);
@@ -279,7 +281,7 @@ ss::future<ss::stop_iteration> compaction_source::deduplication_iteration(
         cloud_topic_log_reader_config config(start_offset, last_offset, _as);
         auto rdr = model::record_batch_reader(
           std::make_unique<level_one_log_reader_impl>(
-            config, _ntp, _tp, _metastore, _io));
+            config, _ntp, _tp, _metastore, _io, _l1_reader_probe));
 
         co_await ct_sink.prepare_iteration(start_offset);
         auto stats = co_await rdr.consume(

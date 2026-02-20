@@ -203,6 +203,16 @@ public:
         return _batch_cache.local().get(tidp, o);
     }
 
+    ss::future<> cache_wait(
+      const model::topic_id_partition& tidp,
+      model::offset offset,
+      model::offset last_known,
+      model::timeout_clock::time_point deadline,
+      std::optional<std::reference_wrapper<ss::abort_source>> as) final {
+        return _batch_cache.local().wait_for_offset(
+          tidp, offset, last_known, deadline, as);
+    }
+
     size_t materialize_max_bytes() const final {
         return _read_pipeline.local().memory_quota_capacity();
     }

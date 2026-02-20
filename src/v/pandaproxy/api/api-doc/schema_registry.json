@@ -682,6 +682,7 @@
           },
           {
             "name": "subjectPrefix",
+            "description": "If specified, only return subjects that start with the given prefix. A plain prefix (e.g. \"my-\") matches subjects in the default context. A context-qualified prefix \":.<context>:<prefix>\" (e.g. \":.my-context:my-\") matches within a specific context. The wildcard context \":*:<prefix>\" (e.g. \":*:my-\") matches across all contexts. Use just the context qualifier (e.g. \":.my-context:\" or \":*:\") to list all subjects in a context.",
             "in": "query",
             "required": false,
             "type": "string"

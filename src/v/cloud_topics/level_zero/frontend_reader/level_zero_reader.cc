@@ -90,6 +90,27 @@ level_zero_log_reader_impl::read_some(
         co_return chunked_circular_buffer<model::record_batch>{};
     }
 
+    // Wait briefly for the write path to cache the batch we need.
+    // This closes the race window between replicate() completing (HWM
+    // advance) and cache_put() running on the write continuation.
+    if (cache_enabled() && _ctp->is_leader()) {
+        auto tidp = get_topic_id_partition(_ctp);
+        auto wait_deadline = model::timeout_clock::now()
+                             + std::chrono::milliseconds(25);
+        try {
+            co_await _ct_api->cache_wait(
+              tidp,
+              kafka::offset_cast(_next_offset),
+              model::prev_offset(_ctp->raft()->committed_offset()),
+              wait_deadline,
+              _config.abort_source);
+        } catch (const ss::timed_out_error&) {
+            // Timeout is expected for non-tailing reads where no
+            // concurrent writer is caching data. Fall through to the
+            // normal fetch-and-materialize path.
+        }
+    }
+
     // We're only fetching from the record batch cache if the reader is in
     // the 'empty' state. It doesn't make any difference if the reader is in
     // the 'materialized' state. If we're in 'ready' state we risk to go out

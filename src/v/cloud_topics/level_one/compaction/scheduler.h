@@ -18,6 +18,7 @@
 #include "cloud_topics/level_one/compaction/scheduler_probe.h"
 #include "cloud_topics/level_one/compaction/scheduling_policies.h"
 #include "cloud_topics/level_one/compaction/worker_manager.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 #include "config/property.h"
 #include "model/fundamental.h"
@@ -49,7 +50,8 @@ public:
     compaction_scheduler(
       compaction_cluster_state,
       ss::sharded<file_io>*,
-      ss::sharded<l1::replicated_metastore>*);
+      ss::sharded<l1::replicated_metastore>*,
+      ss::sharded<level_one_reader_probe>*);
 
     // Starts the contained `_log_collector`, `_worker_manager`, and the
     // backgrounded scheduling loop.

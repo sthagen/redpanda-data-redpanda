@@ -203,9 +203,10 @@ ss::future<> multipart_upload::abort_on_error() {
 }
 
 ss::output_stream<char> multipart_upload::as_stream() {
+    static constexpr size_t buf_size = 8192;
     auto sink = ss::data_sink(
       std::make_unique<multipart_data_sink_impl>(shared_from_this()));
-    return {std::move(sink), _part_size};
+    return {std::move(sink), buf_size};
 }
 
 } // namespace cloud_storage_clients

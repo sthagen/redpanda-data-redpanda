@@ -33,7 +33,8 @@ public:
           nullptr,
           nullptr,
           nullptr,
-          ss::default_scheduling_group());
+          ss::default_scheduling_group(),
+          nullptr);
         co_await manager._workers.invoke_on_all(&l1::compaction_worker::start);
     }
 
@@ -56,7 +57,8 @@ public:
 TEST_F(WorkerManagerTestFixture, PauseAndResumeWorkers) {
     l1::compaction_scheduler_probe probe;
     l1::log_compaction_queue pq;
-    l1::worker_manager manager(pq, nullptr, nullptr, nullptr, nullptr, probe);
+    l1::worker_manager manager(
+      pq, nullptr, nullptr, nullptr, nullptr, probe, nullptr);
     start_workers(manager).get();
     auto stop_manager = ss::defer([&manager] { manager.stop().get(); });
     using worker_state = l1::compaction_worker::worker_state;
@@ -87,7 +89,8 @@ TEST_F(WorkerManagerTestFixture, AcquireWork) {
     l1::compaction_scheduler_probe probe;
     l1::log_compaction_queue pq(std::move(cmp_func));
     l1::log_list_t list;
-    l1::worker_manager manager(pq, nullptr, nullptr, nullptr, nullptr, probe);
+    l1::worker_manager manager(
+      pq, nullptr, nullptr, nullptr, nullptr, probe, nullptr);
     auto stop_manager = ss::defer([&manager] { manager.stop().get(); });
 
     const auto test_ntp = model::ntp(

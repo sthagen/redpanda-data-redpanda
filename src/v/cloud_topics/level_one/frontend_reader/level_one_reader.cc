@@ -9,6 +9,7 @@
  */
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/retry.h"
 #include "cloud_topics/logger.h"
 #include "model/fundamental.h"
@@ -37,13 +38,15 @@ level_one_log_reader_impl::level_one_log_reader_impl(
   model::ntp ntp,
   model::topic_id_partition tidp,
   l1::metastore* metastore,
-  l1::io* io_interface)
+  l1::io* io_interface,
+  level_one_reader_probe* probe)
   : _config(cfg)
   , _ntp(std::move(ntp))
   , _tidp(tidp)
   , _next_offset(cfg.start_offset)
   , _metastore(metastore)
   , _io(io_interface)
+  , _probe(probe)
   , _log(cd_log, fmt::format("[{}/{}/{}]", fmt::ptr(this), _ntp, _tidp)) {
     vlog(_log.debug, "New reader created {}", _config);
 }
@@ -167,6 +170,9 @@ level_one_log_reader_impl::lookup_object_for_offset(
 ss::future<l1::footer> level_one_log_reader_impl::read_footer(
   l1::object_id oid, size_t footer_pos, size_t object_size) {
     size_t footer_total_size = object_size - footer_pos;
+    if (_probe != nullptr) {
+        _probe->register_footer_read(footer_total_size);
+    }
 
     l1::object_extent extent{
       .id = oid,
@@ -235,6 +241,8 @@ ss::future<l1::footer> level_one_log_reader_impl::read_footer(
 ss::future<chunked_circular_buffer<model::record_batch>>
 level_one_log_reader_impl::read_batches(l1::object_reader& reader) {
     chunked_circular_buffer<model::record_batch> batches;
+    size_t bytes_read = 0;
+    size_t bytes_skipped = 0;
 
     while (true) {
         auto result = co_await reader.read_next();
@@ -244,6 +252,7 @@ level_one_log_reader_impl::read_batches(l1::object_reader& reader) {
 
             // Skip batches before our start offset.
             if (batch.last_offset() < kafka::offset_cast(_next_offset)) {
+                bytes_skipped += batch.size_bytes();
                 continue;
             }
 
@@ -258,6 +267,7 @@ level_one_log_reader_impl::read_batches(l1::object_reader& reader) {
                 break;
             }
             _bytes_consumed += batch_size;
+            bytes_read += batch_size;
 
             batches.push_back(std::move(batch));
 
@@ -267,6 +277,10 @@ level_one_log_reader_impl::read_batches(l1::object_reader& reader) {
         }
     }
 
+    if (_probe != nullptr) {
+        _probe->register_bytes_read(bytes_read);
+        _probe->register_bytes_skipped(bytes_skipped);
+    }
     co_return batches;
 }
 

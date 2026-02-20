@@ -78,6 +78,16 @@ public:
       (const model::topic_id_partition&, model::offset o),
       (override));
 
+    MOCK_METHOD(
+      ss::future<>,
+      cache_wait,
+      (const model::topic_id_partition&,
+       model::offset,
+       model::offset,
+       model::timeout_clock::time_point,
+       std::optional<std::reference_wrapper<ss::abort_source>>),
+      (override));
+
     MOCK_METHOD(size_t, materialize_max_bytes, (), (const, override));
 
     MOCK_METHOD(

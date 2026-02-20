@@ -76,7 +76,8 @@ public:
           ss::sharded_parameter(
             [this] { return &scheduler->_committer.local(); }),
           nullptr,
-          ss::default_scheduling_group());
+          ss::default_scheduling_group(),
+          nullptr);
         co_await scheduler->_worker_manager._workers.invoke_on_all(
           &l1::compaction_worker::start);
         scheduler->start_bg_loop();

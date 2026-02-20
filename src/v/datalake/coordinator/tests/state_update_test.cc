@@ -7,7 +7,9 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
+#include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
+#include "datalake/coordinator/partition_state_override.h"
 #include "datalake/coordinator/state.h"
 #include "datalake/coordinator/state_update.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
@@ -313,4 +315,146 @@ TEST(StateUpdateTest, TestLifecycle) {
     ASSERT_TRUE(
       apply_lc_transition(state, rev3, topic_state::lifecycle_state_t::closed)
         .has_value());
+}
+
+TEST(StateUpdateTest, TestResetTopicState) {
+    topics_state state;
+    ASSERT_FALSE(
+      apply_lc_transition(state, rev, topic_state::lifecycle_state_t::live)
+        .has_error());
+
+    auto res = add_files_update::build(
+                 state, tp, rev, make_pending_files({{0, 100}}))
+                 .value()
+                 .apply(state, model::offset{});
+    ASSERT_FALSE(res.has_error());
+    ASSERT_NO_FATAL_FAILURE(
+      check_partition(state, tp, std::nullopt, {{0, 100}}));
+
+    // Reset with reset_all_partitions clears pending files.
+    reset_topic_state_update update{
+      .topic = topic,
+      .topic_revision = rev,
+      .reset_all_partitions = true,
+    };
+    ASSERT_FALSE(update.apply(state).has_error());
+    auto ps = state.partition_state(tp);
+    ASSERT_FALSE(ps.has_value());
+
+    // Reset with wrong revision fails.
+    reset_topic_state_update bad_rev{
+      .topic = topic,
+      .topic_revision = model::revision_id{999},
+    };
+    ASSERT_TRUE(bad_rev.apply(state).has_error());
+
+    // Reset on nonexistent topic is a no-op.
+    reset_topic_state_update missing{
+      .topic = model::topic{"no_such_topic"},
+      .topic_revision = rev,
+    };
+    ASSERT_FALSE(missing.apply(state).has_error());
+}
+
+TEST(StateUpdateTest, TestResetNoOp) {
+    topics_state state;
+    ASSERT_FALSE(
+      apply_lc_transition(state, rev, topic_state::lifecycle_state_t::live)
+        .has_error());
+
+    auto res = add_files_update::build(
+                 state, tp, rev, make_pending_files({{0, 100}}))
+                 .value()
+                 .apply(state, model::offset{});
+    ASSERT_FALSE(res.has_error());
+
+    // reset_all_partitions=false (default), no overrides: state is unchanged.
+    reset_topic_state_update update{
+      .topic = topic,
+      .topic_revision = rev,
+    };
+    ASSERT_FALSE(update.apply(state).has_error());
+    ASSERT_NO_FATAL_FAILURE(
+      check_partition(state, tp, std::nullopt, {{0, 100}}));
+}
+
+TEST(StateUpdateTest, TestResetAllWithOverrides) {
+    const model::partition_id pid1{1};
+    const model::topic_partition tp1{topic, pid1};
+
+    topics_state state;
+    ASSERT_FALSE(
+      apply_lc_transition(state, rev, topic_state::lifecycle_state_t::live)
+        .has_error());
+
+    // Add pending files to two partitions.
+    for (const auto& t : {tp, tp1}) {
+        auto res = add_files_update::build(
+                     state, t, rev, make_pending_files({{0, 100}}))
+                     .value()
+                     .apply(state, model::offset{});
+        ASSERT_FALSE(res.has_error());
+    }
+
+    // Full reset with an override on pid 0 only.
+    chunked_hash_map<model::partition_id, partition_state_override> overrides;
+    overrides[pid] = partition_state_override{
+      .last_committed = kafka::offset{50}};
+
+    reset_topic_state_update update2{
+      .topic = topic,
+      .topic_revision = rev,
+      .reset_all_partitions = true,
+      .partition_overrides = std::move(overrides),
+    };
+    ASSERT_FALSE(update2.apply(state).has_error());
+
+    // pid 0: cleared, last_committed set to 50.
+    ASSERT_NO_FATAL_FAILURE(check_partition(state, tp, 50, {}));
+    // pid 1: cleared entirely (no override).
+    auto ps1 = state.partition_state(tp1);
+    ASSERT_FALSE(ps1.has_value());
+}
+
+TEST(StateUpdateTest, TestPartialReset) {
+    const model::partition_id pid1{1};
+    const model::partition_id pid2{2};
+    const model::topic_partition tp1{topic, pid1};
+    const model::topic_partition tp2{topic, pid2};
+
+    topics_state state;
+    ASSERT_FALSE(
+      apply_lc_transition(state, rev, topic_state::lifecycle_state_t::live)
+        .has_error());
+
+    // Add pending files to pid 0 and pid 1.
+    for (const auto& t : {tp, tp1}) {
+        auto res = add_files_update::build(
+                     state, t, rev, make_pending_files({{0, 100}}))
+                     .value()
+                     .apply(state, model::offset{});
+        ASSERT_FALSE(res.has_error());
+    }
+
+    // Partial reset: override pid 0 and pid 2 (pid 2 doesn't exist yet).
+    chunked_hash_map<model::partition_id, partition_state_override> overrides;
+    overrides[pid] = partition_state_override{
+      .last_committed = kafka::offset{42}};
+    overrides[pid2] = partition_state_override{
+      .last_committed = kafka::offset{99}};
+
+    reset_topic_state_update update3{
+      .topic = topic,
+      .topic_revision = rev,
+      .partition_overrides = std::move(overrides),
+    };
+    ASSERT_FALSE(update3.apply(state).has_error());
+
+    // pid 0: pending cleared, last_committed set.
+    ASSERT_NO_FATAL_FAILURE(check_partition(state, tp, 42, {}));
+    // pid 1: untouched.
+    ASSERT_NO_FATAL_FAILURE(
+      check_partition(state, tp1, std::nullopt, {{0, 100}}));
+    // pid 2: created with last_committed.
+    ASSERT_NO_FATAL_FAILURE(check_partition(state, tp2, 99, {}));
 }

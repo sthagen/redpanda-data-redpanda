@@ -51,11 +51,13 @@ redpanda_cc_library(
     ],
     deps = [
         ":file_committer",
+        ":partition_state_override",
         ":snapshot_remover",
         ":state_update",
         ":stm",
         "//src/v/cluster",
         "//src/v/config",
+        "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/model",
         "@abseil-cpp//absl/hash",
@@ -254,6 +256,21 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "partition_state_override",
+    srcs = [
+        "partition_state_override.cc",
+    ],
+    hdrs = [
+        "partition_state_override.h",
+    ],
+    deps = [
+        "//src/v/model",
+        "//src/v/serde",
+        "@fmt",
+    ],
+)
+
+redpanda_cc_library(
     name = "state",
     srcs = [
         "state.cc",
@@ -281,6 +298,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":partition_state_override",
         ":translated_offset_range",
         "//src/v/datalake:schema_identifier",
         "//src/v/datalake:types",
@@ -333,9 +351,11 @@ redpanda_cc_library(
         "state_update.h",
     ],
     deps = [
+        ":partition_state_override",
         ":state",
         ":translated_offset_range",
         "//src/v/base",
+        "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/iceberg:manifest_entry",
         "//src/v/model",

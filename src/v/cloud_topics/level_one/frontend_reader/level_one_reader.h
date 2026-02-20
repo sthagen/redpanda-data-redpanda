@@ -19,6 +19,8 @@
 
 namespace cloud_topics {
 
+class level_one_reader_probe;
+
 /*
  * This class implements a record batch reader for level one.
  *
@@ -66,7 +68,8 @@ public:
       model::ntp ntp,
       model::topic_id_partition tidp,
       l1::metastore* metastore,
-      l1::io* io_interface);
+      l1::io* io_interface,
+      level_one_reader_probe* probe = nullptr);
 
     bool is_end_of_stream() const final;
 
@@ -134,6 +137,7 @@ private:
     kafka::offset _next_offset;
     l1::metastore* _metastore;
     l1::io* _io;
+    level_one_reader_probe* _probe;
     prefix_logger _log;
     size_t _bytes_consumed{0};
 };

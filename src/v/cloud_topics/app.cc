@@ -61,6 +61,8 @@ ss::future<> app::construct(
     co_await ss::recursive_touch_directory(
       config::node().l1_staging_path().string());
 
+    co_await construct_service(_l1_reader_probe);
+
     co_await construct_service(
       l1_io,
       config::node().l1_staging_path(),
@@ -98,7 +100,8 @@ ss::future<> app::construct(
       ss::sharded_parameter([this] { return &replicated_metastore.local(); }),
       ss::sharded_parameter([this] { return &l1_io.local(); }),
       ss::sharded_parameter(
-        [&metadata_cache] { return &metadata_cache->local(); }));
+        [&metadata_cache] { return &metadata_cache->local(); }),
+      ss::sharded_parameter([this] { return &_l1_reader_probe.local(); }));
 
     co_await construct_service(
       topic_purge_manager,
@@ -146,7 +149,8 @@ ss::future<> app::construct(
         .shard_table = &controller->get_shard_table(),
         .partition_manager = &controller->get_partition_manager()},
       &l1_io,
-      &replicated_metastore);
+      &replicated_metastore,
+      &_l1_reader_probe);
 
     // Must be last to register so it will be first to be stopped in
     // `app::stop`. This is to ensure that stopped services don't receive

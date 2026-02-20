@@ -14,6 +14,7 @@
 #include "cloud_topics/level_one/compaction/committer.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/worker.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 #include "model/fundamental.h"
 #include "resource_mgmt/cpu_scheduling.h"
@@ -27,13 +28,15 @@ worker_manager::worker_manager(
   ss::sharded<replicated_metastore>* metastore,
   ss::sharded<compaction_committer>* committer,
   ss::sharded<cluster::metadata_cache>* metadata_cache,
-  compaction_scheduler_probe& probe)
+  compaction_scheduler_probe& probe,
+  ss::sharded<level_one_reader_probe>* l1_reader_probe)
   : _work_queue(work_queue)
   , _io(io)
   , _metastore(metastore)
   , _committer(committer)
   , _metadata_cache(metadata_cache)
-  , _probe(probe) {}
+  , _probe(probe)
+  , _l1_reader_probe(l1_reader_probe) {}
 
 ss::future<> worker_manager::start() {
     co_await _workers.start(
@@ -42,7 +45,8 @@ ss::future<> worker_manager::start() {
       ss::sharded_parameter([this] { return &_metastore->local(); }),
       ss::sharded_parameter([this] { return &_committer->local(); }),
       ss::sharded_parameter([this] { return &_metadata_cache->local(); }),
-      scheduling_groups::instance().cloud_topics_compaction_sg());
+      scheduling_groups::instance().cloud_topics_compaction_sg(),
+      ss::sharded_parameter([this] { return &_l1_reader_probe->local(); }));
     co_await _workers.invoke_on_all(&compaction_worker::start);
 }
 

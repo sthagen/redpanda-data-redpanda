@@ -22,17 +22,18 @@ namespace cloud_topics {
 struct batch_cache_accessor {
     static void evict_offset(
       batch_cache& c, const model::topic_id_partition& tidp, model::offset o) {
-        c._index[tidp]->testing_evict_from_cache(o);
+        c._entries[tidp].index->testing_evict_from_cache(o);
     }
     static void reclaim(
       batch_cache& c, const model::topic_id_partition& tidp, size_t size) {
         // it doesn't really matter what tidp is used, all the indices point to
         // the same cache.
-        c._index[tidp]->testing_reclaim_from_cache(size);
+        c._entries[tidp].index->testing_reclaim_from_cache(size);
     }
     static bool
     contains_tidp(const batch_cache& c, const model::topic_id_partition& tidp) {
-        return c._index.contains(tidp);
+        auto it = c._entries.find(tidp);
+        return it != c._entries.end() && it->second.index != nullptr;
     }
 };
 

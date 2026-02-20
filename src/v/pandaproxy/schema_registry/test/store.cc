@@ -453,6 +453,180 @@ BOOST_AUTO_TEST_CASE(test_store_get_subjects) {
     BOOST_REQUIRE_EQUAL(s.get_subjects(pps::include_deleted::yes).size(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(test_store_get_subjects_prefix) {
+    pps::store s;
+
+    const auto ctx_test = pps::context{".test"};
+    const auto ctx_other = pps::context{".other"};
+
+    // Insert subjects across multiple contexts
+    s.insert(
+      {pps::context_subject{pps::default_context, pps::subject{"apple"}},
+       string_def0.share()});
+    s.insert(
+      {pps::context_subject{pps::default_context, pps::subject{"app"}},
+       int_def0.share()});
+    s.insert(
+      {pps::context_subject{pps::default_context, pps::subject{"banana"}},
+       string_def0.share()});
+    s.insert(
+      {pps::context_subject{ctx_test, pps::subject{"apple"}},
+       string_def0.share()});
+    s.insert(
+      {pps::context_subject{ctx_test, pps::subject{"avocado"}},
+       int_def0.share()});
+    s.insert(
+      {pps::context_subject{ctx_other, pps::subject{"apple"}},
+       string_def0.share()});
+    s.insert(
+      {pps::context_subject{ctx_other, pps::subject{"banana"}},
+       int_def0.share()});
+
+    // No prefix returns all subjects across all contexts
+    auto subjects = s.get_subjects(pps::include_deleted::no);
+    BOOST_REQUIRE_EQUAL(subjects.size(), 7);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"app"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"banana"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"avocado"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_other, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_other, pps::subject{"banana"}}));
+
+    // Explicit default context prefix ":.:" matches all default context
+    // subjects
+    subjects = s.get_subjects(pps::include_deleted::no, ":.:");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 3);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"app"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"banana"}}));
+
+    // Prefix "app" matches default context "apple" and "app"
+    subjects = s.get_subjects(pps::include_deleted::no, "app");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 2);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"app"}}));
+
+    // Prefix "apple" matches only default context "apple"
+    subjects = s.get_subjects(pps::include_deleted::no, "apple");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 1);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"apple"}}));
+
+    // Prefix ":.test:" matches all subjects in the .test context
+    subjects = s.get_subjects(pps::include_deleted::no, ":.test:");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 2);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"avocado"}}));
+
+    // Prefix ":.test:app" matches only .test context "apple"
+    subjects = s.get_subjects(pps::include_deleted::no, ":.test:app");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 1);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"apple"}}));
+
+    // Prefix ":.other:" matches all subjects in the .other context
+    subjects = s.get_subjects(pps::include_deleted::no, ":.other:");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 2);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_other, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_other, pps::subject{"banana"}}));
+
+    // Prefix with no matches
+    subjects = s.get_subjects(pps::include_deleted::no, "zzz");
+    BOOST_REQUIRE(subjects.empty());
+
+    // Wildcard prefix ":*:app" matches subjects named "app*" in all contexts
+    subjects = s.get_subjects(pps::include_deleted::no, ":*:app");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 4);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"app"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"apple"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_other, pps::subject{"apple"}}));
+
+    // Wildcard prefix ":*:apple" matches exact name "apple" across contexts
+    subjects = s.get_subjects(pps::include_deleted::no, ":*:apple");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 3);
+
+    // Wildcard prefix ":*:banana" matches "banana" in default and .other
+    subjects = s.get_subjects(pps::include_deleted::no, ":*:banana");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 2);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects,
+        pps::context_subject{pps::default_context, pps::subject{"banana"}}));
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_other, pps::subject{"banana"}}));
+
+    // Wildcard prefix ":*:avocado" matches only .test context
+    subjects = s.get_subjects(pps::include_deleted::no, ":*:avocado");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 1);
+    BOOST_REQUIRE(
+      std::ranges::contains(
+        subjects, pps::context_subject{ctx_test, pps::subject{"avocado"}}));
+
+    // Wildcard prefix ":*:" with empty subject prefix matches all subjects
+    subjects = s.get_subjects(pps::include_deleted::no, ":*:");
+    BOOST_REQUIRE_EQUAL(subjects.size(), 7);
+
+    // Wildcard prefix with no matches
+    subjects = s.get_subjects(pps::include_deleted::no, ":*:zzz");
+    BOOST_REQUIRE(subjects.empty());
+}
+
 BOOST_AUTO_TEST_CASE(test_store_global_compat) {
     // Setting the retrieving global compatibility should be allowed multiple
     // times

@@ -51,3 +51,10 @@ repos:
         files: '^MODULE.bazel$|^BUILD$|/BUILD$|\.(BUILD|bzl)$'
         pass_filenames: false
 
+      - id: copyright-year
+        name: Copyright year check for new files
+        entry: tools/check-copyright-year.sh
+        language: script
+        files: '\.(cc|h|py|go|java|sh)$'
+        pass_filenames: false
+

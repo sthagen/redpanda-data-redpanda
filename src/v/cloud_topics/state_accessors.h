@@ -9,6 +9,8 @@
  */
 #pragma once
 
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
+
 namespace cluster {
 class metadata_cache;
 }
@@ -32,15 +34,18 @@ public:
       data_plane_api* data_plane,
       l1::metastore* metastore,
       l1::io* io,
-      cluster::metadata_cache* metadata_cache)
+      cluster::metadata_cache* metadata_cache,
+      level_one_reader_probe* l1_reader_probe)
       : data_plane(data_plane)
       , l1_metastore(metastore)
       , l1_io(io)
-      , metadata_cache(metadata_cache) {}
+      , metadata_cache(metadata_cache)
+      , l1_reader_probe(l1_reader_probe) {}
 
     data_plane_api* get_data_plane() { return data_plane; }
     l1::metastore* get_l1_metastore() { return l1_metastore; }
     l1::io* get_l1_io() { return l1_io; }
+    level_one_reader_probe* get_l1_reader_probe() { return l1_reader_probe; }
     cluster::metadata_cache* get_metadata_cache() { return metadata_cache; }
 
 private:
@@ -48,5 +53,6 @@ private:
     l1::metastore* l1_metastore;
     l1::io* l1_io;
     cluster::metadata_cache* metadata_cache;
+    level_one_reader_probe* l1_reader_probe;
 };
 } // namespace cloud_topics

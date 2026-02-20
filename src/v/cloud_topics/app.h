@@ -13,6 +13,7 @@
 #include "cloud_topics/level_one/common/file_io.h"
 #include "cloud_topics/level_one/compaction/scheduler.h"
 #include "cloud_topics/level_one/domain/domain_supervisor.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/leader_router.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 #include "cloud_topics/level_zero/cluster_services_impl/cluster_services.h"
@@ -89,6 +90,7 @@ private:
     ss::future<> wire_up_notifications();
 
     ss::sstring _logger_name;
+    ss::sharded<level_one_reader_probe> _l1_reader_probe;
     std::unique_ptr<data_plane_api> data_plane;
     ss::sharded<state_accessors> state;
     ss::sharded<l1::file_io> l1_io;

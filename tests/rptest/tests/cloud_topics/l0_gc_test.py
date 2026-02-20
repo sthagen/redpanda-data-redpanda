@@ -602,3 +602,104 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
             backoff_sec=5,
             retry_on_exc=True,
         )
+
+
+class CloudTopicsL0GCMetricsTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Basic semantics for some GC metrics
+    """
+
+    def _get_int_metric(self, name: str) -> list[int]:
+        samples = self.redpanda.metrics_sample(name)
+        self.logger.debug(samples)
+        assert samples is not None, "samples unexpectedly None"
+        vals = [int(s.value) for s in samples.samples]
+        return vals
+
+    def get_epoch_lag(self) -> list[int]:
+        return self._get_int_metric("vectorized_cloud_topics_l0_gc_epoch_lag")
+
+    def get_max_deleted_epoch(self) -> list[int]:
+        return self._get_int_metric("vectorized_cloud_topics_l0_gc_max_deleted_epoch")
+
+    def get_collection_rounds(self) -> list[int]:
+        return self._get_int_metric(
+            "vectorized_cloud_topics_l0_gc_collection_rounds_total"
+        )
+
+    def get_objects_listed(self) -> list[int]:
+        return self._get_int_metric(
+            "vectorized_cloud_topics_l0_gc_objects_listed_total"
+        )
+
+    def get_delete_requests(self) -> list[int]:
+        return self._get_int_metric(
+            "vectorized_cloud_topics_l0_gc_delete_requests_total"
+        )
+
+    @cluster(num_nodes=5)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_gc_metrics(self, cloud_storage_type: CloudStorageType):
+        self.topics = [TopicSpec(partition_count=1)]
+        self.create_topics(self.topics)
+        self.produce_some(topics=[spec.name for spec in self.topics], n=100)
+
+        # GC should be completing collection rounds and scanning objects
+        wait_until(
+            lambda: sum(self.get_collection_rounds()) > 0,
+            timeout_sec=30,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+        self.logger.info(
+            f"GC running, collection_rounds={self.get_collection_rounds()}"
+        )
+
+        wait_until(
+            lambda: sum(self.get_objects_listed()) > 0,
+            timeout_sec=30,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+        self.logger.info(
+            f"GC scanning objects, objects_listed={self.get_objects_listed()}"
+        )
+
+        # Wait for GC to start deleting - max_deleted_epoch should become >= 0 on some shard
+        wait_until(
+            lambda: any(e >= 0 for e in self.get_max_deleted_epoch()),
+            timeout_sec=30,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+
+        initial_max_deleted = max(self.get_max_deleted_epoch())
+        self.logger.info(f"GC started deleting, {initial_max_deleted=}")
+
+        # Produce more to create new epochs while GC is running
+        self.produce_some(topics=[spec.name for spec in self.topics], n=100)
+
+        # max_deleted_epoch should increase as GC makes progress
+        wait_until(
+            lambda: max(self.get_max_deleted_epoch()) > initial_max_deleted,
+            timeout_sec=30,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+        self.logger.info(
+            f"GC progressing, max_deleted_epoch increased to "
+            f"{max(self.get_max_deleted_epoch())}"
+        )
+
+        # Verify batching: delete requests should be fewer than objects deleted,
+        # indicating multiple objects per batch request.
+        total_deleted = self.get_num_objects_deleted()
+        total_delete_requests = sum(self.get_delete_requests())
+        self.logger.info(f"Batching check: {total_deleted=}, {total_delete_requests=}")
+        assert total_delete_requests > 0, "Expected at least one delete request"
+        assert total_deleted > total_delete_requests, (
+            f"Expected batching: {total_deleted=} should be greater than "
+            f"{total_delete_requests=}"
+        )

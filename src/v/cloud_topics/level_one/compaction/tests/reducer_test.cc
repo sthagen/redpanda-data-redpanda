@@ -120,7 +120,8 @@ ss::future<> do_compact(
       io,
       as,
       state,
-      probe);
+      probe,
+      nullptr);
     auto sink = std::make_unique<l1::compaction_sink>(
       tidp,
       dirty_range_intervals,

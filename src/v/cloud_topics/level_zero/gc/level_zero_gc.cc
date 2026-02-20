@@ -86,6 +86,8 @@ public:
             // range, but if they're not it doesn't really matter. all best
             // effort.
             if (!objects.has_value() || !objects.value().empty()) {
+                probe_->objects_listed(
+                  objects.has_value() ? objects.value().size() : 0);
                 co_return std::move(objects);
             }
 
@@ -139,6 +141,7 @@ public:
            pu = std::move(page_u),
            eo = std::move(eligible_objects)]() mutable {
               const auto num_eligible = eo.size();
+              probe_->delete_request();
               return storage_->delete_objects(&as_, std::move(eo))
                 .then([this, num_eligible](
                         std::expected<void, cloud_io::upload_result> res) {
@@ -147,6 +150,7 @@ public:
                           cd_log.info,
                           "Received an error deleting L0 data objects: {}",
                           res.error());
+                        probe_->delete_error();
                     } else {
                         probe_->objects_deleted(num_eligible);
                         vlog(
@@ -182,6 +186,7 @@ private:
         auto list_result = co_await storage_->list_objects(
           &as_, curr_prefix_, std::exchange(continuation_token_, std::nullopt));
         if (!list_result.has_value()) {
+            probe_->list_error();
             co_return std::unexpected{list_result.error()};
         }
 
@@ -722,6 +727,8 @@ level_zero_gc::try_to_collect() {
     // per collection loop.
     std::optional<cluster_epoch> max_gc_epoch;
     size_t total_eligible{0};
+    probe_.reset_deletion_epoch();
+    probe_.collection_round();
     while (delete_worker_->has_capacity()) {
         auto res = co_await do_try_to_collect(std::ref(max_gc_epoch));
         if (!res.has_value()) {
@@ -764,6 +771,7 @@ level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
         vlog(cd_log.info, "No GC eligible epoch currently exists");
         co_return std::unexpected(collection_error::no_collectible_epoch);
     }
+    probe_.set_max_gc_eligible_epoch(max_gc_epoch.value());
 
     const auto max_gc_birthday = std::chrono::system_clock::now()
                                  - config_.deletion_grace_period();
@@ -845,6 +853,7 @@ level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
               "Ignoring object with non-collectible epoch: {} > {}",
               object.key,
               max_gc_epoch.value());
+            probe_.object_skipped_not_eligible();
             continue;
         }
 
@@ -856,11 +865,13 @@ level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
               object.key,
               object.last_modified,
               max_gc_birthday);
+            probe_.object_skipped_too_young();
             continue;
         }
 
         object_keys_total_bytes += object.key.size();
         eligible_objects.push_back(object);
+        probe_.report_deletion_epoch(object_epoch.value());
     }
 
     co_return delete_worker_->delete_objects(

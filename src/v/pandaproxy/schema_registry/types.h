@@ -205,7 +205,7 @@ struct context_subject {
         return fmt::format_to(it, ":{}:{}", ctx, sub);
     }
 
-    bool starts_with(const ss::sstring& prefix) const {
+    bool starts_with(std::string_view prefix) const {
         return to_string().starts_with(prefix);
     }
 

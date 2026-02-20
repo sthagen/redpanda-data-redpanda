@@ -1,6 +1,22 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "level_one_reader_probe",
+    srcs = [
+        "level_one_reader_probe.cc",
+    ],
+    hdrs = [
+        "level_one_reader_probe.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/config",
+        "//src/v/metrics",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "reader",
     srcs = [
         "level_one_reader.cc",
@@ -16,9 +32,9 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/common:abstract_io",
         "//src/v/cloud_topics/level_one/common:object",
         "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/cloud_topics/level_one/frontend_reader:level_one_reader_probe",
         "//src/v/cloud_topics/level_one/metastore",
         "//src/v/cloud_topics/level_one/metastore:retry",
-        "//src/v/config",
         "//src/v/model",
         "//src/v/model:timeout_clock",
         "//src/v/utils:prefix_logger",

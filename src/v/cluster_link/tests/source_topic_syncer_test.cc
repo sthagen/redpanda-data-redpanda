@@ -558,8 +558,6 @@ protected:
 };
 
 TEST_F_CORO(invalid_describe_configs_test, bad_describe_config_response) {
-    co_await fixture()->upsert_link(get_default_metadata());
-
     _describe_configs_results.emplace_back(
       kafka::describe_configs_result{
         .error_code = kafka::error_code::topic_authorization_failed});

@@ -23,6 +23,9 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
+#include <seastar/core/thread.hh>
+#include <seastar/core/when_all.hh>
+
 #include <gtest/gtest.h>
 
 using tests::kafka_consume_transport;
@@ -246,4 +249,89 @@ TEST_F(e2e_fixture, timequery) {
           << "for L1 timequery at relative timestamp: "
           << testcase.relative_timestamp;
     }
+}
+
+// Regression test for a race condition in the cloud topics write path.
+//
+// In the write path, data is first uploaded to S3, then the placeholder
+// batch is replicated via raft (advancing the HWM), and only after that
+// the materialized batch is inserted into the record batch cache. A tailing
+// consumer whose fetch is waiting at the partition tip can observe the new
+// HWM, read the placeholder, find the batch cache empty (cache_put hasn't
+// run yet), and fall through to an expensive S3 download.
+//
+// This test runs a producer and a tailing consumer concurrently. S3
+// GetObject requests are configured to fail so that any cache miss during
+// consumption is observable. After the test we assert that no GetObject
+// requests were attempted.
+TEST_F(e2e_fixture, test_tailing_consumer_no_l0_downloads) {
+    // Disable reconciliation to ensure we only exercise the L0 path.
+    test_local_cfg.get("cloud_topics_disable_reconciliation_loop")
+      .set_value(true);
+
+    auto* producer = make_producer();
+    auto* consumer = make_consumer();
+
+    const size_t num_batches = 100;
+    const size_t total_records = num_batches;
+
+    // Producer: produce single-record batches one at a time so that the
+    // consumer has many opportunities to observe the cache-miss window.
+    auto produce_fut = ss::async([&] {
+        for (size_t i = 0; i < num_batches; i++) {
+            std::vector<kv_t> batch = {
+              {ssx::sformat("key{}", i), ssx::sformat("val{}", i)}};
+            producer
+              ->produce_to_partition(topic_name, model::partition_id(0), batch)
+              .get();
+        }
+    });
+
+    // Consumer: tail the partition — always fetch from the latest consumed
+    // offset. The fetch uses max_wait_ms=1000ms internally, so it blocks
+    // until new data arrives or the timeout expires. This creates the
+    // tailing workload where the consumer is waiting right at the tip
+    // when the producer advances the HWM.
+    size_t total_consumed = 0;
+    auto consume_fut = ss::async([&] {
+        model::offset next_offset{0};
+        while (total_consumed < total_records) {
+            auto records = consumer
+                             ->consume_from_partition(
+                               topic_name, model::partition_id(0), next_offset)
+                             .get();
+            total_consumed += records.size();
+            if (!records.empty()) {
+                next_offset = model::offset(
+                  next_offset() + static_cast<int64_t>(records.size()));
+            }
+        }
+    });
+
+    auto results
+      = ss::when_all(std::move(produce_fut), std::move(consume_fut)).get();
+
+    auto& produce_result = std::get<0>(results);
+    auto& consume_result = std::get<1>(results);
+    if (produce_result.failed()) {
+        std::rethrow_exception(produce_result.get_exception());
+    }
+    if (consume_result.failed()) {
+        std::rethrow_exception(consume_result.get_exception());
+    }
+
+    ASSERT_EQ(total_consumed, total_records);
+
+    // Verify no S3 GetObject requests were made. Any such request means
+    // the consumer hit a cache miss and attempted an S3 download, which
+    // indicates the race between replicate() and cache_put().
+    auto s3_get_requests = get_requests(
+      [](const http_test_utils::request_info& req) {
+          return req.method == "GET" && req.q_list_type.empty();
+      });
+    ASSERT_EQ(s3_get_requests.size(), 0)
+      << "Detected " << s3_get_requests.size()
+      << " unexpected S3 GetObject request(s) during tailing consume. "
+         "This indicates a race between replicate() and cache_put() "
+         "in the cloud topics write path.";
 }

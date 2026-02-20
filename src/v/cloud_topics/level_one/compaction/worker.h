@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/compaction/worker_probe.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cluster/metadata_cache.h"
 #include "compaction/key_offset_map.h"
@@ -47,7 +48,8 @@ public:
       metastore*,
       compaction_committer*,
       cluster::metadata_cache*,
-      ss::scheduling_group);
+      ss::scheduling_group,
+      level_one_reader_probe*);
 
     // Launches background loop.
     ss::future<> start();
@@ -202,6 +204,9 @@ private:
     ss::scheduling_group _compaction_sg;
 
     compaction_worker_probe _probe;
+
+    // Owned by `app`.
+    level_one_reader_probe* _l1_reader_probe;
 };
 
 } // namespace cloud_topics::l1

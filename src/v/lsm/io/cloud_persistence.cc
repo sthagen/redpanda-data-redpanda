@@ -19,6 +19,7 @@
 #include "lsm/io/persistence.h"
 #include "ssx/future-util.h"
 #include "utils/retry_chain_node.h"
+#include "utils/uuid.h"
 
 #include <seastar/core/fstream.hh>
 #include <seastar/core/reactor.hh>
@@ -377,10 +378,14 @@ private:
       uint64_t content_length,
       ss::input_stream<char> input_stream,
       std::filesystem::path filepath) {
+        auto temp_path = fmt::format(
+          "{}.tmp.{}", filepath.native(), uuid_t::create());
+
+        // Download to temp file so we can swap below.
         auto file = ss::open_file_dma(
-          filepath.native(),
+          temp_path,
           ss::open_flags::create | ss::open_flags::rw
-            | ss::open_flags::truncate);
+            | ss::open_flags::exclusive);
         auto output_stream
           = co_await ss::with_file_close_on_failure(
               std::move(file),
@@ -400,9 +405,24 @@ private:
                     }
                     return fut;
                 });
+
         co_await ss::copy(input_stream, output_stream)
           .finally([&output_stream] { return output_stream.close(); })
           .finally([&input_stream] { return input_stream.close(); });
+
+        auto rename_fut = co_await ss::coroutine::as_future(
+          ss::rename_file(temp_path, filepath.native()));
+        if (rename_fut.failed()) {
+            auto ex = rename_fut.get_exception();
+            co_await ss::remove_file(temp_path).then_wrapped(
+              [](ss::future<> fut) { fut.ignore_ready_future(); });
+            throw io_error_exception(
+              "Rename from {} to {} failed: {}",
+              temp_path,
+              filepath.native(),
+              ex);
+        }
+
         co_return content_length;
     }
 

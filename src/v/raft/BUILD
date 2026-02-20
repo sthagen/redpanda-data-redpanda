@@ -168,6 +168,7 @@ redpanda_cc_library(
         "//src/v/utils:human",
         "//src/v/utils:named_type",
         "//src/v/utils:notification_list",
+        "//src/v/utils:offset_monitor",
         "//src/v/utils:prefix_logger",
         "//src/v/utils:to_string",
         "@abseil-cpp//absl/container:btree",

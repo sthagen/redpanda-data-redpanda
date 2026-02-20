@@ -9,6 +9,7 @@ redpanda_cc_library(
         "level_zero_gc_probe.h",
     ],
     deps = [
+        "//src/v/cloud_topics:types",
         "//src/v/metrics",
         "@fmt",
         "@seastar",

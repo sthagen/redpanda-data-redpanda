@@ -62,6 +62,7 @@ redpanda_cc_library(
         "//src/v/lsm/core/internal:files",
         "//src/v/ssx:future_util",
         "//src/v/utils:retry_chain_node",
+        "//src/v/utils:uuid",
     ],
     deps = [
         ":persistence",

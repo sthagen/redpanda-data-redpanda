@@ -181,21 +181,70 @@ public:
     ///\brief Return a list of subjects.
     chunked_vector<context_subject> get_subjects(
       include_deleted inc_del,
-      const std::optional<ss::sstring>& subject_prefix = std::nullopt) const {
+      std::optional<std::string_view> subject_prefix = std::nullopt) const {
+        const auto original_prefix = subject_prefix;
         chunked_vector<context_subject> res;
         res.reserve(_subjects.size());
-        for (const auto& ctx_sub : _subjects) {
-            if (inc_del || !ctx_sub.second.deleted) {
-                auto has_version = std::ranges::any_of(
-                  ctx_sub.second.versions,
-                  [inc_del](const auto& v) { return inc_del || !v.deleted; });
-                if (
-                  has_version
-                  && ctx_sub.first.starts_with(subject_prefix.value_or(""))) {
-                    res.push_back(ctx_sub.first);
-                }
-            }
+
+        constexpr std::string_view WILDCARD_CTX{":*:"};
+        constexpr std::string_view DEFAULT_CTX{":.:"};
+        const auto prefix_has_wildcard_ctx = subject_prefix.has_value()
+                                             && subject_prefix->starts_with(
+                                               WILDCARD_CTX);
+        const auto prefix_has_default_ctx = subject_prefix.has_value()
+                                            && subject_prefix->starts_with(
+                                              DEFAULT_CTX);
+
+        // If the prefix has a wildcard or qualified default context, strip it
+        // for matching purposes
+        if (prefix_has_wildcard_ctx) {
+            subject_prefix = subject_prefix->substr(WILDCARD_CTX.size());
+        } else if (prefix_has_default_ctx) {
+            subject_prefix = subject_prefix->substr(DEFAULT_CTX.size());
         }
+
+        auto matching_subject_names
+          = _subjects | std::views::filter([inc_del](const auto& s) {
+                return inc_del || !s.second.deleted;
+            })
+            | std::views::filter([inc_del](const auto& s) {
+                  return std::ranges::any_of(
+                    s.second.versions,
+                    [inc_del](const auto& v) { return inc_del || !v.deleted; });
+              })
+            | std::views::filter([&](const auto& s) {
+                  if (!subject_prefix.has_value()) {
+                      return true;
+                  }
+
+                  if (prefix_has_wildcard_ctx) {
+                      // Wildcard context prefix: match subjects across all
+                      // contexts by subject name prefix
+                      return s.first.sub().starts_with(subject_prefix.value());
+                  } else if (prefix_has_default_ctx) {
+                      // Qualified default context prefix: match only against
+                      // subjects in the default context, which have no context
+                      // prefix in their name
+                      return s.first.ctx == default_context
+                             && s.first.sub().starts_with(
+                               subject_prefix.value());
+                  } else {
+                      return s.first.starts_with(subject_prefix.value());
+                  }
+              })
+            | std::views::keys;
+
+        std::ranges::copy(matching_subject_names, std::back_inserter(res));
+
+        vlog(
+          srlog.trace,
+          "Listing subjects with prefix=\"{}\", mode={}, matched={} subjects",
+          original_prefix.value_or("(none)"),
+          (prefix_has_wildcard_ctx  ? "wildcard"
+           : prefix_has_default_ctx ? "default_ctx"
+                                    : "normal"),
+          res.size());
+
         return res;
     }
 

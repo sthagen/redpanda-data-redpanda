@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/log_reader_config.h"
 #include "container/chunked_circular_buffer.h"
@@ -148,7 +149,7 @@ protected:
           /*strict_max_bytes=*/strict_max_bytes);
         return model::record_batch_reader(
           std::make_unique<level_one_log_reader_impl>(
-            config, ntp, tidp, &_metastore, &_io));
+            config, ntp, tidp, &_metastore, &_io, nullptr));
     }
 
     chunked_circular_buffer<model::record_batch>

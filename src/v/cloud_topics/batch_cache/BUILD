@@ -46,6 +46,7 @@ redpanda_cc_library(
         "//src/v/storage",
         "//src/v/storage:batch_cache",
         "//src/v/storage:record_batch_utils",
+        "//src/v/utils:offset_monitor",
         "//src/v/utils:retry_chain_node",
         "@abseil-cpp//absl/container:btree",
         "@seastar",

@@ -365,11 +365,12 @@ frontend::make_l1_reader(const cloud_topic_log_reader_config& cfg) const {
     auto ct_state = _partition->get_cloud_topics_state();
     auto l1_metastore = ct_state->local().get_l1_metastore();
     auto l1_io = ct_state->local().get_l1_io();
+    auto l1_reader_probe = ct_state->local().get_l1_reader_probe();
 
     auto tidp = topic_id_partition();
 
     return std::make_unique<level_one_log_reader_impl>(
-      cfg, _partition->ntp(), tidp, l1_metastore, l1_io);
+      cfg, _partition->ntp(), tidp, l1_metastore, l1_io, l1_reader_probe);
 }
 
 ss::future<std::optional<storage::timequery_result>>

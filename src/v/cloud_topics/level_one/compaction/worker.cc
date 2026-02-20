@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/compaction/sink.h"
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/compaction/worker_manager.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cluster/metadata_cache.h"
 #include "compaction/reducer.h"
 #include "config/configuration.h"
@@ -33,7 +34,8 @@ compaction_worker::compaction_worker(
   metastore* metastore,
   compaction_committer* committer,
   cluster::metadata_cache* metadata_cache,
-  ss::scheduling_group compaction_sg)
+  ss::scheduling_group compaction_sg,
+  level_one_reader_probe* l1_reader_probe)
   : _worker_update_queue([](const std::exception_ptr& ex) {
       vlog(
         compaction_log.error,
@@ -47,7 +49,8 @@ compaction_worker::compaction_worker(
   , _metastore(metastore)
   , _committer(committer)
   , _metadata_cache(metadata_cache)
-  , _compaction_sg(compaction_sg) {
+  , _compaction_sg(compaction_sg)
+  , _l1_reader_probe(l1_reader_probe) {
     _poll_interval.watch([this]() { _worker_cv.signal(); });
 }
 
@@ -224,7 +227,8 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       _io,
       _as,
       _job_state,
-      _probe);
+      _probe,
+      _l1_reader_probe);
     auto sink = std::make_unique<compaction_sink>(
       tidp,
       dirty_range_intervals,
