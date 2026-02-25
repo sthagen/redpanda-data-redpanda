@@ -75,7 +75,7 @@ storage::ntp_config topic_configuration::make_ntp_config(
       remote_rev};
 }
 
-void topic_configuration::serde_write(iobuf& out) {
+void topic_configuration::serde_write(iobuf& out) const {
     using serde::write;
     write(out, tp_ns);
     write(out, partition_count);

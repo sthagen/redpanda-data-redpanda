@@ -538,8 +538,7 @@ bool producer_state::has_transaction_expired() const {
            || ms_since_last_update() > _transaction_state->timeout_ms();
 }
 
-producer_state_snapshot
-producer_state::snapshot(kafka::offset log_start_offset) const {
+producer_state_snapshot producer_state::snapshot() const {
     producer_state_snapshot snapshot;
     snapshot.id = _id;
     snapshot.group = _group;
@@ -556,14 +555,8 @@ producer_state::snapshot(kafka::offset log_start_offset) const {
         }
         auto kafka_offset
           = req->_result.get_shared_future().get().value().last_offset;
-        // offsets older than log start are no longer interesting.
-        if (kafka_offset >= log_start_offset) {
-            snapshot.finished_requests.emplace_back(
-              req->_first_sequence,
-              req->_last_sequence,
-              kafka_offset,
-              req->term());
-        }
+        snapshot.finished_requests.emplace_back(
+          req->_first_sequence, req->_last_sequence, kafka_offset, req->term());
     }
     if (_transaction_state) {
         snapshot.transaction_state = *_transaction_state;

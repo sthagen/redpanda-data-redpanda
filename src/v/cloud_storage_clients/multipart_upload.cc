@@ -12,10 +12,9 @@
 
 #include "base/vassert.h"
 #include "base/vlog.h"
-#include "cloud_storage_clients/logger.h"
+#include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/util/log.hh>
 
 namespace cloud_storage_clients {
 
@@ -65,9 +64,12 @@ private:
 };
 
 multipart_upload::multipart_upload(
-  ss::shared_ptr<multipart_upload_state> state, size_t part_size)
+  ss::shared_ptr<multipart_upload_state> state,
+  size_t part_size,
+  ss::logger& logger)
   : _state(std::move(state))
-  , _part_size(part_size) {}
+  , _part_size(part_size)
+  , _logger(logger) {}
 
 multipart_upload::~multipart_upload() {
     vassert(
@@ -99,7 +101,7 @@ ss::future<> multipart_upload::put(iobuf data) {
         // Lazy initialization: only initialize on first part upload
         if (!_multipart_initialized) {
             vlog(
-              s3_log.debug,
+              _logger.debug,
               "Initializing multipart upload for first part (size: {})",
               _part_size);
             co_await _state->initialize_multipart();
@@ -107,7 +109,7 @@ ss::future<> multipart_upload::put(iobuf data) {
         }
 
         vlog(
-          s3_log.debug,
+          _logger.debug,
           "Uploading part {} (size: {})",
           _part_number,
           part_data.size_bytes());
@@ -117,7 +119,7 @@ ss::future<> multipart_upload::put(iobuf data) {
 
 ss::future<> multipart_upload::complete() {
     if (_finalized) {
-        throw std::logic_error("Multipart upload already finalized");
+        co_return;
     }
 
     _finalized = true;
@@ -126,7 +128,7 @@ ss::future<> multipart_upload::complete() {
     // the total data is less than part_size, use regular put_object instead
     if (!_multipart_initialized) {
         vlog(
-          s3_log.debug,
+          _logger.debug,
           "Small file optimization: using single put_object (size: {})",
           _buffer.size_bytes());
         co_await _state->upload_as_single_object(std::move(_buffer));
@@ -136,7 +138,7 @@ ss::future<> multipart_upload::complete() {
     // Upload final part if any data remains
     if (_buffer.size_bytes() > 0) {
         vlog(
-          s3_log.debug,
+          _logger.debug,
           "Uploading final part {} (size: {})",
           _part_number,
           _buffer.size_bytes());
@@ -144,8 +146,10 @@ ss::future<> multipart_upload::complete() {
           _state->upload_part(_part_number++, std::move(_buffer)));
         if (fut.failed()) {
             auto ex = fut.get_exception();
-            vlog(
-              s3_log.error,
+            vlogl(
+              _logger,
+              ssx::is_shutdown_exception(ex) ? ss::log_level::warn
+                                             : ss::log_level::error,
               "Multipart upload final part failed, aborting: {}",
               ex);
             co_await abort_on_error();
@@ -154,13 +158,19 @@ ss::future<> multipart_upload::complete() {
     }
     // Complete the multipart upload
     vlog(
-      s3_log.debug, "Completing multipart upload ({} parts)", _part_number - 1);
+      _logger.debug,
+      "Completing multipart upload ({} parts)",
+      _part_number - 1);
     auto fut = co_await ss::coroutine::as_future(
       _state->complete_multipart_upload());
     if (fut.failed()) {
         auto ex = fut.get_exception();
-        vlog(
-          s3_log.error, "Multipart upload completion failed, aborting: {}", ex);
+        vlogl(
+          _logger,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::warn
+                                         : ss::log_level::error,
+          "Multipart upload completion failed, aborting: {}",
+          ex);
         co_await abort_on_error();
         std::rethrow_exception(ex);
     }
@@ -169,7 +179,7 @@ ss::future<> multipart_upload::complete() {
 ss::future<> multipart_upload::abort() {
     if (_finalized) {
         // Already finalized - this is idempotent
-        vlog(s3_log.debug, "abort() called on already finalized upload");
+        vlog(_logger.debug, "abort() called on already finalized upload");
         co_return;
     }
 
@@ -179,13 +189,13 @@ ss::future<> multipart_upload::abort() {
         co_return;
     }
 
-    vlog(s3_log.debug, "Aborting multipart upload");
+    vlog(_logger.debug, "Aborting multipart upload");
     try {
         co_await _state->abort_multipart_upload();
     } catch (...) {
         // Log but don't propagate abort failures - we're already aborting
         vlog(
-          s3_log.warn,
+          _logger.warn,
           "Abort multipart upload failed: {}",
           std::current_exception());
     }
@@ -196,7 +206,7 @@ ss::future<> multipart_upload::abort_on_error() {
       _state->abort_multipart_upload());
     if (fut.failed()) {
         vlog(
-          s3_log.warn,
+          _logger.warn,
           "Failed to abort multipart upload after completion failure: {}",
           fut.get_exception());
     }

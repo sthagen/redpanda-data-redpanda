@@ -8,7 +8,6 @@ Type=oneshot
 
 EnvironmentFile=/etc/default/redpanda
 
-
 EnvironmentFile=-/etc/redpanda.d/*.conf
 ExecStart=/usr/bin/rpk redpanda tune all $CPUSET
 RemainAfterExit=true

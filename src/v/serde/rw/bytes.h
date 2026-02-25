@@ -14,7 +14,7 @@
 
 namespace serde {
 
-inline void tag_invoke(tag_t<write_tag>, iobuf& out, bytes t) {
+inline void tag_invoke(tag_t<write_tag>, iobuf& out, const bytes& t) {
     write<serde_size_t>(out, t.size());
     out.append(t.data(), t.size());
 }

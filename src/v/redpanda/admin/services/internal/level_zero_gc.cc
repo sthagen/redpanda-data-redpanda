@@ -29,6 +29,12 @@ namespace {
 ss::logger gclog("level_zero_gc_service");
 constexpr model::timeout_clock::duration leader_timeout = 5s;
 constexpr model::timeout_clock::duration advance_epoch_timeout = 10s;
+void validate_initialized(ss::sharded<cloud_topics::level_zero_gc>* gc) {
+    if (!gc->local_is_initialized()) {
+        throw serde::pb::rpc::unavailable_exception(
+          "Cloud topics level zero GC not initialized");
+    }
+}
 } // namespace
 
 namespace admin {
@@ -72,6 +78,7 @@ seastar::future<proto::admin::level_zero_gc::get_status_response>
 level_zero_gc_service_impl::get_status(
   serde::pb::rpc::context ctx,
   proto::admin::level_zero_gc::get_status_request req) {
+    validate_initialized(_gc);
     using namespace proto::admin::level_zero_gc;
     auto [local, remote] = validate_request_routing(ctx, req);
 
@@ -126,6 +133,7 @@ level_zero_gc_service_impl::get_status(
 seastar::future<proto::admin::level_zero_gc::start_response>
 level_zero_gc_service_impl::start(
   serde::pb::rpc::context ctx, proto::admin::level_zero_gc::start_request req) {
+    validate_initialized(_gc);
     using namespace proto::admin::level_zero_gc;
     auto [local, remote] = validate_request_routing(ctx, req);
 
@@ -163,6 +171,7 @@ level_zero_gc_service_impl::start(
 seastar::future<proto::admin::level_zero_gc::pause_response>
 level_zero_gc_service_impl::pause(
   serde::pb::rpc::context ctx, proto::admin::level_zero_gc::pause_request req) {
+    validate_initialized(_gc);
     using namespace proto::admin::level_zero_gc;
     auto [local, remote] = validate_request_routing(ctx, req);
 

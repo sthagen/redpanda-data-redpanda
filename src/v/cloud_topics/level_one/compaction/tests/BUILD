@@ -34,8 +34,6 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_one/common:object",
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/common:object_utils",
-        "//src/v/cloud_topics/level_one/compaction:committer",
-        "//src/v/cloud_topics/level_one/compaction:committing_policy",
         "//src/v/cloud_topics/level_one/compaction:filter",
         "//src/v/cloud_topics/level_one/compaction:meta",
         "//src/v/cloud_topics/level_one/compaction:source_and_sink",
@@ -121,8 +119,6 @@ redpanda_test_cc_library(
         "scheduler_fixture.h",
     ],
     deps = [
-        "//src/v/cloud_topics/level_one/compaction:committer",
-        "//src/v/cloud_topics/level_one/compaction:committing_policy",
         "//src/v/cloud_topics/level_one/compaction:log_info_collector",
         "//src/v/cloud_topics/level_one/compaction:scheduler",
         "//src/v/cloud_topics/level_one/compaction:scheduling_policies",

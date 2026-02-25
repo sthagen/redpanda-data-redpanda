@@ -26,6 +26,7 @@
 using namespace cloud_storage_clients;
 using namespace cloud_storage_clients::tests;
 
+static ss::logger test_log("multipart_upload_test");
 static constexpr size_t test_part_size = 5_MiB;
 
 SEASTAR_THREAD_TEST_CASE(test_multipart_upload_basic) {
@@ -79,7 +80,7 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_basic) {
 
     BOOST_REQUIRE(state_result.has_value());
     auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size);
+      std::move(state_result.value()), test_part_size, test_log);
 
     // Write 6 MiB of data (should trigger one part upload immediately)
     auto data = ::tests::random_iobuf(6_MiB);
@@ -129,7 +130,7 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_small_file_optimization) {
 
     BOOST_REQUIRE(state_result.has_value());
     auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size);
+      std::move(state_result.value()), test_part_size, test_log);
 
     // Write only 3 MiB (less than part_size)
     auto data = ::tests::random_iobuf(3_MiB);
@@ -190,7 +191,7 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_abort) {
 
     BOOST_REQUIRE(state_result.has_value());
     auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size);
+      std::move(state_result.value()), test_part_size, test_log);
 
     // Write data to trigger multipart initialization
     auto data = ::tests::random_iobuf(6_MiB);
@@ -269,7 +270,7 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_complete_error_in_body) {
 
     BOOST_REQUIRE(state_result.has_value());
     auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size);
+      std::move(state_result.value()), test_part_size, test_log);
 
     // Write exactly 5 MiB (triggers first part upload, no leftover)
     auto data = ::tests::random_iobuf(5_MiB);

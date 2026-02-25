@@ -440,9 +440,7 @@ leader_router::metastore_partition(const model::topic_id_partition& tp) const {
     if (!md) {
         return std::nullopt;
     }
-    iobuf temp;
-    write(temp, tp);
-    auto bytes = iobuf_to_bytes(temp);
+    auto bytes = iobuf_to_bytes(serde::to_iobuf(tp));
     auto partition = murmur2(bytes.data(), bytes.size())
                      % md->get().get_configuration().partition_count;
     return model::partition_id{static_cast<int32_t>(partition)};

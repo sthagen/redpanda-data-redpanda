@@ -58,10 +58,6 @@ void reconciler_probe::setup_metrics() {
           [this] { return _object_build_failed; },
           sm::description("Total objects that failed to build")),
         sm::make_counter(
-          "object_upload_failed",
-          [this] { return _object_upload_failed; },
-          sm::description("Total objects that failed to upload")),
-        sm::make_counter(
           "empty_objects_skipped",
           [this] { return _empty_objects_skipped; },
           sm::description(
@@ -86,13 +82,7 @@ void reconciler_probe::setup_metrics() {
           [this] {
               return _object_build_duration.internal_histogram_logform();
           },
-          sm::description("Duration building L1 objects")),
-        sm::make_histogram(
-          "object_upload_duration_seconds",
-          [this] {
-              return _object_upload_duration.internal_histogram_logform();
-          },
-          sm::description("Duration uploading L1 objects")),
+          sm::description("Duration building and uploading L1 objects")),
         sm::make_histogram(
           "metastore_add_objects_duration_seconds",
           [this] {

@@ -16,6 +16,7 @@ namespace cloud_topics {
 struct test_fixture_cfg {
     bool use_lsm_metastore{true};
     bool skip_flush_loop{false};
+    bool skip_level_zero_gc{false};
 };
 
 } // namespace cloud_topics

@@ -10,8 +10,6 @@
 
 #include "cloud_topics/level_one/compaction/scheduler.h"
 
-#include "cloud_topics/level_one/compaction/committer.h"
-#include "cloud_topics/level_one/compaction/committing_policy.h"
 #include "cloud_topics/level_one/compaction/log_collector.h"
 #include "cloud_topics/level_one/compaction/log_info_collector.h"
 #include "cloud_topics/level_one/compaction/logger.h"
@@ -50,7 +48,6 @@ compaction_scheduler::compaction_scheduler(
       _compaction_queue,
       io,
       metastore,
-      &_committer,
       state.metadata_cache,
       _probe,
       l1_reader_probe)
@@ -64,13 +61,7 @@ compaction_scheduler::compaction_scheduler(log_info_collector info_collector)
   : _log_info_collector(std::move(info_collector))
   , _scheduling_policy(make_default_scheduling_policy())
   , _worker_manager(
-      _compaction_queue,
-      nullptr,
-      nullptr,
-      &_committer,
-      nullptr,
-      _probe,
-      nullptr)
+      _compaction_queue, nullptr, nullptr, nullptr, _probe, nullptr)
   , _compaction_interval(
       config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {
@@ -190,11 +181,6 @@ ss::future<> compaction_scheduler::scheduling_loop() {
 
 ss::future<> compaction_scheduler::start() {
     _probe.setup_metrics();
-    co_await _committer.start(
-      ss::sharded_parameter([] { return make_default_committing_policy(); }),
-      ss::sharded_parameter([this] { return &_io->local(); }),
-      ss::sharded_parameter([this] { return &_metastore->local(); }));
-    co_await _committer.invoke_on_all(&compaction_committer::start);
     co_await _worker_manager.start();
     co_await _log_collector->start();
     start_bg_loop();
@@ -218,9 +204,6 @@ ss::future<> compaction_scheduler::stop() {
 
     // Stop workers and inflight compactions.
     co_await _worker_manager.stop();
-
-    // Destruct committer.
-    co_await _committer.stop();
 
     co_await std::move(close_fut);
 }

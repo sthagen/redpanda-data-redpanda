@@ -282,7 +282,7 @@ struct full_heartbeat_reply {
         read_nested(in, req.data, bytes_left_limit);
     }
 
-    friend inline void write(iobuf& out, full_heartbeat_reply req) {
+    friend inline void write_nested(iobuf& out, full_heartbeat_reply req) {
         using serde::write;
         write(out, req.group);
         write(out, req.result);
@@ -307,7 +307,7 @@ struct full_heartbeat {
         read_nested(in, fh.group, bytes_left_limit);
         read_nested(in, fh.data, bytes_left_limit);
     }
-    friend inline void write(iobuf& out, full_heartbeat fh) {
+    friend inline void write_nested(iobuf& out, full_heartbeat fh) {
         using serde::write;
         write(out, fh.group);
         write(out, fh.data);

@@ -8,12 +8,17 @@
 # by the Apache License, Version 2.0
 
 import json
+import uuid
 from typing import TypeAlias, cast
 
 
 from rptest.clients.admin.v2 import Admin, l0_gc_pb, ntp_pb
 from rptest.context.cloud_storage import CloudStorageType
 from rptest.services.kgo_repeater_service import repeater_traffic
+from rptest.services.kgo_verifier_services import (
+    KgoVerifierProducer,
+    KgoVerifierSeqConsumer,
+)
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 
@@ -21,9 +26,11 @@ from connectrpc.errors import ConnectError
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.errors import TimeoutError
 from ducktape.tests.test import TestContext
+from rptest.archival.s3_client import S3Client
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
+from rptest.services.admin import Admin as RedpandaAdmin
 from rptest.services.redpanda import (
     SISettings,
     get_cloud_storage_type,
@@ -35,7 +42,10 @@ from rptest.util import expect_exception
 
 class CloudTopicsL0GCTestBase(RedpandaTest):
     def __init__(
-        self, test_context: TestContext, housekeeping_interval_ms: int | None = None
+        self,
+        test_context: TestContext,
+        housekeeping_interval_ms: int | None = None,
+        extra_rp_conf_overrides: dict[str, int | bool] | None = None,
     ):
         self.test_context = test_context
         si_settings = SISettings(
@@ -58,6 +68,8 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
             "cloud_topics_short_term_gc_interval": 2000,
             "cloud_topics_short_term_gc_backoff_interval": 10000,
         }
+        if extra_rp_conf_overrides:
+            extra_rp_conf.update(extra_rp_conf_overrides)
         super().__init__(
             test_context=test_context,
             extra_rp_conf=extra_rp_conf,
@@ -84,6 +96,32 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
             deleted_total = int(sum(s.value for s in samples.samples))
             self.logger.debug(f"{deleted_total=}")
             return deleted_total
+        return 0
+
+    @property
+    def l0_gc_client(self):
+        return Admin(self.redpanda).l0_gc()
+
+    def _get_metric_total(
+        self, name: str, nodes: list[ClusterNode] | None = None
+    ) -> int:
+        samples = self.redpanda.metrics_sample(name, nodes=nodes)
+        if samples is not None and samples.samples:
+            return int(sum(s.value for s in samples.samples))
+        return 0
+
+    def _get_metric_values(
+        self, name: str, nodes: list[ClusterNode] | None = None
+    ) -> list[int]:
+        samples = self.redpanda.metrics_sample(name, nodes=nodes)
+        if samples is not None and samples.samples:
+            return [int(s.value) for s in samples.samples]
+        return []
+
+    def _get_metric_max(self, name: str, nodes: list[ClusterNode] | None = None) -> int:
+        samples = self.redpanda.metrics_sample(name, nodes=nodes)
+        if samples is not None and samples.samples:
+            return int(max(s.value for s in samples.samples))
         return 0
 
     def produce_some(self, topics: list[str], n: int = 300):
@@ -162,10 +200,6 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
         super().__init__(
             test_context=test_context, housekeeping_interval_ms=10 * 60 * 60 * 1000
         )
-
-    @property
-    def l0_gc_client(self):
-        return Admin(self.redpanda).l0_gc()
 
     def gc_get_status(self, node: int | None = None) -> StatusReport:
         response = self.l0_gc_client.get_status(l0_gc_pb.GetStatusRequest(node_id=node))
@@ -567,6 +601,15 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
         epochs = self.gc_get_epoch_info()
         self.check_epochs(epochs, produce_topics, [stalled_topic])
 
+        # While stuck, min_partition_gc_epoch should be <= 0.
+        min_epoch_metric = "vectorized_cloud_topics_l0_gc_min_partition_gc_epoch"
+        min_epoch_while_stuck = self._get_metric_max(min_epoch_metric)
+        self.logger.debug(f"While stuck: {min_epoch_while_stuck=}")
+        assert min_epoch_while_stuck <= 0, (
+            f"Expected min_partition_gc_epoch <= 0 while stalled "
+            f"topic blocks, got {min_epoch_while_stuck}"
+        )
+
         self.logger.debug(
             "Force the stalled topic's epoch up to the inactive epoch of the active topic. This should unstick GC"
         )
@@ -602,6 +645,100 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
             backoff_sec=5,
             retry_on_exc=True,
         )
+
+        # After unstick, min_partition_gc_epoch should be positive.
+        wait_until(
+            lambda: self._get_metric_max(min_epoch_metric) > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+        self.logger.debug("After unstick: min_partition_gc_epoch > 0")
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_concurrent_pause_start(self, cloud_storage_type: CloudStorageType):
+        """
+        Integration: Rapidly toggle pause/start while GC is running.
+        Verify no crashes, no stuck state, and that the last command wins.
+        """
+        topic = TopicSpec(partition_count=2, replication_factor=3)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        self.produce_some(topics=[topic.name], n=300)
+
+        self.logger.info("Waiting for GC to start deleting")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        # Rapidly toggle pause/start.
+        self.logger.info("Starting rapid pause/start toggling (50 rounds)")
+        for _ in range(50):
+            self.gc_pause()
+            self.gc_start()
+        self.logger.info("Toggling complete")
+
+        # End with start — verify GC reaches RUNNING and keeps working.
+        self.gc_start()
+        wait_until(
+            lambda: self._all_running(),
+            timeout_sec=15,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+        deleted_after_toggle = self.get_num_objects_deleted()
+        self.logger.info(
+            f"After toggling (running): objects_deleted={deleted_after_toggle}"
+        )
+
+        # Verify GC continues to make progress.
+        wait_until(
+            lambda: self.get_num_objects_deleted() > deleted_after_toggle,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+        deleted_running = self.get_num_objects_deleted()
+        self.logger.info(f"GC still progressing: objects_deleted={deleted_running}")
+
+        # End with pause — verify GC reaches PAUSED and stops.
+        self.gc_pause()
+        wait_until(
+            lambda: self._all_paused(),
+            timeout_sec=15,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+        deleted_at_pause = self.get_num_objects_deleted()
+
+        # Verify objects_deleted does not advance while paused.
+        with expect_exception(TimeoutError, lambda _: True):
+            wait_until(
+                lambda: self.get_num_objects_deleted() > deleted_at_pause,
+                timeout_sec=10,
+                backoff_sec=2,
+                retry_on_exc=True,
+            )
+
+    def _all_in_state(self, expected: GcStatus.ValueType) -> bool:
+        try:
+            self.check_statuses(self.gc_get_status(), status=expected)
+            return True
+        except AssertionError:
+            return False
+
+    def _all_running(self) -> bool:
+        return self._all_in_state(GcStatus.L0_GC_STATUS_RUNNING)
+
+    def _all_paused(self) -> bool:
+        return self._all_in_state(GcStatus.L0_GC_STATUS_PAUSED)
 
 
 class CloudTopicsL0GCMetricsTest(CloudTopicsL0GCTestBase):
@@ -703,3 +840,517 @@ class CloudTopicsL0GCMetricsTest(CloudTopicsL0GCTestBase):
             f"Expected batching: {total_deleted=} should be greater than "
             f"{total_delete_requests=}"
         )
+
+
+class CloudTopicsL0GCDataIntegrityTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Verify GC does not cause data loss.
+
+    Produces a known number of records, waits for GC to delete L0 objects
+    (confirming reconciliation has moved data to L1), then consumes and
+    verifies every record is intact.
+    """
+
+    MSG_COUNT = 5000
+    MSG_SIZE = 1024
+
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=get_cloud_storage_type())
+    def test_no_data_loss_under_gc(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce records, let GC delete L0 objects, then consume and verify
+        that every record is still readable.
+        """
+        topic = TopicSpec(partition_count=2)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            topic.name,
+            msg_size=self.MSG_SIZE,
+            msg_count=self.MSG_COUNT,
+        )
+        producer.start()
+        producer.wait(timeout_sec=120)
+
+        pstatus = producer.produce_status
+        self.logger.info(
+            f"Produced {pstatus.acked} records, bad_offsets={pstatus.bad_offsets}"
+        )
+        assert pstatus.acked == self.MSG_COUNT, (
+            f"Producer did not ack all messages: {pstatus.acked} != {self.MSG_COUNT}"
+        )
+        assert pstatus.bad_offsets == 0, (
+            f"Producer saw {pstatus.bad_offsets} bad offsets"
+        )
+
+        self.logger.info("Waiting for GC to delete L0 objects")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=60,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
+        objects_deleted = self.get_num_objects_deleted()
+        self.logger.info(f"GC has deleted {objects_deleted} L0 objects, consuming now")
+
+        consumer = KgoVerifierSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            topic.name,
+            msg_size=self.MSG_SIZE,
+            loop=False,
+            nodes=[producer.nodes[0]],
+        )
+        consumer.start(clean=False)
+        consumer.wait(timeout_sec=120)
+
+        cstatus = consumer.consumer_status
+        self.logger.info(
+            f"Consumer: valid_reads={cstatus.validator.valid_reads}, "
+            f"invalid_reads={cstatus.validator.invalid_reads}, "
+            f"offset_gaps={cstatus.validator.offset_gaps}, "
+            f"out_of_scope_invalid_reads={cstatus.validator.out_of_scope_invalid_reads}"
+        )
+
+        assert cstatus.validator.invalid_reads == 0, (
+            f"Data corruption: {cstatus.validator.invalid_reads} invalid reads"
+        )
+        assert cstatus.validator.out_of_scope_invalid_reads == 0, (
+            f"Out-of-scope reads: {cstatus.validator.out_of_scope_invalid_reads}"
+        )
+        assert cstatus.validator.valid_reads == self.MSG_COUNT, (
+            f"Data loss: expected {self.MSG_COUNT} reads, "
+            f"got {cstatus.validator.valid_reads}"
+        )
+
+        producer.stop()
+        consumer.stop()
+
+
+class CloudTopicsL0GCGracePeriodTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Verify the deletion grace period is enforced.
+
+    Objects that are epoch-eligible but younger than the configured
+    minimum age must not be deleted. Once they age past the grace
+    period they should be collected.
+    """
+
+    GRACE_PERIOD_S = 30
+
+    def __init__(self, test_context: TestContext):
+        super().__init__(
+            test_context=test_context,
+            extra_rp_conf_overrides={
+                "cloud_topics_short_term_gc_minimum_object_age": self.GRACE_PERIOD_S
+                * 1000,
+                # Keep GC polling frequently so we observe skips quickly.
+                "cloud_topics_short_term_gc_interval": 1000,
+                "cloud_topics_short_term_gc_backoff_interval": 2000,
+            },
+        )
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_grace_period_enforcement(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce a burst of records as fast as possible so all L0 objects
+        have similar creation times. With a 30s grace period, GC should
+        list and skip them as 'too young' for a long window after epochs
+        advance, then delete them once they age out.
+        """
+        topic = TopicSpec(partition_count=1)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        # Use KgoVerifierProducer for a fast, synchronous burst so that
+        # all L0 objects are created in a narrow time window.
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            topic.name,
+            msg_size=1024,
+            msg_count=500,
+        )
+        producer.start()
+        producer.wait(timeout_sec=60)
+        self.logger.info(f"Produced {producer.produce_status.acked} records")
+        producer.stop()
+
+        skipped_metric = "vectorized_cloud_topics_l0_gc_objects_skipped_too_young_total"
+
+        self.logger.info(
+            "Waiting for GC to skip epoch-eligible objects as too young "
+            "while no objects have been deleted yet"
+        )
+        wait_until(
+            lambda: self._get_metric_total(skipped_metric) > 0,
+            timeout_sec=30,
+            backoff_sec=1,
+            retry_on_exc=True,
+        )
+
+        assert self.get_num_objects_deleted() == 0, (
+            f"Expected objects_delete=0, got {self.get_num_objects_deleted()=}"
+        )
+
+        self.logger.info(f"Waiting for grace period ({self.GRACE_PERIOD_S}s) to expire")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=self.GRACE_PERIOD_S + 10,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+
+class CloudTopicsL0GCNodeFailureTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Verify GC survives a node failure mid-collection and
+    resumes cluster-wide progress after the node restarts.
+    """
+
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=get_cloud_storage_type())
+    def test_node_failure_mid_gc(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce data, let GC make progress, kill a node, verify surviving
+        nodes continue collecting, then restart and confirm cluster-wide
+        GC resumes.
+        """
+        topic = TopicSpec(partition_count=3)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        self.produce_some(topics=[topic.name], n=500)
+
+        self.logger.info("Waiting for GC to make meaningful progress")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        # Pick the node to kill. Use the last node so that the admin API
+        # (which targets the first node by default) stays available.
+        kill_node = self.redpanda.nodes[-1]
+        kill_node_id = self.redpanda.node_id(kill_node)
+        surviving_nodes = [n for n in self.redpanda.nodes if n != kill_node]
+
+        deleted_on_survivors_before = self.get_num_objects_deleted(
+            nodes=surviving_nodes
+        )
+
+        self.logger.info(f"Killing node {kill_node.name} (id={kill_node_id})")
+        self.redpanda.stop_node(kill_node, timeout=30)
+
+        self.logger.info("Verifying surviving nodes continue GC")
+        wait_until(
+            lambda: self.get_num_objects_deleted(nodes=surviving_nodes)
+            > deleted_on_survivors_before,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        self.logger.info(f"Restarting node {kill_node.name} (id={kill_node_id})")
+        self.redpanda.start_node(kill_node, timeout=30, node_id_override=kill_node_id)
+
+        deleted_after_restart = self.get_num_objects_deleted(nodes=[kill_node])
+        self.logger.info(
+            f"Waiting for restarted node GC to resume (currently {deleted_after_restart})"
+        )
+        wait_until(
+            lambda: self.get_num_objects_deleted(nodes=[kill_node])
+            > deleted_after_restart,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+
+class CloudTopicsL0GCLeadershipTransferTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Verify GC continues making progress through leadership
+    transfers.
+    """
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_leadership_transfer_during_gc(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce records, let GC make progress, transfer partition
+        leadership, then verify GC continues deleting objects.
+        """
+        topic = TopicSpec(partition_count=1, replication_factor=3)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        self.produce_some(topics=[topic.name], n=300)
+
+        self.logger.info("Waiting for GC to start deleting")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        # Find current leader and pick a different target.
+        admin = RedpandaAdmin(self.redpanda)
+        leader_id = admin.get_partition_leader(
+            namespace="kafka", topic=topic.name, partition=0
+        )
+        target_id = next(
+            self.redpanda.node_id(n)
+            for n in self.redpanda.nodes
+            if self.redpanda.node_id(n) != leader_id
+        )
+        self.logger.info(f"Transferring leadership from {leader_id} to {target_id}")
+        admin.partition_transfer_leadership("kafka", topic.name, 0, target_id)
+
+        wait_until(
+            lambda: admin.get_partition_leader(
+                namespace="kafka", topic=topic.name, partition=0
+            )
+            == target_id,
+            timeout_sec=30,
+            backoff_sec=2,
+            retry_on_exc=True,
+        )
+        self.logger.info(f"Leadership transferred to {target_id}")
+
+        # Snapshot after transfer so we know progress is post-transfer.
+        deleted_before = self.get_num_objects_deleted()
+
+        # Verify GC continues to make progress post-transfer.
+        wait_until(
+            lambda: self.get_num_objects_deleted() > deleted_before,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+
+class CloudTopicsL0GCTopicDeletionTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Delete a cloud topic while GC is actively running.
+    Verify GC handles it gracefully — no crashes, no hangs, and
+    max_deleted_epoch continues advancing for the remaining topic.
+    """
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_topic_deletion_during_gc(self, cloud_storage_type: CloudStorageType):
+        """
+        Create two topics, produce to both, wait for GC to start,
+        delete one topic, and verify GC continues for the survivor.
+        """
+        topic_a = TopicSpec(partition_count=1, replication_factor=3)
+        topic_b = TopicSpec(partition_count=1, replication_factor=3)
+        self.topics = [topic_a, topic_b]
+        self.create_topics(self.topics)
+
+        self.produce_some(topics=[topic_a.name, topic_b.name], n=300)
+
+        self.logger.info("Waiting for GC to start deleting")
+        wait_until(
+            lambda: self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        epoch_before = self._get_metric_max(
+            "vectorized_cloud_topics_l0_gc_max_deleted_epoch"
+        )
+
+        # Delete topic B while GC is running.
+        rpk = RpkTool(self.redpanda)
+        self.logger.info(f"Deleting topic {topic_b.name}")
+        rpk.delete_topic(topic_b.name)
+
+        # Verify max_deleted_epoch advances (GC is making real progress).
+        self.logger.info("Waiting for GC to continue after deletion")
+        wait_until(
+            lambda: self._get_metric_max(
+                "vectorized_cloud_topics_l0_gc_max_deleted_epoch"
+            )
+            > epoch_before,
+            timeout_sec=60,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+
+class CloudTopicsL0GCEpochLagTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Configure slow GC so it falls behind ingress, verify
+    epoch_lag grows, then hot-reconfigure to fast GC and verify it
+    catches up.
+    """
+
+    def __init__(self, test_context: TestContext):
+        super().__init__(
+            test_context,
+            extra_rp_conf_overrides={
+                # Slow GC: 10s between rounds (5x the default, enough to
+                # build measurable backpressure without wasting test time).
+                "cloud_topics_short_term_gc_interval": 10000,
+                "cloud_topics_short_term_gc_backoff_interval": 10000,
+            },
+        )
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_epoch_lag_and_catchup(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce data while GC is slow (10s interval), observe epoch_lag
+        building up, then hot-reconfigure to fast GC (1s) and verify
+        epoch_lag drops to 0.
+        """
+        topic = TopicSpec(partition_count=1, replication_factor=3)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        # Produce enough to generate several epochs while GC is slow.
+        self.produce_some(topics=[topic.name], n=200)
+
+        # Wait for epoch_lag > 0: GC is running but falling behind
+        # because epochs advance faster than the 10s GC interval.
+        wait_until(
+            lambda: self._get_metric_max("vectorized_cloud_topics_l0_gc_epoch_lag") > 0,
+            timeout_sec=60,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
+
+        lag_while_slow = self._get_metric_max("vectorized_cloud_topics_l0_gc_epoch_lag")
+        self.logger.info(f"Slow-GC phase: epoch_lag={lag_while_slow}")
+        assert lag_while_slow > 0
+
+        # Hot-reconfigure: speed up GC dramatically.
+        admin = RedpandaAdmin(self.redpanda)
+        admin.patch_cluster_config(
+            upsert={
+                "cloud_topics_short_term_gc_interval": 1000,
+                "cloud_topics_short_term_gc_backoff_interval": 1000,
+            }
+        )
+        self.logger.info("Hot-reconfigured GC to 1s interval")
+
+        # Verify GC catches up: epoch_lag should decrease.
+        # It may not reach 0 because not every epoch has objects to
+        # delete, so max_deleted_epoch can't close the gap completely.
+        wait_until(
+            lambda: self._get_metric_max("vectorized_cloud_topics_l0_gc_epoch_lag")
+            < lag_while_slow,
+            timeout_sec=60,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        lag_final = self._get_metric_max("vectorized_cloud_topics_l0_gc_epoch_lag")
+        self.logger.info(
+            f"Fast-GC phase: epoch_lag={lag_final} (was {lag_while_slow} while slow)"
+        )
+
+
+class CloudTopicsL0GCOrphanedObjectsTest(CloudTopicsL0GCTestBase):
+    """
+    Integration: Inject well-formed orphaned L0 objects into the bucket
+    and verify GC deletes them since their epoch is below the watermark.
+    """
+
+    NUM_ORPHANS = 10
+
+    def _make_l0_object_key(self, prefix: int, epoch: int) -> str:
+        """Build a well-formed L0 data object key."""
+        return f"level_zero/data/{prefix:03d}/{epoch:018d}/{uuid.uuid4()}"
+
+    def _inject_orphaned_objects(
+        self, count: int, prefix: int, epoch: int
+    ) -> list[str]:
+        bucket = self.si_settings.cloud_storage_bucket
+        client = self.redpanda.cloud_storage_client
+        keys: list[str] = []
+        for _ in range(count):
+            key = self._make_l0_object_key(prefix, epoch)
+            client.put_object(bucket, key, b"orphaned-l0-data")
+            keys.append(key)
+        return keys
+
+    @cluster(num_nodes=4)
+    @matrix(
+        cloud_storage_type=get_cloud_storage_type(applies_only_on=[CloudStorageType.S3])
+    )
+    def test_orphaned_objects_cleaned(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce real data so GC establishes an epoch watermark, then
+        inject orphaned L0 objects with a very low epoch. Verify GC
+        deletes them.
+        """
+        topic = TopicSpec(partition_count=1, replication_factor=3)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        self.produce_some(topics=[topic.name], n=300)
+
+        # Wait for the GC watermark to be well above the epoch we'll
+        # use for fake objects (epoch=1), and for GC to be actively
+        # deleting.
+        self.logger.info("Waiting for GC watermark to advance past 10")
+        wait_until(
+            lambda: self._get_metric_max(
+                "vectorized_cloud_topics_l0_gc_min_partition_gc_epoch"
+            )
+            > 10
+            and self.get_num_objects_deleted() > 0,
+            timeout_sec=30,
+            backoff_sec=3,
+            retry_on_exc=True,
+        )
+
+        # Inject orphaned objects with epoch=1. The watermark is well
+        # above this, so they are immediately epoch-eligible. They just
+        # need to age past the grace period (10s default).
+        self.logger.info(f"Injecting {self.NUM_ORPHANS} orphaned objects")
+        injected_keys = self._inject_orphaned_objects(
+            count=self.NUM_ORPHANS, prefix=0, epoch=1
+        )
+        self.logger.info(
+            f"Injected keys: {injected_keys[:3]}... ({len(injected_keys)} total)"
+        )
+
+        # Poll the bucket directly until every injected key is gone.
+        bucket = self.si_settings.cloud_storage_bucket
+        client = cast(S3Client, self.redpanda.cloud_storage_client)
+
+        def orphans_gone() -> bool:
+            for key in injected_keys:
+                try:
+                    client.get_object_meta(bucket, key)
+                    return False
+                except Exception:
+                    pass
+            return True
+
+        self.logger.info("Waiting for orphaned objects to disappear from bucket")
+        wait_until(
+            orphans_gone,
+            timeout_sec=60,
+            backoff_sec=3,
+            retry_on_exc=False,
+        )
+        self.logger.info("All orphaned objects deleted")

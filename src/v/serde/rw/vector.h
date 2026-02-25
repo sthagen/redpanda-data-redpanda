@@ -55,17 +55,19 @@ void tag_invoke(
     t.shrink_to_fit();
 }
 
-void tag_invoke(tag_t<write_tag>, iobuf& out, Vector auto t) {
+template<typename V>
+requires Vector<std::decay_t<V>>
+void tag_invoke(tag_t<write_tag>, iobuf& out, V&& t) {
     if (unlikely(t.size() > std::numeric_limits<serde_size_t>::max())) {
         throw serde_exception(fmt_with_ctx(
           ssx::sformat,
           "serde: {} size {} exceeds serde_size_t",
-          type_str<decltype(t)>(),
+          type_str<std::decay_t<V>>(),
           t.size()));
     }
     write(out, static_cast<serde_size_t>(t.size()));
     for (auto& el : t) {
-        write(out, std::move(el));
+        write(out, std::forward_like<V>(el));
     }
 }
 

@@ -14,8 +14,6 @@
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/common/object_utils.h"
-#include "cloud_topics/level_one/compaction/committer.h"
-#include "cloud_topics/level_one/compaction/committing_policy.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/sink.h"
 #include "cloud_topics/level_one/compaction/source.h"
@@ -97,7 +95,6 @@ ss::future<> do_compact(
   l1::metastore::compaction_offsets_response offsets_response,
   l1::metastore::compaction_epoch expected_compaction_epoch,
   kafka::offset start_offset,
-  l1::compaction_committer& committer,
   l1::metastore* metastore,
   l1::io* io,
   std::chrono::milliseconds min_compaction_lag_ms = 0ms,
@@ -129,7 +126,8 @@ ss::future<> do_compact(
       expected_compaction_epoch,
       start_offset,
       io,
-      &committer,
+      metastore,
+      as,
       config::mock_binding<size_t>(128_MiB));
     auto reducer = compaction::sliding_window_reducer(
       std::move(src), std::move(sink));
@@ -256,9 +254,6 @@ TEST_F(ReducerTestFixture, LinearKeyValueReducer) {
     ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
       start_offset, last_offset));
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
     auto dirty_range_intervals
       = compaction_info->offsets_response.dirty_ranges.to_vec();
 
@@ -268,7 +263,6 @@ TEST_F(ReducerTestFixture, LinearKeyValueReducer) {
       std::move(compaction_info->offsets_response),
       compaction_info->compaction_epoch,
       compaction_info->start_offset,
-      committer,
       &_metastore,
       &_io)
       .get();
@@ -327,9 +321,6 @@ TEST_F(ReducerTestFixture, LinearKeyValueReducerSetStartOffset) {
     ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
       new_start_offset, last_offset));
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
     auto dirty_range_intervals
       = compaction_info->offsets_response.dirty_ranges.to_vec();
 
@@ -339,7 +330,6 @@ TEST_F(ReducerTestFixture, LinearKeyValueReducerSetStartOffset) {
       std::move(compaction_info->offsets_response),
       compaction_info->compaction_epoch,
       compaction_info->start_offset,
-      committer,
       &_metastore,
       &_io)
       .get();
@@ -378,10 +368,6 @@ TEST_F(ReducerTestFixture, TombstoneReducer) {
     tidp_batches.emplace_back(tidp, std::move(batches));
     make_l1_objects(std::move(tidp_batches)).get();
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
-
     auto info_spec = l1::metastore::compaction_info_spec{
       .tidp = tidp,
       .tombstone_removal_upper_bound_ts = model::timestamp::max()};
@@ -404,7 +390,6 @@ TEST_F(ReducerTestFixture, TombstoneReducer) {
           std::move(compaction_info->offsets_response),
           compaction_info->compaction_epoch,
           compaction_info->start_offset,
-          committer,
           &_metastore,
           &_io)
           .get();
@@ -432,7 +417,6 @@ TEST_F(ReducerTestFixture, TombstoneReducer) {
           std::move(compaction_info->offsets_response),
           compaction_info->compaction_epoch,
           compaction_info->start_offset,
-          committer,
           &_metastore,
           &_io)
           .get();
@@ -506,10 +490,6 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerIncreasingTimestamps) {
       .tidp = tidp,
       .tombstone_removal_upper_bound_ts = model::timestamp::max()};
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
-
     for (int i = 0; i <= num_produce_rounds; ++i) {
         auto compaction_info = _metastore.get_compaction_info(info_spec).get();
         ASSERT_TRUE(compaction_info.has_value());
@@ -526,7 +506,6 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerIncreasingTimestamps) {
           std::move(compaction_info->offsets_response),
           compaction_info->compaction_epoch,
           compaction_info->start_offset,
-          committer,
           &_metastore,
           &_io,
           min_compaction_lag_ms)
@@ -619,10 +598,6 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerDecreasingTimestamps) {
       .tidp = tidp,
       .tombstone_removal_upper_bound_ts = model::timestamp::max()};
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
-
     auto prev_dirty_ratio = std::numeric_limits<double>::max();
     for (int i = 0; i < num_produce_rounds; ++i) {
         auto compaction_info = _metastore.get_compaction_info(info_spec).get();
@@ -644,7 +619,6 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerDecreasingTimestamps) {
           std::move(compaction_info->offsets_response),
           compaction_info->compaction_epoch,
           compaction_info->start_offset,
-          committer,
           &_metastore,
           &_io,
           min_compaction_lag_ms)
@@ -751,10 +725,6 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerInterleavedTimestamps) {
       .tidp = tidp,
       .tombstone_removal_upper_bound_ts = model::timestamp::max()};
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
-
     auto prev_dirty_ratio = std::numeric_limits<double>::max();
     for (int i = 0; i < num_compact_rounds; ++i) {
         auto compaction_info = _metastore.get_compaction_info(info_spec).get();
@@ -775,7 +745,6 @@ TEST_F(ReducerTestFixture, MinCompactionLagMsReducerInterleavedTimestamps) {
           std::move(compaction_info->offsets_response),
           compaction_info->compaction_epoch,
           compaction_info->start_offset,
-          committer,
           &_metastore,
           &_io,
           min_compaction_lag_ms)
@@ -852,10 +821,6 @@ TEST_F(ReducerTestFixture, MaxCompactibleOffsetReducer) {
     ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
       start_offset, last_offset));
 
-    auto committer = l1::compaction_committer(
-      l1::make_default_committing_policy(), &_io, &_metastore);
-    auto committer_stop = ss::defer([&committer] { committer.stop().get(); });
-
     // Set max_compactible_offset to the start of the 3rd extent.
     // This should allow compaction of extents [0] and [1], but not [2] or [3].
     auto max_compactible_offset = kafka::offset{2 * records_per_extent};
@@ -866,7 +831,6 @@ TEST_F(ReducerTestFixture, MaxCompactibleOffsetReducer) {
       std::move(compaction_info->offsets_response),
       compaction_info->compaction_epoch,
       compaction_info->start_offset,
-      committer,
       &_metastore,
       &_io,
       0ms,

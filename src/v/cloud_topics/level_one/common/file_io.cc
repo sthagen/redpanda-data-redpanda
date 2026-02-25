@@ -279,4 +279,28 @@ file_io::delete_objects(chunked_vector<object_id> ids, ss::abort_source* as) {
     std::unreachable();
 }
 
+ss::future<std::expected<cloud_storage_clients::multipart_upload_ref, io::errc>>
+file_io::create_multipart_upload(
+  object_id oid, size_t part_size, ss::abort_source* as) {
+    static constexpr auto timeout = 10s;
+    auto key = object_path_factory::level_one_path(oid);
+    auto result_fut = co_await ss::coroutine::as_future(
+      _remote->initiate_multipart_upload(_bucket, key, part_size, timeout));
+    if (result_fut.failed()) {
+        auto ex = result_fut.get_exception();
+        vlog(cd_log.warn, "Error initiating multipart upload: {}", ex);
+        co_return std::unexpected(io::errc::cloud_op_error);
+    }
+    auto result = result_fut.get();
+    if (!result.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Failed to initiate multipart upload for {}: {}",
+          oid,
+          result.error());
+        co_return std::unexpected(io::errc::cloud_op_error);
+    }
+    co_return std::move(result.value());
+}
+
 } // namespace cloud_topics::l1

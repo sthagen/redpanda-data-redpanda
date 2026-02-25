@@ -10,13 +10,13 @@
 
 #include "cloud_topics/level_one/compaction/sink.h"
 
-#include "bytes/iostream.h"
+#include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/object.h"
-#include "cloud_topics/level_one/compaction/committer.h"
 #include "cloud_topics/level_one/compaction/logger.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
+#include "cloud_topics/level_one/metastore/retry.h"
 #include "compaction/reducer.h"
 #include "model/batch_compression.h"
 #include "model/compression.h"
@@ -83,7 +83,8 @@ compaction_sink::compaction_sink(
   metastore::compaction_epoch expected_compaction_epoch,
   kafka::offset start_offset,
   io* io,
-  compaction_committer* committer,
+  metastore* metastore,
+  ss::abort_source& as,
   config::binding<size_t> max_object_size,
   object_builder::options opts)
   : _max_object_size(std::move(max_object_size))
@@ -93,7 +94,8 @@ compaction_sink::compaction_sink(
   , _expected_compaction_epoch(expected_compaction_epoch)
   , _start_offset(start_offset)
   , _io(io)
-  , _committer(committer)
+  , _metastore(metastore)
+  , _as(as)
   , _opts(opts) {}
 
 ss::future<bool>
@@ -108,7 +110,19 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
         co_return false;
     }
 
-    _job = co_await _committer->begin_compaction_job(_tp);
+    auto metadata_builder_res
+      = co_await l1::retry_metastore_op_with_default_rtc(
+        [this]() { return _metastore->object_builder(); }, _as);
+    if (!metadata_builder_res.has_value()) {
+        vlog(
+          compaction_log.warn,
+          "Could not create object metadata builder for compaction of tidp {}: "
+          "{}. Aborting.",
+          _tp,
+          metadata_builder_res.error());
+        throw std::runtime_error("Couldn't begin compaction");
+    }
+    _metadata_builder = std::move(metadata_builder_res).value();
 
     auto& new_cleaned_ranges = ct_src._new_cleaned_ranges;
     new_cleaned_ranges.shrink_to_fit();
@@ -116,10 +130,8 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
 
     vlog(
       compaction_log.debug,
-      "Built compaction map for tidp {}, job id {} with {} keys (max allowed "
-      "{})",
+      "Built compaction map for tidp {} with {} keys (max allowed {})",
       _tp,
-      _job->id(),
       ct_src._map->size(),
       ct_src._map->capacity());
 
@@ -128,30 +140,50 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
 
 ss::future<>
 compaction_sink::initialize_builder(kafka::offset object_base_offset) {
-    auto staging_file_fut = co_await ss::coroutine::as_future(
-      _io->create_tmp_file());
-
-    if (staging_file_fut.failed()) {
-        auto e = staging_file_fut.get_exception();
-        vlogl(
-          compaction_log,
-          ssx::is_shutdown_exception(e) ? ss::log_level::warn
-                                        : ss::log_level::error,
-          "Exception creating staging file: {}",
-          e);
-        std::rethrow_exception(e);
+    auto oid_res = _metadata_builder->create_object_for(_tp);
+    if (!oid_res.has_value()) {
+        vlog(
+          compaction_log.error,
+          "Failed to create object for tidp {}: {}",
+          _tp,
+          oid_res.error());
+        throw std::runtime_error("Failed to create object for compaction");
     }
-    auto staging_file_result = staging_file_fut.get();
+    auto oid = std::move(oid_res).value();
 
-    auto active_staging_file = std::move(staging_file_result).value();
-    auto output_stream = co_await active_staging_file->output_stream();
+    auto upload_res = co_await _io->create_multipart_upload(
+      oid, cloud_storage_clients::multipart_upload::min_part_size, &_as);
+
+    if (!upload_res.has_value()) {
+        std::ignore = _metadata_builder->remove_pending_object(oid);
+        vlog(
+          compaction_log.error,
+          "Failed to create multipart upload for object {}, tidp {}: {}",
+          oid,
+          _tp,
+          static_cast<int>(upload_res.error()));
+        throw std::runtime_error(
+          "Failed to create multipart upload for compaction");
+    }
+
+    auto upload = std::move(upload_res).value();
+    auto output_stream = upload->as_stream();
 
     auto builder = object_builder::create(std::move(output_stream), _opts);
-
     co_await builder->start_partition(_tp);
 
     _inflight_object = std::make_unique<compacted_object>(
-      std::move(active_staging_file), std::move(builder), object_base_offset);
+      std::move(upload), std::move(builder), oid, object_base_offset);
+}
+
+ss::future<> compaction_sink::discard_object(
+  cloud_storage_clients::multipart_upload_ref upload,
+  std::unique_ptr<object_builder> builder,
+  object_id oid) {
+    (co_await ss::coroutine::as_future(upload->abort())).ignore_ready_future();
+    (co_await ss::coroutine::as_future(builder->close())).ignore_ready_future();
+    std::ignore = _metadata_builder->remove_pending_object(oid);
+    _any_object_failed = true;
 }
 
 ss::future<> compaction_sink::flush(kafka::offset object_last_offset) {
@@ -160,49 +192,89 @@ ss::future<> compaction_sink::flush(kafka::offset object_last_offset) {
     }
 
     auto inflight_object = std::exchange(_inflight_object, nullptr);
-    auto active_staging_file = std::exchange(
-      inflight_object->active_staging_file, nullptr);
+    auto upload = std::move(inflight_object->upload);
     auto builder = std::exchange(inflight_object->builder, nullptr);
+    auto oid = inflight_object->oid;
     auto object_base_offset = inflight_object->object_base_offset;
 
+    // Write the footer and get object metadata.
     auto object_info_fut = co_await ss::coroutine::as_future(builder->finish());
-    co_await builder->close();
     if (object_info_fut.failed()) {
         auto e = object_info_fut.get_exception();
         vlogl(
           compaction_log,
-          ssx::is_shutdown_exception(e) ? ss::log_level::warn
-                                        : ss::log_level::error,
-          "Exception creating object_info: {}. Exiting compaction early.",
+          ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                        : ss::log_level::warn,
+          "Exception creating object_info: {}.",
           e);
-        co_await active_staging_file->remove();
-        std::rethrow_exception(e);
+        co_return co_await discard_object(
+          std::move(upload), std::move(builder), oid);
     }
 
+    // close() completes the multipart upload via the stream's data sink.
+    auto close_fut = co_await ss::coroutine::as_future(builder->close());
+    if (close_fut.failed()) {
+        auto e = close_fut.get_exception();
+        vlogl(
+          compaction_log,
+          ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                        : ss::log_level::warn,
+          "Exception closing object builder: {}.",
+          e);
+        if (!upload->is_finalized()) {
+            co_await upload->abort();
+        }
+        std::ignore = _metadata_builder->remove_pending_object(oid);
+        _any_object_failed = true;
+        co_return;
+    }
+
+    // Upload succeeded — register the object with the metadata builder.
     auto object_info = object_info_fut.get();
-    auto ntp_md = [this](
-                    const object_builder::object_info& info,
-                    kafka::offset object_base_offset,
-                    kafka::offset object_last_offset) {
-        auto [first, last] = info.index.partitions.equal_range(_tp);
-        vassert(
-          std::distance(first, last) == 1,
-          "Expected one partition range in builder.");
-        return metastore::object_metadata::ntp_metadata{
-          .tidp = _tp,
-          .base_offset = object_base_offset,
-          .last_offset = object_last_offset,
-          .max_timestamp = first->second.max_timestamp,
-          .pos = first->second.file_position,
-          .size = first->second.length};
-    }(object_info, object_base_offset, object_last_offset);
 
-    auto file_and_info = file_and_md_info{
-      .staging_file = std::move(active_staging_file),
-      .info = std::move(object_info),
-      .ntp_md = std::move(ntp_md)};
+    vlog(
+      compaction_log.trace,
+      "Completed multipart upload for object {} ({}~{}) for tidp {}",
+      oid,
+      object_base_offset,
+      object_last_offset,
+      _tp);
 
-    _job->add_l1_object(std::move(file_and_info));
+    auto [first, last] = object_info.index.partitions.equal_range(_tp);
+    vassert(
+      std::distance(first, last) == 1,
+      "Expected one partition range in builder.");
+    auto ntp_md = metastore::object_metadata::ntp_metadata{
+      .tidp = _tp,
+      .base_offset = object_base_offset,
+      .last_offset = object_last_offset,
+      .max_timestamp = first->second.max_timestamp,
+      .pos = first->second.file_position,
+      .size = first->second.length};
+
+    auto add_res = _metadata_builder->add(oid, std::move(ntp_md));
+    if (!add_res.has_value()) {
+        vlog(
+          compaction_log.warn,
+          "Failed to add object {} to metadata builder: {}",
+          oid,
+          add_res.error());
+        std::ignore = _metadata_builder->remove_pending_object(oid);
+        _any_object_failed = true;
+        co_return;
+    }
+
+    auto finish_res = _metadata_builder->finish(
+      oid, object_info.footer_offset, object_info.size_bytes);
+    if (!finish_res.has_value()) {
+        vlog(
+          compaction_log.warn,
+          "Failed to finish object {} in metadata builder: {}",
+          oid,
+          finish_res.error());
+        std::ignore = _metadata_builder->remove_pending_object(oid);
+        _any_object_failed = true;
+    }
 }
 
 ss::future<ss::stop_iteration>
@@ -253,49 +325,109 @@ ss::future<> compaction_sink::finish_iteration(
     co_return;
 }
 
+ss::future<std::expected<void, metastore::errc>>
+compaction_sink::do_compact_objects(metastore::compaction_map_t compact_map) {
+    co_return co_await l1::retry_metastore_op_with_default_rtc(
+      [this, &compact_map]() {
+          return _metastore->compact_objects(*_metadata_builder, compact_map);
+      },
+      _as);
+}
+
+ss::future<> compaction_sink::compact_objects_without_update() {
+    auto compaction_update = metastore::compaction_update{
+      .new_cleaned_ranges = {},
+      .removed_tombstones_ranges = {},
+      .cleaned_at = model::timestamp::missing(),
+      .expected_compaction_epoch = _expected_compaction_epoch};
+
+    metastore::compaction_map_t compact_map;
+    compact_map.emplace(_tp, std::move(compaction_update));
+    auto replace_res = co_await do_compact_objects(std::move(compact_map));
+    if (replace_res.has_value()) {
+        vlog(
+          compaction_log.info,
+          "Finalized compaction of tidp {} without a compaction metadata "
+          "update",
+          _tp);
+    } else {
+        vlog(
+          compaction_log.warn,
+          "Could not commit object update during compaction of tidp {}: {}.",
+          _tp,
+          replace_res.error());
+    }
+}
+
+ss::future<> compaction_sink::compact_objects_with_update(
+  chunked_vector<metastore::compaction_update::cleaned_range>
+    new_cleaned_ranges,
+  offset_interval_set removed_tombstone_ranges) {
+    auto compaction_update = metastore::compaction_update{
+      .new_cleaned_ranges = std::move(new_cleaned_ranges),
+      .removed_tombstones_ranges = std::move(removed_tombstone_ranges),
+      .cleaned_at = model::timestamp::now(),
+      .expected_compaction_epoch = _expected_compaction_epoch};
+
+    auto compaction_update_str = fmt::format("{}", compaction_update);
+    metastore::compaction_map_t compact_map;
+    compact_map.emplace(_tp, std::move(compaction_update));
+    auto commit_res = co_await do_compact_objects(std::move(compact_map));
+
+    if (commit_res.has_value()) {
+        vlog(
+          compaction_log.info,
+          "Finalized compaction of tidp {} with compaction metadata update {}",
+          _tp,
+          compaction_update_str);
+    } else {
+        vlog(
+          compaction_log.warn,
+          "Could not commit metadata update {} for compaction of tidp {}: {}. "
+          "Retrying object update without metadata.",
+          compaction_update_str,
+          _tp,
+          commit_res.error());
+        co_return co_await compact_objects_without_update();
+    }
+}
+
 ss::future<> compaction_sink::finalize() {
-    if (!_job) {
+    if (!_metadata_builder) {
         co_return;
     }
 
-    std::exception_ptr eptr;
-    try {
-        if (_inflight_object) {
-            if (!_processed_extents.empty()) {
-                auto last_offset
-                  = _processed_extents.make_reverse_stream().next().last_offset;
-                co_await flush(last_offset);
-            } else {
-                // We started an object but didn't process any extents, which
-                // means no meaningful work has been performed. Discard the
-                // inflight object.
-                auto inflight_object = std::exchange(_inflight_object, nullptr);
-                auto active_staging_file = std::exchange(
-                  inflight_object->active_staging_file, nullptr);
-                auto builder = std::exchange(inflight_object->builder, nullptr);
-                co_await active_staging_file->remove();
-                co_await builder->close();
-            }
+    if (_inflight_object) {
+        if (!_processed_extents.empty()) {
+            auto last_offset
+              = _processed_extents.make_reverse_stream().next().last_offset;
+            co_await flush(last_offset);
+        } else {
+            auto inflight_object = std::exchange(_inflight_object, nullptr);
+            co_await discard_object(
+              std::move(inflight_object->upload),
+              std::exchange(inflight_object->builder, nullptr),
+              inflight_object->oid);
         }
-    } catch (...) {
-        eptr = std::current_exception();
     }
 
-    auto removed_tombstone_ranges = get_removed_tombstone_ranges(
-      _removable_tombstone_ranges, _processed_extents);
-    auto new_cleaned_ranges = get_new_cleaned_ranges(
-      _new_cleaned_ranges, _processed_extents, _start_offset);
+    if (_metadata_builder->is_empty()) {
+        vlog(
+          compaction_log.debug,
+          "No built or uploaded objects for tidp {}.",
+          _tp);
+        co_return;
+    }
 
-    auto id = _job->id();
-    _job = nullptr;
-    co_await _committer->finalize_compaction_job(
-      id,
-      std::move(new_cleaned_ranges),
-      std::move(removed_tombstone_ranges),
-      _expected_compaction_epoch);
-
-    if (eptr) {
-        std::rethrow_exception(eptr);
+    if (_any_object_failed) {
+        co_await compact_objects_without_update();
+    } else {
+        auto removed_tombstone_ranges = get_removed_tombstone_ranges(
+          _removable_tombstone_ranges, _processed_extents);
+        auto new_cleaned_ranges = get_new_cleaned_ranges(
+          _new_cleaned_ranges, _processed_extents, _start_offset);
+        co_await compact_objects_with_update(
+          std::move(new_cleaned_ranges), std::move(removed_tombstone_ranges));
     }
 }
 

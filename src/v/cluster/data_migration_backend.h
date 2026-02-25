@@ -48,7 +48,7 @@ public:
       topics_frontend& topics_frontend,
       topic_table& topic_table,
       shard_table& shard_table,
-      group_proxy& group_proxy,
+      ss::shared_ptr<group_proxy> group_proxy,
       std::optional<std::reference_wrapper<cloud_storage::remote>>
         _cloud_storage_api,
       std::optional<std::reference_wrapper<cloud_storage::topic_mount_handler>>
@@ -493,7 +493,7 @@ private:
     topics_frontend& _topics_frontend;
     topic_table& _topic_table;
     shard_table& _shard_table;
-    group_proxy& _group_proxy;
+    ss::shared_ptr<group_proxy> _group_proxy;
     std::optional<std::reference_wrapper<cloud_storage::remote>>
       _cloud_storage_api;
     std::optional<std::reference_wrapper<cloud_storage::topic_mount_handler>>

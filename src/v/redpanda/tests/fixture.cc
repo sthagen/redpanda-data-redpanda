@@ -229,7 +229,8 @@ redpanda_thread_fixture::redpanda_thread_fixture(
   init_cloud_topics_tag,
   std::optional<uint16_t> port,
   cloud_storage_clients::s3_url_style url_style,
-  model::node_id node_id)
+  model::node_id node_id,
+  cloud_topics::test_fixture_cfg ct_test_cfg)
   : redpanda_thread_fixture(
       node_id,
       9092,
@@ -247,7 +248,9 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       false,
       true,
       false,
-      true) {}
+      true,
+      false,
+      ct_test_cfg) {}
 
 redpanda_thread_fixture::redpanda_thread_fixture(
   init_cloud_storage_no_archiver_tag,

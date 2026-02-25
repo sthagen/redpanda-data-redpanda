@@ -53,7 +53,7 @@ void read_nested(
     serde::read_nested(in, ts._v, bytes_left_limit);
 }
 
-void write(iobuf& out, timestamp ts) { serde::write(out, ts._v); }
+void write_nested(iobuf& out, timestamp ts) { serde::write(out, ts._v); }
 
 std::ostream& operator<<(std::ostream& os, const topic_partition_view& tp) {
     fmt::print(os, "{{{}/{}}}", tp.topic(), tp.partition());
@@ -421,6 +421,8 @@ std::ostream& operator<<(std::ostream& o, record_batch_type bt) {
         return o << "group_block";
     case record_batch_type::l1_stm:
         return o << "l1_stm";
+    case record_batch_type::ct_read_replica_stm:
+        return o << "ct_read_replica_stm";
     }
 
     return o << "batch_type::unknown{" << static_cast<int>(bt) << "}";
@@ -653,7 +655,7 @@ iceberg_mode iceberg_mode::key_value
 iceberg_mode iceberg_mode::value_schema_id_prefix
   = iceberg_mode::make<iceberg_mode::variant::value_schema_id_prefix>();
 
-void write(iobuf& out, const iceberg_mode& m) {
+void write_nested(iobuf& out, const iceberg_mode& m) {
     using serde::write;
     write(out, m.kind());
     if (m.kind() == iceberg_mode::variant::value_schema_latest) {

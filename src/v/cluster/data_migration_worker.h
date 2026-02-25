@@ -38,7 +38,7 @@ public:
       model::node_id,
       partition_leaders_table&,
       partition_manager&,
-      group_proxy&,
+      ss::shared_ptr<group_proxy>,
       ss::abort_source&);
     ss::future<> stop();
 
@@ -160,7 +160,7 @@ private:
     model::node_id _self;
     partition_leaders_table& _leaders_table;
     partition_manager& _partition_manager;
-    group_proxy& _group_proxy;
+    ss::shared_ptr<group_proxy> _group_proxy;
     ss::abort_source& _as;
     ss::optimized_optional<ss::abort_source::subscription> _as_sub;
 

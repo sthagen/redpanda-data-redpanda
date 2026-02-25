@@ -6,21 +6,21 @@ set -e
 
 . /etc/os-release
 
-if [[ "$1" = configure ]]; then
-    getent passwd redpanda || NOUSR=1
-    getent group redpanda || NOGRP=1
+if [[ $1 == configure ]]; then
+  getent passwd redpanda || NOUSR=1
+  getent group redpanda || NOGRP=1
 
-    if [[ $NOGRP ]]; then
-        groupadd --system redpanda
-    fi
-    if [[ $NOUSR ]]; then
-        useradd --system \
-                --home-dir /var/lib/redpanda \
-                --no-create-home \
-                --gid redpanda \
-                redpanda
-    fi
-    chown -R redpanda:redpanda /var/lib/redpanda
+  if [[ $NOGRP ]]; then
+    groupadd --system redpanda
+  fi
+  if [[ $NOUSR ]]; then
+    useradd --system \
+      --home-dir /var/lib/redpanda \
+      --no-create-home \
+      --gid redpanda \
+      redpanda
+  fi
+  chown -R redpanda:redpanda /var/lib/redpanda
 fi
 
 chown -R redpanda:redpanda /etc/redpanda

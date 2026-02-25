@@ -51,7 +51,9 @@ void tag_invoke(
     }
 }
 
-void tag_invoke(tag_t<write_tag>, iobuf& out, SetNotMap auto t) {
+template<typename S>
+requires SetNotMap<std::decay_t<S>>
+void tag_invoke(tag_t<write_tag>, iobuf& out, S&& t) {
     using Type = std::decay_t<decltype(t)>;
     if (unlikely(t.size() > std::numeric_limits<serde_size_t>::max())) {
         throw serde_exception(fmt_with_ctx(

@@ -253,9 +253,7 @@ frontend::coordinator_partition(const model::topic& topic) const {
     if (!md) {
         return std::nullopt;
     }
-    iobuf temp;
-    write(temp, topic);
-    auto bytes = iobuf_to_bytes(temp);
+    auto bytes = iobuf_to_bytes(serde::to_iobuf(topic));
     auto partition = murmur2(bytes.data(), bytes.size())
                      % md->get().get_configuration().partition_count;
     return model::partition_id{static_cast<int32_t>(partition)};

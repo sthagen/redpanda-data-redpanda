@@ -11,7 +11,6 @@
 #pragma once
 
 #include "cloud_topics/level_one/common/abstract_io.h"
-#include "cloud_topics/level_one/compaction/committer.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/compaction/worker_probe.h"
@@ -40,13 +39,11 @@ public:
     // `stopped`.
     enum class worker_state { active, paused, stopped };
 
-    // io, metastore, and committer are all passed to the compaction `source`
-    // and `sink`.
+    // io and metastore are passed to the compaction `source` and `sink`.
     compaction_worker(
       worker_manager*,
       io*,
       metastore*,
-      compaction_committer*,
       cluster::metadata_cache*,
       ss::scheduling_group,
       level_one_reader_probe*);
@@ -195,9 +192,6 @@ private:
 
     // Owned by `app`.
     metastore* _metastore;
-
-    // Owned by `scheduler`.
-    compaction_committer* _committer;
 
     cluster::metadata_cache* _metadata_cache;
 

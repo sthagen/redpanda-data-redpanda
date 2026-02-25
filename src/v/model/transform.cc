@@ -173,7 +173,7 @@ std::ostream& operator<<(std::ostream& os, const transform_metadata& meta) {
 
 void transform_metadata::serde_write(iobuf& out) const {
     serde::write(out, name);
-    write(out, input_topic);
+    serde::write(out, input_topic);
     serde::write(out, output_topics);
     serde::write(out, environment);
     serde::write(out, uuid);

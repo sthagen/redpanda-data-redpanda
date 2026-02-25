@@ -245,6 +245,11 @@ ss::future<> controller::wire_up() {
       .then([this] { _probe.start(); });
 }
 
+// If you add a new parameter here to refer to a service created after
+// controller, consider how it is going to be stopped and destructed. A common
+// workaround is to pass shared pointer(s) to instance(s) of a sharded
+// container, and then to make sure triggering global abort source will allow to
+// stop their gates.
 ss::future<> controller::start(
   cluster_discovery& discovery,
   ss::abort_source& shard0_as,
@@ -255,7 +260,7 @@ ss::future<> controller::start(
   ss::shared_ptr<cluster::cloud_metadata::offsets_recovery_requestor>
     offsets_recovery,
   std::chrono::milliseconds application_start_time,
-  ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&
+  ss::sharded<cluster::data_migrations::group_proxy>&
     data_migrations_group_proxy,
   ss::sharded<cloud_topics::state_accessors>* ct_state) {
     /**
@@ -349,7 +354,7 @@ ss::future<> controller::start(
       std::ref(_stm),
       std::ref(_partition_leaders),
       ss::sharded_parameter([&data_migrations_group_proxy] {
-          return std::ref(*data_migrations_group_proxy.local());
+          return data_migrations_group_proxy.local_shared();
       }),
       std::ref(_connections),
       ss::sharded_parameter(
@@ -366,7 +371,7 @@ ss::future<> controller::start(
     co_await _data_migration_router.start(
       _raft0->self().id(),
       ss::sharded_parameter([&data_migrations_group_proxy] {
-          return std::ref(*data_migrations_group_proxy.local());
+          return data_migrations_group_proxy.local_shared();
       }),
       std::ref(_shard_table),
       std::ref(_metadata_cache),
@@ -380,7 +385,7 @@ ss::future<> controller::start(
       ss::sharded_parameter(
         [this] { return std::ref(_partition_manager.local()); }),
       ss::sharded_parameter([&data_migrations_group_proxy] {
-          return std::ref(*data_migrations_group_proxy.local());
+          return data_migrations_group_proxy.local_shared();
       }),
       ss::sharded_parameter([this] { return std::ref(_as.local()); }));
     {
@@ -879,7 +884,13 @@ ss::future<> controller::start(
       std::ref(_tp_frontend.local()),
       std::ref(_tp_state.local()),
       std::ref(_shard_table.local()),
-      std::ref(*data_migrations_group_proxy.local()),
+      ss::sharded_parameter([&data_migrations_group_proxy] {
+          // ss::sharded::start copies all parameters on all shards before
+          // checking shard number, and copying an ss::shared_ptr on a wrong
+          // shard is a no-no. Use ss::sharded_parameter to only copy the lambda
+          // and invoke it on each shard individually.
+          return data_migrations_group_proxy.local_shared();
+      }),
       _cloud_storage_api.local_is_initialized()
         ? std::make_optional(std::ref(_cloud_storage_api.local()))
         : std::nullopt,

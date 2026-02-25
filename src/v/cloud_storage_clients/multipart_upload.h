@@ -18,6 +18,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/util/log.hh>
 
 #include <memory>
 
@@ -115,9 +116,11 @@ public:
     ///
     /// \param state Backend-specific state implementation
     /// \param part_size Size of each part in bytes
+    /// \param logger Logger to use for diagnostics
     explicit multipart_upload(
       ss::shared_ptr<multipart_upload_state> state,
-      size_t part_size = min_part_size);
+      size_t part_size,
+      ss::logger& logger);
 
     ~multipart_upload() override;
 
@@ -175,6 +178,7 @@ private:
 
     ss::shared_ptr<multipart_upload_state> _state;
     size_t _part_size;
+    ss::logger& _logger;
     iobuf _buffer;
     size_t _part_number{1};
     bool _multipart_initialized{false};

@@ -11,7 +11,6 @@
 #pragma once
 
 #include "cloud_topics/level_one/common/file_io.h"
-#include "cloud_topics/level_one/compaction/committer.h"
 #include "cloud_topics/level_one/compaction/logger.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/scheduler_probe.h"
@@ -44,7 +43,6 @@ public:
       log_compaction_queue&,
       ss::sharded<file_io>*,
       ss::sharded<replicated_metastore>*,
-      ss::sharded<compaction_committer>*,
       ss::sharded<cluster::metadata_cache>*,
       compaction_scheduler_probe&,
       ss::sharded<level_one_reader_probe>*);
@@ -102,9 +100,6 @@ private:
 
     // Owned by `app`.
     ss::sharded<replicated_metastore>* _metastore;
-
-    // Owned by `scheduler`.
-    ss::sharded<compaction_committer>* _committer;
 
     ss::sharded<cluster::metadata_cache>* _metadata_cache;
 

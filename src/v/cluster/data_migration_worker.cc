@@ -46,12 +46,12 @@ worker::worker(
   model::node_id self,
   partition_leaders_table& leaders_table,
   partition_manager& partition_manager,
-  group_proxy& group_proxy,
+  ss::shared_ptr<group_proxy> group_proxy,
   ss::abort_source& as)
   : _self(self)
   , _leaders_table(leaders_table)
   , _partition_manager(partition_manager)
-  , _group_proxy(group_proxy)
+  , _group_proxy(std::move(group_proxy))
   , _as(as)
   , _as_sub(_as.subscribe([this]() noexcept { abort_all(); }))
   , _operation_timeout(5s)
@@ -338,7 +338,7 @@ ss::future<errc> worker::do_work(
           "nothing to do with data partitions in cut_over, they are also being "
           "deleted by topic work");
         // todo: shift to a new "cleanup" stage?
-        auto del_res = co_await _group_proxy.delete_groups(
+        auto del_res = co_await _group_proxy->delete_groups(
           ntp, otwi.groups, running_work.work->revision_id);
         // invalid_data_migration_state may indicate group already deleted
         if (
@@ -395,7 +395,7 @@ ss::future<result<model::offset, errc>> worker::block_groups(
   const chunked_vector<kafka::group_id>& groups,
   bool block,
   model::revision_id revision_id) {
-    auto res = co_await _group_proxy.set_blocked_for_groups(
+    auto res = co_await _group_proxy->set_blocked_for_groups(
       ntp, groups, block, revision_id);
     if (res.has_value()) {
         co_return res.value();

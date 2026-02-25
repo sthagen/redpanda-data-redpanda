@@ -50,6 +50,11 @@ public:
         virtual kafka::offset get_start_offset(const model::topic_id_partition&)
           = 0;
 
+        // Get the current last reconciled offset for the partition.
+        virtual kafka::offset
+        get_last_reconciled_offset(const model::topic_id_partition&)
+          = 0;
+
         // Update the start offset to the partition, this must be an
         // idempotent operation.
         virtual ss::future<> set_start_offset(

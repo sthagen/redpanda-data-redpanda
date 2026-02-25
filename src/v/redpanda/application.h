@@ -312,7 +312,7 @@ private:
     metrics::internal_metric_groups _metrics;
     ss::sharded<metrics::public_metrics_group_service> _public_metrics;
     std::unique_ptr<kafka::rm_group_proxy_impl> _rm_group_proxy;
-    ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>
+    ss::sharded<cluster::data_migrations::group_proxy>
       _data_migrations_group_proxy;
 
     ss::sharded<resources::cpu_profiler> _cpu_profiler;

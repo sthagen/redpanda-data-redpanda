@@ -114,7 +114,7 @@ void tag_invoke(
 }
 
 template<typename Clock, typename Duration>
-void write(iobuf&, std::chrono::time_point<Clock, Duration> t) {
+void write_nested(iobuf&, std::chrono::time_point<Clock, Duration> t) {
     static_assert(
       base::unsupported_type<decltype(t)>::value,
       "Time point serialization is risky and can have unintended "

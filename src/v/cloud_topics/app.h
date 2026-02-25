@@ -68,7 +68,8 @@ public:
       ss::sharded<rpc::connection_cache>*,
       cloud_storage_clients::bucket_name,
       ss::sharded<storage::api>*,
-      bool skip_flush_loop = false);
+      bool skip_flush_loop = false,
+      bool skip_level_zero_gc = false);
 
     ss::future<> start();
 
@@ -88,6 +89,9 @@ public:
 
 private:
     ss::future<> wire_up_notifications();
+
+    // Cleans up the temporary files in the L1 staging directory.
+    ss::future<> cleanup_tmp_files();
 
     ss::sstring _logger_name;
     ss::sharded<level_one_reader_probe> _l1_reader_probe;

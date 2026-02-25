@@ -248,7 +248,7 @@ schedule_result<Clock> scheduler_context<Clock>::try_schedule_upload(
                 if (try_split_group(gid)) {
                     vlog(cd_log.trace, "Split group {}", gid);
                 } else {
-                    vlog(cd_log.info, "Failed to split group {}", gid);
+                    vlog(cd_log.debug, "Failed to split group {}", gid);
                 }
             } else if (next_stage_bytes == 0) {
                 // Merge: next stage is empty, can work together with buddy
@@ -271,7 +271,7 @@ schedule_result<Clock> scheduler_context<Clock>::try_schedule_upload(
                         }
                     } else {
                         vlog(
-                          cd_log.info,
+                          cd_log.debug,
                           "Failed to merge group {}, group size: {}",
                           gid,
                           grp_size);

@@ -39,7 +39,7 @@ public:
       ss::sharded<features::feature_table>&,
       ss::sharded<controller_stm>&,
       ss::sharded<partition_leaders_table>&,
-      group_proxy& group_proxy,
+      ss::shared_ptr<group_proxy> group_proxy,
       ss::sharded<rpc::connection_cache>&,
       std::optional<std::reference_wrapper<cloud_storage::topic_mount_handler>>,
       ss::sharded<ss::abort_source>&);
@@ -103,7 +103,7 @@ private:
     features::feature_table& _features;
     ss::sharded<controller_stm>& _controller;
     partition_leaders_table& _leaders_table;
-    group_proxy& _group_proxy;
+    ss::shared_ptr<group_proxy> _group_proxy;
     rpc::connection_cache& _connections;
     std::optional<std::reference_wrapper<cloud_storage::topic_mount_handler>>
       _topic_mount_handler;

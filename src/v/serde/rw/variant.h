@@ -98,14 +98,17 @@ struct variant : public std::variant<Types...> {
     using type::valueless_by_exception;
 };
 
-template<typename... T>
-void tag_invoke(tag_t<write_tag>, iobuf& out, variant<T...> v) {
+template<typename V>
+requires requires {
+    []<typename... T>(variant<T...>) {}(std::declval<std::remove_cvref_t<V>>());
+}
+void tag_invoke(tag_t<write_tag>, iobuf& out, V&& v) {
     write<size_t>(
-      out, std::variant_size_v<typename std::decay_t<decltype(v)>::type>);
+      out, std::variant_size_v<typename std::remove_cvref_t<V>::type>);
     write<size_t>(out, v.index());
     std::visit(
-      [&out]<typename V>(V&& v) { write(out, std::forward<V>(v)); },
-      std::move(v));
+      [&out]<typename T>(T&& t) { write(out, std::forward<T>(t)); },
+      std::forward<V>(v));
 }
 
 namespace detail {

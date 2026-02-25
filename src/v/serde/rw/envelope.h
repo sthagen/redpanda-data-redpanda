@@ -94,7 +94,7 @@ void tag_invoke(
 
 template<typename T>
 requires is_envelope<std::decay_t<T>>
-void tag_invoke(tag_t<write_tag>, iobuf& out, T t) {
+void tag_invoke(tag_t<write_tag>, iobuf& out, T&& t) {
     using Type = std::decay_t<T>;
 
     write(out, Type::redpanda_serde_version);
@@ -113,7 +113,7 @@ void tag_invoke(tag_t<write_tag>, iobuf& out, T t) {
         t.serde_write(out);
     } else {
         envelope_for_each_field(
-          t, [&out](auto& f) { write(out, std::move(f)); });
+          t, [&out](auto& f) { write(out, std::forward_like<T>(f)); });
     }
 
     const auto written_size = out.size_bytes() - size_before;

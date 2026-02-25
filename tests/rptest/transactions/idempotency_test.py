@@ -38,6 +38,16 @@ class IdempotentProducerRecoveryTest(RedpandaTest):
             name="test", partition_count=1, replication_factor=1
         )
 
+    def get_producer_count(self):
+        """Returns the total idempotent producer cache size across all nodes."""
+        metrics = self.redpanda.metrics_sample(
+            "idempotency_pid_cache_size", self.redpanda.started_nodes()
+        )
+        assert metrics, "No metrics samples found"
+        total = sum(int(s.value) for s in metrics.samples)
+        self.redpanda.logger.debug(f"producer cache size: {total}")
+        return total
+
     def wait_for_eviction(self, active_producers_remaining, expected_to_be_evicted):
         def do_wait():
             samples = [
@@ -156,3 +166,74 @@ class IdempotentProducerRecoveryTest(RedpandaTest):
 
         # Ensure producer can recover.
         produce_some()
+
+    @cluster(num_nodes=1)
+    def test_producer_state_survives_prefix_truncation(self):
+        """Verifies that idempotent producer state is preserved across
+        log prefix truncation (delete-records). After truncation the broker
+        should still know about the producers that were active before."""
+        num_producers = 5
+        rpk = RpkTool(self.redpanda)
+        rpk.create_topic(
+            self.test_topic.name,
+            self.test_topic.partition_count,
+            self.test_topic.replication_factor,
+        )
+
+        producers = []
+        for _ in range(num_producers):
+            p = ck.Producer(
+                {
+                    "bootstrap.servers": self.redpanda.brokers(),
+                    "enable.idempotence": True,
+                }
+            )
+            producers.append(p)
+
+        def on_delivery(err, _):
+            assert err is None, err
+
+        # Produce with each producer so the broker registers them.
+        for p in producers:
+            for i in range(100):
+                p.produce(self.test_topic.name, str(i), str(i), on_delivery=on_delivery)
+            p.flush()
+
+        count_before = self.get_producer_count()
+        assert count_before == num_producers, (
+            f"Expected {num_producers} producers, got {count_before}"
+        )
+
+        # Get the high watermark and prefix truncate up to it.
+        offsets = rpk.describe_topic(self.test_topic.name)
+        hw = None
+        for o in offsets:
+            if o.id == 0:
+                hw = o.high_watermark
+                break
+        assert hw is not None
+
+        response = rpk.trim_prefix(self.test_topic.name, hw, partitions=[0])
+        assert len(response) == 1
+        assert response[0].error_msg == "", f"Err: {response[0].error_msg}"
+
+        # Wait for the truncation to be applied.
+        def truncation_applied():
+            offsets = rpk.describe_topic(self.test_topic.name)
+            for o in offsets:
+                if o.id == 0:
+                    return o.start_offset >= hw
+            return False
+
+        wait_until(
+            truncation_applied,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Prefix truncation did not complete",
+        )
+
+        # Verify producer count is retained after truncation.
+        count_after = self.get_producer_count()
+        assert count_after == num_producers, (
+            f"Expected {num_producers} producers after truncation, got {count_after}"
+        )

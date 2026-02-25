@@ -98,7 +98,7 @@ backend::backend(
   topics_frontend& topics_frontend,
   topic_table& topic_table,
   shard_table& shard_table,
-  group_proxy& group_proxy,
+  ss::shared_ptr<group_proxy> group_proxy,
   std::optional<std::reference_wrapper<cloud_storage::remote>>
     cloud_storage_api,
   std::optional<std::reference_wrapper<cloud_storage::topic_mount_handler>>
@@ -113,7 +113,7 @@ backend::backend(
   , _topics_frontend(topics_frontend)
   , _topic_table(topic_table)
   , _shard_table(shard_table)
-  , _group_proxy(group_proxy)
+  , _group_proxy(std::move(group_proxy))
   , _cloud_storage_api(cloud_storage_api)
   , _topic_mount_handler(topic_mount_handler)
   , _as(as) {}
@@ -263,7 +263,7 @@ backend::get_entities_status(id migration_id) {
          * build the map again.
          */
         if (group_map_result.has_error()) {
-            co_await _group_proxy.assure_topic_exists(
+            co_await _group_proxy->assure_topic_exists(
               model::time_from_now(10s));
             group_map_result = build_migration_group_map(meta);
         }
@@ -1865,7 +1865,7 @@ backend::build_migration_group_map(const migration_metadata& metadata) const {
       metadata.migration);
 
     for (const auto& group : groups) {
-        auto partition = _group_proxy.partition_for(group);
+        auto partition = _group_proxy->partition_for(group);
         if (!partition) {
             vlog(
               dm_log.warn,

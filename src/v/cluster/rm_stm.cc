@@ -2123,9 +2123,15 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
     stm_snapshot.highest_producer_id = _highest_producer_id;
     // producers state (includes idempotent and transactional producers)
     for (const auto& [_, state] : _producers) {
-        auto snapshot = state->snapshot(start_kafka_offset);
-        if (!snapshot.finished_requests.empty()) {
-            stm_snapshot.producers.push_back(std::move(snapshot));
+        auto snap = state->snapshot();
+        // Discard finished requests below the local snapshot start offset,
+        // they are no longer relevant.
+        std::erase_if(
+          snap.finished_requests, [start_kafka_offset](const auto& req) {
+              return req.last_offset < start_kafka_offset;
+          });
+        if (!snap.finished_requests.empty()) {
+            stm_snapshot.producers.push_back(std::move(snap));
         }
     }
 
@@ -2287,7 +2293,46 @@ ss::future<> rm_stm::do_remove_persistent_state() {
     co_return co_await raft::persisted_stm<>::remove_persistent_state();
 }
 
-ss::future<> rm_stm::apply_raft_snapshot(const iobuf&) {
+ss::future<iobuf>
+rm_stm::take_raft_snapshot(model::offset last_included_offset) {
+    // this is always called under apply lock, so we can be sure
+    // that no concurrent modifications to the state are happening via apply
+    // path.
+    auto units = co_await _state_lock.hold_write_lock();
+    tx::raft_snapshot snapshot;
+    auto kafka_offset = from_log_offset(last_included_offset);
+    for (const auto& [_, state] : _producers) {
+        if (state->transaction_state()) {
+            // we donot need to include transactional producers for two reasons:
+            // 1. eviction offset honors LSO, so every transaction under LSO is
+            // sealed (committed or aborted).
+            // 2. Sequence numbers reset for every new transaction, so we will
+            // not lose any information about the producer by not including
+            // transactional producers in the snapshot.
+            continue;
+        }
+        auto producer_snap = state->snapshot();
+        std::erase_if(
+          producer_snap.finished_requests, [kafka_offset](const auto& req) {
+              return req.last_offset > kafka_offset;
+          });
+        if (producer_snap.finished_requests.empty()) {
+            continue;
+        }
+        snapshot.producers.push_back(std::move(producer_snap));
+    }
+    vlog(
+      _ctx_log.trace,
+      "taking raft snapshot at offset: {}, producers: {}",
+      last_included_offset,
+      snapshot.producers.size());
+    iobuf result;
+    co_await serde::write_async(result, std::move(snapshot));
+    co_return result;
+}
+
+ss::future<> rm_stm::apply_raft_snapshot(const iobuf& buf) {
+    auto local_buf = buf.copy();
     auto units = co_await _state_lock.hold_write_lock();
     vlog(
       _ctx_log.info,
@@ -2295,6 +2340,38 @@ ss::future<> rm_stm::apply_raft_snapshot(const iobuf&) {
       _raft->start_offset());
     _aborted_tx_state = {};
     co_await reset_producers();
+
+    if (!local_buf.empty()) {
+        auto parser = iobuf_parser{std::move(local_buf)};
+        auto snapshot = co_await serde::read_async<tx::raft_snapshot>(parser);
+        vlog(
+          _ctx_log.debug,
+          "Restoring {} idempotent producers from raft snapshot",
+          snapshot.producers.size());
+        for (auto& entry : snapshot.producers) {
+            auto pid = entry.id;
+            _highest_producer_id = std::max(_highest_producer_id, pid.get_id());
+            auto producer = ss::make_lw_shared<producer_state>(
+              _ctx_log,
+              [this](model::producer_identity pid) {
+                  cleanup_producer_state(pid);
+              },
+              std::move(entry));
+            try {
+                _producer_state_manager.local().register_producer(
+                  *producer, _vcluster_id);
+                _producers.emplace(pid.get_id(), producer);
+            } catch (const cache_full_error& e) {
+                vlog(
+                  _ctx_log.warn,
+                  "unable to register producer {} with vcluster: {} - {}",
+                  pid,
+                  _vcluster_id,
+                  e.what());
+            }
+        }
+    }
+
     set_next(_raft->start_offset());
     co_return;
 }

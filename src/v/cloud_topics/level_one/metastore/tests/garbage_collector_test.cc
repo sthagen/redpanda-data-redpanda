@@ -197,6 +197,12 @@ public:
           std::unexpected(errc::cloud_op_error));
     }
 
+    ss::future<std::expected<cloud_storage_clients::multipart_upload_ref, errc>>
+    create_multipart_upload(
+      object_id id, size_t part_size, ss::abort_source* as) override {
+        return underlying_->create_multipart_upload(id, part_size, as);
+    }
+
 private:
     io* underlying_;
 };

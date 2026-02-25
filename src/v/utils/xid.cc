@@ -117,7 +117,7 @@ void read_nested(iobuf_parser& in, xid& id, const size_t bytes_left_limit) {
     serde::read_nested(in, id._data, bytes_left_limit);
 }
 
-void write(iobuf& out, xid id) { serde::write(out, id._data); }
+void write_nested(iobuf& out, xid id) { serde::write(out, id._data); }
 
 std::istream& operator>>(std::istream& i, xid& id) {
     ss::sstring s;

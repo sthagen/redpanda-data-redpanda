@@ -2373,6 +2373,21 @@ configuration::configuration()
       "testing and should not be set in production.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
+  , cloud_topics_disable_metastore_flush_loop_for_tests(
+      *this,
+      "cloud_topics_disable_metastore_flush_loop_for_tests",
+      "Disables the metastore flush loop in cloud topics. The property exists "
+      "to simplify testing of read replicas and shouldn't be set in "
+      "production.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      false)
+  , cloud_topics_disable_level_zero_gc_for_tests(
+      *this,
+      "cloud_topics_disable_level_zero_gc_for_tests",
+      "Disables the level-zero garbage collector in cloud topics. This "
+      "property exists to simplify testing and shouldn't be set in production.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      false)
   , enable_cluster_metadata_upload_loop(
       *this,
       "enable_cluster_metadata_upload_loop",

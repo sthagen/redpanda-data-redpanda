@@ -58,7 +58,7 @@ struct custom_read_write {
         ++el._x;
     }
 
-    friend inline void write(iobuf& out, custom_read_write el) {
+    friend inline void write_nested(iobuf& out, custom_read_write el) {
         ++el._x;
         serde::write(out, el._x);
     }
@@ -922,6 +922,8 @@ SEASTAR_THREAD_TEST_CASE(absl_node_hash_map) {
 SEASTAR_THREAD_TEST_CASE(absl_flat_hash_map) {
     map_test<absl::flat_hash_map>();
 }
+
+SEASTAR_THREAD_TEST_CASE(chunked_hash_map_) { map_test<chunked_hash_map>(); }
 
 SEASTAR_THREAD_TEST_CASE(absl_node_hash_set) {
     set_test<absl::node_hash_set>();

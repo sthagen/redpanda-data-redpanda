@@ -108,11 +108,6 @@ std::optional<uint64_t> get_object_build_failed() {
       "cloud_topics_reconciler_object_build_failed");
 }
 
-std::optional<uint64_t> get_object_upload_failed() {
-    return test_utils::find_metric_value<uint64_t>(
-      "cloud_topics_reconciler_object_upload_failed");
-}
-
 std::optional<uint64_t> get_empty_objects_skipped() {
     return test_utils::find_metric_value<uint64_t>(
       "cloud_topics_reconciler_empty_objects_skipped");
@@ -142,7 +137,6 @@ TEST_F(ReconcilerMetricsTest, ThroughputCounters) {
     EXPECT_THAT(get_batches_reconciled(), Optional(0));
     EXPECT_THAT(get_partitions_reconciled(), Optional(0));
     EXPECT_THAT(get_object_build_failed(), Optional(0));
-    EXPECT_THAT(get_object_upload_failed(), Optional(0));
     EXPECT_THAT(get_empty_objects_skipped(), Optional(0));
 
     const model::topic tp{"tapioca"};
@@ -165,7 +159,6 @@ TEST_F(ReconcilerMetricsTest, ThroughputCounters) {
     EXPECT_THAT(get_batches_reconciled(), Optional(5));
     EXPECT_THAT(get_bytes_reconciled(), Optional(Gt(0)));
     EXPECT_THAT(get_object_build_failed(), Optional(0));
-    EXPECT_THAT(get_object_upload_failed(), Optional(0));
     EXPECT_THAT(get_empty_objects_skipped(), Optional(0));
 
     auto bytes_after_first = *get_bytes_reconciled();
@@ -178,7 +171,6 @@ TEST_F(ReconcilerMetricsTest, ThroughputCounters) {
     EXPECT_THAT(get_batches_reconciled(), Optional(5));
     EXPECT_THAT(get_bytes_reconciled(), Optional(bytes_after_first));
     EXPECT_THAT(get_object_build_failed(), Optional(0));
-    EXPECT_THAT(get_object_upload_failed(), Optional(0));
     EXPECT_THAT(get_empty_objects_skipped(), Optional(1));
 
     src1->add_batch({.count = 15});
@@ -191,28 +183,26 @@ TEST_F(ReconcilerMetricsTest, ThroughputCounters) {
     EXPECT_THAT(get_batches_reconciled(), Optional(6));
     EXPECT_THAT(get_bytes_reconciled(), Optional(Gt(bytes_after_first)));
     EXPECT_THAT(get_object_build_failed(), Optional(0));
-    EXPECT_THAT(get_object_upload_failed(), Optional(0));
     EXPECT_THAT(get_empty_objects_skipped(), Optional(1));
 }
 
 TEST_F(ReconcilerMetricsTest, FailedObjectsCounter) {
-    EXPECT_THAT(get_object_upload_failed(), Optional(0));
+    EXPECT_THAT(get_objects_uploaded(), Optional(0));
 
     auto src = add_source();
     src->add_batch({.count = 10});
 
-    io().fail_put_object(true);
+    io().fail_complete(true);
 
     reconcile();
 
-    EXPECT_THAT(get_object_upload_failed(), Optional(1));
+    // Object was not uploaded because multipart complete failed.
     EXPECT_THAT(get_objects_uploaded(), Optional(0));
 
-    io().fail_put_object(false);
+    io().fail_complete(false);
 
     reconcile();
 
-    EXPECT_THAT(get_object_upload_failed(), Optional(1));
     EXPECT_THAT(get_objects_uploaded(), Optional(1));
 }
 
@@ -223,9 +213,6 @@ TEST_F(ReconcilerMetricsTest, HistogramMetrics) {
     reconcile();
 
     const auto& probe = reconciler().get_probe_for_tests();
-
-    auto object_upload_duration = probe.get_object_upload_duration_for_tests();
-    EXPECT_GT(object_upload_duration.sample_count, 0);
 
     auto metastore_add_objects_duration
       = probe.get_metastore_add_objects_duration_for_tests();

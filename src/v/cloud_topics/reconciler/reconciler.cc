@@ -239,7 +239,6 @@ ss::future<> reconciler<Clock>::reconciliation_loop() {
         // clang-format off
         /*
          * Error Handling
-         * (Props to Claude for the tree diagram)
          *
          * The reconciler uses nested exception boundaries to ensure proper
          * cleanup and partial failure recovery. One object's failure prevents
@@ -252,23 +251,28 @@ ss::future<> reconciler<Clock>::reconciliation_loop() {
          *       └─ FOR EACH OBJECT:
          *          └─ as_future(reconcile_partitions) → catches all exceptions
          *             └─ reconcile_partitions(oid, partitions)
-         *                ├─ make_context() → returns error if staging fails
-         *                │  └─ as_future(output_stream()) → catches, cleans staging
+         *                ├─ make_context(oid) → returns error if multipart
+         *                │    upload initiation fails
          *                │
          *                ├─ as_future(build_and_put_object)
-         *                │  ├─ build_object() → can throw in builder->finish()
-         *                │  └─ put_object() → returns error on upload failure
+         *                │  └─ build_object() → can throw in builder->finish()
+         *                │       or in build_from_reader() (write failures
+         *                │       propagate since the byte stream can't skip
+         *                │       a failed part). On success, finish() +
+         *                │       close_builder() closes the multipart stream,
+         *                │       completing the upload.
          *                │
          *                └─ GUARANTEED CLEANUP (always executed):
-         *                   ├─ ctx.close_builder()   → closes object builder
-         *                   └─ ctx.cleanup_staging() → removes temp file
+         *                   ├─ ctx.cleanup_upload() → aborts multipart if
+         *                   │    not finalized (no-op on success)
+         *                   └─ ctx.close_builder() → closes object builder
          *
          * Failure Scopes:
          * - Single object failures:
-         *   • Staging file creation fails
+         *   • Multipart upload initiation fails
          *   • No data in partitions (empty object)
-         *   • Build or upload exceptions
-         *   • Individual partition read failures
+         *   • Build exceptions (including write/part upload failures)
+         *   • Individual partition reader creation failures
          *   • Object-level metadata failure
          *
          * - Reconciliation round failures:
@@ -280,7 +284,7 @@ ss::future<> reconciler<Clock>::reconciliation_loop() {
          *
          * Resource Guarantees:
          * - Builder is ALWAYS closed if created
-         * - Staging file is ALWAYS removed if created
+         * - Multipart upload is ALWAYS finalized (completed or aborted)
          * - Failures in one object don't leak resources or affect others
          * - Reconciliation will try again next schedule point after failure,
          *   except for shutdown
@@ -531,7 +535,7 @@ ss::future<std::expected<
 reconciler<Clock>::reconcile_sources(
   const l1::object_id& oid,
   const chunked_vector<ss::shared_ptr<source>>& sources) {
-    auto ctx_result = co_await make_context();
+    auto ctx_result = co_await make_context(oid);
     if (!ctx_result.has_value()) {
         co_return std::unexpected(ctx_result.error().with_context(
           "reconciling {} sources into object {}", sources.size(), oid));
@@ -541,7 +545,18 @@ reconciler<Clock>::reconcile_sources(
     auto fut = co_await ss::coroutine::as_future(
       build_and_put_object(oid, ctx, sources));
 
-    // Always cleanup.
+    // Always cleanup: abort multipart if not completed, then close builder.
+    auto cleanup_fut = co_await ss::coroutine::as_future(ctx.cleanup_upload());
+    if (cleanup_fut.failed()) {
+        auto ex = cleanup_fut.get_exception();
+        vlogl(
+          lg,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                         : ss::log_level::warn,
+          "Exception while cleaning up multipart upload: {}",
+          ex);
+    }
+
     auto close_fut = co_await ss::coroutine::as_future(ctx.close_builder());
     if (close_fut.failed()) {
         auto ex = close_fut.get_exception();
@@ -550,17 +565,6 @@ reconciler<Clock>::reconcile_sources(
           ssx::is_shutdown_exception(ex) ? ss::log_level::debug
                                          : ss::log_level::warn,
           "Exception while closing builder: {}",
-          ex);
-    }
-
-    auto cleanup_fut = co_await ss::coroutine::as_future(ctx.cleanup_staging());
-    if (cleanup_fut.failed()) {
-        auto ex = cleanup_fut.get_exception();
-        vlogl(
-          lg,
-          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
-                                         : ss::log_level::warn,
-          "Exception while cleaning up staging: {}",
           ex);
     }
 
@@ -592,7 +596,9 @@ reconciler<Clock>::build_and_put_object(
   const l1::object_id& oid,
   builder_context& ctx,
   const chunked_vector<ss::shared_ptr<source>>& sources) {
-    // Build the object.
+    // Build the object. On success, build_object() calls finish() and then
+    // close_builder(), which closes the multipart stream and completes the
+    // upload.
     auto build_result = co_await build_object(ctx, sources);
     if (!build_result.has_value()) {
         _probe.increment_object_build_failed();
@@ -606,13 +612,6 @@ reconciler<Clock>::build_and_put_object(
           reconcile_error("Skipping put for object {}: no data", oid));
     }
 
-    // Upload the object.
-    auto put_result = co_await put_object(oid, ctx);
-    if (!put_result.has_value()) {
-        _probe.increment_object_upload_failed();
-        co_return std::unexpected(put_result.error());
-    }
-
     _probe.increment_objects_uploaded();
     _probe.add_bytes_reconciled(obj_meta.object_info.size_bytes);
     _probe.record_object_size_bytes(obj_meta.object_info.size_bytes);
@@ -624,31 +623,22 @@ reconciler<Clock>::build_and_put_object(
 template<class Clock>
 ss::future<
   std::expected<typename reconciler<Clock>::builder_context, reconcile_error>>
-reconciler<Clock>::make_context() {
+reconciler<Clock>::make_context(const l1::object_id& oid) {
     builder_context ctx;
 
-    // Create staging file.
-    auto staging_result = co_await _l1_io->create_tmp_file();
-    if (!staging_result.has_value()) {
+    // Initiate multipart upload.
+    auto upload_result = co_await _l1_io->create_multipart_upload(
+      oid, cloud_storage_clients::multipart_upload::min_part_size, &_as);
+    if (!upload_result.has_value()) {
         co_return std::unexpected(
           reconcile_error(
-            "Failed to create staging file: {}", staging_result.error())
+            "Failed to initiate multipart upload: {}", upload_result.error())
             .non_benign());
     }
-    ctx.staging = std::move(staging_result).value();
+    ctx.upload = std::move(upload_result).value();
 
-    // Create output stream and builder.
-    auto stream_fut = co_await ss::coroutine::as_future(
-      ctx.staging->output_stream());
-    if (stream_fut.failed()) {
-        auto ex = stream_fut.get_exception();
-        co_await ctx.cleanup_staging();
-        co_return std::unexpected(
-          reconcile_error("Failed to create output stream: {}", ex)
-            .mark_benign(ssx::is_shutdown_exception(ex)));
-    }
-
-    auto output_stream = stream_fut.get();
+    // Create output stream from multipart upload and builder.
+    auto output_stream = ctx.upload->as_stream();
     ctx.builder = l1::object_builder::create(
       std::move(output_stream),
       l1::object_builder::options{
@@ -725,19 +715,6 @@ reconciler<Clock>::build_object(
 }
 
 template<class Clock>
-ss::future<std::expected<void, reconcile_error>>
-reconciler<Clock>::put_object(const l1::object_id& oid, builder_context& ctx) {
-    auto metrics_duration = _probe.measure_object_upload_duration();
-    auto put_result = co_await _l1_io->put_object(oid, ctx.staging.get(), &_as);
-    if (!put_result.has_value()) {
-        co_return std::unexpected(reconcile_error(
-          "failed to put L1 object {}: {}", oid, put_result.error()));
-    }
-    vlog(lg.debug, "Successfully put L1 object {}", oid);
-    co_return std::expected<void, reconcile_error>{};
-}
-
-template<class Clock>
 ss::future<std::expected<std::optional<consumer_metadata>, reconcile_error>>
 reconciler<Clock>::add_source_to_object(
   builder_context& ctx,
@@ -749,23 +726,14 @@ reconciler<Clock>::add_source_to_object(
       src->ntp(),
       src->last_reconciled_offset());
 
-    std::optional<consumer_metadata> metadata;
-    try {
-        auto reader = co_await src->make_reader(
-          source::reader_config{
-            .start_offset = start_offset,
-            .max_bytes = ctx.size_budget,
-            .as = &_as,
-          });
-        metadata = co_await build_from_reader(
-          src->topic_id_partition(),
-          std::move(reader),
-          ctx.builder.get(),
-          &_probe);
-    } catch (...) {
-        co_return std::unexpected(reconcile_error(
-          "unable to consume from L0 partition: {}", std::current_exception()));
-    }
+    auto reader = co_await src->make_reader(
+      source::reader_config{
+        .start_offset = start_offset,
+        .max_bytes = ctx.size_budget,
+        .as = &_as,
+      });
+    auto metadata = co_await build_from_reader(
+      src->topic_id_partition(), std::move(reader), ctx.builder.get(), &_probe);
 
     if (!metadata.has_value()) {
         vlog(

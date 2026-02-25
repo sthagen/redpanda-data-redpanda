@@ -24,7 +24,7 @@ namespace kafka {
  * components.
  */
 class data_migration_group_proxy_impl final
-  : public cluster::data_migrations::group_proxy {
+  : public cluster::data_migrations::group_proxy::impl {
 public:
     data_migration_group_proxy_impl(
       coordinator_ntp_mapper& coordinator_ntp_mapper,

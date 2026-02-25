@@ -269,7 +269,7 @@ struct broker_shard {
         return H::combine(std::move(h), s.node_id(), s.shard);
     }
 
-    friend void write(iobuf& out, broker_shard bs) {
+    friend void write_nested(iobuf& out, broker_shard bs) {
         using serde::write;
         write(out, bs.node_id);
         write(out, bs.shard);
@@ -370,7 +370,7 @@ struct topic_namespace {
         return H::combine(std::move(h), tp_ns.ns, tp_ns.tp);
     }
 
-    friend void write(iobuf& out, topic_namespace t) {
+    friend void write_nested(iobuf& out, topic_namespace t) {
         using serde::write;
         write(out, std::move(t.ns));
         write(out, std::move(t.tp));
@@ -696,7 +696,7 @@ public:
 
     bool operator==(const iceberg_mode&) const = default;
 
-    friend void write(iobuf& out, const iceberg_mode& m);
+    friend void write_nested(iobuf& out, const iceberg_mode& m);
 
     friend void read_nested(
       iobuf_parser& in, iceberg_mode& m, const std::size_t bytes_left_limit);

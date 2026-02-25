@@ -8,8 +8,6 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_one/compaction/committer.h"
-#include "cloud_topics/level_one/compaction/committing_policy.h"
 #include "cloud_topics/level_one/compaction/log_info_collector.h"
 #include "cloud_topics/level_one/compaction/scheduler.h"
 #include "cloud_topics/level_one/compaction/scheduling_policies.h"
@@ -62,19 +60,10 @@ public:
         // not `std::make_unique` because private `compaction_scheduler` c-tor.
         scheduler = std::unique_ptr<l1::compaction_scheduler>(
           new l1::compaction_scheduler(std::move(info_collector)));
-        co_await scheduler->_committer.start(
-          ss::sharded_parameter(
-            [] { return l1::make_default_committing_policy(); }),
-          ss::sharded_parameter([this] { return &_io; }),
-          ss::sharded_parameter([this] { return &_metastore; }));
-        co_await scheduler->_committer.invoke_on_all(
-          &l1::compaction_committer::start);
         co_await scheduler->_worker_manager._workers.start(
           &scheduler->_worker_manager,
           ss::sharded_parameter([this] { return &_io; }),
           ss::sharded_parameter([this] { return &_metastore; }),
-          ss::sharded_parameter(
-            [this] { return &scheduler->_committer.local(); }),
           nullptr,
           ss::default_scheduling_group(),
           nullptr);

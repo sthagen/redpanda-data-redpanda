@@ -383,18 +383,18 @@ TEST_F(ReconcilerTest, MetastoreAddObjectsTransientFailure) {
     EXPECT_THAT(metastore_next_offset(src2), Optional(kafka::offset{10}));
 }
 
-TEST_F(ReconcilerTest, IOStagingFileFailure) {
+TEST_F(ReconcilerTest, IOMultipartInitFailure) {
     auto src = add_source();
     src->add_batch({.count = 10});
 
-    io().fail_create_tmp_file(true);
+    io().fail_create_multipart(true);
 
     reconcile();
 
     EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{});
     EXPECT_EQ(metastore_next_offset(src), std::nullopt);
 
-    io().fail_create_tmp_file(false);
+    io().fail_create_multipart(false);
 
     reconcile();
 
@@ -403,22 +403,77 @@ TEST_F(ReconcilerTest, IOStagingFileFailure) {
     EXPECT_THAT(metastore_next_offset(src), Optional(kafka::offset{10}));
 }
 
-TEST_F(ReconcilerTest, IOPutObjectFailure) {
+TEST_F(ReconcilerTest, IOMultipartCompleteFailure) {
     auto src = add_source();
     src->add_batch({.count = 10});
 
-    io().fail_put_object(true);
+    io().fail_complete(true);
 
     reconcile();
 
     EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{});
     EXPECT_EQ(metastore_next_offset(src), std::nullopt);
 
-    io().fail_put_object(false);
+    io().fail_complete(false);
 
     reconcile();
 
-    // Reconciliation should resume after an IO failure.
+    // Reconciliation should resume after a multipart complete failure.
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{9});
+    EXPECT_THAT(metastore_next_offset(src), Optional(kafka::offset{10}));
+}
+
+TEST_F(ReconcilerTest, IOMultipartPartUploadFailure) {
+    auto src = add_source();
+
+    // Need >5MiB to trigger an intermediate part upload (min_part_size is
+    // 5MiB). 100 uncompressed batches of 64KiB records ≈ 6.4MiB.
+    constexpr auto batch_count = 100;
+    constexpr auto record_count = 1;
+    constexpr auto record_size = 64_KiB;
+    for (size_t i = 0; i < batch_count; ++i) {
+        src->add_batch(
+          {.allow_compression = false,
+           .count = record_count,
+           .record_sizes = std::vector<size_t>(record_count, record_size)});
+    }
+
+    io().fail_upload_part(true);
+
+    reconcile();
+
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{});
+    EXPECT_EQ(metastore_next_offset(src), std::nullopt);
+
+    io().fail_upload_part(false);
+
+    reconcile();
+
+    // After recovery, data should be reconciled.
+    EXPECT_GT(src->last_reconciled_offset(), kafka::offset{0});
+}
+
+TEST_F(ReconcilerTest, IOMultipartAbortFailure) {
+    auto src = add_source();
+    src->add_batch({.count = 10});
+
+    // When complete fails, the multipart_upload::complete() method attempts
+    // to abort via abort_on_error(). If abort also fails, it should be
+    // handled gracefully (the multipart_upload layer catches abort errors).
+    io().fail_complete(true);
+    io().fail_abort(true);
+
+    reconcile();
+
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{});
+    EXPECT_EQ(metastore_next_offset(src), std::nullopt);
+
+    io().fail_complete(false);
+    io().fail_abort(false);
+
+    reconcile();
+
+    // Reconciliation should resume after the combined failure.
     EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{9});
     EXPECT_THAT(metastore_next_offset(src), Optional(kafka::offset{10}));
 }

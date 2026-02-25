@@ -332,8 +332,8 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
             assert False
         except requests.exceptions.HTTPError as e:
             assert e.response.json() == {
-                "message": "Unexpected cluster error: The topic has already been created",
-                "code": 500,
+                "message": "The topic has already been created",
+                "code": 400,
             }
 
     @cluster(num_nodes=3, log_allow_list=MIGRATION_LOG_ALLOW_LIST)

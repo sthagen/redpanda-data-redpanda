@@ -44,6 +44,10 @@ public:
     ss::future<std::expected<void, errc>>
     delete_objects(chunked_vector<object_id>, ss::abort_source*) override;
 
+    ss::future<std::expected<cloud_storage_clients::multipart_upload_ref, errc>>
+    create_multipart_upload(
+      object_id, size_t part_size, ss::abort_source*) override;
+
 private:
     ss::future<uint64_t> save_to_cache(
       ss::input_stream<char>,

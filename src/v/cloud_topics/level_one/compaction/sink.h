@@ -10,10 +10,12 @@
 
 #pragma once
 
+#include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/common/object.h"
-#include "cloud_topics/level_one/compaction/committer.h"
+#include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/compaction/meta.h"
+#include "cloud_topics/level_one/metastore/metastore.h"
 #include "compaction/reducer.h"
 #include "config/property.h"
 #include "container/chunked_vector.h"
@@ -31,7 +33,8 @@ public:
       metastore::compaction_epoch,
       kafka::offset,
       l1::io*,
-      compaction_committer*,
+      l1::metastore*,
+      ss::abort_source&,
       config::binding<size_t> max_object_size,
       object_builder::options = {});
 
@@ -41,11 +44,7 @@ public:
     // Called by the `source` before batches in a new extent range are provided
     // to the `sink`. This is an asynchronous function because the active L1
     // object may need to be rolled, in case that the next extent range provided
-    // is non-contiguous. For example, if the extents were
-    // `[[0,10],[11,20],[21,30]]`, and the extent [11,20] was deemed ineligible
-    // for compaction (due to `min.compaction.lag.ms` or some other reason), the
-    // current L1 object composing the range [0,10] would be rolled, and a new
-    // L1 object would be started for the range [21,30].
+    // is non-contiguous.
     ss::future<> prepare_iteration(kafka::offset);
 
     // Called by the `source` after batches in an extent range are provided
@@ -58,18 +57,38 @@ public:
     ss::future<> finalize() final;
 
 private:
-    // The target maximum L1 object size that will be built. After this
-    // threshold is breached, `needs_roll()` should return `true` and a new L1
-    // object will be started.
+    // The target maximum L1 object size that will be built.
     config::binding<size_t> _max_object_size;
 
-    // Initializes the `_inflight_object`. It is guaranteed to have a value (!=
-    // nullptr) after this function is called, if no exception is thrown.
+    // Initializes the `_inflight_object` with a multipart upload.
     ss::future<> initialize_builder(kafka::offset);
 
-    // Finalizes the `_inflight_object` and pushes the built update to the
-    // `_committer`.
+    // Finalizes the `_inflight_object`, completes the multipart upload,
+    // and registers the result with the metadata builder.
     ss::future<> flush(kafka::offset);
+
+    // Aborts the multipart upload, closes the builder, and removes the
+    // pending object from the metadata builder.
+    ss::future<> discard_object(
+      cloud_storage_clients::multipart_upload_ref,
+      std::unique_ptr<object_builder>,
+      object_id);
+
+    // Makes a `compact_objects()` request to the `metastore`, using the
+    // provided (potentially empty) `compaction_map_t` as the metastore
+    // compaction update.
+    ss::future<std::expected<void, metastore::errc>>
+      do_compact_objects(metastore::compaction_map_t);
+
+    // Finalizes the compaction via `metastore->compact_objects()` without a
+    // compaction metadata update.
+    ss::future<> compact_objects_without_update();
+
+    // Finalizes the compaction via `metastore->compact_objects()` with a
+    // compaction metadata update.
+    ss::future<> compact_objects_with_update(
+      chunked_vector<metastore::compaction_update::cleaned_range>,
+      offset_interval_set);
 
 private:
     model::topic_id_partition _tp;
@@ -86,29 +105,31 @@ private:
     // The start offset of the log.
     kafka::offset _start_offset;
 
-    // The compaction job, if initialized, as returned by the `_committer`.
-    compaction_committer::compaction_job* _job{nullptr};
-
     io* _io;
-    compaction_committer* _committer;
+    metastore* _metastore;
+    ss::abort_source& _as;
 
     const object_builder::options _opts;
 
-    // The L1 object currently being built.
+    // The metadata builder for the current compaction job, created during
+    // `initialize()` from the metastore and used to track new objects.
+    std::unique_ptr<metastore::object_metadata_builder> _metadata_builder;
+
+    // Tracks whether any upload failed during this job.
+    bool _any_object_failed{false};
+
+    // The L1 object currently being built via multipart upload.
     struct compacted_object {
-        // Both `active_staging_file` and `builder` are guaranteed to have a
-        // value for an active `compacted_object`.
-        std::unique_ptr<staging_file> active_staging_file{nullptr};
+        cloud_storage_clients::multipart_upload_ref upload;
         std::unique_ptr<object_builder> builder{nullptr};
+        object_id oid;
         kafka::offset object_base_offset{};
     };
 
     std::unique_ptr<compacted_object> _inflight_object{nullptr};
 
     // The interval set that is populated by extents which have been read by the
-    // `source` and written by the `sink`. This is important to know in order to
-    // decide which dirty ranges and removable tombstone ranges have actually
-    // been processed when finalizing the compaction job with the `_committer`.
+    // `source` and written by the `sink`.
     offset_interval_set _processed_extents;
 
     // Dirty ranges returned by the `metastore` that were indexed during

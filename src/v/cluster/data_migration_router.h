@@ -34,7 +34,7 @@ class router : public ss::peering_sharded_service<router> {
 public:
     router(
       model::node_id,
-      group_proxy&,
+      ss::shared_ptr<group_proxy>,
       ss::sharded<shard_table>&,
       ss::sharded<metadata_cache>&,
       ss::sharded<rpc::connection_cache>&,
@@ -50,7 +50,7 @@ public:
     set_group_offsets(set_group_offsets_request&& req);
 
 private:
-    group_proxy& _group_proxy;
+    ss::shared_ptr<group_proxy> _group_proxy;
 
     struct get_group_offsets_handler {
         using proto_t = data_migrations_client_protocol;

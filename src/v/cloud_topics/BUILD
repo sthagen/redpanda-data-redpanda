@@ -91,12 +91,15 @@ redpanda_cc_library(
     implementation_deps = [
         ":cluster_services_interface",
         ":data_plane_impl",
+        ":logger",
         ":topic_manifest_upload_manager",
         "//src/v/cloud_topics/housekeeper:manager",
         "//src/v/cloud_topics/level_one/metastore:flush_loop",
         "//src/v/cloud_topics/level_one/metastore:topic_purger",
         "//src/v/cloud_topics/level_zero/gc:level_zero_gc",
         "//src/v/cloud_topics/manager",
+        "//src/v/ssx:future_util",
+        "//src/v/utils:directory_walker",
     ],
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",

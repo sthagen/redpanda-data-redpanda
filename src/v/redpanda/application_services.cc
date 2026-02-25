@@ -719,7 +719,8 @@ void application::wire_up_redpanda_services(
             &_connection_cache,
             bucket_name.value(),
             &storage,
-            ct_test_cfg.skip_flush_loop)
+            ct_test_cfg.skip_flush_loop,
+            ct_test_cfg.skip_level_zero_gc)
           .get();
     }
 

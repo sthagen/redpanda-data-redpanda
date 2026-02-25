@@ -78,6 +78,26 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "tailing_cache_race_test",
+    timeout = "moderate",
+    srcs = [
+        "tailing_cache_race_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":cluster_fixture",
+        "//src/v/base",
+        "//src/v/kafka/server/tests:kafka_test_utils",
+        "//src/v/ssx:sformat",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/utils:offset_monitor",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "topic_manifest_uploader_test",
     timeout = "short",
     srcs = ["topic_manifest_uploader_test.cc"],

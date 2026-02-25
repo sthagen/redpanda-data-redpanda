@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/fake_io.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/reconciler/reconciliation_source.h"
@@ -19,12 +20,15 @@
 #include "model/tests/random_batch.h"
 
 #include <seastar/core/future.hh>
+#include <seastar/util/log.hh>
 
 #include <expected>
 #include <optional>
 #include <stdexcept>
 
 namespace cloud_topics::reconciler::test {
+
+static ss::logger test_log("reconciler_test");
 
 class fake_source : public source {
 public:
@@ -115,32 +119,96 @@ private:
     int _fail_add_objects_transiently_count = 0;
 };
 
-class unreliable_io : public l1::fake_io {
+// A multipart upload state that delegates to fake_io's storage
+// but can inject failures at each phase of the multipart protocol.
+class unreliable_multipart_state final
+  : public cloud_storage_clients::multipart_upload_state {
 public:
-    ss::future<std::expected<std::unique_ptr<l1::staging_file>, l1::io::errc>>
-    create_tmp_file() override {
-        if (_fail_create_tmp_file) {
-            co_return std::unexpected(l1::io::errc::file_io_error);
-        }
-        co_return co_await l1::fake_io::create_tmp_file();
-    }
-
-    ss::future<std::expected<void, l1::io::errc>> put_object(
+    unreliable_multipart_state(
       l1::object_id oid,
-      l1::staging_file* file,
-      ss::abort_source* as) override {
-        if (_fail_put_object) {
-            co_return std::unexpected(l1::io::errc::cloud_op_error);
+      l1::fake_io& storage,
+      bool& fail_upload_part,
+      bool& fail_complete,
+      bool& fail_abort)
+      : _oid(oid)
+      , _storage(storage)
+      , _fail_upload_part(fail_upload_part)
+      , _fail_complete(fail_complete)
+      , _fail_abort(fail_abort) {}
+
+    ss::future<> initialize_multipart() override { co_return; }
+
+    ss::future<> upload_part(size_t, iobuf data) override {
+        if (_fail_upload_part) {
+            throw std::runtime_error("Injected upload_part failure");
         }
-        co_return co_await l1::fake_io::put_object(oid, file, as);
+        _buffer.append(std::move(data));
+        co_return;
     }
 
-    void fail_create_tmp_file(bool fail) { _fail_create_tmp_file = fail; }
-    void fail_put_object(bool fail) { _fail_put_object = fail; }
+    ss::future<> complete_multipart_upload() override {
+        if (_fail_complete) {
+            throw std::runtime_error("Injected complete_multipart failure");
+        }
+        _storage.put_object(_oid, std::move(_buffer));
+        co_return;
+    }
+
+    ss::future<> abort_multipart_upload() override {
+        if (_fail_abort) {
+            throw std::runtime_error("Injected abort_multipart failure");
+        }
+        _buffer.clear();
+        co_return;
+    }
+
+    ss::future<> upload_as_single_object(iobuf data) override {
+        if (_fail_complete) {
+            throw std::runtime_error(
+              "Injected upload_as_single_object failure");
+        }
+        _storage.put_object(_oid, std::move(data));
+        co_return;
+    }
+
+    bool is_multipart_initialized() const override { return true; }
+    ss::sstring upload_id() const override { return "unreliable"; }
 
 private:
-    bool _fail_create_tmp_file = false;
-    bool _fail_put_object = false;
+    l1::object_id _oid;
+    l1::fake_io& _storage;
+    bool& _fail_upload_part;
+    bool& _fail_complete;
+    bool& _fail_abort;
+    iobuf _buffer;
+};
+
+class unreliable_io : public l1::fake_io {
+public:
+    ss::future<
+      std::expected<cloud_storage_clients::multipart_upload_ref, l1::io::errc>>
+    create_multipart_upload(
+      l1::object_id oid, size_t part_size, ss::abort_source*) override {
+        if (_fail_create_multipart) {
+            co_return std::unexpected(l1::io::errc::cloud_op_error);
+        }
+        auto state = ss::make_shared<unreliable_multipart_state>(
+          oid, *this, _fail_upload_part, _fail_complete, _fail_abort);
+        auto upload = ss::make_shared<cloud_storage_clients::multipart_upload>(
+          std::move(state), part_size, test_log);
+        co_return upload;
+    }
+
+    void fail_create_multipart(bool fail) { _fail_create_multipart = fail; }
+    void fail_upload_part(bool fail) { _fail_upload_part = fail; }
+    void fail_complete(bool fail) { _fail_complete = fail; }
+    void fail_abort(bool fail) { _fail_abort = fail; }
+
+private:
+    bool _fail_create_multipart = false;
+    bool _fail_upload_part = false;
+    bool _fail_complete = false;
+    bool _fail_abort = false;
 };
 
 } // namespace cloud_topics::reconciler::test

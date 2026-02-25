@@ -224,7 +224,7 @@ public:
         return read_nested(in, t._value, bytes_left_limit);
     }
 
-    friend void write(iobuf& out, topic t) {
+    friend void write_nested(iobuf& out, topic t) {
         using serde::write;
         return write(out, std::move(t._value));
     }
@@ -369,7 +369,7 @@ struct topic_partition {
         read_nested(in, tp.partition, bytes_left_limit);
     }
 
-    friend void write(iobuf& out, topic_partition tp) {
+    friend void write_nested(iobuf& out, topic_partition tp) {
         using serde::write;
 
         write(out, std::move(tp.topic));
@@ -413,7 +413,7 @@ struct ntp {
         read_nested(in, ntp.tp, bytes_left_limit);
     }
 
-    friend void write(iobuf& out, ntp ntp) {
+    friend void write_nested(iobuf& out, ntp ntp) {
         using serde::write;
 
         write(out, std::move(ntp.ns));
@@ -605,7 +605,7 @@ struct topic_id_partition {
         read_nested(in, tp.partition, bytes_left_limit);
     }
 
-    friend void write(iobuf& out, topic_id_partition tp) {
+    friend void write_nested(iobuf& out, topic_id_partition tp) {
         using serde::write;
 
         write(out, tp.topic_id);

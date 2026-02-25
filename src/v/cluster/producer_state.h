@@ -230,7 +230,7 @@ public:
 
     std::optional<seq_t> last_sequence_number() const;
 
-    producer_state_snapshot snapshot(kafka::offset log_start_offset) const;
+    producer_state_snapshot snapshot() const;
 
     ss::lowres_system_clock::time_point get_last_update_timestamp() const {
         return _last_updated_ts;

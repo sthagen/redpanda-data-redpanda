@@ -77,6 +77,7 @@ redpanda_cc_library(
     deps = [
         ":object_id",
         "//src/v/bytes:iobuf",
+        "//src/v/cloud_storage_clients",
         "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
         "@seastar",
@@ -116,6 +117,7 @@ redpanda_cc_library(
         ":object_utils",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
+        "//src/v/cloud_storage_clients",
         "@abseil-cpp//absl/container:btree",
         "@seastar",
     ],

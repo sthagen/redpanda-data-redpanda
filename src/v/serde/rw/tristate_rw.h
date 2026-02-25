@@ -14,15 +14,18 @@
 
 namespace serde {
 
-template<typename T>
-void tag_invoke(tag_t<write_tag>, iobuf& out, tristate<T> t) {
+template<typename TS>
+requires requires {
+    []<typename T>(tristate<T>) {}(std::declval<std::remove_cvref_t<TS>>());
+}
+void tag_invoke(tag_t<write_tag>, iobuf& out, TS&& t) {
     if (t.is_disabled()) {
         write<int8_t>(out, -1);
     } else if (!t.has_optional_value()) {
         write<int8_t>(out, 0);
     } else {
         write<int8_t>(out, 1);
-        write(out, std::move(t.value()));
+        write(out, std::forward_like<TS>(t.value()));
     }
 }
 

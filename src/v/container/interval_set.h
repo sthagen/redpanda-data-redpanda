@@ -117,7 +117,7 @@ public:
         using serde::read_nested;
         return read_nested(in, is.set_, bytes_left_limit);
     }
-    friend void write(iobuf& out, interval_set is) {
+    friend void write_nested(iobuf& out, interval_set is) {
         using serde::write;
         return write(out, std::move(is.set_));
     }

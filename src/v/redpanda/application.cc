@@ -339,7 +339,14 @@ int application::run(int ac, char** av) {
                 initialize();
                 check_environment();
                 setup_metrics();
-                wire_up_and_start(app_signal);
+                cloud_topics::test_fixture_cfg ct_cfg;
+                ct_cfg.skip_flush_loop
+                  = config::shard_local_cfg()
+                      .cloud_topics_disable_metastore_flush_loop_for_tests();
+                ct_cfg.skip_level_zero_gc
+                  = config::shard_local_cfg()
+                      .cloud_topics_disable_level_zero_gc_for_tests();
+                wire_up_and_start(app_signal, false, ct_cfg);
                 post_start_tasks();
                 app_signal.wait().get();
                 if (!audit_mgr.local().report_redpanda_app_event(

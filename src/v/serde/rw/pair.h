@@ -11,12 +11,18 @@
 
 #include "serde/rw/rw.h"
 
+#include <utility>
+
 namespace serde {
 
-template<typename T1, typename T2>
-void tag_invoke(tag_t<write_tag>, iobuf& out, const std::pair<T1, T2>& p) {
-    write(out, p.first);
-    write(out, p.second);
+template<typename P>
+requires requires {
+    []<typename T1, typename T2>(std::pair<T1, T2>) {
+    }(std::declval<std::remove_cvref_t<P>>());
+}
+void tag_invoke(tag_t<write_tag>, iobuf& out, P&& p) {
+    write(out, std::forward_like<P>(p.first));
+    write(out, std::forward_like<P>(p.second));
 }
 
 template<typename T1, typename T2>

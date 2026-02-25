@@ -43,7 +43,6 @@ public:
     }
     void increment_partitions_reconciled() { ++_partitions_reconciled; }
     void increment_object_build_failed() { ++_object_build_failed; }
-    void increment_object_upload_failed() { ++_object_upload_failed; }
     void increment_empty_objects_skipped() { ++_empty_objects_skipped; }
     void increment_metastore_retries() { ++_metastore_retries; }
     void increment_offset_corrections() { ++_offset_corrections; }
@@ -62,18 +61,11 @@ public:
         return _object_build_duration.auto_measure();
     }
 
-    std::unique_ptr<hist_t::measurement> measure_object_upload_duration() {
-        return _object_upload_duration.auto_measure();
-    }
-
     std::unique_ptr<hist_t::measurement>
     measure_metastore_add_objects_duration() {
         return _metastore_add_objects_duration.auto_measure();
     }
 
-    auto get_object_upload_duration_for_tests() const {
-        return _object_upload_duration.internal_histogram_logform();
-    }
     auto get_metastore_add_objects_duration_for_tests() const {
         return _metastore_add_objects_duration.internal_histogram_logform();
     }
@@ -94,7 +86,6 @@ private:
     uint64_t _batches_reconciled{0};
     uint64_t _partitions_reconciled{0};
     uint64_t _object_build_failed{0};
-    uint64_t _object_upload_failed{0};
     uint64_t _empty_objects_skipped{0};
     uint64_t _metastore_retries{0};
     uint64_t _offset_corrections{0};
@@ -102,7 +93,6 @@ private:
     // Histograms.
     hist_t _l0_read_duration;
     hist_t _object_build_duration;
-    hist_t _object_upload_duration;
     hist_t _metastore_add_objects_duration;
     hist_t _object_size_bytes;
     hist_t _sources_per_object;

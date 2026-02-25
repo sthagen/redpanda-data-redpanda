@@ -10,11 +10,15 @@
 #pragma once
 
 #include "base/vlog.h"
+#include "bytes/iobuf.h"
 #include "serde/read_header.h"
 #include "serde/rw/tags.h"
 #include "serde/serde_exception.h"
 #include "serde/type_str.h"
 #include "ssx/sformat.h"
+
+#include <type_traits>
+#include <utility>
 
 namespace serde {
 
@@ -57,8 +61,45 @@ std::decay_t<T> read(iobuf_parser& in) {
 }
 
 template<typename T>
-void write(iobuf& b, T x) {
-    write_tag(b, std::forward<T>(x));
+concept has_nonmember_write_nested_lv = requires(const T& t, iobuf& out) {
+    { write_nested(out, t) } -> std::same_as<void>;
+};
+
+template<typename T>
+concept has_nonmember_write_nested_rv = requires(T&& t, iobuf& out) {
+    { write_nested(out, std::move(t)) } -> std::same_as<void>;
+};
+
+template<typename T>
+concept has_nonmember_write_nested = []() consteval {
+    // `write_nested` must be defined either for both lvalue and rvalue T or for
+    // neither.
+    static_assert(
+      has_nonmember_write_nested_lv<T> == has_nonmember_write_nested_rv<T>);
+    return has_nonmember_write_nested_lv<T>;
+}();
+
+// Two functions just to be able to specify T explicitly when calling.
+template<typename T, bool IsRvalue = true>
+requires(!std::is_reference_v<T>)
+void write(iobuf& b, T&& x) {
+    if constexpr (has_nonmember_write_nested<T>) {
+        // NOLINTNEXTLINE(bugprone-move-forwarding-reference)
+        write_nested(b, std::move(x));
+    } else {
+        // NOLINTNEXTLINE(bugprone-move-forwarding-reference)
+        write_tag(b, std::move(x));
+    }
+}
+
+template<typename T, bool IsRvalue = false>
+requires(!std::is_reference_v<T>)
+void write(iobuf& b, const T& x) {
+    if constexpr (has_nonmember_write_nested<T>) {
+        write_nested(b, x);
+    } else {
+        write_tag(b, x);
+    }
 }
 
 template<typename T>

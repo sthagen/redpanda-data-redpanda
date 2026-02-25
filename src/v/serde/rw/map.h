@@ -52,19 +52,20 @@ void tag_invoke(
     }
 }
 
-void tag_invoke(tag_t<write_tag>, iobuf& out, Map auto t) {
-    using Type = std::decay_t<decltype(t)>;
+template<typename M>
+requires Map<std::decay_t<M>>
+void tag_invoke(tag_t<write_tag>, iobuf& out, M&& t) {
     if (unlikely(t.size() > std::numeric_limits<serde_size_t>::max())) {
         throw serde_exception(fmt_with_ctx(
           ssx::sformat,
           "serde: {} size {} exceeds serde_size_t",
-          type_str<Type>(),
+          type_str<std::decay_t<M>>(),
           t.size()));
     }
     write(out, static_cast<serde_size_t>(t.size()));
     for (auto& v : t) {
         write(out, v.first);
-        write(out, std::move(v.second));
+        write(out, std::forward_like<M>(v.second));
     }
 }
 

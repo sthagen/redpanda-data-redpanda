@@ -42,6 +42,12 @@ public:
         return api.get_start_offset();
     }
 
+    kafka::offset
+    get_last_reconciled_offset(const model::topic_id_partition& tidp) override {
+        auto api = get_api(tidp);
+        return api.get_last_reconciled_offset();
+    }
+
     ss::future<> set_start_offset(
       const model::topic_id_partition& tidp,
       kafka::offset offset,

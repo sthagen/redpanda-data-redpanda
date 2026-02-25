@@ -451,7 +451,7 @@ public:
         attrs._attributes = serde::read_nested<uint64_t>(in, bytes_left_limit);
     }
 
-    friend inline void write(iobuf& out, record_batch_attributes el) {
+    friend inline void write_nested(iobuf& out, record_batch_attributes el) {
         serde::write(out, static_cast<uint64_t>(el._attributes.to_ullong()));
     }
 

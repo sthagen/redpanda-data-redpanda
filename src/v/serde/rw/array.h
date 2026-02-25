@@ -21,12 +21,18 @@
 
 namespace serde {
 
-template<typename T, std::size_t Size>
-void tag_invoke(tag_t<write_tag>, iobuf& out, std::array<T, Size> t) {
-    static_assert(t.size() <= std::numeric_limits<serde_size_t>::max());
+template<typename A>
+requires requires {
+    []<typename T, std::size_t Size>(std::array<T, Size>) {
+    }(std::declval<std::remove_cvref_t<A>>());
+}
+void tag_invoke(tag_t<write_tag>, iobuf& out, A&& t) {
+    static_assert(
+      std::tuple_size_v<std::remove_cvref_t<A>>
+      <= std::numeric_limits<serde_size_t>::max());
     write(out, static_cast<serde_size_t>(t.size()));
     for (auto& el : t) {
-        write(out, el);
+        write(out, std::forward_like<A>(el));
     }
 }
 

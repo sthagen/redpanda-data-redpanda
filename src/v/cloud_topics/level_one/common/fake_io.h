@@ -32,6 +32,10 @@ public:
     ss::future<std::expected<void, errc>>
     delete_objects(chunked_vector<object_id>, ss::abort_source*) override;
 
+    ss::future<std::expected<cloud_storage_clients::multipart_upload_ref, errc>>
+    create_multipart_upload(
+      object_id, size_t part_size, ss::abort_source*) override;
+
     // Get a full object that has been put directly from storage
     std::optional<iobuf> get_object(object_id id);
 

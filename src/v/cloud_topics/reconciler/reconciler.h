@@ -147,15 +147,15 @@ private:
 private:
     /*
      * A container for an object in the process of being built.
-     * Always requires cleanup via close_builder() and cleanup_staging().
+     * Always requires cleanup via cleanup_upload() and close_builder().
      */
     struct builder_context {
-        std::unique_ptr<l1::staging_file> staging;
+        cloud_storage_clients::multipart_upload_ref upload;
         std::unique_ptr<l1::object_builder> builder;
         size_t size_budget{0};
 
-        // Close the builder.
-        // Should be called before cleanup_staging.
+        // Close the builder (closes the underlying stream).
+        // On the success path this completes the multipart upload.
         ss::future<> close_builder() {
             if (builder) {
                 co_await builder->close();
@@ -163,12 +163,11 @@ private:
             }
         }
 
-        // Remove staging file.
-        // Call after upload or an error.
-        ss::future<> cleanup_staging() {
-            if (staging) {
-                co_await staging->remove();
-                staging.reset();
+        // Abort the multipart upload if not already finalized.
+        // No-op if the upload was already completed via close_builder().
+        ss::future<> cleanup_upload() {
+            if (upload && !upload->is_finalized()) {
+                co_await upload->abort();
             }
         }
     };
@@ -220,9 +219,12 @@ private:
 
     /*
      * Create a new builder_context for constructing an L1 object.
-     * Returns an error if staging file or builder creation fails.
+     * Initiates a multipart upload for the given object ID.
+     * Returns an error if multipart upload initiation or builder creation
+     * fails.
      */
-    ss::future<std::expected<builder_context, reconcile_error>> make_context();
+    ss::future<std::expected<builder_context, reconcile_error>>
+    make_context(const l1::object_id& oid);
 
     /*
      * Build an object described by `ctx` and containing data from
@@ -245,13 +247,6 @@ private:
       builder_context& ctx,
       ss::shared_ptr<source> src,
       kafka::offset start_offset);
-
-    /*
-     * Upload an object to cloud storage with the specified id.
-     * Returns an error if the upload fails.
-     */
-    ss::future<std::expected<void, reconcile_error>>
-    put_object(const l1::object_id& oid, builder_context& ctx);
 
     /*
      * Add an object's metadata to the metastore metadata builder.

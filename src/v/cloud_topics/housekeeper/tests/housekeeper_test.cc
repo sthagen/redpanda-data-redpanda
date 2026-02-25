@@ -43,6 +43,11 @@ public:
         return kafka::offset{0};
     }
 
+    kafka::offset
+    get_last_reconciled_offset(const model::topic_id_partition&) override {
+        return kafka::offset::max();
+    }
+
     ss::future<> set_start_offset(
       const model::topic_id_partition& tidp,
       kafka::offset offset,

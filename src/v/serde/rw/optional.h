@@ -15,11 +15,14 @@
 
 namespace serde {
 
-template<typename T>
-void tag_invoke(tag_t<write_tag>, iobuf& out, std::optional<T> t) {
+template<typename O>
+requires requires {
+    []<typename T>(std::optional<T>) {}(std::declval<std::remove_cvref_t<O>>());
+}
+void tag_invoke(tag_t<write_tag>, iobuf& out, O&& t) {
     if (t) {
         write(out, true);
-        write(out, std::move(t.value()));
+        write(out, std::forward_like<O>(t.value()));
     } else {
         write(out, false);
     }

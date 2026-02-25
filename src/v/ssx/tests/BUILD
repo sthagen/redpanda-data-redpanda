@@ -344,6 +344,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/base",
         "//src/v/ssx:single_fiber_executor",
+        "//src/v/test_utils:async",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",

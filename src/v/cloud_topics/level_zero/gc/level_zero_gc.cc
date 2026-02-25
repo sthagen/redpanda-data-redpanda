@@ -359,6 +359,10 @@ level_zero_gc::epoch_source::max_gc_eligible_epoch(seastar::abort_source* as) {
         }
     }
 
+    if (probe_) {
+        probe_->set_min_partition_gc_epoch(result);
+    }
+
     co_return result;
 }
 
@@ -578,7 +582,9 @@ level_zero_gc::level_zero_gc(
   , probe_(config::shard_local_cfg().disable_metrics())
   , delete_worker_(
       std::make_unique<list_delete_worker>(
-        std::move(storage), std::move(node_info), probe_)) {}
+        std::move(storage), std::move(node_info), probe_)) {
+    epoch_source_->set_probe(&probe_);
+}
 
 level_zero_gc::level_zero_gc(
   model::node_id self,
@@ -686,9 +692,15 @@ seastar::future<> level_zero_gc::worker() {
             asrc_ = {};
 
             if (backoff.count() > 0) {
+                auto t0 = ss::lowres_clock::now();
                 (co_await seastar::coroutine::as_future(
                    seastar::sleep_abortable(backoff, asrc_)))
                   .ignore_ready_future();
+                auto elapsed
+                  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    ss::lowres_clock::now() - t0);
+                probe_.add_backpressure(
+                  static_cast<double>(elapsed.count()) / 1000.0);
                 backoff = std::chrono::seconds{0};
             }
 

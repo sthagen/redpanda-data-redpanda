@@ -43,7 +43,7 @@ frontend::frontend(
   ss::sharded<features::feature_table>& features,
   ss::sharded<controller_stm>& stm,
   ss::sharded<partition_leaders_table>& leaders,
-  group_proxy& group_proxy,
+  ss::shared_ptr<group_proxy> group_proxy,
   ss::sharded<rpc::connection_cache>& connections,
   std::optional<std::reference_wrapper<cloud_storage::topic_mount_handler>>
     topic_mount_handler,
@@ -54,7 +54,7 @@ frontend::frontend(
   , _features(features.local())
   , _controller(stm)
   , _leaders_table(leaders.local())
-  , _group_proxy(group_proxy)
+  , _group_proxy(std::move(group_proxy))
   , _connections(connections.local())
   , _topic_mount_handler(topic_mount_handler)
   , _as(as)
@@ -262,7 +262,7 @@ ss::future<result<id>> frontend::do_create_migration(data_migration migration) {
           [](const auto& migration) { return !empty(migration.groups); },
           migration)) {
         auto deadline = model::timeout_clock::now() + _operation_timeout;
-        if (!co_await _group_proxy.assure_topic_exists(deadline)) {
+        if (!co_await _group_proxy->assure_topic_exists(deadline)) {
             vlog(
               dm_log.warn,
               "data migration involving consumer groups failed to create "

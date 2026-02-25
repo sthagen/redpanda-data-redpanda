@@ -123,6 +123,19 @@ class NodesDecommissioningTest(PreallocNodesTest):
 
         return total_partitions
 
+    def _topic_replica_nodes(self, topic: str) -> list[ClusterNode]:
+        """Return the cluster nodes that host at least one replica of the
+        given topic."""
+        rpk = RpkTool(self.redpanda)
+        node_ids: set[int] = set()
+        for p in rpk.describe_topic(topic):
+            node_ids.update(p.replicas)
+        return [
+            cluster_node
+            for cluster_node in [self.redpanda.get_node_by_id(n) for n in node_ids]
+            if cluster_node is not None
+        ]
+
     def _partitions_moving(self, node=None):
         reconfigurations = self.admin.list_reconfigurations(node=node)
         return len(reconfigurations) > 0
@@ -446,7 +459,13 @@ class NodesDecommissioningTest(PreallocNodesTest):
         self.start_redpanda()
         self._create_topics(replication_factors=[3])
         self.start_producer()
-        to_decommission = random.choice(self.redpanda.nodes)
+        # Choose a node that actually hosts replicas of self._topic so
+        # that the decommission status will include partitions for it.
+        topic_nodes = self._topic_replica_nodes(self._topic)
+        assert topic_nodes, (
+            "It should be impossible for a topic to have no replicas coinciding with nodes in the cluster"
+        )
+        to_decommission = random.choice(topic_nodes)
         to_decommission_id = self.redpanda.node_id(to_decommission)
         self.logger.info(
             f"decommissioning node: {to_decommission_id}",
@@ -870,7 +889,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
             backoff_sec=1,
         )
         # set recovery rate to small value but allow the controller to recover
-        self._set_recovery_rate(10 * 1024)
+        self._set_recovery_rate(10 * 1024, await_rehabilitation=False)
         # throttle recovery
         self.redpanda.clean_node(self.redpanda.nodes[-1], preserve_current_install=True)
         self.redpanda.start_node(self.redpanda.nodes[-1])

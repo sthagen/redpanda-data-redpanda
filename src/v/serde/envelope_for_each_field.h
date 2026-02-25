@@ -12,6 +12,7 @@
 #include "serde/envelope.h"
 
 #include <tuple>
+#include <utility>
 
 namespace serde {
 
@@ -20,14 +21,25 @@ constexpr inline auto envelope_to_tuple(T&& t) {
     return t.serde_fields();
 }
 
+template<typename T>
+constexpr inline auto envelope_to_tuple(const T& t) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+    return std::apply(
+      [](auto&... args) { return std::tie(std::as_const(args)...); },
+      const_cast<T&>(t).serde_fields());
+}
+
 template<typename Fn>
 concept check_for_more_fn = requires(Fn&& fn, int& f) {
     { fn(f) } -> std::convertible_to<bool>;
 };
 
-template<is_envelope T, typename Fn>
-inline auto envelope_for_each_field(T& t, Fn&& fn) {
-    std::apply([&](auto&&... args) { (fn(args), ...); }, envelope_to_tuple(t));
+template<typename T, typename Fn>
+requires is_envelope<std::decay_t<T>>
+inline auto envelope_for_each_field(T&& t, Fn&& fn) {
+    std::apply(
+      [&](auto&&... args) { (fn(std::forward_like<T>(args)), ...); },
+      envelope_to_tuple(t));
 }
 
 template<is_envelope T, check_for_more_fn Fn>

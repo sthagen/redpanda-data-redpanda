@@ -11,6 +11,7 @@
 #pragma once
 
 #include "bytes/iobuf.h"
+#include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "container/chunked_vector.h"
 
@@ -94,6 +95,11 @@ public:
     // Delete the specified objects from object storage.
     virtual ss::future<std::expected<void, errc>>
     delete_objects(chunked_vector<object_id>, ss::abort_source*) = 0;
+
+    // Create a multipart upload for streaming data directly to object storage.
+    virtual ss::future<
+      std::expected<cloud_storage_clients::multipart_upload_ref, errc>>
+    create_multipart_upload(object_id, size_t part_size, ss::abort_source*) = 0;
 
 protected:
     // A helper to read a staging file.

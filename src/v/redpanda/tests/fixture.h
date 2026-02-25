@@ -112,7 +112,8 @@ public:
       init_cloud_topics_tag,
       std::optional<uint16_t> port = std::nullopt,
       cloud_storage_clients::s3_url_style url_style = default_url_style,
-      model::node_id node_id = model::node_id(1));
+      model::node_id node_id = model::node_id(1),
+      cloud_topics::test_fixture_cfg ct_test_cfg = {});
 
     struct init_cloud_storage_no_archiver_tag {};
 

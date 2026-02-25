@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include "cloud_topics/level_one/common/abstract_io.h"
-#include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
@@ -138,19 +136,6 @@ inline std::ostream& operator<<(std::ostream& o, compaction_job_state s) {
     case compaction_job_state::hard_stop:
         return o << "hard_stop";
     }
-}
-
-struct file_and_md_info {
-    std::unique_ptr<staging_file> staging_file;
-    object_builder::object_info info;
-    metastore::object_metadata::ntp_metadata ntp_md;
-};
-
-// An object ID is a unique identifier for a cloud topic compaction job.
-using compaction_job_id = named_type<uuid_t, struct l1_compaction_job_id_tag>;
-
-inline compaction_job_id create_compaction_job_id() {
-    return compaction_job_id{uuid_t::create()};
 }
 
 } // namespace cloud_topics::l1

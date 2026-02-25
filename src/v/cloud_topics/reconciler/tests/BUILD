@@ -20,6 +20,7 @@ redpanda_test_cc_library(
         "test_utils.h",
     ],
     deps = [
+        "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics/level_one/common:fake_io",
         "//src/v/cloud_topics/level_one/metastore:simple",
         "//src/v/cloud_topics/reconciler",

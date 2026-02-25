@@ -81,7 +81,7 @@ public:
     friend void
     read_nested(iobuf_parser& in, xid& id, const size_t bytes_left_limit);
 
-    friend void write(iobuf& out, xid id);
+    friend void write_nested(iobuf& out, xid id);
 
     template<typename H>
     friend H AbslHashValue(H h, const xid& id) {

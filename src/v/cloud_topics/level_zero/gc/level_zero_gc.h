@@ -207,6 +207,8 @@ public:
         epoch_source& operator=(epoch_source&&) = delete;
         virtual ~epoch_source() = default;
 
+        void set_probe(level_zero_gc_probe* p) { probe_ = p; }
+
         /*
          * L0 objects with epochs <= the return value may be deleted. An
          * expected return value of std::nullopt is not an error, but rather
@@ -229,6 +231,9 @@ public:
         virtual seastar::future<
           std::expected<partitions_max_gc_epoch, std::string>>
         get_partitions_max_gc_epoch(seastar::abort_source*) = 0;
+
+    protected:
+        level_zero_gc_probe* probe_{nullptr};
     };
 
     /**

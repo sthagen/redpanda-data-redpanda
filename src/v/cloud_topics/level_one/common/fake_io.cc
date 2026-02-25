@@ -11,9 +11,52 @@
 #include "cloud_topics/level_one/common/fake_io.h"
 
 #include "bytes/iostream.h"
+#include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/object_id.h"
 
 namespace cloud_topics::l1 {
+
+static ss::logger fake_io_log("fake_io");
+
+// In-memory multipart upload state for testing.
+class fake_multipart_state final
+  : public cloud_storage_clients::multipart_upload_state {
+public:
+    fake_multipart_state(
+      object_id oid, absl::btree_map<object_id, iobuf>& storage)
+      : _oid(oid)
+      , _storage(storage) {}
+
+    ss::future<> initialize_multipart() override { co_return; }
+
+    ss::future<> upload_part(size_t, iobuf data) override {
+        _buffer.append(std::move(data));
+        co_return;
+    }
+
+    ss::future<> complete_multipart_upload() override {
+        _storage.insert_or_assign(_oid, std::move(_buffer));
+        co_return;
+    }
+
+    ss::future<> abort_multipart_upload() override {
+        _buffer.clear();
+        co_return;
+    }
+
+    ss::future<> upload_as_single_object(iobuf data) override {
+        _storage.insert_or_assign(_oid, std::move(data));
+        co_return;
+    }
+
+    bool is_multipart_initialized() const override { return true; }
+    ss::sstring upload_id() const override { return "fake"; }
+
+private:
+    object_id _oid;
+    absl::btree_map<object_id, iobuf>& _storage;
+    iobuf _buffer;
+};
 
 fake_io::fake_io() = default;
 
@@ -107,6 +150,15 @@ chunked_vector<object_id> fake_io::list_objects() const {
         oids.emplace_back(oid);
     }
     return oids;
+}
+
+ss::future<std::expected<cloud_storage_clients::multipart_upload_ref, io::errc>>
+fake_io::create_multipart_upload(
+  object_id oid, size_t part_size, ss::abort_source*) {
+    auto state = ss::make_shared<fake_multipart_state>(oid, _storage);
+    auto upload = ss::make_shared<cloud_storage_clients::multipart_upload>(
+      std::move(state), part_size, fake_io_log);
+    co_return upload;
 }
 
 } // namespace cloud_topics::l1

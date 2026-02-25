@@ -32,7 +32,6 @@ compaction_worker::compaction_worker(
   worker_manager* worker_manager,
   io* io,
   metastore* metastore,
-  compaction_committer* committer,
   cluster::metadata_cache* metadata_cache,
   ss::scheduling_group compaction_sg,
   level_one_reader_probe* l1_reader_probe)
@@ -47,7 +46,6 @@ compaction_worker::compaction_worker(
   , _worker_manager(worker_manager)
   , _io(io)
   , _metastore(metastore)
-  , _committer(committer)
   , _metadata_cache(metadata_cache)
   , _compaction_sg(compaction_sg)
   , _l1_reader_probe(l1_reader_probe) {
@@ -236,7 +234,8 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       expected_compaction_epoch,
       start_offset,
       _io,
-      _committer,
+      _metastore,
+      _as,
       config::shard_local_cfg().cloud_topics_compaction_max_object_size.bind(),
       l1::object_builder::options{
         .indexing_interval

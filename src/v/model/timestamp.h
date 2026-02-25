@@ -83,7 +83,7 @@ public:
     friend std::ostream& operator<<(std::ostream&, timestamp);
 
     // ADL helpers for interfacing with the serde library.
-    friend void write(iobuf& out, timestamp ts);
+    friend void write_nested(iobuf& out, timestamp ts);
     friend void
     read_nested(iobuf_parser& in, timestamp& ts, const size_t bytes_left_limit);
 

@@ -82,6 +82,23 @@ void level_zero_gc_probe::setup_internal_metrics(bool disable) {
           sm::description(
             "Number of DELETE errors during L0 garbage collection."),
           labels),
+        sm::make_counter(
+          "backpressure_seconds_total",
+          [this] { return backpressure_seconds_; },
+          sm::description(
+            "Cumulative time in seconds spent in backoff between L0 "
+            "garbage collection rounds."),
+          labels),
+        sm::make_gauge(
+          "min_partition_gc_epoch",
+          [this] {
+              return min_partition_gc_epoch_.value_or(cluster_epoch{-1})();
+          },
+          sm::description(
+            "Epoch of the partition currently holding back L0 garbage "
+            "collection. This is the partition with the lowest max GC "
+            "eligible epoch across all cloud topics."),
+          labels),
         sm::make_gauge(
           "epoch_lag",
           [this] { return epoch_lag(); },

@@ -470,7 +470,7 @@ class S3Client:
             self._wait_key(bucket, dst, validation_timeout_sec)
             self._wait_no_key(bucket, src, validation_timeout_sec)
 
-    def get_object_meta(self, bucket, key):
+    def get_object_meta(self, bucket: str, key: str):
         """Get object metadata without downloading it"""
         resp = self._get_object(bucket, key)
         # Note: ETag field contains md5 hash enclosed in double quotes that have to be removed

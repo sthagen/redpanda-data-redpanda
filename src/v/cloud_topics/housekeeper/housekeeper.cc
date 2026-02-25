@@ -185,6 +185,10 @@ housekeeper::do_time_retention(std::chrono::milliseconds duration) {
 }
 
 ss::future<> housekeeper::sync_start_offset() {
+    if (_l0_metastore->get_last_reconciled_offset(_tidp) == kafka::offset{}) {
+        // Nothing reconciled, L1 is empty and there's nothing to sync.
+        co_return;
+    }
     auto start_offset = _l0_metastore->get_start_offset(_tidp);
     vlog(cd_log.debug, "Setting {} start offset to {}", _tidp, start_offset);
     auto result = co_await _l1_metastore->set_start_offset(_tidp, start_offset);

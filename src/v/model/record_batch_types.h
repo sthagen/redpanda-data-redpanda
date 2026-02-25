@@ -62,7 +62,8 @@ enum class record_batch_type : int8_t {
     cluster_link = 39,               // cluster link update batches
     group_block = 40, // (un)blocks group names in a consumer offsets partition
     l1_stm = 41,      // cloud_topics::l1::*
-    MAX = l1_stm,
+    ct_read_replica_stm = 42, // cloud_topics::read_replica::*
+    MAX = ct_read_replica_stm,
 };
 
 std::ostream& operator<<(std::ostream& o, record_batch_type bt);

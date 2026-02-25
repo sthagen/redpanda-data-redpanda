@@ -37,13 +37,13 @@ static constexpr std::chrono::milliseconds max_backoff(60);
 static constexpr std::chrono::milliseconds request_timeout(10);
 router::router(
   model::node_id self,
-  group_proxy& group_proxy,
+  ss::shared_ptr<group_proxy> group_proxy,
   ss::sharded<shard_table>& shard_table,
   ss::sharded<metadata_cache>& metadata_cache,
   ss::sharded<rpc::connection_cache>& connection_cache,
   ss::sharded<partition_leaders_table>& leaders,
   ss::abort_source& as)
-  : _group_proxy(group_proxy)
+  : _group_proxy(std::move(group_proxy))
   , _get_group_offsets_handler{.parent = *this}
   , _get_group_offsets_router(
       shard_table,
@@ -112,7 +112,7 @@ ss::future<get_group_offsets_reply> router::get_group_offsets_handler::process(
   ss::shard_id shard, get_group_offsets_request req) {
     co_return co_await parent.container().invoke_on(
       shard, [req = std::move(req)](router& r) mutable {
-          return r._group_proxy.get_group_offsets(std::move(req));
+          return r._group_proxy->get_group_offsets(std::move(req));
       });
 }
 
@@ -134,7 +134,7 @@ ss::future<set_group_offsets_reply> router::set_group_offsets_handler::process(
   ss::shard_id shard, set_group_offsets_request req) {
     co_return co_await parent.container().invoke_on(
       shard, [req = std::move(req)](router& r) mutable {
-          return r._group_proxy.set_group_offsets(std::move(req));
+          return r._group_proxy->set_group_offsets(std::move(req));
       });
 }
 

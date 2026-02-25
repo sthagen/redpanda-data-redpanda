@@ -88,6 +88,10 @@ struct rm_stm_test_fixture : simple_raft_fixture {
           .get();
     }
 
+    auto take_raft_snapshot(model::offset last_included_offset) {
+        return _stm->take_raft_snapshot(last_included_offset);
+    }
+
     auto apply_raft_snapshot(const iobuf& buf) {
         return _stm->apply_raft_snapshot(buf);
     }

@@ -94,7 +94,7 @@ struct topic_configuration
 
     topic_properties properties;
 
-    void serde_write(iobuf& out);
+    void serde_write(iobuf& out) const;
     void serde_read(iobuf_parser& in, const serde::header& h);
 
     friend std::ostream& operator<<(std::ostream&, const topic_configuration&);

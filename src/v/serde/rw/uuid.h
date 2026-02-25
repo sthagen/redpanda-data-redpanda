@@ -16,7 +16,7 @@
 
 namespace serde {
 
-inline void tag_invoke(tag_t<write_tag>, iobuf& out, uuid_t t) {
+inline void tag_invoke(tag_t<write_tag>, iobuf& out, const uuid_t& t) {
     out.append(t.uuid().data, uuid_t::length);
 }
 

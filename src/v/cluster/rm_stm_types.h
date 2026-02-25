@@ -363,6 +363,17 @@ struct tx_snapshot_v6
 
 using tx_snapshot = tx_snapshot_v6;
 
+/// Snapshot of idempotent producer state for inclusion in raft snapshots.
+struct raft_snapshot
+  : serde::
+      envelope<raft_snapshot, serde::version<0>, serde::compat_version<0>> {
+    chunked_vector<producer_state_snapshot> producers;
+    // Aborted state is excluded: raft snapshots represent the truncated,
+    // non-consumable portion of the log, so aborted state is irrelevant.
+
+    auto serde_fields() { return std::tie(producers); }
+};
+
 }; // namespace cluster::tx
 
 namespace reflection {

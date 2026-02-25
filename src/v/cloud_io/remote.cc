@@ -1355,7 +1355,7 @@ remote::initiate_multipart_upload(
 
     // Create the multipart_upload with the wrapped state
     auto upload = ss::make_shared<cloud_storage_clients::multipart_upload>(
-      std::move(wrapped_state), part_size);
+      std::move(wrapped_state), part_size, log);
 
     co_return upload;
 }
