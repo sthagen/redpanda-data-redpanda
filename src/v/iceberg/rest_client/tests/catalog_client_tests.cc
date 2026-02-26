@@ -301,8 +301,8 @@ TEST(token_tests, handle_non_retriable_http_status) {
     ASSERT_FALSE(token.has_value());
     ASSERT_THAT(
       token.error(),
-      VariantWith<r::http_call_error>(
-        VariantWith<bh::status>(bh::status::bad_request)));
+      VariantWith<r::http_call_error>(VariantWith<r::http_status_error>(
+        Field(&r::http_status_error::status, bh::status::bad_request))));
 }
 
 TEST(token_tests, handle_retriable_http_status) {
@@ -375,7 +375,48 @@ TEST(token_tests, handle_retries_exhausted) {
     ASSERT_FALSE(token.has_value());
     ASSERT_THAT(
       token.error(),
-      VariantWith<r::retries_exhausted>(Field(
-        &r::retries_exhausted::errors,
-        Each(VariantWith<bh::status>(bh::status::gateway_timeout)))));
+      VariantWith<r::retries_exhausted>(AllOf(
+        Field(
+          &r::retries_exhausted::reasons,
+          Each(Eq(r::error_kind::retriable_http_status))),
+        Field(
+          &r::retries_exhausted::last_error,
+          Optional(
+            VariantWith<r::http_status_error>(Field(
+              &r::http_status_error::status, bh::status::gateway_timeout)))))));
+}
+
+TEST(client, get_config_propagates_error_body) {
+    constexpr auto err_body
+      = R"({"error":"Forbidden","message":"not authorized"})";
+
+    r::catalog_client cc{
+      make_http_client([](mock_client& m) {
+          EXPECT_CALL(
+            m,
+            request_and_collect_response(
+              AllOf(
+                Property(&bh::request_header<>::target, EndsWith("/config")),
+                Property(&bh::request_header<>::method, Eq(bh::verb::get))),
+              _,
+              _))
+            .WillOnce(Return(
+              ss::make_ready_future<http::downloaded_response>(
+                http::downloaded_response{
+                  .status = bh::status::forbidden,
+                  .body = iobuf::from(err_body)})));
+      }),
+      endpoint,
+      mock_credential_manager,
+      std::nullopt};
+
+    ss::abort_source as;
+    retry_chain_node rtc(as, 1s, 100ms);
+    auto result = cc.get_config(rtc).get();
+    ASSERT_FALSE(result.has_value());
+    ASSERT_THAT(
+      result.error(),
+      VariantWith<r::http_call_error>(VariantWith<r::http_status_error>(AllOf(
+        Field(&r::http_status_error::status, bh::status::forbidden),
+        Field(&r::http_status_error::body, ss::sstring(err_body))))));
 }

@@ -254,13 +254,13 @@ ss::future<> reconciler<Clock>::reconciliation_loop() {
          *                ├─ make_context(oid) → returns error if multipart
          *                │    upload initiation fails
          *                │
-         *                ├─ as_future(build_and_put_object)
-         *                │  └─ build_object() → can throw in builder->finish()
-         *                │       or in build_from_reader() (write failures
-         *                │       propagate since the byte stream can't skip
-         *                │       a failed part). On success, finish() +
-         *                │       close_builder() closes the multipart stream,
-         *                │       completing the upload.
+         *                ├─ as_future(build_object)
+         *                │  └─ can throw in builder->finish() or in
+         *                │     build_from_reader() (write failures propagate
+         *                │     since the byte stream can't skip a failed
+         *                │     part). On success, finish() +
+         *                │     close_builder() closes the multipart stream,
+         *                │     completing the upload.
          *                │
          *                └─ GUARANTEED CLEANUP (always executed):
          *                   ├─ ctx.cleanup_upload() → aborts multipart if
@@ -306,8 +306,6 @@ ss::future<> reconciler<Clock>::reconciliation_loop() {
 
 template<class Clock>
 ss::future<> reconciler<Clock>::reconcile() {
-    _probe.increment_rounds();
-
     chunked_vector<ss::shared_ptr<source>> sources;
     // Make a copy of the sources to not worry about concurrent modification.
     for (auto& [_, src] : _sources) {
@@ -418,7 +416,6 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
           lg.warn,
           "Could not create object metadata builder: {}",
           metadata_builder_res.error());
-        _probe.increment_rounds_failed();
         co_return 0;
     }
     auto& metadata_builder = metadata_builder_res.value();
@@ -429,7 +426,6 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
           src->topic_id_partition());
         if (!oid.has_value()) {
             vlog(lg.warn, "Could not get object: {}", oid.error());
-            _probe.increment_rounds_failed();
             co_return 0;
         }
         oid_to_sources[oid.value()].push_back(src);
@@ -521,7 +517,6 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
         log_error(commit_result.error().with_context(
           "Abandoning reconciliation run because the L1 metastore operation "
           "failed"));
-        _probe.increment_rounds_failed();
         co_return 0;
     }
 
@@ -543,7 +538,7 @@ reconciler<Clock>::reconcile_sources(
     auto ctx = std::move(ctx_result.value());
 
     auto fut = co_await ss::coroutine::as_future(
-      build_and_put_object(oid, ctx, sources));
+      build_object(oid, ctx, sources));
 
     // Always cleanup: abort multipart if not completed, then close builder.
     auto cleanup_fut = co_await ss::coroutine::as_future(ctx.cleanup_upload());
@@ -589,38 +584,6 @@ reconciler<Clock>::reconcile_sources(
 }
 
 template<class Clock>
-ss::future<std::expected<
-  typename reconciler<Clock>::built_object_metadata,
-  reconcile_error>>
-reconciler<Clock>::build_and_put_object(
-  const l1::object_id& oid,
-  builder_context& ctx,
-  const chunked_vector<ss::shared_ptr<source>>& sources) {
-    // Build the object. On success, build_object() calls finish() and then
-    // close_builder(), which closes the multipart stream and completes the
-    // upload.
-    auto build_result = co_await build_object(ctx, sources);
-    if (!build_result.has_value()) {
-        _probe.increment_object_build_failed();
-        co_return std::unexpected(build_result.error());
-    }
-
-    auto obj_meta = std::move(build_result.value());
-    if (obj_meta.commits.empty()) {
-        _probe.increment_empty_objects_skipped();
-        co_return std::unexpected(
-          reconcile_error("Skipping put for object {}: no data", oid));
-    }
-
-    _probe.increment_objects_uploaded();
-    _probe.add_bytes_reconciled(obj_meta.object_info.size_bytes);
-    _probe.record_object_size_bytes(obj_meta.object_info.size_bytes);
-    _probe.record_sources_per_object(obj_meta.commits.size());
-
-    co_return obj_meta;
-}
-
-template<class Clock>
 ss::future<
   std::expected<typename reconciler<Clock>::builder_context, reconcile_error>>
 reconciler<Clock>::make_context(const l1::object_id& oid) {
@@ -630,10 +593,8 @@ reconciler<Clock>::make_context(const l1::object_id& oid) {
     auto upload_result = co_await _l1_io->create_multipart_upload(
       oid, cloud_storage_clients::multipart_upload::min_part_size, &_as);
     if (!upload_result.has_value()) {
-        co_return std::unexpected(
-          reconcile_error(
-            "Failed to initiate multipart upload: {}", upload_result.error())
-            .non_benign());
+        co_return std::unexpected(reconcile_error(
+          "Failed to initiate multipart upload: {}", upload_result.error()));
     }
     ctx.upload = std::move(upload_result).value();
 
@@ -656,7 +617,9 @@ ss::future<std::expected<
   typename reconciler<Clock>::built_object_metadata,
   reconcile_error>>
 reconciler<Clock>::build_object(
-  builder_context& ctx, const chunked_vector<ss::shared_ptr<source>>& sources) {
+  const l1::object_id& oid,
+  builder_context& ctx,
+  const chunked_vector<ss::shared_ptr<source>>& sources) {
     const auto max_size = ctx.size_budget;
 
     chunked_vector<commit_info> metas;
@@ -701,6 +664,15 @@ reconciler<Clock>::build_object(
     }
     metas.shrink_to_fit();
 
+    if (metas.empty()) {
+        // Return early without finishing the builder or completing the
+        // multipart upload. The caller's cleanup will abort the upload
+        // and close the builder.
+        co_return std::unexpected(reconcile_error(
+          "Skipping upload for object {}: no new data from any partition",
+          oid));
+    }
+
     auto obj_info = co_await ctx.builder->finish().finally(
       [&ctx] { return ctx.close_builder(); });
     vlog(
@@ -708,6 +680,11 @@ reconciler<Clock>::build_object(
       "Built L1 object from {} partitions ({} partitions were skipped)",
       metas.size(),
       sources.size() - metas.size());
+
+    _probe.increment_objects_uploaded();
+    _probe.add_bytes_reconciled(obj_info.size_bytes);
+    _probe.record_object_size_bytes(obj_info.size_bytes);
+
     co_return built_object_metadata{
       .object_info = std::move(obj_info),
       .commits = std::move(metas),

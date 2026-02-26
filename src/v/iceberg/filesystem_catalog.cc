@@ -176,6 +176,11 @@ filesystem_catalog::commit_txn(
     co_return std::move(new_tmeta);
 }
 
+ss::future<checked<void, catalog_describe_error>>
+filesystem_catalog::describe_catalog() {
+    co_return outcome::success();
+}
+
 ss::sstring
 filesystem_catalog::table_location(const table_identifier& id) const {
     return fmt::format(

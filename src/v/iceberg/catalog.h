@@ -10,39 +10,20 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "iceberg/catalog_errors.h"
 #include "iceberg/partition.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_identifier.h"
 #include "iceberg/transaction.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/sstring.hh>
 
 namespace iceberg {
 
 class catalog {
 public:
-    enum class errc {
-        // There was a problem at the IO layer.
-        io_error,
+    using errc = catalog_errc;
 
-        // IO has timed out. Depending on the caller, may be worth retrying.
-        timedout,
-
-        // There was some unexpected state (e.g. a broken invariant in the
-        // loaded metadata).
-        unexpected_state,
-
-        // There was a problem that indicates the system is shutting down. Best
-        // to quiesce operation.
-        shutting_down,
-
-        // E.g. a given table already exists.
-        already_exists,
-
-        // E.g. a table is not found.
-        not_found,
-    };
     virtual ~catalog() = default;
 
     // Creates a table with the given metadata.
@@ -85,8 +66,11 @@ public:
     virtual ss::future<checked<table_metadata, errc>>
     commit_txn(const table_identifier& table_ident, transaction) = 0;
 
+    // Probes the catalog for connectivity and credential validity.
+    virtual ss::future<checked<void, catalog_describe_error>>
+    describe_catalog() = 0;
+
     virtual ss::future<> stop() = 0;
 };
-std::ostream& operator<<(std::ostream&, catalog::errc);
 
 } // namespace iceberg

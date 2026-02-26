@@ -20,11 +20,11 @@ import "proto/redpanda/core/pbgen/options.proto";
 import "proto/redpanda/core/pbgen/rpc.proto";
 import "proto/redpanda/core/common/v1/ntp.proto";
 
-option (pbgen.cpp_namespace) = "proto::admin::level_zero_gc";
+option (pbgen.cpp_namespace) = "proto::admin::level_zero";
 
 // Admin endpoints to query Level-0 garbage collection workers for Cloud Topics.
 
-service LevelZeroGcService {
+service LevelZeroService {
     // Returns GC worker status for each shard on targeted node(s).
     rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
         option (pbgen.rpc) = {
@@ -55,6 +55,14 @@ service LevelZeroGcService {
 
     // Query epoch state for one or more cloud topic partitions.
     rpc GetEpochInfo(GetEpochInfoRequest) returns (GetEpochInfoResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+
+    // Returns the estimated L0 data size for a cloud topic partition.
+    rpc GetSizeEstimate(GetSizeEstimateRequest)
+        returns (GetSizeEstimateResponse) {
         option (pbgen.rpc) = {
             authz: SUPERUSER
         };
@@ -164,4 +172,17 @@ enum Status {
     L0_GC_STATUS_RUNNING = 2;
     L0_GC_STATUS_STOPPING = 3;
     L0_GC_STATUS_STOPPED = 4;
+}
+
+// Request the L0 size estimate for a single partition.
+message GetSizeEstimateRequest {
+    common.v1.TopicPartition partition = 1;
+}
+
+// Response with the L0 size estimate.
+message GetSizeEstimateResponse {
+    // Estimated bytes of cloud data still active in L0 (not yet reconciled
+    // to L1). This is the value reported by the size estimator after
+    // subtracting data below the last reconciled offset.
+    uint64 active_bytes = 1;
 }

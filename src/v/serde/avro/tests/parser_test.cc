@@ -12,22 +12,19 @@
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "serde/avro/parser.h"
+#include "serde/avro/tests/avro_comparator.h"
 #include "serde/avro/tests/data_generator.h"
 #include "test_utils/random_bytes.h"
 #include "test_utils/runfiles.h"
 #include "utils/file_io.h"
 
-#include <seastar/util/defer.hh>
-
 #include <avro/Compiler.hh>
 #include <avro/Encoder.hh>
 #include <avro/Generic.hh>
-#include <avro/Schema.hh>
-#include <boost/range/irange.hpp>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace testing;
+using serde::avro::testing::generic_datum_eq;
 
 void parsed_to_avro(
   ::avro::GenericDatum& datum,
@@ -131,149 +128,6 @@ struct AvroParserTest : ::testing::TestWithParam<std::tuple<std::string_view>> {
         writer.write(message);
     }
 
-    template<typename T>
-    AssertionResult check_primitive(
-      const ::avro::GenericDatum& expected,
-      const ::avro::GenericDatum& actual) {
-        if (expected.value<T>() != actual.value<T>()) {
-            return AssertionFailure() << fmt::format(
-                     "expected: {} to be equal to {}",
-                     actual.value<T>(),
-                     expected.value<T>());
-        }
-        return AssertionSuccess();
-    }
-
-    AssertionResult are_equal(
-      const ::avro::GenericDatum& expected,
-      const ::avro::GenericDatum& actual) {
-        if (expected.type() != actual.type()) {
-            return AssertionFailure() << fmt::format(
-                     "Type mismatch, expected: {}, actual: {}",
-                     expected.type(),
-                     actual.type());
-        }
-        switch (expected.type()) {
-        case avro::AVRO_STRING:
-            return check_primitive<std::string>(expected, actual);
-        case avro::AVRO_BYTES:
-            return check_primitive<std::vector<uint8_t>>(expected, actual);
-        case avro::AVRO_INT:
-            return check_primitive<int32_t>(expected, actual);
-        case avro::AVRO_LONG:
-            return check_primitive<int64_t>(expected, actual);
-        case avro::AVRO_FLOAT:
-            return check_primitive<float>(expected, actual);
-        case avro::AVRO_DOUBLE:
-            return check_primitive<double>(expected, actual);
-        case avro::AVRO_BOOL:
-            return check_primitive<bool>(expected, actual);
-        case avro::AVRO_NULL:
-            return AssertionSuccess();
-        case avro::AVRO_RECORD: {
-            auto expected_r = expected.value<::avro::GenericRecord>();
-            auto actual_r = actual.value<::avro::GenericRecord>();
-            if (expected_r.fieldCount() != actual_r.fieldCount()) {
-                return AssertionFailure() << fmt::format(
-                         "Avro record expected to have {} fields while the "
-                         "actual has: {}",
-                         expected_r.fieldCount(),
-                         actual_r.fieldCount());
-            }
-            for (size_t i : boost::irange(expected_r.fieldCount())) {
-                auto r = are_equal(expected_r.fieldAt(i), actual_r.fieldAt(i));
-
-                if (!r) {
-                    return AssertionFailure() << "Record value mismatch at "
-                                              << i << " - " << r.message();
-                }
-            }
-            return AssertionSuccess();
-        }
-        case avro::AVRO_ENUM: {
-            auto& expected_enum = expected.value<::avro::GenericEnum>();
-            auto& actual_enum = expected.value<::avro::GenericEnum>();
-            if (expected_enum.value() != actual_enum.value()) {
-                return AssertionFailure() << fmt::format(
-                         "enum value mismatch {} != {}",
-                         expected_enum.value(),
-                         actual_enum.value());
-            }
-            return AssertionSuccess();
-        }
-        case avro::AVRO_ARRAY: {
-            auto expected_array = expected.value<::avro::GenericArray>();
-            auto actual_array = actual.value<::avro::GenericArray>();
-            if (expected_array.value().size() != actual_array.value().size()) {
-                return AssertionFailure() << fmt::format(
-                         "array size mismatch {} != {}",
-                         expected_array.value().size(),
-                         actual_array.value().size());
-            }
-            for (size_t i : boost::irange(expected_array.value().size())) {
-                auto result = are_equal(
-                  expected_array.value()[i], actual_array.value()[i]);
-                if (!result) {
-                    return AssertionFailure() << fmt::format(
-                             "array element mismatch - {}", result.message());
-                }
-            }
-            return AssertionSuccess();
-        }
-        case avro::AVRO_MAP: {
-            auto expected_map = expected.value<::avro::GenericMap>();
-            auto actual_map = actual.value<::avro::GenericMap>();
-            if (expected_map.value().size() != actual_map.value().size()) {
-                return AssertionFailure() << fmt::format(
-                         "map size mismatch {} != {}",
-                         expected_map.value().size(),
-                         actual_map.value().size());
-            }
-            for (size_t i : boost::irange(expected_map.value().size())) {
-                if (
-                  expected_map.value()[i].first
-                  != actual_map.value()[i].first) {
-                    return AssertionFailure() << fmt::format(
-                             "map key mismatch {} != {}",
-                             expected_map.value()[i].first,
-                             actual_map.value()[i].first);
-                }
-                auto result = are_equal(
-                  expected_map.value()[i].second, actual_map.value()[i].second);
-                if (!result) {
-                    return AssertionFailure() << fmt::format(
-                             "map value mismatch - {}", result.message());
-                }
-            }
-            return AssertionSuccess();
-        }
-
-        case avro::AVRO_UNION:
-            if (expected.unionBranch() != actual.unionBranch()) {
-                return AssertionFailure() << fmt::format(
-                         "union branch mismatch {} != {}",
-                         expected.unionBranch(),
-                         actual.unionBranch());
-            }
-            return are_equal(
-              expected.value<::avro::GenericUnion>().datum(),
-              actual.value<::avro::GenericUnion>().datum());
-        case avro::AVRO_FIXED: {
-            auto expected_fixed = expected.value<::avro::GenericFixed>();
-            auto actual_fixed = expected.value<::avro::GenericFixed>();
-            if (expected_fixed.value() != actual_fixed.value()) {
-                return AssertionFailure()
-                       << fmt::format("fixed value mismatch");
-            }
-            return AssertionSuccess();
-        }
-        case avro::AVRO_UNKNOWN:
-        case avro::AVRO_NUM_TYPES:
-            break;
-        }
-        return AssertionFailure();
-    }
-
     iobuf serialize_with_avro(
       const ::avro::GenericDatum& datum, const ::avro::ValidSchema& schema) {
         std::unique_ptr<::avro::OutputStream> out
@@ -315,7 +169,14 @@ TEST_P(AvroParserTest, RoundtripTest) {
         // covert to GenericDatum
         parsed_to_avro(parsed_avro, parsed);
 
-        ASSERT_TRUE(are_equal(random_value, parsed_avro));
+        ASSERT_TRUE(generic_datum_eq(
+          random_value,
+          parsed_avro,
+          "root",
+          {
+            .map_matching = serde::avro::testing::compare_options::
+              map_matching_policy::positional,
+          }));
     }
 };
 
@@ -353,7 +214,12 @@ INSTANTIATE_TEST_SUITE_P(
     "union_empty_record",
     "union_map_union",
     "union_redundant_types",
-    "unionwithmap"));
+    "unionwithmap"),
+  [](const ::testing::TestParamInfo<AvroParserTest::ParamType>& info) {
+      auto name = std::string(std::get<0>(info.param));
+      std::replace(name.begin(), name.end(), '.', '_');
+      return name;
+  });
 
 TEST_F(AvroParserTest, TestTooManyBytes) {
     auto valid_schema = load_json_schema("record2");

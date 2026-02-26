@@ -236,6 +236,16 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                 }
             )
 
+        if with_cloud_topics:
+            self.redpanda.add_extra_rp_conf(
+                {
+                    CLOUD_TOPICS_CONFIG_STR: True,
+                    # Set both compaction intervals for cloud topics compaction tests
+                    "log_compaction_interval_ms": 5000,
+                    "cloud_topics_compaction_interval_ms": 5000,
+                },
+            )
+
         if compaction_mode == CompactionMode.CHUNKED_SLIDING_WINDOW:
             # This may not be recognized on certain nodes in mixed-version run.
             environment = {"__REDPANDA_TEST_DISABLE_BOUNDED_PROPERTY_CHECKS": "ON"}
@@ -268,21 +278,6 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         self.redpanda.await_feature(
             "membership_change_controller_cmds", "active", timeout_sec=30
         )
-
-        if with_cloud_topics:
-            self.redpanda.set_cluster_config(
-                values={
-                    CLOUD_TOPICS_CONFIG_STR: True,
-                    # Set both compaction intervals for cloud topics compaction tests
-                    "log_compaction_interval_ms": 5000,
-                    "cloud_topics_compaction_interval_ms": 5000,
-                }
-            )
-            self.redpanda.restart_nodes(
-                nodes=self.redpanda.nodes,
-                auto_assign_node_id=True,
-                omit_seeds_on_idx_one=False,
-            )
 
     def _alter_local_topic_retention_bytes(self, topic: str, retention_bytes: int):
         rpk = RpkTool(self.redpanda)

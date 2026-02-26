@@ -13,15 +13,19 @@
 namespace iceberg {
 namespace {
 
-chunked_hash_map<nested_field::id_t, size_t>
-copy_map(const chunked_hash_map<nested_field::id_t, size_t>& m) {
-    chunked_hash_map<nested_field::id_t, size_t> ret;
+constexpr auto copy_map = [](const auto& m) {
+    std::decay_t<decltype(m)> ret;
     ret.reserve(m.size());
     for (auto& [k, v] : m) {
-        ret.emplace(k, v);
+        if constexpr (requires { v.copy(); }) {
+            ret.emplace(k, v.copy());
+        } else {
+            ret.emplace(k, v);
+        }
     }
     return ret;
-}
+};
+
 } // namespace
 data_file data_file::copy() const {
     return data_file{
@@ -31,10 +35,18 @@ data_file data_file::copy() const {
       .partition = partition.copy(),
       .record_count = record_count,
       .file_size_bytes = file_size_bytes,
-      .column_sizes = copy_map(column_sizes),
-      .value_counts = copy_map(value_counts),
-      .null_value_counts = copy_map(null_value_counts),
-      .nan_value_counts = copy_map(nan_value_counts),
+      .column_sizes = column_sizes.transform(copy_map),
+      .value_counts = value_counts.transform(copy_map),
+      .null_value_counts = null_value_counts.transform(copy_map),
+      .nan_value_counts = nan_value_counts.transform(copy_map),
+      .lower_bounds = lower_bounds.transform(copy_map),
+      .upper_bounds = upper_bounds.transform(copy_map),
+      .key_metadata = key_metadata.transform(&iobuf::copy),
+      .split_offsets = split_offsets.transform(&chunked_vector<int64_t>::copy),
+      .equality_ids = equality_ids.transform(
+        &chunked_vector<nested_field::id_t>::copy),
+      .sort_order_id = sort_order_id,
+      .referenced_data_file = referenced_data_file,
     };
 }
 

@@ -94,7 +94,15 @@ private:
         // placeholder batches we extract out the extent_meta to be hydrated
         // later.
         using payload = iobuf;
-        std::variant<cloud_topics::extent_meta, payload> data;
+
+        // A cached_batch holds a fully-formed batch resolved from
+        // the record batch cache during materialize_batches(), avoiding an
+        // S3 download when a previous cache miss caused the fast cache path
+        // to be skipped.
+        struct cached_batch {
+            model::record_batch batch;
+        };
+        std::variant<cloud_topics::extent_meta, payload, cached_batch> data;
     };
 
     bool cache_enabled() const;

@@ -230,4 +230,28 @@ coordinator_manager::remove_tombstone(
     }
 }
 
+ss::future<checked<void, iceberg::catalog_describe_error>>
+coordinator_manager::describe_catalog() {
+    auto holder = gate_.hold();
+    if (!catalog_) {
+        static constexpr auto msg = "catalog not initialized";
+        vlog(datalake_log.warn, "failed to describe catalog: {}", msg);
+        co_return iceberg::catalog_describe_error{
+          .errc = iceberg::catalog_errc::unexpected_state,
+          .message = ss::sstring{msg},
+        };
+    }
+    auto res = co_await catalog_->describe_catalog();
+    if (res.has_error()) {
+        const auto& err = res.error();
+        vlog(
+          datalake_log.debug,
+          "failed to describe catalog: code: {}, message: {}",
+          err.errc,
+          err.message);
+        co_return err;
+    }
+    co_return outcome::success();
+}
+
 } // namespace datalake::coordinator

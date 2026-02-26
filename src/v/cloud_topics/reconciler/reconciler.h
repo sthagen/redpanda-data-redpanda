@@ -206,18 +206,6 @@ private:
       const chunked_vector<ss::shared_ptr<source>>& sources);
 
     /*
-     * Build and upload an object with id `oid` using the provided context.
-     * Reads data from `sources` and packages it into the object.
-     * Returns metadata on success, or an error if no data was added or
-     * if the build/upload fails.
-     */
-    ss::future<std::expected<built_object_metadata, reconcile_error>>
-    build_and_put_object(
-      const l1::object_id& oid,
-      builder_context& ctx,
-      const chunked_vector<ss::shared_ptr<source>>& sources);
-
-    /*
      * Create a new builder_context for constructing an L1 object.
      * Initiates a multipart upload for the given object ID.
      * Returns an error if multipart upload initiation or builder creation
@@ -229,12 +217,13 @@ private:
     /*
      * Build an object described by `ctx` and containing data from
      * `sources`, which must all belong to the same L1 domain.
-     *
-     * Returns empty metadata if no data was added to the object.
-     * Returns an error if building fails.
+     * On success, finishes the builder and completes the multipart
+     * upload. Returns an error if no data was added or if building
+     * fails.
      */
     ss::future<std::expected<built_object_metadata, reconcile_error>>
     build_object(
+      const l1::object_id& oid,
       builder_context& ctx,
       const chunked_vector<ss::shared_ptr<source>>& sources);
 

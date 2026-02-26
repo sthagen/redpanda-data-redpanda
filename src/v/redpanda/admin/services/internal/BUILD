@@ -54,11 +54,11 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "level_zero_gc",
-    srcs = ["level_zero_gc.cc"],
-    hdrs = ["level_zero_gc.h"],
+    name = "level_zero",
+    srcs = ["level_zero.cc"],
+    hdrs = ["level_zero.h"],
     deps = [
-        "//proto/redpanda/core/admin/internal/cloud_topics/v1:level_zero_gc_redpanda_proto",
+        "//proto/redpanda/core/admin/internal/cloud_topics/v1:level_zero_redpanda_proto",
         "//src/v/base",
         "//src/v/cloud_topics:state_accessors",
         "//src/v/cloud_topics/frontend",

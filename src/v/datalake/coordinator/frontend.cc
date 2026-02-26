@@ -537,4 +537,13 @@ ss::future<reset_topic_state_reply> frontend::reset_topic_state(
       &client::reset_topic_state>(std::move(request), bool(local_only_exec));
 }
 
+ss::future<checked<void, iceberg::catalog_describe_error>>
+frontend::describe_catalog() {
+    auto holder = _gate.hold();
+
+    // This endpoint intentionally checks connectivity from the local node, so
+    // it does not route through a coordinator leader.
+    co_return co_await _coordinator_mgr->local().describe_catalog();
+}
+
 } // namespace datalake::coordinator

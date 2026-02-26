@@ -33,6 +33,15 @@ service DatalakeService {
         };
     }
 
+    // Probes the iceberg catalog for connectivity and credential validity.
+    // Returns an empty response on success or an error with diagnostics.
+    rpc DescribeCatalog(DescribeCatalogRequest)
+        returns (DescribeCatalogResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+
     rpc CoordinatorResetTopicState(CoordinatorResetTopicStateRequest)
         returns (CoordinatorResetTopicStateResponse) {
         option (pbgen.rpc) = {
@@ -116,3 +125,9 @@ message TopicState {
     uint64 total_kafka_processed_bytes = 4;
     uint64 last_committed_snapshot_id = 5;
 }
+
+message DescribeCatalogRequest {}
+
+// Currently empty. In the future, may include additional catalog
+// information such as configuration details or capabilities.
+message DescribeCatalogResponse {}

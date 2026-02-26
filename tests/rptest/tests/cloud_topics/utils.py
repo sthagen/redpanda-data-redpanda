@@ -46,4 +46,5 @@ def wait_until_l1_partition_size(
         timeout_sec=timeout_sec,
         backoff_sec=backoff_sec,
         err_msg=f"Waiting for L1 partition size. Last size {last_size[0]}",
+        retry_on_exc=True,
     )

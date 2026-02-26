@@ -317,4 +317,8 @@ l0::producer_queue& ctp_stm_api::producer_queue() {
     return _stm->producer_queue();
 }
 
+uint64_t ctp_stm_api::estimated_data_size() const noexcept {
+    return _stm->state().estimated_data_size();
+}
+
 }; // namespace cloud_topics

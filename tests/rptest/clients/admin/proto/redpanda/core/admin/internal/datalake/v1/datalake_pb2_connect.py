@@ -49,6 +49,21 @@ class DatalakeServiceClient:
             raise ConnectProtocolError('missing response message')
         return msg
 
+    def call_describe_catalog(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse]:
+        """Low-level method to call DescribeCatalog, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.internal.datalake.v1.DatalakeService/DescribeCatalog'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse, extra_headers, timeout_seconds)
+
+    def describe_catalog(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse:
+        response = self.call_describe_catalog(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     def call_coordinator_reset_topic_state(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateResponse]:
         """Low-level method to call CoordinatorResetTopicState, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.internal.datalake.v1.DatalakeService/CoordinatorResetTopicState'
@@ -85,6 +100,21 @@ class AsyncDatalakeServiceClient:
             raise ConnectProtocolError('missing response message')
         return msg
 
+    async def call_describe_catalog(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse]:
+        """Low-level method to call DescribeCatalog, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.internal.datalake.v1.DatalakeService/DescribeCatalog'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse, extra_headers, timeout_seconds)
+
+    async def describe_catalog(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse:
+        response = await self.call_describe_catalog(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     async def call_coordinator_reset_topic_state(self, req: proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateResponse]:
         """Low-level method to call CoordinatorResetTopicState, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.internal.datalake.v1.DatalakeService/CoordinatorResetTopicState'
@@ -106,6 +136,9 @@ class DatalakeServiceProtocol(typing.Protocol):
     def get_coordinator_state(self, req: ClientRequest[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest]) -> ServerResponse[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateResponse]:
         ...
 
+    def describe_catalog(self, req: ClientRequest[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogRequest]) -> ServerResponse[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogResponse]:
+        ...
+
     def coordinator_reset_topic_state(self, req: ClientRequest[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateRequest]) -> ServerResponse[proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateResponse]:
         ...
 DATALAKE_SERVICE_PATH_PREFIX = '/redpanda.core.admin.internal.datalake.v1.DatalakeService'
@@ -113,5 +146,6 @@ DATALAKE_SERVICE_PATH_PREFIX = '/redpanda.core.admin.internal.datalake.v1.Datala
 def wsgi_datalake_service(implementation: DatalakeServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
     app.register_unary_rpc('/redpanda.core.admin.internal.datalake.v1.DatalakeService/GetCoordinatorState', implementation.get_coordinator_state, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.GetCoordinatorStateRequest)
+    app.register_unary_rpc('/redpanda.core.admin.internal.datalake.v1.DatalakeService/DescribeCatalog', implementation.describe_catalog, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.DescribeCatalogRequest)
     app.register_unary_rpc('/redpanda.core.admin.internal.datalake.v1.DatalakeService/CoordinatorResetTopicState', implementation.coordinator_reset_topic_state, proto.redpanda.core.admin.internal.datalake.v1.datalake_pb2.CoordinatorResetTopicStateRequest)
     return app

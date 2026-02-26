@@ -545,6 +545,48 @@ ss::future<http::downloaded_response> handle_load_table_check_concurrency(
       .body = iobuf::from(table_metadata)};
 }
 
+TEST_F(RestCatalogTest, RetriesExhaustedPropagatesLastError) {
+    auto client = make_catalog_client({[](client_mock& m) {
+        setup_token_request_expectations(m);
+        setup_config_expectations(m);
+
+        EXPECT_CALL(
+          m,
+          request_and_collect_response(
+            AllOf(
+              Property(
+                &boost::beast::http::request_header<>::target,
+                EndsWith("/foo%1Fbar%1Fbaz/tables/panda_table")),
+              Property(
+                &boost::beast::http::request_header<>::method,
+                Eq(boost::beast::http::verb::get))),
+            _,
+            _))
+          .WillRepeatedly([](
+                            boost::beast::http::request_header<>&&,
+                            std::optional<iobuf>,
+                            ss::lowres_clock::duration) {
+              return ss::make_ready_future<http::downloaded_response>(
+                http::downloaded_response{
+                  .status = boost::beast::http::status::service_unavailable,
+                  .body = iobuf::from("service unavailable")});
+          });
+    }});
+
+    iceberg::rest_catalog catalog(
+      std::move(client),
+      config::mock_binding<std::chrono::milliseconds>(100ms));
+
+    auto result = catalog
+                    .load_table(
+                      iceberg::table_identifier{
+                        .ns = {"foo", "bar", "baz"}, .table = "panda_table"})
+                    .get();
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_EQ(result.error(), iceberg::catalog_errc::unexpected_state);
+}
+
 TEST_F(RestCatalogTest, TestConcurrentAccesses) {
     auto client = make_catalog_client({[](client_mock& m) {
         setup_token_request_expectations(m);

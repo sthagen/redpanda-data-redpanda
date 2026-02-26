@@ -1,4 +1,10 @@
-#!/usr/bin/python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pyiceberg==0.9.*",
+# ]
+# ///
 
 # Copyright 2024 Redpanda Data, Inc.
 #
@@ -95,8 +101,28 @@ nested_schema = Schema(
 
 
 def make_manifest_entries(num_entries: int) -> list[ManifestEntry]:
+    assert num_entries >= 2, (
+        "Need at least 2 entries to cover both null and non-null cases"
+    )
     manifest_entries: list[ManifestEntry] = []
     for i in range(num_entries):
+        # Even entries: populated optional fields; odd entries: null (None).
+        if i % 2 == 0:
+            counts = {1: 100 + i, 2: 200 + i}
+            lower = {1: b"a", 2: b"b"}
+            upper = {1: b"y", 2: b"z"}
+            split = []
+            eq_ids = []
+            sort_id = i
+            key_meta = b"some_key"
+        else:
+            counts = None
+            lower = None
+            upper = None
+            split = None
+            eq_ids = None
+            sort_id = None
+            key_meta = None
         data_file = DataFile(
             content=DataFileContent.DATA,
             file_path=f"data/path/file-{i}.parquet",
@@ -104,16 +130,16 @@ def make_manifest_entries(num_entries: int) -> list[ManifestEntry]:
             partition={},
             record_count=i,
             file_size_in_bytes=i,
-            column_sizes={},
-            value_counts={},
-            null_value_counts={},
-            nan_value_counts={},
-            lower_bounds={1: b"a", 2: b"b"},
-            upper_bounds={1: b"y", 2: b"z"},
-            key_metadata=None,
-            split_offsets=[],
-            equality_ids=[],
-            sort_order_id=i,
+            column_sizes=counts,
+            value_counts=counts,
+            null_value_counts=counts,
+            nan_value_counts=counts,
+            lower_bounds=lower,
+            upper_bounds=upper,
+            key_metadata=key_meta,
+            split_offsets=split,
+            equality_ids=eq_ids,
+            sort_order_id=sort_id,
         )
         manifest_entry = ManifestEntry(
             status=0,

@@ -341,6 +341,9 @@ void ctp_stm::apply_placeholder(const model::record_batch& batch) {
     auto id = placeholder.id;
     _epoch_checker.check_epoch(ntp(), id.epoch, batch.header().base_offset);
     _state.advance_epoch(id.epoch, batch.header().base_offset);
+    _state.record_placeholder_size(
+      batch.header().base_offset,
+      static_cast<uint64_t>(placeholder.size_bytes));
 }
 
 struct ctp_stm_snapshot
@@ -355,7 +358,7 @@ struct ctp_stm_snapshot
 ss::future<raft::local_snapshot_applied>
 ctp_stm::apply_local_snapshot(raft::stm_snapshot_header header, iobuf&& buf) {
     auto snap = serde::from_iobuf<ctp_stm_snapshot>(std::move(buf));
-    _state = snap.state;
+    _state = std::move(snap.state);
     _epoch_checker = snap.checker;
     vlog(
       _log.debug,
@@ -381,7 +384,7 @@ ctp_stm::take_local_snapshot(ssx::semaphore_units) {
 
 ss::future<> ctp_stm::apply_raft_snapshot(const iobuf& buf) {
     auto snap = serde::from_iobuf<ctp_stm_snapshot>(buf.copy());
-    _state = snap.state;
+    _state = std::move(snap.state);
     _epoch_checker = snap.checker;
     vlog(
       _log.debug,

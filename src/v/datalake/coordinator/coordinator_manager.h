@@ -64,6 +64,9 @@ public:
 
     ss::lw_shared_ptr<coordinator> get(const model::ntp&) const;
 
+    ss::future<checked<void, iceberg::catalog_describe_error>>
+    describe_catalog();
+
 private:
     void start_managing(cluster::partition&);
     void stop_managing(const model::ntp&);

@@ -181,6 +181,7 @@ redpanda_cc_gtest(
     ],
     data = [
         "testdata/nested_manifest.avro",
+        "testdata/spark_3.5.5_iceberg_1.8.1_manifest.avro",
     ],
     deps = [
         ":test_schemas",
@@ -196,6 +197,7 @@ redpanda_cc_gtest(
         "//src/v/iceberg:manifest_list_avro",
         "//src/v/iceberg:partition_key_type",
         "//src/v/iceberg:schema_json",
+        "//src/v/serde/avro/tests:avro_comparator",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:runfiles",
         "//src/v/utils:file_io",

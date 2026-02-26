@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/format_to.h"
+#include "cloud_topics/level_zero/stm/size_estimator.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "serde/envelope.h"
@@ -104,6 +105,19 @@ public:
     /// Estimate inactive epoch
     std::optional<cluster_epoch> estimate_inactive_epoch() const noexcept;
 
+    /// Record a placeholder's size contribution for the size estimator.
+    void record_placeholder_size(model::offset offset, uint64_t size_bytes);
+
+    /// Estimate the total bytes of cloud data addressable by this partition's
+    /// level-zero log.
+    ///
+    /// Uses the LRO as the low watermark: data at or below the LRO has been
+    /// reconciled to L1 and is no longer logically part of L0.
+    uint64_t estimated_data_size() const noexcept;
+
+    /// Access the size estimator directly (for testing and metrics).
+    const size_estimator& get_size_estimator() const noexcept;
+
     /// Advance LRO and it's translated log offset counterpart.
     void advance_last_reconciled_offset(
       kafka::offset new_last_reconciled_offset,
@@ -122,7 +136,8 @@ public:
           _current_epoch_window_offset,
           _min_epoch_lower_bound,
           _previous_applied_epoch,
-          _start_offset);
+          _start_offset,
+          _size_estimator);
     }
 
     /// Max collectible offset is defined by the LRO.
@@ -199,6 +214,9 @@ private:
     // inclusive of what is L1 as well. Any changes to start offset should go
     // through here, then be reconciled to L1.
     kafka::offset _start_offset = kafka::offset{0};
+
+    // Estimates total cloud data bytes addressable by the surviving log.
+    size_estimator _size_estimator;
 };
 
 }; // namespace cloud_topics

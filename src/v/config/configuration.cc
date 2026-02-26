@@ -3781,6 +3781,8 @@ configuration::configuration()
        .visibility = visibility::user,
        .aliases = {"schema_registry_normalize_on_startup"}},
       false)
+  , schema_registry_avro_use_named_references(
+      *this, "schema_registry_avro_use_named_references")
   , schema_registry_enable_qualified_subjects(
       *this,
       "schema_registry_enable_qualified_subjects",
@@ -4521,7 +4523,7 @@ configuration::configuration()
       true,
       "cloud_topics_enabled",
       "Enable cloud topics.",
-      meta{.needs_restart = needs_restart::no, .visibility = visibility::user},
+      meta{.needs_restart = needs_restart::yes, .visibility = visibility::user},
       false)
   , cloud_topics_produce_batching_size_threshold(
       *this,

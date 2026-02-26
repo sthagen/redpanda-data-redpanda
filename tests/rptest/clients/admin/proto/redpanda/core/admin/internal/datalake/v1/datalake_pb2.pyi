@@ -90,6 +90,7 @@ class PartitionStateOverride(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     LAST_COMMITTED_FIELD_NUMBER: builtins.int
     last_committed: builtins.int
+    'Overrides last_committed for the partition. If not set, last_committed is\n    not modified.\n    '
 
     def __init__(self, *, last_committed: builtins.int | None=...) -> None:
         ...
@@ -106,10 +107,11 @@ Global___PartitionStateOverride: typing_extensions.TypeAlias = PartitionStateOve
 
 @typing.final
 class CoordinatorResetTopicStateRequest(google.protobuf.message.Message):
-    """When reset_all_partitions is true, clears pending entries and
-    last_committed for all partitions, then applies overrides. When false,
-    clears pending entries only for partitions in partition_overrides and
-    applies their overrides. No-op when false and partition_overrides is empty.
+    """When reset_all_partitions is true, clears all per partition state
+    (pending entries, last_committed, etc), then applies overrides.
+    When false, clears pending entries only for partitions in partition_overrides
+    and applies optional overrides. No-op if reset_all_partitions is false and
+    partition_overrides is empty.
     """
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -336,3 +338,19 @@ class TopicState(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal['last_committed_snapshot_id', b'last_committed_snapshot_id', 'lifecycle_state', b'lifecycle_state', 'partition_states', b'partition_states', 'revision', b'revision', 'total_kafka_processed_bytes', b'total_kafka_processed_bytes']) -> None:
         ...
 Global___TopicState: typing_extensions.TypeAlias = TopicState
+
+@typing.final
+class DescribeCatalogRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+Global___DescribeCatalogRequest: typing_extensions.TypeAlias = DescribeCatalogRequest
+
+@typing.final
+class DescribeCatalogResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+Global___DescribeCatalogResponse: typing_extensions.TypeAlias = DescribeCatalogResponse

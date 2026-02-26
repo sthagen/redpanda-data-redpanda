@@ -14,6 +14,7 @@
 #include "config/types.h"
 #include "http/client.h"
 #include "http/request_builder.h"
+#include "iceberg/rest_client/catalog_config.h"
 #include "iceberg/rest_client/client_probe.h"
 #include "iceberg/rest_client/credentials.h"
 #include "iceberg/rest_client/error.h"
@@ -119,6 +120,13 @@ public:
      * Public method documentation will refer to the endpoints listed in the
      * specification.
      */
+    /**
+     * List all catalog configuration settings
+     *
+     * GET /v1/config
+     */
+    ss::future<expected<catalog_config>> get_config(retry_chain_node& rtc);
+
     /**
      * Create namespace API
      *

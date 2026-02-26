@@ -12,7 +12,7 @@ import uuid
 from typing import TypeAlias, cast
 
 
-from rptest.clients.admin.v2 import Admin, l0_gc_pb, ntp_pb
+from rptest.clients.admin.v2 import Admin, l0_pb, ntp_pb
 from rptest.context.cloud_storage import CloudStorageType
 from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.kgo_verifier_services import (
@@ -98,10 +98,6 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
             return deleted_total
         return 0
 
-    @property
-    def l0_gc_client(self):
-        return Admin(self.redpanda).l0_gc()
-
     def _get_metric_total(
         self, name: str, nodes: list[ClusterNode] | None = None
     ) -> int:
@@ -182,10 +178,10 @@ class CloudTopicsL0GCTest(CloudTopicsL0GCTestBase):
         )
 
 
-GcStatus: TypeAlias = l0_gc_pb.Status
+GcStatus: TypeAlias = l0_pb.Status
 StatusReport: TypeAlias = dict[int, dict[int, GcStatus] | str]
-EpochInfo: TypeAlias = l0_gc_pb.EpochInfo
-EpochReport: TypeAlias = dict[str, dict[int, l0_gc_pb.EpochInfo | str]]
+EpochInfo: TypeAlias = l0_pb.EpochInfo
+EpochReport: TypeAlias = dict[str, dict[int, l0_pb.EpochInfo | str]]
 
 
 class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
@@ -201,8 +197,12 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
             test_context=test_context, housekeeping_interval_ms=10 * 60 * 60 * 1000
         )
 
+    @property
+    def l0_client(self):
+        return Admin(self.redpanda).l0()
+
     def gc_get_status(self, node: int | None = None) -> StatusReport:
-        response = self.l0_gc_client.get_status(l0_gc_pb.GetStatusRequest(node_id=node))
+        response = self.l0_client.get_status(l0_pb.GetStatusRequest(node_id=node))
         assert response is not None, "GetStatusResponse should not be None"
         expected_nodes = len(self.redpanda.nodes) if node is None else 1
         assert len(response.nodes) == expected_nodes, (
@@ -221,7 +221,7 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
         self.logger.debug(
             f"Pause L0 Garbage Collection {'clusterwide' if node is None else f'Node {node}'}"
         )
-        response = self.l0_gc_client.pause(l0_gc_pb.PauseRequest(node_id=node))
+        response = self.l0_client.pause(l0_pb.PauseRequest(node_id=node))
         assert response is not None, "PauseResponse should not be None"
         expected_nodes = len(self.redpanda.nodes) if node is None else 1
         assert len(response.results) == expected_nodes, (
@@ -233,7 +233,7 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
         self.logger.debug(
             f"Start L0 Garbage Collection {'clusterwide' if node is None else f'Node {node}'}"
         )
-        response = self.l0_gc_client.start(l0_gc_pb.StartRequest(node_id=node))
+        response = self.l0_client.start(l0_pb.StartRequest(node_id=node))
         assert response is not None, "StartResponse should not be None"
         expected_nodes = len(self.redpanda.nodes) if node is None else 1
         assert len(response.results) == expected_nodes, (
@@ -243,8 +243,8 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
 
     def gc_advance_epoch(self, topic: str, partition: int, new_epoch: int) -> EpochInfo:
         self.logger.debug(f"Advance epoch for '{topic}/{partition}'")
-        response = self.l0_gc_client.advance_epoch(
-            l0_gc_pb.AdvanceEpochRequest(
+        response = self.l0_client.advance_epoch(
+            l0_pb.AdvanceEpochRequest(
                 partition=ntp_pb.TopicPartition(topic=topic, partition=partition),
                 new_epoch=new_epoch,
             )
@@ -261,13 +261,13 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
                 (t.name, i) for t in self.topics for i in range(0, t.partition_count)
             ]
         self.logger.debug(f"Get epoch info for {topic_partitions=}")
-        result: dict[str, dict[int, l0_gc_pb.EpochInfo | str]] = {}
+        result: dict[str, dict[int, l0_pb.EpochInfo | str]] = {}
         for topic, partition in topic_partitions:
             if topic not in result:
                 result[topic] = {}
             try:
-                response = self.l0_gc_client.get_epoch_info(
-                    l0_gc_pb.GetEpochInfoRequest(
+                response = self.l0_client.get_epoch_info(
+                    l0_pb.GetEpochInfoRequest(
                         partition=ntp_pb.TopicPartition(
                             topic=topic, partition=partition
                         )
@@ -508,7 +508,7 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
         assert len(errs) == 0, "Unexpected errors: {errs=}"
 
     def _epoch_report_to_str(self, epochs: EpochReport, indent: int = 1) -> str:
-        def epoch_info_to_dict(info: l0_gc_pb.EpochInfo) -> dict[str, int]:
+        def epoch_info_to_dict(info: l0_pb.EpochInfo) -> dict[str, int]:
             return {
                 "estimated_inactive_epoch": info.estimated_inactive_epoch,
                 "max_applied_epoch": info.max_applied_epoch,
@@ -518,7 +518,7 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
 
         serializable = {
             t: {
-                p: (epoch_info_to_dict(e) if isinstance(e, l0_gc_pb.EpochInfo) else e)
+                p: (epoch_info_to_dict(e) if isinstance(e, l0_pb.EpochInfo) else e)
                 for p, e in ps.items()
             }
             for t, ps in epochs.items()
@@ -538,14 +538,14 @@ class CloudTopicsL0GCAdminTest(CloudTopicsL0GCTestBase):
             if t.name in active_topics:
                 # active topics should have EpochInfo with positive inactive epoch
                 assert all(
-                    isinstance(e, l0_gc_pb.EpochInfo) and e.estimated_inactive_epoch > 0
+                    isinstance(e, l0_pb.EpochInfo) and e.estimated_inactive_epoch > 0
                     for _, e in ps.items()
                 ), f"Expected EpochInfo with positive epochs for {t.name=}"
             elif t.name in stalled_topics:
                 # Stalled topics should have EpochInfo with nonexistent estimated_inactive_epoch
                 # since no data has been reconciled
                 assert all(
-                    isinstance(e, l0_gc_pb.EpochInfo) and e.estimated_inactive_epoch < 0
+                    isinstance(e, l0_pb.EpochInfo) and e.estimated_inactive_epoch < 0
                     for _, e in ps.items()
                 ), f"Expected EpochInfo with min epoch for stalled {t.name=}"
             else:

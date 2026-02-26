@@ -136,6 +136,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":catalog_config",
         ":client_probe",
         ":credentials",
         ":entities",

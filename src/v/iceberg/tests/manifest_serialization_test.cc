@@ -21,6 +21,7 @@
 #include "iceberg/partition_key_type.h"
 #include "iceberg/schema_json.h"
 #include "iceberg/tests/test_schemas.h"
+#include "serde/avro/tests/avro_comparator.h"
 #include "test_utils/runfiles.h"
 #include "utils/file_io.h"
 
@@ -29,6 +30,8 @@
 #include <seastar/util/file.hh>
 
 #include <avro/DataFile.hh>
+#include <avro/Generic.hh>
+#include <avro/GenericDatum.hh>
 #include <avro/Stream.hh>
 #include <gtest/gtest.h>
 
@@ -49,6 +52,43 @@ bool trivial_fields_eq(
            && lhs.data_file.record_count == rhs.data_file.record_count
            && lhs.data_file.file_size_in_bytes
                 == rhs.data_file.file_size_in_bytes;
+}
+
+::testing::AssertionResult manifest_avro_equal(
+  iobuf expected_buf,
+  iobuf actual_buf,
+  serde::avro::testing::compare_options opts = {}) {
+    auto expected_in = std::make_unique<avro_iobuf_istream>(
+      std::move(expected_buf));
+    auto actual_in = std::make_unique<avro_iobuf_istream>(
+      std::move(actual_buf));
+    avro::DataFileReader<avro::GenericDatum> expected_reader(
+      std::move(expected_in));
+    avro::DataFileReader<avro::GenericDatum> actual_reader(
+      std::move(actual_in));
+
+    size_t i = 0;
+    while (true) {
+        avro::GenericDatum expected_entry(expected_reader.readerSchema());
+        avro::GenericDatum actual_entry(actual_reader.readerSchema());
+        auto expected_has_entry = expected_reader.read(expected_entry);
+        auto actual_has_entry = actual_reader.read(actual_entry);
+        if (expected_has_entry != actual_has_entry) {
+            return ::testing::AssertionFailure()
+                   << "entry count mismatch at index " << i;
+        }
+        if (!expected_has_entry) {
+            break;
+        }
+        auto res = serde::avro::testing::generic_datum_eq(
+          expected_entry, actual_entry, "entry", opts);
+        if (!res) {
+            return ::testing::AssertionFailure()
+                   << "entry[" << i << "] mismatch: " << res.message();
+        }
+        ++i;
+    }
+    return ::testing::AssertionSuccess();
 }
 
 } // anonymous namespace
@@ -329,14 +369,29 @@ TEST(ManifestSerializationTest, TestSerializeManifestData) {
     ASSERT_EQ(first_entry.file_sequence_number, file_sequence_number{0});
     ASSERT_EQ(first_entry.data_file.file_path, "data/path/file-0.parquet");
     ASSERT_EQ(first_entry.data_file.file_format, data_file_format::parquet);
-    ASSERT_EQ(first_entry.data_file.column_sizes.size(), 0);
-    ASSERT_EQ(first_entry.data_file.value_counts.size(), 0);
-    ASSERT_EQ(first_entry.data_file.null_value_counts.size(), 0);
-    ASSERT_EQ(first_entry.data_file.nan_value_counts.size(), 0);
+    ASSERT_TRUE(first_entry.data_file.column_sizes.has_value());
+    ASSERT_EQ(first_entry.data_file.column_sizes->size(), 2);
+    ASSERT_EQ(
+      first_entry.data_file.column_sizes->at(nested_field::id_t{1}), 100);
+    ASSERT_EQ(
+      first_entry.data_file.column_sizes->at(nested_field::id_t{2}), 200);
+    ASSERT_TRUE(first_entry.data_file.value_counts.has_value());
+    ASSERT_EQ(first_entry.data_file.value_counts->size(), 2);
+    ASSERT_TRUE(first_entry.data_file.null_value_counts.has_value());
+    ASSERT_EQ(first_entry.data_file.null_value_counts->size(), 2);
+    ASSERT_TRUE(first_entry.data_file.nan_value_counts.has_value());
+    ASSERT_EQ(first_entry.data_file.nan_value_counts->size(), 2);
+
+    const auto& second_entry = m.entries[1];
+    ASSERT_FALSE(second_entry.data_file.column_sizes.has_value());
+    ASSERT_FALSE(second_entry.data_file.value_counts.has_value());
+    ASSERT_FALSE(second_entry.data_file.null_value_counts.has_value());
+    ASSERT_FALSE(second_entry.data_file.nan_value_counts.has_value());
 
     auto serialized_buf = serialize_avro(m);
+
     for (int i = 0; i < 10; i++) {
-        auto m_roundtrip = parse_manifest(std::move(serialized_buf));
+        auto m_roundtrip = parse_manifest(serialized_buf.copy());
         ASSERT_EQ(m.metadata, m_roundtrip.metadata);
         ASSERT_EQ(100, m_roundtrip.entries.size());
         ASSERT_EQ(
@@ -349,6 +404,29 @@ TEST(ManifestSerializationTest, TestSerializeManifestData) {
           m_roundtrip.metadata.schema.schema_struct,
           std::get<struct_type>(test_nested_schema_type()));
 
+        // The test data was generated with pyiceberg 0.9 which has fewer
+        // data_file fields than our writer schema. Allow the extra fields
+        // as long as they are null.
+        ASSERT_TRUE(manifest_avro_equal(
+          orig_buf.copy(),
+          std::move(serialized_buf),
+          {.extra_fields = serde::avro::testing::compare_options::
+             extra_fields_policy::allow_null}));
+
         serialized_buf = serialize_avro(m_roundtrip);
     }
+}
+
+TEST(ManifestSerializationTest, TestSparkManifestRoundtrip) {
+    ss::engine().set_strict_dma(false);
+    auto manifest_path = test_utils::get_runfile_path(
+      "src/v/iceberg/tests/testdata/"
+      "spark_3.5.5_iceberg_1.8.1_manifest.avro");
+    auto orig_buf = iobuf{ss::util::read_entire_file(manifest_path).get()};
+    auto m = parse_manifest(orig_buf.copy());
+    ASSERT_GT(m.entries.size(), 0);
+
+    auto serialized_buf = serialize_avro(m);
+    ASSERT_TRUE(
+      manifest_avro_equal(orig_buf.copy(), std::move(serialized_buf)));
 }

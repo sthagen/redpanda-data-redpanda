@@ -13,7 +13,7 @@
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
 #include "cluster/fwd.h"
 #include "cluster/members_table.h"
-#include "proto/redpanda/core/admin/internal/cloud_topics/v1/level_zero_gc.proto.h"
+#include "proto/redpanda/core/admin/internal/cloud_topics/v1/level_zero.proto.h"
 #include "redpanda/admin/proxy/client.h"
 #include "redpanda/admin/proxy/context.h"
 
@@ -25,7 +25,7 @@ class frontend;
 
 namespace admin {
 
-namespace level_zero_gc::detail {
+namespace level_zero::detail {
 /**
  * Concept for requests that can target a specific node.
  */
@@ -44,12 +44,12 @@ concept NodeResult = requires(T res, model::node_id id, ss::sstring err) {
     { res.get_error() } -> std::convertible_to<ss::sstring>;
     res.set_error(std::move(err));
 };
-} // namespace level_zero_gc::detail
+} // namespace level_zero::detail
 
-class level_zero_gc_service_impl
-  : public proto::admin::level_zero_gc::level_zero_gc_service {
+class level_zero_service_impl
+  : public proto::admin::level_zero::level_zero_service {
 public:
-    level_zero_gc_service_impl(
+    level_zero_service_impl(
       model::node_id self,
       admin::proxy::client pc,
       ss::sharded<cloud_topics::level_zero_gc>* gc,
@@ -58,28 +58,32 @@ public:
       ss::sharded<cluster::partition_leaders_table>* pl,
       ss::sharded<cluster::shard_table>* st);
 
-    seastar::future<proto::admin::level_zero_gc::get_status_response>
-      get_status(
-        serde::pb::rpc::context,
-        proto::admin::level_zero_gc::get_status_request) override;
-
-    seastar::future<proto::admin::level_zero_gc::start_response> start(
+    seastar::future<proto::admin::level_zero::get_status_response> get_status(
       serde::pb::rpc::context,
-      proto::admin::level_zero_gc::start_request) override;
+      proto::admin::level_zero::get_status_request) override;
 
-    seastar::future<proto::admin::level_zero_gc::pause_response> pause(
+    seastar::future<proto::admin::level_zero::start_response> start(
       serde::pb::rpc::context,
-      proto::admin::level_zero_gc::pause_request) override;
+      proto::admin::level_zero::start_request) override;
 
-    seastar::future<proto::admin::level_zero_gc::advance_epoch_response>
+    seastar::future<proto::admin::level_zero::pause_response> pause(
+      serde::pb::rpc::context,
+      proto::admin::level_zero::pause_request) override;
+
+    seastar::future<proto::admin::level_zero::advance_epoch_response>
       advance_epoch(
         serde::pb::rpc::context,
-        proto::admin::level_zero_gc::advance_epoch_request) override;
+        proto::admin::level_zero::advance_epoch_request) override;
 
-    seastar::future<proto::admin::level_zero_gc::get_epoch_info_response>
+    seastar::future<proto::admin::level_zero::get_epoch_info_response>
       get_epoch_info(
         serde::pb::rpc::context,
-        proto::admin::level_zero_gc::get_epoch_info_request) override;
+        proto::admin::level_zero::get_epoch_info_request) override;
+
+    seastar::future<proto::admin::level_zero::get_size_estimate_response>
+      get_size_estimate(
+        serde::pb::rpc::context,
+        proto::admin::level_zero::get_size_estimate_request) override;
 
 private:
     using apply_local = ss::bool_class<struct apply_local_tag>;
@@ -96,7 +100,7 @@ private:
      *  - if node field is NOT self - dispatch to specified node
      *  - if request has ALREADY been proxied, do not dispatch a second time
      */
-    template<level_zero_gc::detail::NodeTargetedRequest Req>
+    template<level_zero::detail::NodeTargetedRequest Req>
     [[nodiscard]] std::pair<apply_local, apply_remote> validate_request_routing(
       const serde::pb::rpc::context& ctx, const Req& req) {
         if (req.has_node_id()) {
@@ -146,9 +150,9 @@ private:
      *                 the Response of some rpc.
      */
     template<
-      level_zero_gc::detail::NodeTargetedRequest Request,
+      level_zero::detail::NodeTargetedRequest Request,
       typename Response,
-      level_zero_gc::detail::NodeResult Result,
+      level_zero::detail::NodeResult Result,
       typename RpcClient>
     [[nodiscard]] ss::future<chunked_vector<Result>> dispatch_and_collect(
       const Request& req,

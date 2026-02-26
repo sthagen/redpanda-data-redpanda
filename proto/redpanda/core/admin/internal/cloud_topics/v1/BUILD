@@ -22,8 +22,8 @@ redpanda_proto_library(
 )
 
 proto_library(
-    name = "level_zero_gc_proto",
-    srcs = ["level_zero_gc.proto"],
+    name = "level_zero_proto",
+    srcs = ["level_zero.proto"],
     visibility = ["//visibility:public"],
     deps = [
         "//proto/redpanda/core/common/v1:ntp_proto",
@@ -33,8 +33,8 @@ proto_library(
 )
 
 redpanda_proto_library(
-    name = "level_zero_gc_redpanda_proto",
-    protos = [":level_zero_gc_proto"],
+    name = "level_zero_redpanda_proto",
+    protos = [":level_zero_proto"],
     visibility = ["//visibility:public"],
     deps = [
         "//proto/redpanda/core/common/v1:ntp_redpanda_proto",

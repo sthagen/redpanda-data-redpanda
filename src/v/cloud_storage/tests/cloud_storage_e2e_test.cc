@@ -17,7 +17,9 @@
 #include "cluster/cloud_metadata/tests/manual_mixin.h"
 #include "cluster/controller_api.h"
 #include "cluster/health_monitor_frontend.h"
+#include "kafka/client/transport.h"
 #include "kafka/data/replicated_partition.h"
+#include "kafka/protocol/fetch.h"
 #include "kafka/protocol/find_coordinator.h"
 #include "kafka/server/tests/delete_records_utils.h"
 #include "kafka/server/tests/list_offsets_utils.h"
@@ -283,6 +285,87 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloud) {
         EXPECT_EQ(records[i].key, consumed_records[i].key);
         EXPECT_EQ(records[i].val, consumed_records[i].val);
     }
+}
+
+// Verify that a fetch request with negative max_wait_ms succeeds when reading
+// from cloud storage. This can happen when the kafka client (e.g. in
+// schema_registry) computes max_wait_ms as (deadline - now) and the deadline
+// has already passed.
+TEST_P(EndToEndFixture, TestFetchWithNegativeMaxWait) {
+    test_local_cfg.get("cloud_storage_disable_upload_loop_for_tests")
+      .set_value(true);
+    const model::topic topic_name("tapioca");
+    model::ntp ntp(model::kafka_namespace, topic_name, 0);
+    cluster::topic_properties props;
+    props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.retention_local_target_bytes = tristate<size_t>(1);
+    add_topic({model::kafka_namespace, topic_name}, 1, props).get();
+    wait_for_leader(ntp).get();
+
+    auto partition = app.partition_manager.local().get(ntp);
+    auto log = partition->log();
+    auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
+    ASSERT_TRUE(archiver.sync_for_tests().get());
+
+    tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
+    auto deferred_g_close = ss::defer([&gen] { gen.stop().get(); });
+
+    ASSERT_EQ(3, gen.records_per_batch(3).produce().get());
+    ASSERT_EQ(2, log->segments().size());
+    ASSERT_EQ(1, archiver.manifest().size());
+
+    // force reads from cloud storage
+    ss::abort_source as;
+    storage::housekeeping_config housekeeping_conf(
+      model::timestamp::min(),
+      1,
+      log->stm_manager()->max_removable_local_log_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
+      std::nullopt,
+      std::nullopt,
+      std::chrono::milliseconds{0},
+      as);
+    partition->log()->housekeeping(housekeeping_conf).get();
+    tests::cooperative_spin_wait_with_timeout(10s, [log] {
+        return log->segments().size() == 1;
+    }).get();
+
+    // Send a fetch request with negative max_wait_ms.
+    kafka::client::transport transport(make_kafka_client().get());
+    transport.connect().get();
+    auto deferred_t_close = ss::defer([&transport] { transport.stop().get(); });
+
+    kafka::fetch_request::partition fetch_partition;
+    fetch_partition.fetch_offset = model::offset(0);
+    fetch_partition.partition = model::partition_id(0);
+    fetch_partition.log_start_offset = model::offset(0);
+    fetch_partition.partition_max_bytes = 1_MiB;
+
+    kafka::fetch_request::topic fetch_topic;
+    fetch_topic.topic = topic_name;
+    fetch_topic.partitions.push_back(std::move(fetch_partition));
+
+    kafka::fetch_request req;
+    req.data.min_bytes = 1;
+    req.data.max_bytes = 10_MiB;
+    req.data.max_wait_ms = std::chrono::milliseconds(-10);
+    req.data.topics.push_back(std::move(fetch_topic));
+
+    auto resp = transport.dispatch(std::move(req), kafka::api_version(4)).get();
+    ASSERT_EQ(resp.data.error_code, kafka::error_code::none);
+
+    ASSERT_EQ(resp.data.responses.size(), 1);
+    auto& topic_resp = resp.data.responses[0];
+    ASSERT_EQ(topic_resp.partitions.size(), 1);
+    auto& partition_resp = topic_resp.partitions[0];
+    // There is a workaround for the low/negative max-wait
+    // in the kafka layer. The cloud storage layer should
+    // end up getting default fetch timeout and succeed.
+    ASSERT_EQ(partition_resp.error_code, kafka::error_code::none);
+    ASSERT_TRUE(partition_resp.records.has_value());
+    ASSERT_GT(partition_resp.records->size_bytes(), 0);
 }
 
 TEST_P(EndToEndFixture, TestProduceConsumeFromCloudWithSpillover) {

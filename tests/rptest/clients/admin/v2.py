@@ -34,8 +34,8 @@ from rptest.clients.admin.proto.redpanda.core.admin.internal.shadow_link_interna
 from rptest.clients.admin.proto.redpanda.core.admin.internal.cloud_topics.v1 import (
     metastore_pb2,
     metastore_pb2_connect,
-    level_zero_gc_pb2,
-    level_zero_gc_pb2_connect,
+    level_zero_pb2,
+    level_zero_pb2_connect,
 )
 from rptest.clients.admin.proto.redpanda.core.common.v1 import ntp_pb2
 
@@ -58,7 +58,7 @@ debug_pb = debug_pb2
 kafka_connections_pb = kafka_connections_pb2
 breakglass_pb = breakglass_pb2
 metastore_pb = metastore_pb2
-l0_gc_pb = level_zero_gc_pb2
+l0_pb = level_zero_pb2
 ntp_pb = ntp_pb2
 
 
@@ -161,11 +161,9 @@ class Admin:
             metastore_pb2_connect.MetastoreServiceClient, **kwargs
         )
 
-    def l0_gc(
-        self, **kwargs: Any
-    ) -> level_zero_gc_pb2_connect.LevelZeroGcServiceClient:
+    def l0(self, **kwargs: Any) -> level_zero_pb2_connect.LevelZeroServiceClient:
         return self._make_service(
-            level_zero_gc_pb2_connect.LevelZeroGcServiceClient, **kwargs
+            level_zero_pb2_connect.LevelZeroServiceClient, **kwargs
         )
 
     def internal_shadow_link(

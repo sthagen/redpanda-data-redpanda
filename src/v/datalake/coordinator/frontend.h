@@ -16,6 +16,7 @@
 #include "datalake/coordinator/rpc_service.h"
 #include "datalake/coordinator/types.h"
 #include "datalake/fwd.h"
+#include "iceberg/catalog_errors.h"
 #include "model/namespace.h"
 #include "raft/fwd.h"
 #include "rpc/fwd.h"
@@ -79,6 +80,9 @@ public:
 
     ss::future<reset_topic_state_reply>
       reset_topic_state(reset_topic_state_request, local_only = local_only::no);
+
+    ss::future<checked<void, iceberg::catalog_describe_error>>
+    describe_catalog();
 
     /**
      * Returns the partition of datalake coordinator topic that

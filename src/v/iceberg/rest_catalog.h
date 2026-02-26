@@ -53,6 +53,8 @@ public:
     ss::future<checked<table_metadata, errc>>
     commit_txn(const table_identifier& table_ident, transaction) final;
 
+    ss::future<checked<void, catalog_describe_error>> describe_catalog() final;
+
     ~rest_catalog() final = default;
 
     ss::future<> stop() final;

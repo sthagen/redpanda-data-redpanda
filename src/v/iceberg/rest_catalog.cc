@@ -18,8 +18,8 @@ namespace iceberg {
 namespace {
 
 using http_status = enum boost::beast::http::status;
-using errc = enum iceberg::catalog::errc;
-using enum errc;
+using errc = iceberg::catalog::errc;
+using enum iceberg::catalog_errc;
 
 struct http_error_mapping_visitor {
     errc map_http_status(http_status status) const {
@@ -33,19 +33,28 @@ struct http_error_mapping_visitor {
         return unexpected_state;
     }
 
-    errc operator()(const rest_client::http_call_error& err) const {
+    errc map_http_call_error(const rest_client::http_call_error& err) const {
         return ss::visit(
           err,
-          [this](http_status status) { return map_http_status(status); },
+          [this](const rest_client::http_status_error& status) {
+              return map_http_status(status.status);
+          },
           [](const ss::sstring&) { return unexpected_state; });
+    }
+
+    errc operator()(const rest_client::http_call_error& err) const {
+        return map_http_call_error(err);
     }
 
     errc operator()(const rest_client::json_parse_error&) const {
         return unexpected_state;
     }
 
-    errc operator()(const rest_client::retries_exhausted&) const {
-        return timedout;
+    errc operator()(const rest_client::retries_exhausted& err) const {
+        if (err.last_error) {
+            return map_http_call_error(*err.last_error);
+        }
+        return unexpected_state;
     }
 
     errc operator()(const http::url_build_error&) const {
@@ -216,6 +225,21 @@ rest_catalog::commit_txn(const table_identifier& t_id, transaction txn) {
       .transform_error([](const rest_client::domain_error& err) {
           return map_error("commit_txn", err);
       });
+}
+
+ss::future<checked<void, catalog_describe_error>>
+rest_catalog::describe_catalog() {
+    auto rtc = create_rtc();
+    vlog(log.trace, "describe catalog requested");
+    auto h = co_await lock_.get_units();
+    auto res = co_await client_->get_config(rtc);
+    if (res.has_value()) {
+        co_return outcome::success();
+    }
+    co_return catalog_describe_error{
+      .errc = map_error("describe_catalog", res.error()),
+      .message = fmt::format("{}", res.error()),
+    };
 }
 
 retry_chain_node rest_catalog::create_rtc() {

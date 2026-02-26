@@ -1,5 +1,7 @@
+from connectrpc.errors import ConnectError, ConnectErrorCode
 from ducktape.mark import matrix
 
+from rptest.clients.admin import v2 as admin_v2
 from rptest.clients.default import TopicSpec
 from rptest.services.apache_iceberg_catalog import IcebergRESTCatalog
 from rptest.services.cluster import cluster
@@ -9,7 +11,7 @@ from rptest.services.kgo_verifier_services import (
 from rptest.services.redpanda import SISettings
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import wait_until
+from rptest.util import expect_exception, firewall_blocked, wait_until
 
 
 class RestCatalogConnectionTest(RedpandaTest):
@@ -92,6 +94,20 @@ class RestCatalogConnectionTest(RedpandaTest):
         catalog = self.catalog_service.client()
         namespace = "redpanda"
         topic = TopicSpec(name="datalake-test-topic", partition_count=3)
+
+        admin = admin_v2.Admin(self.redpanda)
+
+        admin.datalake().describe_catalog(admin_v2.datalake_pb.DescribeCatalogRequest())
+
+        with firewall_blocked(
+            self.redpanda.nodes, self.catalog_service.iceberg_rest_port
+        ):
+            with expect_exception(
+                ConnectError, lambda e: e.code == ConnectErrorCode.INTERNAL
+            ):
+                admin.datalake().describe_catalog(
+                    admin_v2.datalake_pb.DescribeCatalogRequest()
+                )
 
         self.client().create_topic(topic)
         self.client().alter_topic_config(

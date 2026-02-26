@@ -62,6 +62,8 @@ class NodesDecommissioningTest(PreallocNodesTest):
             retention_local_trim_interval=5_000,
         )
 
+        extra_rp_conf[CLOUD_TOPICS_CONFIG_STR] = True
+
         super(NodesDecommissioningTest, self).__init__(
             test_context=test_context,
             num_brokers=5,
@@ -391,20 +393,6 @@ class NodesDecommissioningTest(PreallocNodesTest):
 
         self.redpanda.start(
             auto_assign_node_id=new_bootstrap, omit_seeds_on_idx_one=not new_bootstrap
-        )
-
-        # Enable cloud topics
-        self.redpanda.enable_development_feature_support()
-        self.redpanda.set_cluster_config(
-            values={
-                CLOUD_TOPICS_CONFIG_STR: True,
-                "cloud_topics_disable_reconciliation_loop": True,
-            }
-        )
-        self.redpanda.restart_nodes(
-            nodes=self.redpanda.nodes,
-            auto_assign_node_id=new_bootstrap,
-            omit_seeds_on_idx_one=not new_bootstrap,
         )
 
     @cluster(
@@ -985,8 +973,10 @@ class NodesDecommissioningTest(PreallocNodesTest):
             self.logger.info(f"decommissioning node: {node_id}")
             self._decommission(node_id)
             wait_until(
-                lambda: self._partitions_moving(node=survivor_node)
-                or self._node_removed(node_id, survivor_node),
+                lambda: (
+                    self._partitions_moving(node=survivor_node)
+                    or self._node_removed(node_id, survivor_node)
+                ),
                 timeout_sec=60,
                 backoff_sec=1,
             )

@@ -412,6 +412,7 @@ redpanda_cc_library(
         "//src/v/datalake:schema_identifier",
         "//src/v/datalake:types",
         "//src/v/hashing:murmur",
+        "//src/v/iceberg:catalog_errors",
         "//src/v/model",
         "//src/v/raft",
         "//src/v/rpc",

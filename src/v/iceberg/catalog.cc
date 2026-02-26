@@ -11,26 +11,7 @@
 
 #include "iceberg/logger.h"
 
-#include <fmt/format.h>
-
 namespace iceberg {
-
-std::ostream& operator<<(std::ostream& o, catalog::errc e) {
-    switch (e) {
-    case catalog::errc::io_error:
-        return o << "catalog::errc::io_error";
-    case catalog::errc::timedout:
-        return o << "catalog::errc::timedout";
-    case catalog::errc::unexpected_state:
-        return o << "catalog::errc::unexpected_state";
-    case catalog::errc::shutting_down:
-        return o << "catalog::errc::shutting_down";
-    case catalog::errc::already_exists:
-        return o << "catalog::errc::already_exists";
-    case catalog::errc::not_found:
-        return o << "catalog::errc::not_found";
-    }
-}
 
 ss::future<checked<table_metadata, catalog::errc>>
 catalog::load_or_create_table(

@@ -118,6 +118,10 @@ public:
 
     l0::producer_queue& producer_queue();
 
+    /// Estimate the total bytes of cloud data addressable by the level-zero
+    /// log for this partition.
+    uint64_t estimated_data_size() const noexcept;
+
 private:
     /// Replicate a record batch and wait for it to be applied to the ctp_stm.
     /// Returns the offset at which the batch was applied.

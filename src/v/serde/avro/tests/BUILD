@@ -29,6 +29,20 @@ redpanda_test_cc_library(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "avro_comparator",
+    hdrs = [
+        "avro_comparator.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@avro",
+        "@fmt",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "parser_test",
     timeout = "short",
@@ -71,6 +85,7 @@ redpanda_cc_gtest(
     ],
     memory = "128MiB",
     deps = [
+        ":avro_comparator",
         ":avro_test_array",
         ":data_generator",
         "//src/v/base",
@@ -83,10 +98,23 @@ redpanda_cc_gtest(
         "//src/v/test_utils:runfiles",
         "//src/v/utils:file_io",
         "@avro",
-        "@boost//:range",
         "@fmt",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
         "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "avro_comparator_test",
+    timeout = "short",
+    srcs = [
+        "avro_comparator_test.cc",
+    ],
+    deps = [
+        ":avro_comparator",
+        "//src/v/test_utils:gtest",
+        "@avro",
+        "@googletest//:gtest",
     ],
 )

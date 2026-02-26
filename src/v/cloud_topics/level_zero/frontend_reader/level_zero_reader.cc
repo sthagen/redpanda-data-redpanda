@@ -9,6 +9,7 @@
  */
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
 
+#include "base/vassert.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
@@ -340,6 +341,9 @@ level_zero_log_reader_impl::materialize_batches(
           },
           [](const cloud_topics::extent_meta& meta) {
               return meta.byte_range_size();
+          },
+          [](const local_log_batch::cached_batch&) -> size_t {
+              vunreachable("Unexpected cached_batch state");
           });
         if (is_over_limit_with_bytes(hydrated_batch_size)) {
             // If the next meta batch exceeds the max bytes limit, we stop
@@ -363,6 +367,24 @@ level_zero_log_reader_impl::materialize_batches(
         if (
           auto* meta = std::get_if<cloud_topics::extent_meta>(
             &unhydrated_it->data)) {
+            // Try the batch cache before scheduling an S3 download.
+            // This prevents gap amplification where a single evicted
+            // cache entry causes all subsequent batches in this read
+            // to bypass the cache.
+            if (cache_enabled()) {
+                auto cached = _ct_api->cache_get(
+                  tidp, kafka::offset_cast(meta->base_offset));
+                if (cached.has_value()) {
+                    vlog(
+                      _log.trace,
+                      "Cache hit for extent at offset {} during "
+                      "materialize",
+                      meta->base_offset);
+                    unhydrated_it->data = local_log_batch::cached_batch{
+                      .batch = std::move(cached.value())};
+                    continue;
+                }
+            }
             materialize_bytes += meta->byte_range_size;
             to_materialize.push_back(*meta);
             vlog(
@@ -370,40 +392,47 @@ level_zero_log_reader_impl::materialize_batches(
         }
     }
     size_t materialize_count = to_materialize.size();
-    vlog(
-      _log.trace,
-      "Invoking 'materialize' for {}: {} bytes, {} batches to materialize",
-      _ctp->ntp(),
-      materialize_bytes,
-      materialize_count);
-    // Ask data layer to bring data from the cloud storage.
-    auto mat_res = co_await _ct_api->materialize(
-      _ctp->ntp(),
-      materialize_bytes,
-      std::move(to_materialize),
-      deadline,
-      _config.abort_source);
-    if (!mat_res.has_value()) {
-        if (mat_res.error() == errc::shutting_down) {
-            vlog(_log.debug, "Materialize aborted due to shutdown");
-            throw ss::abort_requested_exception();
+    // Only invoke the data plane when there are extents that missed the
+    // batch cache. When every extent was a cache hit the vector is empty
+    // and we can skip the (potentially expensive) S3 round-trip entirely.
+    chunked_vector<model::record_batch> batches;
+    if (!to_materialize.empty()) {
+        vlog(
+          _log.trace,
+          "Invoking 'materialize' for {}: {} bytes, {} batches to "
+          "materialize",
+          _ctp->ntp(),
+          materialize_bytes,
+          materialize_count);
+        // Ask data layer to bring data from the cloud storage.
+        auto mat_res = co_await _ct_api->materialize(
+          _ctp->ntp(),
+          materialize_bytes,
+          std::move(to_materialize),
+          deadline,
+          _config.abort_source);
+        if (!mat_res.has_value()) {
+            if (mat_res.error() == errc::shutting_down) {
+                vlog(_log.debug, "Materialize aborted due to shutdown");
+                throw ss::abort_requested_exception();
+            }
+            if (mat_res.error() == errc::timeout) {
+                vlog(_log.debug, "Materialize aborted due to timeout");
+                co_return std::unexpected(errc::timeout);
+            }
+            throw std::runtime_error(fmt_with_ctx(
+              fmt::format,
+              "Failed to materialize batches from the cloud storage: {}",
+              mat_res.error().message()));
         }
-        if (mat_res.error() == errc::timeout) {
-            vlog(_log.debug, "Materialize aborted due to timeout");
-            co_return std::unexpected(errc::timeout);
+        batches = std::move(mat_res.value());
+        if (batches.size() != materialize_count) {
+            throw std::runtime_error(fmt_with_ctx(
+              fmt::format,
+              "Materialized unexpected number of batches: {}, expected: {}",
+              batches.size(),
+              materialize_count));
         }
-        throw std::runtime_error(
-          fmt::format(
-            "Failed to materialize batches from the cloud storage: {}",
-            mat_res.error().message()));
-    }
-    auto batches = std::move(mat_res.value());
-    if (batches.size() != materialize_count) {
-        throw std::runtime_error(
-          fmt::format(
-            "Materialized unexpected number of batches: {}, expected: {}",
-            batches.size(),
-            materialize_count));
     }
     // Merge our selected subset of unhydrated batches with the materialized
     // batches, preserving control batches from the local log.
@@ -440,6 +469,12 @@ level_zero_log_reader_impl::materialize_batches(
                 local_batch_header,
                 std::move(payload),
                 model::record_batch::tag_ctor_ng{});
+          },
+          [](local_log_batch::cached_batch& cb) {
+              // Cache hit resolved during the collection loop above.
+              // The batch is already fully formed (apply_placeholder_to_batch
+              // was applied before cache_put on the path that populated it).
+              return std::move(cb.batch);
           });
         hydrated.push_back(std::move(batch));
         co_await ss::coroutine::maybe_yield();

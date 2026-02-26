@@ -362,3 +362,38 @@ class EpochInfo(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal['current_epoch_window_offset', b'current_epoch_window_offset', 'estimated_inactive_epoch', b'estimated_inactive_epoch', 'last_reconciled_log_offset', b'last_reconciled_log_offset', 'max_applied_epoch', b'max_applied_epoch']) -> None:
         ...
 Global___EpochInfo: typing_extensions.TypeAlias = EpochInfo
+
+@typing.final
+class GetSizeEstimateRequest(google.protobuf.message.Message):
+    """Request the L0 size estimate for a single partition."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    PARTITION_FIELD_NUMBER: builtins.int
+
+    @property
+    def partition(self) -> proto.redpanda.core.common.v1.ntp_pb2.TopicPartition:
+        ...
+
+    def __init__(self, *, partition: proto.redpanda.core.common.v1.ntp_pb2.TopicPartition | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['partition', b'partition']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['partition', b'partition']) -> None:
+        ...
+Global___GetSizeEstimateRequest: typing_extensions.TypeAlias = GetSizeEstimateRequest
+
+@typing.final
+class GetSizeEstimateResponse(google.protobuf.message.Message):
+    """Response with the L0 size estimate."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ACTIVE_BYTES_FIELD_NUMBER: builtins.int
+    active_bytes: builtins.int
+    'Estimated bytes of cloud data still active in L0 (not yet reconciled\n    to L1). This is the value reported by the size estimator after\n    subtracting data below the last reconciled offset.\n    '
+
+    def __init__(self, *, active_bytes: builtins.int=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['active_bytes', b'active_bytes']) -> None:
+        ...
+Global___GetSizeEstimateResponse: typing_extensions.TypeAlias = GetSizeEstimateResponse

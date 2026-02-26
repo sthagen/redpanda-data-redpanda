@@ -33,6 +33,9 @@ public:
         serde::pb::rpc::context,
         proto::admin::coordinator_reset_topic_state_request) override;
 
+    ss::future<proto::admin::describe_catalog_response> describe_catalog(
+      serde::pb::rpc::context, proto::admin::describe_catalog_request) override;
+
 private:
     admin::proxy::client _proxy_client;
 

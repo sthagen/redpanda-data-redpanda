@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "redpanda/admin/services/internal/level_zero_gc.h"
+#include "redpanda/admin/services/internal/level_zero.h"
 
 #include "base/vassert.h"
 #include "cloud_topics/frontend/frontend.h"
@@ -26,7 +26,7 @@
 #include <seastar/core/shard_id.hh>
 
 namespace {
-ss::logger gclog("level_zero_gc_service");
+ss::logger gclog("level_zero_service");
 constexpr model::timeout_clock::duration leader_timeout = 5s;
 constexpr model::timeout_clock::duration advance_epoch_timeout = 10s;
 void validate_initialized(ss::sharded<cloud_topics::level_zero_gc>* gc) {
@@ -40,9 +40,9 @@ void validate_initialized(ss::sharded<cloud_topics::level_zero_gc>* gc) {
 namespace admin {
 
 namespace {
-constexpr proto::admin::level_zero_gc::status
+constexpr proto::admin::level_zero::status
 map_gc_state(cloud_topics::level_zero_gc::state st) {
-    using namespace proto::admin::level_zero_gc;
+    using namespace proto::admin::level_zero;
     switch (st) {
         using enum cloud_topics::level_zero_gc::state;
     case paused:
@@ -58,7 +58,7 @@ map_gc_state(cloud_topics::level_zero_gc::state st) {
 }
 } // namespace
 
-level_zero_gc_service_impl::level_zero_gc_service_impl(
+level_zero_service_impl::level_zero_service_impl(
   model::node_id self,
   admin::proxy::client pc,
   ss::sharded<cloud_topics::level_zero_gc>* gc,
@@ -74,12 +74,12 @@ level_zero_gc_service_impl::level_zero_gc_service_impl(
   , _partition_leaders(pl)
   , _shard_table(st) {}
 
-seastar::future<proto::admin::level_zero_gc::get_status_response>
-level_zero_gc_service_impl::get_status(
+seastar::future<proto::admin::level_zero::get_status_response>
+level_zero_service_impl::get_status(
   serde::pb::rpc::context ctx,
-  proto::admin::level_zero_gc::get_status_request req) {
+  proto::admin::level_zero::get_status_request req) {
     validate_initialized(_gc);
-    using namespace proto::admin::level_zero_gc;
+    using namespace proto::admin::level_zero;
     auto [local, remote] = validate_request_routing(ctx, req);
 
     get_status_response response;
@@ -111,10 +111,10 @@ level_zero_gc_service_impl::get_status(
           get_status_request,
           get_status_response,
           node_status,
-          level_zero_gc_service_client>(
+          level_zero_service_client>(
           req,
           [ctx](
-            level_zero_gc_service_client& cl,
+            level_zero_service_client& cl,
             model::node_id id,
             const get_status_request&) {
               get_status_request proxy_req;
@@ -130,11 +130,11 @@ level_zero_gc_service_impl::get_status(
     co_return response;
 }
 
-seastar::future<proto::admin::level_zero_gc::start_response>
-level_zero_gc_service_impl::start(
-  serde::pb::rpc::context ctx, proto::admin::level_zero_gc::start_request req) {
+seastar::future<proto::admin::level_zero::start_response>
+level_zero_service_impl::start(
+  serde::pb::rpc::context ctx, proto::admin::level_zero::start_request req) {
     validate_initialized(_gc);
-    using namespace proto::admin::level_zero_gc;
+    using namespace proto::admin::level_zero;
     auto [local, remote] = validate_request_routing(ctx, req);
 
     start_response response;
@@ -149,10 +149,10 @@ level_zero_gc_service_impl::start(
           start_request,
           start_response,
           start_result,
-          level_zero_gc_service_client>(
+          level_zero_service_client>(
           req,
           [ctx](
-            level_zero_gc_service_client& cl,
+            level_zero_service_client& cl,
             model::node_id id,
             const start_request&) {
               start_request proxy_req;
@@ -168,11 +168,11 @@ level_zero_gc_service_impl::start(
     co_return response;
 }
 
-seastar::future<proto::admin::level_zero_gc::pause_response>
-level_zero_gc_service_impl::pause(
-  serde::pb::rpc::context ctx, proto::admin::level_zero_gc::pause_request req) {
+seastar::future<proto::admin::level_zero::pause_response>
+level_zero_service_impl::pause(
+  serde::pb::rpc::context ctx, proto::admin::level_zero::pause_request req) {
     validate_initialized(_gc);
-    using namespace proto::admin::level_zero_gc;
+    using namespace proto::admin::level_zero;
     auto [local, remote] = validate_request_routing(ctx, req);
 
     pause_response response;
@@ -187,10 +187,10 @@ level_zero_gc_service_impl::pause(
           pause_request,
           pause_response,
           pause_result,
-          level_zero_gc_service_client>(
+          level_zero_service_client>(
           req,
           [ctx](
-            level_zero_gc_service_client& cl,
+            level_zero_service_client& cl,
             model::node_id id,
             const pause_request&) {
               pause_request proxy_req;
@@ -228,9 +228,9 @@ make_ct_frontend(cluster::partition_manager& pm, const model::ntp& ntp) {
       partition, ct_state->local().get_data_plane());
 }
 
-proto::admin::level_zero_gc::epoch_info
+proto::admin::level_zero::epoch_info
 epoch_info_to_pb(cloud_topics::frontend::epoch_info info) {
-    proto::admin::level_zero_gc::epoch_info result;
+    proto::admin::level_zero::epoch_info result;
     result.set_estimated_inactive_epoch(info.estimated_inactive_epoch);
     result.set_max_applied_epoch(info.max_applied_epoch);
     result.set_last_reconciled_log_offset(info.last_reconciled_log_offset);
@@ -238,12 +238,12 @@ epoch_info_to_pb(cloud_topics::frontend::epoch_info info) {
     return result;
 }
 
-seastar::future<proto::admin::level_zero_gc::advance_epoch_response>
+seastar::future<proto::admin::level_zero::advance_epoch_response>
 do_advance_epoch(
   cluster::partition_manager& pm,
   const model::ntp& ntp,
   cloud_topics::cluster_epoch new_epoch) {
-    using namespace proto::admin::level_zero_gc;
+    using namespace proto::admin::level_zero;
     auto fe = make_ct_frontend(pm, ntp);
     auto info = co_await fe->advance_epoch(
       new_epoch, model::timeout_clock::now() + advance_epoch_timeout);
@@ -268,11 +268,11 @@ do_advance_epoch(
 
 } // namespace
 
-seastar::future<proto::admin::level_zero_gc::advance_epoch_response>
-level_zero_gc_service_impl::advance_epoch(
+seastar::future<proto::admin::level_zero::advance_epoch_response>
+level_zero_service_impl::advance_epoch(
   serde::pb::rpc::context ctx,
-  proto::admin::level_zero_gc::advance_epoch_request req) {
-    using namespace proto::admin::level_zero_gc;
+  proto::admin::level_zero::advance_epoch_request req) {
+    using namespace proto::admin::level_zero;
     auto& tp = req.get_partition();
     auto ntp = model::ntp{
       model::kafka_namespace, tp.get_topic(), tp.get_partition()};
@@ -285,7 +285,7 @@ level_zero_gc_service_impl::advance_epoch(
             throw serde::pb::rpc::unavailable_exception("Not leader");
         }
         co_return co_await _proxy_client
-          .make_client_for_node<level_zero_gc_service_client>(leader)
+          .make_client_for_node<level_zero_service_client>(leader)
           .advance_epoch(ctx, std::move(req));
     }
 
@@ -303,11 +303,11 @@ level_zero_gc_service_impl::advance_epoch(
       });
 }
 
-seastar::future<proto::admin::level_zero_gc::get_epoch_info_response>
-level_zero_gc_service_impl::get_epoch_info(
+seastar::future<proto::admin::level_zero::get_epoch_info_response>
+level_zero_service_impl::get_epoch_info(
   serde::pb::rpc::context ctx,
-  proto::admin::level_zero_gc::get_epoch_info_request req) {
-    using namespace proto::admin::level_zero_gc;
+  proto::admin::level_zero::get_epoch_info_request req) {
+    using namespace proto::admin::level_zero;
 
     auto& tp = req.get_partition();
     auto ntp = model::ntp{
@@ -324,7 +324,7 @@ level_zero_gc_service_impl::get_epoch_info(
             throw serde::pb::rpc::unavailable_exception("Not leader");
         }
         co_return co_await _proxy_client
-          .make_client_for_node<level_zero_gc_service_client>(leader.value())
+          .make_client_for_node<level_zero_service_client>(leader.value())
           .get_epoch_info(ctx, std::move(req));
     }
 
@@ -341,6 +341,47 @@ level_zero_gc_service_impl::get_epoch_info(
 
     get_epoch_info_response response;
     response.set_epoch(epoch_info_to_pb(info));
+    co_return response;
+}
+
+seastar::future<proto::admin::level_zero::get_size_estimate_response>
+level_zero_service_impl::get_size_estimate(
+  serde::pb::rpc::context ctx,
+  proto::admin::level_zero::get_size_estimate_request req) {
+    using namespace proto::admin::level_zero;
+
+    auto& tp = req.get_partition();
+    auto ntp = model::ntp{
+      model::kafka_namespace, tp.get_topic(), tp.get_partition()};
+
+    auto leader = _partition_leaders->local().get_leader(ntp);
+    if (!leader.has_value()) {
+        throw serde::pb::rpc::unavailable_exception(
+          ssx::sformat("No leader for {}", ntp.tp));
+    }
+
+    if (leader.value() != _self) {
+        if (proxy::is_proxied(ctx)) {
+            throw serde::pb::rpc::unavailable_exception("Not leader");
+        }
+        co_return co_await _proxy_client
+          .make_client_for_node<level_zero_service_client>(leader.value())
+          .get_size_estimate(ctx, std::move(req));
+    }
+
+    auto shard = _shard_table->local().shard_for(ntp);
+    if (!shard.has_value()) {
+        throw serde::pb::rpc::unavailable_exception("Not leader");
+    }
+
+    auto active_bytes = co_await _partition_manager->invoke_on(
+      shard.value(), [ntp](cluster::partition_manager& pm) {
+          auto fe = make_ct_frontend(pm, ntp);
+          return fe->get_l0_size_estimate();
+      });
+
+    get_size_estimate_response response;
+    response.set_active_bytes(active_bytes);
     co_return response;
 }
 

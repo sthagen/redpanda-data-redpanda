@@ -174,6 +174,9 @@ public:
     ss::future<std::expected<epoch_info, frontend_errc>> advance_epoch(
       cloud_topics::cluster_epoch, model::timeout_clock::time_point);
 
+    /// Return the estimated active L0 bytes for this partition.
+    uint64_t get_l0_size_estimate() const;
+
 private:
     // All timequeries work by first getting a coarse grained timequery result
     // from metadata indexes, then getting an exact answer using the datapath.

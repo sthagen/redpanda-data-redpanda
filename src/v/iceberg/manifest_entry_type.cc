@@ -94,6 +94,9 @@ struct_type data_file_type(partition_key_type partition_type) {
     r2_type.fields.emplace_back(
       nested_field::create(
         140, "sort_order_id", field_required::no, int_type()));
+    r2_type.fields.emplace_back(
+      nested_field::create(
+        143, "referenced_data_file", field_required::no, string_type()));
     return r2_type;
 }
 

@@ -343,6 +343,14 @@ frontend::make_l0_reader(const cloud_topic_log_reader_config& cfg) const {
 }
 
 ss::future<size_t> frontend::size_bytes() {
+    auto l0_size = _ctp_stm_api->estimated_data_size();
+
+    // If we have never reconciled there is no L1 data to query.
+    auto lro = _ctp_stm_api->get_last_reconciled_offset();
+    if (lro < kafka::offset{0}) {
+        co_return l0_size;
+    }
+
     auto ct_state = _partition->get_cloud_topics_state();
     auto l1_metastore = ct_state->local().get_l1_metastore();
 
@@ -354,10 +362,16 @@ ss::future<size_t> frontend::size_bytes() {
           "Could not fetch L1 partition size for {}: {}",
           tidp,
           size_res.error());
+        /*
+         * If we can't get an estimate of L1 we return 0 without reporting L0.
+         * The rationale here is that if we are going to have size estimates
+         * flapping it would be better to flap between correct and 0 than
+         * correct and some random value.
+         */
         co_return 0;
     }
 
-    co_return size_res.value().size;
+    co_return size_res.value().size + l0_size;
 }
 
 std::unique_ptr<model::record_batch_reader::impl>
@@ -1048,6 +1062,10 @@ frontend::get_current_epoch(ss::abort_source& as) noexcept {
         co_return std::unexpected{frontend_errc::timeout};
     }
     co_return new_epoch.value();
+}
+
+uint64_t frontend::get_l0_size_estimate() const {
+    return _ctp_stm_api->estimated_data_size();
 }
 
 frontend::epoch_info frontend::get_epoch_info() const {

@@ -15,20 +15,13 @@
 
 namespace iceberg::rest_client {
 
-// Represents an http call which failed, encodes information about possible
-// retriability and cause
-struct failure {
-    bool can_be_retried{false};
-
-    // NOTE: takes precedence over can_be_retried.
-    bool aborted{false};
+struct request_error {
+    error_kind kind;
     http_call_error err;
-    std::string err_msg;
-    bool is_transport_error() const;
 };
 
 struct retry_policy {
-    using result_t = tl::expected<http::downloaded_response, failure>;
+    using result_t = tl::expected<http::downloaded_response, request_error>;
 
     // Given a ready future which will yield a downloaded_response, judges
     // whether it is:
@@ -45,8 +38,8 @@ struct retry_policy {
 
     // Handles the case where the future failed with an exception. Shutdown
     // related errors are returned indicating so, all other errors are
-    // classified into retriable or unretriable.
-    virtual failure should_retry(std::exception_ptr ex) const = 0;
+    // classified into retriable or permanent_failure.
+    virtual request_error should_retry(std::exception_ptr ex) const = 0;
     virtual ~retry_policy() = default;
 };
 
@@ -54,7 +47,7 @@ struct default_retry_policy : public retry_policy {
     result_t
     should_retry(ss::future<http::downloaded_response> response_f) const final;
     result_t should_retry(http::downloaded_response response) const final;
-    failure should_retry(std::exception_ptr ex) const final;
+    request_error should_retry(std::exception_ptr ex) const final;
 };
 
 } // namespace iceberg::rest_client

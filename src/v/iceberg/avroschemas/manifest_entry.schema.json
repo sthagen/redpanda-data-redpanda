@@ -301,6 +301,16 @@
            "doc": "Sort order ID",
            "default": null,
            "field-id": 140
+         },
+         {
+           "name": "referenced_data_file",
+           "type": [
+             "null",
+             "string"
+           ],
+           "doc": "Referenced data file for delete files",
+           "default": null,
+           "field-id": 143
          }
        ]
      },

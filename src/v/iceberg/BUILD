@@ -73,6 +73,18 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "catalog_errors",
+    hdrs = [
+        "catalog_errors.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "catalog",
     srcs = [
         "catalog.cc",
@@ -86,6 +98,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":catalog_errors",
         ":partition",
         ":schema",
         ":table_identifier",

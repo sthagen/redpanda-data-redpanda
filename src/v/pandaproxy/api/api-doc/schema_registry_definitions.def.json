@@ -35,7 +35,11 @@
           "type": "object",
           "description": "Accepted values may be string, number, or boolean, they are converted to strings.",
           "additionalProperties": {
-            "type": "object"
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
           }
         }
       }

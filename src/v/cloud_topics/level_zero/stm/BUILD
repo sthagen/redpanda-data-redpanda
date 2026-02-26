@@ -71,6 +71,19 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "size_estimator",
+    srcs = ["size_estimator.cc"],
+    hdrs = ["size_estimator.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/model",
+        "//src/v/serde",
+        "@fmt",
+    ],
+)
+
+redpanda_cc_library(
     name = "ctp_stm_commands",
     hdrs = ["ctp_stm_commands.h"],
     deps = [
@@ -88,6 +101,7 @@ redpanda_cc_library(
         "//src/v/utils:to_string",
     ],
     deps = [
+        ":size_estimator",
         "//src/v/base",
         "//src/v/cloud_topics:types",
         "//src/v/model",

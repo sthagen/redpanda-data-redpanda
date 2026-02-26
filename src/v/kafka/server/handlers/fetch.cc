@@ -1091,6 +1091,7 @@ private:
                       .bytes_left = octx.bytes_left,
                       .min_bytes = min_fetch_bytes,
                       .deadline = octx.deadline,
+                      .fetch_deadline = octx.fetch_deadline,
                       .requests = std::move(configs),
                       .srv = octx.rctx.server().local(),
                       .mgr = mgr,

@@ -104,6 +104,21 @@ TEST_F(ReconcilerTest, EmptySource) {
     EXPECT_EQ(metastore_next_offset(src), std::nullopt);
 }
 
+TEST_F(ReconcilerTest, EmptyRoundDoesNotUploadObject) {
+    auto src = add_source();
+    src->add_batch({.count = 10});
+    reconcile();
+
+    // First round should upload one object.
+    auto objects_after_first = io().list_objects();
+    EXPECT_EQ(objects_after_first.size(), 1);
+
+    // Second round with no new data should not upload anything.
+    reconcile();
+    auto objects_after_second = io().list_objects();
+    EXPECT_EQ(objects_after_second.size(), objects_after_first.size());
+}
+
 TEST_F(ReconcilerTest, SingleSource) {
     auto src = add_source();
     src->add_batch({.count = 10});

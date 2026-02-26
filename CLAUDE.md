@@ -178,6 +178,22 @@ for memory safety in coroutines, not self-reference.
 - Use snake_case for identifiers. Use CamelCase for concepts.
 - Use Doxygen comments with 3-slashes (///) for public APIs
 
+### Code comments
+
+- **Default to no comments** - clear code and good names are better
+- **Avoid comments that restate the code** - they become stale
+- **Prefer alternatives:**
+  - Better variable/function names
+  - Log lines (serve as documentation and debugging)
+- **Do add comments for:**
+  - Doc comments (`/// \brief`) on public types explaining purpose/usage
+  - Complex algorithms or non-obvious "gotchas"
+  - Test comments explaining input format or test intent
+  - Links to external resources (specs, docs, issues)
+  - Mapping internal types/concepts to external formats (e.g., wire protocols, APIs)
+  - ASCII diagrams for complex state machines or data flows
+- **Avoid obvious branching comments** - `if (x)` rarely needs `// when x is true`
+
 ### More C++-Specific References
 
 - [MODULE.bazel](https://github.com/redpanda-data/redpanda/blob/dev/MODULE.bazel)
@@ -208,8 +224,31 @@ For further details, consult:
 
 When writing or critiquing commit messages, follow these guidelines:
 
- - First line of the commit message should be a short summary (max 50 chars)
- - Remain lines should be wrapped at 72 chars
+**Format:**
+```
+area[/detail]: short description
 
+<optional body>
+```
+
+- Title: ≤72 chars
+- Body: wrapped at 72 chars
+
+**Check git history first** to match the style of the area you're changing:
+```bash
+git log --oneline --no-merges -- path/to/changed/files | head -20
+```
+
+**Goal:** Make the commit easy to review and provide context for future readers (via `git blame`/`git log`)
+
+**Rules:**
+- Title: imperative mood, lowercase after colon, no period
+- Keep bodies concise (1-2 lines typical, trivial changes need only a title)
+- Don't reference GitHub issues/PRs or Jira tickets
+- Use the body to help reviewers and future readers understand:
+  - The "why": motivation, design choices, preparation for future work
+  - The "what": new abstractions introduced, non-obvious changes
+  - Integration tests: briefly note what behaviors are covered
+- Don't restate what's obvious from the diff, but duplicating a doc comment is fine if it helps reviewers understand the change faster.
 
 _Results from code search may be incomplete. For more C++ details, see the [repository code search](https://github.com/redpanda-data/redpanda/search?q=c%2B%2B)._

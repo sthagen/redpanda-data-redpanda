@@ -94,6 +94,8 @@ public:
     ss::future<checked<table_metadata, errc>>
     commit_txn(const table_identifier& table_ident, transaction) final;
 
+    ss::future<checked<void, catalog_describe_error>> describe_catalog() final;
+
     ss::future<> stop() final { return ss::make_ready_future(); }
 
     // Rewrites a new version of the table with the given metadata. This is not

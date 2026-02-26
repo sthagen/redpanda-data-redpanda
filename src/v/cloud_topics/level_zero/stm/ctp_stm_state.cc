@@ -149,6 +149,20 @@ model::offset ctp_stm_state::get_max_collectible_offset() const noexcept {
     return model::offset::min();
 }
 
+void ctp_stm_state::record_placeholder_size(
+  model::offset offset, uint64_t size_bytes) {
+    _size_estimator.record(offset, size_bytes);
+}
+
+uint64_t ctp_stm_state::estimated_data_size() const noexcept {
+    auto lro = get_last_reconciled_log_offset().value_or(model::offset{-1});
+    return _size_estimator.estimated_active_bytes(lro);
+}
+
+const size_estimator& ctp_stm_state::get_size_estimator() const noexcept {
+    return _size_estimator;
+}
+
 void ctp_stm_state::set_start_offset(kafka::offset new_offset) noexcept {
     if (new_offset <= _start_offset) {
         return;

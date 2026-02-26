@@ -246,4 +246,23 @@ datalake_service_impl::coordinator_reset_topic_state(
     co_return proto::admin::coordinator_reset_topic_state_response{};
 }
 
+ss::future<proto::admin::describe_catalog_response>
+datalake_service_impl::describe_catalog(
+  serde::pb::rpc::context, proto::admin::describe_catalog_request) {
+    if (!_coordinator_fe->local_is_initialized()) {
+        throw serde::pb::rpc::unavailable_exception(
+          "Datalake coordinator frontend not initialized");
+    }
+
+    auto res = co_await _coordinator_fe->local().describe_catalog();
+    if (res.has_error()) {
+        const auto& err = res.error();
+        throw serde::pb::rpc::internal_exception(
+          fmt::format(
+            "Catalog describe failed ({}): {}", err.errc, err.message));
+    }
+
+    co_return proto::admin::describe_catalog_response{};
+}
+
 } // namespace admin
