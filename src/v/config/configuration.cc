@@ -4602,6 +4602,23 @@ configuration::configuration()
       "target object size of 64 MiB.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       80_MiB)
+  , cloud_topics_upload_part_size(
+      *this,
+      "cloud_topics_upload_part_size",
+      "The part size in bytes used for multipart uploads. The minimum of "
+      "5 MiB is the smallest non-terminal part size allowed by cloud "
+      "object storage providers.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      16_MiB,
+      {.min = 5_MiB, .max = 128_MiB})
+  , cloud_topics_reconciliation_parallelism(
+      *this,
+      "cloud_topics_reconciliation_parallelism",
+      "Maximum number, per shard, of concurrent objects built by "
+      "reconciliation",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      8,
+      {.min = size_t{1}, .max = size_t{64}})
   , cloud_topics_compaction_max_object_size(
       *this,
       "cloud_topics_compaction_max_object_size",

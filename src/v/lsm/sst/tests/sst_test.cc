@@ -55,7 +55,8 @@ TEST_P(SSTTest, CanCreateAndReadFile) {
                     std::move(*file),
                     lsm::internal::file_id{0},
                     file_size,
-                    ss::make_lw_shared<lsm::sst::block_cache>(1_MiB))
+                    ss::make_lw_shared<lsm::sst::block_cache>(
+                      1_MiB, ss::make_lw_shared<lsm::probe>()))
                     .get();
     auto iter = reader.create_iterator();
     iter->seek_to_first().get();

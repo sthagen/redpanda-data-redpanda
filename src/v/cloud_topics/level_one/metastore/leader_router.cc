@@ -410,7 +410,9 @@ leader_router::leader_router(
   , _leaders(leaders)
   , _shard_table(shards)
   , _connection_cache(connections)
-  , _domain_supervisor(&domain_supervisor->local()) {}
+  , _domain_supervisor(&domain_supervisor->local()) {
+    _probe.setup_metrics();
+}
 
 ss::future<> leader_router::stop() { return _gate.close(); }
 
@@ -459,6 +461,7 @@ ss::future<rpc::add_objects_reply> leader_router::add_objects_locally(
   rpc::add_objects_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_add_objects();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -479,6 +482,7 @@ ss::future<rpc::replace_objects_reply> leader_router::replace_objects_locally(
   rpc::replace_objects_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_replace_objects();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -500,6 +504,7 @@ leader_router::get_first_offset_ge_locally(
   rpc::get_first_offset_ge_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_first_offset_ge();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -521,6 +526,7 @@ leader_router::get_first_timestamp_ge_locally(
   rpc::get_first_timestamp_ge_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_first_timestamp_ge();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -534,6 +540,7 @@ leader_router::get_first_offset_for_bytes_locally(
   rpc::get_first_offset_for_bytes_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_first_offset_for_bytes();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -566,6 +573,7 @@ ss::future<rpc::get_offsets_reply> leader_router::get_offsets_locally(
   rpc::get_offsets_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_offsets();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -586,6 +594,7 @@ ss::future<rpc::get_size_reply> leader_router::get_size_locally(
   rpc::get_size_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_size();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -607,6 +616,7 @@ leader_router::get_compaction_info_locally(
   rpc::get_compaction_info_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_compaction_info();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -628,6 +638,7 @@ leader_router::get_term_for_offset_locally(
   rpc::get_term_for_offset_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_term_for_offset();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -649,6 +660,7 @@ leader_router::get_end_offset_for_term_locally(
   rpc::get_end_offset_for_term_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_end_offset_for_term();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -671,6 +683,7 @@ ss::future<rpc::set_start_offset_reply> leader_router::set_start_offset_locally(
   rpc::set_start_offset_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_set_start_offset();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -691,6 +704,7 @@ ss::future<rpc::remove_topics_reply> leader_router::remove_topics_locally(
   rpc::remove_topics_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_remove_topics();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -712,6 +726,7 @@ leader_router::get_compaction_infos_locally(
   rpc::get_compaction_infos_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_compaction_infos();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -733,6 +748,7 @@ leader_router::get_extent_metadata_locally(
   rpc::get_extent_metadata_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_get_extent_metadata();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -753,6 +769,7 @@ ss::future<rpc::flush_domain_reply> leader_router::flush_domain_locally(
   rpc::flush_domain_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_flush_domain();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {
@@ -773,6 +790,7 @@ ss::future<rpc::restore_domain_reply> leader_router::restore_domain_locally(
   rpc::restore_domain_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_restore_domain();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {

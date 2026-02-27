@@ -269,6 +269,7 @@ controller_backend::controller_backend(
   ss::sharded<topics_frontend>& frontend,
   ss::sharded<storage::api>& storage,
   ss::sharded<features::feature_table>& features,
+  ss::sharded<cluster_recovery_table>& recovery_table,
   config::binding<std::chrono::milliseconds> housekeeping_interval,
   config::binding<std::optional<size_t>> initial_retention_local_target_bytes,
   config::binding<std::optional<std::chrono::milliseconds>>
@@ -287,6 +288,7 @@ controller_backend::controller_backend(
   , _topics_frontend(frontend)
   , _storage(storage)
   , _features(features)
+  , _recovery_table(recovery_table)
   , _self(*config::node().node_id())
   , _data_directory(config::node().data_directory().as_sstring())
   , _housekeeping_interval(std::move(housekeeping_interval))
@@ -1222,6 +1224,8 @@ ss::future<result<ss::stop_iteration>> controller_backend::reconcile_ntp_step(
         auto topic_md = _topics.local().get_topic_metadata_ref(
           model::topic_namespace_view(ntp));
         vassert(topic_md, "topic metadata disappeared for {}", ntp);
+        auto bootstrap_params
+          = _recovery_table.local().get_partition_bootstrap_params(ntp);
         auto ec = co_await create_partition(
           ntp,
           group_id,
@@ -1231,7 +1235,8 @@ ss::future<result<ss::stop_iteration>> controller_backend::reconcile_ntp_step(
           force_reconfiguration{
             replicas_view.update
             && replicas_view.update->is_force_reconfiguration()},
-          topic_md->get());
+          topic_md->get(),
+          std::move(bootstrap_params));
         if (ec) {
             co_return ec;
         }
@@ -1408,7 +1413,8 @@ ss::future<std::error_code> controller_backend::create_partition(
   replicas_t initial_replicas,
   const replicas_revision_map& replica_revision_map,
   force_reconfiguration is_force_reconfigured,
-  const topic_metadata& topic_md) {
+  const topic_metadata& topic_md,
+  std::optional<partition_bootstrap_params> bootstrap_params) {
     vlog(
       clusterlog.debug,
       "[{}] creating partition, log revision: {}, initial_replicas: {}",
@@ -1509,14 +1515,21 @@ ss::future<std::error_code> controller_backend::create_partition(
          * storage and current node is joining replica set. A node is joining
          * replica set if its initial nodes set is empty.
          */
-        if (initial_nodes.empty() && rtp.has_value()) {
-            // reset remote topic properties
-            vlog(
-              clusterlog.info,
-              "[{}] Disabling remote recovery while creating partition "
-              "replica. Current node is added to the replica set as learner.",
-              ntp);
-            rtp.reset();
+        if (initial_nodes.empty()) {
+            if (rtp.has_value()) {
+                // reset remote topic properties
+                vlog(
+                  clusterlog.info,
+                  "[{}] Disabling remote recovery while creating partition "
+                  "replica. Current node is added to the replica set as "
+                  "learner.",
+                  ntp);
+                rtp.reset();
+            }
+            // Bootstrap params should only be used to seed the partition when
+            // the topic is first created. When a replica is added to an
+            // existing partition, bootstrap_params should be reset.
+            bootstrap_params.reset();
         }
         // we use offset as an rev as it is always increasing and it
         // increases while ntp is being created again
@@ -1530,7 +1543,8 @@ ss::future<std::error_code> controller_backend::create_partition(
               std::move(xst_state),
               rtp,
               read_replica_bucket,
-              &cfg);
+              &cfg,
+              bootstrap_params);
 
             _xst_states.erase(ntp);
 

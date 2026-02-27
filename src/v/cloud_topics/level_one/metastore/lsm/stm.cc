@@ -132,7 +132,7 @@ ss::future<> stm::do_apply(const model::record_batch& batch) {
         co_return;
     }
 
-    auto iter = model::record_batch_iterator::create(batch);
+    auto iter = model::record_batch_copy_iterator::create(batch);
     while (iter.has_next()) {
         auto r = iter.next();
         auto key_buf = r.release_key();

@@ -16,6 +16,8 @@
 
 #include <seastar/core/lowres_clock.hh>
 
+#include <algorithm>
+
 namespace cluster::self_test {
 
 class omit_metrics_measurement_exception : public std::exception {};
@@ -63,6 +65,16 @@ public:
     }
 
     void set_total_time(ss::lowres_clock::duration t) { _total_time = t; }
+
+    void merge_from(const metrics& other) {
+        _hist += other._hist;
+        _number_of_timeouts += other._number_of_timeouts;
+        _bytes_operated += other._bytes_operated;
+        _num_requests += other._num_requests;
+        _total_time = std::max(_total_time, other._total_time);
+        _start_time = std::min(_start_time, other._start_time);
+        _end_time = std::max(_end_time, other._end_time);
+    }
 
     size_t iops() const {
         const auto secs = std::chrono::duration_cast<std::chrono::seconds>(

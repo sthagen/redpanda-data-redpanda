@@ -64,10 +64,19 @@ public:
       recovery_stage next_stage,
       std::optional<ss::sstring> error_msg = std::nullopt);
 
+    // Set bootstrap parameters for partitions in an existing topic.
+    // Must be called before partitions are materialized by controller_backend.
+    // Used by cluster recovery to specify known offsets.
+    ss::future<std::error_code> set_bootstrap_params(
+      model::topic_namespace,
+      absl::btree_map<model::partition_id, partition_bootstrap_params>,
+      model::timeout_clock::time_point);
+
     // Interface for mux_state_machine.
     static constexpr auto commands = make_commands_list<
       cluster_recovery_init_cmd,
-      cluster_recovery_update_cmd>();
+      cluster_recovery_update_cmd,
+      set_partition_bootstrap_params_cmd>();
 
     bool is_batch_applicable(const model::record_batch& b) const;
     ss::future<std::error_code> apply_update(model::record_batch b);
@@ -79,6 +88,8 @@ public:
     apply_snapshot(model::offset, const controller_snapshot& snap) {
         co_await _recovery_table.invoke_on_all([&snap](auto& table) mutable {
             table.set_recovery_states(snap.cluster_recovery.recovery_states);
+            table.set_pending_bootstrap_params(
+              snap.cluster_recovery.pending_bootstrap_params);
         });
     }
 
@@ -92,6 +103,8 @@ private:
       apply_to_table(model::offset, cluster_recovery_init_cmd);
     ss::future<std::error_code>
       apply_to_table(model::offset, cluster_recovery_update_cmd);
+    ss::future<std::error_code>
+      apply_to_table(model::offset, set_partition_bootstrap_params_cmd);
 
     // NOTE: only sharded to comply with the signature of replicate_and_wait().
     // Still only used on shard-0.

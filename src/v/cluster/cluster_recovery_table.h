@@ -118,12 +118,25 @@ public:
       wait_for_nodes wait = wait_for_nodes::no);
     std::error_code apply(model::offset offset, cluster_recovery_init_cmd);
     std::error_code apply(model::offset offset, cluster_recovery_update_cmd);
+    std::error_code
+    apply(model::offset offset, set_partition_bootstrap_params_cmd);
 
-    void fill_snapshot(controller_snapshot& snap) {
-        snap.cluster_recovery.recovery_states = _states;
+    /// Returns the bootstrap params for a partition if set.
+    /// Used by controller_backend when creating partitions during recovery.
+    std::optional<partition_bootstrap_params>
+    get_partition_bootstrap_params(const model::ntp& ntp) const;
+
+    const pending_bootstrap_params_t& get_pending_bootstrap_params() const {
+        return _pending_bootstrap_params;
     }
+
+    void fill_snapshot(controller_snapshot& snap);
     void set_recovery_states(std::vector<cluster_recovery_state> states) {
         _states = std::move(states);
+    }
+    void
+    set_pending_bootstrap_params(const pending_bootstrap_params_t& params) {
+        _pending_bootstrap_params.replace(params.values().copy());
     }
 
 private:
@@ -131,6 +144,10 @@ private:
 
     ss::condition_variable _has_active_recovery;
     std::vector<cluster_recovery_state> _states;
+    /// Bootstrap params set during cluster recovery. These are consumed when
+    /// the partition is created and removed from this map when recovery
+    /// completes/fails.
+    pending_bootstrap_params_t _pending_bootstrap_params;
 };
 
 } // namespace cluster

@@ -22,6 +22,7 @@
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
+#include "ssx/semaphore.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -292,6 +293,13 @@ private:
     ss::abort_source _as;
     reconciler_probe _probe;
     ss::scheduling_group _reconciler_sg;
+    // Captured at construction so that changing the config at runtime
+    // does not take effect without a restart (and without bumping the
+    // corresponding memory reservation).
+    size_t _upload_part_size;
+    // Bounds total concurrent domain-level reconciliations (multipart
+    // uploads) across all topics on this shard.
+    ssx::named_semaphore<Clock> _reconciliation_sem;
 };
 
 } // namespace cloud_topics::reconciler

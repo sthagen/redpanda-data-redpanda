@@ -146,10 +146,11 @@ std::ostream& operator<<(std::ostream& o, const topic_purge_domain& d) {
         return o << "cloud_storage";
     case topic_purge_domain::iceberg:
         return o << "iceberg";
-    default:
-        fmt::print(o, "unknown({})", static_cast<int>(d));
-        return o;
+    case topic_purge_domain::cloud_topic:
+        return o << "cloud_topic";
     }
+    fmt::print(o, "unknown({})", static_cast<int>(d));
+    return o;
 }
 
 std::ostream& operator<<(std::ostream& o, const topic_result& r) {
@@ -176,6 +177,16 @@ std::ostream& operator<<(std::ostream& o, const configuration_invariants& c) {
       c.version,
       c.node_id,
       c.core_count);
+    return o;
+}
+
+std::ostream& operator<<(std::ostream& o, const partition_bootstrap_params& p) {
+    fmt::print(
+      o,
+      "{{start_offset: {}, next_offset: {}, initial_term: {}}}",
+      p.start_offset,
+      p.next_offset,
+      p.initial_term);
     return o;
 }
 

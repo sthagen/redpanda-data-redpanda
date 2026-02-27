@@ -17,6 +17,9 @@
 #include "base/vassert.h"
 #include "lsm/core/compression.h"
 #include "lsm/core/internal/files.h"
+#include "lsm/core/probe.h"
+
+#include <seastar/core/shared_ptr.hh>
 
 #include <cstddef>
 
@@ -28,6 +31,9 @@ struct options {
     // See the direct description of what an epoch is, but allows for shared
     // storage.
     internal::database_epoch database_epoch;
+
+    // The probe for the database to record stats
+    ss::lw_shared_ptr<probe> probe = ss::make_lw_shared<lsm::probe>();
 
     // If the database is opened in readonly mode. Readonly mode causes all
     // write operations to fail. However, read operations can be performed.

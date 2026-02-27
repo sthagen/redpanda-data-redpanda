@@ -502,12 +502,12 @@ TEST_F(
       [&](
         const model::topic_namespace& tp_ns,
         const cluster::topic_properties& props,
-        bool expect_action,
-        std::optional<bool> expect_recovery = std::nullopt) {
+        bool expect_action) {
           cluster::controller_snapshot snap;
           auto& tps = snap.topics.topics[tp_ns];
           tps.metadata.configuration.tp_ns = tp_ns;
           tps.metadata.configuration.properties = props;
+          tps.metadata.revision = model::revision_id{42};
 
           auto actions = reconciler.get_actions(snap);
           ASSERT_EQ(
@@ -525,13 +525,14 @@ TEST_F(
           if (expect_action) {
               ASSERT_EQ(actions.cloud_topics.size(), 1);
               ASSERT_EQ(actions.cloud_topics[0].tp_ns, tp_ns);
-              if (expect_recovery.has_value()) {
-                  // recovery is std::optional<bool>, so we check the effective
-                  // boolean value (nullopt and false are both falsy).
-                  ASSERT_EQ(
-                    actions.cloud_topics[0].properties.recovery.value_or(false),
-                    *expect_recovery);
-              }
+              // Verify that remote_topic_properties is set with the correct
+              // revision for cloud topics.
+              ASSERT_TRUE(actions.cloud_topics[0]
+                            .properties.remote_topic_properties.has_value());
+              ASSERT_EQ(
+                actions.cloud_topics[0]
+                  .properties.remote_topic_properties->remote_revision,
+                model::initial_revision_id{42});
           } else {
               ASSERT_TRUE(actions.cloud_topics.empty());
           }
@@ -539,14 +540,16 @@ TEST_F(
 
     model::topic_namespace tp_ns{model::kafka_namespace, model::topic{"foo"}};
 
-    // Case 1: Cloud topic doesn't exist - should create with recovery=true.
-    check_cloud_topic_action(tp_ns, cloud_topic_properties(), true, true);
+    // Case 1: Cloud topic doesn't exist - should create and set
+    // remote_topic_properties.
+    check_cloud_topic_action(tp_ns, cloud_topic_properties(), true);
 
-    // Case 2: Read-replica cloud topic - should create with recovery=false.
+    // Case 2: Read-replica cloud topic - should create and set
+    // remote_topic_properties.
     model::topic_namespace rr_tp_ns{
       model::kafka_namespace, model::topic{"read_replica"}};
     check_cloud_topic_action(
-      rr_tp_ns, read_replica_cloud_topic_properties(), true, false);
+      rr_tp_ns, read_replica_cloud_topic_properties(), true);
 
     // Case 3: Topic already exists - no action needed.
     // Create a topic in the cluster. The reconciler only checks for topic
@@ -555,8 +558,7 @@ TEST_F(
     model::topic_namespace existing_tp_ns{
       model::kafka_namespace, model::topic{"existing"}};
     add_topic(existing_tp_ns, 1, non_remote_topic_properties()).get();
-    check_cloud_topic_action(
-      existing_tp_ns, cloud_topic_properties(), false, std::nullopt);
+    check_cloud_topic_action(existing_tp_ns, cloud_topic_properties(), false);
 }
 
 TEST_F(

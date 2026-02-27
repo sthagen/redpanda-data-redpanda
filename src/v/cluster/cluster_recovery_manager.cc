@@ -301,6 +301,22 @@ ss::future<cluster::errc> cluster_recovery_manager::replicate_update(
     co_return cluster::errc::success;
 }
 
+ss::future<std::error_code> cluster_recovery_manager::set_bootstrap_params(
+  model::topic_namespace tp_ns,
+  absl::btree_map<model::partition_id, partition_bootstrap_params> params,
+  model::timeout_clock::time_point timeout) {
+    // Note: This command can be applied BEFORE the topic exists.
+    // The bootstrap params are stored in a pending map and will be
+    // consumed when the partition is created by controller_backend.
+    set_partition_bootstrap_params_cmd_data data{
+      .tp_ns = tp_ns, .partition_params = std::move(params)};
+
+    set_partition_bootstrap_params_cmd cmd(tp_ns, std::move(data));
+
+    co_return co_await replicate_and_wait(
+      _controller_stm, _sharded_as, std::move(cmd), timeout);
+}
+
 ss::future<std::error_code>
 cluster_recovery_manager::apply_update(model::record_batch b) {
     auto offset = b.base_offset();
@@ -320,6 +336,10 @@ ss::future<std::error_code> cluster_recovery_manager::apply_to_table(
 }
 ss::future<std::error_code> cluster_recovery_manager::apply_to_table(
   model::offset offset, cluster_recovery_update_cmd cmd) {
+    return dispatch_updates_to_cores(offset, std::move(cmd));
+}
+ss::future<std::error_code> cluster_recovery_manager::apply_to_table(
+  model::offset offset, set_partition_bootstrap_params_cmd cmd) {
     return dispatch_updates_to_cores(offset, std::move(cmd));
 }
 

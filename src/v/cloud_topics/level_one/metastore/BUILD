@@ -87,16 +87,19 @@ redpanda_cc_library(
     name = "leader_router",
     srcs = [
         "leader_router.cc",
+        "leader_router_probe.cc",
         "service.cc",
     ],
     hdrs = [
         "leader_router.h",
+        "leader_router_probe.h",
         "service.h",
     ],
     implementation_deps = [
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics/level_one/domain:domain_manager",
         "//src/v/cloud_topics/level_one/domain:domain_supervisor",
+        "//src/v/config",
         "//src/v/hashing:murmur",
         "@fmt",
     ],
@@ -107,8 +110,10 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_storage:remote_label",
         "//src/v/cluster",
+        "//src/v/metrics",
         "//src/v/model",
         "//src/v/rpc",
+        "//src/v/utils:log_hist",
         "@seastar",
     ],
 )

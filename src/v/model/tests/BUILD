@@ -164,6 +164,7 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         ":random",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/model:batch_compression",
         "//src/v/test_utils:gtest",

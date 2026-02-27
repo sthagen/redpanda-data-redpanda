@@ -211,4 +211,22 @@ ss::future<> bootstrap_pre_existing_partition(
   model::term_id last_included_term,
   std::vector<raft::vnode> initial_nodes,
   ss::lw_shared_ptr<storage::offset_translator_state> ot_state);
+
+/// Bootstrap partition state with custom offset and term.
+///
+/// Simpler alternative to bootstrap_pre_existing_partition for programmatic
+/// partition creation. Creates:
+/// 1. Raft snapshot with last_included_index = start_offset - 1, term
+/// 2. Storage start_offset in kvstore
+/// 3. Raft latest_known_offset in kvstore
+///
+/// Offset translation delta is always 0 (kafka offset = log offset).
+/// No offset translator state is created.
+ss::future<> bootstrap_partition_state(
+  storage::api& api,
+  const storage::ntp_config& ntp_cfg,
+  raft::group_id group,
+  model::offset start_offset,
+  model::term_id initial_term,
+  std::vector<raft::vnode> initial_nodes);
 } // namespace raft::details

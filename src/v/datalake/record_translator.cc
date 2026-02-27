@@ -23,6 +23,7 @@
 #include "iceberg/datatypes.h"
 #include "iceberg/values.h"
 #include "model/fundamental.h"
+#include "model/record.h"
 
 #include <avro/Generic.hh>
 #include <avro/GenericDatum.hh>
@@ -79,9 +80,10 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
   std::optional<iobuf> key,
   model::timestamp ts,
   model::timestamp_type ts_t,
-  const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
-    headers) {
+  const chunked_vector<model::record_header>& headers) {
     auto system_data = std::make_unique<iceberg::struct_value>();
+    system_data->fields.reserve(6);
+
     system_data->fields.emplace_back(iceberg::int_value(pid));
     system_data->fields.emplace_back(iceberg::long_value(o));
     // NOTE: Kafka uses milliseconds, Iceberg uses microseconds.
@@ -92,15 +94,16 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
         system_data->fields.emplace_back(std::nullopt);
     } else {
         auto headers_list = std::make_unique<iceberg::list_value>();
-        for (const auto& [k, v] : headers) {
+        for (const auto& hdr : headers) {
             auto header_kv_struct = std::make_unique<iceberg::struct_value>();
             header_kv_struct->fields.emplace_back(
-              k ? std::make_optional<iceberg::value>(
-                    iceberg::string_value(k->copy()))
-                : std::nullopt);
+              hdr.key_size() >= 0 ? std::make_optional<iceberg::value>(
+                                      iceberg::string_value(hdr.key().copy()))
+                                  : std::nullopt);
             header_kv_struct->fields.emplace_back(
-              v ? std::make_optional<iceberg::value>(
-                    iceberg::binary_value(v->copy()))
+              hdr.value_size() >= 0
+                ? std::make_optional<iceberg::value>(
+                    iceberg::binary_value(hdr.value().copy()))
                 : std::nullopt);
             headers_list->elements.emplace_back(std::move(header_kv_struct));
         }
@@ -146,8 +149,7 @@ default_translator::translate_data(
   std::optional<iobuf> parsable_val,
   model::timestamp ts,
   model::timestamp_type ts_t,
-  const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
-    headers) {
+  const chunked_vector<model::record_header>& headers) {
     if (val_type.has_value()) {
         co_return co_await structured_translator.translate_data(
           pid,
@@ -193,8 +195,7 @@ key_value_translator::translate_data(
   std::optional<iobuf> parsable_val,
   model::timestamp ts,
   model::timestamp_type ts_t,
-  const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
-    headers) {
+  const chunked_vector<model::record_header>& headers) {
     if (val_type.has_value()) {
         vlog(
           datalake_log.error,
@@ -278,8 +279,7 @@ structured_data_translator::translate_data(
   std::optional<iobuf> parsable_val,
   model::timestamp ts,
   model::timestamp_type ts_t,
-  const chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>&
-    headers) {
+  const chunked_vector<model::record_header>& headers) {
     if (!val_type.has_value()) {
         vlog(
           datalake_log.error,

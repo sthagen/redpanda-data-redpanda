@@ -103,7 +103,7 @@ ss::future<> coordinator_stm::do_apply(const model::record_batch& b) {
     if (b.header().type != model::record_batch_type::datalake_coordinator) {
         co_return;
     }
-    auto iter = model::record_batch_iterator::create(b);
+    auto iter = model::record_batch_copy_iterator::create(b);
     while (iter.has_next()) {
         auto r = iter.next();
         iobuf_parser key_p{r.release_key()};

@@ -34,7 +34,7 @@ record_batch_builder& record_batch_builder::add_raw_kv(
 record_batch_builder& record_batch_builder::add_raw_kw(
   std::optional<iobuf>&& key,
   std::optional<iobuf>&& value,
-  std::vector<model::record_header> headers) {
+  chunked_vector<model::record_header> headers) {
     auto sr = serialized_record{
       std::move(key), std::move(value), std::move(headers)};
     auto rec_sz = record_size(_offset_delta, sr);

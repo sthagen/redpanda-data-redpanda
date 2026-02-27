@@ -129,11 +129,12 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
       raw_size_bytes,
       decompressed_size_bytes);
 
-    auto timestamp_type = batch.header().attrs.timestamp_type();
+    auto batch_header = batch.header();
+    auto timestamp_type = batch_header.attrs.timestamp_type();
     auto is_broker_time = timestamp_type == model::timestamp_type::append_time;
-    auto first_timestamp = batch.header().first_timestamp.value();
-    auto max_timestamp = batch.header().max_timestamp;
-    auto it = model::record_batch_iterator::create(batch);
+    auto first_timestamp = batch_header.first_timestamp.value();
+    auto max_timestamp = batch_header.max_timestamp;
+    auto it = model::record_batch_iterator::create(std::move(batch));
     while (it.has_next()) {
         if (as.abort_requested()) {
             vlog(_log.debug, "Abort requested, stopping translation");
@@ -146,17 +147,13 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                            ? max_timestamp
                            : model::timestamp{
                                first_timestamp + record.timestamp_delta()};
-        kafka::offset offset{batch.base_offset()() + record.offset_delta()};
+        kafka::offset offset{
+          batch_header.base_offset() + record.offset_delta()};
         if (offset < start_offset) {
             continue;
         }
         int64_t estimated_size = (key ? key->size_bytes() : 0)
                                  + (val ? val->size_bytes() : 0);
-        chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>
-          header_kvs;
-        for (auto& hdr : record.headers()) {
-            header_kvs.emplace_back(hdr.share_key_opt(), hdr.share_value_opt());
-        }
 
         auto val_type_res = co_await _type_resolver.resolve_buf_type(
           std::move(val));
@@ -166,7 +163,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
               _log.warn,
               "Error resolving type for record at offset {}, batch: {}: {}",
               offset,
-              batch.header(),
+              batch_header,
               err);
             switch (err) {
             case type_resolver::errc::registry_error:
@@ -183,7 +180,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                   record.share_value(),
                   timestamp,
                   timestamp_type,
-                  std::move(header_kvs),
+                  record.headers(),
                   as);
                 if (invalid_res.has_error()) {
                     _error = invalid_res.error();
@@ -201,14 +198,14 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
           std::move(val_type_res.value().parsable_buf),
           timestamp,
           timestamp_type,
-          header_kvs);
+          record.headers());
         if (record_data_res.has_error()) {
             auto err = record_data_res.error();
             vlog(
               _log.warn,
               "Error translating data for record at offset {}, batch: {}: {}",
               offset,
-              batch.header(),
+              batch_header,
               err);
             switch (err) {
             case record_translator::errc::unexpected_schema:
@@ -221,7 +218,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                   record.share_value(),
                   timestamp,
                   timestamp_type,
-                  std::move(header_kvs),
+                  record.headers(),
                   as);
                 if (invalid_res.has_error()) {
                     _error = invalid_res.error();
@@ -230,10 +227,17 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                 continue;
             }
         }
-        auto record_type = _record_translator.build_type(
-          std::move(val_type_res.value().type));
-        auto writer_iter = _writers.find(record_type.comps);
+        auto& val_type = val_type_res.value().type;
+        record_schema_components comps{
+          .key_identifier = std::nullopt,
+          .val_identifier = val_type.has_value()
+                              ? std::make_optional(val_type->id)
+                              : std::nullopt,
+        };
+        auto writer_iter = _writers.find(comps);
         if (writer_iter == _writers.end()) {
+            auto record_type = _record_translator.build_type(
+              std::move(val_type));
             auto ensure_res = co_await _table_creator.ensure_table(
               _ntp.tp.topic, _topic_revision, record_type.comps);
             if (ensure_res.has_error()) {
@@ -248,7 +252,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                       record.share_value(),
                       timestamp,
                       timestamp_type,
-                      std::move(header_kvs),
+                      record.headers(),
                       as);
                     if (invalid_res.has_error()) {
                         _error = invalid_res.error();
@@ -477,7 +481,7 @@ record_multiplexer::handle_invalid_record(
   std::optional<iobuf> val,
   model::timestamp ts,
   model::timestamp_type ts_t,
-  chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>> headers,
+  const chunked_vector<model::record_header>& headers,
   ss::abort_source& as) {
     _translation_probe.increment_invalid_record(cause);
     switch (_invalid_record_action) {

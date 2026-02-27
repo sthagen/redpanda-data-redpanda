@@ -11,6 +11,14 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "probe",
+    hdrs = ["probe.h"],
+    deps = [
+        "//src/v/utils:log_hist",
+    ],
+)
+
+redpanda_cc_library(
     name = "compression",
     srcs = ["compression.cc"],
     hdrs = ["compression.h"],

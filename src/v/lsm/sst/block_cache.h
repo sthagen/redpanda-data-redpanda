@@ -14,6 +14,7 @@
 #include "lsm/block/handle.h"
 #include "lsm/block/reader.h"
 #include "lsm/core/internal/files.h"
+#include "lsm/core/probe.h"
 
 #include <seastar/core/future.hh>
 
@@ -53,7 +54,7 @@ public:
     };
 
     // Create a new block cache that holds the given number of blocks.
-    explicit block_cache(size_t max_entries);
+    explicit block_cache(size_t max_entries, ss::lw_shared_ptr<probe>);
     block_cache(const block_cache&) = delete;
     block_cache& operator=(const block_cache&) = delete;
     block_cache(block_cache&&) = default;

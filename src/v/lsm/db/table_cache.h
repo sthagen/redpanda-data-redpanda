@@ -16,6 +16,7 @@
 #include "base/seastarx.h"
 #include "lsm/core/internal/files.h"
 #include "lsm/core/internal/iterator.h"
+#include "lsm/core/probe.h"
 #include "lsm/io/persistence.h"
 #include "lsm/sst/block_cache.h"
 
@@ -32,6 +33,7 @@ public:
     table_cache(
       io::data_persistence*,
       size_t max_entries,
+      ss::lw_shared_ptr<probe>,
       ss::lw_shared_ptr<sst::block_cache>);
     table_cache(const table_cache&) = delete;
     table_cache(table_cache&&) = default;

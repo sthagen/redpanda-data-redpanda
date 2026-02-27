@@ -71,6 +71,8 @@ std::error_code cluster_recovery_table::apply(
       manifest,
       bucket,
       wait_for_nodes);
+    // Clear any stale bootstrap params from previous recovery attempts
+    _pending_bootstrap_params.clear();
     _states.emplace_back(
       std::move(manifest), std::move(bucket), wait_for_nodes);
     _has_active_recovery.signal();
@@ -107,7 +109,59 @@ cluster_recovery_table::apply(model::offset, cluster_recovery_update_cmd cmd) {
     if (cmd.value.error_msg.has_value()) {
         _states.back().error_msg = std::move(cmd.value.error_msg);
     }
+    // Clear bootstrap params when recovery completes or fails
+    if (
+      cmd.value.stage == recovery_stage::complete
+      || cmd.value.stage == recovery_stage::failed) {
+        if (!_pending_bootstrap_params.empty()) {
+            vlog(
+              clusterlog.debug,
+              "Clearing {} pending bootstrap params as recovery {}",
+              _pending_bootstrap_params.size(),
+              cmd.value.stage);
+            _pending_bootstrap_params.clear();
+        }
+    }
     return errc::success;
+}
+
+std::error_code cluster_recovery_table::apply(
+  model::offset, set_partition_bootstrap_params_cmd cmd) {
+    const auto& tp_ns = cmd.value.tp_ns;
+
+    // Store bootstrap params in the pending map. These will be consumed
+    // when the partition is created by controller_backend.
+    // Note: This command is applied during cluster recovery.
+    for (const auto& [partition_id, params] : cmd.value.partition_params) {
+        model::ntp ntp(tp_ns.ns, tp_ns.tp, partition_id);
+        _pending_bootstrap_params[ntp] = params;
+
+        vlog(
+          clusterlog.debug,
+          "Set pending bootstrap params for {}: offset={}, term={}",
+          ntp,
+          params.start_offset,
+          params.initial_term);
+    }
+
+    return errc::success;
+}
+
+std::optional<partition_bootstrap_params>
+cluster_recovery_table::get_partition_bootstrap_params(
+  const model::ntp& ntp) const {
+    if (auto it = _pending_bootstrap_params.find(ntp);
+        it != _pending_bootstrap_params.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+void cluster_recovery_table::fill_snapshot(controller_snapshot& snap) {
+    snap.cluster_recovery.recovery_states = _states;
+    for (const auto& [ntp, params] : _pending_bootstrap_params) {
+        snap.cluster_recovery.pending_bootstrap_params.emplace(ntp, params);
+    }
 }
 
 } // namespace cluster

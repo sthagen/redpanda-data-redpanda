@@ -91,9 +91,9 @@ uint32_t crc_record_batch(const record_batch& b) {
 }
 
 template<typename Parser, typename ParserData>
-static std::vector<model::record_header>
+static chunked_vector<model::record_header>
 parse_record_headers(Parser& parser, ParserData parser_data) {
-    std::vector<model::record_header> headers;
+    chunked_vector<model::record_header> headers;
     auto [header_count, _] = parser.read_varlong();
     /**
      * If records buffer is corrupted, it may result in reading very large

@@ -25,7 +25,7 @@ struct record_essence {
     std::optional<model::partition_id> partition_id;
     std::optional<iobuf> key;
     std::optional<iobuf> value;
-    std::vector<model::record_header> headers;
+    chunked_vector<model::record_header> headers;
 };
 
 inline constexpr model::node_id consumer_replica_id{-1};

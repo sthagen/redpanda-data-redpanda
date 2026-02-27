@@ -671,6 +671,23 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "bootstrap_partition_state_test",
+    timeout = "short",
+    srcs = ["bootstrap_partition_state_test.cc"],
+    deps = [
+        "//src/v/base",
+        "//src/v/features",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/storage",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:test_env",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_bench(
     name = "heartbeat_bench_rpbench",
     srcs = ["heartbeat_bench.cc"],

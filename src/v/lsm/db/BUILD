@@ -123,6 +123,7 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/base",
+        "//src/v/lsm/core:probe",
         "//src/v/lsm/core/internal:files",
         "//src/v/lsm/core/internal:iterator",
         "//src/v/lsm/core/internal:keys",

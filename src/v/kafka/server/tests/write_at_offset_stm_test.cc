@@ -116,7 +116,8 @@ struct WriteAtOffsetStmFixture
             if (batch.header().type != model::record_batch_type::raft_data) {
                 co_return ss::stop_iteration::no;
             }
-            auto record_iterator = model::record_batch_iterator::create(batch);
+            auto record_iterator = model::record_batch_copy_iterator::create(
+              batch);
             while (record_iterator.has_next()) {
                 auto record = record_iterator.next();
                 auto expected_offset = serde::from_iobuf<kafka::offset>(

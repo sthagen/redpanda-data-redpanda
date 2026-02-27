@@ -40,7 +40,7 @@ std::ostream& operator<<(std::ostream& os, const sample_type& st) {
 
 void serialize_sample_type(storage::record_batch_builder& rbb, sample_type st) {
     iobuf key, value;
-    std::vector<model::record_header> headers;
+    chunked_vector<model::record_header> headers;
     reflection::serialize(key, std::move(st.key));
     reflection::serialize(value, std::move(st.value));
     std::transform(

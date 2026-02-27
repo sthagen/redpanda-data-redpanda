@@ -98,6 +98,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/lsm/block:handle",
         "//src/v/lsm/block:reader",
+        "//src/v/lsm/core:probe",
         "//src/v/lsm/core/internal:files",
         "@seastar",
     ],

@@ -47,8 +47,9 @@ impl::impl(ctor, io::persistence p, ss::lw_shared_ptr<internal::options> o)
       std::make_unique<table_cache>(
         _persistence.data.get(),
         _opts->max_open_files,
+        _opts->probe,
         ss::make_lw_shared<sst::block_cache>(
-          _opts->block_cache_size / _opts->sst_block_size)))
+          _opts->block_cache_size / _opts->sst_block_size, _opts->probe)))
   , _versions(
       std::make_unique<version_set>(
         _persistence.metadata.get(), _table_cache.get(), _opts))
@@ -97,6 +98,7 @@ ss::future<> impl::make_room_for_write() {
           && num_l0_files > _opts->level_zero_slowdown_writes_trigger) {
             // We're in throttling mode
             vlog(log.debug, "throttling_writes reason=l0_file_count");
+            _opts->probe->throttled_writes += 1;
             constexpr auto throttle_duration = std::chrono::milliseconds(100);
             try {
                 co_await ss::sleep_abortable(throttle_duration, _as);
@@ -116,6 +118,7 @@ ss::future<> impl::make_room_for_write() {
         }
         if (_imm) {
             vlog(log.warn, "blocking_writes reason=memtable_full");
+            _opts->probe->stalled_writes += 1;
             // We are over the write buffer limit and we have a pending
             // memtable flush, wait for it to finish.
             co_await _background_work_finished_signal.wait(_as);
@@ -123,6 +126,7 @@ ss::future<> impl::make_room_for_write() {
         }
         if (num_l0_files > _opts->level_zero_stop_writes_trigger) {
             vlog(log.warn, "blocking_writes reason=l0_full");
+            _opts->probe->stalled_writes += 1;
             // We've hit out L0 file limit, wait for compaction to finish.
             co_await _background_work_finished_signal.wait(_as);
             continue;
@@ -357,6 +361,7 @@ void impl::maybe_schedule_compaction() {
 
 ss::future<> impl::apply_edits(ss::lw_shared_ptr<version_edit> edit) {
     auto units = co_await _manifest_write_mu.get_units();
+    auto m = _opts->probe->manifest_write_latency.auto_measure();
     vlog(log.trace, "apply_edits_start");
     auto fut = co_await ss::coroutine::as_future(
       _versions->log_and_apply(std::move(edit)));
@@ -374,8 +379,10 @@ ss::future<> impl::do_flush() {
         co_return;
     }
     co_await ss::coroutine::switch_to(_opts->compaction_scheduling_group);
+    auto m = _opts->probe->flush_latency.auto_measure();
     auto edit = co_await run_flush_task(
       _opts, _persistence.data.get(), _versions.get(), *_imm, &_as);
+    m->stop();
     if (!edit) {
         _imm = std::nullopt;
         co_return;
@@ -396,6 +403,7 @@ ss::future<> impl::do_compaction() {
         co_return;
     }
     co_await ss::coroutine::switch_to(_opts->compaction_scheduling_group);
+    auto m = _opts->probe->compaction_latency.auto_measure();
     auto edit = co_await run_compaction_task(
       _persistence.data.get(),
       &_snapshots,
@@ -403,6 +411,7 @@ ss::future<> impl::do_compaction() {
       _opts,
       std::move(compact.value()),
       &_as);
+    m->stop();
     co_await apply_edits(std::move(edit));
     // TODO: only call GC actor when we delete a file. This requires
     // the GC actor still doing cleanup when it is not called.

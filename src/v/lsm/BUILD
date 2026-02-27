@@ -19,6 +19,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/lsm/core:probe",
         "//src/v/lsm/io:persistence",
         "//src/v/ssx:time",
         "//src/v/utils:named_type",

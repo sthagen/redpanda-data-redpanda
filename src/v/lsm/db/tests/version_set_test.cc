@@ -119,7 +119,9 @@ private:
     lsm::db::table_cache _table_cache{
       _data_persistence.get(),
       default_max_entries,
-      ss::make_lw_shared<lsm::sst::block_cache>(1_MiB)};
+      ss::make_lw_shared<lsm::probe>(),
+      ss::make_lw_shared<lsm::sst::block_cache>(
+        1_MiB, ss::make_lw_shared<lsm::probe>())};
     ss::lw_shared_ptr<lsm::db::version_set> _version_set
       = ss::make_lw_shared<lsm::db::version_set>(
         _metadata_persistence.get(), &_table_cache, _options);
@@ -206,7 +208,9 @@ private:
     lsm::db::table_cache _table_cache{
       _data_persistence.get(),
       default_max_entries,
-      ss::make_lw_shared<lsm::sst::block_cache>(1_MiB)};
+      ss::make_lw_shared<lsm::probe>(),
+      ss::make_lw_shared<lsm::sst::block_cache>(
+        1_MiB, ss::make_lw_shared<lsm::probe>())};
     ss::lw_shared_ptr<lsm::db::version_set> _version_set
       = ss::make_lw_shared<lsm::db::version_set>(
         _metadata_persistence.get(), &_table_cache, _options);

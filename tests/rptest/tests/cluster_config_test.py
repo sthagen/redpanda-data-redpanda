@@ -796,6 +796,23 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 # Do this instead.
                 valid_value = 0.5
 
+            if name in (
+                "cloud_topics_upload_part_size",
+                "cloud_topics_reconciliation_parallelism",
+                "cloud_topics_compaction_key_map_memory",
+            ):
+                # These feed into memory reservations (part_size *
+                # parallelism for reconciler, key_map_memory for
+                # compaction). Doubling all of them together causes the
+                # combined reservation to exceed available per-shard
+                # memory on restart. Use modest non-default values.
+                if name == "cloud_topics_upload_part_size":
+                    valid_value = 5242880  # 5 MiB (minimum)
+                elif name == "cloud_topics_reconciliation_parallelism":
+                    valid_value = 4
+                else:
+                    valid_value = 16777216  # 16 MiB (minimum)
+
             if name == "tls_v1_2_cipher_suites":
                 valid_value = ":".join(
                     random.sample(

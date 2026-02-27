@@ -1358,7 +1358,7 @@ class PandaProxyInvalidInputsTest(PandaProxyEndpoints):
         Create a topic and post a request larger than the total available memory.
         """
 
-        self.redpanda.set_resource_settings(ResourceSettings(memory_mb=256, num_cpus=1))
+        self.redpanda.set_resource_settings(ResourceSettings(memory_mb=512, num_cpus=1))
         self.redpanda.start()
 
         name = create_topic_names(1)[0]
@@ -1394,8 +1394,10 @@ class PandaProxyInvalidInputsTest(PandaProxyEndpoints):
         data = {"records": values}
         data_json = json.dumps(data)
 
-        # With 256Mb available per core, the available memory for the kafka services
-        # is 90.4Mb at most. We want to ensure that this request is larger than this
+        # With 512Mb available per core and the various memory reservations
+        # (compaction, cloud topics, partitions), the available memory for
+        # the kafka services is well under 90Mb. We want to ensure that
+        # this request is larger than this.
         memory_limit = 90.4 * 1024 * 1024
         assert len(data_json) > memory_limit, (
             f"Expected request larger than {memory_limit}b. Got {len(data_json)}b, instead"

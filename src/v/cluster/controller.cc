@@ -544,6 +544,7 @@ ss::future<> controller::start(
       std::ref(_tp_frontend),
       std::ref(_storage),
       std::ref(_feature_table),
+      std::ref(_recovery_table),
       ss::sharded_parameter([] {
           return config::shard_local_cfg()
             .controller_backend_housekeeping_interval_ms.bind();

@@ -203,8 +203,14 @@ controller_snapshot_reconciler::get_actions(
             }
             if (tp_config.is_cloud_topic()) {
                 auto new_config = tp_config;
-                if (!new_config.is_read_replica()) {
-                    new_config.properties.recovery = true;
+                if (!new_config.properties.remote_topic_properties
+                       .has_value()) {
+                    auto& remote_props
+                      = new_config.properties.remote_topic_properties.emplace();
+                    remote_props.remote_revision = model::initial_revision_id{
+                      meta.metadata.revision};
+                    remote_props.remote_partition_count
+                      = tp_config.partition_count;
                 }
                 actions.cloud_topics.emplace_back(std::move(new_config));
                 continue;

@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_vector.h"
 #include "model/batch_compression.h"
 #include "model/record.h"
 #include "model/record_utils.h"
@@ -73,7 +74,7 @@ TEST_F(RecordBatchTest, SetMaxTimestamp) {
 TEST_F(RecordBatchTest, Iterator) {
     auto b = model::test::make_random_batch(model::offset(0), 10, false);
 
-    auto it = model::record_batch_iterator::create(b);
+    auto it = model::record_batch_copy_iterator::create(b);
     for (int i = 0; i < b.record_count(); ++i) {
         EXPECT_TRUE(it.has_next());
         model::record r = it.next();
@@ -93,7 +94,7 @@ TEST_F(RecordBatchTest, ExtraBytesIterator) {
       model::packed_record_batch_header_size + buf.size_bytes());
     b = model::record_batch(
       header, std::move(buf), model::record_batch::tag_ctor_ng{});
-    auto it = model::record_batch_iterator::create(b);
+    auto it = model::record_batch_copy_iterator::create(b);
     EXPECT_TRUE(it.has_next());
     EXPECT_THROW(it.next(), std::out_of_range);
 }
@@ -118,7 +119,7 @@ void check_parse_record_metadata(bool fully_parse) {
       model::offset(0), num_records, false);
 
     std::vector<std::pair<int64_t, int32_t>> expected;
-    auto it = model::record_batch_iterator::create(b);
+    auto it = model::record_batch_copy_iterator::create(b);
     while (it.has_next()) {
         auto r = it.next();
         expected.emplace_back(r.timestamp_delta(), r.offset_delta());
@@ -200,7 +201,7 @@ TEST_F(RecordBatchTest, RecordSizeBytesWithEmptyKey) {
 }
 
 TEST_F(RecordBatchTest, RecordSizeBytesWithHeaders) {
-    std::vector<model::record_header> headers;
+    chunked_vector<model::record_header> headers;
     headers.emplace_back(3, iobuf::from("hdr"), 2, iobuf::from("hv"));
     auto r = model::record(
       model::record_attributes(0),
@@ -213,7 +214,7 @@ TEST_F(RecordBatchTest, RecordSizeBytesWithHeaders) {
 }
 
 TEST_F(RecordBatchTest, RecordSizeBytesWithNullHeaderValues) {
-    std::vector<model::record_header> headers;
+    chunked_vector<model::record_header> headers;
     headers.emplace_back(3, iobuf::from("hdr"), -1, iobuf{});
     auto r = model::record(
       model::record_attributes(0),

@@ -267,14 +267,17 @@ struct plugins_t
 struct cluster_recovery_t
   : public serde::envelope<
       cluster_recovery_t,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     std::vector<cluster_recovery_state> recovery_states;
+    pending_bootstrap_params_t pending_bootstrap_params;
 
     friend bool operator==(const cluster_recovery_t&, const cluster_recovery_t&)
       = default;
 
-    auto serde_fields() { return std::tie(recovery_states); }
+    auto serde_fields() {
+        return std::tie(recovery_states, pending_bootstrap_params);
+    }
 };
 
 struct client_quotas_t

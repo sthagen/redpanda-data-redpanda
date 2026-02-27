@@ -57,7 +57,9 @@ public:
         _table_cache.emplace(
           _persistence.get(),
           10,
-          ss::make_lw_shared<lsm::sst::block_cache>(1_MiB));
+          ss::make_lw_shared<lsm::probe>(),
+          ss::make_lw_shared<lsm::sst::block_cache>(
+            1_MiB, ss::make_lw_shared<lsm::probe>()));
         _gc.emplace(_persistence.get(), _opts, &*_table_cache);
         _gc->start().get();
     }

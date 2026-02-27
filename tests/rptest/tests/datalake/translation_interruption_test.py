@@ -14,7 +14,11 @@ from ducktape.mark import matrix
 from rptest.clients.rpk import RpkTool, TopicSpec
 from rptest.services.catalog_service import CatalogType
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import PandaproxyConfig, SISettings, SchemaRegistryConfig
+from rptest.services.redpanda import (
+    PandaproxyConfig,
+    SISettings,
+    SchemaRegistryConfig,
+)
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
@@ -99,12 +103,12 @@ class DatalakeTranslationInterruptionsTest(RedpandaTest):
         triggered by exceptions from abort source"""
 
         # A large block size forces the translators to OOM rather fairly quickly
-        # since the total memory allocated per shard to datalake is ~88 MB
-        # which only supports one active translator a time.
+        # since only 1-3 blocks fit in the per-shard datalake memory,
+        # which only supports one active translator at a time.
 
         self.redpanda.add_extra_rp_conf(
             {
-                "datalake_scheduler_block_size_bytes": 64 * 1024 * 1024,
+                "datalake_scheduler_block_size_bytes": 32 * 1024 * 1024,
                 "datalake_scheduler_max_concurrent_translations": 2,
             }
         )

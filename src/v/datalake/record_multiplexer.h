@@ -135,7 +135,7 @@ private:
       std::optional<iobuf>,
       model::timestamp,
       model::timestamp_type ts_t,
-      chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>,
+      const chunked_vector<model::record_header>&,
       ss::abort_source&);
 
     prefix_logger _log;

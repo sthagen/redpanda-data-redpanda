@@ -103,6 +103,7 @@ inline constexpr int8_t force_partition_reconfiguration_type = 11;
 inline constexpr int8_t update_partition_replicas_cmd_type = 12;
 inline constexpr int8_t set_topic_partitions_disabled_cmd_type = 13;
 inline constexpr int8_t bulk_force_reconfiguration_cmd_type = 14;
+inline constexpr int8_t set_partition_bootstrap_params_cmd_type = 15;
 
 inline constexpr int8_t create_user_cmd_type = 5;
 inline constexpr int8_t delete_user_cmd_type = 6;
@@ -262,6 +263,17 @@ using bulk_force_reconfiguration_cmd = controller_command<
   bulk_force_reconfiguration_cmd_data,
   bulk_force_reconfiguration_cmd_type,
   model::record_batch_type::topic_management_cmd,
+  serde_opts::serde_only>;
+
+/**
+ * Used to set bootstrap parameters for partitions in an existing topic.
+ * Enables cluster recovery to create partitions with known offsets.
+ */
+using set_partition_bootstrap_params_cmd = controller_command<
+  model::topic_namespace,
+  set_partition_bootstrap_params_cmd_data,
+  set_partition_bootstrap_params_cmd_type,
+  model::record_batch_type::cluster_recovery_cmd,
   serde_opts::serde_only>;
 
 using create_user_cmd = controller_command<

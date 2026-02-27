@@ -43,7 +43,9 @@ public:
         return {
           _persistence.get(),
           max_entries,
-          ss::make_lw_shared<lsm::sst::block_cache>(1_MiB)};
+          ss::make_lw_shared<lsm::probe>(),
+          ss::make_lw_shared<lsm::sst::block_cache>(
+            1_MiB, ss::make_lw_shared<lsm::probe>())};
     }
 
     void TearDown() override { _persistence->close().get(); }

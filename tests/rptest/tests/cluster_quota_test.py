@@ -144,7 +144,7 @@ class ClusterRateQuotaTest(RedpandaTest):
     Ducktape tests for rate quota
     """
 
-    topics = (TopicSpec(replication_factor=1, max_message_bytes=100 * MiB),)
+    topics = (TopicSpec(replication_factor=1, max_message_bytes=10 * MiB),)
 
     def __init__(self, *args, **kwargs):
         # Note: the quotas apply based on the full size of the request (for
@@ -181,7 +181,7 @@ class ClusterRateQuotaTest(RedpandaTest):
                     "storage": "trace",
                 },
             ),
-            resource_settings=ResourceSettings(num_cpus=1),
+            resource_settings=ResourceSettings(num_cpus=1, memory_mb=2560),
             **kwargs,
         )
         self.rpk = RpkTool(self.redpanda)

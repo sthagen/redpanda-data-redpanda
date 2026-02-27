@@ -271,7 +271,7 @@ model::record_batch make_tx_control_batch(
     builder.set_control_type();
     builder.set_transactional_type();
     builder.add_raw_kw(
-      std::move(key), std::move(value), std::vector<model::record_header>());
+      std::move(key), std::move(value), chunked_vector<model::record_header>());
 
     return std::move(builder).build();
 }

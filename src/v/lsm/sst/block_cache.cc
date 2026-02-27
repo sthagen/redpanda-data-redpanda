@@ -37,8 +37,9 @@ struct cache_key {
 
 class block_cache::impl {
 public:
-    explicit impl(size_t max_entries)
-      : _cache(compute_cache_config(max_entries)) {}
+    explicit impl(size_t max_entries, ss::lw_shared_ptr<probe> probe)
+      : _cache(compute_cache_config(max_entries))
+      , _probe(std::move(probe)) {}
 
     ~impl() {
         vassert(
@@ -79,7 +80,13 @@ public:
     }
     std::optional<block::reader> get(internal::file_id id, block::handle h) {
         auto value = _cache.get_value({id, h});
-        return value ? std::make_optional(**value) : std::nullopt;
+        if (value) {
+            _probe->block_cache_hit += 1;
+            return std::make_optional(**value);
+        } else {
+            _probe->block_cache_miss += 1;
+            return std::nullopt;
+        }
     }
 
 private:
@@ -100,6 +107,7 @@ private:
 
     chunked_hash_map<cache_key, std::unique_ptr<ssx::semaphore>> _mu_map;
     cache_t _cache;
+    ss::lw_shared_ptr<probe> _probe;
 };
 
 block_cache::handle::handle(
@@ -120,8 +128,8 @@ std::optional<block::reader> block_cache::handle::get() {
     return _cache->get(_id, _handle);
 }
 
-block_cache::block_cache(size_t max_entries)
-  : _impl(std::make_unique<impl>(max_entries)) {}
+block_cache::block_cache(size_t max_entries, ss::lw_shared_ptr<probe> p)
+  : _impl(std::make_unique<impl>(max_entries, std::move(p))) {}
 
 block_cache::~block_cache() = default;
 

@@ -482,6 +482,29 @@ def decode_topic_command_serde(k_rdr: Reader, rdr: Reader):
         cmd |= rdr.read_envelope(
             lambda rdr, _: {"replicas": rdr.read_serde_vector(read_broker_shard)}
         )
+    elif cmd["type"] == 15:
+        cmd["type_string"] = "set_partition_bootstrap_params"
+        cmd["namespace"] = k_rdr.read_string()
+        cmd["topic"] = k_rdr.read_string()
+        cmd |= rdr.read_envelope(
+            lambda rdr, _: {
+                "tp_ns": rdr.read_envelope(
+                    lambda rdr, _: {
+                        "namespace": rdr.read_string(),
+                        "topic": rdr.read_string(),
+                    }
+                ),
+                "partition_params": rdr.read_serde_map(
+                    lambda rdr: rdr.read_int32(),  # partition_id (key)
+                    lambda rdr: rdr.read_envelope(  # params (value)
+                        lambda rdr, _: {
+                            "start_offset": rdr.read_int64(),
+                            "initial_term": rdr.read_int64(),
+                        }
+                    ),
+                ),
+            }
+        )
     return cmd
 
 

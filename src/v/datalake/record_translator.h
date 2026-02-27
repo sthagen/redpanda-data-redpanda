@@ -14,6 +14,7 @@
 #include "datalake/schema_identifier.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/values.h"
+#include "model/record.h"
 #include "model/timestamp.h"
 
 #include <seastar/core/future.hh>
@@ -42,8 +43,7 @@ public:
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
       model::timestamp_type ts_t,
-      const chunked_vector<
-        std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
+      const chunked_vector<model::record_header>& headers)
       = 0;
     virtual ~record_translator() = default;
 };
@@ -59,9 +59,7 @@ public:
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
       model::timestamp_type ts_t,
-      const chunked_vector<
-        std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
-      override;
+      const chunked_vector<model::record_header>& headers) override;
     ~key_value_translator() override = default;
 };
 
@@ -76,9 +74,7 @@ public:
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
       model::timestamp_type ts_t,
-      const chunked_vector<
-        std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
-      override;
+      const chunked_vector<model::record_header>& headers) override;
     ~structured_data_translator() override = default;
 };
 
@@ -97,9 +93,7 @@ public:
       std::optional<iobuf> parsable_val,
       model::timestamp ts,
       model::timestamp_type ts_t,
-      const chunked_vector<
-        std::pair<std::optional<iobuf>, std::optional<iobuf>>>& headers)
-      override;
+      const chunked_vector<model::record_header>& headers) override;
     ~default_translator() override = default;
 
 private:

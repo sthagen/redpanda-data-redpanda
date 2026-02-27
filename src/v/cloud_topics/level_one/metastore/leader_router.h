@@ -12,6 +12,7 @@
 
 #include "base/seastarx.h"
 #include "cloud_storage/remote_label.h"
+#include "cloud_topics/level_one/metastore/leader_router_probe.h"
 #include "cloud_topics/level_one/metastore/rpc_service.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cluster/fwd.h"
@@ -226,6 +227,7 @@ private:
     ss::sharded<cluster::shard_table>* _shard_table;
     ss::sharded<::rpc::connection_cache>* _connection_cache;
     domain_supervisor* _domain_supervisor;
+    leader_router_probe _probe;
 };
 
 } // namespace cloud_topics::l1

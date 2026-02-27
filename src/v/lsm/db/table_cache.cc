@@ -132,8 +132,10 @@ public:
     impl(
       io::data_persistence* p,
       size_t max_entries,
+      ss::lw_shared_ptr<probe> probe,
       ss::lw_shared_ptr<sst::block_cache> block_cache)
       : _persistence(p)
+      , _probe(std::move(probe))
       , _cache(compute_cache_config(max_entries), eviction(this))
       , _block_cache(std::move(block_cache))
       , _cleanup_queue([](const std::exception_ptr& ex) {
@@ -290,9 +292,11 @@ private:
                   std::make_unique<cached_value>(handle, std::move(reader)));
                 vassert(succ, "lock is held, who mutated _map?");
                 _cache.insert(*it->second);
+                _probe->table_cache_miss += 1;
                 co_return it->second->value;
             }
         }
+        _probe->table_cache_hit += 1;
         auto& entry = *it->second;
         if (entry.hook.evicted()) {
             // If this was evicted, but on the ghost queue, then we can reinsert
@@ -332,6 +336,7 @@ private:
     }
 
     io::data_persistence* _persistence;
+    ss::lw_shared_ptr<probe> _probe;
     chunked_hash_map<internal::file_handle, std::unique_ptr<ssx::mutex>>
       _mu_map;
     chunked_hash_map<internal::file_handle, entry_t> _map;
@@ -351,10 +356,11 @@ private:
 table_cache::table_cache(
   io::data_persistence* persistence,
   size_t max_entries,
+  ss::lw_shared_ptr<probe> probe,
   ss::lw_shared_ptr<sst::block_cache> block_cache)
   : _impl(
       std::make_unique<impl>(
-        persistence, max_entries, std::move(block_cache))) {}
+        persistence, max_entries, std::move(probe), std::move(block_cache))) {}
 
 table_cache::~table_cache() = default;
 

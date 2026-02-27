@@ -157,7 +157,7 @@ model::record adl<model::record>::from(iobuf_parser& in) {
     auto value_len = adl<int32_t>{}.from(in);
     auto value = adl<iobuf>{}.from(in);
     auto hdr_size = adl<int32_t>{}.from(in);
-    std::vector<model::record_header> headers;
+    chunked_vector<model::record_header> headers;
     headers.reserve(hdr_size);
     for (int i = 0; i < hdr_size; ++i) {
         auto hkey_len = adl<int32_t>{}.from(in);

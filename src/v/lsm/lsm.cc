@@ -120,6 +120,7 @@ ss::lw_shared_ptr<internal::options> translate_options(options opts) {
     internal_opts->sst_block_size = opts.sst_block_size;
     internal_opts->sst_filter_period = opts.sst_filter_period;
     internal_opts->file_deletion_delay = opts.file_deletion_delay;
+    internal_opts->probe = std::move(opts.probe);
 
     return internal_opts;
 }

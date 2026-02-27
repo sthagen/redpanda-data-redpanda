@@ -29,7 +29,7 @@ public:
     virtual record_batch_builder& add_raw_kw(
       std::optional<iobuf>&& key,
       std::optional<iobuf>&& value,
-      std::vector<model::record_header> headers);
+      chunked_vector<model::record_header> headers);
     model::record_batch build() &&;
     ss::future<model::record_batch> build_async() &&;
     virtual ~record_batch_builder();
@@ -58,8 +58,8 @@ private:
         serialized_record(
           std::optional<iobuf> k,
           std::optional<iobuf> v,
-          std::vector<model::record_header> hdrs
-          = std::vector<model::record_header>())
+          chunked_vector<model::record_header> hdrs
+          = chunked_vector<model::record_header>())
           : headers(std::move(hdrs)) {
             if (k) {
                 key = std::move(*k);
@@ -79,7 +79,7 @@ private:
         int32_t encoded_key_size;
         iobuf value;
         int32_t encoded_value_size;
-        std::vector<model::record_header> headers;
+        chunked_vector<model::record_header> headers;
     };
 
     model::record_batch_header build_header() const;

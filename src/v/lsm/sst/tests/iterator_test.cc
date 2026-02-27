@@ -48,7 +48,8 @@ public:
                         std::move(*file),
                         lsm::internal::file_id{_counter},
                         file_size,
-                        ss::make_lw_shared<lsm::sst::block_cache>(1_MiB))
+                        ss::make_lw_shared<lsm::sst::block_cache>(
+                          1_MiB, ss::make_lw_shared<lsm::probe>()))
                         .get();
         auto it = reader.create_iterator();
         _readers.push_back(std::move(reader));

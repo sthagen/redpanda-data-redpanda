@@ -147,7 +147,7 @@ ss::future<> fake_wasm_engine::transform(
   model::record_batch batch,
   wasm::transform_probe*,
   wasm::transform_callback cb) {
-    auto it = model::record_batch_iterator::create(batch);
+    auto it = model::record_batch_copy_iterator::create(batch);
     while (it.has_next()) {
         auto transformed = model::transformed_data::from_record(it.next());
         if (!_output_topics.has_value()) {

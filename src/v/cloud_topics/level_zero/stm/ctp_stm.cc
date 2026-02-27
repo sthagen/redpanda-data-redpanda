@@ -19,6 +19,7 @@
 #include "raft/persisted_stm.h"
 #include "ssx/future-util.h"
 #include "ssx/watchdog.h"
+#include "storage/snapshot.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/sleep.hh>
@@ -515,4 +516,37 @@ fmt::iterator epoch_window_checker::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it, "window=[{}, {}], offset={}", _min_epoch, _max_epoch, _latest_offset);
 }
+
+ss::future<> create_ctp_stm_bootstrap_snapshot(
+  const std::filesystem::path& work_directory, ctp_stm_seed_offsets offsets) {
+    // The starting CTP STM state includes start offset
+    // and LRO. The LRO has two components, log offset and kafka offset.
+    // The assumption here is that the partition is re-created and the
+    // offset translator state is empty. Because of that log offset is
+    // equal to kafka offset.
+    ctp_stm_state state;
+    state.set_start_offset(offsets.start_offset);
+    auto k_lro = kafka::prev_offset(offsets.next_offset);
+    auto l_lro = kafka::offset_cast(k_lro);
+    state.advance_last_reconciled_offset(k_lro, l_lro);
+
+    // Create empty epoch checker
+    epoch_window_checker checker;
+
+    // Create the snapshot
+    ctp_stm_snapshot snap{.state = state, .checker = checker};
+    auto data = serde::to_iobuf(snap);
+
+    // The snapshot offset should be equal to l_lro since the partition is
+    // empty and starting offset is equal to LRO + 1.
+    auto stm_snap = raft::stm_snapshot::create(0, l_lro, std::move(data));
+
+    // Persist using the file-backed snapshot manager
+    storage::simple_snapshot_manager snapshot_mgr(
+      work_directory, ss::sstring(ctp_stm::name));
+
+    co_await raft::file_backed_stm_snapshot::persist_local_snapshot(
+      snapshot_mgr, std::move(stm_snap));
+}
+
 }; // namespace cloud_topics

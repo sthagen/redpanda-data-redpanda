@@ -15,6 +15,7 @@
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_partition.h"
 #include "cloud_storage/remote_path_provider.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/archival/types.h"
@@ -122,7 +123,8 @@ ss::future<consensus_ptr> partition_manager::manage(
   std::optional<xshard_transfer_state> xst_state,
   std::optional<remote_topic_properties> rtp,
   std::optional<cloud_storage_clients::bucket_name> read_replica_bucket,
-  const topic_configuration* topic_cfg) {
+  const topic_configuration* topic_cfg,
+  std::optional<partition_bootstrap_params> bootstrap_params) {
     auto remote_label = topic_cfg ? topic_cfg->properties.remote_label
                                   : std::nullopt;
     auto remote_topic_namespace_override
@@ -154,13 +156,42 @@ ss::future<consensus_ptr> partition_manager::manage(
           remote_topic_namespace_override.value());
     }
 
-    // NOTE: while the source cluster UUIDs of the path providers will
-    // ultimately be the same, this is a different path provider than what will
-    // be used at runtime by the partition. The latter is owned by the archival
-    // metadata STM and its lifecycle is therefore tied to the partition, which
-    // hasn't been constructed yet.
-    // TODO: implement a recovery primitive for cloud topics
-    if (!ntp_cfg.cloud_topic_enabled()) {
+    if (bootstrap_params.has_value()) {
+        // Programmatic bootstrap with custom offset/term.
+        // This is used for creating partitions with arbitrary start
+        // offset during cluster recovery.
+        vlog(
+          clusterlog.info,
+          "Bootstrapping partition {} with start offset: {}, term: {}",
+          ntp_cfg.ntp(),
+          bootstrap_params->start_offset,
+          bootstrap_params->initial_term);
+
+        co_await seastar::recursive_touch_directory(ntp_cfg.work_directory());
+
+        co_await raft::details::bootstrap_partition_state(
+          _storage,
+          ntp_cfg,
+          group,
+          bootstrap_params->next_offset,
+          bootstrap_params->initial_term,
+          initial_nodes);
+
+        if (ntp_cfg.cloud_topic_enabled()) {
+            co_await cloud_topics::create_ctp_stm_bootstrap_snapshot(
+              std::filesystem::path(ntp_cfg.work_directory()),
+              cloud_topics::ctp_stm_seed_offsets{
+                .start_offset = model::offset_cast(
+                  bootstrap_params->start_offset),
+                .next_offset = model::offset_cast(
+                  bootstrap_params->next_offset)});
+        }
+    } else {
+        // NOTE: while the source cluster UUIDs of the path providers will
+        // ultimately be the same, this is a different path provider than what
+        // will be used at runtime by the partition. The latter is owned by the
+        // archival metadata STM and its lifecycle is therefore tied to the
+        // partition, which hasn't been constructed yet.
         cloud_storage::remote_path_provider path_provider(
           std::move(remote_label), std::move(remote_topic_namespace_override));
         auto dl_result = co_await maybe_download_log(

@@ -10,7 +10,7 @@ import random
 import string
 import time
 import pytest
-from typing import Any
+from typing import Any, List
 
 import requests
 
@@ -26,8 +26,10 @@ from rptest.clients.rpk import RPKACLInput, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
-from rptest.services.redpanda import SISettings
+from rptest.services.redpanda import SISettings, CLOUD_TOPICS_CONFIG_STR
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.clients.admin.v2 import Admin, metastore_pb, ntp_pb
+from connectrpc.errors import ConnectError, ConnectErrorCode
 from rptest.util import wait_until_result
 from rptest.utils.si_utils import quiesce_uploads
 
@@ -959,3 +961,279 @@ class ClusterRecoveryWithNameTest(RedpandaTest):
         if "failed" in state:
             raise RuntimeError(f"Cluster recovery failed with state: {state}")
         return "inactive" in state
+
+
+class PartitionOffsets:
+    """Captured offsets from metastore for verification after recovery."""
+
+    def __init__(self, start_offset: int, next_offset: int):
+        self.start_offset = start_offset
+        self.next_offset = next_offset
+
+    def __repr__(self):
+        return f"PartitionOffsets(start_offset={self.start_offset}, next_offset={self.next_offset})"
+
+
+class CloudTopicsClusterRecoveryTest(RedpandaTest):
+    """
+    Tests for cluster recovery of cloud topics.
+
+    Verifies that when cluster recovery runs for cloud topics:
+    1. The recovery process queries the L1 metastore for partition offsets
+    2. Bootstrap params are set correctly before topic creation
+    3. After recovery, producing new data and reconciliation works correctly
+    """
+
+    message_size = 4 * KiB
+    topic_name = "cloud_topic_recovery_test"
+    partition_count = 3
+
+    def __init__(self, test_context: TestContext):
+        # Configure for both cloud topics and cluster recovery
+        si_settings = SISettings(
+            test_context,
+            cloud_storage_max_connections=10,
+            # Disable tiered storage remote read/write - cloud topics use different paths
+            cloud_storage_enable_remote_read=False,
+            cloud_storage_enable_remote_write=False,
+            fast_uploads=True,
+        )
+
+        extra_rp_conf = {
+            # Enable cloud topics
+            CLOUD_TOPICS_CONFIG_STR: True,
+            # Enable cluster metadata upload for recovery
+            "enable_cluster_metadata_upload_loop": True,
+            "cloud_storage_cluster_metadata_upload_interval_ms": 1000,
+            "controller_snapshot_max_age_sec": 1,
+            # Fast L0 -> L1 reconciliation for testing
+            "cloud_topics_reconciliation_min_interval": 250,
+            "cloud_topics_reconciliation_max_interval": 2000,
+            # Fast metastore flush for testing
+            "cloud_topics_long_term_flush_interval": 2000,
+            # Reduce test time
+            "group_topic_partitions": 2,
+        }
+
+        self.s3_bucket = si_settings.cloud_storage_bucket
+
+        super(CloudTopicsClusterRecoveryTest, self).__init__(
+            test_context=test_context,
+            si_settings=si_settings,
+            extra_rp_conf=extra_rp_conf,
+            num_brokers=3,
+        )
+
+    def _create_cloud_topic(self, rpk: RpkTool) -> None:
+        """Create a cloud topic with the test configuration."""
+        rpk.create_topic(
+            topic=self.topic_name,
+            partitions=self.partition_count,
+            replicas=3,
+            config={
+                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
+                "cleanup.policy": "delete",
+            },
+        )
+
+    def _produce_data(self, msg_count: int = 500) -> None:
+        """Produce test data to the cloud topic."""
+        KgoVerifierProducer.oneshot(
+            self.test_context,
+            self.redpanda,
+            self.topic_name,
+            msg_size=self.message_size,
+            msg_count=msg_count,
+            batch_max_bytes=self.message_size * 8,
+            timeout_sec=60,
+        )
+
+    def _get_metastore_offsets(
+        self, admin: Admin, topic: str, partition: int
+    ) -> PartitionOffsets | None:
+        """
+        Get partition offsets from the L1 metastore.
+        Returns None if the partition is not found in the metastore.
+        """
+        metastore = admin.metastore()
+        req = metastore_pb.GetOffsetsRequest(
+            partition=ntp_pb.TopicPartition(topic=topic, partition=partition)
+        )
+        try:
+            response = metastore.get_offsets(req=req)
+            return PartitionOffsets(
+                start_offset=response.offsets.start_offset,
+                next_offset=response.offsets.next_offset,
+            )
+        except ConnectError as e:
+            if e.code == ConnectErrorCode.NOT_FOUND:
+                return None
+            raise
+
+    def _wait_for_metastore_sync(
+        self,
+        admin: Admin,
+        topic: str,
+        partition: int,
+        expected_min_next_offset: int,
+        timeout_sec: int = 60,
+    ) -> PartitionOffsets:
+        """
+        Wait until the metastore has data for the partition and next_offset
+        reaches at least the expected value.
+        """
+        result: List[PartitionOffsets | None] = [None]
+
+        def check_metastore() -> bool:
+            offsets = self._get_metastore_offsets(admin, topic, partition)
+            result[0] = offsets
+            if offsets is None:
+                return False
+            return offsets.next_offset >= expected_min_next_offset
+
+        wait_until(
+            check_metastore,
+            timeout_sec=timeout_sec,
+            backoff_sec=2,
+            err_msg=lambda: f"Metastore sync timeout for {topic}/{partition}, "
+            f"last offsets: {result[0]}",
+        )
+
+        assert result[0] is not None
+        return result[0]
+
+    def _perform_cluster_recovery(self, rpk: RpkTool) -> None:
+        """
+        Stop the cluster, wipe local data, restart with auto_assign_node_id,
+        and initialize cluster recovery using rpk.
+        """
+        self.logger.info("Stopping cluster for recovery")
+        self.redpanda.stop()
+
+        self.logger.info("Wiping local data on all nodes")
+        for node in self.redpanda.nodes:
+            self.redpanda.remove_local_data(node)
+
+        self.logger.info("Restarting cluster with auto_assign_node_id")
+        self.redpanda.restart_nodes(
+            self.redpanda.nodes,
+            auto_assign_node_id=True,
+            omit_seeds_on_idx_one=False,
+        )
+
+        self.logger.info("Waiting for controller to be ready")
+        self.redpanda._admin.await_stable_leader(
+            "controller",
+            partition=0,
+            namespace="redpanda",
+            timeout_s=60,
+            backoff_s=2,
+        )
+
+        self.logger.info("Starting cluster recovery with rpk")
+        rpk.cluster_recovery_start(wait=True)
+
+    @cluster(num_nodes=4)
+    def test_cloud_topics_recovery_with_bootstrap_params(self):
+        """
+        Test that cloud topics recovery correctly sets bootstrap params
+        and allows producing new data after recovery.
+
+        This test verifies that:
+        1. Cloud topic is created and data is produced
+        2. After cluster recovery, the topic is restored
+        3. New data can be produced to the recovered topic
+        4. New data is reconciled to the metastore correctly
+        """
+        rpk = RpkTool(self.redpanda)
+        admin = Admin(self.redpanda)
+
+        self.logger.info("Creating cloud topic")
+        self._create_cloud_topic(rpk)
+
+        self.logger.info("Producing initial test data")
+        self._produce_data(msg_count=500)
+
+        self.logger.info("Waiting for metastore sync")
+        baseline = {}
+        for part in rpk.describe_topic(self.topic_name):
+            baseline[part.id] = part.high_watermark
+            partition = part.id
+            hwm = part.high_watermark
+            offsets = self._wait_for_metastore_sync(
+                admin,
+                self.topic_name,
+                partition,
+                expected_min_next_offset=hwm,
+                timeout_sec=120,
+            )
+            self.logger.info(
+                f"Metastore offsets for partition {partition}: "
+                f"start_offset={offsets.start_offset}, "
+                f"next_offset={offsets.next_offset}"
+            )
+
+        # Allow time for the metastore manifest to be flushed to S3
+        # after the sync completes.
+        self.logger.info("Waiting 30s for metastore manifest flush")
+        time.sleep(30)
+
+        self.logger.info("Waiting for controller metadata upload")
+        self.redpanda.wait_for_controller_snapshot(self.redpanda.nodes[0])
+
+        self.logger.info("Performing cluster recovery")
+        self._perform_cluster_recovery(rpk)
+
+        rpk = RpkTool(self.redpanda)  # Need new client after restart
+        admin = Admin(self.redpanda)  # Need new admin client after restart
+        topics = set(rpk.list_topics())
+        assert self.topic_name in topics, (
+            f"Topic {self.topic_name} not restored. Available: {topics}"
+        )
+
+        adjustment = {}
+
+        def all_partitions_ready():
+            adjustment.clear()
+            for part in rpk.describe_topic(self.topic_name):
+                adjustment[part.id] = part.high_watermark
+            if len(adjustment) != len(baseline):
+                return False
+            return all(adjustment.get(pid) == hwm for pid, hwm in baseline.items())
+
+        wait_until(
+            all_partitions_ready,
+            timeout_sec=120,
+            backoff_sec=2,
+            err_msg=f"Partitions not ready: baseline={baseline}, adjustment={adjustment}",
+        )
+
+        self.logger.info("Producing new data to recovered topic")
+        self._produce_data(msg_count=500)
+
+        self.logger.info("Waiting for new data to reconcile to metastore")
+        # Update HWM values after producing
+        for part in rpk.describe_topic(self.topic_name):
+            prev_hwm = adjustment[part.id]
+            assert part.high_watermark > prev_hwm, (
+                f"Prev HWM {prev_hwm} >= actual HWM {part.high_watermark}"
+            )
+
+        self.logger.info("Waiting for metastore sync")
+        for part in rpk.describe_topic(self.topic_name):
+            partition = part.id
+            hwm = part.high_watermark
+            offsets = self._wait_for_metastore_sync(
+                admin,
+                self.topic_name,
+                partition,
+                expected_min_next_offset=hwm,
+                timeout_sec=120,
+            )
+            self.logger.info(
+                f"Metastore offsets for partition {partition}: "
+                f"start_offset={offsets.start_offset}, "
+                f"next_offset={offsets.next_offset}"
+            )
+
+        self.logger.info("Cloud topics recovery with bootstrap params test PASSED")

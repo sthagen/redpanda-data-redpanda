@@ -11,23 +11,15 @@
 
 #pragma once
 
-#include "base/likely.h"
 #include "base/seastarx.h"
 #include "cluster/node/local_monitor.h"
-#include "cluster/self_test/metrics.h"
 #include "cluster/self_test_rpc_types.h"
-#include "config/node_config.h"
+#include "ssx/abort_source.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/aligned_buffer.hh>
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/file.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_intent.hh>
-#include <seastar/core/lowres_clock.hh>
 
-#include <chrono>
-#include <exception>
+#include <optional>
 
 namespace cluster::self_test {
 
@@ -35,16 +27,6 @@ class diskcheck_exception : public std::runtime_error {
 public:
     explicit diskcheck_exception(const std::string& msg)
       : std::runtime_error(msg) {}
-};
-class diskcheck_aborted_exception final : public diskcheck_exception {
-public:
-    diskcheck_aborted_exception()
-      : diskcheck_exception("User aborted benchmark") {}
-};
-class diskcheck_misconfigured_exception final : public diskcheck_exception {
-public:
-    explicit diskcheck_misconfigured_exception(const ss::sstring& msg)
-      : diskcheck_exception(msg) {}
 };
 class diskcheck_option_out_of_range final : public diskcheck_exception {
 public:
@@ -92,31 +74,20 @@ public:
     void cancel();
 
 private:
-    enum class read_or_write { read, write };
-
-    ss::future<std::vector<self_test_result>> initialize_benchmark(ss::sstring);
     ss::future<std::vector<self_test_result>>
-    run_configured_benchmarks(std::vector<ss::file>&);
+    run_configured_benchmarks(ss::sstring basename);
 
     ss::future<> verify_remaining_space(size_t dataset_size);
-
-    template<read_or_write mode>
-    ss::future<metrics> do_run_benchmark(std::vector<ss::file>&);
-
-    template<read_or_write mode>
-    ss::future<> run_benchmark_fiber(
-      ss::lowres_clock::time_point start, ss::file& file, metrics& m);
-
-    uint64_t get_next_pos(uint64_t pos);
 
 private:
     /// To ensure test doesn't attempt to take all available disk space
     ss::sharded<node::local_monitor>& _nlm;
 
-    ss::io_intent _intent{};
-    bool _cancelled{false};
-    /// For shutting down service
-    ss::abort_source _as;
+    /// Parent source used for the below sharded abort source
+    std::optional<ss::abort_source> _cancel_parent;
+    /// Abort source to signal all shards to stop running any currently running
+    /// tests
+    std::optional<ssx::sharded_abort_source> _cancelled;
     ss::gate _gate;
     diskcheck_opts _opts;
 };

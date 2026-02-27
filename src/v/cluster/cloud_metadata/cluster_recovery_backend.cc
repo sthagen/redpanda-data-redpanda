@@ -346,6 +346,13 @@ ss::future<cluster::errc> cluster_recovery_backend::do_action(
         }
         const auto& metastore_conf = metastore_meta->get_configuration();
         const auto metastore_label = metastore_conf.properties.remote_label;
+
+        // Get metastore for querying partition offsets/terms
+        cloud_topics::l1::metastore* metastore = nullptr;
+        if (_ct_state) {
+            metastore = _ct_state->local().get_l1_metastore();
+        }
+
         topic_configuration_vector topics;
         for (auto& topic_cfg : actions.cloud_topics) {
             if (topic_cfg.is_read_replica()) {
@@ -365,6 +372,117 @@ ss::future<cluster::errc> cluster_recovery_backend::do_action(
                       topic_label,
                       metastore_label);
                 }
+
+                // Query metastore for bootstrap params and set them before
+                // creating the topic
+                if (metastore && topic_cfg.tp_id.has_value()) {
+                    absl::
+                      btree_map<model::partition_id, partition_bootstrap_params>
+                        partition_params;
+
+                    for (int32_t p = 0; p < topic_cfg.partition_count; ++p) {
+                        auto pid = model::partition_id(p);
+                        model::topic_id_partition tidp(
+                          topic_cfg.tp_id.value(), pid);
+
+                        // Get start offset from metastore.
+                        // missing_ntp is expected for new partitions
+                        // that haven't been flushed to the metastore
+                        // yet - treat as empty partition.
+                        auto offsets_res = co_await metastore->get_offsets(
+                          tidp);
+                        if (!offsets_res.has_value()) {
+                            if (
+                              offsets_res.error()
+                              == cloud_topics::l1::metastore::errc::
+                                missing_ntp) {
+                                vlog(
+                                  clusterlog.debug,
+                                  "Partition {} not found in metastore, "
+                                  "starting empty",
+                                  tidp);
+                                continue;
+                            }
+                            vlog(
+                              clusterlog.error,
+                              "Failed to get offsets for {} from metastore: {}",
+                              tidp,
+                              offsets_res.error());
+                            co_return cluster::errc::replication_error;
+                        }
+
+                        // Start offset for a CTP is a next_offset that
+                        // the metastore expects to reconcile.
+                        auto start_offset = offsets_res->start_offset;
+                        auto next_offset = offsets_res->next_offset;
+
+                        // Get term for start offset.
+                        // missing_ntp and out_of_range are acceptable
+                        // - use term 0. Other errors are transient and
+                        // worth retrying.
+                        auto term_res = co_await metastore->get_term_for_offset(
+                          tidp, start_offset);
+                        model::term_id initial_term{0};
+                        if (term_res.has_value()) {
+                            initial_term = term_res.value();
+                        } else if (
+                          term_res.error()
+                            == cloud_topics::l1::metastore::errc::missing_ntp
+                          || term_res.error()
+                               == cloud_topics::l1::metastore::errc::
+                                 out_of_range) {
+                            vlog(
+                              clusterlog.debug,
+                              "Term not found for {} offset {}: {}, using "
+                              "term 0",
+                              tidp,
+                              start_offset,
+                              term_res.error());
+                        } else {
+                            vlog(
+                              clusterlog.error,
+                              "Failed to get term for {} offset {} from "
+                              "metastore: {}",
+                              tidp,
+                              start_offset,
+                              term_res.error());
+                            co_return cluster::errc::replication_error;
+                        }
+
+                        partition_params[pid] = partition_bootstrap_params{
+                          kafka::offset_cast(start_offset),
+                          kafka::offset_cast(next_offset),
+                          initial_term};
+
+                        vlog(
+                          clusterlog.debug,
+                          "Setting bootstrap params for {}/{}: "
+                          "start_offset={}, "
+                          "term={}",
+                          topic_cfg.tp_ns,
+                          pid,
+                          start_offset,
+                          initial_term);
+                    }
+
+                    if (!partition_params.empty()) {
+                        retry_chain_node bootstrap_retry(&parent_retry);
+                        auto ec
+                          = co_await _recovery_manager.set_bootstrap_params(
+                            topic_cfg.tp_ns,
+                            std::move(partition_params),
+                            bootstrap_retry.get_deadline());
+                        if (ec) {
+                            vlog(
+                              clusterlog.error,
+                              "Failed to set bootstrap params for {}: {}",
+                              topic_cfg.tp_ns,
+                              ec);
+                            co_return cluster::errc::replication_error;
+                        }
+                    }
+                }
+
                 topics.emplace_back(std::move(topic_cfg));
                 vlog(
                   clusterlog.debug,

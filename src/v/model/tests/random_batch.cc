@@ -31,8 +31,8 @@ namespace model::test {
 using namespace tests; // NOLINT
 
 namespace {
-std::vector<model::record_header> make_headers(int n = 2) {
-    std::vector<model::record_header> ret;
+chunked_vector<model::record_header> make_headers(int n = 2) {
+    chunked_vector<model::record_header> ret;
     ret.reserve(n);
     for (int i = 0; i < n; ++i) {
         int key_len = get_int(i, 10);

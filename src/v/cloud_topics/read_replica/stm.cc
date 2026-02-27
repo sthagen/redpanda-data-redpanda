@@ -154,25 +154,20 @@ ss::future<> stm::do_apply(const model::record_batch& batch) {
         co_return;
     }
 
-    auto iter = model::record_batch_iterator::create(batch);
+    auto iter = model::record_batch_copy_iterator::create(batch);
     while (iter.has_next()) {
         auto r = iter.next();
         auto key_buf = r.release_key();
-        if (key_buf.size_bytes() == 0) {
-            continue;
-        }
-
         iobuf_parser key_parser(std::move(key_buf));
         auto key = serde::read<update_key>(key_parser);
 
         iobuf value_buf = r.release_value();
         iobuf_parser value_parser(std::move(value_buf));
 
-        auto o = batch.base_offset() + model::offset_delta{r.offset_delta()};
         switch (key) {
         case update_key::update_metadata: {
             auto update = serde::read<update_metadata_update>(value_parser);
-            maybe_apply(o, update, state_);
+            maybe_apply(batch.base_offset(), update, state_);
             break;
         }
         }

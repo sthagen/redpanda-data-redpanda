@@ -445,6 +445,64 @@ struct configuration_update_reply
     auto serde_fields() { return std::tie(success); }
 };
 
+/// Parameters for bootstrapping a partition with custom initial state.
+/// Used for programmatic partition creation with specific offset/term.
+/// The struct also contains a next_offset which is used to initialize
+/// ctp_stm
+struct partition_bootstrap_params
+  : serde::envelope<
+      partition_bootstrap_params,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    partition_bootstrap_params() noexcept = default;
+
+    partition_bootstrap_params(
+      model::offset start_offset,
+      model::offset next_offset,
+      model::term_id initial_term)
+      : start_offset(start_offset)
+      , next_offset(next_offset)
+      , initial_term(initial_term) {}
+
+    /// The starting offset for this partition (min offset of the log)
+    model::offset start_offset{0};
+    model::offset next_offset{0};
+
+    /// The initial term for Raft consensus
+    model::term_id initial_term{0};
+
+    auto serde_fields() {
+        return std::tie(start_offset, next_offset, initial_term);
+    }
+
+    friend bool operator==(
+      const partition_bootstrap_params&, const partition_bootstrap_params&)
+      = default;
+
+    friend std::ostream&
+    operator<<(std::ostream&, const partition_bootstrap_params&);
+};
+
+using pending_bootstrap_params_t
+  = chunked_hash_map<model::ntp, partition_bootstrap_params>;
+
+/// Data for setting bootstrap parameters on existing topic partitions.
+/// Used by cluster recovery to specify known offsets for partitions.
+struct set_partition_bootstrap_params_cmd_data
+  : serde::envelope<
+      set_partition_bootstrap_params_cmd_data,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    model::topic_namespace tp_ns;
+    absl::btree_map<model::partition_id, partition_bootstrap_params>
+      partition_params;
+
+    auto serde_fields() { return std::tie(tp_ns, partition_params); }
+
+    friend std::ostream&
+    operator<<(std::ostream&, const set_partition_bootstrap_params_cmd_data&);
+};
+
 /// Partition assignment describes an assignment of all replicas for single NTP.
 /// The replicas are hold in vector of broker_shard.
 struct partition_assignment

@@ -13,6 +13,7 @@
 
 #include "absl/time/time.h"
 #include "base/seastarx.h"
+#include "lsm/core/probe.h"
 #include "lsm/io/persistence.h"
 #include "ssx/time.h"
 #include "utils/named_type.h"
@@ -143,6 +144,12 @@ struct options {
     // If set to zero, then files are immediately GC'd after new manifest files
     // are written.
     absl::Duration file_deletion_delay;
+
+    // The probe to use for recording statistics.
+    //
+    // Use this to specify the probe and grab a reference to expose the metrics
+    // in our internal prometheus stack for the appropriate subsystem.
+    ss::lw_shared_ptr<probe> probe = ss::make_lw_shared<lsm::probe>();
 };
 
 class write_batch;

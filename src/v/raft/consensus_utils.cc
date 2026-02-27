@@ -451,4 +451,76 @@ ss::future<> bootstrap_pre_existing_partition(
       model::offset_delta{ot_state->delta(min_rp_offset)});
 }
 
+ss::future<> bootstrap_partition_state(
+  storage::api& api,
+  const storage::ntp_config& ntp_cfg,
+  raft::group_id group,
+  model::offset start_offset,
+  model::term_id initial_term,
+  std::vector<raft::vnode> initial_nodes) {
+    vlog(
+      raftlog.info,
+      "{} Bootstrap partition state with start_offset: {}, term: {}",
+      ntp_cfg.ntp(),
+      start_offset,
+      initial_term);
+
+    // Set storage start_offset in kvstore
+    vlog(
+      raftlog.debug,
+      "{} Add storage start_offset to the kv-store {}",
+      ntp_cfg.ntp(),
+      start_offset);
+    co_await api.kvs().put(
+      storage::kvstore::key_space::storage,
+      storage::internal::start_offset_key(ntp_cfg.ntp()),
+      reflection::to_iobuf(start_offset));
+
+    // Set Raft latest_known_offset in kvstore
+    // For a partition starting at start_offset with no data yet,
+    // the latest_known_offset is start_offset (the first offset that can
+    // be written).
+    vlog(
+      raftlog.debug,
+      "{} Set latest_known_offset {} to the kv-store",
+      ntp_cfg.ntp(),
+      start_offset);
+    auto key = raft::details::serialize_group_key(
+      group, raft::metadata_key::config_latest_known_offset);
+    co_await api.kvs().put(
+      storage::kvstore::key_space::consensus,
+      key,
+      reflection::to_iobuf(start_offset));
+
+    // Create Raft snapshot
+    raft::group_configuration group_config(
+      std::move(initial_nodes), ntp_cfg.get_revision());
+    raft::snapshot_metadata meta = {
+      // `last_included_index` should be the last offset included in
+      // this fake snapshot. That's why we set it to be the offset
+      // before the start of the log.
+      .last_included_index = model::prev_offset(start_offset),
+      .last_included_term = initial_term,
+      .version = raft::snapshot_metadata::current_version,
+      .latest_configuration = std::move(group_config),
+      .cluster_time = ss::lowres_clock::now(),
+      // No offset translation - delta is always 0
+      .log_start_delta = offset_translator_delta{0},
+    };
+
+    vlog(
+      raftlog.debug,
+      "{} Create snapshot, last_included_index {}, last_included_term {}",
+      ntp_cfg.ntp(),
+      meta.last_included_index,
+      meta.last_included_term);
+
+    storage::simple_snapshot_manager tmp_snapshot_mgr(
+      std::filesystem::path(ntp_cfg.work_directory()),
+      storage::simple_snapshot_manager::default_snapshot_filename);
+
+    co_await raft::details::persist_snapshot(
+      tmp_snapshot_mgr, std::move(meta), iobuf());
+}
+
 } // namespace raft::details

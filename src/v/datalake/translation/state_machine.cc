@@ -59,7 +59,7 @@ ss::future<> translation_stm::do_apply(const model::record_batch& batch) {
       != model::record_batch_type::datalake_translation_state) {
         co_return;
     }
-    auto record_iterator = model::record_batch_iterator::create(batch);
+    auto record_iterator = model::record_batch_copy_iterator::create(batch);
     while (record_iterator.has_next()) {
         auto record = record_iterator.next();
         auto value = serde::from_iobuf<translation_state>(

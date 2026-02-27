@@ -85,9 +85,10 @@ PERF_TEST_C(flush_task_fixture, flush_16mb) {
     auto metadata = co_await io::open_disk_metadata_persistence(temp_dir);
 
     auto opts = ss::make_lw_shared<lsm::internal::options>();
-    auto block_cache = ss::make_lw_shared<sst::block_cache>(10_MiB);
+    auto p = ss::make_lw_shared<lsm::probe>();
+    auto block_cache = ss::make_lw_shared<sst::block_cache>(10_MiB, p);
     auto table_cache = ss::make_lw_shared<db::table_cache>(
-      data.get(), 100, block_cache);
+      data.get(), 100, p, block_cache);
     auto versions = ss::make_lw_shared<db::version_set>(
       metadata.get(), table_cache.get(), opts);
     co_await versions->recover();
