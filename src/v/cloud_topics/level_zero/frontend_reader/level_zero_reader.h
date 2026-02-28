@@ -107,6 +107,11 @@ private:
 
     bool cache_enabled() const;
 
+    /// Look up the topic_id_partition for this reader's partition.
+    /// Throws ss::abort_requested_exception if the topic config has been
+    /// removed (e.g. topic deletion race).
+    model::topic_id_partition require_topic_id_partition() const;
+
     // Prepare a local log reader configuration for reading placeholder and
     // other metadata batches from the CTP.
     storage::local_log_reader_config ctp_read_config() const;

@@ -212,13 +212,17 @@ private:
 
     bool cache_enabled() const;
 
-    model::topic_id_partition topic_id_partition() const;
+    /// Returns nullopt when the topic config has been removed from the
+    /// topic_table (e.g. during deletion) but the partition has not yet
+    /// been shut down.
+    std::optional<model::topic_id_partition> topic_id_partition() const;
 
     std::unique_ptr<model::record_batch_reader::impl>
     make_l0_reader(const cloud_topic_log_reader_config& cfg) const;
 
-    std::unique_ptr<model::record_batch_reader::impl>
-    make_l1_reader(const cloud_topic_log_reader_config& cfg) const;
+    std::unique_ptr<model::record_batch_reader::impl> make_l1_reader(
+      const cloud_topic_log_reader_config& cfg,
+      model::topic_id_partition tidp) const;
 
     ss::lw_shared_ptr<cluster::partition> _partition;
     data_plane_api* _data_plane;

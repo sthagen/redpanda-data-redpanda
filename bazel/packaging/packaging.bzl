@@ -550,20 +550,20 @@ def _deb_package_impl(ctx):
         })
         inputs.append(package_content.iotune)
 
-    # Add hwloc-calc
+    # Add hwloc-calc (named hwloc-calc-redpanda for rpk compatibility)
     if package_content.hwloc_calc != None:
         package_files.append({
             "path": ctx.attr.install_path + "/bin",
-            "name": "hwloc-calc",
+            "name": "hwloc-calc-redpanda",
             "source": package_content.hwloc_calc.path,
         })
         inputs.append(package_content.hwloc_calc)
 
-    # Add hwloc-distrib
+    # Add hwloc-distrib (named hwloc-distrib-redpanda for rpk compatibility)
     if package_content.hwloc_distrib != None:
         package_files.append({
             "path": ctx.attr.install_path + "/bin",
-            "name": "hwloc-distrib",
+            "name": "hwloc-distrib-redpanda",
             "source": package_content.hwloc_distrib.path,
         })
         inputs.append(package_content.hwloc_distrib)

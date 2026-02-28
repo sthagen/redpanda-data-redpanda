@@ -22,6 +22,7 @@
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/state_accessors.h"
+#include "cloud_topics/topic_id_partition.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm_types.h"
@@ -170,20 +171,6 @@ get_aborted_transactions_local(
     co_return target;
 }
 
-model::topic_id_partition
-get_topic_id_partition(const ss::lw_shared_ptr<cluster::partition>& partition) {
-    const auto& ntp = partition->ntp();
-    auto ct_state = partition->get_cloud_topics_state();
-    auto metadata_cache = ct_state->local().get_metadata_cache();
-    auto topic_cfg = metadata_cache->get_topic_cfg(
-      model::topic_namespace_view(ntp));
-    if (!topic_cfg || !topic_cfg->tp_id) {
-        throw std::runtime_error(
-          fmt::format("no topic ID found for cloud topic {}", ntp));
-    }
-    return model::topic_id_partition{*topic_cfg->tp_id, ntp.tp.partition};
-}
-
 } // namespace
 
 frontend::frontend(
@@ -294,8 +281,12 @@ frontend::make_reader(cloud_topic_log_reader_config cfg) {
         // we're hacking around. Maybe the `translating_reader` should take
         // responsibility for returning aborted transactions directly instead of
         // this roundabout way of doing it.
+        auto tidp = topic_id_partition();
+        if (!tidp) {
+            throw topic_config_not_found_exception(ntp());
+        }
         co_return storage::translating_reader{
-          model::record_batch_reader(make_l1_reader(cfg))};
+          model::record_batch_reader(make_l1_reader(cfg, *tidp))};
     }
     co_return storage::translating_reader{
       model::record_batch_reader(make_l0_reader(cfg)),
@@ -332,7 +323,7 @@ bool frontend::cache_enabled() const {
     return true;
 }
 
-model::topic_id_partition frontend::topic_id_partition() const {
+std::optional<model::topic_id_partition> frontend::topic_id_partition() const {
     return get_topic_id_partition(_partition);
 }
 
@@ -355,7 +346,10 @@ ss::future<size_t> frontend::size_bytes() {
     auto l1_metastore = ct_state->local().get_l1_metastore();
 
     auto tidp = topic_id_partition();
-    auto size_res = co_await l1_metastore->get_size(tidp);
+    if (!tidp) {
+        co_return 0;
+    }
+    auto size_res = co_await l1_metastore->get_size(*tidp);
     if (!size_res.has_value()) {
         vlog(
           cd_log.warn,
@@ -374,14 +368,13 @@ ss::future<size_t> frontend::size_bytes() {
     co_return size_res.value().size + l0_size;
 }
 
-std::unique_ptr<model::record_batch_reader::impl>
-frontend::make_l1_reader(const cloud_topic_log_reader_config& cfg) const {
+std::unique_ptr<model::record_batch_reader::impl> frontend::make_l1_reader(
+  const cloud_topic_log_reader_config& cfg,
+  model::topic_id_partition tidp) const {
     auto ct_state = _partition->get_cloud_topics_state();
     auto l1_metastore = ct_state->local().get_l1_metastore();
     auto l1_io = ct_state->local().get_l1_io();
     auto l1_reader_probe = ct_state->local().get_l1_reader_probe();
-
-    auto tidp = topic_id_partition();
 
     return std::make_unique<level_one_log_reader_impl>(
       cfg, _partition->ntp(), tidp, l1_metastore, l1_io, l1_reader_probe);
@@ -422,13 +415,16 @@ frontend::l1_timequery(storage::timequery_config cfg) {
     auto ct_state = _partition->get_cloud_topics_state();
     auto l1_metastore = ct_state->local().get_l1_metastore();
     auto tidp = topic_id_partition();
+    if (!tidp) {
+        throw topic_config_not_found_exception(ntp());
+    }
     // I don't love this, but we clamp min/max offsets by the kafka start offset
     // and the LSO/HWM, but we can ignore the max offset for L1 because we never
     // upload anything less than LSO to L1.
     std::ignore = cfg.max_offset;
     // Go query our start offset from the L1 metastore
     auto result = co_await l1_metastore->get_first_ge(
-      tidp, model::offset_cast(cfg.min_offset), cfg.time);
+      *tidp, model::offset_cast(cfg.min_offset), cfg.time);
     if (!result.has_value()) {
         if (
           result.error() == l1::metastore::errc::out_of_range
@@ -560,7 +556,6 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
   chunked_vector<model::record_batch> cache_batches,
   raft::replicate_options opts) {
     const auto& ntp = partition->ntp();
-    auto tidp = get_topic_id_partition(partition);
     // The default errc that will cause the client to retry the operation
     constexpr auto default_errc = raft::errc::timeout;
     /*
@@ -689,17 +684,22 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
         // which case it's not stored) or from the log replay. The
         // simplest solution in this case is to skip caching.
         if (res.value().last_term >= model::term_id{0}) {
-            update_batches(
-              cache_batches,
-              kafka::offset_cast(res.value().last_offset),
-              res.value().last_term);
-            for (const auto& b : cache_batches) {
-                vlog(
-                  cd_log.trace,
-                  "Putting batch to cache: {}, term: {}",
-                  b.base_offset(),
-                  b.term());
-                api->cache_put(tidp, b);
+            // Topic config may already be gone if the topic is being
+            // deleted; skip caching in that case.
+            auto tidp = get_topic_id_partition(partition);
+            if (tidp) {
+                update_batches(
+                  cache_batches,
+                  kafka::offset_cast(res.value().last_offset),
+                  res.value().last_term);
+                for (const auto& b : cache_batches) {
+                    vlog(
+                      cd_log.trace,
+                      "Putting batch to cache: {}, term: {}",
+                      b.base_offset(),
+                      b.term());
+                    api->cache_put(*tidp, b);
+                }
             }
         } else {
             vlog(
@@ -803,16 +803,20 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
     }
     auto ret_offset = model::offset(result.value().last_offset());
     if (!rb_copy.empty()) {
-        update_batches(rb_copy, ret_offset, result.value().last_term);
+        // Topic config may already be gone if the topic is being
+        // deleted; skip caching in that case.
         auto tidp = topic_id_partition();
-        for (const auto& b : rb_copy) {
-            vlog(
-              cd_log.trace,
-              "Putting batch for {} to cache: {}, term: {}",
-              ntp(),
-              b.base_offset(),
-              b.term());
-            _data_plane->cache_put(tidp, b);
+        if (tidp) {
+            update_batches(rb_copy, ret_offset, result.value().last_term);
+            for (const auto& b : rb_copy) {
+                vlog(
+                  cd_log.trace,
+                  "Putting batch for {} to cache: {}, term: {}",
+                  ntp(),
+                  b.base_offset(),
+                  b.term());
+                _data_plane->cache_put(*tidp, b);
+            }
         }
     }
     co_return ret_offset;
@@ -889,7 +893,10 @@ frontend::get_leader_epoch_last_offset(model::term_id term) const {
     auto ct_state = _partition->get_cloud_topics_state();
     auto l1_metastore = ct_state->local().get_l1_metastore();
     auto tidp = topic_id_partition();
-    auto l1_res = co_await l1_metastore->get_end_offset_for_term(tidp, term);
+    if (!tidp) {
+        co_return std::nullopt;
+    }
+    auto l1_res = co_await l1_metastore->get_end_offset_for_term(*tidp, term);
     if (!l1_res.has_value()) {
         switch (l1_res.error()) {
         case l1::metastore::errc::out_of_range:

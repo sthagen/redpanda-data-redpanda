@@ -42,4 +42,5 @@ class IsolateLeaderFault(RecoverableFault):
         FailureInjector(self.redpanda)._isolate(self._leader)
 
     def heal(self):
+        assert self._leader is not None
         FailureInjector(self.redpanda)._heal(self._leader)

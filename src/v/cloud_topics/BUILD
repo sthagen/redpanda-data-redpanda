@@ -210,6 +210,19 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "topic_id_partition",
+    hdrs = [
+        "topic_id_partition.h",
+    ],
+    visibility = [":__subpackages__"],
+    deps = [
+        ":state_accessors",
+        "//src/v/cluster",
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
     name = "cluster_services_interface",
     hdrs = [
         "cluster_services.h",

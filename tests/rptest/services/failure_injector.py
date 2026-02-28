@@ -12,6 +12,7 @@ import signal
 import threading
 import time
 
+from ducktape.cluster.cluster import ClusterNode
 from ducktape.errors import TimeoutError
 from ducktape.utils.util import wait_until
 
@@ -77,7 +78,7 @@ class FailureInjectorBase:
         self._continue_all()
         self._undo_all()
 
-    def inject_failure(self, spec):
+    def inject_failure(self, spec: FailureSpec) -> None:
         if spec in self._in_flight:
             self.redpanda.logger.info(
                 f"Ignoring failure injection, already in flight {spec}"
@@ -177,13 +178,13 @@ class FailureInjectorBase:
     def _isolate(self, node):
         pass
 
-    def _heal(self, node):
+    def _heal(self, node: ClusterNode) -> None:
         pass
 
-    def _delete_netem(self, node):
+    def _delete_netem(self, node: ClusterNode) -> None:
         pass
 
-    def _heal_all(self):
+    def _heal_all(self) -> None:
         pass
 
     def _continue_all(self):
@@ -245,7 +246,7 @@ class FailureInjector(FailureInjectorBase):
         cmd = "iptables -A INPUT -p tcp --destination-port 33145 -j DROP"
         node.account.ssh(cmd)
 
-    def _heal(self, node):
+    def _heal(self, node: ClusterNode) -> None:
         self.redpanda.logger.info(f"healing node {node.account.hostname}")
         try:
             cmd = "iptables -D OUTPUT -p tcp --destination-port 33145 -j DROP"

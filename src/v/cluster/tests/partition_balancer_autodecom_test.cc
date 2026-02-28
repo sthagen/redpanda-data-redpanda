@@ -562,10 +562,10 @@ public:
 
 TEST(AutoDecomTestSuite, Smoke) {
     partition_balancer_planner_accessor::smoke_test();
-};
+}
 TEST(AutoDecomTestSuite, NormalRemove) {
     partition_balancer_planner_accessor::test_normal_removal();
-};
+}
 TEST(AutoDecomTestSuite, NoQuorum) {
     partition_balancer_planner_accessor::test_votes_no_quorum();
 }

@@ -15,10 +15,11 @@
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/state_accessors.h"
-#include "cluster/metadata_cache.h"
+#include "cloud_topics/topic_id_partition.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"
 #include "model/timeout_clock.h"
+#include "ssx/future-util.h"
 
 #include <seastar/coroutine/maybe_yield.hh>
 
@@ -29,32 +30,6 @@
 #include <variant>
 
 namespace cloud_topics {
-namespace {
-
-/// Thrown when the topic config is no longer available, e.g. because the
-/// topic has been deleted from the topic_table but the partition has not
-/// yet been shut down. Caught in do_load_slice to end the stream
-/// gracefully instead of propagating as a hard error.
-struct topic_config_not_found final : std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
-
-model::topic_id_partition
-get_topic_id_partition(const ss::lw_shared_ptr<cluster::partition>& partition) {
-    const auto& ntp = partition->ntp();
-    auto ct_state = partition->get_cloud_topics_state();
-    auto metadata_cache = ct_state->local().get_metadata_cache();
-    auto topic_cfg = metadata_cache->get_topic_cfg(
-      model::topic_namespace_view(ntp));
-    if (!topic_cfg) {
-        throw topic_config_not_found(
-          fmt::format("no config found for cloud topic {}", ntp));
-    }
-    return model::topic_id_partition{
-      topic_cfg->tp_id.value(), ntp.tp.partition};
-}
-
-} // namespace
 
 level_zero_log_reader_impl::level_zero_log_reader_impl(
   const cloud_topic_log_reader_config& cfg,
@@ -76,13 +51,14 @@ level_zero_log_reader_impl::do_load_slice(
   model::timeout_clock::time_point deadline) {
     try {
         return read_some(deadline);
-    } catch (const topic_config_not_found& e) {
-        vlog(_log.debug, "Reader ending stream: {}", e.what());
-        set_end_of_stream();
-        return ss::make_ready_future<model::record_batch_reader::storage_t>();
     } catch (...) {
-        vlog(
-          _log.error, "Reader caught exception: {}", std::current_exception());
+        auto ex = std::current_exception();
+        vlogl(
+          _log,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                         : ss::log_level::error,
+          "Reader caught exception: {}",
+          ex);
         set_end_of_stream();
         throw;
     }
@@ -107,7 +83,7 @@ level_zero_log_reader_impl::read_some(
     // This closes the race window between replicate() completing (HWM
     // advance) and cache_put() running on the write continuation.
     if (cache_enabled() && _ctp->is_leader()) {
-        auto tidp = get_topic_id_partition(_ctp);
+        auto tidp = require_topic_id_partition();
         auto wait_deadline = model::timeout_clock::now()
                              + std::chrono::milliseconds(25);
         try {
@@ -205,7 +181,7 @@ level_zero_log_reader_impl::maybe_read_batches_from_cache() {
         return ret;
     }
 
-    auto tidp = get_topic_id_partition(_ctp);
+    auto tidp = require_topic_id_partition();
 
     /*
      * Fetch batches from the cache starting at `_next_offset` until we hit a
@@ -328,7 +304,7 @@ ss::future<std::expected<chunked_circular_buffer<model::record_batch>, errc>>
 level_zero_log_reader_impl::materialize_batches(
   chunked_circular_buffer<local_log_batch> unhydrated,
   model::timeout_clock::time_point deadline) {
-    auto tidp = get_topic_id_partition(_ctp);
+    auto tidp = require_topic_id_partition();
     // Cherry-pick enough L0 meta batches to materialize.
     chunked_vector<cloud_topics::extent_meta> to_materialize;
     auto unhydrated_it = unhydrated.begin();
@@ -486,6 +462,15 @@ level_zero_log_reader_impl::materialize_batches(
       "Materialized {} batches from the L0 meta batches",
       hydrated.size());
     co_return hydrated;
+}
+
+model::topic_id_partition
+level_zero_log_reader_impl::require_topic_id_partition() const {
+    auto tidp = get_topic_id_partition(_ctp);
+    if (!tidp) {
+        throw topic_config_not_found_exception(_ctp->ntp());
+    }
+    return *tidp;
 }
 
 bool level_zero_log_reader_impl::cache_enabled() const {

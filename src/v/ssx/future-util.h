@@ -290,6 +290,9 @@ ignore_shutdown_exceptions(seastar::future<> fut) noexcept {
 }
 
 /// \brief Check if the exception is a commonly ignored shutdown exception.
+///
+/// Also checks inside seastar::nested_exception for shutdown exceptions
+/// in either the inner or outer exception.
 inline bool is_shutdown_exception(const std::exception_ptr& e) {
     try {
         std::rethrow_exception(e);
@@ -303,6 +306,9 @@ inline bool is_shutdown_exception(const std::exception_ptr& e) {
         return true;
     } catch (const seastar::broken_condition_variable&) {
         return true;
+    } catch (const seastar::nested_exception& nested) {
+        return is_shutdown_exception(nested.inner)
+               || is_shutdown_exception(nested.outer);
     } catch (...) {
     }
     return false;

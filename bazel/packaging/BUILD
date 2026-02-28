@@ -99,6 +99,8 @@ redpanda_deb_package(
     package_name = "redpanda-tuner",
     out = "redpanda-tuner.deb",
     description = "Redpanda tuner",
+    hwloc_calc = "@hwloc//:hwloc_calc",
+    hwloc_distrib = "@hwloc//:hwloc_distrib",
     include_sysroot_libs = False,
     install_path = "/usr",
     systemd_service = "scripts/redpanda-tuner.service",
