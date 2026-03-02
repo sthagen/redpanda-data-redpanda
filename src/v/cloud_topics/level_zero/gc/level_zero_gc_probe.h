@@ -24,6 +24,7 @@ public:
     explicit level_zero_gc_probe(bool disable);
 
     void objects_deleted(uint64_t count = 1) { objects_deleted_ += count; }
+    void bytes_deleted(uint64_t bytes) { bytes_deleted_ += bytes; }
     void objects_listed(uint64_t count) { objects_listed_ += count; }
     void object_skipped_not_eligible() { objects_skipped_not_eligible_++; }
     void object_skipped_too_young() { objects_skipped_too_young_++; }
@@ -49,6 +50,7 @@ private:
     cloud_topics::cluster_epoch::type epoch_lag() const;
 
     uint64_t objects_deleted_{0};
+    uint64_t bytes_deleted_{0};
     uint64_t objects_listed_{0};
     uint64_t objects_skipped_not_eligible_{0};
     uint64_t objects_skipped_too_young_{0};

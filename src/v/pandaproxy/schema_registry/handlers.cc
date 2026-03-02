@@ -416,6 +416,7 @@ ss::future<server::reply_t> put_config_subject(
     parse_accept_header(rq, rp);
     auto ctx_sub = context_subject::from_string(
       parse::request_param<ss::sstring>(*rq.req, "subject"));
+    validate_context_subject(ctx_sub, is_config_or_mode::yes);
 
     enterprise::handle_config_mode_authz(
       rq,
@@ -559,6 +560,7 @@ ss::future<server::reply_t> put_mode_subject(
                  .value_or(force::no);
     auto ctx_sub = context_subject::from_string(
       parse::request_param<ss::sstring>(*rq.req, "subject"));
+    validate_context_subject(ctx_sub, is_config_or_mode::yes);
 
     enterprise::handle_config_mode_authz(
       rq,
@@ -904,6 +906,7 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     const auto ctx_sub = context_subject::from_string(
       parse::request_param<ss::sstring>(*rq.req, "subject"));
+    validate_context_subject(ctx_sub);
     const auto norm{
       parse::query_param<std::optional<normalize>>(*rq.req, "normalize")
         .value_or(normalize::no)};

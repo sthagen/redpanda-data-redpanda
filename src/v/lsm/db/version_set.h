@@ -92,6 +92,12 @@ public:
 
     size_t num_files(internal::level level) { return _files[level].size(); }
 
+    // Call func(level_number, files) for every level in this version.
+    void for_each_level(
+      absl::FunctionRef<void(
+        internal::level,
+        const chunked_vector<ss::lw_shared_ptr<file_meta_data>>&)> func) const;
+
     fmt::iterator format_to(fmt::iterator) const;
 
 private:

@@ -10,8 +10,35 @@
 #pragma once
 
 #include "cloud_topics/level_one/metastore/rpc_types.h"
+#include "container/chunked_vector.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
 
 namespace cloud_topics::l1 {
+
+// Summary information about a single SST file in the LSM tree.
+struct lsm_file_info {
+    uint64_t epoch;
+    uint64_t id;
+    uint64_t size_bytes;
+    std::string smallest_key_info;
+    std::string largest_key_info;
+};
+
+// Information about a single level in the LSM tree.
+struct lsm_level_info {
+    int32_t level_number;
+    chunked_vector<lsm_file_info> files;
+};
+
+struct database_stats {
+    size_t active_memtable_bytes{0};
+    size_t immutable_memtable_bytes{0};
+    size_t total_size_bytes{0};
+    std::vector<lsm_level_info> levels;
+};
 
 // Abstract base class for domain managers.
 // Defines the interface used by leader_router to interact with domain managers.
@@ -73,6 +100,9 @@ public:
 
     virtual ss::future<rpc::restore_domain_reply>
       restore_domain(rpc::restore_domain_request) = 0;
+
+    virtual ss::future<std::expected<database_stats, rpc::errc>>
+    get_database_stats() = 0;
 };
 
 } // namespace cloud_topics::l1

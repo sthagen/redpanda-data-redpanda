@@ -78,6 +78,9 @@ public:
     ss::future<rpc::restore_domain_reply>
       restore_domain(rpc::restore_domain_request) override;
 
+    ss::future<std::expected<database_stats, rpc::errc>>
+    get_database_stats() override;
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
     ss::future<> gc_loop();

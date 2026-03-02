@@ -3356,6 +3356,23 @@ configuration::configuration()
       "Enable automatic leadership rebalancing.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       true)
+  , leader_balancer_mode(
+      *this,
+      "leader_balancer_mode",
+      "Mode of the leader balancer optimization strategy. "
+      "`calibrated` uses a heuristic that balances leaders based on replica "
+      "counts per shard. `random` randomly moves leaders to reduce load on "
+      "heavily-loaded shards. Legacy values `greedy_balanced_shards` and "
+      "`random_hill_climbing` are treated as `calibrated`.",
+      {.needs_restart = needs_restart::no,
+       .example = model::leader_balancer_mode_to_string(
+         model::leader_balancer_mode::calibrated),
+       .visibility = visibility::user},
+      model::leader_balancer_mode::calibrated,
+      {
+        model::leader_balancer_mode::calibrated,
+        model::leader_balancer_mode::random,
+      })
   , leader_balancer_idle_timeout(
       *this,
       "leader_balancer_idle_timeout",

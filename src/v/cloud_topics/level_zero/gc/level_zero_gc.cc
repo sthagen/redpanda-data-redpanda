@@ -134,16 +134,22 @@ public:
             vlog(cd_log.trace, "Gate closed");
             co_return;
         }
+        const auto num_eligible = eligible_objects.size();
+        size_t eligible_bytes = 0;
+        for (const auto& o : eligible_objects) {
+            eligible_bytes += o.size_bytes;
+        }
         ssx::spawn_with_gate(
           gate_,
           [this,
            u = std::move(u_fut.get()),
            pu = std::move(page_u),
-           eo = std::move(eligible_objects)]() mutable {
-              const auto num_eligible = eo.size();
+           eo = std::move(eligible_objects),
+           num_eligible,
+           eligible_bytes]() mutable {
               probe_->delete_request();
               return storage_->delete_objects(&as_, std::move(eo))
-                .then([this, num_eligible](
+                .then([this, num_eligible, eligible_bytes](
                         std::expected<void, cloud_io::upload_result> res) {
                     if (!res.has_value()) {
                         vlog(
@@ -153,10 +159,13 @@ public:
                         probe_->delete_error();
                     } else {
                         probe_->objects_deleted(num_eligible);
+                        probe_->bytes_deleted(eligible_bytes);
                         vlog(
                           cd_log.debug,
-                          "Deleted {} L0 data objects eligible for GC",
-                          num_eligible);
+                          "Deleted {} L0 data objects ({} bytes) eligible "
+                          "for GC",
+                          num_eligible,
+                          eligible_bytes);
                     }
                 })
                 .finally([u = std::move(u), pu = std::move(pu)] {})

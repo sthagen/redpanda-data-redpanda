@@ -502,6 +502,27 @@ inline std::ostream& operator<<(std::ostream& os, cloud_storage_backend csb) {
     }
 }
 
+enum class leader_balancer_mode : uint8_t {
+    calibrated = 0,
+    random = 1,
+};
+
+constexpr const char*
+leader_balancer_mode_to_string(leader_balancer_mode mode) {
+    switch (mode) {
+    case leader_balancer_mode::calibrated:
+        return "calibrated";
+    case leader_balancer_mode::random:
+        return "random";
+    default:
+        throw std::invalid_argument("unknown leader_balancer_mode");
+    }
+}
+
+inline std::ostream& operator<<(std::ostream& os, leader_balancer_mode mode) {
+    return os << leader_balancer_mode_to_string(mode);
+}
+
 enum class cloud_storage_chunk_eviction_strategy {
     eager = 0,
     capped = 1,

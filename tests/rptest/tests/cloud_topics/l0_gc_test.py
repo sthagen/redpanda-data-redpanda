@@ -37,7 +37,8 @@ from rptest.services.redpanda import (
     CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import expect_exception
+from rptest.util import expect_exception, wait_until_with_progress_check
+from rptest.utils.mode_checks import is_debug_mode
 
 
 class CloudTopicsL0GCTestBase(RedpandaTest):
@@ -97,6 +98,11 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
             self.logger.debug(f"{deleted_total=}")
             return deleted_total
         return 0
+
+    def get_bytes_deleted(self, nodes: list[ClusterNode] | None = None) -> int:
+        return self._get_metric_total(
+            "vectorized_cloud_topics_l0_gc_bytes_deleted_total", nodes=nodes
+        )
 
     def _get_metric_total(
         self, name: str, nodes: list[ClusterNode] | None = None
@@ -903,6 +909,7 @@ class CloudTopicsL0GCDataIntegrityTest(CloudTopicsL0GCTestBase):
             msg_size=self.MSG_SIZE,
             loop=False,
             nodes=[producer.nodes[0]],
+            producer=producer,
         )
         consumer.start(clean=False)
         consumer.wait(timeout_sec=120)
@@ -1028,7 +1035,7 @@ class CloudTopicsL0GCNodeFailureTest(CloudTopicsL0GCTestBase):
 
         self.produce_some(topics=[topic.name], n=500)
 
-        self.logger.info("Waiting for GC to make meaningful progress")
+        self.logger.info("Waiting for GC kick in")
         wait_until(
             lambda: self.get_num_objects_deleted() > 0,
             timeout_sec=30,
@@ -1354,3 +1361,131 @@ class CloudTopicsL0GCOrphanedObjectsTest(CloudTopicsL0GCTestBase):
             retry_on_exc=False,
         )
         self.logger.info("All orphaned objects deleted")
+
+
+class CloudTopicsL0GCStressTest(CloudTopicsL0GCTestBase):
+    """
+    Stress: Push ~3 GiB through 12 partitions, wait for a significant
+    volume of L0 data to be garbage-collected, then consume and verify
+    that no records were lost and some reads were served from L1.
+
+    In debug/sanitizer builds the data volume is reduced to 40 MiB to
+    stay within the framework's per-test write budget.
+    """
+
+    PARTITION_COUNT = 12
+    MSG_SIZE = 4096
+
+    if is_debug_mode():
+        data_volume = 40 * 1024 * 1024  # 40 MiB
+        timeout_s = 180
+    else:
+        data_volume = 3 * 1024 * 1024 * 1024  # 3 GiB
+        timeout_s = 600
+
+    MSG_COUNT = data_volume // MSG_SIZE
+    # Wait for GC to collect at least 2/3 of the produced volume.
+    GC_BYTES_TARGET = data_volume * 2 // 3
+    # Expect at least 1/3 of produced volume to be read from L1.
+    L1_READ_BYTES_TARGET = data_volume // 3
+
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=get_cloud_storage_type(docker_use_arbitrary=True))
+    def test_gc_stress(self, cloud_storage_type: CloudStorageType):
+        """
+        Produce ~3 GiB across 12 partitions (40 MiB in debug mode),
+        wait for GC to collect roughly 2/3, then consume all records
+        and verify nothing was lost and some reads came from L1.
+        """
+        topic = TopicSpec(partition_count=self.PARTITION_COUNT)
+        self.topics = [topic]
+        self.create_topics(self.topics)
+
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            topic.name,
+            msg_size=self.MSG_SIZE,
+            msg_count=self.MSG_COUNT,
+        )
+        producer.start()
+
+        consumer = KgoVerifierSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            topic.name,
+            msg_size=self.MSG_SIZE,
+            loop=True,
+            nodes=[producer.nodes[0]],
+            producer=producer,
+        )
+        consumer.start(clean=False)
+
+        self.logger.info(
+            f"Waiting for GC to delete >= {self.GC_BYTES_TARGET / (1024**3):.1f} GiB"
+        )
+        wait_until_with_progress_check(
+            check=lambda: self.get_bytes_deleted(),
+            condition=lambda: self.get_bytes_deleted() >= self.GC_BYTES_TARGET,
+            timeout_sec=self.timeout_s,
+            progress_sec=60,
+            backoff_sec=5,
+            logger=self.logger,
+        )
+        bytes_deleted = self.get_bytes_deleted()
+        self.logger.info(
+            f"GC deleted {bytes_deleted / (1024**3):.2f} GiB "
+            f"({self.get_num_objects_deleted()} objects)"
+        )
+
+        producer.wait(timeout_sec=self.timeout_s)
+
+        pstatus = producer.produce_status
+        self.logger.info(
+            f"Produced {pstatus.acked} records "
+            f"(~{pstatus.acked * self.MSG_SIZE / (1024**3):.2f} GiB), "
+            f"bad_offsets={pstatus.bad_offsets}"
+        )
+        assert pstatus.acked == self.MSG_COUNT, (
+            f"Producer did not ack all messages: {pstatus.acked} != {self.MSG_COUNT}"
+        )
+        assert pstatus.bad_offsets == 0, (
+            f"Producer saw {pstatus.bad_offsets} bad offsets"
+        )
+
+        consumer.wait(timeout_sec=self.timeout_s)
+
+        cstatus = consumer.consumer_status
+        self.logger.info(
+            f"Consumer: valid_reads={cstatus.validator.valid_reads}, "
+            f"invalid_reads={cstatus.validator.invalid_reads}, "
+            f"offset_gaps={cstatus.validator.offset_gaps}, "
+            f"out_of_scope_invalid_reads="
+            f"{cstatus.validator.out_of_scope_invalid_reads}"
+        )
+
+        assert cstatus.validator.invalid_reads == 0, (
+            f"Data corruption: {cstatus.validator.invalid_reads} invalid reads"
+        )
+        assert cstatus.validator.out_of_scope_invalid_reads == 0, (
+            f"Out-of-scope reads: {cstatus.validator.out_of_scope_invalid_reads}"
+        )
+        assert cstatus.validator.valid_reads >= self.MSG_COUNT, (
+            f"Data loss: expected at least {self.MSG_COUNT} reads, "
+            f"got {cstatus.validator.valid_reads}"
+        )
+
+        l1_read_bytes = self._get_metric_total(
+            "vectorized_cloud_topics_level_one_reader_read_bytes"
+        )
+        self.logger.info(
+            f"L1 reader bytes: {l1_read_bytes / (1024**2):.1f} MiB "
+            f"(target: {self.L1_READ_BYTES_TARGET / (1024**2):.1f} MiB)"
+        )
+        assert l1_read_bytes >= self.L1_READ_BYTES_TARGET, (
+            f"Expected >= {self.L1_READ_BYTES_TARGET} bytes read from L1, "
+            f"got {l1_read_bytes}"
+        )
+
+        producer.stop()
+        consumer.stop()

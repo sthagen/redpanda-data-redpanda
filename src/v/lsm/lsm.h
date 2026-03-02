@@ -15,12 +15,15 @@
 #include "base/seastarx.h"
 #include "lsm/core/probe.h"
 #include "lsm/io/persistence.h"
+#include "lsm/stats.h"
 #include "ssx/time.h"
 #include "utils/named_type.h"
 
 #include <seastar/core/future.hh>
 
+#include <cstdint>
 #include <memory>
+#include <string>
 
 namespace lsm {
 
@@ -220,6 +223,10 @@ public:
     //
     // REQUIRES: Database must be opened in read-only mode.
     ss::future<bool> refresh();
+
+    // Get data statistics for the database including memtable sizes, per-level
+    // SST file sizes, and per-file information.
+    data_stats get_data_stats() const;
 
 private:
     std::unique_ptr<db::impl> _impl;

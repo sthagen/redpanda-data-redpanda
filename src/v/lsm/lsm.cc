@@ -220,6 +220,8 @@ write_batch database::create_write_batch() { return write_batch{_impl.get()}; }
 
 ss::future<bool> database::refresh() { return _impl->refresh(); }
 
+data_stats database::get_data_stats() const { return _impl->get_data_stats(); }
+
 write_batch::write_batch(db::impl* db)
   : _batch(ss::make_lw_shared<db::memtable>())
   , _db(db) {}

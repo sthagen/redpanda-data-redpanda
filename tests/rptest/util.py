@@ -65,30 +65,38 @@ class Scale:
         return self._scale == Scale.RELEASE
 
 
-def repeat_check(times: int):
+def repeat_check(times: int, require_same: bool = False):
     def decorator(func):
         """
         Decorator to repeat a check function until it passes for a given number
         of times in a line. The function should accept no arguments and return
         either a tuple where the first element is a boolean
         (for wait_until_result), or just a boolean (for plain wait_until).
+
+        `require_same` controls whether we require the successful result to be the same
         """
 
         def wrapper():
             ret = func()
             is_successful = ret[0] if isinstance(ret, tuple) else ret
             if is_successful:
+                if require_same and wrapper._last_successful_result != ret:
+                    wrapper._last_successful_result = ret
+                    wrapper._passed = 0
                 wrapper._passed += 1
                 if wrapper._passed >= times:
-                    wrapper._passed = 0  # in case we reuse the function
+                    reinit(wrapper)  # in case we reuse the function
                     return ret
                 return (False, None) if isinstance(ret, tuple) else False
             else:
-                wrapper._passed = 0
+                reinit(wrapper)  # reset on failure
                 return ret
 
-        # init the counter
-        wrapper._passed = 0
+        def reinit(wrapper):
+            wrapper._passed = 0
+            wrapper._last_successful_result = None
+
+        reinit(wrapper)
 
         return wrapper
 

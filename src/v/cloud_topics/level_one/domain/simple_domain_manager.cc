@@ -723,4 +723,10 @@ ss::future<> simple_domain_manager::gc_loop() {
     vlog(cd_log.debug, "{} - Garbage collection loop stopped...", ntp);
 }
 
+ss::future<std::expected<database_stats, rpc::errc>>
+simple_domain_manager::get_database_stats() {
+    // Not implemented.
+    co_return std::unexpected(rpc::errc::concurrent_requests);
+}
+
 } // namespace cloud_topics::l1

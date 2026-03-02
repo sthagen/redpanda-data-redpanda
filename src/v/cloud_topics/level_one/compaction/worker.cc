@@ -43,6 +43,7 @@ compaction_worker::compaction_worker(
   })
   , _poll_interval(
       config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
+  , _upload_part_size(config::shard_local_cfg().cloud_topics_upload_part_size())
   , _worker_manager(worker_manager)
   , _io(io)
   , _metastore(metastore)
@@ -237,6 +238,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       _metastore,
       _as,
       config::shard_local_cfg().cloud_topics_compaction_max_object_size.bind(),
+      _upload_part_size,
       l1::object_builder::options{
         .indexing_interval
         = config::shard_local_cfg().cloud_topics_l1_indexing_interval(),

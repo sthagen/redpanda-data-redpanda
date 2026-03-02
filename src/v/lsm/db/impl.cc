@@ -29,6 +29,8 @@
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/switch_to.hh>
 
+#include <fmt/format.h>
+
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -263,6 +265,37 @@ ss::future<> impl::close() {
     co_await _persistence.data->close();
     co_await _persistence.metadata->close();
     vlog(log.trace, "close_end");
+}
+
+lsm::data_stats impl::get_data_stats() const {
+    lsm::data_stats stats{};
+    if (_mem) {
+        stats.active_memtable_bytes = _mem->approximate_memory_usage();
+    }
+    if (_imm) {
+        stats.immutable_memtable_bytes = (*_imm)->approximate_memory_usage();
+    }
+    stats.total_size_bytes = stats.active_memtable_bytes
+                             + stats.immutable_memtable_bytes;
+    _versions->current()->for_each_level(
+      [&stats](
+        internal::level level_num,
+        const chunked_vector<ss::lw_shared_ptr<file_meta_data>>& level_files) {
+          lsm::level_info level;
+          level.level_number = level_num();
+          for (const auto& file : level_files) {
+              stats.total_size_bytes += file->file_size;
+              lsm::file_info info;
+              info.epoch = file->handle.epoch();
+              info.id = file->handle.id();
+              info.size_bytes = file->file_size;
+              info.smallest_key_info = fmt::format("{}", file->smallest);
+              info.largest_key_info = fmt::format("{}", file->largest);
+              level.files.push_back(std::move(info));
+          }
+          stats.levels.push_back(std::move(level));
+      });
+    return stats;
 }
 
 ss::future<> impl::recover() {

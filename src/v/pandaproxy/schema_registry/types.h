@@ -40,6 +40,7 @@ using force = ss::bool_class<struct force_tag>;
 using normalize = ss::bool_class<struct normalize_tag>;
 using verbose = ss::bool_class<struct verbose_tag>;
 using is_qualified = ss::bool_class<struct is_qualified_tag>;
+using is_config_or_mode = ss::bool_class<struct is_config_or_mode_tag>;
 
 template<typename E>
 std::enable_if_t<std::is_enum_v<E>, std::optional<E>>
@@ -228,6 +229,14 @@ struct context_subject {
 };
 
 inline const context_subject invalid_subject{default_context, subject{""}};
+
+/// Validate that a context_subject does not use reserved names (__GLOBAL,
+/// __EMPTY). Throws exception with error_code::subject_invalid if invalid.
+/// \param is_config_or_mode If true, allows .__GLOBAL context (used by
+///   config/mode endpoints).
+void validate_context_subject(
+  const context_subject& ctx_sub,
+  is_config_or_mode is_config_or_mode = is_config_or_mode::no);
 
 /// A reference subject that may be qualified or unqualified.
 /// Unqualified references are resolved relative to a parent schema's context.

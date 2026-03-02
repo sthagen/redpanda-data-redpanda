@@ -1240,4 +1240,39 @@ db_domain_manager::flush_domain(rpc::flush_domain_request req) {
     };
 }
 
+ss::future<std::expected<database_stats, rpc::errc>>
+db_domain_manager::get_database_stats() {
+    auto gl_res = co_await gate_and_open_reads();
+    if (!gl_res.has_value()) {
+        co_return std::unexpected(gl_res.error());
+    }
+
+    auto stats = db_->db().get_data_stats();
+
+    // Convert LSM stats to domain manager format
+    database_stats result;
+    result.active_memtable_bytes = stats.active_memtable_bytes;
+    result.immutable_memtable_bytes = stats.immutable_memtable_bytes;
+    result.total_size_bytes = stats.total_size_bytes;
+
+    for (const auto& lsm_level : stats.levels) {
+        lsm_level_info level;
+        level.level_number = lsm_level.level_number;
+
+        for (const auto& lsm_file : lsm_level.files) {
+            lsm_file_info file;
+            file.epoch = lsm_file.epoch;
+            file.id = lsm_file.id;
+            file.size_bytes = lsm_file.size_bytes;
+            file.smallest_key_info = lsm_file.smallest_key_info;
+            file.largest_key_info = lsm_file.largest_key_info;
+            level.files.push_back(std::move(file));
+        }
+
+        result.levels.push_back(std::move(level));
+    }
+
+    co_return result;
+}
+
 } // namespace cloud_topics::l1

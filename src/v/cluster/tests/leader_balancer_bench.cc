@@ -11,11 +11,12 @@
 #include "cluster/scheduling/leader_balancer_constraints.h"
 #include "cluster/scheduling/leader_balancer_random.h"
 #include "cluster/scheduling/leader_balancer_types.h"
+#include "leader_balancer_simulation_utils.h"
 #include "leader_balancer_test_utils.h"
 
 #include <seastar/testing/perf_tests.hh>
 
-#include <vector>
+#include <utility>
 
 namespace {
 
@@ -23,6 +24,35 @@ constexpr int node_count = 72;
 constexpr int shards_per_node = 16;  // i.e., cores per node
 constexpr int groups_per_shard = 80; // group == partition in this context
 constexpr int replicas = 3;          // number of replicas
+
+namespace lbt = cluster::leader_balancer_types;
+
+template<
+  std::derived_from<cluster::leader_balancer_strategy> ClimbingStrategy,
+  int node_count>
+void strategy_bench() {
+    auto cluster_data
+      = leader_balancer_test_utils::prepare_simulation_cluster<node_count>();
+
+    auto strategy = ClimbingStrategy(
+      std::move(cluster_data.index),
+      std::move(cluster_data.group_to_topic),
+      std::move(cluster_data.muted_index),
+      std::nullopt);
+
+    lbt::muted_groups_t muted_groups{};
+
+    perf_tests::start_measuring_time();
+    for (;;) {
+        auto movement_opt = strategy.find_movement(muted_groups);
+        if (!movement_opt) {
+            break;
+        }
+        strategy.apply_movement(*movement_opt);
+        muted_groups.add(static_cast<uint64_t>(movement_opt->group));
+    }
+    perf_tests::stop_measuring_time();
+}
 
 /*
  * Measures the time it takes to randomly generate and evaluate every possible
@@ -115,4 +145,12 @@ PERF_TEST(lb, random_eval_all) {
 
 PERF_TEST(lb, random_generator) {
     random_bench<cluster::leader_balancer_types::random_reassignments>();
+}
+
+PERF_TEST(lb, full_simulation_random) {
+    strategy_bench<lbt::random_hill_climbing_strategy, 3>();
+}
+
+PERF_TEST(lb, full_simulation_calibrated) {
+    strategy_bench<lbt::calibrated_hill_climbing_strategy, 3>();
 }

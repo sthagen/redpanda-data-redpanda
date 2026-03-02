@@ -84,6 +84,9 @@ public:
     ss::future<rpc::restore_domain_reply>
       restore_domain(rpc::restore_domain_request) override;
 
+    ss::future<std::expected<database_stats, rpc::errc>>
+    get_database_stats() override;
+
 private:
     // Initializes the underlying database for the current term, potentially
     // reopening it if needed (e.g. the underlying Raft term has changed since

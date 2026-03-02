@@ -630,14 +630,31 @@ ss::future<ss::stop_iteration> leader_balancer::balance() {
         co_return ss::stop_iteration::no;
     }
 
-    auto muted_nodes = collect_muted_nodes(health_report.value());
+    leader_balancer_types::muted_index muted_index{
+      collect_muted_nodes(health_report.value()), {}};
 
-    std::unique_ptr<leader_balancer_strategy> strategy
-      = std::make_unique<leader_balancer_types::random_hill_climbing_strategy>(
-        std::move(index),
-        std::move(group_id_to_topic),
-        leader_balancer_types::muted_index{std::move(muted_nodes), {}},
-        std::move(preference_index));
+    auto mode = config::shard_local_cfg().leader_balancer_mode();
+    std::unique_ptr<leader_balancer_strategy> strategy;
+    switch (mode) {
+    case model::leader_balancer_mode::random:
+        vlog(clusterlog.debug, "using random_hill_climbing strategy");
+        strategy = std::make_unique<
+          leader_balancer_types::random_hill_climbing_strategy>(
+          std::move(index),
+          std::move(group_id_to_topic),
+          std::move(muted_index),
+          std::move(preference_index));
+        break;
+    case model::leader_balancer_mode::calibrated:
+        vlog(clusterlog.debug, "using calibrated_hill_climbing strategy");
+        strategy = std::make_unique<
+          leader_balancer_types::calibrated_hill_climbing_strategy>(
+          std::move(index),
+          std::move(group_id_to_topic),
+          std::move(muted_index),
+          std::move(preference_index));
+        break;
+    }
 
     auto cores = strategy->stats();
 

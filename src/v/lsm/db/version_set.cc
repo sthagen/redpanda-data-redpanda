@@ -535,6 +535,15 @@ ss::future<> version::for_each_overlapping(
     }
 }
 
+void version::for_each_level(
+  absl::FunctionRef<void(
+    internal::level, const chunked_vector<ss::lw_shared_ptr<file_meta_data>>&)>
+    func) const {
+    for (auto l = 0_level; l() < _files.size(); ++l) {
+        func(l, _files[l]);
+    }
+}
+
 fmt::iterator version::format_to(fmt::iterator it) const {
     // For example:
     //   --- level 1 ---

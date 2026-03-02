@@ -1366,6 +1366,9 @@ class SchemaRegistryEndpoints(RedpandaTest):
     def assert_equal(self, first, second, msg=None):
         assert first == second, msg or f"{first} != {second}"
 
+    def assert_not_equal(self, first, second, msg=None):
+        assert first != second, msg or f"{first} == {second}"
+
     def assert_in(self, member, container, msg=None):
         assert member in container, msg or f"{member!r} not found in {container!r}"
 
@@ -6747,6 +6750,60 @@ class SchemaRegistryContextTest(SchemaRegistryEndpoints):
         # Now base can be deleted
         result = self.sr_client.delete_subject(subject=base_subject)
         self.assert_equal(result.status_code, requests.codes.ok)
+
+    @cluster(num_nodes=1)
+    def test_reserved_subject_names_rejected(self):
+        """
+        Verify that reserved subject names (__GLOBAL, __EMPTY) and the
+        reserved context (.__GLOBAL) are rejected on post_subject_versions,
+        put_config_subject, & put_mode_subject.
+
+        The .__GLOBAL context is allowed on config/mode PUT endpoints but
+        rejected on the register endpoint.
+        """
+        schema_data = json.dumps({"schema": schema1_def})
+        config_data = json.dumps({"compatibility": "BACKWARD"})
+        mode_data = json.dumps({"mode": "READWRITE"})
+
+        global_subject = "__GLOBAL"
+        empty_subject = "__EMPTY"
+        global_context = ":.__GLOBAL:"
+        global_context_subject = f"{global_context}subject"
+
+        # Reserved subject names are rejected on all endpoints
+        for subject in [global_subject, empty_subject]:
+            result = self.sr_client.post_subjects_subject_versions(
+                subject=subject, data=schema_data
+            )
+            self.assert_equal(result.status_code, 422)
+            self.assert_equal(result.json()["error_code"], 42208)
+
+            result = self.sr_client.set_config_subject(
+                subject=subject, data=config_data
+            )
+            self.assert_equal(result.status_code, 422)
+            self.assert_equal(result.json()["error_code"], 42208)
+
+            result = self.sr_client.set_mode_subject(subject=subject, data=mode_data)
+            self.assert_equal(result.status_code, 422)
+            self.assert_equal(result.json()["error_code"], 42208)
+
+        # .__GLOBAL context is rejected on register but allowed on
+        # config/mode PUT endpoints (is_config_or_mode::yes)
+        for subject in [global_context, global_context_subject]:
+            result = self.sr_client.post_subjects_subject_versions(
+                subject=subject, data=schema_data
+            )
+            self.assert_equal(result.status_code, 422)
+            self.assert_equal(result.json()["error_code"], 42208)
+
+            result = self.sr_client.set_config_subject(
+                subject=subject, data=config_data
+            )
+            self.assert_not_equal(result.status_code, 422)
+
+            result = self.sr_client.set_mode_subject(subject=subject, data=mode_data)
+            self.assert_not_equal(result.status_code, 422)
 
 
 class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):

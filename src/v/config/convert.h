@@ -410,6 +410,43 @@ struct convert<model::cloud_storage_backend> {
 };
 
 template<>
+struct convert<model::leader_balancer_mode> {
+    using type = model::leader_balancer_mode;
+
+    // Accept new values plus legacy values for backward compatibility
+    static constexpr auto acceptable_values = std::to_array(
+      {model::leader_balancer_mode_to_string(type::calibrated),
+       model::leader_balancer_mode_to_string(type::random),
+       "greedy_balanced_shards",
+       "random_hill_climbing"});
+
+    static Node encode(const type& rhs) { return Node(fmt::format("{}", rhs)); }
+
+    static bool decode(const Node& node, type& rhs) {
+        auto value = node.as<std::string>();
+
+        if (
+          std::find(acceptable_values.begin(), acceptable_values.end(), value)
+          == acceptable_values.end()) {
+            return false;
+        }
+
+        // Map legacy values to calibrated, only "random" activates random mode
+        rhs = string_switch<type>(std::string_view{value})
+                .match(
+                  model::leader_balancer_mode_to_string(type::calibrated),
+                  type::calibrated)
+                .match(
+                  model::leader_balancer_mode_to_string(type::random),
+                  type::random)
+                .match("greedy_balanced_shards", type::calibrated)
+                .match("random_hill_climbing", type::calibrated);
+
+        return true;
+    }
+};
+
+template<>
 struct convert<std::filesystem::path> {
     using type = std::filesystem::path;
 

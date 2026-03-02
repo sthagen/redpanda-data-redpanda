@@ -21,6 +21,7 @@
 #include "lsm/db/table_cache.h"
 #include "lsm/db/version_set.h"
 #include "lsm/io/persistence.h"
+#include "lsm/stats.h"
 #include "ssx/condition_variable.h"
 #include "ssx/mutex.h"
 #include "ssx/time.h"
@@ -97,6 +98,8 @@ public:
     //
     // This *must* be called before destroying the database.
     ss::future<> close();
+
+    lsm::data_stats get_data_stats() const;
 
 private:
     friend class snapshot;

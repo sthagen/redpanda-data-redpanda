@@ -86,8 +86,10 @@ compaction_sink::compaction_sink(
   metastore* metastore,
   ss::abort_source& as,
   config::binding<size_t> max_object_size,
+  size_t upload_part_size,
   object_builder::options opts)
   : _max_object_size(std::move(max_object_size))
+  , _upload_part_size(upload_part_size)
   , _tp(tp)
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
@@ -152,7 +154,7 @@ compaction_sink::initialize_builder(kafka::offset object_base_offset) {
     auto oid = std::move(oid_res).value();
 
     auto upload_res = co_await _io->create_multipart_upload(
-      oid, cloud_storage_clients::multipart_upload::min_part_size, &_as);
+      oid, _upload_part_size, &_as);
 
     if (!upload_res.has_value()) {
         std::ignore = _metadata_builder->remove_pending_object(oid);

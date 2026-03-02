@@ -184,6 +184,10 @@ private:
     // The interval on which the worker polls for new work.
     config::binding<std::chrono::milliseconds> _poll_interval;
 
+    // Captured at construction so that changing the config at runtime does not
+    // take effect without a restart.
+    size_t _upload_part_size;
+
     // Owned by `scheduler`.
     worker_manager* _worker_manager;
 

@@ -100,8 +100,12 @@ void application::configure_admin_server(model::node_id node_id) {
           if (cloud_topics_app) {
               s.add_service(
                 std::make_unique<admin::metastore_service_impl>(
+                  create_client(),
                   cloud_topics_app->get_sharded_replicated_metastore(),
-                  &controller->get_topics_state()));
+                  &controller->get_topics_state(),
+                  &metadata_cache,
+                  &controller->get_shard_table(),
+                  cloud_topics_app->get_sharded_l1_domain_supervisor()));
               s.add_service(
                 std::make_unique<admin::level_zero_service_impl>(
                   node_id,

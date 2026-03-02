@@ -40,6 +40,12 @@ void level_zero_gc_probe::setup_internal_metrics(bool disable) {
             "Number of L0 objects deleted by garbage collection."),
           labels),
         sm::make_counter(
+          "bytes_deleted_total",
+          [this] { return bytes_deleted_; },
+          sm::description(
+            "Total bytes of L0 objects deleted by garbage collection."),
+          labels),
+        sm::make_counter(
           "objects_listed_total",
           [this] { return objects_listed_; },
           sm::description("Total L0 objects scanned by garbage collection."),

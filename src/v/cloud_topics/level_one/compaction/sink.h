@@ -36,6 +36,7 @@ public:
       l1::metastore*,
       ss::abort_source&,
       config::binding<size_t> max_object_size,
+      size_t upload_part_size,
       object_builder::options = {});
 
     ss::future<bool>
@@ -59,6 +60,9 @@ public:
 private:
     // The target maximum L1 object size that will be built.
     config::binding<size_t> _max_object_size;
+
+    // The part size used for multipart uploads.
+    size_t _upload_part_size;
 
     // Initializes the `_inflight_object` with a multipart upload.
     ss::future<> initialize_builder(kafka::offset);

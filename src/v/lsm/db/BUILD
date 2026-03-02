@@ -60,6 +60,7 @@ redpanda_cc_library(
         "//src/v/lsm/core/internal:logger",
         "//src/v/lsm/core/internal:merging_iterator",
         "//src/v/lsm/sst:builder",
+        "@fmt",
     ],
     deps = [
         ":gc_actor",
@@ -70,6 +71,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/container:chunked_hash_map",
+        "//src/v/lsm:stats",
         "//src/v/lsm/core:exceptions",
         "//src/v/lsm/core/internal:files",
         "//src/v/lsm/core/internal:iterator",

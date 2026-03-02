@@ -674,6 +674,8 @@ consteval std::string_view property_type_name() {
                            type,
                            model::cloud_storage_chunk_eviction_strategy>) {
         return "string";
+    } else if constexpr (std::is_same_v<type, model::leader_balancer_mode>) {
+        return "string";
     } else if constexpr (std::is_same_v<
                            type,
                            pandaproxy::schema_registry::

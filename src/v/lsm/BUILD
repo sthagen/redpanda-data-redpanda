@@ -1,6 +1,15 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "stats",
+    hdrs = ["stats.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/container:chunked_vector",
+    ],
+)
+
+redpanda_cc_library(
     name = "lsm",
     srcs = [
         "lsm.cc",
@@ -18,6 +27,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":stats",
         "//src/v/base",
         "//src/v/lsm/core:probe",
         "//src/v/lsm/io:persistence",

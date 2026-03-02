@@ -9,6 +9,8 @@
  * by the Apache License, Version 2.0
  */
 
+#pragma once
+
 #include "cluster/scheduling/leader_balancer_strategy.h"
 #include "cluster/scheduling/leader_balancer_types.h"
 

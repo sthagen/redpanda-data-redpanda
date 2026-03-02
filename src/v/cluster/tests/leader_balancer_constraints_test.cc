@@ -313,7 +313,7 @@ BOOST_AUTO_TEST_CASE(topic_skew_error) {
 
     auto [o1, g_id_to_t_id1] = index_fn();
     auto [shard_index1, muted_index1] = std::move(o1);
-    auto rhc = lbt::random_hill_climbing_strategy(
+    auto rhc = lbt::calibrated_hill_climbing_strategy(
       leader_balancer_test_utils::copy_cluster_index(shard_index1.shards()),
       std::move(g_id_to_t_id1),
       std::move(muted_index1),
@@ -393,7 +393,7 @@ BOOST_AUTO_TEST_CASE(even_shard_uneven_node_load) {
 
     cluster::leader_balancer_types::shard_index shard_idx(std::move(idx));
 
-    auto strategy = lbt::random_hill_climbing_strategy(
+    auto strategy = lbt::calibrated_hill_climbing_strategy(
       leader_balancer_test_utils::copy_cluster_index(shard_idx.shards()),
       std::move(g2topic),
       cluster::leader_balancer_types::muted_index({}, {}),

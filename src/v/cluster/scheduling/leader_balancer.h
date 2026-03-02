@@ -56,8 +56,9 @@ class leader_balancer {
     using clock_type = ss::lowres_clock;
 
     /*
-     * after becoming the raft0 leader apply a delay before the rebalancer
-     * starts in order to give the system some time to stabilize.
+     * After becoming the raft0 leader apply a delay before the rebalancer
+     * starts in order to give the system some time to stabilize. Also, a
+     * recently started node will be muted for this many seconds after start.
      */
     static constexpr clock_type::duration leader_activation_delay = 30s;
 

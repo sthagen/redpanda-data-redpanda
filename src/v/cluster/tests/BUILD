@@ -133,6 +133,7 @@ redpanda_test_cc_library(
     name = "leader_balancer_test_utils",
     hdrs = [
         "leader_balancer_constraints_utils.h",
+        "leader_balancer_simulation_utils.h",
         "leader_balancer_test_utils.h",
     ],
     deps = [
@@ -247,6 +248,20 @@ redpanda_cc_btest(
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@boost//:test",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "leader_balancer_simulation_test",
+    timeout = "short",
+    srcs = [
+        "leader_balancer_simulation_test.cc",
+    ],
+    deps = [
+        ":leader_balancer_test_utils",
+        "//src/v/cluster",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
     ],
 )
 

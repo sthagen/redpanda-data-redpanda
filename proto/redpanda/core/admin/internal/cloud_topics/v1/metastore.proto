@@ -62,6 +62,16 @@ service MetastoreService {
             authz: SUPERUSER
         };
     }
+
+    // Get database statistics for the metastore database.
+    // Returns detailed size information about the LSM tree including
+    // memtable sizes and per-level breakdowns.
+    rpc GetDatabaseStats(GetDatabaseStatsRequest)
+        returns (GetDatabaseStatsResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
 }
 
 // GetOffsetsRequest is the request for looking up the offsets in the metastore
@@ -98,4 +108,45 @@ message GetSizeRequest {
 message GetSizeResponse {
     // The size in bytes of this partition in the metastore.
     uint64 size_bytes = 1;
+}
+
+// GetDatabaseStatsRequest is the request for looking up LSM storage statistics.
+message GetDatabaseStatsRequest {
+    // The metastore partition to query. Defaults to partition 0 if not
+    // specified.
+    uint32 metastore_partition = 1;
+}
+
+// GetDatabaseStatsResponse contains detailed LSM storage statistics.
+message GetDatabaseStatsResponse {
+    // Size of the active memtable (data not yet flushed).
+    uint64 active_memtable_bytes = 1;
+    // Size of the immutable memtable (data being flushed).
+    uint64 immutable_memtable_bytes = 2;
+    // Total size including memtables and all levels.
+    uint64 total_size_bytes = 3;
+    // Per-level file information for the LSM tree.
+    repeated LsmLevel levels = 4;
+}
+
+// Information about a single level in the LSM tree.
+message LsmLevel {
+    // The level number (0 for L0, 1 for L1, etc).
+    int32 level_number = 1;
+    // Files in this level.
+    repeated LsmFile files = 2;
+}
+
+// Summary information about a single SST file.
+message LsmFile {
+    // Database epoch when the file was created.
+    uint64 epoch = 1;
+    // File ID.
+    uint64 id = 2;
+    // File size in bytes.
+    uint64 size_bytes = 3;
+    // Smallest key in the file (human-readable string representation).
+    string smallest_key_info = 4;
+    // Largest key in the file (human-readable string representation).
+    string largest_key_info = 5;
 }

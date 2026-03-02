@@ -128,7 +128,8 @@ ss::future<> do_compact(
       io,
       metastore,
       as,
-      config::mock_binding<size_t>(128_MiB));
+      config::mock_binding<size_t>(128_MiB),
+      16_MiB);
     auto reducer = compaction::sliding_window_reducer(
       std::move(src), std::move(sink));
 

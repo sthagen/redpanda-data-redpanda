@@ -28,7 +28,8 @@
 #include <vector>
 
 using index_type = cluster::leader_balancer_strategy::index_type;
-using strategy = cluster::leader_balancer_types::random_hill_climbing_strategy;
+using strategy
+  = cluster::leader_balancer_types::calibrated_hill_climbing_strategy;
 using reassignment = cluster::leader_balancer_strategy::reassignment;
 
 /**
