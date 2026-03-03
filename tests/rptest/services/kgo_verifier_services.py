@@ -1526,3 +1526,10 @@ class KgoVerifierMultiConsumerGroupConsumer(KgoVerifierMultiService):
         ]
 
         super().__init__(context, redpanda, topics, consumers, custom_node=custom_node)
+
+    @property
+    def consumers(self) -> Sequence[KgoVerifierConsumerGroupConsumer]:
+        assert all(
+            isinstance(s, KgoVerifierConsumerGroupConsumer) for s in self._services
+        )
+        return cast(Sequence[KgoVerifierConsumerGroupConsumer], self._services)

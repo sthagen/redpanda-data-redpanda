@@ -752,43 +752,6 @@ TEST(JsonSchema, ListWithEmptyItemsAndAdditionalItems) {
       iceberg::field_required::no));
 }
 
-TEST(JsonSchema, AdditionalProperties) {
-    constexpr std::string_view schema = R"({
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "$id": "https://example.com/root.json",
-      "type": "object",
-      "additionalProperties": { "type": "string" }
-    })";
-
-    auto result = to_iceberg_type(schema);
-    ASSERT_TRUE(result.has_error());
-    ASSERT_STREQ(
-      "Only 'false' subschema is supported for additionalProperties keyword",
-      result.error().what());
-}
-
-TEST(JsonSchema, AdditionalPropertiesFalse) {
-    constexpr std::string_view schema = R"({
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "$id": "https://example.com/root.json",
-      "type": "object",
-      "properties": {
-        "field1": { "type": "string" }
-      },
-      "additionalProperties": false
-    })";
-
-    auto result = to_iceberg_type(schema);
-    ASSERT_TRUE(result.has_value()) << result.error().what();
-
-    ASSERT_EQ(result.value().fields.size(), 1);
-    ASSERT_TRUE(field_matches(
-      result.value().fields[0],
-      "field1",
-      iceberg::string_type{},
-      iceberg::field_required::no));
-}
-
 TEST(JsonSchema, Format) {
     // table from format to iceberg type
     constexpr auto test_cases
@@ -1142,16 +1105,38 @@ TEST_CORO(IcebergValues, ValueObject) {
         OptionalIcebergPrimitive<long_value>(42)));
 }
 
+TEST_CORO(IcebergValues, ValueObjectDuplicateKeysLastWins) {
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+          "key1": {"type": "string"}
+      }
+    })";
+    auto value = R"({"key1": "value1", "key1": "value2"})";
+
+    auto result = co_await to_iceberg_value(schema, value);
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    EXPECT_THAT(
+      result_value->fields,
+      ElementsAre(OptionalIcebergPrimitive<string_value>("value2")));
+}
+
 TEST_CORO(IcebergValues, ValueObjectOptionals) {
     auto schema = R"({
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
       "properties": {
           "key1": {"type": ["string", "null"]},
-          "key2": {"type": ["integer", "null"]}
+          "key2": {"type": ["integer", "null"]},
+          "nullkey": {"type": ["object", "null"]}
       }
     })";
-    auto value = R"({"key1": "value1", "key3": "extra-key"})";
+    auto value = R"({"key1": "value1", "nullkey": null, "key3": "extra-key"})";
 
     auto result = co_await to_iceberg_value(schema, value);
 
@@ -1162,7 +1147,9 @@ TEST_CORO(IcebergValues, ValueObjectOptionals) {
     EXPECT_THAT(
       result_value->fields,
       ElementsAre(
-        OptionalIcebergPrimitive<string_value>("value1"), Eq(std::nullopt)));
+        OptionalIcebergPrimitive<string_value>("value1"),
+        Eq(std::nullopt),
+        Eq(std::nullopt)));
 }
 
 TEST_CORO(IcebergValues, ValueObjectSpuriousCompoundMember) {
@@ -1264,6 +1251,223 @@ TEST_CORO(IcebergValues, ValueObjectNesting) {
             )),
           // key20
           OptionalIcebergPrimitive<string_value>("value2"))));
+}
+
+TEST(JsonSchema, AdditionalProperties) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://example.com/root.json",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    })";
+
+    auto result = to_iceberg_type(schema);
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "root",
+      iceberg::map_type::create(
+        0,
+        iceberg::string_type{},
+        0,
+        iceberg::field_required::no,
+        iceberg::string_type{}),
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, AdditionalPropertiesWithProperties) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://example.com/root.json",
+      "type": "object",
+      "properties": {
+        "field1": { "type": "string" }
+      },
+      "additionalProperties": { "type": "integer" }
+    })";
+
+    auto result = to_iceberg_type(schema);
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Cannot convert object with both properties and schema-valued "
+      "additionalProperties",
+      result.error().what());
+}
+
+TEST(JsonSchema, AdditionalPropertiesFalse) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://example.com/root.json",
+      "type": "object",
+      "properties": {
+        "field1": { "type": "string" }
+      },
+      "additionalProperties": false
+    })";
+
+    auto result = to_iceberg_type(schema);
+    ASSERT_TRUE(result.has_value()) << result.error().what();
+
+    ASSERT_EQ(result.value().fields.size(), 1);
+    ASSERT_TRUE(field_matches(
+      result.value().fields[0],
+      "field1",
+      iceberg::string_type{},
+      iceberg::field_required::no));
+}
+
+TEST(JsonSchema, AdditionalPropertiesTrue) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "https://example.com/root.json",
+      "type": "object",
+      "additionalProperties": true
+    })";
+
+    auto result = to_iceberg_type(schema);
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Only 'false' or object subschema is supported for "
+      "additionalProperties keyword",
+      result.error().what());
+}
+
+TEST_CORO(IcebergValues, ValueObjectAdditionalProperties) {
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    })";
+    auto value = R"({"key1": "value1", "key2": null})";
+
+    auto result = co_await to_iceberg_value(schema, value);
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    EXPECT_THAT(
+      result_value->fields,
+      ElementsAre(IcebergMap(UnorderedElementsAre(
+        IcebergKeyValue(
+          IcebergPrimitive<string_value>("key1"),
+          OptionalIcebergPrimitive<string_value>("value1")),
+        IcebergKeyValue(
+          IcebergPrimitive<string_value>("key2"), Eq(std::nullopt))))));
+}
+
+TEST_CORO(IcebergValues, ValueObjectAdditionalPropertiesDuplicateKeys) {
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    })";
+    auto value = R"({"key1": "value1", "key1": "value2"})";
+
+    auto result = co_await to_iceberg_value(schema, value);
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    EXPECT_THAT(
+      result_value->fields,
+      ElementsAre(IcebergMap(ElementsAre(IcebergKeyValue(
+        IcebergPrimitive<string_value>("key1"),
+        OptionalIcebergPrimitive<string_value>("value2"))))));
+}
+
+TEST_CORO(IcebergValues, ValueObjectAdditionalPropertiesEmpty) {
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    })";
+    auto value = R"({})";
+
+    auto result = co_await to_iceberg_value(schema, value);
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    EXPECT_THAT(result_value->fields, ElementsAre(IcebergMap(IsEmpty())));
+}
+
+TEST_CORO(IcebergValues, ValueObjectAdditionalPropertiesList) {
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    })";
+    auto value = R"({
+      "key1": ["a", "b"],
+      "key2": ["c"]
+    })";
+
+    auto result = co_await to_iceberg_value(schema, value);
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    EXPECT_THAT(
+      result_value->fields,
+      ElementsAre(IcebergMap(UnorderedElementsAre(
+        IcebergKeyValue(
+          IcebergPrimitive<string_value>("key1"),
+          IcebergList(ElementsAre(
+            OptionalIcebergPrimitive<string_value>("a"),
+            OptionalIcebergPrimitive<string_value>("b")))),
+        IcebergKeyValue(
+          IcebergPrimitive<string_value>("key2"),
+          IcebergList(
+            ElementsAre(OptionalIcebergPrimitive<string_value>("c"))))))));
+}
+
+TEST_CORO(IcebergValues, ValueObjectAdditionalPropertiesNesting) {
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "nested": { "type": "integer" }
+            }
+          }
+        }
+      }
+    })";
+    auto value = R"({
+      "tags": {
+        "key1": { "nested": 1 },
+        "key2": { "nested": 2 }
+      }
+    })";
+
+    auto result = co_await to_iceberg_value(schema, value);
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    EXPECT_THAT(
+      result_value->fields,
+      ElementsAre(IcebergMap(UnorderedElementsAre(
+        IcebergKeyValue(
+          IcebergPrimitive<string_value>("key1"),
+          IcebergStruct(OptionalIcebergPrimitive<long_value>(1))),
+        IcebergKeyValue(
+          IcebergPrimitive<string_value>("key2"),
+          IcebergStruct(OptionalIcebergPrimitive<long_value>(2)))))));
 }
 
 TEST(JsonSchema, OneOfNullable) {
@@ -1745,6 +1949,91 @@ TEST(JsonSchema, OneOfAdditionalPropertiesInside) {
     ASSERT_STREQ(
       "additionalProperties: false conflicts with properties defined in "
       "another branch",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfAdditionalPropertiesSchemaBothSides) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "additionalProperties": { "type": "string" },
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": { "type": "integer" }
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "Intersecting constraints with additionalProperties on both sides is "
+      "not supported",
+      result.error().what());
+}
+
+TEST(JsonSchema, OneOfAdditionalPropertiesSchemaConflictsWithProperties) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "additionalProperties": { "type": "string" },
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "nested_field": { "type": "integer" }
+              }
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "additionalProperties schema conflicts with properties defined in "
+      "another branch",
+      result.error().what());
+}
+
+TEST(
+  JsonSchema,
+  OneOfAdditionalPropertiesFalseConflictsWithAdditionalPropertiesSchema) {
+    constexpr std::string_view schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "field": {
+          "additionalProperties": { "type": "string" },
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    })";
+
+    auto result = to_iceberg_type(schema);
+
+    ASSERT_TRUE(result.has_error());
+    ASSERT_STREQ(
+      "additionalProperties: false conflicts with additionalProperties "
+      "schema defined in another branch",
       result.error().what());
 }
 

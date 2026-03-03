@@ -187,5 +187,9 @@ std::ostream& operator<<(std::ostream& o, cluster::errc err) {
     case errc::feature_sanctioned:
         return o << "cluster::errc::feature_sanctioned";
     }
+
+    // fallback path: we don't expect it, but this is better than just falling
+    // off the end without returning anything
+    return o << "cluster::errc::unknown(" << static_cast<int>(err) << ")";
 }
 } // namespace cluster

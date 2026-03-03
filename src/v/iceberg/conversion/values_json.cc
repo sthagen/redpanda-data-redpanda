@@ -11,13 +11,14 @@
 #include "iceberg/conversion/values_json.h"
 
 #include "bytes/iobuf_parser.h"
+#include "container/chunked_hash_map.h"
 #include "iceberg/conversion/conversion_outcome.h"
 #include "iceberg/conversion/ir_json.h"
 #include "iceberg/conversion/time_rfc3339.h"
 #include "iceberg/values.h"
 #include "serde/json/parser.h"
 
-#include <seastar/core/coroutine.hh>
+#include <seastar/core/coroutine.hh> // IWYU pragma: keep
 
 #include <exception>
 #include <memory>
@@ -150,11 +151,25 @@ ss::future<> decode_list(
   const list_type& lt,
   const json_conversion_ir::struct_field_map_t& field_map);
 
+ss::future<> decode_map(
+  serde::json::parser& p,
+  map_value& mv,
+  const map_type& mt,
+  const json_conversion_ir::struct_field_map_t& field_map);
+
 ss::future<> decode_field(
   serde::json::parser& p,
   std::optional<iceberg::value>& v,
   const field_type& ft,
   const json_conversion_ir::struct_field_map_t& field_map) {
+    // The JSON-to-Iceberg conversion assumes input has passed through a JSON
+    // schema validator, so we can be lax about validation. If we see null, we
+    // assume that schema allows null here.
+    if (p.token() == serde::json::token::value_null) {
+        v = std::nullopt;
+        co_return;
+    }
+
     struct field_decoder_visitor {
         // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
         serde::json::parser& p;
@@ -174,9 +189,10 @@ ss::future<> decode_field(
             co_await decode_list(p, *lv, lt, field_map);
             co_return std::move(lv);
         }
-        ss::future<std::optional<value>> operator()(const map_type&) {
-            throw value_conversion_exception(
-              "Map type is not supported in JSON deserialization");
+        ss::future<std::optional<value>> operator()(const map_type& mt) {
+            auto mv = std::make_unique<map_value>();
+            co_await decode_map(p, *mv, mt, field_map);
+            co_return std::move(mv);
         }
     };
 
@@ -208,7 +224,7 @@ ss::future<> decode_struct(
     while (true) {
         if (!co_await p.next()) {
             throw value_conversion_exception(
-              "Failed to read next JSON token after start object");
+              "Expected key or end of JSON object but got end of input");
         }
 
         if (p.token() == serde::json::token::end_object) {
@@ -275,6 +291,72 @@ ss::future<> decode_list(
 
         co_await decode_field(
           p, lv.elements.emplace_back(), lt.element_field->type, field_map);
+    }
+}
+
+ss::future<> decode_map(
+  serde::json::parser& p,
+  map_value& mv,
+  const map_type& mt,
+  const json_conversion_ir::struct_field_map_t& field_map) {
+    if (p.token() != serde::json::token::start_object) {
+        throw value_conversion_exception(
+          "Expected start of JSON object for map type");
+    }
+
+    if (mt.key_field == nullptr || mt.value_field == nullptr) {
+        throw value_conversion_exception(
+          "Malformed map type in JSON deserialization");
+    }
+
+    auto key_primitive = std::get_if<primitive_type>(&mt.key_field->type);
+    if (
+      key_primitive == nullptr
+      || !std::holds_alternative<string_type>(*key_primitive)) {
+        throw value_conversion_exception(
+          fmt::format(
+            "JSON map decoding only supports string keys, got {}",
+            mt.key_field->type));
+    }
+
+    // Track key -> position to keep last-write-wins semantics in O(1).
+    chunked_hash_map<ss::sstring, size_t> key_to_pos;
+
+    while (true) {
+        if (!co_await p.next()) {
+            throw value_conversion_exception(
+              "Expected key or end of JSON object but got end of input");
+        }
+
+        if (p.token() == serde::json::token::end_object) {
+            co_return;
+        }
+
+        if (p.token() != serde::json::token::key) {
+            throw value_conversion_exception(
+              fmt::format(
+                "Expected key token in JSON object but got {}", p.token()));
+        }
+
+        auto k = p.value_string();
+        auto index_key = k.linearize_to_string();
+
+        if (!co_await p.next()) {
+            throw value_conversion_exception(
+              "Failed to read next JSON token after key");
+        }
+
+        auto pos_it = key_to_pos.find(index_key);
+        if (pos_it != key_to_pos.end()) {
+            co_await decode_field(
+              p, mv.kvs[pos_it->second].val, mt.value_field->type, field_map);
+        } else {
+            auto& kv = mv.kvs.emplace_back();
+            kv.key = primitive_value{string_value{std::move(k)}};
+            auto inserted_pos = mv.kvs.size() - 1;
+            key_to_pos.emplace(std::move(index_key), inserted_pos);
+            co_await decode_field(p, kv.val, mt.value_field->type, field_map);
+        }
     }
 }
 

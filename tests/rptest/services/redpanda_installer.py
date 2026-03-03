@@ -15,11 +15,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from time import sleep
 from typing import Any, Iterable, Literal, TYPE_CHECKING
 
 import concurrent.futures
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from ducktape.utils.util import wait_until
 from ducktape.cluster.cluster import ClusterNode
 
@@ -199,6 +200,7 @@ class RedpandaInstaller:
         """
         self._started = False
         self._redpanda = redpanda
+        self._http_session = self._create_http_session()
 
         # Keep track if the original install path is /opt/redpanda, as is the
         # case for package-deployed clusters. Since the installer uses this
@@ -227,6 +229,21 @@ class RedpandaInstaller:
         # memoize result of self.arch()
         self._arch_lock = threading.Lock()
         self._arch = None
+
+    def _create_http_session(self) -> requests.Session:
+        """Create a session with retry for transient errors (connection and HTTP 5xx)."""
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            status=3,
+            backoff_factor=1.0,
+            allowed_methods=["HEAD", "GET"],
+            status_forcelist=[500, 502, 503, 504],
+        )
+        session = requests.Session()
+        session.mount("https://", HTTPAdapter(max_retries=retry))
+        return session
 
     def installed_version(self, node: ClusterNode) -> RedpandaVersion:
         assert node in self._installed_versions, (
@@ -472,18 +489,11 @@ class RedpandaInstaller:
         validate that it is really downloadable: this avoids tests being upset by ongoing releases
         which might exist in github but not yet fave all their artifacts
         """
-        r = requests.head(self._version_package_url(version))
+        # Session with retry handles transient connection errors automatically
+        r = self._http_session.head(self._version_package_url(version))
+
         # allow 403 ClientError, it usually indicates Unauthorized get and can happen on S3 while dealing with old releases
         allowed = (200, 403, 404)
-        if r.status_code not in allowed:
-            num_retries = 3
-            while num_retries > 0:
-                sleep(5.0 ** (4 - num_retries))
-                r = requests.head(self._version_package_url(version))
-                if r.status_code in allowed:
-                    break
-                num_retries -= 1
-
         if r.status_code not in allowed:
             r.raise_for_status()
 

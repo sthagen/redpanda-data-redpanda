@@ -883,7 +883,7 @@ public:
 
         const auto all_deleted = is_deleted(
           std::all_of(versions.begin(), versions.end(), [](const auto& v) {
-              return v.deleted;
+              return static_cast<bool>(v.deleted);
           }));
 
         if (deleted == all_deleted) {

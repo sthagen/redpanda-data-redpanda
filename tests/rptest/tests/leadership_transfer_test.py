@@ -519,6 +519,144 @@ class LeadershipPinningTest(RedpandaTest):
         wait_until(predicate, timeout_sec=timeout_sec, backoff_sec=5)
 
     @cluster(num_nodes=6, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_ordered_leader_pinning_failover(self):
+        """
+        check that ordered pinning will failover to the next highest priority
+        and return to the highest priority if and when it again becomes available
+        """
+        rack_layout = ["A", "A", "B", "C", "D", "E"]
+        self.RACK_LAYOUT = rack_layout
+
+        for ix, node in enumerate(self.redpanda.nodes):
+            self.redpanda.set_extra_node_conf(node, {"rack": rack_layout[ix]})
+        self.redpanda.start()
+
+        # Decrease idle timeout to not wait too long after nodes are killed
+        self.redpanda.set_cluster_config({"enable_leader_balancer": False})
+        self.redpanda.set_cluster_config({"leader_balancer_idle_timeout": 20000})
+        self.redpanda.set_cluster_config({"enable_leader_balancer": True})
+
+        rpk = RpkTool(self.redpanda)
+        topic = "test-topic"
+        partitions = 60
+        partition_counts = {topic: partitions}
+        preference = ["E", "D", "C", "B", "A"]
+
+        rpk.create_topic(
+            topic,
+            partitions=partitions,
+            replicas=5,
+            config={
+                "redpanda.leaders.preference": "ordered_racks: " + ", ".join(preference)
+            },
+        )
+
+        self.wait_for_racks(
+            partition_counts,
+            {topic: preference},
+            is_ordered=True,
+            timeout_sec=90,
+        )
+
+        node_e = self.redpanda.nodes[rack_layout.index("E")]
+        self.redpanda.stop_node(node_e)
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["D", "C", "B", "A"]},
+            is_ordered=True,
+            timeout_sec=60,
+        )
+
+        node_d = self.redpanda.nodes[rack_layout.index("D")]
+        self.redpanda.stop_node(node_d)
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["C", "B", "A"]},
+            is_ordered=True,
+            timeout_sec=60,
+        )
+
+        self.redpanda.start_node(node_e)
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["E", "C", "B", "A"]},
+            is_ordered=True,
+            timeout_sec=90,
+        )
+
+        node_b = self.redpanda.nodes[rack_layout.index("B")]
+        self.redpanda.stop_node(node_b)
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["E", "C", "A"]},
+            is_ordered=True,
+            timeout_sec=60,
+        )
+
+    @cluster(num_nodes=6, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_ordered_unordered_swap(self):
+        """
+        1. ordered, check ordered leadership
+        2. swap to unordered, check unordered leadership
+        3. swap to ordered, check ordered leadership
+        """
+        for ix, node in enumerate(self.redpanda.nodes):
+            self.redpanda.set_extra_node_conf(node, {"rack": self.RACK_LAYOUT[ix]})
+        self.redpanda.start()
+
+        self.redpanda.set_cluster_config({"enable_leader_balancer": False})
+        self.redpanda.set_cluster_config({"leader_balancer_idle_timeout": 20000})
+        self.redpanda.set_cluster_config({"enable_leader_balancer": True})
+
+        rpk = RpkTool(self.redpanda)
+        topic = "test-topic"
+        partitions = 60
+        partition_counts = {topic: partitions}
+
+        rpk.create_topic(
+            topic,
+            partitions=partitions,
+            replicas=3,
+            config={"redpanda.leaders.preference": "ordered_racks: A, B"},
+        )
+
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["A", "B"]},
+            is_ordered=True,
+            timeout_sec=90,
+        )
+
+        rpk.alter_topic_config(topic, "redpanda.leaders.preference", "racks: A, B")
+
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["A", "B"]},
+            is_ordered=False,
+            timeout_sec=60,
+        )
+
+        rpk.alter_topic_config(
+            topic, "redpanda.leaders.preference", "ordered_racks: A, B"
+        )
+
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["A", "B"]},
+            is_ordered=True,
+            timeout_sec=60,
+        )
+
+        rpk.alter_topic_config(topic, "redpanda.leaders.preference", "racks: A, B")
+
+        self.wait_for_racks(
+            partition_counts,
+            {topic: ["A", "B"]},
+            is_ordered=False,
+            timeout_sec=60,
+        )
+
+    @cluster(num_nodes=6, log_allow_list=RESTART_LOG_ALLOW_LIST)
     @matrix(ordering=[Ordering.ordered, Ordering.unordered])
     def test_leadership_pinning(self, ordering: Ordering):
         """

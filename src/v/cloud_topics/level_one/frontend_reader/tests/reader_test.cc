@@ -304,7 +304,7 @@ TEST_F(l1_reader_test, missing_object) {
         .first_offset = kafka::offset{0},
       });
 
-    _metastore.add_objects(*builder, term_map).get().value();
+    std::ignore = _metastore.add_objects(*builder, term_map).get().value();
 
     auto reader = make_reader(ntp, tidp);
     EXPECT_THROW(read_all(std::move(reader)), std::runtime_error);
@@ -364,7 +364,7 @@ TEST_F(l1_reader_test, empty_offset_range) {
         .term = model::term_id{1},
         .first_offset = high_watermark,
       });
-    _metastore.add_objects(*meta_builder, term_map).get().value();
+    std::ignore = _metastore.add_objects(*meta_builder, term_map).get().value();
 
     // Write some objects after the empty object.
     auto final_batches

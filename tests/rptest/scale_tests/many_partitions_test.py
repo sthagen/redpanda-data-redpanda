@@ -9,26 +9,35 @@
 
 import concurrent.futures
 import math
+import re
 import time
 from collections import Counter
 from typing import Any, Callable
 from ducktape.cluster.cluster import ClusterNode
 import numpy
-from ducktape.mark import parametrize
+from ducktape.mark import ignore, parametrize  # type: ignore[reportUnknownVariableType]
 from ducktape.utils.util import TimeoutError, wait_until
 
 from rptest.clients.rpk import RpkException, RpkTool
 from rptest.services.cluster import cluster
 from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.kgo_verifier_services import (
-    KgoVerifierConsumerGroupConsumer,
+    KgoVerifierMultiConsumerGroupConsumer,
+    KgoVerifierMultiProducer,
+    KgoVerifierMultiRandomConsumer,
+    KgoVerifierParams,
     KgoVerifierProducer,
-    KgoVerifierRandomConsumer,
 )
 from ducktape.tests.test import TestContext
 from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.openmessaging_benchmark_configs import OMBSampleConfigurations
-from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, LoggingConfig
+from rptest.clients.types import TopicSpec
+from rptest.services.redpanda import (
+    CLOUD_TOPICS_CONFIG_STR,
+    RESTART_LOG_ALLOW_LIST,
+    LoggingConfig,
+    SISettings,
+)
 from rptest.services.rpk_consumer import RpkConsumer
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.scale_parameters import ScaleParameters
@@ -59,9 +68,17 @@ DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT = int(
 # of data to write.
 STRESS_DATA_SIZE = 1024 * 1024 * 1024 * 100
 
-# When running with tiered storage, it's been observed that shutdown can take
-# on the order of a few minutes.
+# When running with tiered storage or cloud topics, it's been observed that
+# shutdown can take on the order of a few minutes.  Cloud topics housekeeping
+# (metastore sync, epoch advancement) can further extend this at high partition
+# counts.
 STOP_TIMEOUT = 60 * 5
+CLOUD_TOPICS_STOP_TIMEOUT = 60 * 10
+
+# TODO: suppress this log in the reconciler
+METASTORE_TRANSPORT_LOG_ALLOW_LIST = [
+    re.compile(r"reconciler - .*std::runtime_error .*metastore::errc::transport_error"),
+]
 
 
 class ManyPartitionsTest(PreallocNodesTest):
@@ -144,6 +161,7 @@ class ManyPartitionsTest(PreallocNodesTest):
             **kwargs,
         )
         self.rpk = RpkTool(self.redpanda)
+        self._stop_timeout = STOP_TIMEOUT
 
     def _all_elections_done(self, topic_names: list[str], p_per_topic: int):
         any_incomplete = False
@@ -326,7 +344,7 @@ class ManyPartitionsTest(PreallocNodesTest):
                         self.redpanda.restart_nodes,
                         nodes=[node],
                         start_timeout=self.EXPECT_START_TIME,
-                        stop_timeout=STOP_TIMEOUT,
+                        stop_timeout=self._stop_timeout,
                     )
                 )
 
@@ -347,7 +365,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         self.logger.info(f"Single node restart on node {node.name}")
         node_id = self.redpanda.idx(node)
 
-        self.redpanda.stop_node(node, timeout=STOP_TIMEOUT)
+        self.redpanda.stop_node(node, timeout=self._stop_timeout)
 
         # Wait for leaderships to stabilize on the surviving nodes
         wait_until(
@@ -523,7 +541,6 @@ class ManyPartitionsTest(PreallocNodesTest):
         # Now that we've tested basic ability to form consensus and survive some
         # restarts, move on to a more general stress test.
         self.logger.info("Entering traffic stress test")
-        target_topic: str = topic_names[0]
 
         # Assume fetches will be 10MB, the franz-go default
         fetch_bytes_per_partition = 10 * 1024 * 1024
@@ -567,26 +584,35 @@ class ManyPartitionsTest(PreallocNodesTest):
         )
         expect_transmit_time = max(expect_transmit_time, 30)
 
-        for tn in topic_names:
-            self.logger.info(
-                f"Writing {write_bytes_per_topic} bytes to {tn} with a deadline of {expect_transmit_time}s"
+        params_per_topic = [
+            KgoVerifierParams(
+                topic=tn,
+                msg_size=msg_size,
+                msg_count=msg_count_per_topic,
             )
-            t1 = time.time()
-            producer = KgoVerifierProducer(
-                self.test_context,
-                self.redpanda,
-                tn,
-                msg_size,
-                msg_count_per_topic,
-                custom_node=[self.preallocated_nodes[0]],
-            )
-            producer.start()
-            producer.wait(timeout_sec=expect_transmit_time)
-            self.free_preallocated_nodes()
-            duration = time.time() - t1
-            self.logger.info(
-                f"Wrote {write_bytes_per_topic} bytes to {tn} in {duration}s, bandwidth {(write_bytes_per_topic / duration) / (1024 * 1024)}MB/s"
-            )
+            for tn in topic_names
+        ]
+
+        self.logger.info(
+            f"Writing {write_bytes_per_topic} bytes to each of {len(topic_names)} topics "
+            f"with a deadline of {expect_transmit_time}s"
+        )
+        t1 = time.time()
+        producer = KgoVerifierMultiProducer(
+            self.test_context,
+            self.redpanda,
+            params_per_topic,
+            custom_node=[self.preallocated_nodes[0]],
+        )
+        producer.start()
+        producer.wait(timeout_sec=expect_transmit_time)
+        self.free_preallocated_nodes()
+        duration = time.time() - t1
+        total_bytes = write_bytes_per_topic * len(topic_names)
+        self.logger.info(
+            f"Wrote {total_bytes} bytes across {len(topic_names)} topics in {duration}s, "
+            f"bandwidth {(total_bytes / duration) / (1024 * 1024)}MB/s"
+        )
 
         stress_msg_size = 32768
         stress_data_size = STRESS_DATA_SIZE
@@ -595,23 +621,29 @@ class ManyPartitionsTest(PreallocNodesTest):
             stress_data_size = 2e9
 
         stress_msg_count = int(stress_data_size / stress_msg_size)
-        fast_producer = KgoVerifierProducer(
+        stress_params = [
+            KgoVerifierParams(
+                topic=tn,
+                msg_size=stress_msg_size,
+                msg_count=stress_msg_count,
+            )
+            for tn in topic_names
+        ]
+        fast_producer = KgoVerifierMultiProducer(
             self.test_context,
             self.redpanda,
-            target_topic,
-            stress_msg_size,
-            stress_msg_count,
+            stress_params,
             custom_node=[self.preallocated_nodes[0]],
         )
         fast_producer.start()
 
-        # Don't start consumers until the producer has written out its first
+        # Don't start consumers until all producers have written out their first
         # checkpoint with valid ranges.
         wait_until(
-            lambda: fast_producer.produce_status.acked > 0,
+            lambda: all(p.produce_status.acked > 0 for p in fast_producer.producers),
             timeout_sec=30,
             backoff_sec=1.0,
-            err_msg="Waiting for producer checkpoint",
+            err_msg="Waiting for producer checkpoints",
         )
 
         rand_ios = 100
@@ -620,14 +652,13 @@ class ManyPartitionsTest(PreallocNodesTest):
             rand_parallel = 10
             rand_ios = 10
 
-        rand_consumer = KgoVerifierRandomConsumer(
+        rand_consumer = KgoVerifierMultiRandomConsumer(
             self.test_context,
             self.redpanda,
-            target_topic,
-            msg_size=0,
+            stress_params,
             rand_read_msgs=rand_ios,
             parallel=rand_parallel,
-            nodes=[self.preallocated_nodes[1]],
+            custom_node=[self.preallocated_nodes[1]],
         )
         rand_consumer.start(clean=False)
         rand_consumer.wait()
@@ -652,26 +683,37 @@ class ManyPartitionsTest(PreallocNodesTest):
             # minutes during these events.
             expect_transmit_time += 600
 
-        verifier = KgoVerifierConsumerGroupConsumer(
+        verify_params = [
+            KgoVerifierParams(
+                topic=tn,
+                msg_size=0,
+                msg_count=0,
+                seq_max_msgs=max_msgs,
+            )
+            for tn in topic_names
+        ]
+        verifier = KgoVerifierMultiConsumerGroupConsumer(
             self.test_context,
             self.redpanda,
-            target_topic,
-            0,
+            verify_params,
             readers=math.ceil(scale.partition_limit / 5000),
-            max_msgs=max_msgs,
-            nodes=[self.preallocated_nodes[2]],
+            custom_node=[self.preallocated_nodes[2]],
         )
         verifier.start(clean=False)
 
         verifier.wait(timeout_sec=expect_transmit_time)
-        assert verifier.consumer_status.validator.invalid_reads == 0
-        if not scale.tiered_storage_enabled:
-            assert (
-                verifier.consumer_status.validator.valid_reads
-                >= fast_producer.produce_status.acked + msg_count_per_topic
-            ), (
-                f"{verifier.consumer_status.validator.valid_reads} >= {fast_producer.produce_status.acked} + {msg_count_per_topic}"
-            )
+        for i, v in enumerate(verifier.consumers):
+            assert v.consumer_status.validator.invalid_reads == 0
+            if not scale.tiered_storage_enabled:
+                assert (
+                    v.consumer_status.validator.valid_reads
+                    >= fast_producer.producers[i].produce_status.acked
+                    + msg_count_per_topic
+                ), (
+                    f"topic {topic_names[i]}: "
+                    f"{v.consumer_status.validator.valid_reads} >= "
+                    f"{fast_producer.producers[i].produce_status.acked} + {msg_count_per_topic}"
+                )
 
         self.free_preallocated_nodes()
 
@@ -807,6 +849,44 @@ class ManyPartitionsTest(PreallocNodesTest):
             topic_partitions_per_shard=topic_partitions_per_shard,
         )
 
+    @cluster(
+        num_nodes=12,
+        log_allow_list=RESTART_LOG_ALLOW_LIST + METASTORE_TRANSPORT_LOG_ALLOW_LIST,
+    )
+    @parametrize(
+        mib_per_partition=DEFAULT_MIB_PER_PARTITION,
+        topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
+    )
+    def test_many_partitions_cloud_topics(
+        self, mib_per_partition: float, topic_partitions_per_shard: int
+    ):
+        self._test_many_partitions(
+            compacted=False,
+            cloud_topics_enabled=True,
+            mib_per_partition=mib_per_partition,
+            topic_partitions_per_shard=topic_partitions_per_shard,
+        )
+
+    @ignore  # TODO: Evaluate parameters and turn this back on
+    @cluster(
+        num_nodes=12,
+        log_allow_list=RESTART_LOG_ALLOW_LIST + METASTORE_TRANSPORT_LOG_ALLOW_LIST,
+    )
+    @parametrize(
+        mib_per_partition=DEFAULT_MIB_PER_PARTITION,
+        topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
+    )
+    def test_many_partitions_cloud_topics_tiered_storage(
+        self, mib_per_partition: float, topic_partitions_per_shard: int
+    ):
+        self._test_many_partitions(
+            compacted=False,
+            tiered_storage_enabled=True,
+            cloud_topics_enabled=True,
+            mib_per_partition=mib_per_partition,
+            topic_partitions_per_shard=topic_partitions_per_shard,
+        )
+
     @cluster(num_nodes=12, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_omb(self):
         scale = ScaleParameters(
@@ -839,6 +919,7 @@ class ManyPartitionsTest(PreallocNodesTest):
         mib_per_partition: float,
         topic_partitions_per_shard: int,
         tiered_storage_enabled: bool = False,
+        cloud_topics_enabled: bool = False,
     ):
         """
         Validate that redpanda works with partition counts close to its resource
@@ -870,6 +951,10 @@ class ManyPartitionsTest(PreallocNodesTest):
         # Scale tests are not run on debug builds
         assert not self.debug_mode
 
+        self._stop_timeout = (
+            CLOUD_TOPICS_STOP_TIMEOUT if cloud_topics_enabled else STOP_TIMEOUT
+        )
+
         replication_factor = 3
 
         scale = ScaleParameters(
@@ -881,11 +966,25 @@ class ManyPartitionsTest(PreallocNodesTest):
             partition_memory_reserve_percentage=DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
         )
 
-        # Run with one huge topic: it is more stressful for redpanda when clients
-        # request the metadata for many partitions at once, and the simplest way
-        # to get traffic generators to do that without the clients supporting
-        # writing to arrays of topics is to put all the partitions into one topic.
-        n_topics = 1
+        # When cloud topics are enabled but tiered storage is not, we still
+        # need SISettings for the object store backend that cloud topics use.
+        if cloud_topics_enabled and not tiered_storage_enabled:
+            cloud_si_settings = SISettings(
+                self.test_context,
+                cloud_storage_enable_remote_read=False,
+                cloud_storage_enable_remote_write=False,
+                fast_uploads=True,
+            )
+            self.redpanda.set_si_settings(cloud_si_settings)
+
+        # By default run with one huge topic for maximum metadata stress. It is
+        # more stressful for redpanda when clients request the metadata for
+        # many partitions at once, and the simplest way to get traffic
+        # generators to do that without the clients supporting writing to
+        # arrays of topics is to put all the partitions into one topic. When
+        # cloud topics are enabled, split into two topics (regular + cloud) to
+        # exercise mixed-mode operation.
+        n_topics = 2 if cloud_topics_enabled else 1
 
         # Partitions per topic
         n_partitions = int(scale.partition_limit / n_topics)
@@ -923,11 +1022,24 @@ class ManyPartitionsTest(PreallocNodesTest):
             }
         )
 
+        if cloud_topics_enabled:
+            self.redpanda.add_extra_rp_conf({CLOUD_TOPICS_CONFIG_STR: True})
+
         self.redpanda.start()
 
         self.logger.info("Entering topic creation")
-        topic_names = [f"scale_{i:06d}" for i in range(0, n_topics)]
-        for tn in topic_names:
+        regular_topic_names: list[str] = []
+        cloud_topic_names: list[str] = []
+
+        if cloud_topics_enabled:
+            regular_topic_names = ["scale_000000"]
+            cloud_topic_names = ["cloud_000001"]
+        else:
+            regular_topic_names = [f"scale_{i:06d}" for i in range(0, n_topics)]
+
+        topic_names = regular_topic_names + cloud_topic_names
+
+        for tn in regular_topic_names:
             self.logger.info(f"Creating topic {tn} with {n_partitions} partitions")
             config: dict[str, Any] = {
                 "segment.bytes": scale.segment_size,
@@ -948,6 +1060,25 @@ class ManyPartitionsTest(PreallocNodesTest):
                 tn, partitions=n_partitions, replicas=replication_factor, config=config
             )
 
+        for tn in cloud_topic_names:
+            self.logger.info(
+                f"Creating cloud topic {tn} with {n_partitions} partitions"
+            )
+            # Cloud topics manage retention via the object store; local
+            # retention is not applicable.
+            cloud_config: dict[str, Any] = {
+                "segment.bytes": scale.segment_size,
+                "retention.bytes": scale.retention_bytes,
+                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
+                "cleanup.policy": "compact,delete" if compacted else "delete",
+            }
+            self.rpk.create_topic(
+                tn,
+                partitions=n_partitions,
+                replicas=replication_factor,
+                config=cloud_config,
+            )
+
         self.logger.info("Awaiting elections...")
         wait_until(
             lambda: self._all_elections_done(topic_names, n_partitions),
@@ -964,7 +1095,7 @@ class ManyPartitionsTest(PreallocNodesTest):
 
         if scale.tiered_storage_enabled:
             self.logger.info("Entering tiered storage warmup")
-            for tn in topic_names:
+            for tn in regular_topic_names:
                 self._tiered_storage_warmup(scale, tn)
 
         self.logger.info("Entering initial traffic test, writes + random reads")

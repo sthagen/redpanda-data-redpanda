@@ -39,14 +39,16 @@ using initialize_result = result<R, std::string>;
 
 ss::logger lg("ossl-library-context-service");
 
-using OSSL_PROVIDER_ptr = internal::handle<OSSL_PROVIDER, [](OSSL_PROVIDER* p) {
+void unload_ossl_provider(OSSL_PROVIDER* p) {
     if (1 != OSSL_PROVIDER_unload(p)) {
         vlog(
           lg.warn,
           "Failed to unload OSSL provider: {}",
           internal::ossl_error::build_error());
     }
-}>;
+}
+
+using OSSL_PROVIDER_ptr = internal::handle<OSSL_PROVIDER, unload_ossl_provider>;
 
 struct initialize_return {
     // Only loaded when in FIPS mode

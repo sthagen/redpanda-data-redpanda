@@ -11,11 +11,18 @@
 
 #include "redpanda/admin/services/shadow_link/converter.h"
 
+#include "bytes/iobuf_parser.h"
 #include "cluster_link/model/types.h"
+#include "config/configuration.h"
 #include "crypto/crypto.h"
+#include "serde/protobuf/rpc.h"
 #include "utils/base64.h"
 
+#include <seastar/core/memory.hh>
+#include <seastar/util/defer.hh>
+
 #include <algorithm>
+#include <new>
 #include <optional>
 #include <stdexcept>
 #include <variant>
@@ -57,6 +64,28 @@ using proto::common::tls_file_settings;
 using proto::common::tls_settings;
 using proto::common::tlspem_settings;
 namespace {
+
+/// Converts an iobuf to ss::sstring for TLS PEM data.
+///
+/// Note: This creates a contiguous allocation which may exceed 128KiB for large
+/// CA bundles. While large allocations are generally discouraged in Seastar,
+/// this is acceptable here because the Seastar TLS layer (set_x509_key, etc.)
+/// requires linearized certificate data anyway.
+ss::sstring iobuf_to_string(const iobuf& buf) {
+    auto sz = buf.size_bytes();
+
+    // Temporarily disable crash-on-allocation-failure so we can convert
+    // std::bad_alloc to an RPC error instead of crashing the broker.
+    try {
+        ss::memory::scoped_system_alloc_fallback fb;
+        iobuf_const_parser p(buf);
+        return p.read_string(sz);
+    } catch (const std::bad_alloc&) {
+        throw serde::pb::rpc::resource_exhausted_exception(
+          ssx::sformat(
+            "TLS certificate data too large to linearize ({} bytes)", sz));
+    }
+}
 
 constexpr auto to_filter_pattern_type(proto::admin::pattern_type p) {
     switch (p) {
@@ -454,13 +483,16 @@ void set_tls_settings(
       },
       [&config](const tlspem_settings& pem) {
           if (!pem.get_ca().empty()) {
-              config.ca = cluster_link::model::tls_value(pem.get_ca());
+              config.ca = cluster_link::model::tls_value(
+                iobuf_to_string(pem.get_ca()));
           }
           if (!pem.get_key().empty()) {
-              config.key = cluster_link::model::tls_value(pem.get_key());
+              config.key = cluster_link::model::tls_value(
+                iobuf_to_string(pem.get_key()));
           }
           if (!pem.get_cert().empty()) {
-              config.cert = cluster_link::model::tls_value(pem.get_cert());
+              config.cert = cluster_link::model::tls_value(
+                iobuf_to_string(pem.get_cert()));
           }
           if (config.key.has_value() != config.cert.has_value()) {
               throw std::invalid_argument(
@@ -612,14 +644,14 @@ struct tls_visitor {
               auto key_digest = bytes_to_base64(
                 crypto::digest(crypto::digest_type::SHA256, key()));
               pem_settings.set_key_fingerprint(std::move(key_digest));
-              pem_settings.set_cert(ss::sstring{cert()});
+              pem_settings.set_cert(iobuf::from(cert()));
           },
           [this, &key, &cert](std::monostate) {
               tlspem_settings pem_settings;
               auto key_digest = bytes_to_base64(
                 crypto::digest(crypto::digest_type::SHA256, key()));
               pem_settings.set_key_fingerprint(std::move(key_digest));
-              pem_settings.set_cert(ss::sstring{cert()});
+              pem_settings.set_cert(iobuf::from(cert()));
               _tls_settings->set_tls_pem_settings(std::move(pem_settings));
           });
     }
@@ -647,7 +679,7 @@ tls_settings create_tls_settings(const cluster_link::model::metadata& md) {
           },
           [&tls](const cluster_link::model::tls_value& value) {
               tlspem_settings pem_settings;
-              pem_settings.set_ca(ss::sstring{value});
+              pem_settings.set_ca(iobuf::from(value()));
               tls.set_tls_pem_settings(std::move(pem_settings));
           });
     }
@@ -1136,7 +1168,7 @@ void merge_input_only_fields(
                   from.connection.key.value(),
                   [&to_pem](
                     const cluster_link::model::tls_value& value) mutable {
-                      to_pem.set_key(ss::sstring{value()});
+                      to_pem.set_key(iobuf::from(value()));
                   },
                   [](const auto&) {
                       throw std::invalid_argument(

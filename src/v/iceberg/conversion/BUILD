@@ -210,6 +210,7 @@ redpanda_cc_library(
     implementation_deps = [
         ":time_rfc3339",
         "//src/v/bytes:iobuf_parser",
+        "//src/v/container:chunked_hash_map",
         "//src/v/serde/json:parser",
     ],
     visibility = ["//visibility:public"],

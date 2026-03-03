@@ -1,6 +1,8 @@
 from typing import Any, Literal, Union, overload
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 class RpCloudApiClient(object):
@@ -9,6 +11,26 @@ class RpCloudApiClient(object):
         self._token = None
         self._logger = log
         self.lasterror = None
+        self._session = self._create_session()
+
+    def _create_session(self) -> requests.Session:
+        """Create a session with retry for transient connection errors."""
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=0.5,
+            status_forcelist=[
+                requests.codes.bad_gateway,
+                requests.codes.service_unavailable,
+                requests.codes.gateway_timeout,
+            ],
+            allowed_methods=["GET", "POST", "PATCH", "DELETE", "HEAD"],
+        )
+        session = requests.Session()
+        session.mount("https://", HTTPAdapter(max_retries=retry))
+        session.mount("http://", HTTPAdapter(max_retries=retry))
+        return session
 
     def _handle_error(self, response: requests.Response, quite=False):
         try:
@@ -38,7 +60,7 @@ class RpCloudApiClient(object):
                 "client_secret": f"{self._config.oauth_client_secret}",
                 "audience": f"{self._config.oauth_audience}",
             }
-            resp = requests.post(
+            resp = self._session.post(
                 f"{self._config.oauth_url}", headers=headers, data=data
             )
             _r = self._handle_error(resp)
@@ -86,7 +108,7 @@ class RpCloudApiClient(object):
             "Accept": "application/json",
         }
         _base = base_url if base_url else self._config.api_url
-        resp = requests.get(f"{_base}{endpoint}", headers=headers, **kwargs)
+        resp = self._session.get(f"{_base}{endpoint}", headers=headers, **kwargs)
         _r = self._handle_error(resp, quite=quite)
         if text_response:
             return _r.text
@@ -101,7 +123,7 @@ class RpCloudApiClient(object):
             "Accept": "application/json",
         } | override_headers
         _base = base_url if base_url else self._config.api_url
-        resp = requests.post(f"{_base}{endpoint}", headers=headers, **kwargs)
+        resp = self._session.post(f"{_base}{endpoint}", headers=headers, **kwargs)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 
@@ -123,7 +145,7 @@ class RpCloudApiClient(object):
         } | override_headers
 
         _base = base_url if base_url else self._config.api_url
-        resp = requests.patch(f"{_base}{endpoint}", headers=headers, **kwargs)
+        resp = self._session.patch(f"{_base}{endpoint}", headers=headers, **kwargs)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 
@@ -131,7 +153,7 @@ class RpCloudApiClient(object):
         token = self._get_token()
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         _base = base_url if base_url else self._config.api_url
-        resp = requests.delete(f"{_base}{endpoint}", headers=headers, **kwargs)
+        resp = self._session.delete(f"{_base}{endpoint}", headers=headers, **kwargs)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 

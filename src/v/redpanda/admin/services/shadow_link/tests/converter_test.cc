@@ -434,9 +434,9 @@ TEST(converter_test, create_with_tls_value) {
     proto::admin::shadow_link_client_options shadow_link_client_options;
     proto::common::tls_settings tls_settings;
     proto::common::tlspem_settings tls_pem_settings;
-    tls_pem_settings.set_ca(ss::sstring{ca});
-    tls_pem_settings.set_key(ss::sstring{key});
-    tls_pem_settings.set_cert(ss::sstring{cert});
+    tls_pem_settings.set_ca(iobuf::from(ca));
+    tls_pem_settings.set_key(iobuf::from(key));
+    tls_pem_settings.set_cert(iobuf::from(cert));
     tls_settings.set_tls_pem_settings(std::move(tls_pem_settings));
 
     shadow_link_client_options.set_tls_settings(std::move(tls_settings));
@@ -479,7 +479,7 @@ TEST(converter_test, create_with_tls_value_invalid) {
     proto::admin::shadow_link_client_options shadow_link_client_options;
     proto::common::tls_settings tls_settings;
     proto::common::tlspem_settings tls_pem_settings;
-    tls_pem_settings.set_key(ss::sstring{key});
+    tls_pem_settings.set_key(iobuf::from(key));
 
     tls_settings.set_tls_pem_settings(std::move(tls_pem_settings));
 
@@ -1272,9 +1272,9 @@ TEST(converter_test, test_update_tls_value) {
     admin::set_client_id(current_md);
 
     proto::common::tlspem_settings tls_pem_settings;
-    tls_pem_settings.set_ca("new-ca");
-    tls_pem_settings.set_key("new-key");
-    tls_pem_settings.set_cert("new-cert");
+    tls_pem_settings.set_ca(iobuf::from("new-ca"));
+    tls_pem_settings.set_key(iobuf::from("new-key"));
+    tls_pem_settings.set_cert(iobuf::from("new-cert"));
 
     proto::common::tls_settings tls_settings;
     tls_settings.set_tls_pem_settings(std::move(tls_pem_settings));
