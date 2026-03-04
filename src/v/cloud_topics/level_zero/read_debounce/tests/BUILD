@@ -38,6 +38,7 @@ redpanda_cc_bench(
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
         "//src/v/cloud_topics/level_zero/pipeline:read_request",
         "//src/v/cloud_topics/level_zero/read_debounce",
+        "//src/v/cloud_topics/level_zero/read_merge",
         "//src/v/config",
         "//src/v/model",
         "//src/v/model/tests:random",

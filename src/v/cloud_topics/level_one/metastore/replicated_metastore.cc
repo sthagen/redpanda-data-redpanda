@@ -245,7 +245,21 @@ rpc_to_meta_extent_metadata(chunked_vector<rpc::extent_metadata> v) {
     metastore::extent_metadata_vec res;
     res.reserve(v.size());
     for (auto& e : v) {
-        res.emplace_back(e.base_offset, e.last_offset, e.max_timestamp);
+        std::optional<metastore::extent_object_info> obj_info;
+        if (e.object_info.has_value()) {
+            obj_info = metastore::extent_object_info{
+              .oid = e.object_info->oid,
+              .footer_pos = e.object_info->footer_pos,
+              .object_size = e.object_info->object_size,
+            };
+        }
+        res.push_back(
+          metastore::extent_metadata{
+            .base_offset = e.base_offset,
+            .last_offset = e.last_offset,
+            .max_timestamp = e.max_timestamp,
+            .object_info = std::move(obj_info),
+          });
     }
     return res;
 }
@@ -831,7 +845,8 @@ replicated_metastore::get_extent_metadata_forwards(
   const model::topic_id_partition& tidp,
   kafka::offset min_offset,
   kafka::offset max_offset,
-  size_t max_num_extents) {
+  size_t max_num_extents,
+  include_object_metadata include_object_metadata) {
     static constexpr auto o = rpc::get_extent_metadata_request::order::forwards;
 
     rpc::get_extent_metadata_request req;
@@ -840,6 +855,7 @@ replicated_metastore::get_extent_metadata_forwards(
     req.max_offset = max_offset;
     req.max_num_extents = max_num_extents;
     req.o = o;
+    req.include_object_metadata = bool(include_object_metadata);
 
     auto reply_fut = co_await ss::coroutine::as_future(
       fe_.get_extent_metadata(std::move(req)));

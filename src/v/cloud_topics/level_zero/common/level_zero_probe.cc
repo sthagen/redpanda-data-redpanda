@@ -254,6 +254,52 @@ void write_request_scheduler_probe::setup_internal_metrics(bool disable) {
          sm::description("Number of active upload groups in the scheduler."),
          labels)});
 }
+read_merge_probe::read_merge_probe(bool disable) {
+    setup_internal_metrics(disable);
+}
+
+void read_merge_probe::setup_internal_metrics(bool disable) {
+    if (disable) {
+        return;
+    }
+    namespace sm = ss::metrics;
+    std::vector<sm::label_instance> labels;
+
+    _metrics.add_group(
+      prometheus_sanitize::metrics_name("cloud_topics_read_merge"),
+      {
+        sm::make_counter(
+          "requests_in",
+          [this] { return _requests_in; },
+          sm::description(
+            "Number of read requests handled by the read merge component."),
+          labels),
+
+        sm::make_counter(
+          "bytes_in",
+          [this] { return _bytes_in; },
+          sm::description(
+            "Total bytes of read requests handled by the read merge "
+            "component."),
+          labels),
+
+        sm::make_counter(
+          "requests_out",
+          [this] { return _requests_out; },
+          sm::description(
+            "Number of proxy requests forwarded to the next pipeline stage."),
+          labels),
+
+        sm::make_counter(
+          "bytes_out",
+          [this] { return _bytes_out; },
+          sm::description(
+            "Total bytes of proxy requests forwarded to the next pipeline "
+            "stage."),
+          labels),
+      });
+}
+
 batcher_probe::batcher_probe(bool disable) { setup_internal_metrics(disable); }
 
 void batcher_probe::setup_internal_metrics(bool disable) {

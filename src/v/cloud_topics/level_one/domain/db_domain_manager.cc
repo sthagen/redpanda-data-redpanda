@@ -887,12 +887,37 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
         }
         const auto& extent = row.value();
         auto key = extent_row_key::decode(extent.key);
-        extents.push_back(
-          rpc::extent_metadata{
-            .base_offset = key->base_offset,
-            .last_offset = extent.val.last_offset,
-            .max_timestamp = extent.val.max_timestamp,
-          });
+        rpc::extent_metadata em{
+          .base_offset = key->base_offset,
+          .last_offset = extent.val.last_offset,
+          .max_timestamp = extent.val.max_timestamp,
+        };
+        if (req.include_object_metadata) {
+            auto object_res = co_await reader.get_object(extent.val.oid);
+            if (!object_res.has_value()) {
+                co_return rpc::get_extent_metadata_reply{
+                  .ec = log_and_convert(
+                    object_res.error(),
+                    fmt::format(
+                      "Error getting object {} in extent ({}~{}): ",
+                      extent.val.oid,
+                      key->base_offset,
+                      extent.val.last_offset)),
+                };
+            }
+            if (!object_res->has_value()) {
+                co_return rpc::get_extent_metadata_reply{
+                  .ec = rpc::errc::out_of_range,
+                };
+            }
+            const auto& object = object_res.value().value();
+            em.object_info = rpc::extent_object_info{
+              .oid = extent.val.oid,
+              .footer_pos = object.footer_pos,
+              .object_size = object.object_size,
+            };
+        }
+        extents.push_back(std::move(em));
         if (extents.size() >= req.max_num_extents) {
             end_of_stream = false;
             break;

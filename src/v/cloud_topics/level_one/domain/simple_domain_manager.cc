@@ -54,11 +54,20 @@ meta_to_rpc_extent_metadata(metastore::extent_metadata_vec v) {
     chunked_vector<rpc::extent_metadata> res;
     res.reserve(v.size());
     for (auto& e : v) {
+        std::optional<rpc::extent_object_info> obj_info;
+        if (e.object_info.has_value()) {
+            obj_info = rpc::extent_object_info{
+              .oid = e.object_info->oid,
+              .footer_pos = e.object_info->footer_pos,
+              .object_size = e.object_info->object_size,
+            };
+        }
         res.push_back(
           rpc::extent_metadata{
             .base_offset = e.base_offset,
             .last_offset = e.last_offset,
-            .max_timestamp = e.max_timestamp});
+            .max_timestamp = e.max_timestamp,
+            .object_info = std::move(obj_info)});
     }
     return res;
 }
@@ -647,7 +656,8 @@ simple_domain_manager::get_extent_metadata(
               req.tp,
               req.min_offset,
               req.max_offset,
-              req.max_num_extents);
+              req.max_num_extents,
+              metastore::include_object_metadata(req.include_object_metadata));
         case rpc::get_extent_metadata_request::order::backwards:
             return simple_metastore::get_extent_metadata_backwards(
               stm_state,

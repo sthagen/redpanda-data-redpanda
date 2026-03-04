@@ -101,6 +101,8 @@ ss::future<> app::construct(
       ss::sharded_parameter([&remote] { return std::ref(remote->local()); }),
       bucket);
 
+    co_await construct_service(l1_reader_cache_);
+
     co_await construct_service(
       state,
       data_plane.get(),
@@ -108,7 +110,8 @@ ss::future<> app::construct(
       ss::sharded_parameter([this] { return &l1_io.local(); }),
       ss::sharded_parameter(
         [&metadata_cache] { return &metadata_cache->local(); }),
-      ss::sharded_parameter([this] { return &_l1_reader_probe.local(); }));
+      ss::sharded_parameter([this] { return &_l1_reader_probe.local(); }),
+      ss::sharded_parameter([this] { return &l1_reader_cache_.local(); }));
 
     co_await construct_service(
       topic_purge_manager,

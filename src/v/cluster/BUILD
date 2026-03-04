@@ -764,6 +764,7 @@ redpanda_cc_library(
         "//src/v/ssx:checkpoint_mutex",
         "//src/v/ssx:event",
         "//src/v/ssx:future_util",
+        "//src/v/ssx:minimum_interval_timer",
         "//src/v/ssx:mutex",
         "//src/v/ssx:rate_limited_function",
         "//src/v/ssx:semaphore",

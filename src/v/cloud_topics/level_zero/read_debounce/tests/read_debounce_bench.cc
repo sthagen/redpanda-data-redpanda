@@ -10,6 +10,7 @@
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/read_debounce/read_debounce.h"
+#include "cloud_topics/level_zero/read_merge/read_merge.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -21,6 +22,8 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/circular_buffer.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/sleep.hh>
+#include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/testing/perf_tests.hh>
 
@@ -32,9 +35,15 @@
 using namespace std::chrono_literals;
 namespace cloud_topics {
 
+/// Mock fetch handler that processes requests with an optional delay
+/// to simulate I/O latency. When delay is zero, requests complete
+/// synchronously (original behavior).
 struct fetch_handler {
-    explicit fetch_handler(l0::read_pipeline<>& p)
-      : stage(p.register_read_pipeline_stage()) {
+    explicit fetch_handler(
+      l0::read_pipeline<>& p,
+      std::chrono::microseconds delay = std::chrono::microseconds(0))
+      : stage(p.register_read_pipeline_stage())
+      , _delay(delay) {
         _batch = model::test::make_random_batch(
           model::test::record_batch_spec{
             .offset = model::offset(0),
@@ -64,14 +73,17 @@ struct fetch_handler {
             }
 
             for (auto& r : result.value().requests) {
-                process_single_request(&r);
+                ssx::spawn_with_gate(_gate, [this, req = &r]() mutable {
+                    return process_single_request(req);
+                });
             }
         }
     }
 
-    void process_single_request(l0::read_request<>* req) {
-        auto auto_dispose = ss::defer(
-          [req] { req->set_value(errc::unexpected_failure); });
+    ss::future<> process_single_request(l0::read_request<>* req) {
+        if (_delay.count() > 0) {
+            co_await ss::sleep(_delay);
+        }
 
         auto meta = std::move(req->query.meta);
         chunked_vector<model::record_batch> data;
@@ -79,13 +91,13 @@ struct fetch_handler {
             std::ignore = m;
             data.push_back(_batch->copy());
         }
-        auto_dispose.cancel();
         req->set_value({{std::move(data)}});
     }
 
     std::optional<model::record_batch> _batch;
     l0::read_pipeline<>::stage stage;
     ss::gate _gate;
+    std::chrono::microseconds _delay;
 };
 } // namespace cloud_topics
 
@@ -95,7 +107,10 @@ class read_debounce_bench {
 public:
     /// Start benchmark fixture.
     /// \param enable_debounce enables or disables read debounce
-    ss::future<> start(bool enable_debounce) {
+    /// \param fetch_delay simulates I/O latency in fetch handler
+    ss::future<> start(
+      bool enable_debounce,
+      std::chrono::microseconds fetch_delay = std::chrono::microseconds(0)) {
         co_await pipeline.start();
 
         if (enable_debounce) {
@@ -107,7 +122,8 @@ public:
         }
 
         co_await sink.start(
-          ss::sharded_parameter([this] { return std::ref(pipeline.local()); }));
+          ss::sharded_parameter([this] { return std::ref(pipeline.local()); }),
+          fetch_delay);
 
         co_await sink.invoke_on_all([](auto& sink) { return sink.start(); });
     }
@@ -142,9 +158,62 @@ public:
               co_await pipeline.local().make_reader(
                 model::controller_ntp,
                 std::move(query),
-                ss::lowres_clock::now() + std::chrono::seconds(10)));
+                ss::lowres_clock::now() + 10s));
             perf_tests::stop_measuring_time();
         }
+    }
+
+    // Fire N concurrent requests all targeting the same object_id.
+    // Measures how the debounce stage handles contention.
+    ss::future<> test_run_concurrent_same_object(int concurrency) {
+        auto shared_id = object_id{.name = uuid_t::create()};
+        chunked_vector<ss::future<
+          std::expected<l0::dataplane_query_result, std::error_code>>>
+          futures;
+
+        perf_tests::start_measuring_time();
+        for (int i = 0; i < concurrency; i++) {
+            l0::dataplane_query query;
+            query.output_size_estimate = 1_KiB;
+            query.meta.push_back(
+              extent_meta{
+                .id = shared_id, .byte_range_size = byte_range_size_t{1_KiB}});
+
+            futures.push_back(pipeline.local().make_reader(
+              model::controller_ntp,
+              std::move(query),
+              ss::lowres_clock::now() + 10s));
+        }
+        auto results = co_await ss::when_all(futures.begin(), futures.end());
+        perf_tests::do_not_optimize(results);
+        perf_tests::stop_measuring_time();
+    }
+
+    // Fire N concurrent requests each targeting a unique object_id.
+    // For debounce, false hash collisions (pigeonhole on 128 slots)
+    // serialize unrelated requests. For read_merge, no collisions.
+    ss::future<> test_run_concurrent_unique_objects(int concurrency) {
+        chunked_vector<ss::future<
+          std::expected<l0::dataplane_query_result, std::error_code>>>
+          futures;
+
+        perf_tests::start_measuring_time();
+        for (int i = 0; i < concurrency; i++) {
+            l0::dataplane_query query;
+            query.output_size_estimate = 1_KiB;
+            query.meta.push_back(
+              extent_meta{
+                .id = object_id{.name = uuid_t::create()},
+                .byte_range_size = byte_range_size_t{1_KiB}});
+
+            futures.push_back(pipeline.local().make_reader(
+              model::controller_ntp,
+              std::move(query),
+              ss::lowres_clock::now() + 10s));
+        }
+        auto results = co_await ss::when_all(futures.begin(), futures.end());
+        perf_tests::do_not_optimize(results);
+        perf_tests::stop_measuring_time();
     }
 
     ss::sharded<cloud_topics::l0::read_pipeline<>> pipeline;
@@ -152,15 +221,177 @@ public:
     ss::sharded<cloud_topics::fetch_handler> sink;
 };
 
+// ---- Read merge benchmark fixture ----
+
+class read_merge_bench {
+public:
+    ss::future<> start(
+      bool enable_merge,
+      std::chrono::microseconds fetch_delay = std::chrono::microseconds(0)) {
+        co_await pipeline.start();
+
+        if (enable_merge) {
+            co_await merge.start(ss::sharded_parameter([this] {
+                return pipeline.local().register_read_pipeline_stage();
+            }));
+
+            co_await merge.invoke_on_all([](auto& f) { return f.start(); });
+        }
+
+        co_await sink.start(
+          ss::sharded_parameter([this] { return std::ref(pipeline.local()); }),
+          fetch_delay);
+
+        co_await sink.invoke_on_all([](auto& sink) { return sink.start(); });
+    }
+
+    ss::future<> stop() {
+        co_await pipeline.stop();
+        co_await sink.stop();
+        if (merge.local_is_initialized()) {
+            co_await merge.stop();
+        }
+    }
+
+    // Run requests serially, each with a unique object_id
+    ss::future<> test_run_unique(int num_requests) {
+        for (int i = 0; i < num_requests; i++) {
+            l0::dataplane_query query;
+            query.output_size_estimate = 1_KiB;
+            query.meta.push_back(
+              extent_meta{
+                .id = object_id{.name = uuid_t::create()},
+                .byte_range_size = byte_range_size_t{1_KiB}});
+
+            perf_tests::start_measuring_time();
+            perf_tests::do_not_optimize(
+              co_await pipeline.local().make_reader(
+                model::controller_ntp,
+                std::move(query),
+                ss::lowres_clock::now() + 10s));
+            perf_tests::stop_measuring_time();
+        }
+    }
+
+    // Fire N concurrent requests all targeting the same object_id.
+    // Measures the merge path where joiners wait on the shared_future.
+    ss::future<> test_run_concurrent_same_object(int concurrency) {
+        auto shared_id = object_id{.name = uuid_t::create()};
+        chunked_vector<ss::future<
+          std::expected<l0::dataplane_query_result, std::error_code>>>
+          futures;
+
+        perf_tests::start_measuring_time();
+        for (int i = 0; i < concurrency; i++) {
+            l0::dataplane_query query;
+            query.output_size_estimate = 1_KiB;
+            query.meta.push_back(
+              extent_meta{
+                .id = shared_id, .byte_range_size = byte_range_size_t{1_KiB}});
+
+            futures.push_back(pipeline.local().make_reader(
+              model::controller_ntp,
+              std::move(query),
+              ss::lowres_clock::now() + 10s));
+        }
+        auto results = co_await ss::when_all(futures.begin(), futures.end());
+        perf_tests::do_not_optimize(results);
+        perf_tests::stop_measuring_time();
+    }
+
+    // Fire N concurrent requests each targeting a unique object_id.
+    // read_merge has no false collisions — all requests proceed in
+    // parallel without blocking each other.
+    ss::future<> test_run_concurrent_unique_objects(int concurrency) {
+        chunked_vector<ss::future<
+          std::expected<l0::dataplane_query_result, std::error_code>>>
+          futures;
+
+        perf_tests::start_measuring_time();
+        for (int i = 0; i < concurrency; i++) {
+            l0::dataplane_query query;
+            query.output_size_estimate = 1_KiB;
+            query.meta.push_back(
+              extent_meta{
+                .id = object_id{.name = uuid_t::create()},
+                .byte_range_size = byte_range_size_t{1_KiB}});
+
+            futures.push_back(pipeline.local().make_reader(
+              model::controller_ntp,
+              std::move(query),
+              ss::lowres_clock::now() + 10s));
+        }
+        auto results = co_await ss::when_all(futures.begin(), futures.end());
+        perf_tests::do_not_optimize(results);
+        perf_tests::stop_measuring_time();
+    }
+
+    ss::sharded<cloud_topics::l0::read_pipeline<>> pipeline;
+    ss::sharded<cloud_topics::l0::read_merge<>> merge;
+    ss::sharded<cloud_topics::fetch_handler> sink;
+};
+
+// ---- Debounce tests ----
+
 PERF_TEST_C(read_debounce_bench, baseline) {
-    // This is a baseline. It is measured without the debouncing.
+    // Baseline: no middle stage, serial requests with unique objects.
     co_await start(false);
     co_await test_run(100);
     co_await stop();
 }
 
-PERF_TEST_C(read_debounce_bench, debounce) {
+PERF_TEST_C(read_debounce_bench, serial) {
+    // Serial requests through debounce, unique objects.
     co_await start(true);
     co_await test_run(100);
+    co_await stop();
+}
+
+PERF_TEST_C(read_debounce_bench, concurrent_same_object) {
+    // 50 concurrent requests for the same object through debounce.
+    // All hash to the same slot — serialized by 250ms lock timeout.
+    co_await start(true, 1ms);
+    co_await test_run_concurrent_same_object(50);
+    co_await stop();
+}
+
+PERF_TEST_C(read_debounce_bench, concurrent_unique_objects) {
+    // 50 concurrent requests for different objects through debounce.
+    // False hash collisions on 128 slots serialize unrelated requests.
+    co_await start(true, 1ms);
+    co_await test_run_concurrent_unique_objects(50);
+    co_await stop();
+}
+
+// ---- Read merge tests ----
+
+PERF_TEST_C(read_merge_bench, baseline) {
+    // Baseline: no middle stage, serial requests with unique objects.
+    co_await start(false);
+    co_await test_run_unique(100);
+    co_await stop();
+}
+
+PERF_TEST_C(read_merge_bench, serial_unique_objects) {
+    // Serial requests through read_merge, unique objects.
+    // Measures per-request overhead of hash map lookup.
+    co_await start(true);
+    co_await test_run_unique(100);
+    co_await stop();
+}
+
+PERF_TEST_C(read_merge_bench, concurrent_same_object) {
+    // 50 concurrent requests for the same object through read_merge.
+    // Only 1 proxy reaches fetch handler; 49 join on shared_future.
+    co_await start(true, 1ms);
+    co_await test_run_concurrent_same_object(50);
+    co_await stop();
+}
+
+PERF_TEST_C(read_merge_bench, concurrent_unique_objects) {
+    // 50 concurrent requests for different objects through read_merge.
+    // No false collisions — all requests proceed fully in parallel.
+    co_await start(true, 1ms);
+    co_await test_run_concurrent_unique_objects(50);
     co_await stop();
 }

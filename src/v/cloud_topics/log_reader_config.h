@@ -86,6 +86,14 @@ struct cloud_topic_log_reader_config {
 
     bool skip_cache{false};
 
+    // Number of objects to look ahead when fetching object metadata from
+    // the metastore. 0 (default) means no lookahead and is equivalent to 1:
+    // fetch one object's metadata at a time. Values > 1 batch-fetch multiple
+    // objects' metadata in a single metastore RPC.
+    //
+    // NB: Applies to the L1 reader only.
+    size_t lookahead_objects{0};
+
     fmt::iterator format_to(fmt::iterator it) const;
 };
 
