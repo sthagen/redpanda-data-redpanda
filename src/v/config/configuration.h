@@ -816,6 +816,8 @@ public:
 
     property<bool> cloud_topics_fetch_debounce_enabled;
 
+    property<std::chrono::milliseconds> cloud_topics_preregistered_object_ttl;
+
     development_feature_property<int> development_feature_property_testing_only;
 
 private:

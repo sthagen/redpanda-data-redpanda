@@ -36,24 +36,28 @@ term_state_update_t make_terms_update(const metastore::term_offset_map_t& m) {
 }
 } // namespace
 
-std::expected<object_id, simple_object_builder::error>
+ss::future<std::expected<object_id, simple_object_builder::error>>
 simple_object_builder::get_or_create_object_for(
-  const model::topic_id_partition&) {
+  const model::topic_id_partition& tidp) {
     // The simple metastore isn't partitioned at all, so have all partitions
     // blindly share any existing object.
     if (pending_objects_.empty()) {
-        auto oid = create_object_id();
-        pending_objects_[oid] = {};
-        return oid;
+        co_return co_await create_object_for(tidp);
     }
-    return pending_objects_.begin()->first;
+    co_return pending_objects_.begin()->first;
 }
 
-std::expected<object_id, simple_object_builder::error>
+ss::future<std::expected<object_id, simple_object_builder::error>>
 simple_object_builder::create_object_for(const model::topic_id_partition&) {
     auto oid = create_object_id();
+    preregister_objects_update prereg{
+      .registered_at = model::timestamp::now(),
+    };
+    prereg.object_ids.push_back(oid);
+    auto res = prereg.apply(*state_);
+    vassert(res.has_value(), "preregister_objects_update::apply must succeed");
     pending_objects_[oid] = {};
-    return oid;
+    co_return oid;
 }
 
 std::expected<void, simple_object_builder::error>
@@ -139,7 +143,24 @@ ss::future<std::expected<
   std::unique_ptr<metastore::object_metadata_builder>,
   metastore::errc>>
 simple_metastore::object_builder() {
-    co_return std::make_unique<simple_object_builder>();
+    co_return std::make_unique<simple_object_builder>(&state_);
+}
+
+void simple_metastore::preregister_objects(
+  const chunked_vector<object_id>& object_ids) {
+    preregister_objects_update prereg{
+      .registered_at = model::timestamp::now(),
+    };
+    for (const auto& oid : object_ids) {
+        if (!state_.objects.contains(oid)) {
+            prereg.object_ids.push_back(oid);
+        }
+    }
+    if (prereg.object_ids.empty()) {
+        return;
+    }
+    auto res = prereg.apply(state_);
+    vassert(res.has_value(), "preregister_objects_update::apply must succeed");
 }
 
 ss::future<std::expected<metastore::offsets_response, metastore::errc>>

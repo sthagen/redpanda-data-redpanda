@@ -83,19 +83,26 @@ ss::future<> l1_reader_cache::stop() {
 
 ss::future<> l1_reader_cache::evict_stale() {
     auto now = ss::lowres_clock::now();
+    // Collect all stale readers without yielding. Yielding mid-iteration
+    // would let take_reader() or return_reader() erase entries from the
+    // list, invalidating our iterator (use-after-free).
+    std::vector<std::unique_ptr<l1::object_reader>> to_close;
     auto it = _entries.begin();
     while (it != _entries.end()) {
         if (now - it->atime > ttl) {
-            auto reader_to_close = std::move(it->reader.reader);
+            to_close.push_back(std::move(it->reader.reader));
             vlog(cd_log.debug, "TTL evicted cached L1 reader for {}", it->tidp);
             it = _entries.erase_and_dispose(
               it, [](cache_entry* e) { delete e; }); // NOLINT
-            co_await close_reader_safe(std::move(reader_to_close));
         } else {
             ++it;
         }
     }
     arm_timer();
+    co_await ss::max_concurrent_for_each(
+      to_close, 16, [](std::unique_ptr<l1::object_reader>& r) {
+          return close_reader_safe(std::move(r));
+      });
 }
 
 void l1_reader_cache::arm_timer() {

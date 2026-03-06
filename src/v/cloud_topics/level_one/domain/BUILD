@@ -52,8 +52,10 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/metastore:garbage_collector",
         "//src/v/cloud_topics/level_one/metastore:rpc_types",
+        "//src/v/cloud_topics/level_one/metastore:state_update",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/model:batch_builder",
@@ -95,10 +97,12 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":domain_manager",
+        "//src/v/base",
         "//src/v/cloud_topics/level_one/common:abstract_io",
         "//src/v/cloud_topics/level_one/metastore:rpc_types",
         "//src/v/cloud_topics/level_one/metastore/lsm:replicated_db",
         "//src/v/cloud_topics/level_one/metastore/lsm:stm",
+        "//src/v/model",
         "//src/v/ssx:checkpoint_mutex",
         "@seastar",
     ],

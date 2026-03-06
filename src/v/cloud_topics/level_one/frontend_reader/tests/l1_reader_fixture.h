@@ -64,7 +64,7 @@ protected:
         std::map<model::topic_id_partition, l1::object_id> oid_by_tidp;
         for (auto& [tidp, unused] : batches_by_tidp) {
             oid_by_tidp[tidp]
-              = meta_builder->get_or_create_object_for(tidp).value();
+              = (co_await meta_builder->get_or_create_object_for(tidp)).value();
         }
 
         // Then create output streams and builders for each object.

@@ -4732,6 +4732,12 @@ configuration::configuration()
       "performance and lowering the cost.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::user},
       true)
+  , cloud_topics_preregistered_object_ttl(
+      *this,
+      "cloud_topics_preregistered_object_ttl",
+      "Time-to-live for pre-registered L1 objects before they are expired.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1h)
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",

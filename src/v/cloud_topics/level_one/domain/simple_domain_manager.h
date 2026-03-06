@@ -81,6 +81,9 @@ public:
     ss::future<std::expected<database_stats, rpc::errc>>
     get_database_stats() override;
 
+    ss::future<rpc::preregister_objects_reply>
+      preregister_objects(rpc::preregister_objects_request) override;
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
     ss::future<> gc_loop();

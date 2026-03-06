@@ -9,9 +9,11 @@
  */
 #include "cloud_topics/level_one/domain/simple_domain_manager.h"
 
+#include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/garbage_collector.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
+#include "cloud_topics/level_one/metastore/state_update.h"
 #include "cloud_topics/logger.h"
 #include "config/configuration.h"
 #include "container/chunked_hash_map.h"
@@ -677,6 +679,54 @@ simple_domain_manager::get_extent_metadata(
       .ec = rpc::errc::ok,
       .extents = meta_to_rpc_extent_metadata(std::move(get_res->extents)),
       .end_of_stream = get_res->end_of_stream};
+}
+
+ss::future<rpc::preregister_objects_reply>
+simple_domain_manager::preregister_objects(
+  rpc::preregister_objects_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::preregister_objects_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::preregister_objects_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+
+    preregister_objects_update update;
+    update.registered_at = model::timestamp::now();
+    update.object_ids.reserve(req.count);
+    for (uint32_t i = 0; i < req.count; ++i) {
+        update.object_ids.push_back(create_object_id());
+    }
+
+    chunked_vector<object_id> reply_ids;
+    reply_ids.reserve(update.object_ids.size());
+    for (const auto& oid : update.object_ids) {
+        reply_ids.push_back(oid);
+    }
+
+    storage::record_batch_builder builder(
+      model::record_batch_type::l1_stm, model::offset{0});
+    builder.add_raw_kv(
+      serde::to_iobuf(preregister_objects_update::key),
+      serde::to_iobuf(std::move(update)));
+    auto repl_res = co_await stm_->replicate_and_wait(
+      sync_res.value(), std::move(builder).build(), as_);
+    if (!repl_res.has_value()) {
+        co_return rpc::preregister_objects_reply{
+          .ec = convert_stm_errc(repl_res.error()),
+        };
+    }
+
+    co_return rpc::preregister_objects_reply{
+      .ec = rpc::errc::ok,
+      .object_ids = std::move(reply_ids),
+    };
 }
 
 ss::future<rpc::flush_domain_reply>

@@ -255,8 +255,11 @@ public:
           _tidp,
           decltype(term_map)::value_type::second_type::single(
             model::term_id{0}, result.next_offset));
+        auto oid = obj.oid;
         chunked_vector<decltype(obj)> objects;
         objects.push_back(std::move(obj));
+        _l1_metastore.preregister_objects(
+          chunked_vector<cloud_topics::l1::object_id>::single(oid));
         handle_error(_l1_metastore.add_objects(objects, term_map).get());
     }
 

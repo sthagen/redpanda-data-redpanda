@@ -279,6 +279,15 @@ db_domain_manager::get_first_offset_ge(rpc::get_first_offset_ge_request req) {
         };
     }
     const auto& object = object_res.value().value();
+    if (object.is_preregistration) {
+        co_return rpc::get_first_offset_ge_reply{
+          .ec = log_and_convert(
+            state_reader::error(
+              state_reader::errc::corruption,
+              "Extent refers to a preregistered object"),
+            "Error getting object"),
+        };
+    }
     co_return rpc::get_first_offset_ge_reply{
       .ec = rpc::errc::ok,
       .object = rpc::object_metadata{
@@ -351,6 +360,15 @@ db_domain_manager::get_first_timestamp_ge(
             }
             auto key = extent_row_key::decode(extent.key);
             const auto& object = object_res.value().value();
+            if (object.is_preregistration) {
+                co_return rpc::get_first_timestamp_ge_reply{
+                  .ec = log_and_convert(
+                    state_reader::error(
+                      state_reader::errc::corruption,
+                      "Extent refers to a preregistered object"),
+                    "Error getting object"),
+                };
+            }
             co_return rpc::get_first_timestamp_ge_reply{
               .ec = rpc::errc::ok,
               .object = rpc::object_metadata{
@@ -931,6 +949,45 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
     };
 }
 
+ss::future<rpc::preregister_objects_reply>
+db_domain_manager::preregister_objects(rpc::preregister_objects_request req) {
+    auto gl_res = co_await gate_and_open_writes();
+    if (!gl_res.has_value()) {
+        co_return rpc::preregister_objects_reply{
+          .ec = gl_res.error(),
+        };
+    }
+
+    preregister_objects_db_update update;
+    update.registered_at = model::timestamp::now();
+    update.object_ids.reserve(req.count);
+    for (uint32_t i = 0; i < req.count; ++i) {
+        update.object_ids.push_back(create_object_id());
+    }
+
+    auto reader = state_reader(db_->db().create_snapshot());
+    chunked_vector<write_batch_row> rows;
+    auto build_res = co_await update.build_rows(reader, rows);
+    if (!build_res.has_value()) {
+        co_return rpc::preregister_objects_reply{
+          .ec = log_and_convert(
+            build_res.error(), "Rejecting request to preregister objects: "),
+        };
+    }
+
+    auto apply_res = co_await write_rows(gl_res.value(), std::move(rows));
+    if (!apply_res.has_value()) {
+        co_return rpc::preregister_objects_reply{
+          .ec = apply_res.error(),
+        };
+    }
+
+    co_return rpc::preregister_objects_reply{
+      .ec = rpc::errc::ok,
+      .object_ids = std::move(update.object_ids),
+    };
+}
+
 ss::future<std::expected<ss::rwlock::holder, rpc::errc>>
 db_domain_manager::exclusive_db_lock() {
     auto fut = co_await ss::coroutine::as_future(
@@ -1089,8 +1146,12 @@ ss::future<> db_domain_manager::gc_loop() {
         }
         // TODO: make batch size configurable.
         vlog(cd_log.debug, "Running garbage collection now...");
+        auto ttl
+          = config::shard_local_cfg().cloud_topics_preregistered_object_ttl();
+        auto prereg_expiry_cutoff = model::timestamp{
+          model::timestamp::now()() - static_cast<int64_t>(ttl.count())};
         auto gc_res = co_await gc.remove_unreferenced_objects(
-          db_.get(), &as_, 1000);
+          db_.get(), &as_, 1000, prereg_expiry_cutoff);
         if (!gc_res.has_value()) {
             using enum db_garbage_collector::errc;
             switch (gc_res.error().e) {
@@ -1108,8 +1169,12 @@ ss::future<> db_domain_manager::gc_loop() {
                 break;
             }
         }
-        // Drop the database lock while we sleep.
+        // Drop the database lock before expiring stale preregistered objects
+        // and before sleeping, so we don't hold it unnecessarily.
         gl_res = {};
+        if (gc_res.has_value() && !gc_res.value().empty()) {
+            co_await expire_preregistered_objects(std::move(gc_res.value()));
+        }
 
         auto sleep_interval = gc_interval_();
         vlog(
@@ -1298,6 +1363,38 @@ db_domain_manager::get_database_stats() {
     }
 
     co_return result;
+}
+
+ss::future<>
+db_domain_manager::expire_preregistered_objects(chunked_vector<object_id> ids) {
+    auto locks_res = co_await gate_and_open_writes();
+    if (!locks_res.has_value()) {
+        vlog(
+          cd_log.debug,
+          "Not expiring preregistered objects, failed to acquire locks: {}",
+          locks_res.error());
+        co_return;
+    }
+    expire_preregistered_objects_db_update update{.object_ids = std::move(ids)};
+    auto reader = state_reader(db_->db().create_snapshot());
+    chunked_vector<write_batch_row> rows;
+    auto build_res = co_await update.build_rows(reader, rows);
+    if (!build_res.has_value()) {
+        log_and_convert(
+          build_res.error(),
+          "Error building rows for preregistered object expiry: ");
+        co_return;
+    }
+    if (rows.empty()) {
+        co_return;
+    }
+    auto write_res = co_await write_rows(locks_res.value(), std::move(rows));
+    if (!write_res.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Error writing preregistered object expiry rows: {}",
+          write_res.error());
+    }
 }
 
 } // namespace cloud_topics::l1

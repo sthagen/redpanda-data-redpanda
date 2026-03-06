@@ -106,6 +106,30 @@ struct remove_objects_db_update {
     chunked_vector<object_id> objects;
 };
 
+struct preregister_objects_db_update {
+    /// \brief Returns an error if any oid already exists in state.
+    ss::future<std::expected<void, db_update_error>>
+    can_apply(state_reader&) const;
+
+    /// \brief For each oid not already a committed object, writes an
+    /// object_row_key entry with is_preregistration=true.
+    ss::future<std::expected<void, db_update_error>>
+    build_rows(state_reader&, chunked_vector<write_batch_row>&) const;
+
+    chunked_vector<object_id> object_ids;
+    model::timestamp registered_at;
+};
+
+struct expire_preregistered_objects_db_update {
+    /// \brief For each oid whose object_entry has is_preregistration=true,
+    /// emits an overwrite of object_row_key(oid) with is_preregistration
+    /// cleared. The next GC run picks them up via the removed==total path.
+    ss::future<std::expected<void, db_update_error>>
+    build_rows(state_reader&, chunked_vector<write_batch_row>&) const;
+
+    chunked_vector<object_id> object_ids;
+};
+
 } // namespace cloud_topics::l1
 
 template<>

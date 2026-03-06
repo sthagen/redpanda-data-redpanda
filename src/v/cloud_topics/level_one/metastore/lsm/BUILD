@@ -262,6 +262,8 @@ redpanda_cc_library(
         ":replicated_db",
         "//src/v/base",
         "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/container:chunked_vector",
+        "//src/v/model",
         "//src/v/utils:detailed_error",
         "//src/v/utils:named_type",
         "@seastar",

@@ -113,7 +113,7 @@ public:
         // appropriate for the given partition. Potentially shares the object
         // with another partition, if the object is allowed by the metastore to
         // be shared by the other partition.
-        virtual std::expected<object_id, error>
+        virtual ss::future<std::expected<object_id, error>>
         get_or_create_object_for(const model::topic_id_partition&) = 0;
 
         // Creates a new object for the given partition. It is guaranteed that
@@ -124,7 +124,7 @@ public:
         // this particular `object_metadata_builder` only invoke
         // `create_object_for()` and `finish()` for the provided `object_id`
         // within a tightly bounded scope.
-        virtual std::expected<object_id, error>
+        virtual ss::future<std::expected<object_id, error>>
         create_object_for(const model::topic_id_partition&) = 0;
 
         // Removes a pending object from the builder. The object must be in the

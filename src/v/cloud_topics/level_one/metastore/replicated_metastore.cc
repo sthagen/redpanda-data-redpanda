@@ -90,7 +90,7 @@ meta_to_rpc_compact_update(const metastore::compaction_update& update) {
 // objects up by the appropriate metastore topic partition.
 class replicated_object_builder : public metastore::object_metadata_builder {
 public:
-    replicated_object_builder(leader_router& fe)
+    explicit replicated_object_builder(leader_router& fe)
       : object_metadata_builder()
       , fe_(fe) {}
     ~replicated_object_builder() override {}
@@ -100,9 +100,9 @@ public:
       = delete;
     replicated_object_builder& operator=(replicated_object_builder&&) = delete;
 
-    std::expected<object_id, error>
+    ss::future<std::expected<object_id, error>>
     get_or_create_object_for(const model::topic_id_partition&) override;
-    std::expected<object_id, error>
+    ss::future<std::expected<object_id, error>>
     create_object_for(const model::topic_id_partition&) override;
     std::expected<void, error> remove_pending_object(object_id) override;
     std::expected<void, error>
@@ -112,6 +112,9 @@ public:
     bool is_empty() const override;
 
 private:
+    ss::future<std::expected<object_id, error>>
+    get_or_request_from_pool(model::partition_id metastore_pid);
+
     friend class cloud_topics::l1::replicated_metastore;
 
     struct partitioned_objects {
@@ -122,42 +125,74 @@ private:
         chunked_vector<metastore::object_metadata> finished_objects_;
     };
     leader_router& fe_;
+    // TODO: let callers decide.
+    static constexpr size_t pool_refill_size = 1;
+    chunked_hash_map<model::partition_id, chunked_vector<object_id>> pool_;
     chunked_hash_map<model::partition_id, partitioned_objects> partitions_;
 };
 
-std::expected<object_id, replicated_object_builder::error>
+ss::future<std::expected<object_id, replicated_object_builder::error>>
+replicated_object_builder::get_or_request_from_pool(
+  model::partition_id metastore_pid) {
+    auto& pool = pool_[metastore_pid];
+    if (pool.empty()) {
+        auto req = rpc::preregister_objects_request{
+          .metastore_partition = metastore_pid,
+          .count = static_cast<uint32_t>(pool_refill_size),
+        };
+        auto reply_fut = co_await ss::coroutine::as_future(
+          fe_.preregister_objects(std::move(req)));
+        if (reply_fut.failed()) {
+            auto ex = reply_fut.get_exception();
+            co_return std::unexpected(
+              error{fmt::format("preregister_objects() failed: {}", ex)});
+        }
+        auto reply = reply_fut.get();
+        if (reply.ec != rpc::errc::ok) {
+            co_return std::unexpected(
+              error{fmt::format("preregister_objects() error: {}", reply.ec)});
+        }
+        if (reply.object_ids.empty()) {
+            co_return std::unexpected(
+              error{fmt::format("preregister_objects() missing object IDs")});
+        }
+        pool = std::move(reply.object_ids);
+    }
+    auto oid = pool.back();
+    pool.pop_back();
+    if (pool.empty()) {
+        pool_.erase(metastore_pid);
+    }
+    partitions_[metastore_pid].pending_objects_[oid] = {};
+    co_return oid;
+}
+
+ss::future<std::expected<object_id, replicated_object_builder::error>>
 replicated_object_builder::get_or_create_object_for(
   const model::topic_id_partition& tidp) {
     auto metastore_pid = fe_.metastore_partition(tidp);
     if (!metastore_pid) {
-        return std::unexpected(
+        co_return std::unexpected(
           error{"could not determine metastore partition for "
                 "get_or_create_object_for()"});
     }
     auto& partition_objects = partitions_[*metastore_pid];
-
-    if (partition_objects.pending_objects_.empty()) {
-        auto oid = create_object_id();
-        partition_objects.pending_objects_[oid] = {};
-        return oid;
+    if (!partition_objects.pending_objects_.empty()) {
+        co_return partition_objects.pending_objects_.begin()->first;
     }
-    return partition_objects.pending_objects_.begin()->first;
+    co_return co_await get_or_request_from_pool(*metastore_pid);
 }
 
-std::expected<object_id, replicated_object_builder::error>
+ss::future<std::expected<object_id, replicated_object_builder::error>>
 replicated_object_builder::create_object_for(
   const model::topic_id_partition& tidp) {
     auto metastore_pid = fe_.metastore_partition(tidp);
     if (!metastore_pid) {
-        return std::unexpected(
+        co_return std::unexpected(
           error{
             "could not determine metastore partition for create_object_for()"});
     }
-    auto& partition_objects = partitions_[*metastore_pid];
-
-    auto oid = create_object_id();
-    partition_objects.pending_objects_[oid] = {};
-    return oid;
+    co_return co_await get_or_request_from_pool(*metastore_pid);
 }
 
 std::expected<void, replicated_object_builder::error>

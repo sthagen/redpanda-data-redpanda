@@ -458,6 +458,7 @@
         "rptest/e2e_tests/workloads/flink_table_transactions_basic.py",
         "rptest/e2e_tests/workloads/flink_transactions_scale.py",
         "rptest/e2e_tests/workloads/flink_transactions_topic_swarm.py",
-        "rptest/remote_scripts/payload_pb2.py"
+        "rptest/remote_scripts/payload_pb2.py",
+        "tools/controller_forced_reconfiguration/invoke_controller_reconfiguration.py"
     ]
 }

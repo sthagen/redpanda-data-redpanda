@@ -142,7 +142,7 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
 
 ss::future<>
 compaction_sink::initialize_builder(kafka::offset object_base_offset) {
-    auto oid_res = _metadata_builder->create_object_for(_tp);
+    auto oid_res = co_await _metadata_builder->create_object_for(_tp);
     if (!oid_res.has_value()) {
         vlog(
           compaction_log.error,

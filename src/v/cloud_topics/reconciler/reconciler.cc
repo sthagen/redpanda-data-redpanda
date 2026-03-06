@@ -441,7 +441,7 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
     chunked_hash_map<l1::object_id, chunked_vector<ss::shared_ptr<source>>>
       oid_to_sources;
     for (const auto& src : sources) {
-        auto oid = metadata_builder->get_or_create_object_for(
+        auto oid = co_await metadata_builder->get_or_create_object_for(
           src->topic_id_partition());
         if (!oid.has_value()) {
             vlog(lg.warn, "Could not get object: {}", oid.error());

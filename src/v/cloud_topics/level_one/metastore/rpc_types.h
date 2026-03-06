@@ -467,6 +467,27 @@ struct flush_domain_request
     model::partition_id metastore_partition;
 };
 
+struct preregister_objects_reply
+  : serde::envelope<
+      preregister_objects_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, object_ids); }
+    errc ec{errc::ok};
+    chunked_vector<object_id> object_ids;
+};
+
+struct preregister_objects_request
+  : serde::envelope<
+      preregister_objects_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = preregister_objects_reply;
+    auto serde_fields() { return std::tie(metastore_partition, count); }
+    model::partition_id metastore_partition;
+    uint32_t count{0};
+};
+
 } //  namespace cloud_topics::l1::rpc
 
 template<>

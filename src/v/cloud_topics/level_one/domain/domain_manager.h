@@ -103,6 +103,9 @@ public:
 
     virtual ss::future<std::expected<database_stats, rpc::errc>>
     get_database_stats() = 0;
+
+    virtual ss::future<rpc::preregister_objects_reply>
+      preregister_objects(rpc::preregister_objects_request) = 0;
 };
 
 } // namespace cloud_topics::l1
