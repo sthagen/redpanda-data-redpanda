@@ -16,7 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.message
 from ........ import proto
 import sys
@@ -125,3 +127,91 @@ class GetSizeResponse(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal['size_bytes', b'size_bytes']) -> None:
         ...
 Global___GetSizeResponse: typing_extensions.TypeAlias = GetSizeResponse
+
+@typing.final
+class GetDatabaseStatsRequest(google.protobuf.message.Message):
+    """GetDatabaseStatsRequest is the request for looking up LSM storage statistics."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    METASTORE_PARTITION_FIELD_NUMBER: builtins.int
+    metastore_partition: builtins.int
+    'The metastore partition to query. Defaults to partition 0 if not\n    specified.\n    '
+
+    def __init__(self, *, metastore_partition: builtins.int=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['metastore_partition', b'metastore_partition']) -> None:
+        ...
+Global___GetDatabaseStatsRequest: typing_extensions.TypeAlias = GetDatabaseStatsRequest
+
+@typing.final
+class GetDatabaseStatsResponse(google.protobuf.message.Message):
+    """GetDatabaseStatsResponse contains detailed LSM storage statistics."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    ACTIVE_MEMTABLE_BYTES_FIELD_NUMBER: builtins.int
+    IMMUTABLE_MEMTABLE_BYTES_FIELD_NUMBER: builtins.int
+    TOTAL_SIZE_BYTES_FIELD_NUMBER: builtins.int
+    LEVELS_FIELD_NUMBER: builtins.int
+    active_memtable_bytes: builtins.int
+    'Size of the active memtable (data not yet flushed).'
+    immutable_memtable_bytes: builtins.int
+    'Size of the immutable memtable (data being flushed).'
+    total_size_bytes: builtins.int
+    'Total size including memtables and all levels.'
+
+    @property
+    def levels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___LsmLevel]:
+        """Per-level file information for the LSM tree."""
+
+    def __init__(self, *, active_memtable_bytes: builtins.int=..., immutable_memtable_bytes: builtins.int=..., total_size_bytes: builtins.int=..., levels: collections.abc.Iterable[Global___LsmLevel] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['active_memtable_bytes', b'active_memtable_bytes', 'immutable_memtable_bytes', b'immutable_memtable_bytes', 'levels', b'levels', 'total_size_bytes', b'total_size_bytes']) -> None:
+        ...
+Global___GetDatabaseStatsResponse: typing_extensions.TypeAlias = GetDatabaseStatsResponse
+
+@typing.final
+class LsmLevel(google.protobuf.message.Message):
+    """Information about a single level in the LSM tree."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    LEVEL_NUMBER_FIELD_NUMBER: builtins.int
+    FILES_FIELD_NUMBER: builtins.int
+    level_number: builtins.int
+    'The level number (0 for L0, 1 for L1, etc).'
+
+    @property
+    def files(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___LsmFile]:
+        """Files in this level."""
+
+    def __init__(self, *, level_number: builtins.int=..., files: collections.abc.Iterable[Global___LsmFile] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['files', b'files', 'level_number', b'level_number']) -> None:
+        ...
+Global___LsmLevel: typing_extensions.TypeAlias = LsmLevel
+
+@typing.final
+class LsmFile(google.protobuf.message.Message):
+    """Summary information about a single SST file."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    EPOCH_FIELD_NUMBER: builtins.int
+    ID_FIELD_NUMBER: builtins.int
+    SIZE_BYTES_FIELD_NUMBER: builtins.int
+    SMALLEST_KEY_INFO_FIELD_NUMBER: builtins.int
+    LARGEST_KEY_INFO_FIELD_NUMBER: builtins.int
+    epoch: builtins.int
+    'Database epoch when the file was created.'
+    id: builtins.int
+    'File ID.'
+    size_bytes: builtins.int
+    'File size in bytes.'
+    smallest_key_info: builtins.str
+    'Smallest key in the file (human-readable string representation).'
+    largest_key_info: builtins.str
+    'Largest key in the file (human-readable string representation).'
+
+    def __init__(self, *, epoch: builtins.int=..., id: builtins.int=..., size_bytes: builtins.int=..., smallest_key_info: builtins.str=..., largest_key_info: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['epoch', b'epoch', 'id', b'id', 'largest_key_info', b'largest_key_info', 'size_bytes', b'size_bytes', 'smallest_key_info', b'smallest_key_info']) -> None:
+        ...
+Global___LsmFile: typing_extensions.TypeAlias = LsmFile

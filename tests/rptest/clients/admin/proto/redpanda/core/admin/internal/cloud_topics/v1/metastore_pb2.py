@@ -9,7 +9,7 @@ _sym_db = _symbol_database.Default()
 from ........proto.redpanda.core.pbgen import options_pb2 as proto_dot_redpanda_dot_core_dot_pbgen_dot_options__pb2
 from ........proto.redpanda.core.pbgen import rpc_pb2 as proto_dot_redpanda_dot_core_dot_pbgen_dot_rpc__pb2
 from ........proto.redpanda.core.common.v1 import ntp_pb2 as proto_dot_redpanda_dot_core_dot_common_dot_v1_dot_ntp__pb2
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\nBproto/redpanda/core/admin/internal/cloud_topics/v1/metastore.proto\x12,redpanda.core.admin.internal.cloud_topics.v1\x1a\'proto/redpanda/core/pbgen/options.proto\x1a#proto/redpanda/core/pbgen/rpc.proto\x1a\'proto/redpanda/core/common/v1/ntp.proto"O\n\x11GetOffsetsRequest\x12:\n\tpartition\x18\x01 \x01(\x0b2\'.redpanda.core.common.v1.TopicPartition"\\\n\x12GetOffsetsResponse\x12F\n\x07offsets\x18\x02 \x01(\x0b25.redpanda.core.admin.internal.cloud_topics.v1.Offsets"4\n\x07Offsets\x12\x14\n\x0cstart_offset\x18\x01 \x01(\x03\x12\x13\n\x0bnext_offset\x18\x02 \x01(\x03"L\n\x0eGetSizeRequest\x12:\n\tpartition\x18\x01 \x01(\x0b2\'.redpanda.core.common.v1.TopicPartition"%\n\x0fGetSizeResponse\x12\x12\n\nsize_bytes\x18\x01 \x01(\x042\xbd\x02\n\x10MetastoreService\x12\x97\x01\n\nGetOffsets\x12?.redpanda.core.admin.internal.cloud_topics.v1.GetOffsetsRequest\x1a@.redpanda.core.admin.internal.cloud_topics.v1.GetOffsetsResponse"\x06\xea\x92\x19\x02\x10\x03\x12\x8e\x01\n\x07GetSize\x12<.redpanda.core.admin.internal.cloud_topics.v1.GetSizeRequest\x1a=.redpanda.core.admin.internal.cloud_topics.v1.GetSizeResponse"\x06\xea\x92\x19\x02\x10\x03B\x1b\xea\x92\x19\x17proto::admin::metastoreb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\nBproto/redpanda/core/admin/internal/cloud_topics/v1/metastore.proto\x12,redpanda.core.admin.internal.cloud_topics.v1\x1a\'proto/redpanda/core/pbgen/options.proto\x1a#proto/redpanda/core/pbgen/rpc.proto\x1a\'proto/redpanda/core/common/v1/ntp.proto"O\n\x11GetOffsetsRequest\x12:\n\tpartition\x18\x01 \x01(\x0b2\'.redpanda.core.common.v1.TopicPartition"\\\n\x12GetOffsetsResponse\x12F\n\x07offsets\x18\x02 \x01(\x0b25.redpanda.core.admin.internal.cloud_topics.v1.Offsets"4\n\x07Offsets\x12\x14\n\x0cstart_offset\x18\x01 \x01(\x03\x12\x13\n\x0bnext_offset\x18\x02 \x01(\x03"L\n\x0eGetSizeRequest\x12:\n\tpartition\x18\x01 \x01(\x0b2\'.redpanda.core.common.v1.TopicPartition"%\n\x0fGetSizeResponse\x12\x12\n\nsize_bytes\x18\x01 \x01(\x04"6\n\x17GetDatabaseStatsRequest\x12\x1b\n\x13metastore_partition\x18\x01 \x01(\r"\xbd\x01\n\x18GetDatabaseStatsResponse\x12\x1d\n\x15active_memtable_bytes\x18\x01 \x01(\x04\x12 \n\x18immutable_memtable_bytes\x18\x02 \x01(\x04\x12\x18\n\x10total_size_bytes\x18\x03 \x01(\x04\x12F\n\x06levels\x18\x04 \x03(\x0b26.redpanda.core.admin.internal.cloud_topics.v1.LsmLevel"f\n\x08LsmLevel\x12\x14\n\x0clevel_number\x18\x01 \x01(\x05\x12D\n\x05files\x18\x02 \x03(\x0b25.redpanda.core.admin.internal.cloud_topics.v1.LsmFile"m\n\x07LsmFile\x12\r\n\x05epoch\x18\x01 \x01(\x04\x12\n\n\x02id\x18\x02 \x01(\x04\x12\x12\n\nsize_bytes\x18\x03 \x01(\x04\x12\x19\n\x11smallest_key_info\x18\x04 \x01(\t\x12\x18\n\x10largest_key_info\x18\x05 \x01(\t2\xe9\x03\n\x10MetastoreService\x12\x97\x01\n\nGetOffsets\x12?.redpanda.core.admin.internal.cloud_topics.v1.GetOffsetsRequest\x1a@.redpanda.core.admin.internal.cloud_topics.v1.GetOffsetsResponse"\x06\xea\x92\x19\x02\x10\x03\x12\x8e\x01\n\x07GetSize\x12<.redpanda.core.admin.internal.cloud_topics.v1.GetSizeRequest\x1a=.redpanda.core.admin.internal.cloud_topics.v1.GetSizeResponse"\x06\xea\x92\x19\x02\x10\x03\x12\xa9\x01\n\x10GetDatabaseStats\x12E.redpanda.core.admin.internal.cloud_topics.v1.GetDatabaseStatsRequest\x1aF.redpanda.core.admin.internal.cloud_topics.v1.GetDatabaseStatsResponse"\x06\xea\x92\x19\x02\x10\x03B\x1b\xea\x92\x19\x17proto::admin::metastoreb\x06proto3')
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'proto.redpanda.core.admin.internal.cloud_topics.v1.metastore_pb2', _globals)
@@ -20,6 +20,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals['_METASTORESERVICE'].methods_by_name['GetOffsets']._serialized_options = b'\xea\x92\x19\x02\x10\x03'
     _globals['_METASTORESERVICE'].methods_by_name['GetSize']._loaded_options = None
     _globals['_METASTORESERVICE'].methods_by_name['GetSize']._serialized_options = b'\xea\x92\x19\x02\x10\x03'
+    _globals['_METASTORESERVICE'].methods_by_name['GetDatabaseStats']._loaded_options = None
+    _globals['_METASTORESERVICE'].methods_by_name['GetDatabaseStats']._serialized_options = b'\xea\x92\x19\x02\x10\x03'
     _globals['_GETOFFSETSREQUEST']._serialized_start = 235
     _globals['_GETOFFSETSREQUEST']._serialized_end = 314
     _globals['_GETOFFSETSRESPONSE']._serialized_start = 316
@@ -30,5 +32,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals['_GETSIZEREQUEST']._serialized_end = 540
     _globals['_GETSIZERESPONSE']._serialized_start = 542
     _globals['_GETSIZERESPONSE']._serialized_end = 579
-    _globals['_METASTORESERVICE']._serialized_start = 582
-    _globals['_METASTORESERVICE']._serialized_end = 899
+    _globals['_GETDATABASESTATSREQUEST']._serialized_start = 581
+    _globals['_GETDATABASESTATSREQUEST']._serialized_end = 635
+    _globals['_GETDATABASESTATSRESPONSE']._serialized_start = 638
+    _globals['_GETDATABASESTATSRESPONSE']._serialized_end = 827
+    _globals['_LSMLEVEL']._serialized_start = 829
+    _globals['_LSMLEVEL']._serialized_end = 931
+    _globals['_LSMFILE']._serialized_start = 933
+    _globals['_LSMFILE']._serialized_end = 1042
+    _globals['_METASTORESERVICE']._serialized_start = 1045
+    _globals['_METASTORESERVICE']._serialized_end = 1534
