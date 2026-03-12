@@ -10,7 +10,7 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
-load(":internal.bzl", "redpanda_copts")
+load(":internal.bzl", "antithesis_deps", "redpanda_copts")
 
 def _has_flags(args, *flags):
     """
@@ -153,7 +153,7 @@ def _redpanda_cc_test(
         timeout = timeout,
         srcs = srcs,
         defines = defines,
-        deps = deps,
+        deps = deps + antithesis_deps(),
         copts = redpanda_copts(),
         args = args,
         features = [
@@ -456,7 +456,7 @@ def redpanda_cc_bench(
         name = binary_name,
         srcs = srcs,
         defines = defines,
-        deps = deps,
+        deps = deps + antithesis_deps(),
         testonly = True,
         copts = redpanda_copts(),
         features = [

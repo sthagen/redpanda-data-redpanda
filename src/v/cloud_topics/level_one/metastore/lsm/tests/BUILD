@@ -12,6 +12,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_one/metastore/lsm:write_batch_row",
         "//src/v/container:chunked_vector",
         "//src/v/model",
+        "//src/v/serde",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
     ],

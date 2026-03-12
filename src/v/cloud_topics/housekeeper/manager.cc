@@ -64,7 +64,7 @@ public:
         auto& state = _state->at(tidp);
         auto lowest_pinned = state.partition->raft()
                                ->log()
-                               ->stm_manager()
+                               ->stm_hookset()
                                ->lowest_pinned_data_offset();
         if (!lowest_pinned.has_value()) {
             return kafka::offset::max();

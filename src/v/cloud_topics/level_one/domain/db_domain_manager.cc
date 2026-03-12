@@ -136,8 +136,8 @@ ss::future<> db_domain_manager::stop_and_wait() {
     vlog(cd_log.debug, "DB domain manager stopping...");
     as_.request_abort();
     sem_.broken();
-    auto gate_fut = gate_.close();
     writer_lock_.broken();
+    co_await gate_.close();
     auto wlock_res = co_await exclusive_db_lock();
     if (wlock_res.has_value()) {
         if (db_) {
@@ -148,8 +148,6 @@ ss::future<> db_domain_manager::stop_and_wait() {
             }
         }
     }
-
-    co_await std::move(gate_fut);
     vlog(cd_log.debug, "DB domain manager stopped...");
 }
 

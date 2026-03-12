@@ -2332,6 +2332,7 @@ rm_stm::take_raft_snapshot(model::offset last_included_offset) {
 }
 
 ss::future<> rm_stm::apply_raft_snapshot(const iobuf& buf) {
+    auto holder = _gate.hold();
     auto local_buf = buf.copy();
     auto units = co_await _state_lock.hold_write_lock();
     vlog(
@@ -2468,7 +2469,7 @@ void rm_stm_factory::create(
       _producer_state_manager,
       tcfg ? tcfg->properties.mpx_virtual_cluster_id : std::nullopt);
 
-    raft->log()->stm_manager()->add_stm(stm);
+    raft->log()->stm_hookset()->add_stm(stm);
 }
 
 } // namespace cluster

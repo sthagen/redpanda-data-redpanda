@@ -114,6 +114,8 @@ public:
 
     void set_active_groups(uint64_t count) { _active_groups = count; }
 
+    void set_next_stage_bytes(uint64_t bytes) { _next_stage_bytes = bytes; }
+
 private:
     void setup_internal_metrics(bool disable);
 
@@ -128,6 +130,8 @@ private:
     uint64_t _rx_bytes_xshard{0};
     /// Number of active upload groups
     uint64_t _active_groups{0};
+    /// Bytes buffered in the next pipeline stage
+    uint64_t _next_stage_bytes{0};
 
     metrics::internal_metric_groups _metrics;
 };

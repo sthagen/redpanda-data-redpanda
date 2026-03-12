@@ -210,12 +210,13 @@ struct level_zero_gc_mt_test : public seastar_test {
     }
 
     // Add objects with various prefixes (call from shard 0 context)
-    void populate_objects(size_t count) {
+    void populate_objects(size_t count, bool dynamic_epoch = false) {
         g_bucket_state->objects.reserve(count);
         for (size_t i = 0; i < count; ++i) {
             auto prefix = static_cast<object_id::prefix_t>(i % 1000);
             auto id = object_id{
-              .epoch = cluster_epoch(1),
+              .epoch = cluster_epoch(
+                dynamic_epoch ? static_cast<int64_t>(i) : 1),
               .name = uuid_t::create(),
               .prefix = prefix,
             };
@@ -305,6 +306,38 @@ TEST_F_CORO(level_zero_gc_mt_test, no_eligible_epoch) {
       << "No shards attempted to list";
     EXPECT_EQ(get_shards_that_deleted(), 0);
     EXPECT_EQ(get_total_deleted(), 0);
+}
+
+/*
+ * Concurrent reset/start/pause cycles don't crash or corrupt state.
+ */
+TEST_F_CORO(level_zero_gc_mt_test, concurrent_reset_start_pause) {
+    populate_objects(num_objects, true /* dynamic_epoch */);
+    set_max_epoch(num_objects / 2 - 1);
+
+    co_await gc_.invoke_on_all(&level_zero_gc::start);
+    co_await ss::sleep(100ms);
+
+    std::vector<ss::future<>> futs;
+
+    for (int i = 0; i < 10; ++i) {
+        futs.push_back(
+          gc_.invoke_on_all([](level_zero_gc& gc) { return gc.reset(); }));
+        futs.push_back(
+          gc_.invoke_on_all([](level_zero_gc& gc) { return gc.reset(); }));
+        futs.push_back(gc_.invoke_on_all(&level_zero_gc::start));
+        futs.push_back(gc_.invoke_on_all(&level_zero_gc::pause));
+        futs.push_back(gc_.invoke_on_all(&level_zero_gc::start));
+    }
+
+    co_await ss::when_all_succeed(std::move(futs));
+
+    co_await gc_.invoke_on_all(&level_zero_gc::start);
+
+    set_max_epoch(num_objects);
+
+    RPTEST_REQUIRE_EVENTUALLY_CORO(
+      5s, [this] { return get_total_deleted() == num_objects; });
 }
 
 /*

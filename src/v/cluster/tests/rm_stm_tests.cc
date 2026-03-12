@@ -970,7 +970,7 @@ FIXTURE_TEST(test_tx_compaction_last_producer_batch, rm_stm_test_fixture) {
 
     auto log = _storage.local().log_mgr().get(_raft->ntp());
     BOOST_REQUIRE(log);
-    log->stm_manager()->add_stm(_stm);
+    log->stm_hookset()->add_stm(_stm);
 
     auto tx_seq_zero = model::tx_seq{0};
     auto produce = [&](auto pid, auto& seq, int count = 5) {

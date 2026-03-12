@@ -307,6 +307,20 @@ build:coverage --instrumentation_filter="^//src/v[/:]"
 build:sanitizer --config=debug
 
 # =================================
+# Antithesis
+# =================================
+# Build mode for Antithesis testing. Enables coverage instrumentation
+# that Antithesis uses for guided exploration. Debug symbols are included
+# for symbolization (placed in /symbols in the container image).
+build:antithesis --//bazel:antithesis=True
+build:antithesis --compilation_mode=opt
+build:antithesis --per_file_copt=src/v/.*@-fsanitize-coverage=trace-pc-guard
+build:antithesis --linkopt=-Wl,--build-id
+build:antithesis --linkopt=-Wl,--allow-shlib-undefined
+build:antithesis --copt=-g --strip=never
+build:antithesis --@seastar//:stack_guards=False --@seastar//:debug=False
+
+# =================================
 # Testing
 # =================================
 

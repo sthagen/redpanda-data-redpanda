@@ -1136,7 +1136,7 @@ class LoggingConfig:
     # assumed it was always supported/does not require special handling.
     LOGGER_GENESIS: dict[str, RedpandaVersionTriple] = {
         "datalake": (24, 3, 1),
-        "cloud_topics-compaction": (26, 1, 1),
+        "cloud_topics_compaction": (26, 1, 1),
     }
 
     def __init__(self, default_level: str, logger_levels: dict[str, str] = {}) -> None:
@@ -6056,6 +6056,10 @@ class RedpandaService(Service, RedpandaServiceABC):
             manifest_not_uploaded: list[Partition] = []
             for p in self.partitions():
                 try:
+                    if p.topic == "__consumer_offsets":
+                        # We don't tier this topic, so skip it
+                        continue
+
                     status = self._admin.get_partition_cloud_storage_status(
                         p.topic, p.index, node=p.leader
                     )

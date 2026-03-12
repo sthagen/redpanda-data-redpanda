@@ -292,6 +292,7 @@ ss::future<xshard_transfer_state> consensus::stop() {
     }
     co_await _replication_monitor.stop();
     co_await _event_manager.stop();
+    _log->stm_hookset()->stop();
     if (_stm_manager) {
         co_await _stm_manager->stop();
     }
@@ -1659,6 +1660,7 @@ consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
             co_await ss::coroutine::switch_to(ss::default_scheduling_group());
             co_await _stm_manager->start();
         }
+        _log->stm_hookset()->start();
 
         vlog(
           _ctxlog.info,
@@ -4317,9 +4319,9 @@ consensus::do_snapshot_and_truncate_log(model::offset truncation_point) {
     co_await _consumable_offset_monitor.wait(
       truncation_point, model::no_timeout, _as);
     co_await refresh_commit_index();
-    co_await _log->stm_manager()->ensure_snapshot_exists(truncation_point);
+    co_await _log->stm_hookset()->ensure_snapshot_exists(truncation_point);
     const auto max_removable_local_log_offset
-      = _log->stm_manager()->max_removable_local_log_offset();
+      = _log->stm_hookset()->max_removable_local_log_offset();
     if (truncation_point > max_removable_local_log_offset) {
         truncation_point = max_removable_local_log_offset;
         if (truncation_point <= _last_snapshot_index) {

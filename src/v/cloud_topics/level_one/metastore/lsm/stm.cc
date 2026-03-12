@@ -266,7 +266,7 @@ void lsm_stm_factory::create(
   raft::consensus* raft,
   const cluster::stm_instance_config&) {
     auto s = builder.create_stm<stm>(cd_log, raft, config::mock_binding(10s));
-    raft->log()->stm_manager()->add_stm(std::move(s));
+    raft->log()->stm_hookset()->add_stm(std::move(s));
 }
 
 std::ostream& operator<<(std::ostream& os, stm::errc e) {

@@ -81,6 +81,10 @@ struct domain_manager_node {
         }
         auto* ptr = mgr.get();
         managers.push_back(std::move(mgr));
+        if (managers.size() > 3) {
+            inactive_managers.push_back(std::move(managers.front()));
+            managers.pop_front();
+        }
         return ptr;
     }
 
@@ -91,6 +95,18 @@ struct domain_manager_node {
                 co_await mgr->stop_and_wait();
             } catch (...) {
                 // Ignore errors during teardown.
+                auto ex = std::current_exception();
+                vlog(dm_test_log.info, "Manager shutdown error: {}", ex);
+            }
+        }
+        for (auto& mgr : inactive_managers) {
+            try {
+                co_await mgr->stop_and_wait();
+            } catch (...) {
+                // Ignore errors during teardown.
+                auto ex = std::current_exception();
+                vlog(
+                  dm_test_log.info, "Inactive manager shutdown error: {}", ex);
             }
         }
     }
@@ -100,7 +116,19 @@ struct domain_manager_node {
     const cloud_storage_clients::bucket_name& bucket;
     temporary_dir staging_directory;
     file_io object_io;
+
+    // Active managers on this node. These managers may be operated on by
+    // callers. Not all of these managers are expected to actually work, e.g.
+    // managers from previous terms likely won't work. We keep around multiple
+    // to validate concurrency, but not too many (hence inactive_managers) to
+    // not make these tests too stressful.
+    //
+    // It is expected that the last manager in this list is typically
+    // functional.
     std::list<std::unique_ptr<db_domain_manager>> managers;
+
+    // Inactive managers, left around to destruct at the end of the test.
+    std::list<std::unique_ptr<db_domain_manager>> inactive_managers;
 };
 
 model::topic_id_partition
@@ -490,7 +518,7 @@ public:
                 co_await ss::maybe_yield();
             }
             co_await ss::when_all_succeed(std::move(futs));
-            co_await random_sleep_ms(100);
+            co_await random_sleep_ms(1000);
         }
     }
 
@@ -596,7 +624,9 @@ TEST_P(DbDomainManagerTestWithParams, TestConcurrentUpdates) {
             futs.emplace_back(extent_validator_loop(*node, tp, done));
             futs.emplace_back(
               replacer_loop(*node, tp, expected_add_next, done));
-            if (args.with_flush_loop) {
+        }
+        if (args.with_flush_loop) {
+            for (int i = 0; i < 2; ++i) {
                 futs.emplace_back(flusher_loop(*node, done));
             }
         }

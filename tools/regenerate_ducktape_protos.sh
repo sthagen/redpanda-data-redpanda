@@ -44,6 +44,7 @@ uv run --python 3.11 --no-project \
   "$REPO_ROOT"/proto/redpanda/core/common/**/*.proto \
   "$REPO_ROOT"/proto/redpanda/core/pbgen/*.proto \
   "$REPO_ROOT"/proto/redpanda/core/admin/**/*.proto \
+  "$REPO_ROOT"/proto/redpanda/core/rest/**/*.proto \
   "$GOOGLEAPIS_DIR"/google/api/field_behavior.proto \
   "$GOOGLEAPIS_DIR"/google/api/field_info.proto \
   "$GOOGLEAPIS_DIR"/google/api/resource.proto
@@ -66,6 +67,7 @@ uv run --python 3.11 --no-project \
   "$REPO_ROOT"/proto/redpanda/core/common/**/*.proto \
   "$REPO_ROOT"/proto/redpanda/core/pbgen/*.proto \
   "$REPO_ROOT"/proto/redpanda/core/admin/**/*.proto \
+  "$REPO_ROOT"/proto/redpanda/core/rest/**/*.proto \
   "$GOOGLEAPIS_DIR"/google/api/field_behavior.proto \
   "$GOOGLEAPIS_DIR"/google/api/field_info.proto \
   "$GOOGLEAPIS_DIR"/google/api/resource.proto

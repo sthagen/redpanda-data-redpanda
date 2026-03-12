@@ -23,6 +23,8 @@ struct gc_test_config {
     std::chrono::milliseconds list_cost{0ms};
     std::chrono::milliseconds delete_cost{0ms};
 };
+constexpr size_t prefix_max = cloud_topics::object_id::prefix_max;
+constexpr size_t n_prefixes = prefix_max + 1;
 } // namespace
 
 class object_storage_test_impl
@@ -98,6 +100,8 @@ public:
         if (as->abort_requested()) {
             co_return std::unexpected{cloud_io::upload_result::cancelled};
         }
+        auto abort = as->subscribe([this]() noexcept { delete_cv_.broken(); });
+        co_await delete_cv_.wait([this] { return !deletes_blocked_; });
         co_await seastar::sleep(cfg_->delete_cost);
         auto u = co_await delete_mtx_.get_units(*as);
         deleted_->insert_range(
@@ -106,12 +110,23 @@ public:
         co_return std::expected<void, cloud_io::upload_result>();
     }
 
+    void block_deletes() { deletes_blocked_ = true; }
+    void unblock_deletes() {
+        deletes_blocked_ = false;
+        delete_cv_.broadcast();
+    }
+    bool has_delete_waiters() const { return delete_cv_.has_waiters(); }
+
     chunked_vector<cloud_storage_clients::client::list_bucket_item>* listed_;
     std::unordered_set<ss::sstring>* deleted_;
     gc_test_config* cfg_;
 
     ssx::mutex list_mtx_{"object-store-impl-list"};
     ssx::mutex delete_mtx_{"object-store-impl-delete"};
+
+private:
+    bool deletes_blocked_{false};
+    seastar::condition_variable delete_cv_;
 };
 
 class epoch_source_test_impl
@@ -176,8 +191,11 @@ class LevelZeroGCTest : public testing::Test {
 public:
     LevelZeroGCTest(
       std::chrono::milliseconds throttle_progress = 10ms,
-      std::chrono::milliseconds throttle_no_progress = 10ms)
-      : gc(
+      std::chrono::milliseconds throttle_no_progress = 10ms) {
+        auto storage = std::make_unique<object_storage_test_impl>(
+          &listed, &deleted, &cfg);
+        storage_ = storage.get();
+        gc = std::make_unique<cloud_topics::level_zero_gc>(
           cloud_topics::level_zero_gc_config{
             .deletion_grace_period
             = config::mock_binding<std::chrono::milliseconds>(12h),
@@ -188,11 +206,12 @@ public:
             = config::mock_binding<std::chrono::milliseconds>(
               throttle_no_progress),
           },
-          std::make_unique<object_storage_test_impl>(&listed, &deleted, &cfg),
+          std::move(storage),
           std::make_unique<epoch_source_test_impl>(&max_epoch),
-          std::make_unique<node_info_test_impl>()) {}
+          std::make_unique<node_info_test_impl>());
+    }
 
-    void TearDown() override { gc.stop().get(); }
+    void TearDown() override { gc->stop().get(); }
 
     /*
      * Insert an entry into the `listed` container which is the source of
@@ -215,8 +234,9 @@ public:
     chunked_vector<cloud_storage_clients::client::list_bucket_item> listed;
     std::unordered_set<ss::sstring> deleted;
     std::optional<int64_t> max_epoch;
-    cloud_topics::level_zero_gc gc;
+    std::unique_ptr<cloud_topics::level_zero_gc> gc;
     gc_test_config cfg{};
+    object_storage_test_impl* storage_{nullptr};
 };
 
 template<typename Func>
@@ -237,7 +257,7 @@ TEST_F(LevelZeroGCTest, ListedIsDeleted) {
         add_listed(i, 24h);
     }
     this->max_epoch = 100;
-    gc.start();
+    gc->start().get();
     EXPECT_TRUE(Eventually([this] { return deleted.size() == 100; }));
 }
 
@@ -247,7 +267,7 @@ TEST_F(LevelZeroGCTest, ListedIsDeletedBelowEpoch) {
         add_listed(i, 24h);
     }
     this->max_epoch = 49;
-    gc.start();
+    gc->start().get();
     EXPECT_TRUE(Eventually([this] { return deleted.size() == 50; }));
 }
 
@@ -256,7 +276,7 @@ TEST_F(LevelZeroGCTest, NoDeletesWithoutMaxEpoch) {
     for (int i = 0; i < 100; ++i) {
         add_listed(i, 24h);
     }
-    gc.start();
+    gc->start().get();
     EXPECT_FALSE(Eventually([this] { return deleted.size() > 0; }));
 }
 
@@ -266,8 +286,108 @@ TEST_F(LevelZeroGCTest, NoDeletesForYoungObjects) {
         add_listed(i, std::chrono::hours(i));
     }
     this->max_epoch = 100;
-    gc.start();
+    gc->start().get();
     EXPECT_TRUE(Eventually([this] { return deleted.size() == 88; }));
+}
+
+// reset while paused keeps GC paused
+TEST_F(LevelZeroGCTest, ResetWhilePaused) {
+    for (int i = 0; i < 50; ++i) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = 50;
+    gc->start().get();
+    EXPECT_TRUE(Eventually([this] { return deleted.size() == 50; }));
+
+    gc->pause().get();
+    gc->reset().get();
+
+    // GC should remain paused — no new deletes
+    EXPECT_FALSE(Eventually([this] { return deleted.size() > 50; }, 10));
+}
+
+// reset while running resumes collection automatically
+TEST_F(LevelZeroGCTest, ResetWhileRunning) {
+    for (int i = 0; i < 100; ++i) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = 50;
+    gc->start().get();
+
+    // Wait for some progress
+    EXPECT_TRUE(Eventually([this] { return !deleted.empty(); }));
+
+    // Reset while running — should resume and eventually delete all
+    gc->reset().get();
+
+    this->max_epoch = 100;
+
+    EXPECT_TRUE(Eventually([this] { return deleted.size() == 100; }));
+}
+
+// reset on a GC that was never started is a no-op
+TEST_F(LevelZeroGCTest, ResetBeforeStart) {
+    for (int i = 0; i < 10; ++i) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = 10;
+
+    // Reset before ever starting — should not crash
+    gc->reset().get();
+
+    // Now start and verify it works normally
+    gc->start().get();
+    EXPECT_TRUE(Eventually([this] { return deleted.size() == 10; }));
+}
+
+// concurrent reset is a no-op: the second reset returns immediately while the
+// first is still draining, and the resetting state is observable
+TEST_F(LevelZeroGCTest, ResetConcurrentOps) {
+    for (int i = 0; i < 50; ++i) {
+        add_listed(i, 24h);
+    }
+    this->max_epoch = 50;
+
+    // Block deletes before starting — GC will list objects and submit
+    // delete tasks, but they'll block on the CV inside the mock storage.
+    // This means the gate holds open fibers when reset() tries gate_.close().
+    storage_->block_deletes();
+    gc->start().get();
+
+    // Wait for the worker loop to have submitted at least one delete task.
+    EXPECT_TRUE(Eventually(
+      [this] { return storage_->has_delete_waiters(); }, 5 /* wait ~100ms */));
+
+    // Kick off the first reset — it will block waiting for gate_.close()
+    auto reset_fut = gc->reset();
+
+    // Give it a chance to enter the resetting state
+    EXPECT_TRUE(Eventually(
+      [this] {
+          return gc->get_state()
+                 == cloud_topics::level_zero_gc::state::resetting;
+      },
+      5 /* wait ~100ms */));
+
+    // A second concurrent reset should return immediately (no-op)
+    gc->reset().get();
+
+    // start() blocks on the reset CV — launch it in the background
+    auto start_fut = gc->start();
+    EXPECT_FALSE(start_fut.available());
+
+    // Still resetting (first reset is blocked)
+    EXPECT_EQ(gc->get_state(), cloud_topics::level_zero_gc::state::resetting);
+    EXPECT_EQ(deleted.size(), 0);
+
+    // Unblock deletes — reset completes, which signals the CV, unblocking
+    // start()
+    storage_->unblock_deletes();
+    reset_fut.get();
+    start_fut.get();
+
+    // After reset completes, GC resumes and finishes the work
+    EXPECT_TRUE(Eventually([this] { return deleted.size() == 50; }));
 }
 
 /*
@@ -406,7 +526,7 @@ TEST_F(LevelZeroGCScaleOutTest, MultiPageDelete) {
     }
     this->max_epoch = n;
     this->cfg.list_page_size = list_page_size;
-    gc.start();
+    gc->start().get();
     EXPECT_TRUE(Eventually(
       [this, expected = (size_t)n] { return deleted.size() == expected; }));
 }
@@ -420,11 +540,11 @@ TEST_F(LevelZeroGCScaleOutTest, CleanShutdown) {
     this->max_epoch = n;
     this->cfg.list_page_size = list_page_size;
     this->cfg.delete_cost = 200ms;
-    gc.start();
+    gc->start().get();
     // wait until we process one page
     EXPECT_TRUE(Eventually([this] { return !deleted.empty(); }));
     // then immediately shutdown gc
-    gc.stop().get();
+    gc->stop().get();
 }
 
 TEST_F(LevelZeroGCScaleOutTest, ConcurrentDeletes) {
@@ -436,7 +556,7 @@ TEST_F(LevelZeroGCScaleOutTest, ConcurrentDeletes) {
     this->max_epoch = n;
     this->cfg.list_page_size = list_page_size;
     this->cfg.delete_cost = 100ms;
-    gc.start();
+    gc->start().get();
     EXPECT_TRUE(Eventually(
       [this, expected = (size_t)n] { return deleted.size() == expected; }));
 }
@@ -453,7 +573,7 @@ TEST_F(LevelZeroGCScaleOutTest, ConcurrentDeletesPipelineSaturation) {
     this->max_epoch = n;
     this->cfg.list_page_size = list_page_size;
     this->cfg.delete_cost = 50ms;
-    gc.start();
+    gc->start().get();
     EXPECT_TRUE(Eventually(
       [this, expected = (size_t)n] { return deleted.size() == expected; },
       50,
@@ -481,7 +601,7 @@ void check_range_contents(
 } // namespace
 
 /*
- * With a single shard, it should handle all prefixes [0, 999].
+ * With a single shard, it should handle all prefixes [0, prefix_max].
  */
 TEST_F(PrefixRangeComputationTest, SingleShardCoversAllPrefixes) {
     auto range = cloud_topics::compute_prefix_range(
@@ -509,7 +629,7 @@ TEST_F(PrefixRangeComputationTest, TwoShardsPartitionSpace) {
         auto range = cloud_topics::compute_prefix_range(
           1 /* shard_idx */, 2 /* total_shards */);
         check_range_contents(range);
-        // Second shard: [500, 999]
+        // Second shard: [500, prefix_max]
         EXPECT_EQ(range->min, 500);
         EXPECT_EQ(range->max, cloud_topics::object_id::prefix_max);
     }
@@ -519,7 +639,7 @@ TEST_F(PrefixRangeComputationTest, TwoShardsPartitionSpace) {
  * With 1000 shards (one per prefix), each shard handles exactly one prefix.
  */
 TEST_F(PrefixRangeComputationTest, ThousandShardsOnePerPrefix) {
-    constexpr size_t total = 1000;
+    constexpr size_t total = n_prefixes;
 
     for (size_t i = 0; i < total; ++i) {
         auto range = cloud_topics::compute_prefix_range(
@@ -568,7 +688,7 @@ TEST_F(PrefixRangeComputationTest, MoreShardsThanPrefixes) {
 TEST_F(PrefixRangeComputationTest, HeterogeneousCompleteCoverage) {
     constexpr size_t total = 41;
 
-    std::vector<int> coverage_count(1000, 0);
+    std::vector<int> coverage_count(n_prefixes, 0);
 
     for (size_t shard = 0; shard < total; ++shard) {
         auto r = cloud_topics::compute_prefix_range(
@@ -577,15 +697,60 @@ TEST_F(PrefixRangeComputationTest, HeterogeneousCompleteCoverage) {
         auto [min, max] = r.value();
         EXPECT_GE(min, 0);
         EXPECT_LE(max, cloud_topics::object_id::prefix_max);
-        for (auto prefix = min; prefix <= max && prefix < 1000; ++prefix) {
+        for (auto prefix = min; prefix <= max && prefix < n_prefixes;
+             ++prefix) {
             coverage_count[prefix]++;
         }
     }
 
-    // Verify all prefixes are covered exactlye
-    for (int prefix = 0; prefix < 1000; ++prefix) {
+    // Verify all prefixes are covered exactly once
+    for (size_t prefix = 0; prefix < n_prefixes; ++prefix) {
         EXPECT_EQ(coverage_count[prefix], 1) << fmt::format(
           "Prefix {} covered {} times", prefix, coverage_count[prefix]);
+    }
+}
+
+/*
+ * Verify that prefix ranges are balanced: no shard gets more than one extra
+ * prefix compared to any other. Also checks complete, non-overlapping coverage
+ * for several shard counts including 32 (the case that exposed the original
+ * imbalance where the last shard received all leftover prefixes).
+ */
+TEST_F(PrefixRangeComputationTest, BalancedDistribution) {
+    for (size_t total : std::vector<size_t>{
+           2, 3, 7, 10, 24, 32, 41, 64, 128, prefix_max, n_prefixes}) {
+        SCOPED_TRACE(fmt::format("total_shards={}", total));
+
+        std::vector<int> coverage_count(n_prefixes, 0);
+        size_t min_width = std::numeric_limits<size_t>::max();
+        size_t max_width = 0;
+
+        for (size_t shard = 0; shard < total; ++shard) {
+            auto r = cloud_topics::compute_prefix_range(shard, total);
+            ASSERT_TRUE(r.has_value());
+            ASSERT_LE(r->min, r->max);
+            ASSERT_LE(r->max, prefix_max);
+            size_t width = r->max - r->min + 1;
+            min_width = std::min(min_width, width);
+            max_width = std::max(max_width, width);
+
+            for (auto pfx = r->min; pfx <= r->max; ++pfx) {
+                coverage_count[pfx]++;
+            }
+        }
+
+        EXPECT_LE(max_width - min_width, 1) << fmt::format(
+          "Imbalance too large: min_width={}, max_width={}",
+          min_width,
+          max_width);
+
+        for (size_t pfx = 0; pfx < n_prefixes; ++pfx) {
+            EXPECT_EQ(coverage_count[pfx], 1) << fmt::format(
+              "Prefix {} covered {} times (total_shards={})",
+              pfx,
+              coverage_count[pfx],
+              total);
+        }
     }
 }
 
@@ -706,7 +871,7 @@ TEST_P(LevelZeroGCPartitioningTest, ShardOnlyDeletesObjectsInRange) {
     auto [min, max] = range.value();
 
     // Add objects across the full prefix range (every 50th prefix)
-    for (int prefix = 0; prefix <= 999; prefix += 50) {
+    for (size_t prefix = 0; prefix <= prefix_max; prefix += 50) {
         add_listed_with_prefix(prefix, 1);
     }
     sort_listed();
@@ -715,7 +880,7 @@ TEST_P(LevelZeroGCPartitioningTest, ShardOnlyDeletesObjectsInRange) {
       cloud_topics::prefix_range_inclusive{min, max});
     max_epoch_ = 100;
 
-    gc_.start();
+    gc_.start().get();
 
     // Only objects in this shard's range should be deleted
     EXPECT_TRUE(Eventually([this, expected_in_range] {
@@ -741,7 +906,7 @@ TEST_P(LevelZeroGCPartitioningTest, PaginationWithinRange) {
     cfg_.list_page_size = 5;
 
     // Add several objects within this shard's range
-    for (auto prefix = min; prefix <= max && prefix < 1000; prefix += 5) {
+    for (auto prefix = min; prefix <= max && prefix < n_prefixes; prefix += 5) {
         for (int i = 0; i < 10; ++i) {
             add_listed_with_prefix(prefix, 1);
         }
@@ -752,7 +917,7 @@ TEST_P(LevelZeroGCPartitioningTest, PaginationWithinRange) {
       cloud_topics::prefix_range_inclusive{min, max});
     max_epoch_ = 100;
 
-    gc_.start();
+    gc_.start().get();
 
     EXPECT_TRUE(
       Eventually([this, expected] { return deleted_.size() == expected; }));
@@ -770,7 +935,7 @@ TEST_P(LevelZeroGCPartitioningTest, EpochFilteringWithPartitioning) {
     auto [min, max] = range.value();
 
     // Add objects with various epochs, using prefixes in our range
-    if (min < 1000) {
+    if (min < n_prefixes) {
         add_listed_with_prefix(min, 50);  // epoch 50, eligible
         add_listed_with_prefix(min, 100); // epoch 100, boundary
         add_listed_with_prefix(min, 150); // epoch 150, not eligible
@@ -780,7 +945,7 @@ TEST_P(LevelZeroGCPartitioningTest, EpochFilteringWithPartitioning) {
 
     max_epoch_ = 100; // Only epochs <= 100 are eligible
 
-    gc_.start();
+    gc_.start().get();
 
     // Only 2 objects (epochs 50 and 100) should be deleted
     EXPECT_TRUE(Eventually([this] { return deleted_.size() == 2; }));
@@ -796,7 +961,7 @@ TEST_P(LevelZeroGCPartitioningTest, AgeFilteringWithPartitioning) {
     ASSERT_TRUE(range.has_value());
     auto [min, max] = range.value();
 
-    if (min < 1000) {
+    if (min < n_prefixes) {
         add_listed_with_prefix(min, 1, 24h); // old enough
         add_listed_with_prefix(
           min + 1 > max ? min : min + 1, 1, 24h); // old enough
@@ -809,7 +974,7 @@ TEST_P(LevelZeroGCPartitioningTest, AgeFilteringWithPartitioning) {
 
     max_epoch_ = 100;
 
-    gc_.start();
+    gc_.start().get();
 
     // Only 2 old objects should be deleted
     EXPECT_TRUE(Eventually([this] { return deleted_.size() == 2; }));
@@ -829,15 +994,15 @@ TEST_P(LevelZeroGCPartitioningTest, NoObjectsInRange) {
         // Add objects before our range
         add_listed_with_prefix(0, 1);
     }
-    if (max < 999) {
+    if (max < prefix_max) {
         // Add objects after our range
-        add_listed_with_prefix(999, 1);
+        add_listed_with_prefix(prefix_max, 1);
     }
     sort_listed();
 
     max_epoch_ = 100;
 
-    gc_.start();
+    gc_.start().get();
 
     // No objects should be deleted since none are in our range
     EXPECT_FALSE(Eventually([this] { return !deleted_.empty(); }, 10));
@@ -855,7 +1020,7 @@ TEST_P(LevelZeroGCPartitioningTest, ObjectsAtBoundaries) {
     // Add object at min boundary
     add_listed_with_prefix(min, 1);
     // Add object at max boundary
-    if (max < 1000) {
+    if (max < n_prefixes) {
         add_listed_with_prefix(max, 1);
     }
     sort_listed();
@@ -864,7 +1029,7 @@ TEST_P(LevelZeroGCPartitioningTest, ObjectsAtBoundaries) {
       cloud_topics::prefix_range_inclusive{min, max});
     max_epoch_ = 100;
 
-    gc_.start();
+    gc_.start().get();
 
     EXPECT_TRUE(
       Eventually([this, expected] { return deleted_.size() == expected; }));
@@ -877,7 +1042,7 @@ INSTANTIATE_TEST_SUITE_P(
   testing::Values(
     std::make_tuple(0, 1),  // Single shard covering all prefixes
     std::make_tuple(0, 2),  // First half [0, 500)
-    std::make_tuple(1, 2),  // Second half [500, 999]
+    std::make_tuple(1, 2),  // Second half [500, prefix_max]
     std::make_tuple(0, 10), // First range [0, 100)
     std::make_tuple(4, 10), // Middle range [400, 500)
     std::make_tuple(23, 24) // Last shard (handles remainder)

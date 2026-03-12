@@ -26,7 +26,7 @@ void ctp_stm_factory::create(
   const cluster::stm_instance_config&) {
     auto stm = builder.create_stm<cloud_topics::ctp_stm>(
       cloud_topics::cd_log, raft);
-    raft->log()->stm_manager()->add_stm(stm);
+    raft->log()->stm_hookset()->add_stm(stm);
 }
 
 } // namespace cloud_topics::l0

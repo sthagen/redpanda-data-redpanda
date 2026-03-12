@@ -1265,7 +1265,7 @@ chunked_vector<topic_partition_information> status_to_partition_information(
 
 void set_client_id(cluster_link::model::metadata& md) {
     md.connection.client_id = ssx::sformat(
-      "cluster-link-{}-{}", md.name, md.uuid);
+      "shadow-link-{}-{}", md.name, md.uuid);
 }
 
 cluster_link::model::metadata

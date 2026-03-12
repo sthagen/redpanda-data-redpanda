@@ -145,7 +145,7 @@ compaction_sink::initialize_builder(kafka::offset object_base_offset) {
     auto oid_res = co_await _metadata_builder->create_object_for(_tp);
     if (!oid_res.has_value()) {
         vlog(
-          compaction_log.error,
+          compaction_log.warn,
           "Failed to create object for tidp {}: {}",
           _tp,
           oid_res.error());
@@ -159,7 +159,7 @@ compaction_sink::initialize_builder(kafka::offset object_base_offset) {
     if (!upload_res.has_value()) {
         std::ignore = _metadata_builder->remove_pending_object(oid);
         vlog(
-          compaction_log.error,
+          compaction_log.warn,
           "Failed to create multipart upload for object {}, tidp {}: {}",
           oid,
           _tp,

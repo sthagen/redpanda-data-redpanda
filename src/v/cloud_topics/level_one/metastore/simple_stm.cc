@@ -263,7 +263,7 @@ void stm_factory::create(
   const cluster::stm_instance_config&) {
     auto stm = builder.create_stm<simple_stm>(
       cd_log, raft, config::mock_binding(10s));
-    raft->log()->stm_manager()->add_stm(stm);
+    raft->log()->stm_hookset()->add_stm(stm);
 }
 
 } // namespace cloud_topics::l1

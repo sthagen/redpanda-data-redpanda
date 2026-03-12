@@ -28,9 +28,19 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
 
+#include <memory>
+
+namespace {
+constexpr ss::lowres_clock::duration control_timeout = 5s;
+}
+
 namespace cloud_topics {
 
 class level_zero_gc::list_delete_worker {
+    static constexpr auto handle_worker_exc = [](std::exception_ptr eptr) {
+        vlog(cd_log.warn, "Exception from delete worker: {}", eptr);
+    };
+
 public:
     explicit list_delete_worker(
       std::unique_ptr<object_storage> storage,
@@ -39,9 +49,7 @@ public:
       : storage_(std::move(storage))
       , node_info_(std::move(node_info))
       , probe_(&probe)
-      , worker_([](std::exception_ptr eptr) {
-          vlog(cd_log.warn, "Exception from delete worker: {}", eptr);
-      }) {}
+      , worker_(std::make_unique<ssx::work_queue>(handle_worker_exc)) {}
     void start() {
         vlog(cd_log.info, "Starting cloud topics list/delete worker");
         if (as_.abort_requested()) {
@@ -63,9 +71,38 @@ public:
         as_.request_abort();
         delete_sem_.broken();
         page_sem_.broken();
-        co_await worker_.shutdown();
+        co_await worker_->shutdown();
         co_await gate_.close();
         vlog(cd_log.info, "Stopped cloud topics list/delete worker");
+    }
+
+    seastar::future<> reset() {
+        if (gate_.is_closed()) {
+            co_return;
+        }
+        vlog(cd_log.info, "Resetting cloud topics list/delete worker");
+
+        // Abort in-flight list/delete operations
+        as_.request_abort();
+
+        // Drain pending delete tasks
+        co_await worker_->shutdown();
+
+        // Wait for spawned delete fibers to complete
+        if (!gate_.is_closed()) {
+            co_await gate_.close();
+        }
+
+        continuation_token_.reset();
+        curr_prefix_.reset();
+        key_prefixes_.set_range(std::nullopt);
+
+        as_ = {};
+        gate_ = {};
+
+        worker_ = std::make_unique<ssx::work_queue>(handle_worker_exc);
+
+        vlog(cd_log.info, "Reset cloud topics list/delete worker");
     }
 
     bool has_capacity() const { return page_sem_.available_units() > 0; }
@@ -110,9 +147,9 @@ public:
                 // unbounded.
                 u.emplace(seastar::consume_units(page_sem_, keys_total_bytes));
             }
-            worker_.submit([this,
-                            o = std::move(objects),
-                            u = std::move(u).value()]() mutable {
+            worker_->submit([this,
+                             o = std::move(objects),
+                             u = std::move(u).value()]() mutable {
                 return do_delete_objects(std::move(o), std::move(u));
             });
         }
@@ -222,7 +259,7 @@ private:
     std::unique_ptr<object_storage> storage_;
     std::unique_ptr<node_info> node_info_;
     level_zero_gc_probe* probe_;
-    ssx::work_queue worker_;
+    std::unique_ptr<ssx::work_queue> worker_;
     // TODO: configurable limits?
     // max number of in-flight delete ops
     ssx::semaphore delete_sem_{5, "ct/gc/delete"};
@@ -621,14 +658,22 @@ level_zero_gc::level_zero_gc(
 
 level_zero_gc::~level_zero_gc() = default;
 
-void level_zero_gc::start() {
+seastar::future<> level_zero_gc::start() {
+    while (resetting_) {
+        co_await reset_cv_.wait(
+          control_timeout, [this] { return !resetting_; });
+    }
     vlog(cd_log.info, "Starting cloud topics L0 GC worker");
     delete_worker_->start();
     should_run_ = true;
     worker_cv_.signal();
 }
 
-void level_zero_gc::pause() {
+seastar::future<> level_zero_gc::pause() {
+    while (resetting_) {
+        co_await reset_cv_.wait(
+          control_timeout, [this] { return !resetting_; });
+    }
     vlog(cd_log.info, "Pausing cloud topics L0 GC worker");
     should_run_ = false;
     asrc_.request_abort();
@@ -645,6 +690,35 @@ seastar::future<> level_zero_gc::stop() {
     vlog(cd_log.info, "Stopped cloud_topics L0 GC worker");
 }
 
+seastar::future<> level_zero_gc::reset() {
+    if (should_shutdown_ || resetting_) {
+        co_return;
+    }
+    vlog(cd_log.info, "Resetting cloud topics L0 GC worker state");
+
+    resetting_ = true;
+    const bool was_running = should_run_;
+
+    auto done = ss::defer([this] {
+        resetting_ = false;
+        reset_cv_.broadcast();
+    });
+
+    // Pause the outer worker loop so it blocks on the CV
+    should_run_ = false;
+    asrc_.request_abort();
+
+    co_await delete_worker_->reset();
+
+    // Resume if was running, then clear the flag so that start()/pause()
+    // waiting on reset_cv_ don't race with the resume.
+    if (was_running && !should_shutdown_) {
+        delete_worker_->start();
+        should_run_ = true;
+        worker_cv_.signal();
+    }
+}
+
 std::string_view to_string_view(level_zero_gc::state s) {
     switch (s) {
         using enum level_zero_gc::state;
@@ -652,6 +726,8 @@ std::string_view to_string_view(level_zero_gc::state s) {
         return "level_zero_gc::state::paused";
     case running:
         return "level_zero_gc::state::running";
+    case resetting:
+        return "level_zero_gc::state::resetting";
     case stopping:
         return "level_zero_gc::state::stopping";
     case stopped:
@@ -666,6 +742,9 @@ auto level_zero_gc::get_state() const -> state {
     auto st = [this] {
         if (should_shutdown_) {
             return worker_.available() ? state::stopped : state::stopping;
+        }
+        if (resetting_) {
+            return state::resetting;
         }
         return should_run_ ? state::running : state::paused;
     }();
@@ -901,17 +980,30 @@ level_zero_gc::do_try_to_collect(std::optional<cluster_epoch>& max_gc_epoch) {
 
 std::optional<prefix_range_inclusive>
 compute_prefix_range(size_t shard_idx, size_t total_shards) {
-    auto total_prefixes = object_id::prefix_max + 1;
-    total_shards = std::min(total_shards, static_cast<size_t>(total_prefixes));
-    if (shard_idx >= total_shards) {
+    constexpr size_t total_prefixes = object_id::prefix_max + 1;
+    total_shards = std::min(total_shards, total_prefixes);
+    if (total_shards == 0 || shard_idx >= total_shards) {
         return std::nullopt;
     }
+
+    // Divide prefixes evenly, distributing the remainder one-per-shard across
+    // the first `remainder` shards. E.g. 1000 prefixes / 32 shards:
+    //   stride=31, remainder=8
+    //   shards 0-7:  32 prefixes each (31 + 1 extra)
+    //   shards 8-31: 31 prefixes each
     auto stride = total_prefixes / total_shards;
-    auto min = static_cast<object_id::prefix_t>(shard_idx * stride);
-    auto max = static_cast<object_id::prefix_t>(min + stride - 1);
-    if (shard_idx == total_shards - 1) {
-        max = object_id::prefix_max;
-    }
+    auto remainder = total_prefixes % total_shards;
+
+    auto has_extra = shard_idx < remainder;
+    auto width = stride + (has_extra ? 1 : 0);
+
+    // Each shard before us consumed `stride` prefixes, plus one extra for each
+    // of the first `remainder` shards. The number of extra prefixes already
+    // handed out is min(shard_idx, remainder).
+    auto extras_before = std::min(shard_idx, remainder);
+    auto min = static_cast<object_id::prefix_t>(
+      shard_idx * stride + extras_before);
+    auto max = static_cast<object_id::prefix_t>(min + width - 1);
 
     return prefix_range_inclusive{min, max};
 }

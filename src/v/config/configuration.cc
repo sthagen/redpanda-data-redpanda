@@ -3086,6 +3086,13 @@ configuration::configuration()
       "Number of chunks to prefetch ahead of every downloaded chunk",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       0)
+  , cloud_storage_prefetch_segments_max(
+      *this,
+      "cloud_storage_prefetch_segments_max",
+      "Maximum number of small segments (size <= chunk size) to prefetch ahead "
+      "during sequential reads. Set to 0 to disable cross-segment prefetch.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      3)
   , cloud_storage_cache_num_buckets(
       *this,
       "cloud_storage_cache_num_buckets",

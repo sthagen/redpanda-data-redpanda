@@ -252,6 +252,14 @@ void write_request_scheduler_probe::setup_internal_metrics(bool disable) {
          "active_groups",
          [this] { return _active_groups; },
          sm::description("Number of active upload groups in the scheduler."),
+         labels),
+
+       sm::make_gauge(
+         "next_stage_bytes",
+         [this] { return _next_stage_bytes; },
+         sm::description(
+           "Bytes buffered in the next pipeline stage, used for "
+           "group split/merge decisions."),
          labels)});
 }
 read_merge_probe::read_merge_probe(bool disable) {

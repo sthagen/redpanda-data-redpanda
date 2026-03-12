@@ -281,9 +281,18 @@ public:
     /*
      * Request that GC be started or paused. These can be called multiple times
      * and in any order. The last invocation will eventually take effect.
+     *
+     * If a reset is in progress, these will block until it completes or
+     * control_timeout expires.
      */
-    void start();
-    void pause();
+    seastar::future<> start();
+    seastar::future<> pause();
+
+    /// Reset internal GC state without a full stop/start cycle.
+    /// Drains in-flight operations, clears pagination and prefix
+    /// iteration state, and prepares for a fresh collection sweep.
+    /// GC resumes automatically if it was running before the reset.
+    seastar::future<> reset();
 
     /*
      * Request and wait for GC to be completely stopped. After calling shutdown,
@@ -296,12 +305,14 @@ public:
      *
      *   - paused: Paused indefinitely, call start() to run
      *   - running: GC will run until paused or stopped
+     *   - resetting: reset() is draining in-flight work
      *   - stopping: stop() requested but there may be work still in flight
      *   - stopped: Permanently stopped.
      */
     enum class state : uint8_t {
         paused,
         running,
+        resetting,
         stopping,
         stopped,
     };
@@ -317,9 +328,11 @@ private:
 
     bool should_run_;
     bool should_shutdown_;
+    bool resetting_{false};
     seastar::abort_source asrc_;
     seastar::condition_variable worker_cv_;
     seastar::future<> worker_;
+    seastar::condition_variable reset_cv_;
 
     seastar::future<> worker();
     enum class collection_error : int8_t;
