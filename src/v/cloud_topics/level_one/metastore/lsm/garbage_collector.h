@@ -57,7 +57,8 @@ public:
       replicated_database*,
       ss::abort_source*,
       size_t batch_size,
-      model::timestamp prereg_expiry_cutoff);
+      model::timestamp prereg_expiry_cutoff,
+      model::timestamp deletion_delay_cutoff);
 
 private:
     // Removes the given batch size worth of objects, evaluating objects
@@ -71,6 +72,7 @@ private:
       size_t batch_size,
       std::optional<object_id>,
       model::timestamp prereg_expiry_cutoff,
+      model::timestamp deletion_delay_cutoff,
       chunked_vector<object_id>& to_expire_out);
 
     io* io_;

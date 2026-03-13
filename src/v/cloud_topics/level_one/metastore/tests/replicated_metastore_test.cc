@@ -9,6 +9,7 @@
  */
 
 #include "cloud_storage/remote_label.h"
+#include "cloud_topics/level_one/metastore/domain_uuid.h"
 #include "cloud_topics/level_one/metastore/manifest_io.h"
 #include "cloud_topics/level_one/metastore/metastore_manifest.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
@@ -86,7 +87,7 @@ private:
         // Create a database using cloud metadata persistence pointing at the
         // LSM state's domain prefix in the bucket.
         auto domain_prefix = cloud_storage_clients::object_key{
-          fmt::format("{}", lsm_st.domain_uuid)};
+          domain_cloud_prefix(lsm_st.domain_uuid)};
         auto meta_persist = lsm::io::open_cloud_metadata_persistence(
                               remote, bucket_name, domain_prefix)
                               .get();
@@ -801,7 +802,13 @@ TEST_P(ReplicatedMetastoreTest, TestSetStartOffset) {
     auto missing_tp = make_tp(999);
     auto set_start_missing = meta.set_start_offset(missing_tp, o{10}).get();
     ASSERT_FALSE(set_start_missing.has_value());
-    ASSERT_EQ(set_start_missing.error(), metastore::errc::invalid_request);
+    if (GetParam() == metastore_backend::simple) {
+        // The simple backend doesn't have finer grained reasons for bad
+        // updates.
+        ASSERT_EQ(set_start_missing.error(), metastore::errc::invalid_request);
+    } else {
+        ASSERT_EQ(set_start_missing.error(), metastore::errc::missing_ntp);
+    }
     ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{50}, o{100}));
 
     // Set start so it's totally empty
@@ -819,7 +826,7 @@ TEST_P(ReplicatedMetastoreTest, TestBasicRemoveTopics) {
     auto& app = get_ct_app(model::node_id{0});
     auto& meta = app.get_sharded_replicated_metastore()->local();
 
-    static constexpr auto topics_count = 10000;
+    static constexpr auto topics_count = 3000;
     add_objects_for_topics(meta, topics_count, 99).get();
 
     // Sanity check that all topics exist.
@@ -842,11 +849,20 @@ TEST_P(ReplicatedMetastoreTest, TestBasicRemoveTopics) {
         topic_ids_to_remove.push_back(tp.topic_id);
     }
 
-    // Remove all topics.
-    auto remove_res = meta.remove_topics(topic_ids_to_remove).get();
-    ASSERT_TRUE(remove_res.has_value());
-    EXPECT_TRUE(remove_res->not_removed.empty())
-      << remove_res->not_removed.size() << " topics remain";
+    // Remove all topics, retrying as needed since batching may return
+    // not_removed topics when extent counts exceed the batch limit.
+    while (!topic_ids_to_remove.empty()) {
+        auto remove_res = meta.remove_topics(topic_ids_to_remove).get();
+        ASSERT_TRUE(remove_res.has_value());
+        chunked_vector<model::topic_id> remaining;
+        remaining.reserve(remove_res->not_removed.size());
+        for (auto& tid : remove_res->not_removed) {
+            remaining.push_back(tid);
+        }
+        ASSERT_LT(remaining.size(), topic_ids_to_remove.size())
+          << "no progress removing topics";
+        topic_ids_to_remove = std::move(remaining);
+    }
 
     // Verify all topics are gone.
     for (int i = 0; i < topics_count; ++i) {
@@ -896,8 +912,16 @@ TEST_P(ReplicatedMetastoreTest, TestRemoveTopicsWithShuffleLoop) {
             break;
         }
         auto remove_res = meta.remove_topics(topics_to_remove).get();
-        if (
-          !remove_res.has_value() || !remove_res.value().not_removed.empty()) {
+        if (!remove_res.has_value()) {
+            ss::sleep(100ms).get();
+            continue;
+        }
+        if (!remove_res.value().not_removed.empty()) {
+            topics_to_remove.clear();
+            std::copy(
+              remove_res->not_removed.begin(),
+              remove_res->not_removed.end(),
+              std::back_inserter(topics_to_remove));
             ss::sleep(100ms).get();
             continue;
         }

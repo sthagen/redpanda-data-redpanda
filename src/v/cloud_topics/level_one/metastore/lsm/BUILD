@@ -155,6 +155,8 @@ redpanda_cc_library(
     implementation_deps = [
         ":replicated_persistence",
         "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics/level_one/metastore:domain_uuid",
+        "//src/v/config",
         "//src/v/lsm/io:cloud_persistence",
         "//src/v/model:batch_builder",
         "//src/v/serde",

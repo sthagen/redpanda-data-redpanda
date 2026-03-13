@@ -10,10 +10,12 @@
 
 #include "cloud_topics/level_one/metastore/lsm/replicated_db.h"
 
+#include "cloud_topics/level_one/metastore/domain_uuid.h"
 #include "cloud_topics/level_one/metastore/lsm/lsm_update.h"
 #include "cloud_topics/level_one/metastore/lsm/replicated_persistence.h"
 #include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/logger.h"
+#include "config/configuration.h"
 #include "lsm/io/cloud_persistence.h"
 #include "lsm/io/persistence.h"
 #include "lsm/proto/manifest.proto.h"
@@ -109,11 +111,15 @@ replicated_database::open(
     }
     auto domain_uuid = s->state().domain_uuid;
     cloud_storage_clients::object_key domain_prefix{
-      fmt::format("{}", domain_uuid())};
+      domain_cloud_prefix(domain_uuid)};
 
     auto data_persist_fut = co_await ss::coroutine::as_future(
       lsm::io::open_cloud_data_persistence(
-        staging_directory, remote, bucket, domain_prefix));
+        staging_directory,
+        remote,
+        bucket,
+        domain_prefix,
+        ss::sstring(domain_uuid())));
     if (data_persist_fut.failed()) {
         co_return std::unexpected(wrap_failed_future(
           data_persist_fut.get_exception(), "Failed to open data persistence"));
@@ -136,7 +142,9 @@ replicated_database::open(
       lsm::database::open(
         lsm::options{
           .database_epoch = epoch(),
-          // TODO: tuning.
+          .file_deletion_delay = absl::FromChrono(
+            config::shard_local_cfg()
+              .cloud_topics_long_term_file_deletion_delay()),
         },
         std::move(io)));
     if (db_fut.failed()) {

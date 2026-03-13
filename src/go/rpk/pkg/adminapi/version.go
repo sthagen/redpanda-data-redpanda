@@ -26,10 +26,11 @@ func HasMinimumVersion(ctx context.Context, cl *rpadmin.AdminAPI, version redpan
 		return false
 	}
 	for _, broker := range brokers.Msg.Brokers {
-		if broker.BuildInfo == nil {
+		brokerResp, err := cl.BrokerService().GetBroker(ctx, &connect.Request[adminv2.GetBrokerRequest]{Msg: &adminv2.GetBrokerRequest{NodeId: &broker.NodeId}})
+		if err != nil || brokerResp.Msg.Broker.BuildInfo == nil {
 			return false
 		}
-		v, err := redpanda.VersionFromString(broker.BuildInfo.Version)
+		v, err := redpanda.VersionFromString(brokerResp.Msg.Broker.BuildInfo.Version)
 		if err != nil || !v.IsAtLeast(version) {
 			return false
 		}

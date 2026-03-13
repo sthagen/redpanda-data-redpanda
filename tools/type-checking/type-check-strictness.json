@@ -33,7 +33,6 @@
         "rptest/scale_tests/datalake_scale_test.py",
         "rptest/scale_tests/franzgo_bench.py",
         "rptest/scale_tests/large_controller_snapshot_test.py",
-        "rptest/scale_tests/list_kafka_connections_scale_test.py",
         "rptest/scale_tests/log_storage_target_size_test.py",
         "rptest/scale_tests/many_clients_test.py",
         "rptest/scale_tests/partition_balancer_scale_test.py",

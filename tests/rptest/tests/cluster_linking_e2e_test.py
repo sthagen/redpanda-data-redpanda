@@ -2217,6 +2217,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             partition_count=partition_count,
             replication_factor=3,
             message_timestamp_type=timestamp_type,
+            retention_ms=-1,
         )
 
         self.source_default_client().create_topic(topic)
@@ -2229,7 +2230,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
         msg_cnt = 100
-        base_ts = 1664453149000
+        base_ts = 1664453149000  # Thu Sep 29 2022 12:05:49 GMT
         with self.producer_consumer(
             topic=topic.name,
             msg_size=128,

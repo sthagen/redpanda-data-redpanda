@@ -819,6 +819,9 @@ public:
 
     property<std::chrono::milliseconds> cloud_topics_preregistered_object_ttl;
 
+    property<std::chrono::milliseconds>
+      cloud_topics_long_term_file_deletion_delay;
+
     development_feature_property<int> development_feature_property_testing_only;
 
 private:

@@ -412,6 +412,20 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
         co_return 0;
     }
 
+    // Don't do any work when no source has pending data.
+    {
+        chunked_vector<ss::shared_ptr<source>> pending;
+        for (auto& src : sources) {
+            if (src->has_pending_data()) {
+                pending.push_back(std::move(src));
+            }
+        }
+        sources = std::move(pending);
+    }
+    if (sources.empty()) {
+        co_return 0;
+    }
+
     // Begin by creating the set of objects to be built.
     retry_chain_node rtc = l1::make_default_metastore_rtc(_as);
     auto metadata_builder_res = co_await l1::retry_metastore_op(

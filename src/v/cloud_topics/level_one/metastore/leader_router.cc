@@ -831,6 +831,7 @@ leader_router::preregister_objects_locally(
   rpc::preregister_objects_request request,
   const model::ntp& metastore_ntp,
   ss::shard_id shard) {
+    auto m = _probe.auto_measure_preregister_objects();
     co_return co_await container().invoke_on(
       shard,
       [metastore_ntp, req = std::move(request)](leader_router& fe) mutable {

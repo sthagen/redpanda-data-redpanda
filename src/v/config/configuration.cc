@@ -4745,6 +4745,14 @@ configuration::configuration()
       "Time-to-live for pre-registered L1 objects before they are expired.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1h)
+  , cloud_topics_long_term_file_deletion_delay(
+      *this,
+      "cloud_topics_long_term_file_deletion_delay",
+      "Delay before deleting stale long term files, allowing concurrent "
+      "readers (e.g. read replica topics) to finish reading them before "
+      "removal.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1h)
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",

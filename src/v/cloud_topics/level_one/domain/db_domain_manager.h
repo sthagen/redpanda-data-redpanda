@@ -141,8 +141,24 @@ private:
     ss::future<std::expected<void, rpc::errc>>
     write_rows(const gate_writer_locks&, chunked_vector<write_batch_row>);
 
+    ss::future<std::expected<void, rpc::errc>>
+      write_rows_no_lock(chunked_vector<write_batch_row>);
+
     ss::future<rpc::get_compaction_info_reply> do_get_compaction_info(
       const gate_read_lock&, state_reader&, rpc::get_compaction_info_request);
+
+    ss::future<rpc::set_start_offset_reply> do_set_start_offset(
+      const gate_writer_locks&, rpc::set_start_offset_request);
+
+    // Ensures all partitions for a topic have start_offset == next_offset by
+    // advancing start_offset where needed.
+    ss::future<std::expected<void, rpc::errc>>
+    set_partitions_empty(const gate_writer_locks&, const model::topic_id&);
+
+    // Removes all metadata rows for the given topics. Callers are expected to
+    // ensure that the number of rows deleted is reasonable.
+    ss::future<std::expected<void, rpc::errc>>
+    do_remove_topics(const gate_writer_locks&, chunked_vector<model::topic_id>);
 
     ss::future<> expire_preregistered_objects(chunked_vector<object_id>);
 

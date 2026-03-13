@@ -48,6 +48,8 @@ public:
         _source_log.push_back(std::move(batch));
     }
 
+    bool has_pending_data() override { return true; }
+
     kafka::offset last_reconciled_offset() override { return _lro; }
 
     ss::future<std::expected<void, errc>>

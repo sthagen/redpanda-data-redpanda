@@ -60,6 +60,16 @@ public:
       , _fe(ss::make_lw_shared<frontend>(partition, dp_api))
       , _partition(std::move(partition)) {}
 
+    bool has_pending_data() override {
+        auto lro = last_reconciled_offset();
+        auto lso = _fe->last_stable_offset();
+        if (!lso.has_value()) {
+            // LSO is invalid.
+            return false;
+        }
+        return lso.value() > kafka::next_offset(lro);
+    }
+
     kafka::offset last_reconciled_offset() override {
         ctp_stm_api api(_partition->raft()->stm_manager()->get<ctp_stm>());
         return api.get_last_reconciled_offset();

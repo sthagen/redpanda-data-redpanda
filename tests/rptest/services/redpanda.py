@@ -4716,7 +4716,7 @@ class RedpandaService(Service, RedpandaServiceABC):
             return "/opt/redpanda"
         return self._context.globals["rp_install_path_root"]
 
-    def find_binary(self, name: str):
+    def find_binary(self, name: str) -> str:
         rp_install_path_root = self.rp_install_path()
         return f"{rp_install_path_root}/bin/{name}"
 

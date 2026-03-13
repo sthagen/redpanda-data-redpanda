@@ -68,6 +68,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
         "//src/v/cloud_storage_clients",
+        "//src/v/cloud_topics/level_one/metastore:domain_uuid",
         "//src/v/cloud_topics/level_one/metastore/lsm:replicated_db",
         "//src/v/cloud_topics/level_one/metastore/lsm:stm",
         "//src/v/cloud_topics/level_one/metastore/lsm:write_batch_row",
