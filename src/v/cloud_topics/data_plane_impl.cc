@@ -165,7 +165,8 @@ public:
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout,
-      model::opt_abort_source_t as) override {
+      model::opt_abort_source_t as,
+      allow_materialization_failure allow_mat_failure) override {
         if (metadata.empty()) {
             co_return chunked_vector<model::record_batch>{};
         }
@@ -183,6 +184,7 @@ public:
           {
             .output_size_estimate = output_size_estimate,
             .meta = std::move(metadata),
+            .allow_mat_failure = allow_mat_failure,
           },
           timeout,
           as);

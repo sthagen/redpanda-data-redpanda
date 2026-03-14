@@ -62,6 +62,8 @@ map_gc_state(cloud_topics::level_zero_gc::state st) {
         return status::l0_gc_status_stopping;
     case stopped:
         return status::l0_gc_status_stopped;
+    case safety_blocked:
+        return status::l0_gc_status_safety_blocked;
     }
     vunreachable("Unrecognized level_zero_gc::state {}", st);
 }

@@ -63,7 +63,8 @@ public:
        size_t output_size_estimate,
        chunked_vector<extent_meta> metadata,
        model::timeout_clock::time_point timeout,
-       model::opt_abort_source_t),
+       model::opt_abort_source_t,
+       allow_materialization_failure allow_mat_failure),
       (override));
 
     MOCK_METHOD(

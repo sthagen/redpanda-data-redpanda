@@ -73,12 +73,16 @@ public:
 
     // Materialize extents from the L0 read pipeline.
     // `output_size_estimate` must not exceed `materialize_max_bytes()`.
+    // When `allow_mat_failure` is yes, download_not_found (404)
+    // errors for individual extents are tolerated: the missing extents are
+    // skipped and the result contains fewer batches than requested.
     virtual ss::future<result<chunked_vector<model::record_batch>>> materialize(
       model::ntp ntp,
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout,
-      model::opt_abort_source_t)
+      model::opt_abort_source_t,
+      allow_materialization_failure allow_mat_failure)
       = 0;
 
     /// Return the maximum bytes that may be requested in a single

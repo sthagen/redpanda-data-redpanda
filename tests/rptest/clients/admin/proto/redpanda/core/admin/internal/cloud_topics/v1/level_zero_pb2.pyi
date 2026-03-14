@@ -42,6 +42,7 @@ class _StatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTyp
     L0_GC_STATUS_STOPPING: _Status.ValueType
     L0_GC_STATUS_STOPPED: _Status.ValueType
     L0_GC_STATUS_RESETTING: _Status.ValueType
+    L0_GC_STATUS_SAFETY_BLOCKED: _Status.ValueType
 
 class Status(_Status, metaclass=_StatusEnumTypeWrapper):
     """GC worker lifecycle states.
@@ -53,6 +54,7 @@ L0_GC_STATUS_RUNNING: Status.ValueType
 L0_GC_STATUS_STOPPING: Status.ValueType
 L0_GC_STATUS_STOPPED: Status.ValueType
 L0_GC_STATUS_RESETTING: Status.ValueType
+L0_GC_STATUS_SAFETY_BLOCKED: Status.ValueType
 Global___Status: typing_extensions.TypeAlias = Status
 
 @typing.final

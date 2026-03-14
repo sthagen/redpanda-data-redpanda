@@ -17,6 +17,7 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/rwlock.hh>
+#include <seastar/core/scheduling.hh>
 
 namespace cloud_topics::l1 {
 class io;
@@ -33,7 +34,8 @@ public:
       std::filesystem::path staging_dir,
       cloud_io::remote* remote,
       cloud_storage_clients::bucket_name bucket,
-      io* object_io);
+      io* object_io,
+      ss::scheduling_group sg);
 
     void start() override;
     ss::future<> stop_and_wait() override;
@@ -169,6 +171,7 @@ private:
     cloud_io::remote* remote_;
     cloud_storage_clients::bucket_name bucket_;
     io* object_io_;
+    ss::scheduling_group sg_;
 
     ss::shared_ptr<stm> stm_;
 

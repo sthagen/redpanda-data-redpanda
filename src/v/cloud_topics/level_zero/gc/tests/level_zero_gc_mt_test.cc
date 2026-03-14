@@ -171,6 +171,14 @@ public:
     size_t total_shards() const override { return ss::smp::count; }
 };
 
+class safety_monitor_test_impl
+  : public cloud_topics::level_zero_gc::safety_monitor {
+public:
+    result can_proceed() const override {
+        return {.ok = true, .reason = std::nullopt};
+    }
+};
+
 /*
  * Test fixture for multithreaded GC tests.
  */
@@ -200,7 +208,9 @@ struct level_zero_gc_mt_test : public seastar_test {
               return std::make_unique<mt_epoch_source>(g_bucket_state.get());
           }),
           ss::sharded_parameter(
-            [] { return std::make_unique<mt_node_info>(); }));
+            [] { return std::make_unique<mt_node_info>(); }),
+          ss::sharded_parameter(
+            [] { return std::make_unique<safety_monitor_test_impl>(); }));
     }
 
     ss::future<> TearDownAsync() override {

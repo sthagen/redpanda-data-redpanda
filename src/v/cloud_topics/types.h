@@ -10,10 +10,13 @@
 
 #pragma once
 
+#include "base/seastarx.h"
 #include "random/generators.h"
 #include "serde/envelope.h"
 #include "utils/named_type.h"
 #include "utils/uuid.h"
+
+#include <seastar/util/bool_class.hh>
 
 #include <fmt/core.h>
 
@@ -73,6 +76,9 @@ enum class ctp_stm_object_ownership {
     exclusive = 0,
     shared = 1,
 };
+
+using allow_materialization_failure
+  = ss::bool_class<struct allow_materialization_failure_tag>;
 
 } // namespace cloud_topics
 

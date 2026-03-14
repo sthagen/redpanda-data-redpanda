@@ -47,11 +47,13 @@ redpanda_cc_library(
     ],
     visibility = [":__subpackages__"],
     deps = [
+        "//src/v/base",
         "//src/v/random:generators",
         "//src/v/serde",
         "//src/v/utils:named_type",
         "//src/v/utils:uuid",
         "@fmt",
+        "@seastar",
     ],
 )
 
@@ -257,6 +259,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":types",
         "//src/v/base",
         "//src/v/model",
         "//src/v/utils:to_string",

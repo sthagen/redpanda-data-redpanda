@@ -83,7 +83,8 @@ ss::future<> app::construct(
       ss::sharded_parameter([this] { return &l1_io.local(); }),
       config::node().l1_staging_path(),
       ss::sharded_parameter([&remote] { return &remote->local(); }),
-      bucket);
+      bucket,
+      scheduling_groups::instance().cloud_topics_metastore_sg());
 
     co_await construct_service(
       l1_metastore_router,

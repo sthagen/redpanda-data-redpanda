@@ -19,6 +19,7 @@
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/members_table.h"
 #include "cluster/topic_table.h"
+#include "config/configuration.h"
 #include "ssx/semaphore.h"
 #include "ssx/work_queue.h"
 
@@ -32,7 +33,8 @@
 
 namespace {
 constexpr ss::lowres_clock::duration control_timeout = 5s;
-}
+constexpr ss::lowres_clock::duration health_report_query_timeout = 10s;
+} // namespace
 
 namespace cloud_topics {
 
@@ -484,7 +486,6 @@ public:
          * Get a recent health report. Partitions use the health reporting
          * mechanism to self-report their max GC eligible epoch.
          */
-        constexpr auto health_report_query_timeout = 10s;
 
         auto health_report
           = co_await health_monitor_->local().get_cluster_health(
@@ -615,13 +616,82 @@ private:
     seastar::sharded<cluster::members_table>* members_table_;
 };
 
+class cluster_safety_monitor : public level_zero_gc::safety_monitor {
+public:
+    explicit cluster_safety_monitor(
+      seastar::sharded<cluster::health_monitor_frontend>* health_monitor,
+      config::binding<std::chrono::milliseconds> check_interval)
+      : health_monitor_(health_monitor)
+      , check_interval_(std::move(check_interval))
+      , cached_result_{.ok = false, .reason = "awaiting first health check"}
+      , poll_loop_(do_poll_loop()) {}
+
+    result can_proceed() const override { return cached_result_; }
+
+    void start() override { started_ = true; }
+
+    seastar::future<> stop() override {
+        started_ = false;
+        as_.request_abort();
+        co_await std::exchange(poll_loop_, seastar::make_ready_future<>());
+    }
+
+private:
+    seastar::future<> do_poll_loop() noexcept {
+        while (!as_.abort_requested()) {
+            if (started_) {
+                auto poll_fut = co_await ss::coroutine::as_future(
+                  poll_health());
+                if (poll_fut.failed()) {
+                    auto ex = poll_fut.get_exception();
+                    cached_result_ = result{
+                      .ok = false,
+                      .reason = fmt::format("health check failed: {}", ex)};
+                }
+            }
+
+            auto sleep_fut = co_await seastar::coroutine::as_future(
+              seastar::sleep_abortable(check_interval_(), as_));
+            if (sleep_fut.failed()) {
+                sleep_fut.ignore_ready_future();
+                break;
+            }
+        }
+    }
+
+    seastar::future<> poll_health() {
+        auto overview
+          = co_await health_monitor_->local().get_cluster_health_overview(
+            model::timeout_clock::now() + health_report_query_timeout);
+
+        if (overview.is_healthy()) {
+            cached_result_ = result{.ok = true, .reason = std::nullopt};
+        } else {
+            cached_result_ = result{
+              .ok = false,
+              .reason = overview.unhealthy_reasons.empty()
+                          ? "cluster unhealthy"
+                          : overview.unhealthy_reasons.front()};
+        }
+    }
+
+    seastar::sharded<cluster::health_monitor_frontend>* health_monitor_;
+    config::binding<std::chrono::milliseconds> check_interval_;
+    result cached_result_;
+    bool started_{false};
+    seastar::abort_source as_;
+    seastar::future<> poll_loop_;
+};
+
 level_zero_gc::level_zero_gc(
   level_zero_gc_config config,
   std::unique_ptr<object_storage> storage,
   std::unique_ptr<epoch_source> epoch_source,
-  std::unique_ptr<node_info> node_info)
+  std::unique_ptr<node_info> node_info,
+  std::unique_ptr<safety_monitor> safety_monitor)
   : config_(std::move(config))
   , epoch_source_(std::move(epoch_source))
+  , safety_monitor_(std::move(safety_monitor))
   , should_run_(false) // begin in a stopped state
   , should_shutdown_(false)
   , worker_(worker())
@@ -654,7 +724,11 @@ level_zero_gc::level_zero_gc(
       std::make_unique<object_storage_remote_impl>(remote, std::move(bucket)),
       std::make_unique<epoch_source_impl>(
         health_monitor, controller_stm, topic_table),
-      std::make_unique<node_info_impl>(self, members_table)) {}
+      std::make_unique<node_info_impl>(self, members_table),
+      std::make_unique<cluster_safety_monitor>(
+        health_monitor,
+        config::shard_local_cfg()
+          .cloud_topics_gc_health_check_interval.bind())) {}
 
 level_zero_gc::~level_zero_gc() = default;
 
@@ -665,6 +739,7 @@ seastar::future<> level_zero_gc::start() {
     }
     vlog(cd_log.info, "Starting cloud topics L0 GC worker");
     delete_worker_->start();
+    safety_monitor_->start();
     should_run_ = true;
     worker_cv_.signal();
 }
@@ -687,6 +762,7 @@ seastar::future<> level_zero_gc::stop() {
     worker_cv_.signal();
     co_await delete_worker_->stop();
     co_await std::exchange(worker_, seastar::make_ready_future<>());
+    co_await safety_monitor_->stop();
     vlog(cd_log.info, "Stopped cloud_topics L0 GC worker");
 }
 
@@ -732,6 +808,8 @@ std::string_view to_string_view(level_zero_gc::state s) {
         return "level_zero_gc::state::stopping";
     case stopped:
         return "level_zero_gc::state::stopped";
+    case safety_blocked:
+        return "level_zero_gc::state::safety_blocked";
     }
     vunreachable("Unrecognized GC state: {}", s);
 }
@@ -746,7 +824,11 @@ auto level_zero_gc::get_state() const -> state {
         if (resetting_) {
             return state::resetting;
         }
-        return should_run_ ? state::running : state::paused;
+        if (!should_run_) {
+            return state::paused;
+        }
+        return safety_monitor_->can_proceed().ok ? state::running
+                                                 : state::safety_blocked;
     }();
     vlog(cd_log.debug, "cloud_topics L0 GC worker state: {}", st);
     return st;
@@ -778,6 +860,19 @@ seastar::future<> level_zero_gc::worker() {
             // may subscribe or reset the abort source since it is able to
             // ensure that the abort source is unreferenced at this time.
             asrc_ = {};
+
+            if (auto safety = safety_monitor_->can_proceed(); !safety.ok) {
+                vlog(
+                  cd_log.debug,
+                  "L0 GC blocked by safety monitor: {}",
+                  safety.reason.value_or("unknown"));
+                probe_.safety_blocked();
+                (co_await seastar::coroutine::as_future(
+                   seastar::sleep_abortable(
+                     config_.throttle_no_progress(), asrc_)))
+                  .ignore_ready_future();
+                continue;
+            }
 
             if (backoff.count() > 0) {
                 auto t0 = ss::lowres_clock::now();

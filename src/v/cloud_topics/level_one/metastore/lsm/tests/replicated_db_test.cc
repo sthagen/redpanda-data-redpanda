@@ -82,7 +82,8 @@ struct replicated_db_node {
           staging_directory.get_path(),
           remote,
           bucket,
-          as);
+          as,
+          ss::default_scheduling_group());
         if (!ret.has_value()) {
             co_return std::unexpected(ret.error());
         }

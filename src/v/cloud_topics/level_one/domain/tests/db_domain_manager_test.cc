@@ -76,7 +76,8 @@ struct domain_manager_node {
           staging_directory.get_path(),
           remote,
           bucket,
-          &object_io);
+          &object_io,
+          ss::default_scheduling_group());
         if (start_gc) {
             mgr->start();
         }

@@ -143,6 +143,74 @@ struct level_zero_gc_config {
     config::binding<std::chrono::milliseconds> throttle_no_progress;
 };
 
+/*
+ * State Machine
+ * =============
+ *
+ *  Construction
+ *       |
+ *       v
+ *  +--------+
+ *  | paused |<-----------------------------+
+ *  +---+----+                              |
+ *      | start()                           |
+ *      v                                   |
+ *  +----------------+                      |
+ *  | worker loop top|<-----------+         |
+ *  +-------+--------+            |         |
+ *          |                     |         |
+ *          | check safety        |         |
+ *          |                     |         |
+ *     ok +-+-+ !ok               |         |
+ *    +---+   +----+              |         |
+ *    v            v              |         |
+ *  +---------+ +---------------+ |         |
+ *  | running | |safety_blocked | |         |
+ *  |         | |               | |         |
+ *  | backoff | | increment     | |         |
+ *  |  then   | |  probe,       | |         |
+ *  | collect | |  sleep        | |         |
+ *  +----+----+ +-------+-------+ |         |
+ *       |              |         |         |
+ *       +------+-------+         |         |
+ *              |                 |         |
+ *              +-----------------+         |
+ *                  loop back               |
+ *                                          |
+ *  pause() from running or safety_blocked  |
+ *  ----------------------------------------+
+ *
+ *  reset() from any non-stopped state:
+ *
+ *  +----------+
+ *  |resetting | drains delete worker, then
+ *  +----+-----+ restores prior run/pause state
+ *       |
+ *       v
+ *  was_running?
+ *    yes -> running
+ *    no  -> paused
+ *
+ *  stop() from any state:
+ *
+ *  +---------+  worker done  +---------+
+ *  |stopping |-------------->| stopped |
+ *  +---------+               +---------+
+ *                             (terminal)
+ *
+ *  The running/safety_blocked distinction is not an
+ *  explicit transition. Both are phases of the worker
+ *  loop -- each iteration checks can_proceed() and
+ *  takes the corresponding branch. The state returned
+ *  by get_state() reflects whichever branch would be
+ *  taken at query time.
+ *
+ *  get_state() priority:
+ *    should_shutdown_ > resetting_ > !should_run_ >
+ *    safety_monitor_.can_proceed()
+ *
+ *  start()/pause() block while resetting_ is true.
+ */
 class level_zero_gc {
 public:
     /*
@@ -253,6 +321,33 @@ public:
         virtual size_t total_shards() const = 0;
     };
 
+    /// Interface for gating GC on system-level safety conditions.
+    ///
+    /// Production implementations poll external signals (e.g. cluster health)
+    /// in a background fiber and cache the result so that can_proceed() is
+    /// synchronous and cheap. This is orthogonal to admin pause/start — even
+    /// if an operator calls start(), GC will not proceed while the safety
+    /// monitor reports not-ok.
+    class safety_monitor {
+    public:
+        safety_monitor() = default;
+        safety_monitor(const safety_monitor&) = delete;
+        safety_monitor(safety_monitor&&) = delete;
+        safety_monitor& operator=(const safety_monitor&) = delete;
+        safety_monitor& operator=(safety_monitor&&) = delete;
+        virtual ~safety_monitor() = default;
+
+        struct result {
+            bool ok;
+            std::optional<ss::sstring> reason;
+        };
+
+        virtual result can_proceed() const = 0;
+
+        virtual void start() {}
+        virtual seastar::future<> stop() { return seastar::now(); }
+    };
+
 public:
     /*
      * Construct with the given storage and epoch providers. This interface is
@@ -262,7 +357,8 @@ public:
       level_zero_gc_config,
       std::unique_ptr<object_storage>,
       std::unique_ptr<epoch_source>,
-      std::unique_ptr<node_info>);
+      std::unique_ptr<node_info>,
+      std::unique_ptr<safety_monitor>);
 
     /*
      * Construct with default implementations of storage and epoch providers.
@@ -308,6 +404,8 @@ public:
      *   - resetting: reset() is draining in-flight work
      *   - stopping: stop() requested but there may be work still in flight
      *   - stopped: Permanently stopped.
+     *   - safety_blocked: GC is started but the safety monitor is preventing
+     *     collection (e.g. cluster unhealthy)
      */
     enum class state : uint8_t {
         paused,
@@ -315,6 +413,7 @@ public:
         resetting,
         stopping,
         stopped,
+        safety_blocked,
     };
 
     /**
@@ -325,6 +424,7 @@ public:
 private:
     level_zero_gc_config config_;
     std::unique_ptr<epoch_source> epoch_source_;
+    std::unique_ptr<safety_monitor> safety_monitor_;
 
     bool should_run_;
     bool should_shutdown_;

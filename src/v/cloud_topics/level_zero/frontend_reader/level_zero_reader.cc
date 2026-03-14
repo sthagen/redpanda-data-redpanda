@@ -386,7 +386,8 @@ level_zero_log_reader_impl::materialize_batches(
           materialize_bytes,
           std::move(to_materialize),
           deadline,
-          _config.abort_source);
+          _config.abort_source,
+          _config.allow_mat_failure);
         if (!mat_res.has_value()) {
             if (mat_res.error() == errc::shutting_down) {
                 vlog(_log.debug, "Materialize aborted due to shutdown");
@@ -402,7 +403,10 @@ level_zero_log_reader_impl::materialize_batches(
               mat_res.error().message()));
         }
         batches = std::move(mat_res.value());
-        if (batches.size() != materialize_count) {
+        auto count_ok = bool(_config.allow_mat_failure)
+                          ? batches.size() <= materialize_count
+                          : batches.size() == materialize_count;
+        if (!count_ok) {
             throw std::runtime_error(fmt_with_ctx(
               fmt::format,
               "Materialized unexpected number of batches: {}, expected: {}",
@@ -411,7 +415,10 @@ level_zero_log_reader_impl::materialize_batches(
         }
     }
     // Merge our selected subset of unhydrated batches with the materialized
-    // batches, preserving control batches from the local log.
+    // batches, preserving control batches from the local log. When
+    // allow_mat_failure is set, some extents may have been skipped: the
+    // materialized batches are a subsequence of the query (same offset
+    // order), so sequential offset comparison identifies which were skipped.
     auto batches_it = batches.begin();
     chunked_circular_buffer<model::record_batch> hydrated;
     auto range_to_materialize = std::ranges::subrange(
@@ -421,10 +428,27 @@ level_zero_log_reader_impl::materialize_batches(
             _config.abort_source.value().get().check();
         }
         auto& local_batch_header = local_batch.header;
-        model::record_batch batch = ss::visit(
+        auto maybe_batch = ss::visit(
           local_batch.data,
-          [this, &local_batch_header, &batches_it, &tidp](
-            const cloud_topics::extent_meta&) {
+          [this, &local_batch_header, &batches_it, &batches, &tidp](
+            const cloud_topics::extent_meta& meta)
+            -> std::optional<model::record_batch> {
+              if (
+                batches_it == batches.end()
+                || batches_it->base_offset()
+                     != kafka::offset_cast(meta.base_offset)) {
+                  if (!bool(_config.allow_mat_failure)) {
+                      throw std::runtime_error(fmt_with_ctx(
+                        fmt::format,
+                        "Materialized batch offset mismatch: expected "
+                        "{}, got {}",
+                        kafka::offset_cast(meta.base_offset),
+                        batches_it == batches.end()
+                          ? model::offset{}
+                          : batches_it->base_offset()));
+                  }
+                  return std::nullopt;
+              }
               model::record_batch batch = apply_placeholder_to_batch(
                 local_batch_header, std::move(*batches_it));
               ++batches_it;
@@ -440,19 +464,23 @@ level_zero_log_reader_impl::materialize_batches(
               }
               return batch;
           },
-          [&local_batch_header](local_log_batch::payload& payload) {
+          [&local_batch_header](local_log_batch::payload& payload)
+            -> std::optional<model::record_batch> {
               return model::record_batch(
                 local_batch_header,
                 std::move(payload),
                 model::record_batch::tag_ctor_ng{});
           },
-          [](local_log_batch::cached_batch& cb) {
+          [](local_log_batch::cached_batch& cb)
+            -> std::optional<model::record_batch> {
               // Cache hit resolved during the collection loop above.
               // The batch is already fully formed (apply_placeholder_to_batch
               // was applied before cache_put on the path that populated it).
               return std::move(cb.batch);
           });
-        hydrated.push_back(std::move(batch));
+        if (maybe_batch.has_value()) {
+            hydrated.push_back(std::move(*maybe_batch));
+        }
         co_await ss::coroutine::maybe_yield();
     }
     vassert(

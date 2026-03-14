@@ -795,6 +795,7 @@ public:
     property<size_t> cloud_topics_reconciliation_max_object_size;
     bounded_property<size_t> cloud_topics_upload_part_size;
     bounded_property<size_t> cloud_topics_reconciliation_parallelism;
+    property<bool> cloud_topics_allow_materialization_failure;
     property<size_t> cloud_topics_compaction_max_object_size;
     property<size_t> cloud_topics_l1_indexing_interval;
     property<std::chrono::milliseconds> cloud_topics_compaction_interval_ms;
@@ -812,6 +813,7 @@ public:
     property<std::chrono::milliseconds> cloud_topics_short_term_gc_interval;
     property<std::chrono::milliseconds>
       cloud_topics_short_term_gc_backoff_interval;
+    property<std::chrono::milliseconds> cloud_topics_gc_health_check_interval;
 
     property<bool> cloud_topics_parallel_fetch_enabled;
 

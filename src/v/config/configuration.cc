@@ -4643,6 +4643,16 @@ configuration::configuration()
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       8,
       {.min = size_t{1}, .max = size_t{64}})
+  , cloud_topics_allow_materialization_failure(
+      *this,
+      "cloud_topics_allow_materialization_failure",
+      "When enabled, the reconciler tolerates missing L0 extent objects "
+      "(404 errors) during materialization. Failed extents are skipped, "
+      "producing L1 state with empty offset ranges where deleted data was. "
+      "Use this to recover partitions after accidental deletion of live "
+      "extent objects.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , cloud_topics_compaction_max_object_size(
       *this,
       "cloud_topics_compaction_max_object_size",
@@ -4723,6 +4733,13 @@ configuration::configuration()
       "when no progress is being made or errors are occurring.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1min)
+  , cloud_topics_gc_health_check_interval(
+      *this,
+      "cloud_topics_gc_health_check_interval",
+      "The interval at which the L0 garbage collector checks cluster health. "
+      "GC will not proceed while the cluster is unhealthy.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10s)
   , cloud_topics_parallel_fetch_enabled(
       *this,
       "cloud_topics_parallel_fetch_enabled",

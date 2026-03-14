@@ -61,7 +61,8 @@ replicated_database::open(
   const std::filesystem::path& staging_directory,
   cloud_io::remote* remote,
   const cloud_storage_clients::bucket_name& bucket,
-  ss::abort_source& as) {
+  ss::abort_source& as,
+  ss::scheduling_group sg) {
     auto term_result = co_await s->sync(std::chrono::seconds(30));
     if (!term_result.has_value()) {
         co_return std::unexpected(
@@ -142,6 +143,7 @@ replicated_database::open(
       lsm::database::open(
         lsm::options{
           .database_epoch = epoch(),
+          .compaction_scheduling_group = sg,
           .file_deletion_delay = absl::FromChrono(
             config::shard_local_cfg()
               .cloud_topics_long_term_file_deletion_delay()),
@@ -193,13 +195,15 @@ replicated_database::open(
         }
     }
     auto ret = std::unique_ptr<replicated_database>(
-      new replicated_database(term, domain_uuid, s, std::move(db), as));
+      new replicated_database(term, domain_uuid, s, std::move(db), as, sg));
     ret->start();
     co_return std::move(ret);
 }
 
 void replicated_database::start() {
-    ssx::spawn_with_gate(gate_, [this] { return apply_loop(); });
+    ssx::spawn_with_gate(gate_, [this] {
+        return ss::with_scheduling_group(sg_, [this] { return apply_loop(); });
+    });
 }
 
 ss::future<std::expected<void, replicated_database::error>>
