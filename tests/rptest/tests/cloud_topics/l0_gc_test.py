@@ -1195,13 +1195,9 @@ class CloudTopicsL0GCNodeFailureTest(CloudTopicsL0GCTestBase):
         self.logger.info(f"Restarting node {kill_node.name} (id={kill_node_id})")
         self.redpanda.start_node(kill_node, timeout=30, node_id_override=kill_node_id)
 
-        deleted_after_restart = self.get_num_objects_deleted(nodes=[kill_node])
-        self.logger.info(
-            f"Waiting for restarted node GC to resume (currently {deleted_after_restart})"
-        )
+        self.logger.info("Waiting for restarted node GC to resume")
         wait_until(
-            lambda: self.get_num_objects_deleted(nodes=[kill_node])
-            > deleted_after_restart,
+            lambda: self.get_num_objects_deleted(nodes=[kill_node]) > 0,
             timeout_sec=30,
             backoff_sec=3,
             retry_on_exc=True,
