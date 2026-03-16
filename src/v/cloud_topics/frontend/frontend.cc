@@ -691,22 +691,13 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
         // which case it's not stored) or from the log replay. The
         // simplest solution in this case is to skip caching.
         if (res.value().last_term >= model::term_id{0}) {
-            // Topic config may already be gone if the topic is being
-            // deleted; skip caching in that case.
             auto tidp = get_topic_id_partition(partition);
             if (tidp) {
                 update_batches(
                   cache_batches,
                   kafka::offset_cast(res.value().last_offset),
                   res.value().last_term);
-                for (const auto& b : cache_batches) {
-                    vlog(
-                      cd_log.trace,
-                      "Putting batch to cache: {}, term: {}",
-                      b.base_offset(),
-                      b.term());
-                    api->cache_put(*tidp, b);
-                }
+                api->cache_put_ordered(*tidp, std::move(cache_batches));
             }
         } else {
             vlog(
@@ -810,20 +801,10 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
     }
     auto ret_offset = model::offset(result.value().last_offset());
     if (!rb_copy.empty()) {
-        // Topic config may already be gone if the topic is being
-        // deleted; skip caching in that case.
         auto tidp = topic_id_partition();
         if (tidp) {
             update_batches(rb_copy, ret_offset, result.value().last_term);
-            for (const auto& b : rb_copy) {
-                vlog(
-                  cd_log.trace,
-                  "Putting batch for {} to cache: {}, term: {}",
-                  ntp(),
-                  b.base_offset(),
-                  b.term());
-                _data_plane->cache_put(*tidp, b);
-            }
+            _data_plane->cache_put_ordered(*tidp, std::move(rb_copy));
         }
     }
     co_return ret_offset;

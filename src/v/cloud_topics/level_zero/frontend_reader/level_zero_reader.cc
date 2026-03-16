@@ -79,13 +79,32 @@ level_zero_log_reader_impl::read_some(
         co_return chunked_circular_buffer<model::record_batch>{};
     }
 
+    // Like the storage layer log reader, stop when we've consumed all
+    // committed data. The Kafka fetch handler owns the waiting policy
+    // via the visible_offset_monitor / max_wait_ms.
+    {
+        auto ot_state = _ctp->get_offset_translator_state();
+        auto translated = ot_state->from_log_offset(
+          _ctp->raft()->committed_offset());
+        if (_next_offset > model::offset_cast(translated)) {
+            vlog(
+              _log.debug,
+              "next offset {} beyond committed kafka offset {}, "
+              "end of stream",
+              _next_offset,
+              translated);
+            set_end_of_stream();
+            co_return chunked_circular_buffer<model::record_batch>{};
+        }
+    }
+
     // Wait briefly for the write path to cache the batch we need.
     // This closes the race window between replicate() completing (HWM
     // advance) and cache_put() running on the write continuation.
     if (cache_enabled() && _ctp->is_leader()) {
         auto tidp = require_topic_id_partition();
         auto wait_deadline = model::timeout_clock::now()
-                             + std::chrono::milliseconds(25);
+                             + std::chrono::milliseconds(500);
         try {
             // Translate committed_offset from raft-space to kafka-space.
             // The batch cache monitor tracks kafka offsets (put() notifies
@@ -192,13 +211,6 @@ level_zero_log_reader_impl::maybe_read_batches_from_cache() {
         if (!batch.has_value()) {
             break;
         }
-
-        vlog(
-          _log.trace,
-          "Loaded batch from cache for {}: {} @ term {}",
-          _next_offset,
-          batch.value().base_offset(),
-          batch.value().term());
 
         auto batch_size = batch.value().size_bytes();
         if (is_over_limit_with_bytes(batch_size)) {
@@ -351,11 +363,6 @@ level_zero_log_reader_impl::materialize_batches(
                 auto cached = _ct_api->cache_get(
                   tidp, kafka::offset_cast(meta->base_offset));
                 if (cached.has_value()) {
-                    vlog(
-                      _log.trace,
-                      "Cache hit for extent at offset {} during "
-                      "materialize",
-                      meta->base_offset);
                     unhydrated_it->data = local_log_batch::cached_batch{
                       .batch = std::move(cached.value())};
                     continue;

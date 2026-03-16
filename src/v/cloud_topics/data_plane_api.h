@@ -100,6 +100,13 @@ public:
     virtual std::optional<model::record_batch>
     cache_get(const model::topic_id_partition&, model::offset o) = 0;
 
+    /// Put batches into the cache and notify the offset monitor when the
+    /// inserted batches extend the contiguous range tracked by the monitor.
+    virtual void cache_put_ordered(
+      const model::topic_id_partition&,
+      chunked_vector<model::record_batch> batches)
+      = 0;
+
     /// Retrieve current cluster epoch
     virtual ss::future<std::optional<cloud_topics::cluster_epoch>>
     get_current_epoch(ss::abort_source* as) = 0;

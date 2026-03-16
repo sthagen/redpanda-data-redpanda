@@ -205,6 +205,12 @@ public:
         return _batch_cache.local().get(tidp, o);
     }
 
+    void cache_put_ordered(
+      const model::topic_id_partition& tidp,
+      chunked_vector<model::record_batch> batches) final {
+        _batch_cache.local().put_ordered(tidp, std::move(batches));
+    }
+
     ss::future<> cache_wait(
       const model::topic_id_partition& tidp,
       model::offset offset,

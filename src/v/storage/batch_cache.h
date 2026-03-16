@@ -592,6 +592,11 @@ public:
       size_t max_bytes,
       bool skip_lru_promote);
 
+    /// Check whether the index contains valid (non-evicted) entries that cover
+    /// every offset in the closed range [from, to] without gaps.  Returns true
+    /// when from > to (empty range).
+    bool has_contiguous_coverage(model::offset from, model::offset to) const;
+
     /**
      * Removes all batches that _may_ contain the specified offset.
      */
