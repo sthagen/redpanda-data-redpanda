@@ -668,6 +668,7 @@ redpanda_cc_library(
         ":table_utils",
         ":topic_memory_per_partition_default",
         "//src/v/cloud_storage:logger",
+        "//src/v/cloud_topics/read_replica:stm",
         "//src/v/crash_tracker",
         "//src/v/features:enterprise_feature_messages",
         "//src/v/resource_mgmt:memory_groups",

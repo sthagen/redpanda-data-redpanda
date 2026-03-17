@@ -12,6 +12,7 @@
 
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/frontend.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/log_reader_config.h"
 #include "cloud_topics/logger.h"

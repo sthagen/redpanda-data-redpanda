@@ -504,7 +504,7 @@ class TLSCertManager:
         """
         p12_password = self.generate_password(length=pw_length)
         self._exec(
-            f"openssl pkcs12 -export -inkey {key} -in {crt} -certfile {ca} -passout pass:{p12_password} -out {p12_file}"
+            f"openssl pkcs12 -export -inkey {key} -in {crt} -certfile {ca} -passout pass:{p12_password} -out {p12_file} -certpbe AES-256-CBC -keypbe AES-256-CBC -macalg SHA256"
         )
         return p12_password
 

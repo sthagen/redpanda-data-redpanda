@@ -169,7 +169,7 @@ cluster::cloud_storage_mode partition::get_cloud_storage_mode() const {
 
     const auto& cfg = _raft->log_config();
 
-    if (cfg.is_read_replica_mode_enabled()) {
+    if (cfg.is_read_replica_mode_enabled() && !cfg.cloud_topic_enabled()) {
         return cluster::cloud_storage_mode::read_replica;
     }
     if (cfg.is_tiered_storage()) {
@@ -473,11 +473,6 @@ ss::future<> partition::start(
     // store partition properties stm offset for fast access
     _partition_properties_stm
       = _raft->stm_manager()->get<cluster::partition_properties_stm>();
-
-    // the cloud topics stm provides access to garbage collection metadata. this
-    // metadata is collected into cluster health reports as a way to disseminate
-    // this information to the garbage collection process.
-    _ctp_stm = _raft->stm_manager()->get<cloud_topics::ctp_stm>();
 
     // Start the probe after the partition is fully initialised
     _probe.setup_metrics(ntp);
@@ -795,6 +790,7 @@ bool partition::should_construct_archiver() {
            // for it.
            && _raft->ntp().ns == model::kafka_namespace
            && _raft->ntp().tp.topic != model::kafka_consumer_offsets_topic
+           && !ntp_config.cloud_topic_enabled()
            && (ntp_config.is_archival_enabled() || ntp_config.is_read_replica_mode_enabled());
 }
 
@@ -1843,13 +1839,6 @@ ss::future<result<ss::rwlock::holder>> partition::hold_writes_enabled() {
     }
 
     co_return *std::move(maybe_units);
-}
-
-std::optional<int64_t> partition::cloud_topic_max_gc_eligible_epoch() const {
-    if (_ctp_stm) {
-        return _ctp_stm->estimate_inactive_epoch();
-    }
-    return std::nullopt;
 }
 
 ss::sharded<cloud_topics::state_accessors>*

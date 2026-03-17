@@ -12,6 +12,7 @@
 
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/housekeeper/housekeeper.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/state_accessors.h"

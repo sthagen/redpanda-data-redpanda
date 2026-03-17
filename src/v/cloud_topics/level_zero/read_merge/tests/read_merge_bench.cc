@@ -9,7 +9,6 @@
 
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
-#include "cloud_topics/level_zero/read_debounce/read_debounce.h"
 #include "cloud_topics/level_zero/read_merge/read_merge.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
@@ -102,126 +101,6 @@ struct fetch_handler {
 } // namespace cloud_topics
 
 using namespace cloud_topics;
-
-class read_debounce_bench {
-public:
-    /// Start benchmark fixture.
-    /// \param enable_debounce enables or disables read debounce
-    /// \param fetch_delay simulates I/O latency in fetch handler
-    ss::future<> start(
-      bool enable_debounce,
-      std::chrono::microseconds fetch_delay = std::chrono::microseconds(0)) {
-        co_await pipeline.start();
-
-        if (enable_debounce) {
-            co_await debounce.start(ss::sharded_parameter([this] {
-                return pipeline.local().register_read_pipeline_stage();
-            }));
-
-            co_await debounce.invoke_on_all([](auto& f) { return f.start(); });
-        }
-
-        co_await sink.start(
-          ss::sharded_parameter([this] { return std::ref(pipeline.local()); }),
-          fetch_delay);
-
-        co_await sink.invoke_on_all([](auto& sink) { return sink.start(); });
-    }
-
-    ss::future<> stop() {
-        co_await pipeline.stop();
-        co_await sink.stop();
-        if (debounce.local_is_initialized()) {
-            co_await debounce.stop();
-        }
-    }
-
-    // Run requests serially
-    ss::future<> test_run(int num_requests) {
-        perf_tests::start_measuring_time();
-        for (int i = 0; i < num_requests; i++) {
-            l0::dataplane_query query;
-            query.output_size_estimate = 1_KiB;
-            query.meta.push_back(
-              // The exact values doesn't matter. The only requirement
-              // is that the id is different for every request.
-              extent_meta{
-                .id = object_id{.name = uuid_t::create()},
-                .byte_range_size = byte_range_size_t{1_KiB}});
-
-            // The requests are processed sequentially, without any concurrency
-            // so we're measuring a propagation latency and not throughput. The
-            // latency is expected to be in the ballpark of 10 microseconds end
-            // to end. The actual I/O (either cache or cloud) will take
-            // longer.
-            perf_tests::do_not_optimize(
-              co_await pipeline.local().make_reader(
-                model::controller_ntp,
-                std::move(query),
-                ss::lowres_clock::now() + 10s));
-        }
-        perf_tests::stop_measuring_time();
-    }
-
-    // Fire N concurrent requests all targeting the same object_id.
-    // Measures how the debounce stage handles contention.
-    ss::future<> test_run_concurrent_same_object(int concurrency) {
-        auto shared_id = object_id{.name = uuid_t::create()};
-        chunked_vector<ss::future<
-          std::expected<l0::dataplane_query_result, std::error_code>>>
-          futures;
-
-        perf_tests::start_measuring_time();
-        for (int i = 0; i < concurrency; i++) {
-            l0::dataplane_query query;
-            query.output_size_estimate = 1_KiB;
-            query.meta.push_back(
-              extent_meta{
-                .id = shared_id, .byte_range_size = byte_range_size_t{1_KiB}});
-
-            futures.push_back(pipeline.local().make_reader(
-              model::controller_ntp,
-              std::move(query),
-              ss::lowres_clock::now() + 10s));
-        }
-        auto results = co_await ss::when_all(futures.begin(), futures.end());
-        perf_tests::do_not_optimize(results);
-        perf_tests::stop_measuring_time();
-    }
-
-    // Fire N concurrent requests each targeting a unique object_id.
-    // For debounce, false hash collisions (pigeonhole on 128 slots)
-    // serialize unrelated requests. For read_merge, no collisions.
-    ss::future<> test_run_concurrent_unique_objects(int concurrency) {
-        chunked_vector<ss::future<
-          std::expected<l0::dataplane_query_result, std::error_code>>>
-          futures;
-
-        perf_tests::start_measuring_time();
-        for (int i = 0; i < concurrency; i++) {
-            l0::dataplane_query query;
-            query.output_size_estimate = 1_KiB;
-            query.meta.push_back(
-              extent_meta{
-                .id = object_id{.name = uuid_t::create()},
-                .byte_range_size = byte_range_size_t{1_KiB}});
-
-            futures.push_back(pipeline.local().make_reader(
-              model::controller_ntp,
-              std::move(query),
-              ss::lowres_clock::now() + 10s));
-        }
-        auto results = co_await ss::when_all(futures.begin(), futures.end());
-        perf_tests::do_not_optimize(results);
-        perf_tests::stop_measuring_time();
-    }
-
-    ss::sharded<cloud_topics::l0::read_pipeline<>> pipeline;
-    ss::sharded<cloud_topics::l0::read_debounce<>> debounce;
-    ss::sharded<cloud_topics::fetch_handler> sink;
-};
-
-// ---- Read merge benchmark fixture ----
 
 class read_merge_bench {
 public:
@@ -330,40 +209,6 @@ public:
     ss::sharded<cloud_topics::l0::read_merge<>> merge;
     ss::sharded<cloud_topics::fetch_handler> sink;
 };
-
-// ---- Debounce tests ----
-
-PERF_TEST_C(read_debounce_bench, baseline) {
-    // Baseline: no middle stage, serial requests with unique objects.
-    co_await start(false);
-    co_await test_run(100);
-    co_await stop();
-}
-
-PERF_TEST_C(read_debounce_bench, serial) {
-    // Serial requests through debounce, unique objects.
-    co_await start(true);
-    co_await test_run(100);
-    co_await stop();
-}
-
-PERF_TEST_C(read_debounce_bench, concurrent_same_object) {
-    // 50 concurrent requests for the same object through debounce.
-    // All hash to the same slot — serialized by 250ms lock timeout.
-    co_await start(true, 1ms);
-    co_await test_run_concurrent_same_object(50);
-    co_await stop();
-}
-
-PERF_TEST_C(read_debounce_bench, concurrent_unique_objects) {
-    // 50 concurrent requests for different objects through debounce.
-    // False hash collisions on 128 slots serialize unrelated requests.
-    co_await start(true, 1ms);
-    co_await test_run_concurrent_unique_objects(50);
-    co_await stop();
-}
-
-// ---- Read merge tests ----
 
 PERF_TEST_C(read_merge_bench, baseline) {
     // Baseline: no middle stage, serial requests with unique objects.

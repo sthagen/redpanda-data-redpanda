@@ -48,6 +48,11 @@ class flush_loop_manager;
 class topic_purger_manager;
 } // namespace l1
 
+namespace read_replica {
+class snapshot_manager;
+class metadata_manager;
+} // namespace read_replica
+
 class app : public ssx::sharded_service_container {
 public:
     explicit app(ss::sstring logger_name = "cloud_topics::app");
@@ -112,6 +117,10 @@ private:
     ss::sharded<topic_manifest_upload_manager> topic_manifest_upload_mgr;
     std::unique_ptr<l1::compaction_scheduler> compaction_scheduler;
     ss::sharded<l0::cluster_services> cluster_services;
+
+    // Read replica components
+    ss::sharded<read_replica::snapshot_manager> rr_snapshot_manager_;
+    ss::sharded<read_replica::metadata_manager> rr_metadata_manager_;
 };
 
 } // namespace cloud_topics

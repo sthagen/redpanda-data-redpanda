@@ -198,10 +198,12 @@ private:
     /*
      * Reconcile a set of sources into an object with id `oid`.
      * The metastore must have previously assigned `oid` to each source
-     * in `sources`. Returns metadata on success, or an error if building,
-     * uploading, or metadata operations fail.
+     * in `sources`. Returns metadata on success, nullopt if no sources
+     * had data to reconcile, or an error if building, uploading, or
+     * metadata operations fail.
      */
-    ss::future<std::expected<built_object_metadata, reconcile_error>>
+    ss::future<
+      std::expected<std::optional<built_object_metadata>, reconcile_error>>
     reconcile_sources(
       const l1::object_id& oid,
       const chunked_vector<ss::shared_ptr<source>>& sources);
@@ -219,12 +221,12 @@ private:
      * Build an object described by `ctx` and containing data from
      * `sources`, which must all belong to the same L1 domain.
      * On success, finishes the builder and completes the multipart
-     * upload. Returns an error if no data was added or if building
-     * fails.
+     * upload. Returns nullopt if no sources had data, or an error
+     * if building fails.
      */
-    ss::future<std::expected<built_object_metadata, reconcile_error>>
+    ss::future<
+      std::expected<std::optional<built_object_metadata>, reconcile_error>>
     build_object(
-      const l1::object_id& oid,
       builder_context& ctx,
       const chunked_vector<ss::shared_ptr<source>>& sources);
 

@@ -26,9 +26,8 @@ namespace cloud_topics::l0 {
 
 /// Merges concurrent read requests targeting the same L0 object.
 ///
-/// Unlike read_debounce, this component keys on exact object_id (no
-/// hash collisions) and has no fixed timeout — the wait scales to
-/// actual download time.
+/// Keys on exact object_id (no hash collisions) and has no fixed
+/// timeout — the wait scales to actual download time.
 template<class Clock = ss::lowres_clock>
 class read_merge {
 public:

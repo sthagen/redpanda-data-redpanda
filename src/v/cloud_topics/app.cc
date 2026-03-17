@@ -20,10 +20,13 @@
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/manager/manager.h"
+#include "cloud_topics/read_replica/metadata_manager.h"
+#include "cloud_topics/read_replica/snapshot_manager.h"
 #include "cloud_topics/reconciler/reconciler.h"
 #include "cloud_topics/topic_manifest_upload_manager.h"
 #include "cluster/cluster_epoch_service.h"
 #include "cluster/controller.h"
+#include "cluster/utils/partition_change_notifier_impl.h"
 #include "config/node_config.h"
 #include "resource_mgmt/cpu_scheduling.h"
 #include "ssx/future-util.h"
@@ -105,6 +108,25 @@ ss::future<> app::construct(
     co_await construct_service(l1_reader_cache_);
 
     co_await construct_service(
+      rr_snapshot_manager_,
+      config::node().l1_staging_path(),
+      ss::sharded_parameter([&remote] { return &remote->local(); }),
+      ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }));
+
+    co_await construct_service(
+      rr_metadata_manager_,
+      ss::sharded_parameter([controller] {
+          return cluster::partition_change_notifier_impl::make_default(
+            controller->get_raft_manager(),
+            controller->get_partition_manager(),
+            controller->get_topics_state());
+      }),
+      std::ref(controller->get_partition_manager()),
+      ss::sharded_parameter([this] { return &rr_snapshot_manager_.local(); }),
+      std::ref(*remote),
+      std::ref(controller->get_topics_state()));
+
+    co_await construct_service(
       state,
       data_plane.get(),
       ss::sharded_parameter([this] { return &replicated_metastore.local(); }),
@@ -112,7 +134,9 @@ ss::future<> app::construct(
       ss::sharded_parameter(
         [&metadata_cache] { return &metadata_cache->local(); }),
       ss::sharded_parameter([this] { return &_l1_reader_probe.local(); }),
-      ss::sharded_parameter([this] { return &l1_reader_cache_.local(); }));
+      ss::sharded_parameter([this] { return &l1_reader_cache_.local(); }),
+      ss::sharded_parameter([this] { return &rr_metadata_manager_.local(); }),
+      ss::sharded_parameter([this] { return &rr_snapshot_manager_.local(); }));
 
     co_await construct_service(
       topic_purge_manager,
@@ -196,6 +220,10 @@ ss::future<> app::start() {
         co_await flush_loop_manager.invoke_on_all(
           &l1::flush_loop_manager::start);
     }
+
+    // Start read replica metadata manager
+    co_await rr_metadata_manager_.invoke_on_all(
+      &read_replica::metadata_manager::start);
 
     // When start is called, we must have registered all the callbacks before
     // this as starting the manager will invoke callbacks for partitions already
@@ -385,6 +413,6 @@ ss::sharded<level_zero_gc>* app::get_level_zero_gc() { return &l0_gc; }
 
 cluster_services& app::get_local_cluster_services() {
     return std::ref(cluster_services.local());
-};
+}
 
 } // namespace cloud_topics

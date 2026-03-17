@@ -467,8 +467,8 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
     // Process sources by their object (one per domain) in parallel,
     // bounded by the semaphore.
     chunked_vector<l1::object_id> oids;
-    chunked_vector<
-      ss::future<std::expected<built_object_metadata, reconcile_error>>>
+    chunked_vector<ss::future<
+      std::expected<std::optional<built_object_metadata>, reconcile_error>>>
       futures;
     oids.reserve(oid_to_sources.size());
     futures.reserve(oid_to_sources.size());
@@ -484,9 +484,10 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
     // NB: `futures` has size at most 3.
     auto results = co_await ss::when_all(futures.begin(), futures.end());
 
-    // Process results.
+    // Process results. Collect objects that won't be committed (no data,
+    // errors, or exceptions) so their pending metastore state is cleaned up.
     chunked_vector<built_object_metadata> successful_objects;
-    chunked_vector<l1::object_id> failed_objects;
+    chunked_vector<l1::object_id> unused_objects;
     for (size_t i = 0; i < results.size(); ++i) {
         auto& oid = oids[i];
         auto& object_fut = results[i];
@@ -503,22 +504,30 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
             if (is_shutdown) {
                 co_return 0;
             }
-            failed_objects.push_back(oid);
+            unused_objects.push_back(oid);
             continue;
         }
 
         auto result = object_fut.get();
         if (!result.has_value()) {
-            failed_objects.push_back(oid);
+            unused_objects.push_back(oid);
             log_error(result.error());
             continue;
         }
 
-        auto obj_metadata = std::move(result).value();
+        auto& maybe_metadata = result.value();
+        if (!maybe_metadata.has_value()) {
+            // No data from any partition in this object — normal for
+            // caught-up or slow-moving partitions.
+            unused_objects.push_back(oid);
+            continue;
+        }
+
+        auto obj_metadata = std::move(maybe_metadata).value();
         auto add_result = add_object_metadata(
           oid, obj_metadata, metadata_builder.get());
         if (!add_result.has_value()) {
-            failed_objects.push_back(oid);
+            unused_objects.push_back(oid);
             log_error(add_result.error().with_context(
               "adding metadata for object {}", oid));
             continue;
@@ -528,7 +537,7 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
         successful_objects.push_back(std::move(obj_metadata));
     }
 
-    for (const auto& oid : failed_objects) {
+    for (const auto& oid : unused_objects) {
         auto rm_ret = metadata_builder->remove_pending_object(oid);
         vassert(
           rm_ret.has_value(), "Removing object {} in non-pending state", oid);
@@ -564,7 +573,7 @@ ss::future<size_t> reconciler<Clock>::reconcile_source_set(
 
 template<class Clock>
 ss::future<std::expected<
-  typename reconciler<Clock>::built_object_metadata,
+  std::optional<typename reconciler<Clock>::built_object_metadata>,
   reconcile_error>>
 reconciler<Clock>::reconcile_sources(
   const l1::object_id& oid,
@@ -576,8 +585,7 @@ reconciler<Clock>::reconcile_sources(
     }
     auto ctx = std::move(ctx_result.value());
 
-    auto fut = co_await ss::coroutine::as_future(
-      build_object(oid, ctx, sources));
+    auto fut = co_await ss::coroutine::as_future(build_object(ctx, sources));
 
     // Always cleanup: abort multipart if not completed, then close builder.
     auto cleanup_fut = co_await ss::coroutine::as_future(ctx.cleanup_upload());
@@ -653,12 +661,10 @@ reconciler<Clock>::make_context(const l1::object_id& oid) {
 
 template<class Clock>
 ss::future<std::expected<
-  typename reconciler<Clock>::built_object_metadata,
+  std::optional<typename reconciler<Clock>::built_object_metadata>,
   reconcile_error>>
 reconciler<Clock>::build_object(
-  const l1::object_id& oid,
-  builder_context& ctx,
-  const chunked_vector<ss::shared_ptr<source>>& sources) {
+  builder_context& ctx, const chunked_vector<ss::shared_ptr<source>>& sources) {
     const auto max_size = ctx.size_budget;
 
     chunked_vector<commit_info> metas;
@@ -704,12 +710,10 @@ reconciler<Clock>::build_object(
     metas.shrink_to_fit();
 
     if (metas.empty()) {
-        // Return early without finishing the builder or completing the
-        // multipart upload. The caller's cleanup will abort the upload
-        // and close the builder.
-        co_return std::unexpected(reconcile_error(
-          "Skipping upload for object {}: no new data from any partition",
-          oid));
+        // No new data from any partition. Return early without finishing
+        // the builder or completing the multipart upload. The caller's
+        // cleanup will abort the upload and close the builder.
+        co_return std::nullopt;
     }
 
     auto obj_info = co_await ctx.builder->finish().finally(

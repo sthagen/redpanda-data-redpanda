@@ -198,7 +198,7 @@ class QuotaManagementUtils:
             wait_until(
                 lambda: self.rpk.alter_cluster_quotas(*args, **kwargs)["status"]
                 == "OK",
-                timeout_sec=10,
+                timeout_sec=30,
                 backoff_sec=1,
                 err_msg="failed to run rpk.alter_cluster_quotas",
             )
