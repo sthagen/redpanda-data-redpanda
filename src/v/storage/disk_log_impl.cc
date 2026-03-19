@@ -3507,14 +3507,12 @@ ss::future<> disk_log_impl::do_truncate_prefix(truncate_prefix_config cfg) {
 
 ss::future<> disk_log_impl::truncate(truncate_config cfg) {
     throw_if_closed();
-    // We are truncating the offset translator before truncating the log
-    // because if saving offset translator state fails (e.g. because of a
-    // crash), we can retry and eventually log and offset translator will
-    // become consistent. OTOH if log truncation were first and saving offset
-    // translator state failed, we wouldn't retry and log and offset translator
-    // could diverge.
-    co_await _offset_translator.truncate(cfg.base_offset);
-
+    // Truncate the log before the offset translator. This ordering ensures
+    // that if the OT update fails (I/O error on checkpoint), the in-memory
+    // OT state is already correct (the map erase happens before the
+    // checkpoint) so runtime offset translations remain accurate. On
+    // restart, sync_with_log will reconcile the on-disk OT state with the
+    // actual log.
     co_await _failure_probes.truncate().then([this, cfg]() mutable {
         // Before truncation, erase any claim about a particular segment being
         // clean: this may refer to a segment we are about to delete, or it
@@ -3531,6 +3529,7 @@ ss::future<> disk_log_impl::truncate(truncate_config cfg) {
               return do_truncate(cfg, std::nullopt);
           });
     });
+    co_await _offset_translator.truncate(cfg.base_offset);
 }
 
 ss::future<> disk_log_impl::do_truncate(

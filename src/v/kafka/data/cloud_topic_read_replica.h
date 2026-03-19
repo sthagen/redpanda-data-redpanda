@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/read_replica/partition_metadata.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/protocol/errors.h"
@@ -132,8 +133,13 @@ public:
     size_t local_size_bytes() const final;
     ss::future<std::optional<size_t>> cloud_size_bytes() const final;
     model::offset offset_lag() const final;
+    ss::future<cluster::partition_cloud_storage_status>
+    get_cloud_storage_status() const final;
 
 private:
+    ss::future<std::optional<cloud_topics::l1::metastore::size_response>>
+    get_metastore_size() const;
+
     struct snapshot {
         partition_metadata metadata;
         std::unique_ptr<snapshot_metastore> metastore;

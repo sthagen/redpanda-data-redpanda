@@ -404,6 +404,7 @@ add_objects_db_update::build_rows(
           .compaction_epoch = opt ? opt->compaction_epoch
                                   : partition_state::compaction_epoch_t{0},
           .size = (opt ? opt->size : 0) + extent_size_sum,
+          .num_extents = (opt ? opt->num_extents : 0) + extents.size(),
         };
     }
     // Now that we've validated the offsets of our extents, validate the terms
@@ -674,6 +675,8 @@ replace_objects_db_update::build_rows(
         auto prev_size = static_cast<ssize_t>(meta_res.value()->size);
         meta_res.value()->size = std::max(
           ssize_t(0), prev_size - removed_for_tidp);
+        meta_res.value()->num_extents -= std::min(
+          meta_res.value()->num_extents, extent_keys_to_delete[tidp].size());
     }
 
     // Update existing object entries to indicate the removal of data from
@@ -738,6 +741,7 @@ replace_objects_db_update::build_rows(
                               ? start_it->second
                               : kafka::offset{0};
         size_t added_for_tidp = 0;
+        size_t added_extents_for_tidp = 0;
         for (const auto& extent : extents) {
             // Skip extents fully below start_offset. These are stale
             // replacements for extents that have been truncated.
@@ -748,6 +752,7 @@ replace_objects_db_update::build_rows(
             auto key = extent_row_key::encode(tidp, extent.base_offset);
             added_extent_keys.emplace(key);
             added_for_tidp += extent.len;
+            ++added_extents_for_tidp;
             out.emplace_back(
               write_batch_row{
                 .key = extent_row_key::encode(tidp, extent.base_offset),
@@ -768,6 +773,7 @@ replace_objects_db_update::build_rows(
             co_return std::unexpected(std::move(meta_res.error()));
         }
         meta_res.value()->size += added_for_tidp;
+        meta_res.value()->num_extents += added_extents_for_tidp;
     }
     if (added_extent_keys.empty()) {
         // No extents, e.g. because all replacements are below the current
@@ -1038,6 +1044,9 @@ set_start_offset_db_update::build_rows(
             .next_offset = metadata.next_offset,
             .compaction_epoch = metadata.compaction_epoch,
             .size = metadata.size - std::min(metadata.size, total_removed_size),
+            .num_extents
+            = metadata.num_extents
+              - std::min(metadata.num_extents, extent_keys_to_delete.size()),
           }),
       });
 

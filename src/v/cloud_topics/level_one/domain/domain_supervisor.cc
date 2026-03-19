@@ -15,10 +15,10 @@
 #include "cloud_topics/level_one/domain/simple_domain_manager.h"
 #include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/logger.h"
-#include "cloud_topics/types.h"
 #include "cluster/controller.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
+#include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "ssx/when_all.h"
@@ -202,10 +202,11 @@ private:
           = tristate<std::chrono::milliseconds>();
         topic_props.cleanup_policy_bitflags
           = model::cleanup_policy_bitflags::none;
-        // NOTE: For now we just have a fixed number of domains for the entire
-        // cluster.
         co_return co_await create_topic(
-          tp_ns, num_partitions.value_or(default_num_l1_domains), topic_props);
+          tp_ns,
+          num_partitions.value_or(
+            config::shard_local_cfg().cloud_topics_num_metastore_partitions()),
+          topic_props);
     }
 
     ss::future<> update_topic(cluster::topic_properties_update update) {

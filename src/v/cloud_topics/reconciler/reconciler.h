@@ -18,6 +18,7 @@
 #include "cloud_topics/reconciler/adaptive_interval.h"
 #include "cloud_topics/reconciler/reconciler_probe.h"
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
+#include "cluster/fwd.h"
 #include "cluster/partition.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
@@ -90,7 +91,8 @@ struct reconcile_error {
 template<class Clock = ss::lowres_clock>
 class reconciler {
 public:
-    reconciler(l1::io*, l1::metastore*, ss::scheduling_group);
+    reconciler(
+      l1::io*, l1::metastore*, cluster::metadata_cache*, ss::scheduling_group);
 
     reconciler(const reconciler&) = delete;
     reconciler& operator=(const reconciler&) = delete;
@@ -103,6 +105,9 @@ public:
 
     void setup_metrics_for_tests() { _probe.setup_metrics(); }
     const reconciler_probe& get_probe_for_tests() const { return _probe; }
+    size_t topic_scheduler_count_for_tests() const {
+        return _topic_schedulers.size();
+    }
 
     void attach_partition(
       const model::ntp&,
@@ -291,6 +296,7 @@ private:
 
     l1::io* _l1_io;
     l1::metastore* _metastore;
+    cluster::metadata_cache* _metadata_cache;
     ss::gate _gate;
     ss::abort_source _as;
     reconciler_probe _probe;

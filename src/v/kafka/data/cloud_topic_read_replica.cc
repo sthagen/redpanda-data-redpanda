@@ -314,7 +314,8 @@ size_t partition_proxy::local_size_bytes() const {
     return partition_->size_bytes();
 };
 
-ss::future<std::optional<size_t>> partition_proxy::cloud_size_bytes() const {
+ss::future<std::optional<cloud_topics::l1::metastore::size_response>>
+partition_proxy::get_metastore_size() const {
     auto snap_res = co_await get_snapshot();
     if (!snap_res.has_value()) {
         co_return std::nullopt;
@@ -324,10 +325,31 @@ ss::future<std::optional<size_t>> partition_proxy::cloud_size_bytes() const {
     if (!size_res.has_value()) {
         co_return std::nullopt;
     }
+    co_return size_res.value();
+}
+
+ss::future<std::optional<size_t>> partition_proxy::cloud_size_bytes() const {
+    auto size_res = co_await get_metastore_size();
     co_return size_res.value().size;
 }
 
 model::offset partition_proxy::offset_lag() const { return model::offset(0); }
+
+ss::future<cluster::partition_cloud_storage_status>
+partition_proxy::get_cloud_storage_status() const {
+    cluster::partition_cloud_storage_status status{};
+    auto local_size = local_size_bytes();
+    auto cloud_size = (co_await get_metastore_size())
+                        .value_or(cloud_topics::l1::metastore::size_response{});
+    status.mode = cluster::cloud_storage_mode::cloud_topic_read_replica;
+    status.local_log_size_bytes = local_size;
+    // A cloud topic read replica only has access to L1 data, and therefore only
+    // reports L1 data size for both "cloud" and "total" log size bytes.
+    status.cloud_log_size_bytes = cloud_size.size;
+    status.total_log_size_bytes = cloud_size.size;
+    status.stm_region_segment_count = cloud_size.num_extents;
+    co_return status;
+}
 
 ss::future<std::expected<partition_proxy::snapshot, ss::sstring>>
 partition_proxy::get_snapshot() const {

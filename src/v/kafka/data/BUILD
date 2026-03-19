@@ -48,6 +48,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:state_accessors",
         "//src/v/cloud_topics/frontend",
         "//src/v/cloud_topics/frontend:errc",
+        "//src/v/cloud_topics/level_one/metastore",
         "//src/v/cloud_topics/level_zero/frontend_reader",
         "//src/v/kafka/data:log_reader_config",
         "//src/v/kafka/protocol",

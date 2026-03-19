@@ -52,7 +52,7 @@ class PartitionState(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     LAST_CATALOG_COMMITTED_OFFSET_FIELD_NUMBER: builtins.int
     last_catalog_committed_offset: builtins.int
-    'Last translated offset for the partition. If not set, no translation\n    has been done for the partition.\n    IMPORTANT: This is a Kafka offset, not a Redpanda log offset.\n    '
+    'Last translated offset for the partition. If not set, no translation\n    has been done for the partition.\n    '
 
     def __init__(self, *, last_catalog_committed_offset: builtins.int | None=...) -> None:
         ...
@@ -129,17 +129,13 @@ Global___TopicState: typing_extensions.TypeAlias = TopicState
 
 @typing.final
 class GetTranslationStateRequest(google.protobuf.message.Message):
-    """Returns the Iceberg translation state for one or more topics. If no topics
-    are specified, returns state for all topics.
-    """
+    """Returns the Iceberg translation state for one or more topics."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     TOPICS_FILTER_FIELD_NUMBER: builtins.int
 
     @property
     def topics_filter(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """Names of topics whose state to return. If empty, returns state for all
-        topics.
-        """
+        """Names of topics whose state to return. Must be not empty."""
 
     def __init__(self, *, topics_filter: collections.abc.Iterable[builtins.str] | None=...) -> None:
         ...

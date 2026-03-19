@@ -11,7 +11,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Set directories
 OUT_DIR="$REPO_ROOT/tests/rptest/clients/admin"
-GOOGLEAPIS_DIR="$REPO_ROOT/bazel-out/../../../external/googleapis+"
+GOOGLEAPIS_DIR="$(cd "$REPO_ROOT" && bazel info output_base)/external/googleapis+"
 
 echo "Checking for uv..."
 if ! command -v uv &>/dev/null; then
@@ -23,7 +23,7 @@ fi
 echo "Checking for googleapis directory..."
 if [ ! -d "$GOOGLEAPIS_DIR" ]; then
   echo "Error: googleapis directory not found at $GOOGLEAPIS_DIR"
-  echo "Please run: bazel build //proto/..."
+  echo "Please run: bazel fetch //proto/..."
   exit 1
 fi
 

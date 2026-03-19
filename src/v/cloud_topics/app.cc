@@ -155,6 +155,8 @@ ss::future<> app::construct(
       reconciler,
       ss::sharded_parameter([this] { return &l1_io.local(); }),
       ss::sharded_parameter([this] { return &replicated_metastore.local(); }),
+      ss::sharded_parameter(
+        [&metadata_cache] { return &metadata_cache->local(); }),
       scheduling_groups::instance().cloud_topics_reconciler_sg());
 
     if (!skip_level_zero_gc) {

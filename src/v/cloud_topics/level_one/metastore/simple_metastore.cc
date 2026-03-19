@@ -199,6 +199,7 @@ simple_metastore::get_size(
     const auto& prt = prt_ref->get();
     return size_response{
       .size = prt.calculate_size(),
+      .num_extents = prt.extents.size(),
     };
 }
 

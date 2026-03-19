@@ -388,6 +388,7 @@ simple_domain_manager::get_size(rpc::get_size_request req) {
     co_return rpc::get_size_reply{
       .ec = rpc::errc::ok,
       .size = get_res->size,
+      .num_extents = get_res->num_extents,
     };
 }
 

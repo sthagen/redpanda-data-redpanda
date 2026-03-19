@@ -180,7 +180,9 @@ public:
 
     struct size_response {
         // The total size of the partition in bytes.
-        size_t size;
+        size_t size{0};
+        // The number of extents in the partition.
+        size_t num_extents{0};
     };
     // Returns the size of the partition in bytes.
     virtual ss::future<std::expected<size_response, errc>>

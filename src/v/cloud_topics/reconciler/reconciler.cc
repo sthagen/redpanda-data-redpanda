@@ -23,9 +23,11 @@
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
 #include "cloud_topics/reconciler/reconciliation_source.h"
 #include "cloud_topics/types.h"
+#include "cluster/metadata_cache.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
+#include "model/namespace.h"
 #include "ssx/future-util.h"
 #include "utils/retry_chain_node.h"
 
@@ -63,9 +65,13 @@ void log_error(
 
 template<class Clock>
 reconciler<Clock>::reconciler(
-  l1::io* l1_io, l1::metastore* metastore, ss::scheduling_group reconciler_sg)
+  l1::io* l1_io,
+  l1::metastore* metastore,
+  cluster::metadata_cache* metadata_cache,
+  ss::scheduling_group reconciler_sg)
   : _l1_io(l1_io)
   , _metastore(metastore)
+  , _metadata_cache(metadata_cache)
   , _reconciler_sg(reconciler_sg)
   , _upload_part_size(config::shard_local_cfg().cloud_topics_upload_part_size())
   , _reconciliation_sem(
@@ -331,12 +337,23 @@ ss::future<> reconciler<Clock>::reconcile() {
     auto now = Clock::now();
     chunked_vector<chunked_vector<ss::shared_ptr<source>>> due_topics;
 
+    // No yield points between the source copy and here, so the scheduler
+    // map must be in sync with sources: one scheduler per distinct topic.
+    vassert(
+      topics.size() == _topic_schedulers.size(),
+      "Topic scheduler count ({}) doesn't match source topic count ({})",
+      _topic_schedulers.size(),
+      topics.size());
+
     for (auto& topic_sources : topics) {
         vassert(!topic_sources.empty(), "Empty topic source set");
         auto topic_id = topic_sources.front()->topic_id_partition().topic_id;
-        auto& scheduler_state = get_or_create_topic_scheduler(topic_id);
-        auto next_due = scheduler_state.last_reconciled
-                        + scheduler_state.scheduler.current_interval();
+        auto sched_it = _topic_schedulers.find(topic_id);
+        if (sched_it == _topic_schedulers.end()) {
+            continue;
+        }
+        auto next_due = sched_it->second.last_reconciled
+                        + sched_it->second.scheduler.current_interval();
 
         if (now >= next_due) {
             due_topics.push_back(std::move(topic_sources));
@@ -359,8 +376,16 @@ ss::future<> reconciler<Clock>::reconcile() {
     // due topic.
     auto parallelism
       = config::shard_local_cfg().cloud_topics_reconciliation_parallelism();
-    auto max_concurrent_topics = (parallelism + default_num_l1_domains - 1)
-                                 / default_num_l1_domains;
+    size_t num_domains
+      = config::shard_local_cfg().cloud_topics_num_metastore_partitions();
+    if (_metadata_cache) {
+        auto md = _metadata_cache->get_topic_metadata_ref(
+          model::l1_metastore_nt);
+        if (md) {
+            num_domains = md->get().get_configuration().partition_count;
+        }
+    }
+    auto max_concurrent_topics = (parallelism + num_domains - 1) / num_domains;
     co_await ss::max_concurrent_for_each(
       std::make_move_iterator(due_topics.begin()),
       std::make_move_iterator(due_topics.end()),
@@ -374,10 +399,13 @@ ss::future<> reconciler<Clock>::reconcile() {
           // Update the topic's scheduler state. Adapt based on max object
           // size produced. Note that we slow down if there's nothing to
           // reconcile or if all objects failed. This is a sort of retry
-          // with backoff mechanism.
-          auto& scheduler_state = get_or_create_topic_scheduler(topic_id);
-          scheduler_state.scheduler.adapt(bytes);
-          scheduler_state.last_reconciled = now;
+          // with backoff mechanism. The scheduler may have been removed
+          // if sources were detached during reconciliation.
+          auto sched_it = _topic_schedulers.find(topic_id);
+          if (sched_it != _topic_schedulers.end()) {
+              sched_it->second.scheduler.adapt(bytes);
+              sched_it->second.last_reconciled = now;
+          }
       });
 }
 

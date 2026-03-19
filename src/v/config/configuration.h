@@ -823,6 +823,7 @@ public:
 
     property<std::chrono::milliseconds>
       cloud_topics_long_term_file_deletion_delay;
+    bounded_property<int32_t> cloud_topics_num_metastore_partitions;
 
     development_feature_property<int> development_feature_property_testing_only;
 

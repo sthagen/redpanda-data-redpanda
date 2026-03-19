@@ -195,11 +195,12 @@ struct get_offsets_request
 
 struct get_size_reply
   : serde::
-      envelope<get_size_reply, serde::version<0>, serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(ec, size); }
+      envelope<get_size_reply, serde::version<1>, serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, size, num_extents); }
 
     errc ec;
     size_t size{0};
+    size_t num_extents{0};
 };
 struct get_size_request
   : serde::

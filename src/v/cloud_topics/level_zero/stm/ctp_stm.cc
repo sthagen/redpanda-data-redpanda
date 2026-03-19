@@ -417,7 +417,11 @@ ctp_stm::fence_epoch(cluster_epoch e) {
     if (!co_await sync(sync_timeout, _as)) {
         // Prevent the below log spam if we are shutting down.
         _as.check();
-        vlog(_log.warn, "ctp_stm::fence_epoch sync timeout");
+        if (_raft->is_leader()) {
+            vlog(_log.warn, "ctp_stm::fence_epoch sync timeout");
+        } else {
+            vlog(_log.debug, "ctp_stm::fence_epoch sync timeout (not leader)");
+        }
         throw std::runtime_error(fmt_with_ctx(fmt::format, "Sync timeout"));
     }
     auto term = _raft->confirmed_term();

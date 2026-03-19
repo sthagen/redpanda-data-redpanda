@@ -592,6 +592,7 @@ db_domain_manager::get_size(rpc::get_size_request req) {
     co_return rpc::get_size_reply{
       .ec = rpc::errc::ok,
       .size = metadata.size,
+      .num_extents = metadata.num_extents,
     };
 }
 

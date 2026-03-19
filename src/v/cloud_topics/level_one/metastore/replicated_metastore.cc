@@ -369,6 +369,7 @@ replicated_metastore::get_size(const model::topic_id_partition& tidp) {
 
     metastore::size_response resp;
     resp.size = reply.size;
+    resp.num_extents = reply.num_extents;
     co_return resp;
 }
 

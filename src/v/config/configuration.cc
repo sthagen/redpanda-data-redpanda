@@ -4770,6 +4770,17 @@ configuration::configuration()
       "removal.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1h)
+  , cloud_topics_num_metastore_partitions(
+      *this,
+      "cloud_topics_num_metastore_partitions",
+      "Number of partitions for the cloud topics metastore topic, used to "
+      "spread metastore load across the cluster. Higher values allow more "
+      "parallel metadata operations but reduce the amount of work each "
+      "partition can batch together. Only takes effect when the metastore "
+      "topic is first created.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      3,
+      {.min = 1})
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",
