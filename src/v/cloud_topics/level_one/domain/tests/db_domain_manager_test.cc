@@ -688,6 +688,10 @@ TEST_P(DbDomainManagerTestWithParams, TestConcurrentUpdates) {
 }
 
 TEST_P(DbDomainManagerTestWithParams, TestUpdatesWithDroppedAppends) {
+    cfg.get("cloud_topics_metastore_replication_timeout_ms")
+      .set_value(std::chrono::milliseconds(10s));
+    cfg.get("cloud_topics_metastore_lsm_apply_timeout_ms")
+      .set_value(std::chrono::milliseconds(30s));
     auto args = params();
     auto tp = make_tp();
     bool done = false;
@@ -990,7 +994,7 @@ TEST_F(DbDomainManagerTest, TestGarbageCollectionAfterRemoveTopic) {
     auto prereg_reply = initial_manager
                           ->preregister_objects({
                             .metastore_partition = model::partition_id(0),
-                            .count = 4321,
+                            .count = 1234,
                           })
                           .get();
     ASSERT_EQ(prereg_reply.ec, l1_rpc::errc::ok);
@@ -1012,13 +1016,18 @@ TEST_F(DbDomainManagerTest, TestGarbageCollectionAfterRemoveTopic) {
         ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
     }
 
-    // Remove the topic, marking the objects as removable.
+    // Remove the topic, retrying as needed since batching may return
+    // not_removed when extent counts exceed the batch limit.
     {
-        l1_rpc::remove_topics_request req;
-        req.topics.push_back(tp.topic_id);
-        auto reply = initial_manager->remove_topics(std::move(req)).get();
-        ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
-        ASSERT_TRUE(reply.not_removed.empty());
+        chunked_vector<model::topic_id> remaining;
+        remaining.push_back(tp.topic_id);
+        while (!remaining.empty()) {
+            l1_rpc::remove_topics_request req;
+            req.topics = std::move(remaining);
+            auto reply = initial_manager->remove_topics(std::move(req)).get();
+            ASSERT_EQ(reply.ec, l1_rpc::errc::ok);
+            remaining = std::move(reply.not_removed);
+        }
     }
 
     // Allow for some time to GC, but no GC should happen until we flush.
@@ -1220,14 +1229,23 @@ TEST_F(DbDomainManagerTest, TestSetStartOffsetBatchedExtentRemoval) {
     ASSERT_NO_FATAL_FAILURE(add_preregistered_objects(
       tp, kafka::offset(0), 2500, 1, model::term_id(1)));
 
-    // Truncate everything in one call.
-    l1_rpc::set_start_offset_request set_req{
-      .tp = tp,
-      .start_offset = kafka::offset(2500),
-    };
-    auto set_reply
-      = initial_manager->set_start_offset(std::move(set_req)).get();
-    ASSERT_EQ(set_reply.ec, l1_rpc::errc::ok);
+    // Each call does one batch. The first calls should return has_more=true,
+    // and the final call has_more=false once the target is reached.
+    int rounds = 0;
+    bool has_more = true;
+    while (has_more) {
+        l1_rpc::set_start_offset_request set_req{
+          .tp = tp,
+          .start_offset = kafka::offset(2500),
+        };
+        auto set_reply
+          = initial_manager->set_start_offset(std::move(set_req)).get();
+        ASSERT_EQ(set_reply.ec, l1_rpc::errc::ok);
+        has_more = set_reply.has_more;
+        ++rounds;
+    }
+    // 2500 extents at 1000 per batch = 3 rounds.
+    ASSERT_EQ(rounds, 3);
 
     l1_rpc::get_offsets_request verify_req{.tp = tp};
     auto verify_reply
@@ -1266,13 +1284,18 @@ TEST_F(DbDomainManagerTest, TestSetStartOffsetMidExtent) {
     // The batch scans 1000 extents, ending at [9990,9999]. Without
     // clamping, the intermediate offset would be next_offset(9999)=10000,
     // which would incorrectly delete extent [9990,9999].
-    l1_rpc::set_start_offset_request set_req{
-      .tp = tp,
-      .start_offset = kafka::offset(9995),
-    };
-    auto set_reply
-      = initial_manager->set_start_offset(std::move(set_req)).get();
-    ASSERT_EQ(set_reply.ec, l1_rpc::errc::ok);
+    // Retry until all batches are processed.
+    bool has_more = true;
+    while (has_more) {
+        l1_rpc::set_start_offset_request set_req{
+          .tp = tp,
+          .start_offset = kafka::offset(9995),
+        };
+        auto set_reply
+          = initial_manager->set_start_offset(std::move(set_req)).get();
+        ASSERT_EQ(set_reply.ec, l1_rpc::errc::ok);
+        has_more = set_reply.has_more;
+    }
 
     l1_rpc::get_offsets_request verify_req{.tp = tp};
     auto verify_reply

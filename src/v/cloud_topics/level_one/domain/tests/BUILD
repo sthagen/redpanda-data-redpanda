@@ -1,6 +1,21 @@
 load("//bazel:test.bzl", "redpanda_cc_gtest")
 
 redpanda_cc_gtest(
+    name = "entity_lock_map_test",
+    timeout = "short",
+    srcs = [
+        "entity_lock_map_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/domain:db_domain_manager",
+        "//src/v/test_utils:async",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "db_domain_manager_test",
     timeout = "moderate",
     srcs = [

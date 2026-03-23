@@ -115,7 +115,7 @@ private:
     void maybe_schedule_compaction();
 
     ss::future<> do_flush();
-    ss::future<> do_compaction();
+    ss::future<> do_compaction(std::unique_ptr<compaction>);
     ss::future<> apply_edits(ss::lw_shared_ptr<version_edit>);
 
     io::persistence _persistence;
@@ -131,8 +131,8 @@ private:
     snapshot_list _snapshots;
     gc_actor _gc_actor;
     ssx::mutex _manifest_write_mu;
-    std::optional<ss::future<>> _compaction_task;
-    std::optional<ss::future<>> _flush_task;
+    bool _is_flushing = false;
+    ss::gate _gate;
 };
 
 } // namespace lsm::db

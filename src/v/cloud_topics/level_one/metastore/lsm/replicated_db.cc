@@ -259,7 +259,9 @@ replicated_database::write(chunked_vector<write_batch_row> rows) {
     // NOTE: at this point, since we waited for STM apply after replication,
     // the write should have been added to the volatile buffer.
     needs_apply_cv_.signal();
-    auto deadline = ss::lowres_clock::now() + 30s;
+    auto lsm_apply_timeout
+      = config::shard_local_cfg().cloud_topics_metastore_lsm_apply_timeout_ms();
+    auto deadline = ss::lowres_clock::now() + lsm_apply_timeout;
     auto wait_fut = co_await ss::coroutine::as_future(finished_apply_cv_.wait(
       deadline, as_, [this, o = replicate_result.value()] {
           return applied_offset_.has_value() && applied_offset_.value() >= o;

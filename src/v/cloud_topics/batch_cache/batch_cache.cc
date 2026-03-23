@@ -169,7 +169,10 @@ void batch_cache::put_ordered(
     auto prev = model::prev_offset(first_base);
     if (prev <= entry.monitor->last_applied()) {
         // The batch is contiguous with what the monitor has already seen.
-        entry.monitor->notify(last);
+        // Scan forward past `last` in case earlier out-of-order puts left
+        // batches beyond this range that are now reachable.
+        auto end = entry.index->contiguous_end(model::next_offset(last));
+        entry.monitor->notify(std::max(last, end));
         return;
     }
 
@@ -177,7 +180,10 @@ void batch_cache::put_ordered(
     // and this batch.
     auto gap_start = model::next_offset(entry.monitor->last_applied());
     if (entry.index->has_contiguous_coverage(gap_start, prev)) {
-        entry.monitor->notify(last);
+        // The gap is closed. Scan forward past the inserted range to
+        // pick up any batches that arrived out of order earlier.
+        auto end = entry.index->contiguous_end(model::next_offset(last));
+        entry.monitor->notify(std::max(last, end));
     }
 }
 

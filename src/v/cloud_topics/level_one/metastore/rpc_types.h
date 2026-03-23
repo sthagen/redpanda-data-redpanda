@@ -326,11 +326,12 @@ struct get_end_offset_for_term_request
 struct set_start_offset_reply
   : serde::envelope<
       set_start_offset_reply,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(ec); }
+    auto serde_fields() { return std::tie(ec, has_more); }
 
     errc ec;
+    bool has_more{false};
 };
 struct set_start_offset_request
   : serde::envelope<

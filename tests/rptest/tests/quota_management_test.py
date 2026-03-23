@@ -867,6 +867,7 @@ class QuotaManagementUpgradeTest(EndToEndTest, QuotaManagementUtils):
 
         self.redpanda.restart_nodes([second_node])
         wait_for_num_versions(self.redpanda, 1)
+        self.redpanda.await_feature("user_based_client_quota", "active", timeout_sec=30)
 
         self.logger.debug("Verify that user quotas are now enabled")
         res = self.alter_quotas(alter_user_quota_body, node=second_node)

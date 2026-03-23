@@ -597,6 +597,11 @@ public:
     /// when from > to (empty range).
     bool has_contiguous_coverage(model::offset from, model::offset to) const;
 
+    /// Return the last offset of the contiguous range starting at \p from.
+    /// If \p from is not covered by the index, returns the offset before
+    /// \p from (i.e. no coverage).
+    model::offset contiguous_end(model::offset from) const;
+
     /**
      * Removes all batches that _may_ contain the specified offset.
      */

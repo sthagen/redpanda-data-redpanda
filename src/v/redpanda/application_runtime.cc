@@ -302,7 +302,11 @@ void application::wire_up_runtime_services(
 
     construct_service(_debug_bundle_service, &storage.local().kvs()).get();
 
-    construct_single_service(_host_metrics_watcher, std::ref(_log));
+    auto data_dir = config::node().data_directory().as_sstring();
+    auto cache_dir = ss::sstring(
+      config::node().cloud_storage_cache_path().string());
+    construct_single_service(
+      _host_metrics_watcher, std::ref(_log), data_dir, cache_dir);
 
     construct_service(_kafka_connections_service, std::ref(_kafka_server.ref()))
       .get();

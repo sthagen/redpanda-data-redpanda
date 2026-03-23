@@ -802,13 +802,7 @@ TEST_P(ReplicatedMetastoreTest, TestSetStartOffset) {
     auto missing_tp = make_tp(999);
     auto set_start_missing = meta.set_start_offset(missing_tp, o{10}).get();
     ASSERT_FALSE(set_start_missing.has_value());
-    if (GetParam() == metastore_backend::simple) {
-        // The simple backend doesn't have finer grained reasons for bad
-        // updates.
-        ASSERT_EQ(set_start_missing.error(), metastore::errc::invalid_request);
-    } else {
-        ASSERT_EQ(set_start_missing.error(), metastore::errc::missing_ntp);
-    }
+    ASSERT_EQ(set_start_missing.error(), metastore::errc::invalid_request);
     ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{50}, o{100}));
 
     // Set start so it's totally empty

@@ -12,6 +12,7 @@
 #include "cloud_topics/level_one/metastore/lsm/keys.h"
 #include "cloud_topics/level_one/metastore/lsm/values.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
+#include "cloud_topics/level_one/metastore/state_update_utils.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/coroutine/as_future.hh>
@@ -827,6 +828,61 @@ replace_objects_db_update::build_rows(
     co_return std::expected<void, db_update_error>{};
 }
 
+ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
+replace_objects_db_update::discover_replaced_object_ids(
+  state_reader& state) const {
+    auto validate_res = validate_inputs();
+    if (!validate_res.has_value()) {
+        co_return std::unexpected(std::move(validate_res.error()));
+    }
+    sorted_extents_by_tidp_t new_extents_by_tp;
+    for (const auto& o : new_objects) {
+        o.collect_extents_by_tidp(&new_extents_by_tp);
+    }
+
+    auto contiguous_intervals_res = contiguous_intervals_for_extents(
+      new_extents_by_tp);
+    if (!contiguous_intervals_res.has_value()) {
+        co_return std::unexpected(db_update_error(
+          invalid_input, std::move(contiguous_intervals_res.error())));
+    }
+
+    // For each partition's replacement intervals, scan existing extents
+    // in that range and collect their object IDs. We use get_inclusive_extents
+    // rather than get_extent_range — discovery only needs OIDs, not exact
+    // alignment validation (build_rows handles that).
+    absl::btree_set<object_id> discovered_oids;
+    for (const auto& [tidp, intervals] : contiguous_intervals_res.value()) {
+        for (const auto& interval : intervals) {
+            auto extents_res = co_await state.get_inclusive_extents(
+              tidp, interval.base_offset, interval.last_offset);
+            if (!extents_res.has_value()) {
+                co_return std::unexpected(wrap_read_err(
+                  std::move(extents_res.error()),
+                  "Error getting {} extents for discovery in [{}, {}]",
+                  tidp,
+                  interval.base_offset,
+                  interval.last_offset));
+            }
+            if (!extents_res->has_value()) {
+                continue;
+            }
+            auto gen = (*extents_res)->get_rows();
+            while (auto row_res = co_await gen()) {
+                const auto& row = row_res->get();
+                if (!row.has_value()) {
+                    co_return std::unexpected(wrap_read_err(
+                      row.error(),
+                      "Error iterating {} extents during discovery",
+                      tidp));
+                }
+                discovered_oids.insert(row->val.oid);
+            }
+        }
+    }
+    co_return discovered_oids;
+}
+
 std::expected<void, db_update_error>
 replace_objects_db_update::validate_inputs() const {
     if (new_objects.empty()) {
@@ -1055,6 +1111,57 @@ set_start_offset_db_update::build_rows(
     co_return std::expected<void, db_update_error>{};
 }
 
+ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
+set_start_offset_db_update::discover_truncated_object_ids(
+  state_reader& reader) const {
+    auto meta_res = co_await reader.get_metadata(tp);
+    if (!meta_res.has_value()) {
+        co_return std::unexpected(wrap_read_err(
+          std::move(meta_res.error()),
+          "Error reading metadata for {} during discovery",
+          tp));
+    }
+    if (!meta_res->has_value()) {
+        co_return std::unexpected(db_update_error(
+          invalid_update,
+          fmt::format("Partition {} not found during discovery", tp)));
+    }
+    const auto& metadata = meta_res.value().value();
+
+    if (new_start_offset <= metadata.start_offset) {
+        co_return absl::btree_set<object_id>{};
+    }
+
+    absl::btree_set<object_id> discovered_oids;
+    auto max_to_remove = kafka::prev_offset(new_start_offset);
+    auto extents_res = co_await reader.get_inclusive_extents(
+      tp, metadata.start_offset, max_to_remove);
+    if (!extents_res.has_value()) {
+        co_return std::unexpected(wrap_read_err(
+          std::move(extents_res.error()),
+          "Error getting {} extents for discovery in range [{}, {}]",
+          tp,
+          metadata.start_offset,
+          max_to_remove));
+    }
+    if (extents_res.value().has_value()) {
+        auto extent_gen = (*extents_res)->get_rows();
+        while (auto row_res = co_await extent_gen()) {
+            const auto& row = row_res->get();
+            if (!row.has_value()) {
+                co_return std::unexpected(wrap_read_err(
+                  row.error(),
+                  "Error iterating {} extents during discovery",
+                  tp));
+            }
+            if (row->val.last_offset < new_start_offset) {
+                discovered_oids.insert(row->val.oid);
+            }
+        }
+    }
+    co_return discovered_oids;
+}
+
 ss::future<std::expected<void, db_update_error>>
 remove_topics_db_update::build_rows(
   state_reader& reader, chunked_vector<write_batch_row>& out) const {
@@ -1136,6 +1243,46 @@ remove_topics_db_update::build_rows(
     }
 
     co_return std::expected<void, db_update_error>{};
+}
+
+ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
+remove_topics_db_update::discover_object_ids(state_reader& reader) const {
+    absl::btree_set<object_id> discovered_oids;
+    for (const auto& tid : topics) {
+        auto partitions_res = co_await reader.get_partitions_for_topic(tid);
+        if (!partitions_res.has_value()) {
+            co_return std::unexpected(wrap_read_err(
+              std::move(partitions_res.error()),
+              "Error getting partitions for {} during discovery",
+              tid));
+        }
+        for (const auto& pid : partitions_res.value()) {
+            model::topic_id_partition tidp(tid, pid);
+            auto extents_res = co_await reader.get_inclusive_extents(
+              tidp, std::nullopt, std::nullopt);
+            if (!extents_res.has_value()) {
+                co_return std::unexpected(wrap_read_err(
+                  std::move(extents_res.error()),
+                  "Error getting {} extents during discovery",
+                  tidp));
+            }
+            if (!extents_res->has_value()) {
+                continue;
+            }
+            auto gen = (*extents_res)->get_rows();
+            while (auto row_res = co_await gen()) {
+                const auto& row = row_res->get();
+                if (!row.has_value()) {
+                    co_return std::unexpected(wrap_read_err(
+                      row.error(),
+                      "Error iterating {} extents during discovery",
+                      tidp));
+                }
+                discovered_oids.insert(row->val.oid);
+            }
+        }
+    }
+    co_return discovered_oids;
 }
 
 ss::future<std::expected<void, db_update_error>>

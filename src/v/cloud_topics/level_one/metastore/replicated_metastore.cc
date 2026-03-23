@@ -491,23 +491,26 @@ replicated_metastore::replace_objects(
 ss::future<std::expected<void, metastore::errc>>
 replicated_metastore::set_start_offset(
   const model::topic_id_partition& tidp, kafka::offset offset) {
-    rpc::set_start_offset_request req;
-    req.tp = tidp;
-    req.start_offset = offset;
+    while (true) {
+        rpc::set_start_offset_request req;
+        req.tp = tidp;
+        req.start_offset = offset;
 
-    auto reply_fut = co_await ss::coroutine::as_future(
-      fe_.set_start_offset(std::move(req)));
-    if (reply_fut.failed()) {
-        auto ex = reply_fut.get_exception();
-        vlog(cd_log.warn, "Error while sending request: {}", ex);
-        co_return std::unexpected(metastore::errc::transport_error);
+        auto reply_fut = co_await ss::coroutine::as_future(
+          fe_.set_start_offset(std::move(req)));
+        if (reply_fut.failed()) {
+            auto ex = reply_fut.get_exception();
+            vlog(cd_log.warn, "Error while sending request: {}", ex);
+            co_return std::unexpected(metastore::errc::transport_error);
+        }
+        auto reply = reply_fut.get();
+        if (reply.ec != rpc::errc::ok) {
+            co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+        }
+        if (!reply.has_more) {
+            co_return std::expected<void, metastore::errc>{};
+        }
     }
-    auto reply = reply_fut.get();
-    if (reply.ec != rpc::errc::ok) {
-        co_return std::unexpected(rpc_to_meta_errc(reply.ec));
-    }
-
-    co_return std::expected<void, metastore::errc>{};
 }
 
 ss::future<std::expected<metastore::topic_removal_response, metastore::errc>>

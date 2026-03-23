@@ -120,10 +120,9 @@ private:
     ss::optimized_optional<ss::lw_shared_ptr<file_meta_data>> _file_to_compact;
     internal::level _file_to_compact_level;
 
-    // The level that should be compacted next and it's compaction score.
-    // Score < 1 means that compaction is not strictly needed.
-    double _compaction_score = 0;
-    internal::level _compaction_level;
+    // The compaction score for each level.
+    // Scores < 1 means that compaction is not strictly needed.
+    absl::FixedArray<double> _compaction_scores;
 };
 
 // The representation of a database is a set of versions. The newest version is
@@ -179,7 +178,7 @@ public:
 
     // Pick level and inputs for a new compaction run.
     // Returns std::nullopt if there is no compaction.
-    std::optional<compaction> pick_compaction();
+    ss::optimized_optional<std::unique_ptr<compaction>> pick_compaction();
 
     // Create an iterator that reads over the compaction inputs.
     ss::future<std::unique_ptr<internal::iterator>>
@@ -213,6 +212,7 @@ private:
     ss::lw_shared_ptr<internal::options> _options;
     ss::lw_shared_ptr<version> _current;
     intrusive_list<version_edit, &version_edit::_list_hook> _live_edits;
+    absl::FixedArray<bool> _compacting_levels;
     internal::file_id _next_file_id = internal::file_id{2};
     internal::file_id _current_manifest_id;
     std::optional<internal::sequence_number> _last_seqno;
@@ -221,7 +221,20 @@ private:
 
 // Encapulate information about a compaction event.
 class compaction {
+    // A private struct so that the constructor can only be used
+    // internal to version (or friended classes).
+    struct ctor {};
+
 public:
+    compaction(
+      ctor,
+      ss::lw_shared_ptr<internal::options> options,
+      ss::lw_shared_ptr<version> version,
+      ss::lw_shared_ptr<version_edit> edit,
+      internal::level level);
+
+    ~compaction();
+
     // Return the level that is being compacted.  Inputs from "level"
     // and "level+1" will be merged to produce a set of "level+1" files.
     internal::level level() const { return _level; }
@@ -266,14 +279,6 @@ public:
 private:
     friend class version;
     friend class version_set;
-
-    compaction(
-      ss::lw_shared_ptr<internal::options> options,
-      ss::lw_shared_ptr<version_edit> edit,
-      internal::level level)
-      : _level(level)
-      , _edit(std::move(edit))
-      , _level_ptrs(/*n=*/options->levels.size(), /*val=*/0) {}
 
     internal::level _level;
     uint64_t _max_output_file_size = 0;

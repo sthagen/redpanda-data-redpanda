@@ -815,6 +815,11 @@ public:
       cloud_topics_short_term_gc_backoff_interval;
     property<std::chrono::milliseconds> cloud_topics_gc_health_check_interval;
 
+    property<std::chrono::milliseconds>
+      cloud_topics_metastore_replication_timeout_ms;
+    property<std::chrono::milliseconds>
+      cloud_topics_metastore_lsm_apply_timeout_ms;
+
     property<bool> cloud_topics_parallel_fetch_enabled;
 
     property<bool> cloud_topics_fetch_debounce_enabled;

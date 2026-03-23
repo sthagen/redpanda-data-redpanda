@@ -334,8 +334,10 @@ std::optional<model::topic_id_partition> frontend::topic_id_partition() const {
 
 std::unique_ptr<model::record_batch_reader::impl>
 frontend::make_l0_reader(const cloud_topic_log_reader_config& cfg) const {
-    return std::make_unique<level_zero_log_reader_impl>(
+    auto rdr = std::make_unique<level_zero_log_reader_impl>(
       cfg, _partition, _data_plane);
+    rdr->register_with_stm(_ctp_stm_api.get());
+    return rdr;
 }
 
 ss::future<std::optional<l1::metastore::size_response>> frontend::l1_size() {

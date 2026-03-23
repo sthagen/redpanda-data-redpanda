@@ -460,6 +460,32 @@ bool batch_cache_index::has_contiguous_coverage(
     return expected > to;
 }
 
+model::offset batch_cache_index::contiguous_end(model::offset from) const {
+    auto it = _index.upper_bound(from);
+    if (it != _index.begin()) {
+        --it;
+    }
+    model::offset expected = from;
+    while (it != _index.end()) {
+        const auto& range = it->second.range();
+        if (!range || !range->valid()) {
+            break;
+        }
+        auto hdr = it->second.header();
+        if (hdr.base_offset > expected) {
+            break;
+        }
+        auto next = model::next_offset(hdr.last_offset());
+        if (next <= expected) {
+            ++it;
+            continue;
+        }
+        expected = next;
+        ++it;
+    }
+    return model::prev_offset(expected);
+}
+
 void batch_cache_index::truncate(model::offset offset) {
     lock_guard lk(*this);
 

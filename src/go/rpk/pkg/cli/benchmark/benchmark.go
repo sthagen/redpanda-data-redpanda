@@ -374,6 +374,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				kgo.RequiredAcks(kgo.AllISRAcks()),
 				kgo.RecordPartitioner(kgo.RoundRobinPartitioner()),
 				kgo.ProducerLinger(0),
+				kgo.ProducerBatchCompression(kgo.NoCompression()),
 			}
 
 			producerClients := make([]*kgo.Client, 0, clients)

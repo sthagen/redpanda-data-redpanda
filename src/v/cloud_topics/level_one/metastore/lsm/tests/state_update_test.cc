@@ -1741,3 +1741,87 @@ TEST_F(StateUpdateTest, TestAddObjectsWithPreregistration) {
     // Preregistered row should be cleaned up.
     verify_preregistered_object_missing(oid);
 }
+
+TEST_F(StateUpdateTest, TestDiscoverTruncatedObjectIds) {
+    auto oid1 = make_oid();
+    auto oid2 = make_oid();
+    auto oid3 = make_oid();
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(oid1, tp(tidp0, 0, 99).pos(0, 1023)),
+      make_object(oid2, tp(tidp0, 100, 199).pos(0, 1023)),
+      make_object(oid3, tp(tidp0, 200, 299).pos(0, 1023)));
+
+    // Discover objects below offset 200: should find oid1 and oid2.
+    auto update = set_start_offset_db_update{
+      .tp = tidp0,
+      .new_start_offset = kafka::offset(200),
+    };
+    auto reader = make_reader();
+    auto result = update.discover_truncated_object_ids(reader).get();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result.value().size(), 2);
+    EXPECT_TRUE(result.value().contains(oid1));
+    EXPECT_TRUE(result.value().contains(oid2));
+    EXPECT_FALSE(result.value().contains(oid3));
+}
+
+TEST_F(StateUpdateTest, TestDiscoverReplacedObjectIds) {
+    auto old_oid1 = make_oid();
+    auto old_oid2 = make_oid();
+    auto old_oid3 = make_oid();
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(old_oid1, tp(tidp0, 0, 99).pos(0, 1023)),
+      make_object(old_oid2, tp(tidp0, 100, 199).pos(0, 1023)),
+      make_object(old_oid3, tp(tidp0, 200, 299).pos(0, 1023)));
+
+    // Build a replace update that replaces extents [0-199]. Discovery
+    // should find old_oid1 and old_oid2 but not old_oid3.
+    auto new_oid = make_oid();
+    auto db_update = make_replace_objects_update(
+      compact_specs{}, make_object(new_oid, tp(tidp0, 0, 199).pos(0, 2047)));
+
+    // Preregister the new object so validate_inputs passes.
+    preregister_new_objects(db_update.new_objects);
+
+    auto reader = make_reader();
+    auto result = db_update.discover_replaced_object_ids(reader).get();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result.value().size(), 2);
+    EXPECT_TRUE(result.value().contains(old_oid1));
+    EXPECT_TRUE(result.value().contains(old_oid2));
+    EXPECT_FALSE(result.value().contains(old_oid3));
+}
+
+TEST_F(StateUpdateTest, TestDiscoverRemoveTopicsObjectIds) {
+    // Use a different topic_id for the second topic.
+    auto other_tidp = model::topic_id_partition(
+      model::topic_id(
+        uuid_t::from_string("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+      model::partition_id(0));
+
+    auto oid1 = make_oid();
+    auto oid2 = make_oid();
+    auto oid3 = make_oid();
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(oid1, tp(tidp0, 0, 99).pos(0, 1023)),
+      make_object(oid2, tp(tidp0, 100, 199).pos(0, 1023)));
+    add_objects(
+      {terms(other_tidp, {{0, 1}})},
+      make_object(oid3, tp(other_tidp, 0, 99).pos(0, 1023)));
+
+    // Discover objects for tidp0's topic only — should find oid1 and oid2
+    // but not oid3 (different topic).
+    auto update = remove_topics_db_update{
+      .topics = chunked_vector<model::topic_id>::single(tidp0.topic_id),
+    };
+    auto reader = make_reader();
+    auto result = update.discover_object_ids(reader).get();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result.value().size(), 2);
+    EXPECT_TRUE(result.value().contains(oid1));
+    EXPECT_TRUE(result.value().contains(oid2));
+    EXPECT_FALSE(result.value().contains(oid3));
+}

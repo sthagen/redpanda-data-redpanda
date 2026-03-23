@@ -258,25 +258,24 @@ TEST_F(batch_cache_test_fixture, test_put_ordered_out_of_order) {
     ASSERT_FALSE(wait_fut.available());
 
     // Now insert batch [0,9] — the index now has contiguous coverage
-    // from 0 through 9, which fills the gap, so the monitor is notified
-    // with offset 9 (the last offset of [0,9]).
+    // from 0 through 19, which fills the gap. put_ordered scans forward
+    // past the inserted range and discovers [10,19] is already cached,
+    // so the monitor is notified with offset 19.
     chunked_vector<model::record_batch> first_batch;
     first_batch.push_back(
       model::test::make_random_batch(model::offset(0), 10, false));
     _cache.put_ordered(tidp, std::move(first_batch));
 
-    // The waiter for offset 19 should NOT be resolved yet because
-    // put_ordered for [0,9] only notifies with offset 9.
-    // We need to verify both batches are in cache though.
+    // Both batches are in cache and the waiter for offset 19 is resolved
+    // because the gap-closing put discovers the full contiguous range.
     auto b0 = _cache.get(tidp, model::offset(0));
     auto b1 = _cache.get(tidp, model::offset(10));
     ASSERT_TRUE(b0.has_value());
     ASSERT_TRUE(b1.has_value());
+    ASSERT_TRUE(wait_fut.available());
+    wait_fut.get();
 
     _cache.stop().get();
-
-    // Consume the waiter future — stop() sent it abort_requested_exception.
-    ASSERT_THROW(wait_fut.get(), ss::abort_requested_exception);
 }
 
 // Verify that put_ordered inserts the batch even when the predecessor

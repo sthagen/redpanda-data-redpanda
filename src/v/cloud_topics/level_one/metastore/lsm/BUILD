@@ -1,6 +1,72 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "debug_serde",
+    srcs = [
+        "debug_serde.cc",
+    ],
+    hdrs = [
+        "debug_serde.h",
+    ],
+    implementation_deps = [
+        ":keys",
+        ":values",
+        "//src/v/cloud_topics/level_one/metastore:state",
+        "//src/v/serde",
+        "//src/v/utils:uuid",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/redpanda/core/admin/internal/cloud_topics/v1:metastore_redpanda_proto",
+        "//src/v/utils:detailed_error",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "debug_reader",
+    srcs = [
+        "debug_reader.cc",
+    ],
+    hdrs = [
+        "debug_reader.h",
+    ],
+    implementation_deps = [
+        ":values",
+        "//src/v/cloud_topics/level_one/metastore:state",
+        "//src/v/serde",
+        "//src/v/strings:string_switch",
+        "//src/v/utils:uuid",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":debug_serde",
+        ":keys",
+        ":write_batch_row",
+        "//src/v/container:chunked_vector",
+    ],
+)
+
+redpanda_cc_library(
+    name = "debug_writer",
+    srcs = [
+        "debug_writer.cc",
+    ],
+    hdrs = [
+        "debug_writer.h",
+    ],
+    implementation_deps = [
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":debug_serde",
+        ":write_batch_row",
+        "//src/v/container:chunked_vector",
+    ],
+)
+
+redpanda_cc_library(
     name = "keys",
     srcs = [
         "keys.cc",
@@ -223,8 +289,10 @@ redpanda_cc_library(
         ":state_reader",
         ":write_batch_row",
         "//src/v/base",
+        "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/metastore:state_update",
         "//src/v/utils:named_type",
+        "@abseil-cpp//absl/container:btree",
         "@seastar",
     ],
 )

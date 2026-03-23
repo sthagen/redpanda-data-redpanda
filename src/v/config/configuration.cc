@@ -4740,6 +4740,21 @@ configuration::configuration()
       "GC will not proceed while the cluster is unhealthy.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       10s)
+  , cloud_topics_metastore_replication_timeout_ms(
+      *this,
+      "cloud_topics_metastore_replication_timeout_ms",
+      "Timeout for L1 metastore Raft replication and waiting for the STM to "
+      "apply the replicated write batch.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      30s)
+  , cloud_topics_metastore_lsm_apply_timeout_ms(
+      *this,
+      "cloud_topics_metastore_lsm_apply_timeout_ms",
+      "Timeout for applying a replicated write batch to the local LSM "
+      "database. This may take longer than usual when L0 compaction is "
+      "behind and writes are being throttled.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5min)
   , cloud_topics_parallel_fetch_enabled(
       *this,
       "cloud_topics_parallel_fetch_enabled",

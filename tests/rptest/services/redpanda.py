@@ -805,6 +805,25 @@ class SISettings:
         elif self.cloud_storage_type == CloudStorageType.ABS:
             self._load_abs_context(logger, test_context)
 
+        cloud_storage_url_style = test_context.globals.get(
+            "cloud_storage_url_style", None
+        )
+        if cloud_storage_url_style is not None:
+            if cloud_storage_url_style not in ("path", "virtual_host"):
+                raise ValueError(
+                    f"Invalid cloud_storage_url_style: {cloud_storage_url_style!r}, "
+                    f"expected 'path' or 'virtual_host'"
+                )
+            logger.info(
+                f"Overriding cloud_storage_url_style from globals: "
+                f"{cloud_storage_url_style}"
+            )
+            self.cloud_storage_url_style = cloud_storage_url_style
+            if cloud_storage_url_style == "path":
+                self.addressing_style = S3AddressingStyle.PATH
+            else:
+                self.addressing_style = S3AddressingStyle.VIRTUAL
+
     def _load_abs_context(self, logger: Logger, test_context: TestContext) -> None:
         storage_account = test_context.globals.get(
             self.GLOBAL_ABS_STORAGE_ACCOUNT, None
@@ -6242,7 +6261,12 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         n_partitions = len(cloud_storage_partitions)
         timeout = (n_partitions // 100) * 60 + 120
-        wait_until(all_partitions_scrubbed, timeout_sec=timeout, backoff_sec=5)
+        wait_until(
+            all_partitions_scrubbed,
+            timeout_sec=timeout,
+            backoff_sec=5,
+            retry_on_exc=True,
+        )
 
         return all_anomalies
 

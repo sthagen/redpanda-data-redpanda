@@ -790,4 +790,15 @@ simple_domain_manager::get_database_stats() {
     co_return std::unexpected(rpc::errc::concurrent_requests);
 }
 
+ss::future<std::expected<void, rpc::errc>>
+simple_domain_manager::write_debug_rows(chunked_vector<write_batch_row>) {
+    co_return std::unexpected(rpc::errc::not_leader);
+}
+
+ss::future<std::expected<domain_manager::read_debug_rows_result, rpc::errc>>
+simple_domain_manager::read_debug_rows(
+  std::optional<ss::sstring>, std::optional<ss::sstring>, uint32_t) {
+    co_return std::unexpected(rpc::errc::not_leader);
+}
+
 } // namespace cloud_topics::l1

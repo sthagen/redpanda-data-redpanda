@@ -55,7 +55,7 @@ void log_error(
   const reconcile_error& err,
   vlog::file_line file_line = vlog::file_line::current()) {
     lg.log(
-      err.benign ? ss::log_level::debug : ss::log_level::error,
+      err.benign ? ss::log_level::debug : ss::log_level::warn,
       "{} - {}",
       file_line,
       err.message);

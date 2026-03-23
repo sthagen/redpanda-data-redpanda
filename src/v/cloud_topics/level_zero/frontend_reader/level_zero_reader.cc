@@ -82,20 +82,18 @@ level_zero_log_reader_impl::read_some(
     // Like the storage layer log reader, stop when we've consumed all
     // committed data. The Kafka fetch handler owns the waiting policy
     // via the visible_offset_monitor / max_wait_ms.
-    {
-        auto ot_state = _ctp->get_offset_translator_state();
-        auto translated = ot_state->from_log_offset(
-          _ctp->raft()->committed_offset());
-        if (_next_offset > model::offset_cast(translated)) {
-            vlog(
-              _log.debug,
-              "next offset {} beyond committed kafka offset {}, "
-              "end of stream",
-              _next_offset,
-              translated);
-            set_end_of_stream();
-            co_return chunked_circular_buffer<model::record_batch>{};
-        }
+    auto ot_state = _ctp->get_offset_translator_state();
+    auto committed_kafka = ot_state->from_log_offset(
+      _ctp->raft()->committed_offset());
+    if (_next_offset > model::offset_cast(committed_kafka)) {
+        vlog(
+          _log.debug,
+          "next offset {} beyond committed kafka offset {}, "
+          "end of stream",
+          _next_offset,
+          committed_kafka);
+        set_end_of_stream();
+        co_return chunked_circular_buffer<model::record_batch>{};
     }
 
     // Wait briefly for the write path to cache the batch we need.
@@ -106,14 +104,6 @@ level_zero_log_reader_impl::read_some(
         auto wait_deadline = model::timeout_clock::now()
                              + std::chrono::milliseconds(500);
         try {
-            // Translate committed_offset from raft-space to kafka-space.
-            // The batch cache monitor tracks kafka offsets (put() notifies
-            // with kafka offsets), so the seed must also be in kafka-space.
-            // Using a raft offset here would over-seed the monitor by the
-            // offset delta, causing the wait to resolve immediately.
-            auto ot_state = _ctp->get_offset_translator_state();
-            auto committed_kafka = ot_state->from_log_offset(
-              _ctp->raft()->committed_offset());
             co_await _ct_api->cache_wait(
               tidp,
               kafka::offset_cast(_next_offset),
@@ -131,7 +121,9 @@ level_zero_log_reader_impl::read_some(
     // the 'empty' state. It doesn't make any difference if the reader is in
     // the 'materialized' state. If we're in 'ready' state we risk to go out
     // of sync with cached metadata so it's safer to hydrate.
-    if (auto cached = maybe_read_batches_from_cache(); !cached.empty()) {
+    if (auto cached = maybe_read_batches_from_cache(
+          model::offset_cast(committed_kafka));
+        !cached.empty()) {
         co_return cached;
     }
 
@@ -194,7 +186,8 @@ level_zero_log_reader_impl::read_some(
 }
 
 chunked_circular_buffer<model::record_batch>
-level_zero_log_reader_impl::maybe_read_batches_from_cache() {
+level_zero_log_reader_impl::maybe_read_batches_from_cache(
+  kafka::offset committed_kafka) {
     chunked_circular_buffer<model::record_batch> ret;
     if (!cache_enabled()) {
         return ret;
@@ -206,7 +199,8 @@ level_zero_log_reader_impl::maybe_read_batches_from_cache() {
      * Fetch batches from the cache starting at `_next_offset` until we hit a
      * gap or a control batch and must then fetch the data from object storage.
      */
-    while (_next_offset <= _config.max_offset) {
+    auto max_offset = std::min(_config.max_offset, committed_kafka);
+    while (_next_offset <= max_offset) {
         auto batch = _ct_api->cache_get(tidp, kafka::offset_cast(_next_offset));
         if (!batch.has_value()) {
             break;
@@ -523,6 +517,10 @@ bool level_zero_log_reader_impl::cache_enabled() const {
 
 void level_zero_log_reader_impl::print(std::ostream& o) {
     o << "cloud_topics_reader";
+}
+
+void level_zero_log_reader_impl::register_with_stm(ctp_stm_api* api) {
+    api->register_reader(&_state);
 }
 
 void level_zero_log_reader_impl::set_end_of_stream() { _end_of_stream = true; }

@@ -11,9 +11,15 @@
 # by the Apache License, Version 2.0
 # ==================================================================
 #
-# Start a 3 node cluster:
+# Start a 3 node cluster via bazel (builds redpanda automatically):
 #
-#   [jerry@winterland]$ dev_cluster.py -e vbuild/debug/clang/bin/redpanda
+#   bazel run --config=fastbuild //tools:dev_cluster -- [dev_cluster args] -- [redpanda args]
+#
+# Examples:
+#
+#   bazel run --config=fastbuild //tools:dev_cluster
+#   bazel run --config=fastbuild //tools:dev_cluster -- --nodes 1
+#   bazel run --config=release //tools:dev_cluster -- --nodes 1 -- --logger-log-level=io=debug
 #
 import argparse
 import asyncio
@@ -245,6 +251,7 @@ class Prometheus:
         listen_address: str = "127.0.0.1",
         port: int = 3001,
         redpanda_admin_ports: list[int] = [],
+        scrape_interval: str = "5s",
     ) -> None:
         self.binary = binary
         self.directory = directory
@@ -252,6 +259,7 @@ class Prometheus:
         self.listen_address = listen_address
         self.port = port
         self.redpanda_admin_ports = redpanda_admin_ports
+        self.scrape_interval = scrape_interval
         self.process: asyncio.subprocess.Process
 
     def stop(self) -> None:
@@ -267,10 +275,10 @@ class Prometheus:
         data_dir.mkdir(parents=True, exist_ok=True)
 
         # Create a basic Prometheus configuration
-        config = {
+        config: dict[str, Any] = {
             "global": {
-                "scrape_interval": "5s",
-                "evaluation_interval": "5s",
+                "scrape_interval": self.scrape_interval,
+                "evaluation_interval": self.scrape_interval,
             },
             "scrape_configs": [
                 {
@@ -335,12 +343,14 @@ class Grafana:
         directory: Path,
         port: int,
         prometheus_url: str | None = None,
+        scrape_interval: str = "5s",
     ) -> None:
         self.binary = binary
         self.directory = directory
         self.stopped = False
         self.port = port
         self.prometheus_url = prometheus_url
+        self.scrape_interval = scrape_interval
         self.process: asyncio.subprocess.Process
 
     def stop(self) -> None:
@@ -381,6 +391,9 @@ class Grafana:
                         "url": self.prometheus_url,
                         "isDefault": True,
                         "editable": True,
+                        "jsonData": {
+                            "timeInterval": self.scrape_interval,
+                        },
                     }
                 ],
             }
@@ -664,6 +677,12 @@ async def main() -> None:
         default=True,
     )
     parser.add_argument(
+        "--scrape-interval",
+        type=str,
+        help="prometheus scrape interval (e.g. '1s', '5s', '15s')",
+        default="5s",
+    )
+    parser.add_argument(
         "--grafana",
         type=Path,
         help="path to grafana executable",
@@ -817,6 +836,7 @@ async def main() -> None:
             prometheus_dir,
             args.listen_address,
             redpanda_admin_ports=[args.base_admin_port + i for i in range(args.nodes)],
+            scrape_interval=args.scrape_interval,
         )
         prometheus_task = asyncio.create_task(prometheus.run())
 
@@ -836,6 +856,7 @@ async def main() -> None:
             grafana_dir,
             port=args.grafana_port,
             prometheus_url=prometheus_url,
+            scrape_interval=args.scrape_interval,
         )
         grafana_task = asyncio.create_task(grafana.run())
 

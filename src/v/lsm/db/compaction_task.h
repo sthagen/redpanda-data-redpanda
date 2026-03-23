@@ -21,7 +21,7 @@ ss::future<ss::lw_shared_ptr<version_edit>> run_compaction_task(
   snapshot_list* snapshots,
   version_set* versions,
   ss::lw_shared_ptr<internal::options> opts,
-  compaction compaction,
+  compaction* compaction,
   ss::abort_source* as);
 
 } // namespace lsm::db
