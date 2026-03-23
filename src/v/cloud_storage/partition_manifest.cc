@@ -1152,6 +1152,11 @@ void partition_manifest::spillover(const segment_meta& spillover_meta) {
 }
 
 segment_meta partition_manifest::make_manifest_metadata() const {
+    if (empty()) {
+        throw std::runtime_error(
+          "can't make manifest metadata for empty manifest");
+    }
+
     return segment_meta{
       .size_bytes = cloud_log_size(),
       .base_offset = get_start_offset().value(),
@@ -2809,6 +2814,69 @@ void partition_manifest::process_anomalies(
       _detected_anomalies,
       _last_partition_scrub,
       _last_scrubbed_offset);
+}
+
+std::optional<partition_manifest> partition_manifest::repair_state() const {
+    auto repaired = do_repair_state();
+
+    // Guard against "infinite repair loop" scenario, where the manifest is
+    // repaired but the repaired manifest is still inconsistent and needs to be
+    // repaired again.
+    if (repaired.has_value() && repaired->do_repair_state().has_value()) {
+        throw std::runtime_error(
+          fmt::format(
+            "[{}] Manifest repair failed: repaired manifest is still "
+            "inconsistent, this should never happen",
+            display_name()));
+    }
+
+    return repaired;
+}
+
+std::optional<partition_manifest> partition_manifest::do_repair_state() const {
+    if (!get_spillover_map().empty()) {
+        const auto first_spill = get_spillover_map().begin();
+        if (
+          _archive_start_offset < first_spill->base_offset
+          || _archive_clean_offset < first_spill->base_offset) {
+            auto cloned = clone();
+
+            // Old versions of redpanda (pre v25.3) could have a manifest with
+            // incorrect `archive_start_offset` and `archive_clean_offset`
+            // values—below the offset of the first spillover manifest. To avoid
+            // issues with such manifests, we need to detect this case and fix
+            // the offsets by bumping them up to the offset of the first
+            // spillover manifest.
+
+            if (_archive_start_offset < first_spill->base_offset) {
+                vlog(
+                  cst_log.warn,
+                  "[{}] archive_start_offset {} is below the first spillover "
+                  "manifest offset {}, advancing it to align with the first "
+                  "spillover manifest offset.",
+                  display_name(),
+                  _archive_start_offset,
+                  first_spill->base_offset);
+                cloned.set_archive_start_offset(
+                  first_spill->base_offset, first_spill->delta_offset);
+            }
+            if (_archive_clean_offset < first_spill->base_offset) {
+                vlog(
+                  cst_log.warn,
+                  "[{}] archive_clean_offset {} is below the first spillover "
+                  "manifest offset {}, advancing it to align with the first "
+                  "spillover manifest offset.",
+                  display_name(),
+                  _archive_clean_offset,
+                  first_spill->base_offset);
+                cloned.set_archive_clean_offset(first_spill->base_offset, 0);
+            }
+
+            return cloned;
+        }
+    }
+
+    return std::nullopt;
 }
 
 std::ostream& operator<<(std::ostream& o, const partition_manifest& pm) {

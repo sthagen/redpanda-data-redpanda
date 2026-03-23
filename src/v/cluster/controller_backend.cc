@@ -964,7 +964,7 @@ ss::future<> controller_backend::try_reconcile_ntp(
         } catch (...) {
             vlog(
               clusterlog.warn,
-              "[{}] exception occured during reconciliation: {}",
+              "[{}] exception occurred during reconciliation: {}",
               ntp,
               std::current_exception());
             last_error = errc::partition_operation_failed;

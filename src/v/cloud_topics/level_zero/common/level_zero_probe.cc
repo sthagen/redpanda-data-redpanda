@@ -81,6 +81,13 @@ void pipeline_probe::setup_internal_metrics(bool disable, ss::sstring name) {
             "Amount of memory (in bytes) blocked due to memory pressure."),
           labels),
         sm::make_counter(
+          "request_limit_waits",
+          [this] { return _request_limit_waits; },
+          sm::description(
+            "Number of times requests had to wait for an in-flight slot "
+            "due to the write inflight limit."),
+          labels),
+        sm::make_counter(
           "bytes_in",
           [this] { return _total_bytes_in; },
           sm::description(

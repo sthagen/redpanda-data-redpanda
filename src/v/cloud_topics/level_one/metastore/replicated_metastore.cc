@@ -220,6 +220,16 @@ replicated_object_builder::remove_pending_object(object_id oid) {
 std::expected<void, replicated_object_builder::error>
 replicated_object_builder::add(
   object_id oid, metastore::object_metadata::ntp_metadata ntp_meta) {
+    if (ntp_meta.base_offset > ntp_meta.last_offset) {
+        return std::unexpected(
+          error{fmt::format(
+            "Metadata has inverted offsets for partition {}, object {}: "
+            "base_offset {} > last_offset {}",
+            ntp_meta.tidp,
+            oid,
+            ntp_meta.base_offset,
+            ntp_meta.last_offset)});
+    }
     auto metastore_pid = fe_.metastore_partition(ntp_meta.tidp);
     if (!metastore_pid) {
         return std::unexpected(

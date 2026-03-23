@@ -835,7 +835,7 @@ backend::do_topic_work(model::topic_namespace nt, topic_work tw) noexcept {
     } catch (...) {
         vlog(
           dm_log.warn,
-          "exception occured during topic work {} on nt={}",
+          "exception occurred during topic work {} on nt={}",
           tw,
           nt,
           std::current_exception());

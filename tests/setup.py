@@ -12,7 +12,7 @@ setup(
     package_data={"": ["*.md"]},
     include_package_data=True,
     install_requires=[
-        "ducktape@git+https://github.com/redpanda-data/ducktape.git@c3266e0740781cb26b56e74715c0da48ad59c6c7",
+        "ducktape@git+https://github.com/redpanda-data/ducktape.git@f2ddfea94619090688530f3c492ea9f72cb7290e",
         "prometheus-client==0.9.0",
         "kafka-python==2.0.6",
         "crc32c==2.2",

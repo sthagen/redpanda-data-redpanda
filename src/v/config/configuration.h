@@ -438,6 +438,7 @@ struct configuration final : public config_store {
     property<bool> enable_cluster_metadata_upload_loop;
     property<std::optional<ss::sstring>> cloud_storage_cluster_name;
     property<size_t> cloud_storage_max_segments_pending_deletion_per_partition;
+    bounded_property<size_t> cloud_storage_gc_max_segments_per_run;
     property<bool> cloud_storage_enable_compacted_topic_reupload;
     property<size_t> cloud_storage_recovery_temporary_retention_bytes_default;
     // validation of topic manifest during recovery
@@ -829,6 +830,9 @@ public:
     property<std::chrono::milliseconds>
       cloud_topics_long_term_file_deletion_delay;
     bounded_property<int32_t> cloud_topics_num_metastore_partitions;
+
+    bounded_property<size_t> cloud_topics_produce_write_inflight_limit;
+    bounded_property<size_t> cloud_topics_produce_no_pid_concurrency;
 
     development_feature_property<int> development_feature_property_testing_only;
 

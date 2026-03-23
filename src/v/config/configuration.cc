@@ -2418,9 +2418,20 @@ configuration::configuration()
       "The per-partition limit for the number of segments pending deletion "
       "from the cloud. Segments can be deleted due to retention or compaction. "
       "If this limit is breached and deletion fails, then segments will be "
-      "orphaned in the cloud and will have to be removed manually",
+      "orphaned in the cloud and will have to be removed manually. Applies "
+      "only the the in-memory manifest. Spillover manifests are not affected "
+      "by this limit.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       5000)
+  , cloud_storage_gc_max_segments_per_run(
+      *this,
+      "cloud_storage_gc_max_segments_per_run",
+      "Maximum number of segments to delete per housekeeping run. Each segment "
+      "maps to up to three object keys (data, index, tx manifest), so a value "
+      "of 300 produces 600 to 900 deletes plus one per spillover manifest.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      300,
+      {.min = 1})
   , cloud_storage_enable_compacted_topic_reupload(
       *this,
       "cloud_storage_enable_compacted_topic_reupload",
@@ -4795,6 +4806,24 @@ configuration::configuration()
       "topic is first created.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       3,
+      {.min = 1})
+  , cloud_topics_produce_write_inflight_limit(
+      *this,
+      "cloud_topics_produce_write_inflight_limit",
+      "Maximum number of in-flight write requests per shard in the cloud "
+      "topics write pipeline. Requests that exceed this limit are queued "
+      "until a slot becomes available.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      1024,
+      {.min = 1})
+  , cloud_topics_produce_no_pid_concurrency(
+      *this,
+      "cloud_topics_produce_no_pid_concurrency",
+      "Maximum number of concurrent raft replication requests for producers "
+      "without a producer ID (idempotency disabled). Limits how many no-PID "
+      "writes can proceed past the producer queue into raft simultaneously.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      32,
       {.min = 1})
   , development_feature_property_testing_only(
       *this,
