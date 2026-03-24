@@ -12,6 +12,7 @@
 
 #include "base/outcome.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
+#include "cloud_topics/types.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -62,8 +63,7 @@ public:
     stage_write(chunked_vector<model::record_batch> batches) = 0;
 
     // Execute this write using the reservation.
-    virtual ss::future<
-      std::expected<chunked_vector<extent_meta>, std::error_code>>
+    virtual ss::future<std::expected<upload_meta, std::error_code>>
     execute_write(
       model::ntp ntp,
       cluster_epoch min_epoch,
@@ -110,6 +110,10 @@ public:
     /// Retrieve current cluster epoch
     virtual ss::future<std::optional<cloud_topics::cluster_epoch>>
     get_current_epoch(ss::abort_source* as) = 0;
+
+    /// Invalid the current epoch window if it's below this value.
+    virtual ss::future<>
+      invalidate_epoch_below(cloud_topics::cluster_epoch) = 0;
 
     /// Wait until a batch at or beyond \p offset has been added to the cache
     /// for \p tidp, or until timeout/abort. \p last_known seeds a newly

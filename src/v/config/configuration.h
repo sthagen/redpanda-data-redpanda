@@ -808,6 +808,8 @@ public:
       cloud_topics_epoch_service_epoch_increment_interval;
     property<std::chrono::milliseconds>
       cloud_topics_epoch_service_local_epoch_cache_duration;
+    property<std::chrono::milliseconds>
+      cloud_topics_epoch_service_max_same_epoch_duration;
 
     property<std::chrono::milliseconds>
       cloud_topics_short_term_gc_minimum_object_age;

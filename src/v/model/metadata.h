@@ -505,6 +505,7 @@ inline std::ostream& operator<<(std::ostream& os, cloud_storage_backend csb) {
 enum class leader_balancer_mode : uint8_t {
     calibrated = 0,
     random = 1,
+    greedy = 2,
 };
 
 constexpr const char*
@@ -514,6 +515,8 @@ leader_balancer_mode_to_string(leader_balancer_mode mode) {
         return "calibrated";
     case leader_balancer_mode::random:
         return "random";
+    case leader_balancer_mode::greedy:
+        return "greedy";
     default:
         throw std::invalid_argument("unknown leader_balancer_mode");
     }

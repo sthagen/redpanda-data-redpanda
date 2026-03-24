@@ -233,6 +233,23 @@ redpanda_cc_btest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "leader_balancer_greedy_test",
+    timeout = "short",
+    srcs = [
+        "leader_balancer_greedy_test.cc",
+    ],
+    deps = [
+        ":leader_balancer_test_utils",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/test_utils:gtest",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_btest(
     name = "leader_balancer_constraints_test",
     timeout = "short",
@@ -1275,6 +1292,7 @@ redpanda_cc_gtest(
     cpu = 2,
     deps = [
         "//src/v/cluster",
+        "//src/v/config",
         "//src/v/ssx:abort_source",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",

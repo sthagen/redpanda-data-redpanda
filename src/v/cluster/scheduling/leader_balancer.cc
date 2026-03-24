@@ -17,6 +17,7 @@
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
 #include "cluster/partition_leaders_table.h"
+#include "cluster/scheduling/leader_balancer_greedy.h"
 #include "cluster/scheduling/leader_balancer_random.h"
 #include "cluster/scheduling/leader_balancer_strategy.h"
 #include "cluster/scheduling/leader_balancer_types.h"
@@ -640,6 +641,16 @@ ss::future<ss::stop_iteration> leader_balancer::balance() {
         vlog(clusterlog.debug, "using random_hill_climbing strategy");
         strategy = std::make_unique<
           leader_balancer_types::random_hill_climbing_strategy>(
+          std::move(index),
+          std::move(group_id_to_topic),
+          std::move(muted_index),
+          std::move(preference_index));
+        break;
+    case model::leader_balancer_mode::greedy:
+        vlog(clusterlog.debug, "using greedy strategy");
+        strategy = std::make_unique<
+          leader_balancer_types::greedy_topic_aware_strategy>(
+          _members.node_count(),
           std::move(index),
           std::move(group_id_to_topic),
           std::move(muted_index),

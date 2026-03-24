@@ -55,8 +55,7 @@ public:
 
     /// Add write request to the pipeline
     /// The revision id is the topic creation revision id for the ntp.
-    ss::future<std::expected<chunked_vector<extent_meta>, std::error_code>>
-    write_and_debounce(
+    ss::future<std::expected<upload_meta, std::error_code>> write_and_debounce(
       model::ntp ntp,
       cluster_epoch min_epoch,
       chunked_vector<model::record_batch> batches,
@@ -73,8 +72,7 @@ public:
     ss::future<std::expected<prepared_data, std::error_code>>
     prepare_write(chunked_vector<model::record_batch> batches);
 
-    ss::future<std::expected<chunked_vector<extent_meta>, std::error_code>>
-    execute_write(
+    ss::future<std::expected<upload_meta, std::error_code>> execute_write(
       model::ntp ntp,
       cluster_epoch min_epoch,
       prepared_data prepped,

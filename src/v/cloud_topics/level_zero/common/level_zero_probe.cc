@@ -58,7 +58,7 @@ void pipeline_probe::setup_internal_metrics(bool disable, ss::sstring name) {
         sm::make_histogram(
           "request_processing_time_ms",
           [this] {
-              return _request_processing_time.public_histogram_logform();
+              return _request_processing_time.internal_histogram_logform();
           },
           sm::description("Request processing time histogram in milliseconds."),
           labels),

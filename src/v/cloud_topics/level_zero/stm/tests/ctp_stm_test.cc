@@ -564,7 +564,7 @@ TEST_F_CORO(ctp_stm_fixture, test_fence_epoch_concurrent_new_epoch) {
     ASSERT_FALSE_CORO(accessor.epoch_cv_has_waiters(*stm));
 
     // Verify epoch 2 is now established
-    auto max_seen = api(leader).get_max_seen_epoch();
+    auto max_seen = api(leader).get_max_seen_epoch(leader.raft()->term());
     ASSERT_TRUE_CORO(max_seen.has_value());
     ASSERT_EQ_CORO(max_seen.value(), ct::cluster_epoch{2});
 }
@@ -770,7 +770,7 @@ TEST_F_CORO(
     }
 
     // Verify Node 0's window
-    auto max_seen_0 = api(node0).get_max_seen_epoch();
+    auto max_seen_0 = api(node0).get_max_seen_epoch(node0.raft()->term());
     ASSERT_TRUE_CORO(max_seen_0.has_value());
     vlog(
       ct::cd_log.info,
@@ -805,7 +805,7 @@ TEST_F_CORO(
         ASSERT_TRUE_CORO(success);
     }
 
-    auto max_seen_1 = api(node1).get_max_seen_epoch();
+    auto max_seen_1 = api(node1).get_max_seen_epoch(node1.raft()->term());
     ASSERT_TRUE_CORO(max_seen_1.has_value());
     vlog(
       ct::cd_log.info,
@@ -905,7 +905,7 @@ TEST_F_CORO(
         // Let the fence guard drop without replicating.
     }
 
-    auto max_seen = api(node0).get_max_seen_epoch();
+    auto max_seen = api(node0).get_max_seen_epoch(node0.raft()->term());
     ASSERT_TRUE_CORO(max_seen.has_value());
     ASSERT_EQ_CORO(max_seen.value(), ct::cluster_epoch{100});
 
