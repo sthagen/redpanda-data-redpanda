@@ -12,6 +12,7 @@
 #include "absl/container/btree_set.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/domain/domain_manager.h"
+#include "cloud_topics/level_one/domain/domain_manager_probe.h"
 #include "cloud_topics/level_one/domain/entity_lock_map.h"
 #include "cloud_topics/level_one/metastore/lsm/replicated_db.h"
 #include "cloud_topics/level_one/metastore/lsm/stm.h"
@@ -39,7 +40,8 @@ public:
       cloud_io::remote* remote,
       cloud_storage_clients::bucket_name bucket,
       io* object_io,
-      ss::scheduling_group sg);
+      ss::scheduling_group sg,
+      domain_manager_probe* probe);
 
     void start() override;
     ss::future<> stop_and_wait() override;
@@ -250,6 +252,8 @@ private:
     // Operations will only succeed with this db when the underlying Raft
     // partition is leader of the expected term.
     std::unique_ptr<replicated_database> db_;
+
+    domain_manager_probe* probe_;
 };
 
 } // namespace cloud_topics::l1

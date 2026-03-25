@@ -12,6 +12,7 @@
 
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/domain/db_domain_manager.h"
+#include "cloud_topics/level_one/domain/domain_manager_probe.h"
 #include "cloud_topics/level_one/domain/simple_domain_manager.h"
 #include "cloud_topics/level_one/metastore/lsm/stm.h"
 #include "cloud_topics/logger.h"
@@ -49,6 +50,7 @@ public:
       }) {}
 
     ss::future<> start() {
+        _probe.setup_metrics();
         if (ss::this_shard_id() == 0) {
             _as = {};
             _loop = do_topic_reconciliation_loop();
@@ -330,7 +332,8 @@ private:
               _remote,
               _bucket,
               _object_io,
-              _sg);
+              _sg,
+              &_probe);
         } else {
             domain_mgr = ss::make_shared<simple_domain_manager>(
               stm_manager->get<simple_stm>(), _object_io);
@@ -355,6 +358,8 @@ private:
     using domain_manager_id = model::ntp;
     chunked_hash_map<domain_manager_id, ss::shared_ptr<domain_manager>>
       _domains;
+
+    domain_manager_probe _probe;
 
     std::optional<ss::future<>> _loop;
     ss::abort_source _as;

@@ -319,9 +319,9 @@ build:antithesis --//bazel:antithesis=True
 build:antithesis --compilation_mode=opt
 build:antithesis --per_file_copt=src/v/.*@-fsanitize-coverage=trace-pc-guard
 build:antithesis --linkopt=-Wl,--build-id
+build:antithesis --linkopt=-Wl,--allow-shlib-undefined
 build:antithesis --copt=-g --strip=never
 build:antithesis --@seastar//:stack_guards=False
-build:antithesis --dynamic_mode=off
 
 # =================================
 # Testing

@@ -53,7 +53,7 @@ def _parse_bytes(value):
 
 def _test_options():
     """
-    Returns common data dependencies and environment variables for Redpanda tests.
+    Returns common data dependencies, environment variables, and library deps for Redpanda tests.
 
     This function provides a centralized place to define common settings for all
     C++ tests, ensuring consistency and making it easier to manage test
@@ -63,6 +63,7 @@ def _test_options():
         A tuple containing:
         - A list of common data dependencies needed by tests (e.g., suppression files).
         - A dictionary of common environment variables for test execution.
+        - A list of common library dependencies for all tests.
     """
     data = [
         "//:ubsan_suppressions",
@@ -82,7 +83,8 @@ def _test_options():
         # see https://redpandadata.atlassian.net/wiki/x/BwDSUw
         "REDPANDA_RNG_SEEDING_MODE_DEFAULT": "fixed",
     }
-    return data, env
+    deps = antithesis_deps()
+    return data, env, deps
 
 def _redpanda_cc_test(
         name,
@@ -147,13 +149,13 @@ def _redpanda_cc_test(
     if args and dash_dash_protocol:
         args = ["--"] + args
 
-    test_data, test_env = _test_options()
+    test_data, test_env, test_deps = _test_options()
     cc_test(
         name = name,
         timeout = timeout,
         srcs = srcs,
         defines = defines,
-        deps = deps + antithesis_deps(),
+        deps = deps + test_deps,
         copts = redpanda_copts(),
         args = args,
         features = [
@@ -189,13 +191,13 @@ def _redpanda_cc_fuzz_test(
       env: environment variables
       data: data file dependencies
     """
-    test_data, test_env = _test_options()
+    test_data, test_env, test_deps = _test_options()
     cc_test(
         name = name,
         timeout = timeout,
         srcs = srcs,
         defines = defines,
-        deps = deps,
+        deps = deps + test_deps,
         copts = redpanda_copts(),
         args = custom_args,
         features = [
@@ -327,7 +329,7 @@ def redpanda_cc_btest_no_seastar(
         cpu = 1,
         memory = "128MiB",
         deps = []):
-    test_data, test_env = _test_options()
+    test_data, test_env, test_deps = _test_options()
     cc_test(
         name = name,
         timeout = timeout,
@@ -343,7 +345,7 @@ def redpanda_cc_btest_no_seastar(
             "//src/v/test_utils:boost_result_redirect",
             "//src/v/test_utils:boost_test_hooks",
             "@boost//:test.so",
-        ] + deps,
+        ] + deps + test_deps,
         data = test_data,
         env = test_env,
     )
@@ -454,12 +456,14 @@ def redpanda_cc_bench(
 
     tags = tags + ["bench"]
 
+    test_data, test_env, test_deps = _test_options()
+
     binary_name = name + "_binary"
     cc_binary(
         name = binary_name,
         srcs = srcs,
         defines = defines,
-        deps = deps + antithesis_deps(),
+        deps = deps + test_deps,
         testonly = True,
         copts = redpanda_copts(),
         features = [
@@ -496,7 +500,6 @@ def redpanda_cc_bench(
 
     # we write a wrapper to test the benchmark, which tries to
     # run it as quickly as possible in order to smoke test it
-    test_data, test_env = _test_options()
     test_args = args + ["--iterations=1 --runs=1 --duration=0 --no-stdout --overprovisioned"]
     if test_regex != None:
         test_args = test_args + ["-t {}".format(test_regex)]

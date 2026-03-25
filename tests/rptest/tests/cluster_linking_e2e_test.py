@@ -2856,6 +2856,133 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
         producer.free()
 
 
+class ShadowLinkConsumerGroupPartitionCountMismatchTest(ShadowLinkTestBase):
+    """
+    Verifies that consumer group offset mirroring works correctly when the
+    __consumer_offsets topic has different partition counts on the source and
+    target clusters.
+    """
+
+    # Use asymmetric partition counts: 8 on source, 32 on target.
+    # This ensures groups map to different __consumer_offsets partitions on
+    # each side, exercising the logical-offset-forwarding design.
+    SOURCE_GROUP_TOPIC_PARTITIONS = 8
+    TARGET_GROUP_TOPIC_PARTITIONS = 32
+
+    def __init__(self, test_context, *args, **kwargs):
+        super().__init__(
+            test_context=test_context,
+            num_prealloc_nodes=1,
+            secondary_cluster_args=SecondaryClusterArgs(
+                extra_rp_conf={
+                    "group_topic_partitions": self.SOURCE_GROUP_TOPIC_PARTITIONS,
+                },
+            ),
+            extra_rp_conf={
+                "group_topic_partitions": self.TARGET_GROUP_TOPIC_PARTITIONS,
+            },
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=7)
+    def test_consumer_group_offsets_with_partition_count_mismatch(self):
+        """
+        Produce data, consume with multiple groups on the source cluster, then
+        create a shadow link and verify that every group's per-partition
+        committed offsets are mirrored to the target cluster despite different
+        __consumer_offsets partition counts.
+        """
+        topic = TopicSpec(name="source-topic", partition_count=12, replication_factor=3)
+        self.source_default_client().create_topic(topic)
+
+        msg_count = 10000
+        KgoVerifierProducer.oneshot(
+            self.test_context,
+            self.source_cluster.service,
+            topic.name,
+            128,
+            msg_count,
+            custom_node=self.preallocated_nodes,
+        )
+
+        # Consume with several groups so they span different
+        # __consumer_offsets partitions on each cluster
+        groups = [f"test-group-{i}" for i in range(5)]
+        source_rpk = RpkTool(self.source_cluster.service)
+        for group in groups:
+            source_rpk.consume(
+                topic=topic.name,
+                group=group,
+                n=1,
+                offset="start",
+            )
+
+        # Capture source offsets before creating the link
+        source_offsets: dict[str, dict[tuple[str, int], int | None]] = {}
+        for group in groups:
+            desc = source_rpk.group_describe(group=group)
+            source_offsets[group] = {
+                (p.topic, p.partition): p.current_offset for p in desc.partitions
+            }
+            self.logger.info(f"Source group {group} offsets: {source_offsets[group]}")
+
+        self.create_link("test-link")
+
+        target_rpk = RpkTool(self.target_cluster.service)
+
+        # Verify the precondition: __consumer_offsets must actually have
+        # different partition counts on each cluster, otherwise the test
+        # is not exercising the mismatch scenario.
+        co_topic = "__consumer_offsets"
+        source_co_partitions = len(list(source_rpk.describe_topic(co_topic)))
+        target_co_partitions = len(list(target_rpk.describe_topic(co_topic)))
+        self.logger.info(
+            f"__consumer_offsets partition counts: "
+            f"source={source_co_partitions}, target={target_co_partitions}"
+        )
+        assert source_co_partitions != target_co_partitions, (
+            f"Expected different __consumer_offsets partition counts, "
+            f"but both clusters have {source_co_partitions}"
+        )
+
+        def _offsets_consistent():
+            for group in groups:
+                try:
+                    t_desc = target_rpk.group_describe(group=group)
+                except Exception:
+                    self.logger.debug(f"Group {group} not yet available on target")
+                    return False
+                t_partitions = {
+                    (p.topic, p.partition): p.current_offset for p in t_desc.partitions
+                }
+                for key, src_offset in source_offsets[group].items():
+                    if key not in t_partitions:
+                        self.logger.debug(
+                            f"Group {group} partition {key} not in target"
+                        )
+                        return False
+                    if src_offset != t_partitions[key]:
+                        self.logger.debug(
+                            f"Group {group} partition {key}: "
+                            f"source={src_offset} target={t_partitions[key]}"
+                        )
+                        return False
+            return True
+
+        wait_until(
+            _offsets_consistent,
+            timeout_sec=60,
+            backoff_sec=3,
+            err_msg=(
+                "Consumer group offsets not consistent between source and "
+                "target clusters with different __consumer_offsets partition "
+                "counts"
+            ),
+            retry_on_exc=True,
+        )
+
+
 class ShadowLinkSecurityTests(ShadowLinkTestBase):
     """
     Tests that verify security settings syncing
