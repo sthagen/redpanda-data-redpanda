@@ -5093,7 +5093,7 @@ class RedpandaService(Service, RedpandaServiceABC):
             .removesuffix(".")
         )
         fqdn = (
-            node.account.ssh_output(cmd=f"host {hostname}", timeout_sec=10)
+            node.account.ssh_output(cmd=f"host -t A {hostname}", timeout_sec=10)
             .decode("utf-8")
             .split(" ")[0]
         )
