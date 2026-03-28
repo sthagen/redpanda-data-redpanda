@@ -886,6 +886,14 @@ configuration::configuration()
       "Use separate scheduler group to handle parsing Kafka protocol requests",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       true)
+  , kafka_handler_latency_all(
+      *this,
+      "kafka_handler_latency_all",
+      "Enable latency histograms for all Kafka API handlers. When disabled, "
+      "only important handlers (produce, fetch, metadata, api_versions, "
+      "offset_commit) have latency histograms.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      false)
   , kafka_tcp_keepalive_idle_timeout_seconds(
       *this,
       "kafka_tcp_keepalive_timeout",

@@ -94,6 +94,9 @@ struct handler_interface {
     virtual std::optional<ss::scheduling_group>
     scheduling_group_override(const connection_context&) const = 0;
 
+    /// Whether this handler should have a per-handler latency histogram.
+    virtual bool has_latency_histogram() const = 0;
+
     virtual ~handler_interface() = default;
 };
 

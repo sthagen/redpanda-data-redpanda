@@ -220,6 +220,7 @@ struct configuration final : public config_store {
     property<bool> use_fetch_scheduler_group;
     property<bool> use_produce_scheduler_group;
     property<bool> use_kafka_handler_scheduler_group;
+    property<bool> kafka_handler_latency_all;
     property<std::chrono::seconds> kafka_tcp_keepalive_idle_timeout_seconds;
     property<std::chrono::seconds> kafka_tcp_keepalive_probe_interval_seconds;
     property<uint32_t> kafka_tcp_keepalive_probes;
