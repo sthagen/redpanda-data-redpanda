@@ -169,11 +169,12 @@ class StorageModeUpgradeTest(StorageModeTestBase):
         )
         self.installer = self.redpanda._installer
 
+    # storage_mode property introduced in v26.1, start on v25.3 (pre-feature)
+    FROM_VERSION = (25, 3)
+    TO_VERSION = RedpandaInstaller.next_major_version(FROM_VERSION)
+
     def setUp(self):
-        # Use v25.3 as the previous version (before storage_mode existed)
-        self.prev_version = (25, 3)
-        # Install old version before starting cluster
-        self.installer.install(self.redpanda.nodes, self.prev_version)
+        self.installer.install(self.redpanda.nodes, self.FROM_VERSION)
         super(StorageModeUpgradeTest, self).setUp()
 
     def _create_topic_with_tiered_storage_config(
@@ -226,8 +227,8 @@ class StorageModeUpgradeTest(StorageModeTestBase):
                 f"Topic {topic_name} remote_write mismatch: expected {str(remote_write).lower()}, got {actual_write}"
             )
 
-        # Upgrade all nodes to HEAD
-        self.installer.install(self.redpanda.nodes, RedpandaInstaller.HEAD)
+        # Upgrade all nodes to next version
+        self.installer.install(self.redpanda.nodes, self.TO_VERSION)
         self.redpanda.restart_nodes(self.redpanda.nodes)
 
         # Wait for cluster to stabilize on new version
