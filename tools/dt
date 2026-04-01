@@ -798,8 +798,8 @@ def main():
     run_parser.add_argument(
         "--max-parallel",
         type=int,
-        default=1,
-        help="Maximum parallel tests (default: 1)",
+        default=1000,
+        help="Maximum parallel tests (default: 1000)",
     )
     run_parser.add_argument(
         "--repeat",
@@ -888,8 +888,8 @@ def main():
     test_parser.add_argument(
         "--max-parallel",
         type=int,
-        default=1,
-        help="Maximum parallel tests (default: 1)",
+        default=1000,
+        help="Maximum parallel tests (default: 1000)",
     )
     test_parser.add_argument(
         "--repeat",
@@ -972,8 +972,8 @@ def main():
     repl_parser.add_argument(
         "--max-parallel",
         type=int,
-        default=1,
-        help="Maximum parallel tests (default: 1)",
+        default=1000,
+        help="Maximum parallel tests (default: 1000)",
     )
     repl_parser.add_argument(
         "--repeat",

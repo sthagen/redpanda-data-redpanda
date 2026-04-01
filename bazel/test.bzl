@@ -12,6 +12,13 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load(":internal.bzl", "antithesis_deps", "redpanda_copts")
 
+def _reactor_args():
+    """Returns additional reactor args for all reactor-using tests and benchmarks."""
+    return select({
+        "//bazel:io_uring_enabled": ["--reactor-backend=io_uring"],
+        "//conditions:default": [],
+    })
+
 def _has_flags(args, *flags):
     """
     Check if flags are present in a set of arguments.
@@ -148,6 +155,8 @@ def _redpanda_cc_test(
     # Google test / benchmarks don't understand the "--" protocol
     if args and dash_dash_protocol:
         args = ["--"] + args
+
+    args = args + _reactor_args()
 
     test_data, test_env, test_deps = _test_options()
     cc_test(
@@ -474,7 +483,7 @@ def redpanda_cc_bench(
         data = data,
     )
 
-    args = ["$(rootpath :{})".format(binary_name)] + args
+    args = ["$(rootpath :{})".format(binary_name)] + args + _reactor_args()
     env = env | {
         "MB_EXEC_IN_SHM": "1",
         "MB_REDIRECT_STDERR_DEFAULT": "1" if redirect_stderr else "0",

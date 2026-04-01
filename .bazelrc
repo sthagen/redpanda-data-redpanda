@@ -84,6 +84,7 @@ build --per_file_copt=src/v/serde/protobuf/tests/round_trip_test.cc@-Wno-depreca
 build --per_file_copt=src/v/serde/protobuf/tests/parser_test.cc@-Wno-deprecated-declarations
 build --per_file_copt=src/v/iceberg/conversion/tests/iceberg_protobuf_tests.cc@-Wno-deprecated-declarations
 build --per_file_copt=src/v/pandaproxy/schema_registry/protobuf.cc@-Wno-deprecated-declarations
+build --per_file_copt=.*\\.pb\\.cc@-Wno-deprecated-declarations
 # Suppress deprecated declarations in the protobuf external module itself
 build --per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
 build --host_per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
@@ -339,6 +340,14 @@ test:lldb --run_under='@current_llvm_toolchain_llvm//:bin/lldb-server g :7654 --
 # Bump timeout to 1h
 test:lldb --test_timeout=3600
 test:lldb --strategy=TestRunner=local
+
+# An indicator you want to use io_uring. Currently this
+# just enables the io_uring reactor backend when running
+# benchmarks and unit tests, but in the future it may do
+# more. Note there is also --@seastar//:io_uring, which
+# already defaults to true: that flag determines if Seastar
+# is built with io_uring support at all.
+build:io_uring --//bazel:io_uring=True
 
 # always pass through the following variables if they are set in the environment
 test --test_env=REDPANDA_RNG_SEEDING_MODE

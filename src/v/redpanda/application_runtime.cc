@@ -128,7 +128,12 @@ void application::wire_up_runtime_services(
           node_id,
           &controller->get_plugin_frontend(),
           &controller->get_feature_table(),
-          &raft_group_manager,
+          ss::sharded_parameter([this] {
+              return cluster::partition_change_notifier_impl::make_default(
+                raft_group_manager,
+                partition_manager,
+                controller->get_topics_state());
+          }),
           &controller->get_topics_state(),
           &partition_manager,
           &_transform_rpc_client,
