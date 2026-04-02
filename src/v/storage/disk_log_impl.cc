@@ -59,6 +59,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/util/defer.hh>
 
 #include <fmt/format.h>
 #include <roaring/roaring.hh>
@@ -246,30 +247,24 @@ ss::future<> disk_log_impl::remove() {
     _closed = true;
     // wait for compaction to finish
     co_await _compaction_housekeeping_gate.close();
-    // gets all the futures started in the background
-    std::vector<ss::future<>> permanent_delete;
-    permanent_delete.reserve(_segs.size());
-    while (!_segs.empty()) {
-        auto s = _segs.back();
-        _segs.pop_back();
-        permanent_delete.emplace_back(
-          remove_segment_permanently(s, "disk_log_impl::remove()"));
-    }
-    co_await _offset_translator.remove_persistent_state();
 
-    co_await _readers_cache->stop()
-      .then([this, permanent_delete = std::move(permanent_delete)]() mutable {
-          // wait for all futures
-          return ss::when_all_succeed(
-                   permanent_delete.begin(), permanent_delete.end())
-            .then([this]() {
-                vlog(stlog.info, "Finished removing all segments:{}", config());
-            })
-            .then([this] {
-                return remove_kvstore_state(config().ntp(), _kvstore);
-            });
-      })
-      .finally([this] { _probe->clear_metrics(); });
+    auto _ = ss::defer([this] { _probe->clear_metrics(); });
+
+    // Clear segments.
+    auto segments_to_remove = std::move(_segs).release();
+    _segs = segment_set(segment_set::underlying_t{});
+
+    co_await ss::max_concurrent_for_each(
+      segments_to_remove, 128, [this](ss::lw_shared_ptr<segment>& s) {
+          return remove_segment_permanently(s, "disk_log_impl::remove()");
+      });
+
+    vlog(stlog.info, "Finished removing all segments:{}", config());
+
+    co_await _offset_translator.remove_persistent_state();
+    co_await _readers_cache->stop();
+
+    co_await remove_kvstore_state(config().ntp(), _kvstore);
 }
 
 ss::future<> disk_log_impl::start(
