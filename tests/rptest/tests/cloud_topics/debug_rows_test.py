@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 from rptest.clients.admin.v2 import metastore_pb
+from ducktape.mark import matrix
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.tests.cloud_topics.e2e_test import EndToEndCloudTopicsBase
@@ -165,7 +166,13 @@ class DebugRowsTest(EndToEndCloudTopicsBase):
         return self._read_rows(metastore_partition, seek_key=seek, last_key=last)
 
     @cluster(num_nodes=4)
-    def test_read_and_write_rows(self) -> None:
+    @matrix(
+        storage_mode=[
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+        ],
+    )
+    def test_read_and_write_rows(self, storage_mode: str) -> None:
         topic: TopicSpec = self.topics[0]
         self.start_producer(num_nodes=1)  # type: ignore[reportUnknownMemberType]
         self.await_num_produced(min_records=5000, timeout_sec=120)  # type: ignore[reportUnknownMemberType]

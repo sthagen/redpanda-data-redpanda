@@ -246,7 +246,9 @@ cloud_topic_partition::get_cloud_storage_status() const {
     auto l0_size = _fe->get_l0_size_estimate();
     auto l1_size = (co_await _fe->l1_size())
                      .value_or(cloud_topics::l1::metastore::size_response{});
-    status.mode = cluster::cloud_storage_mode::cloud_topic;
+    status.mode = _partition->get_ntp_config().is_tiered_cloud()
+                    ? cluster::cloud_storage_mode::tiered_cloud_topic
+                    : cluster::cloud_storage_mode::cloud_topic;
     status.local_log_size_bytes = local_size;
     // Report the L1 size via "cloud" size bytes and the sum of L0 and L1 sizes
     // via "total" log size bytes. Users can derive the L0 size through total -

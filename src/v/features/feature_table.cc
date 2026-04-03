@@ -134,6 +134,8 @@ std::string_view to_string_view(feature f) {
         return "user_based_client_quota";
     case feature::cloud_topics:
         return "cloud_topics";
+    case feature::tiered_cloud_topics:
+        return "tiered_cloud_topics";
 
     /*
      * testing features

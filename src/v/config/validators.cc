@@ -473,6 +473,14 @@ validate_default_redpanda_storage_mode(const configuration& config) {
           "cloud_topics_enabled is false");
     }
 
+    if (
+      mode == model::redpanda_storage_mode::tiered_cloud
+      && !config.cloud_topics_enabled()) {
+        return fmt::format(
+          "default_redpanda_storage_mode cannot be set to tiered_cloud when "
+          "cloud_topics_enabled is false");
+    }
+
     return std::nullopt;
 }
 

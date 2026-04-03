@@ -273,6 +273,68 @@ TEST_F(frontend_fixture, test_replicate_invalidates_epoch_cache) {
     ASSERT_TRUE(result.has_value());
 }
 
+TEST_F(frontend_fixture, test_tiered_cloud_replicate_skips_l0_upload) {
+    const model::topic topic_name("tiered_cloud_topic");
+    model::ntp ntp(model::kafka_namespace, topic_name, 0);
+
+    cluster::topic_properties props;
+    props.storage_mode = model::redpanda_storage_mode::tiered_cloud;
+    props.shadow_indexing = model::shadow_indexing_mode::disabled;
+
+    add_topic({model::kafka_namespace, topic_name}, 1, props).get();
+    wait_for_leader(ntp).get();
+
+    auto partition = app.partition_manager.local().get(ntp);
+    ASSERT_TRUE(
+      partition->raft()->stm_manager()->get<cloud_topics::ctp_stm>()
+      != nullptr);
+
+    cloud_topics::frontend frontend(std::move(partition), _data_plane.get());
+
+    // stage_write and execute_write should NOT be called for tiered_cloud
+    EXPECT_CALL(*_data_plane, stage_write(_)).Times(0);
+    EXPECT_CALL(*_data_plane, execute_write(_, _, _, _)).Times(0);
+
+    auto batch = model::test::make_random_batch(model::offset{0}, false);
+    chunked_vector<model::record_batch> buf;
+    buf.push_back(std::move(batch));
+    auto res = frontend
+                 .replicate(
+                   std::move(buf),
+                   raft::replicate_options(raft::consistency_level::quorum_ack))
+                 .get();
+
+    ASSERT_TRUE(res.has_value());
+}
+
+TEST_F(frontend_fixture, test_tiered_cloud_replicate_stages_skips_l0_upload) {
+    const model::topic topic_name("tiered_cloud_topic2");
+    model::ntp ntp(model::kafka_namespace, topic_name, 0);
+
+    cluster::topic_properties props;
+    props.storage_mode = model::redpanda_storage_mode::tiered_cloud;
+    props.shadow_indexing = model::shadow_indexing_mode::disabled;
+
+    add_topic({model::kafka_namespace, topic_name}, 1, props).get();
+    wait_for_leader(ntp).get();
+
+    auto partition = app.partition_manager.local().get(ntp);
+    cloud_topics::frontend frontend(std::move(partition), _data_plane.get());
+
+    // stage_write and execute_write should NOT be called
+    EXPECT_CALL(*_data_plane, stage_write(_)).Times(0);
+    EXPECT_CALL(*_data_plane, execute_write(_, _, _, _)).Times(0);
+
+    auto batch = model::test::make_random_batch(model::offset{0}, false);
+    auto stages = frontend.replicate(
+      model::batch_identity{},
+      std::move(batch),
+      raft::replicate_options(raft::consistency_level::quorum_ack));
+
+    auto res = stages.replicate_finished.get();
+    ASSERT_TRUE(res.has_value());
+}
+
 TEST_F(frontend_fixture, test_advance_epoch) {
     // This test verifies that frontend::advance_epoch() correctly integrates
     // with the underlying ctp_stm_api to advance the partition's epoch and

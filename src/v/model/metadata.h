@@ -614,6 +614,7 @@ enum class redpanda_storage_mode : uint8_t {
     local = 0,
     tiered = 1,
     cloud = 2,
+    tiered_cloud = 3,
     unset = 255
 };
 
@@ -625,6 +626,8 @@ constexpr const char* redpanda_storage_mode_to_string(redpanda_storage_mode m) {
         return "tiered";
     case redpanda_storage_mode::cloud:
         return "cloud";
+    case redpanda_storage_mode::tiered_cloud:
+        return "tiered_cloud";
     case redpanda_storage_mode::unset:
         return "unset";
     }

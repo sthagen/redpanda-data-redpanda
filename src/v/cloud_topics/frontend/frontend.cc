@@ -794,6 +794,18 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
 
 ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
   chunked_vector<model::record_batch> batches, raft::replicate_options opts) {
+    // In tiered_cloud mode, replicate raft_data directly through raft.
+    // No L0 upload, no placeholders, no epoch fencing. The client's
+    // requested acks level is passed through (unlike cloud mode which
+    // forces quorum_ack to protect placeholder consistency).
+    if (_partition->get_ntp_config().is_tiered_cloud()) {
+        auto result = co_await _partition->replicate(std::move(batches), opts);
+        if (!result) {
+            co_return std::unexpected(result.error());
+        }
+        co_return result.value().last_offset;
+    }
+
     chunked_vector<model::record_batch_header> headers;
     headers.reserve(batches.size());
     for (const auto& batch : batches) {
@@ -903,6 +915,29 @@ raft::replicate_stages frontend::replicate(
   model::batch_identity batch_id,
   model::record_batch batch,
   raft::replicate_options opts) {
+    // In tiered_cloud mode, replicate raft_data directly through raft.
+    // Use partition->replicate_in_stages which returns kafka_stages (with
+    // kafka-translated offsets), then adapt to raft::replicate_stages.
+    // The client's requested acks level is passed through.
+    if (_partition->get_ntp_config().is_tiered_cloud()) {
+        auto ks = _partition->replicate_in_stages(
+          batch_id, std::move(batch), opts);
+        raft::replicate_stages out(raft::errc::success);
+        out.request_enqueued = std::move(ks.request_enqueued);
+        out.replicate_finished = ks.replicate_finished.then(
+          [](
+            result<cluster::kafka_result> r) -> result<raft::replicate_result> {
+              if (!r) {
+                  return r.error();
+              }
+              return raft::replicate_result{
+                .last_offset = kafka::offset_cast(r.value().last_offset),
+                .last_term = r.value().last_term,
+              };
+          });
+        return out;
+    }
+
     auto ctp_stm_api = make_ctp_stm_api(_partition);
     auto header = batch.header();
     chunked_vector<model::record_batch> batch_vec, to_cache;

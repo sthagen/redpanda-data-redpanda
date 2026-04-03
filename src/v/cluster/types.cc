@@ -803,6 +803,8 @@ std::ostream& operator<<(std::ostream& o, const cloud_storage_mode& mode) {
         return o << "cloud_topic";
     case cloud_storage_mode::cloud_topic_read_replica:
         return o << "cloud_topic_read_replica";
+    case cloud_storage_mode::tiered_cloud_topic:
+        return o << "tiered_cloud_topic";
     }
     __builtin_unreachable();
 }

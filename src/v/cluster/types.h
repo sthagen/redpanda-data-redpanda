@@ -3262,7 +3262,8 @@ enum class cloud_storage_mode : uint8_t {
     full = 3,
     read_replica = 4,
     cloud_topic = 5,
-    cloud_topic_read_replica = 6
+    cloud_topic_read_replica = 6,
+    tiered_cloud_topic = 7
 };
 
 std::ostream& operator<<(std::ostream&, const cloud_storage_mode&);
