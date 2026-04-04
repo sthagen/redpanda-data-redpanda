@@ -705,12 +705,15 @@ class RedpandaInstallerTest(RedpandaTest):
         assert RedpandaInstaller.next_major_version((25, 3)) == (26, 1)
         assert RedpandaInstaller.next_major_version((26, 3)) == (27, 1)
 
+        def match_major(a: tuple[int, int, int], b: tuple[int, int, int]) -> bool:
+            return a[0:2] == b[0:2]
+
         # Verify LATEST_RELEASED_MAJOR is the newest in released_versions.
         # If it's not, either github releases are not up to date (used
         # locally), RP_GIT_RELEASED_VERSIONS is not set correctly in CI,
         # or LATEST_RELEASED_MAJOR needs to be bumped.
         released = self.redpanda._installer.released_versions
-        assert released[0] == LATEST_RELEASED_MAJOR, (
+        assert match_major(released[0], LATEST_RELEASED_MAJOR), (
             f"Expected LATEST_RELEASED_MAJOR {LATEST_RELEASED_MAJOR} to be the "
             f"newest released version, but got {released[0]} "
             f"(first 10: {released[:10]})"
