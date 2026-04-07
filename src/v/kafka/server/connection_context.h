@@ -19,6 +19,7 @@
 #include "kafka/server/handlers/details/security.h"
 #include "kafka/server/handlers/handler_probe.h"
 #include "kafka/server/logger.h"
+#include "kafka/server/response.h"
 #include "net/connection.h"
 #include "net/server_probe.h"
 #include "proto/redpanda/core/admin/v2/kafka_connections.proto.h"
@@ -48,8 +49,6 @@
 #include <vector>
 
 namespace kafka {
-
-using response_ptr = ss::foreign_ptr<std::unique_ptr<response>>;
 
 using closed_connections_t
   = std::deque<ss::lw_shared_ptr<const proto::admin::kafka_connection>>;

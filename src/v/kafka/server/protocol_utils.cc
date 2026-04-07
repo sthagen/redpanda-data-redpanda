@@ -155,7 +155,8 @@ ss::scattered_message<char> response_as_scattered(response_ptr response) {
           msg.append_static(src, sz);
           return ss::stop_iteration::no;
       });
-    // MUST be the foreign ptr not the iobuf
+    // The response must outlive the scattered message since the message
+    // references the iobuf fragments directly via append_static.
     msg.on_delete([response = std::move(response)] {});
     return msg;
 }

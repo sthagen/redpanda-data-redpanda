@@ -4592,6 +4592,7 @@ class RedpandaService(Service, RedpandaServiceABC):
             if (
                 "compaction.staging" in file.name
                 or "compaction.compaction_index" in file.name
+                or "compaction_index.staging" in file.name
             ):
                 # compaction staging files are temporary and are generally
                 # cleaned up after compaction finishes, or at next round of
