@@ -1270,10 +1270,11 @@ class simple_fetch_planner final : public fetch_planner::impl {
                * If not authorized do not include into a plan.
                * We audit successful messages only on the initial fetch.
                */
-              if (unlikely(!octx.rctx.authorized(
-                    security::acl_operation::read,
-                    topic,
-                    audit_on_success{octx.initial_fetch}))) {
+              if (
+                unlikely(!octx.rctx.authorized(
+                  security::acl_operation::read,
+                  topic,
+                  audit_on_success{octx.initial_fetch}))) {
                   return fail_all_partitions(
                     error_code::topic_authorization_failed);
               }
@@ -1282,9 +1283,10 @@ class simple_fetch_planner final : public fetch_planner::impl {
                * in sanction mode (without an enterprise license), the audit
                * log topic is not consumable
                */
-              if (unlikely(
-                    topic == model::kafka_audit_logging_topic
-                    && octx.rctx.feature_table().local().should_sanction())) {
+              if (
+                unlikely(
+                  topic == model::kafka_audit_logging_topic
+                  && octx.rctx.feature_table().local().should_sanction())) {
                   thread_local static ss::logger::rate_limit rate(1s);
                   vloglr(
                     klog,
@@ -1338,8 +1340,9 @@ class simple_fetch_planner final : public fetch_planner::impl {
                   const auto partition_id = kitp.get_partition();
                   model::ktp_with_hash ktp{kitp.get_topic(), partition_id};
 
-                  if (unlikely(
-                        metadata_cache.is_disabled(tn_view, partition_id))) {
+                  if (
+                    unlikely(
+                      metadata_cache.is_disabled(tn_view, partition_id))) {
                       resp_it->set(
                         make_partition_response_error(
                           partition_id, error_code::replica_not_available),
@@ -1681,8 +1684,9 @@ ss::future<response_ptr> op_context::send_response() && {
           resp_it->partition->topic_id,
           resp_it->partition->topic,
           resp_it->partition_response->partition_index);
-        if (auto sp_it = session_partitions.find(key);
-            sp_it != session_partitions.end()) {
+        if (
+          auto sp_it = session_partitions.find(key);
+          sp_it != session_partitions.end()) {
             update_session_partition(
               *resp_it->partition_response, sp_it->second->partition);
         }
@@ -1812,8 +1816,9 @@ void op_context::response_placeholder::set(
           _it->partition->topic,
           _it->partition_response->partition_index);
 
-        if (auto it = session_partitions.find(key);
-            it != session_partitions.end()) {
+        if (
+          auto it = session_partitions.find(key);
+          it != session_partitions.end()) {
             auto has_to_be_included = partition_has_changes(
               *_it->partition_response, it->second->partition);
             /**

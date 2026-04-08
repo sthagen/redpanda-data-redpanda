@@ -159,32 +159,6 @@ COMPILERS = {
     "current": {
         "tars": {
             "aarch64": {
-                "build_date": "2025-11-14",
-                "sha": "f51afb38ca39cc93c6ed065a0c463d3587b975204d6028a63de33153caf3e104",
-            },
-            "x86_64": {
-                "build_date": "2025-11-14",
-                "sha": "616e3f50b1f03b61ec712f4f28fa67668d60ae3edccea8508065a3f49dbbb24a",
-            },
-        },
-        "version": "20.1.8",
-    },
-    "next": {
-        "tars": {
-            "aarch64": {
-                "build_date": "2025-11-25",
-                "sha": "37257804087a26b0ede7c0349d3f44db7b7439e551fc6c753f7934ead654c1b8",
-            },
-            "x86_64": {
-                "build_date": "2025-11-25",
-                "sha": "b3aa9cb72c2e46bd1cc3f17f3772b37a424e54f796253961382163eab2f4a9c0",
-            },
-        },
-        "version": "21.1.6",
-    },
-    "clang-22": {
-        "tars": {
-            "aarch64": {
                 "build_date": "2026-03-02",
                 "sha": "4fcc2b9cc39b98f63e63739a5229e0b73a2bc9b26d1f4681f12c2cf55ddcab6e",
             },

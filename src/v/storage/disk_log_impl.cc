@@ -1052,8 +1052,9 @@ disk_log_impl::compact_adjacent_segment_ranges(
   compaction::compaction_config cfg,
   std::optional<model::offset> new_start_offset) {
     chunked_vector<compaction_result> rs;
-    if (auto ranges = find_adjacent_compaction_ranges(cfg, new_start_offset);
-        ranges) {
+    if (
+      auto ranges = find_adjacent_compaction_ranges(cfg, new_start_offset);
+      ranges) {
         // lightweight copy of segments in all of the found ranges. once a
         // scheduling event occurs in this method we can't rely on the iterators
         // in the range remaining valid. for example, a concurrent truncate may
@@ -1408,8 +1409,6 @@ ss::future<> disk_log_impl::housekeeping(housekeeping_config cfg) {
             std::rethrow_exception(fut.get_exception());
         }
     }
-
-    _probe->set_compaction_ratio(_compaction_ratio.get());
 }
 
 ss::future<> disk_log_impl::do_compact(
@@ -3066,8 +3065,9 @@ bool disk_log_impl::is_compacted(
 
 bool disk_log_impl::eligible_for_compacted_reupload(
   model::offset first, model::offset last) const {
-    if (auto mco = max_eligible_for_compacted_reupload_offset(first);
-        mco.has_value()) {
+    if (
+      auto mco = max_eligible_for_compacted_reupload_offset(first);
+      mco.has_value()) {
         return last <= mco.value();
     }
     return false;
