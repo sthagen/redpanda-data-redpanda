@@ -27,6 +27,7 @@
 #include "cluster/partition.h"
 #include "cluster/rm_stm_types.h"
 #include "cluster/types.h"
+#include "kafka/server/write_at_offset_stm.h"
 #include "model/fundamental.h"
 #include "model/offset_interval.h"
 #include "model/record.h"
@@ -1233,6 +1234,107 @@ auto frontend::advance_epoch(
     }
 
     co_return get_epoch_info();
+}
+
+ss::future<result<raft::replicate_result>> frontend::replicate_at_offset(
+  chunked_vector<model::record_batch> batches,
+  chunked_vector<kafka::offset> expected_base_offsets,
+  std::optional<kafka::offset> prev_log_offset,
+  model::timeout_clock::duration timeout,
+  std::optional<std::reference_wrapper<ss::abort_source>> as,
+  ss::shared_ptr<kafka::write_at_offset_stm> stm) {
+    chunked_vector<model::record_batch_header> headers;
+    headers.reserve(batches.size());
+    for (const auto& batch : batches) {
+        headers.push_back(batch.header());
+    }
+
+    auto min_epoch = cluster_epoch(_partition->get_topic_revision_id());
+
+    // Use the std::max trick from the normal produce path to reduce
+    // the likelihood of fencing errors when shards are on different
+    // epochs.
+    auto accepted_min = _ctp_stm_api->get_max_seen_epoch(_partition->term());
+    if (!accepted_min) {
+        accepted_min = _ctp_stm_api->get_max_epoch();
+    }
+    if (accepted_min) {
+        min_epoch = std::max(min_epoch, *accepted_min);
+    }
+
+    vassert(
+      min_epoch() > 0L,
+      "Unexpected invalid min epoch {} for {}",
+      min_epoch,
+      ntp());
+
+    auto staged = co_await _data_plane->stage_write(std::move(batches));
+    if (!staged.has_value()) {
+        co_return staged.error();
+    }
+
+    auto deadline = model::timeout_clock::now() + timeout;
+    auto res = co_await _data_plane->execute_write(
+      ntp(), min_epoch, std::move(staged.value()), deadline);
+
+    if (!res.has_value()) {
+        co_return res.error();
+    }
+
+    auto batch_epoch = res.value().extents.front().id.epoch;
+
+    auto fence_fut = co_await ss::coroutine::as_future(
+      _ctp_stm_api->fence_epoch(batch_epoch));
+    if (fence_fut.failed()) {
+        auto not_leader = !_partition->is_leader();
+        auto e = fence_fut.get_exception();
+        if (not_leader) {
+            vlog(
+              cd_log.debug,
+              "Failed to fence epoch {} for ntp {}, not a leader",
+              batch_epoch,
+              ntp());
+        } else {
+            vlogl(
+              cd_log,
+              ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                            : ss::log_level::warn,
+              "Failed to fence epoch {} for ntp {}, error: {}",
+              batch_epoch,
+              ntp(),
+              e);
+        }
+        std::rethrow_exception(e);
+    }
+    auto fence = std::move(fence_fut.get());
+    if (!fence.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Failed to fence epoch {} for ntp {}, ctp latest seen epoch "
+          "is [{}, {}]",
+          batch_epoch,
+          ntp(),
+          fence.error().window_min,
+          fence.error().window_max);
+        co_return raft::errc::not_leader;
+    }
+
+    auto placeholders = co_await convert_to_placeholders(
+      res.value().extents, headers);
+
+    chunked_vector<model::record_batch> placeholder_batches;
+    for (auto&& batch : placeholders.batches) {
+        placeholder_batches.push_back(std::move(batch));
+    }
+
+    auto stages = stm->replicate(
+      std::move(placeholder_batches),
+      std::move(expected_base_offsets),
+      prev_log_offset,
+      timeout,
+      as);
+
+    co_return co_await std::move(stages.replicate_finished);
 }
 
 fmt::iterator

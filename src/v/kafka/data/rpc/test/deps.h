@@ -195,6 +195,10 @@ public:
     get_cloud_storage_status() const override {
         throw std::runtime_error("unimplemented");
     }
+    std::unique_ptr<kafka::exact_offset_replicator>
+      make_exact_offset_replicator() && final {
+        return nullptr;
+    }
 
 private:
     model::offset latest_offset() {

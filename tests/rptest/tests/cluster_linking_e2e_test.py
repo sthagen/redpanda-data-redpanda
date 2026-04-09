@@ -53,11 +53,13 @@ from rptest.services.multi_cluster_services import (
     Service as MultiService,
 )
 from rptest.services.redpanda import (
+    CLOUD_TOPICS_CONFIG_STR,
     MetricSamples,
     MetricsEndpoint,
     RedpandaService,
     SchemaRegistryConfig,
     SecurityConfig,
+    SISettings,
 )
 from rptest.services.tls import TLSCertManager
 from rptest.tests.cluster_linking_test_base import (
@@ -4364,3 +4366,116 @@ class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):
         assert source_last_record == target_first_record, (
             f"Record mismatch: source={source_last_record}, target={target_first_record}"
         )
+
+
+class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
+    """
+    Tests cluster linking replication with cloud topics
+    (redpanda.storage.mode=cloud and tiered_cloud) on the source cluster.
+    """
+
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
+        si_settings = SISettings(
+            test_context,
+            cloud_storage_max_connections=10,
+            cloud_storage_enable_remote_read=False,
+            cloud_storage_enable_remote_write=False,
+            fast_uploads=True,
+        )
+
+        super().__init__(
+            test_context,
+            si_settings=si_settings,
+            extra_rp_conf={
+                CLOUD_TOPICS_CONFIG_STR: True,
+                "enable_cluster_metadata_upload_loop": False,
+            },
+            secondary_cluster_args=SecondaryClusterArgs(
+                si_settings=si_settings,
+                extra_rp_conf={
+                    CLOUD_TOPICS_CONFIG_STR: True,
+                    "enable_shadow_linking": True,
+                    "enable_cluster_metadata_upload_loop": False,
+                },
+            ),
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=7)
+    @matrix(
+        storage_mode=[
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+        ],
+    )
+    def test_cloud_topic_replication(self, storage_mode):
+        """
+        Verify that data produced to a cloud/tiered_cloud topic on the source
+        cluster is replicated to the target cluster via cluster linking.
+        """
+        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+            self.source_cluster_service.set_feature_active(
+                "tiered_cloud_topics", True, timeout_sec=30
+            )
+            self.target_cluster.service.set_feature_active(
+                "tiered_cloud_topics", True, timeout_sec=30
+            )
+
+        topic = TopicSpec(
+            name="ct-topic",
+            partition_count=3,
+            replication_factor=1,
+        )
+
+        source_rpk = RpkTool(self.source_cluster.service)
+
+        def create_source_topic():
+            try:
+                source_rpk.create_topic(
+                    topic=topic.name,
+                    partitions=topic.partition_count,
+                    replicas=topic.replication_factor,
+                    config={
+                        TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                    },
+                )
+                return True
+            except Exception as e:
+                if "INVALID_CONFIG" in str(e):
+                    return False
+                raise
+
+        # Retry topic creation: feature flag propagation may lag behind
+        # the admin API response on some nodes.
+        wait_until(
+            create_source_topic,
+            timeout_sec=30,
+            backoff_sec=2,
+            err_msg=f"Failed to create source topic with storage_mode={storage_mode}",
+        )
+
+        source_configs = source_rpk.describe_topic_configs(topic.name)
+        assert source_configs[TopicSpec.PROPERTY_STORAGE_MODE][0] == storage_mode, (
+            f"Source topic storage mode: {source_configs[TopicSpec.PROPERTY_STORAGE_MODE]}"
+        )
+
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_partitions_exists_in_target(topic),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        # Verify target topic has the same storage mode
+        target_rpk = RpkTool(self.target_cluster.service)
+        target_configs = target_rpk.describe_topic_configs(topic.name)
+        assert target_configs[TopicSpec.PROPERTY_STORAGE_MODE][0] == storage_mode, (
+            f"Target topic storage mode: {target_configs[TopicSpec.PROPERTY_STORAGE_MODE]}, "
+            f"expected: {storage_mode}"
+        )
+
+        with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=10000):
+            self.verify()

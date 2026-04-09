@@ -270,6 +270,11 @@ raft::replicate_stages partition_proxy::replicate(
         make_error_code(kafka::error_code::invalid_topic_exception))};
 }
 
+std::unique_ptr<kafka::exact_offset_replicator>
+partition_proxy::make_exact_offset_replicator() && {
+    return nullptr;
+}
+
 result<kafka::partition_info> partition_proxy::get_partition_info() const {
     kafka::partition_info ret;
     ret.leader = partition_->get_leader_id();
