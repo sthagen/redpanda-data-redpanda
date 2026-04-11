@@ -25,7 +25,7 @@ build --copt=-ffile-compilation-dir=. --host_copt=-ffile-compilation-dir=.
 build:system-clang --extra_toolchains=@local_config_cc_toolchains//:all
 build:system-clang --action_env=BAZEL_COMPILER=clang
 build:system-clang --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
-build:system-clang --linkopt -fuse-ld=lld
+build:system-clang --linkopt -fuse-ld=lld --host_linkopt -fuse-ld=lld
 
 # Use new proto toolchain resolution
 build --incompatible_enable_proto_toolchain_resolution
