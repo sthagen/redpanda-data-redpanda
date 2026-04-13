@@ -4551,6 +4551,14 @@ configuration::configuration()
       "cluster for data replication.",
       meta{.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , shadow_link_failover_batch_size(
+      *this,
+      "shadow_link_failover_batch_size",
+      "Maximum number of mirror topics to include in a single batched "
+      "failover controller command.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1000,
+      {.min = 1})
   , internal_rpc_request_timeout_ms(
       *this,
       "internal_rpc_request_timeout_ms",

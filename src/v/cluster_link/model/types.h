@@ -910,6 +910,26 @@ struct update_mirror_topic_status_cmd
     auto serde_fields() { return std::tie(topic, status, force_update); }
 };
 
+/// \brief Batched command to update the state of multiple mirror topics
+///
+/// All topics in a batch share the same target status. Used by failover to
+/// update up to 1k topics in a single raft entry, avoiding per-topic deep
+/// copies of the link metadata.
+struct batch_update_mirror_topic_status_cmd
+  : serde::envelope<
+      batch_update_mirror_topic_status_cmd,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    mirror_topic_status status{mirror_topic_status::active};
+    chunked_vector<::model::topic> topics;
+
+    friend bool operator==(
+      const batch_update_mirror_topic_status_cmd&,
+      const batch_update_mirror_topic_status_cmd&) = default;
+
+    auto serde_fields() { return std::tie(status, topics); }
+};
+
 /// \brief Command used to update the properties of a mirror topic
 ///
 /// Will be used by the cluster linking metadata sync test to update

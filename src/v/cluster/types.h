@@ -3585,6 +3585,36 @@ struct update_mirror_topic_status_response
     auto serde_fields() { return std::tie(ec); }
 };
 
+struct batch_update_mirror_topic_status_request
+  : serde::envelope<
+      batch_update_mirror_topic_status_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    ::cluster_link::model::id_t link_id;
+    ::cluster_link::model::batch_update_mirror_topic_status_cmd cmd;
+    model::timeout_clock::duration timeout{};
+
+    friend bool operator==(
+      const batch_update_mirror_topic_status_request&,
+      const batch_update_mirror_topic_status_request&) = default;
+
+    auto serde_fields() { return std::tie(link_id, cmd, timeout); }
+};
+
+struct batch_update_mirror_topic_status_response
+  : serde::envelope<
+      batch_update_mirror_topic_status_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    cluster_link::errc ec{cluster_link::errc::success};
+
+    friend bool operator==(
+      const batch_update_mirror_topic_status_response&,
+      const batch_update_mirror_topic_status_response&) = default;
+
+    auto serde_fields() { return std::tie(ec); }
+};
+
 struct update_mirror_topic_properties_request
   : serde::envelope<
       update_mirror_topic_properties_request,
