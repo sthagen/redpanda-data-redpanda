@@ -323,8 +323,8 @@ ss::future<std::optional<ss::sstring>> disk_log_impl::close() {
     bool errors = false;
 
     co_await _readers_cache->stop().then([this, &errors] {
-        return ss::parallel_for_each(
-          _segs, [&errors](ss::lw_shared_ptr<segment>& h) {
+        return ss::max_concurrent_for_each(
+          _segs, 128, [&errors](ss::lw_shared_ptr<segment>& h) {
               return h->close().handle_exception(
                 [&errors, h](std::exception_ptr e) {
                     vlog(stlog.error, "Error closing segment:{} - {}", e, h);

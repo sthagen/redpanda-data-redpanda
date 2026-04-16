@@ -286,8 +286,9 @@ backend::get_entities_status(id migration_id) {
           migration_id,
           groups_by_partition.size());
         errc last_errc = errc::success;
-        co_await ss::parallel_for_each(
+        co_await ss::max_concurrent_for_each(
           std::move(groups_by_partition),
+          64,
           [this, &ret, &last_errc](auto&& pair) {
               // TODO: retry per-partition
               auto&& [pid, groups] = pair;
@@ -421,8 +422,9 @@ backend::set_entities_status(id migration_id, entities_status status) {
                   });
 
                 errc last_error = errc::success;
-                co_await ss::parallel_for_each(
+                co_await ss::max_concurrent_for_each(
                   *mrstate.partition_group_map,
+                  64,
                   [&requests, this, &last_error](const auto& pair) {
                       auto& [pid, groups] = pair;
                       auto& request = requests.at(pid);

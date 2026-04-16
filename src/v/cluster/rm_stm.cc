@@ -212,7 +212,7 @@ ss::future<> rm_stm::cleanup_evicted_producers() {
         if (producer.is_evicted() && producer.id() == pid) {
             if (producer._active_transaction_hook.is_linked()) {
                 vlog(
-                  _ctx_log.error,
+                  _ctx_log.info,
                   "Ignoring cleanup request of producer {} due to in progress "
                   "transaction.",
                   producer);
@@ -222,7 +222,7 @@ ss::future<> rm_stm::cleanup_evicted_producers() {
             vlog(_ctx_log.trace, "removed producer: {}", pid);
         } else {
             vlog(
-              _ctx_log.error,
+              _ctx_log.info,
               "Skipping cleanup of evicted pid: {} and associated producer: {}",
               pid,
               producer);
@@ -2038,8 +2038,6 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
       "Unsupported snapshot version requested: {}",
       version);
 
-    auto units = co_await _state_lock.hold_read_lock();
-
     auto start_offset = _raft->start_offset();
     vlog(
       _ctx_log.trace,
@@ -2307,9 +2305,6 @@ rm_stm::take_raft_snapshot(model::offset last_included_offset) {
     // this is always called under apply lock, so we can be sure
     // that no concurrent modifications to the state are happening via apply
     // path.
-
-    // write lock is probably excessive here because the loop below is
-    // synchronous
     auto units = co_await _state_lock.hold_write_lock();
     tx::raft_snapshot snapshot;
     auto kafka_offset = from_log_offset(last_included_offset);

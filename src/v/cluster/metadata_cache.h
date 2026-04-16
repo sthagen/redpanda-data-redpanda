@@ -63,7 +63,7 @@ public:
     ss::future<> stop() { return ss::now(); }
 
     /// Returns list of all topics that exists in the cluster.
-    std::vector<model::topic_namespace> all_topics() const;
+    chunked_vector<model::topic_namespace> all_topics() const;
 
     ///\brief Returns metadata of single topic.
     ///

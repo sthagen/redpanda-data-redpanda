@@ -47,7 +47,7 @@ metadata_cache::metadata_cache(
   , _leaders(leaders)
   , _health_monitor(health_monitor) {}
 
-std::vector<model::topic_namespace> metadata_cache::all_topics() const {
+chunked_vector<model::topic_namespace> metadata_cache::all_topics() const {
     return _topics_state.local().all_topics();
 }
 

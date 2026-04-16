@@ -1819,9 +1819,9 @@ ss::future<> topic_table::notify_waiters() {
     }
 }
 
-std::vector<model::topic_namespace> topic_table::all_topics() const {
-    std::vector<model::topic_namespace> topics;
-    topics.reserve(topics.size());
+chunked_vector<model::topic_namespace> topic_table::all_topics() const {
+    chunked_vector<model::topic_namespace> topics;
+    topics.reserve(_topics.size());
     for (auto& [tp_ns, _] : _topics) {
         topics.push_back(tp_ns);
     }

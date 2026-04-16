@@ -589,7 +589,7 @@ public:
     /// Query API
 
     /// Returns list of all topics that exists in the cluster.
-    std::vector<model::topic_namespace> all_topics() const;
+    chunked_vector<model::topic_namespace> all_topics() const;
 
     // Returns the number of topics that exist in the cluster.
     size_t all_topics_count() const;

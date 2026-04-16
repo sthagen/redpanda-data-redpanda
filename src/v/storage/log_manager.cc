@@ -216,8 +216,8 @@ ss::future<> log_manager::stop() {
     _gc_sem.broken();
 
     co_await _gate.close();
-    co_await ss::coroutine::parallel_for_each(
-      _logs, [this](logs_type::value_type& entry) -> ss::future<> {
+    co_await ss::max_concurrent_for_each(
+      _logs, 128, [this](logs_type::value_type& entry) -> ss::future<> {
           auto close_fut = entry.second->housekeeping_gate.close();
           return clean_close(entry.second->handle)
             .then(

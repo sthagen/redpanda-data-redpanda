@@ -1,0 +1,65 @@
+{
+  "skill_name": "create-backport-branch",
+  "evals": [
+    {
+      "id": 0,
+      "name": "clean-cherry-pick",
+      "prompt": "/create-backport-branch 81d9e1af33 30160",
+      "expected_output": "Creates a backport branch from commit 81d9e1af33 (v25.3.x before PR 30160 was backported). The single commit from PR #30160 should cherry-pick cleanly with no conflicts and no empty result. Produces a structured report.",
+      "files": [],
+      "expectations": [
+        "Branch was created with naming pattern ai-backport-pr-30160-81d9e1af33-{timestamp}",
+        "Cherry-pick command used the -x flag to record the source commit",
+        "Cherry-pick succeeded cleanly with no conflicts",
+        "Final report includes total commits count (1), conflicts resolved count (0), and commits skipped count (0)",
+        "Final report includes the backport branch name",
+        "The backport branch has exactly 1 new commit beyond the base"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "multi-commit-conflict",
+      "prompt": "/create-backport-branch 5cdd00f4ca 30089",
+      "expected_output": "Creates a backport branch from commit 5cdd00f4ca (v26.1.x). Cherry-picks 8 commits from PR #30089. Should encounter conflict in feature_table.h and resolve it by adapting to the target branch's release_version values.",
+      "files": [],
+      "expectations": [
+        "Branch was created with naming pattern ai-backport-pr-30089-5cdd00f4ca-{timestamp}",
+        "All 8 commits were fetched from the PR via gh api",
+        "Cherry-pick command used the -x flag",
+        "Either all conflicts were resolved and continued, OR agent aborted cleanly listing the specific commit SHA and conflicted files",
+        "If conflicts were resolved, the final report includes a per-conflict one-line explanation",
+        "No conflict markers (<<<<<<< or ======= or >>>>>>>) remain in any resolved files"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "generated-files-modify-delete",
+      "prompt": "/create-backport-branch d0a6248434 30115",
+      "expected_output": "Creates a backport branch from commit d0a6248434 (v25.1.x). Cherry-picks 3 commits from PR #30115. Should encounter modify/delete conflict on buf.gen.yaml and abort cleanly per skill rules.",
+      "files": [],
+      "expectations": [
+        "Branch was created with naming pattern ai-backport-pr-30115-d0a6248434-{timestamp}",
+        "Generated files (go.sum, MODULE.bazel, or similar) were identified",
+        "Cherry-pick command used the -x flag",
+        "Agent aborted cleanly on modify/delete conflict, listing the specific commit SHA and conflicted files",
+        "Abort report includes the exact cherry-pick command that was being attempted",
+        "Final report includes total commits count, conflicts resolved count, and commits skipped count"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "already-present-empty",
+      "prompt": "/create-backport-branch ea6e2533c7 30160",
+      "expected_output": "Creates a backport branch from commit ea6e2533c7 (v25.3.x after PR 30160 was already backported). The cherry-pick should result in an empty commit since the change is already present. Should handle with git cherry-pick --skip and report as skipped.",
+      "files": [],
+      "expectations": [
+        "Branch was created with naming pattern ai-backport-pr-30160-ea6e2533c7-{timestamp}",
+        "Cherry-pick command used the -x flag",
+        "Empty cherry-pick was handled with git cherry-pick --skip (not --abort)",
+        "Final report includes commits skipped count of 1",
+        "Final report correctly indicates the commit was already on the target branch",
+        "The backport branch was preserved (not deleted)"
+      ]
+    }
+  ]
+}
