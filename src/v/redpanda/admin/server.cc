@@ -2651,7 +2651,7 @@ admin_server::put_license_handler(std::unique_ptr<ss::http::request> req) {
             /// Loaded license is idential to license in request, do
             /// nothing and return 200(OK) for idempotence
             vlog(
-              adminlog.info,
+              adminlog.debug,
               "Attempted to load identical license, doing nothing: {}",
               license);
             co_return ss::json::json_void();
