@@ -13,8 +13,6 @@
 #include "model/compression.h"
 #include "model/metadata.h"
 
-#include <seastar/core/sstring.hh>
-
 #include <boost/lexical_cast.hpp>
 #include <boost/test/unit_test.hpp>
 

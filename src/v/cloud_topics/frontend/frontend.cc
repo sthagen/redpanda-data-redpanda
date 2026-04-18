@@ -23,7 +23,6 @@
 #include "cloud_topics/logger.h"
 #include "cloud_topics/state_accessors.h"
 #include "cloud_topics/topic_id_partition.h"
-#include "cluster/metadata_cache.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm_types.h"
 #include "cluster/types.h"
@@ -39,19 +38,15 @@
 #include "ssx/future-util.h"
 #include "storage/log_reader.h"
 #include "storage/offset_translator_state.h"
-#include "storage/record_batch_builder.h"
 #include "storage/types.h"
 
 #include <seastar/core/circular_buffer.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/util/defer.hh>
 
 #include <chrono>
 #include <expected>
-#include <iterator>
 #include <limits>
 #include <optional>
 #include <stdexcept>

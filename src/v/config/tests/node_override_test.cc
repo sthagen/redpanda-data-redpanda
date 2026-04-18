@@ -14,11 +14,9 @@
 #include "model/fundamental.h"
 #include "utils/uuid.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <yaml-cpp/exceptions.h>
-#include <yaml-cpp/yaml.h>
 
 std::vector<config::node_id_override>
 read_from_yaml(const ss::sstring& yaml_string) {

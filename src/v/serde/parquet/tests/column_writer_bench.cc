@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 
-#include "bytes/random.h"
 #include "container/chunked_vector.h"
 #include "random/generators.h"
 #include "serde/parquet/column_writer.h"

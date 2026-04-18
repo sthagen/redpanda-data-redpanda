@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/details/io_iterator_consumer.h"
-#include "bytes/iobuf_parser.h"
 #include "kafka/protocol/batch_consumer.h"
 #include "kafka/protocol/batch_reader.h"
 #include "kafka/protocol/exceptions.h"
@@ -17,7 +16,6 @@
 #include "model/tests/random_batch.h"
 #include "model/tests/raw_record_batch_factory.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
 

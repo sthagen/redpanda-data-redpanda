@@ -14,8 +14,6 @@
 #include "model/tests/random_batch.h"
 #include "redpanda/tests/fixture.h"
 
-#include <seastar/core/sstring.hh>
-
 #include <gtest/gtest.h>
 
 namespace cloud_topics {

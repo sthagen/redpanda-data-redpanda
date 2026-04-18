@@ -9,12 +9,10 @@
 
 #include "raft/state_machine.h"
 
-#include "base/likely.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "raft/consensus.h"
 #include "ssx/future-util.h"
-#include "storage/log.h"
 #include "storage/record_batch_builder.h"
 
 #include <exception>

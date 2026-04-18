@@ -9,7 +9,6 @@
 
 #include "ssx/abort_source.h"
 
-#include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/later.hh>
 

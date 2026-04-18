@@ -15,6 +15,7 @@
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 
 #include <bit>
 #include <cstddef>
@@ -531,7 +532,7 @@ public:
 
     friend std::ostream&
     operator<<(std::ostream& os, const chunked_vector<T>& v) {
-        fmt::print(os, "[{}]", fmt::join(v, ","));
+        fmt::print(os, "{}", v);
         return os;
     }
 

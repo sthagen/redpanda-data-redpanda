@@ -18,12 +18,12 @@
 
 namespace config {
 
-std::ostream& operator<<(std::ostream& os, const config::node_id_override& v) {
-    if (v.ignore_existing_node_id) {
-        return os << ssx::sformat(
-                 "{}:{}:{}/ignore_existing_node_id", v.key, v.uuid, v.id);
+fmt::iterator node_id_override::format_to(fmt::iterator it) const {
+    if (ignore_existing_node_id) {
+        return fmt::format_to(
+          it, "{}:{}:{}/ignore_existing_node_id", key, uuid, id);
     }
-    return os << ssx::sformat("{}:{}:{}", v.key, v.uuid, v.id);
+    return fmt::format_to(it, "{}:{}:{}", key, uuid, id);
 }
 
 std::istream& operator>>(std::istream& is, config::node_id_override& v) {

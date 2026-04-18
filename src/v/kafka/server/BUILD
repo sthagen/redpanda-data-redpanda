@@ -430,9 +430,9 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/base",
         "//src/v/container:chunked_vector",
         "//src/v/model",
-        "//src/v/utils:to_string",
         "@seastar",
     ],
 )
@@ -503,6 +503,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":logger",
+        "//src/v/base",
         "//src/v/cluster:snapshot",
         "//src/v/cluster:state_machine_registry",
         "//src/v/model:batch_utils",

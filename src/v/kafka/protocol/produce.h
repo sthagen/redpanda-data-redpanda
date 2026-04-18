@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
@@ -56,9 +57,8 @@ struct produce_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const produce_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 
     /**
@@ -104,9 +104,8 @@ struct produce_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const produce_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

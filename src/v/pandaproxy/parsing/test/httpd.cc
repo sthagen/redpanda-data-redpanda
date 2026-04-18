@@ -13,12 +13,10 @@
 
 #include "pandaproxy/json/types.h"
 
-#include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
 #include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_io.hpp>
-#include <boost/utility/string_view.hpp>
+#include <boost/tuple/tuple_io.hpp> // NOLINT(misc-include-cleaner): needed for boost::tuple printing in test output
 
 namespace bdata = boost::unit_test::data;
 namespace pp = pandaproxy;

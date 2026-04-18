@@ -13,9 +13,6 @@
 #include "lsm/sst/builder.h"
 #include "lsm/sst/reader.h"
 
-#include <seastar/core/file.hh>
-
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 namespace {

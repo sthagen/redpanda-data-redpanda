@@ -19,7 +19,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/util/later.hh>
 
 #include <chrono>
 

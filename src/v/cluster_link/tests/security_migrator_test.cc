@@ -11,12 +11,9 @@
 
 #include "cluster_link/security_migrator.h"
 #include "cluster_link/tests/deps.h"
-#include "kafka/server/handlers/details/security.h"
 #include "security/acl_store.h"
 #include "test_utils/async.h"
 #include "test_utils/test.h"
-
-#include <algorithm>
 
 using namespace std::chrono_literals;
 

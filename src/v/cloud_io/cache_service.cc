@@ -21,7 +21,6 @@
 #include "ssx/future-util.h"
 #include "utils/human.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shard_id.hh>

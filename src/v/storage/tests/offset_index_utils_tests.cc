@@ -6,10 +6,8 @@
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
-#include "random/generators.h"
 #include "storage/segment_index.h"
 #include "test_utils/tmpbuf_file.h"
-#include "utils/file_io.h"
 
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>

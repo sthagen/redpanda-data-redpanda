@@ -38,17 +38,11 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/map_reduce.hh>
-#include <seastar/core/semaphore.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/util/noncopyable_function.hh>
 
-#include <boost/fusion/sequence/intrinsic/back.hpp>
 #include <boost/outcome/basic_result.hpp>
 #include <boost/range/irange.hpp>
 
@@ -443,9 +437,9 @@ client::do_load_wasm_binary_once(
                       : do_remote_load_wasm_binary(*leader, offset, timeout));
     vlog(
       log.trace,
-      "do_load_wasm_binary_once_response(node={}): {}",
+      "do_load_wasm_binary_once_response(node={}): has_value={}",
       *leader,
-      reply);
+      reply.has_value());
     co_return reply;
 }
 

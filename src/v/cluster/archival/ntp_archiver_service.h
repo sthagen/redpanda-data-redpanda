@@ -9,6 +9,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "cloud_io/cache_service.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/partition_manifest.h"
@@ -48,7 +49,7 @@ using namespace std::chrono_literals;
 
 enum class segment_upload_kind { compacted, non_compacted };
 
-std::ostream& operator<<(std::ostream& os, segment_upload_kind upload_kind);
+fmt::iterator format_to(segment_upload_kind upload_kind, fmt::iterator);
 
 class ntp_archiver_upload_result {
 public:
@@ -97,23 +98,23 @@ private:
 // re-dispatched to the partition leader by caller.
 enum class flush_response { rejected, accepted };
 
-std::ostream& operator<<(std::ostream& os, flush_response fr);
+fmt::iterator format_to(flush_response fr, fmt::iterator);
 
 struct flush_result {
     flush_response response;
     // The inclusive offset which the archiver will flush() to, if response is
     // accepted.
     std::optional<model::offset> offset;
-};
 
-std::ostream& operator<<(std::ostream& os, flush_result fr);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 // Indicates whether a flush is still in progress, if it is complete, or if
 // the flush needs to be retried (in case of a leadership change during
 // flush())
 enum class wait_result { not_in_progress, complete, lost_leadership, failed };
 
-std::ostream& operator<<(std::ostream& os, wait_result wr);
+fmt::iterator format_to(wait_result wr, fmt::iterator);
 
 /// Fence value for the archival STM.
 /// The value is used to implement optimistic
@@ -169,6 +170,8 @@ public:
     /// \return future that will become ready when all async operation will be
     /// completed
     ss::future<> stop();
+
+    fmt::iterator format_to(fmt::iterator it) const;
 
     /// Get NTP
     const model::ntp& get_ntp() const;

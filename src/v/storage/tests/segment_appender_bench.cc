@@ -12,10 +12,7 @@
 #include "test_utils/tmpbuf_file.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/reactor.hh>
 #include <seastar/testing/perf_tests.hh>
-#include <seastar/util/defer.hh>
 
 struct appender_fixture {
     ss::future<std::unique_ptr<storage::segment_appender>>

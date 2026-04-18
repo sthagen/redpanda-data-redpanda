@@ -21,8 +21,6 @@
 #include "serde/rw/rw.h"
 #include "ssx/sleep_abortable.h"
 
-#include <seastar/coroutine/as_future.hh>
-
 namespace cloud_topics::read_replica {
 
 namespace {

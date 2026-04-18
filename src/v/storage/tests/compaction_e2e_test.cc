@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "absl/container/btree_map.h"
-#include "base/vlog.h"
 #include "cluster/feature_manager.h"
 #include "cluster/feature_update_action.h"
 #include "cluster/tests/tx_compaction_utils.h"
@@ -17,7 +16,6 @@
 #include "features/feature_table.h"
 #include "gtest/gtest.h"
 #include "kafka/server/tests/produce_consume_utils.h"
-#include "model/batch_compression.h"
 #include "model/namespace.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"

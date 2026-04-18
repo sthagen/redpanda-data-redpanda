@@ -16,8 +16,6 @@
 
 #include <gmock/gmock.h>
 
-#include <lz4.h>
-
 using enum compression::lz4_decompression_buffers::alloc_ctx::allocation_state;
 
 TEST(AllocateBuffers, StateTransitions) {

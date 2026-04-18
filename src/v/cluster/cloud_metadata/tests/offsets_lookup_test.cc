@@ -10,12 +10,10 @@
 
 #include "cloud_io/tests/s3_imposter.h"
 #include "cluster/cloud_metadata/offsets_lookup.h"
-#include "cluster/types.h"
 #include "random/generators.h"
 #include "redpanda/tests/fixture.h"
 
 #include <seastar/core/scheduling.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/util/log.hh>
 
 #include <gtest/gtest.h>

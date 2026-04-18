@@ -9,16 +9,9 @@
 
 #include "kafka/server/handlers/txn_offset_commit.h"
 
-#include "cluster/topics_frontend.h"
-#include "kafka/server/group_manager.h"
 #include "kafka/server/group_router.h"
-#include "kafka/server/logger.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"
-#include "utils/remote.h"
-#include "utils/to_string.h"
-
-#include <seastar/core/print.hh>
 
 #include <algorithm>
 

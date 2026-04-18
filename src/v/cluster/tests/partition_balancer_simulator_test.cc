@@ -7,15 +7,12 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "base/vlog.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/tests/partition_balancer_planner_fixture.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "random/generators.h"
 #include "test_utils/boost_fixture.h"
-
-#include <seastar/testing/thread_test_case.hh>
 
 #include <cstddef>
 

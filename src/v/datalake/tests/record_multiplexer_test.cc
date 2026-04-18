@@ -12,7 +12,6 @@
 #include "datalake/record_multiplexer.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
-#include "datalake/table_definition.h"
 #include "datalake/table_id_provider.h"
 #include "datalake/tests/catalog_and_registry_fixture.h"
 #include "datalake/tests/record_generator.h"
@@ -30,7 +29,6 @@
 #include "random/generators.h"
 #include "storage/record_batch_builder.h"
 
-#include <avro/Compiler.hh>
 #include <gtest/gtest.h>
 
 using namespace datalake;

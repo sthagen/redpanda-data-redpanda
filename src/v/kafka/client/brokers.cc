@@ -10,8 +10,6 @@
 #include "kafka/client/brokers.h"
 
 #include "kafka/client/types.h"
-#include "kafka/protocol/metadata.h"
-#include "ssx/future-util.h"
 
 namespace kafka::client {
 

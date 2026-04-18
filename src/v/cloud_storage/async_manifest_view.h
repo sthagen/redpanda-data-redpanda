@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "cloud_storage/async_manifest_materializer.h"
 #include "cloud_storage/fwd.h"
@@ -41,15 +42,14 @@ struct async_view_timestamp_query {
       , ts(ts)
       , max_offset(max_offset) {}
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const async_view_timestamp_query& q) {
-        fmt::print(
-          o,
-          "async_view_timestamp_query{{min_offset:{}, ts:{}, max_offset:{}}}",
-          q.min_offset,
-          q.ts,
-          q.max_offset);
-        return o;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "async_view_timestamp_query{{min_offset:{}, ts:{}, "
+          "max_offset:{}}}",
+          min_offset,
+          ts,
+          max_offset);
     }
 
     kafka::offset min_offset;
@@ -61,7 +61,23 @@ struct async_view_timestamp_query {
 using async_view_search_query_t
   = std::variant<model::offset, kafka::offset, async_view_timestamp_query>;
 
-std::ostream& operator<<(std::ostream&, const async_view_search_query_t&);
+fmt::iterator format_to(const async_view_search_query_t& q, fmt::iterator out);
+
+} // namespace cloud_storage
+
+template<>
+struct fmt::formatter<cloud_storage::async_view_search_query_t> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    fmt::iterator format(
+      const cloud_storage::async_view_search_query_t& q,
+      fmt::format_context& ctx) const {
+        return cloud_storage::format_to(q, ctx.out());
+    }
+};
+
+namespace cloud_storage {
 
 class async_manifest_view;
 
@@ -219,7 +235,19 @@ enum class async_manifest_view_cursor_status {
     evicted,
 };
 
-std::ostream& operator<<(std::ostream&, async_manifest_view_cursor_status);
+inline fmt::iterator
+format_to(async_manifest_view_cursor_status s, fmt::iterator out) {
+    switch (s) {
+    case async_manifest_view_cursor_status::empty:
+        return fmt::format_to(out, "empty");
+    case async_manifest_view_cursor_status::evicted:
+        return fmt::format_to(out, "evicted");
+    case async_manifest_view_cursor_status::materialized_stm:
+        return fmt::format_to(out, "materialized_stm");
+    case async_manifest_view_cursor_status::materialized_spillover:
+        return fmt::format_to(out, "materialized_spillover");
+    }
+}
 
 /// The cursor can be used to traverse manifest
 /// asynchronously. The full content of the manifest

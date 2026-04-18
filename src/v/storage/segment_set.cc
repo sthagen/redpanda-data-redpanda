@@ -18,14 +18,11 @@
 #include "storage/logger.h"
 #include "storage/segment.h"
 #include "utils/directory_walker.h"
-#include "utils/filtered_lower_bound.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/thread.hh>
-
-#include <fmt/format.h>
 
 #include <algorithm>
 #include <exception>

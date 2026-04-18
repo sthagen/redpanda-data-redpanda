@@ -24,8 +24,6 @@
 
 #include <seastar/coroutine/maybe_yield.hh>
 
-#include <fmt/ranges.h>
-
 #include <iterator>
 #include <system_error>
 #include <vector>

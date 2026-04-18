@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "config/configuration.h"
 #include "test_utils/scoped_config.h"
 
 #include <seastar/testing/thread_test_case.hh>

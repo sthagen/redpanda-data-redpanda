@@ -10,7 +10,6 @@
 #include "cluster/cloud_metadata/producer_id_recovery_manager.h"
 
 #include "cluster/controller_service.h"
-#include "cluster/health_monitor_types.h"
 #include "cluster/id_allocator_frontend.h"
 #include "cluster/logger.h"
 #include "cluster/members_table.h"

@@ -22,10 +22,7 @@
 #include "rpc/types.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/condition-variable.hh>
 #include <seastar/util/defer.hh>
-
-#include <bits/types/clock_t.h>
 
 #include <chrono>
 #include <exception>

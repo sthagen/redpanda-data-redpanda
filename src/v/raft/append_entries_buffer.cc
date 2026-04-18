@@ -4,8 +4,6 @@
 #include "raft/types.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/do_with.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/util/later.hh>
 #include <seastar/util/variant_utils.hh>

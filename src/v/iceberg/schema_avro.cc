@@ -25,7 +25,7 @@ namespace {
 
 avro::CustomAttributes field_attrs(int field_id) {
     avro::CustomAttributes attrs;
-    attrs.addAttribute("field-id", fmt::to_string(field_id));
+    attrs.addAttribute("field-id", fmt::format("{}", field_id));
     return attrs;
 }
 

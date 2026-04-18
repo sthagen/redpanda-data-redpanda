@@ -11,22 +11,17 @@
 #include "base/vlog.h"
 #include "cloud_storage/segment_meta_cstore.h"
 #include "cloud_storage/types.h"
-#include "common_def.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 #include "random/generators.h"
 #include "utils/delta_for.h"
 #include "utils/human.h"
 
-#include <seastar/testing/test_case.hh>
-#include <seastar/testing/thread_test_case.hh>
-
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
 #include <iterator>
-#include <limits>
 #include <ranges>
 
 using namespace cloud_storage;
@@ -279,7 +274,7 @@ void test_cstore_prefix_truncate(size_t test_size, size_t max_truncate_ix) {
     BOOST_TEST_INFO(
       fmt::format(
         "random_generators::global().engine(): [{}]",
-        random_generators::global().engine()));
+        fmt_streamed(random_generators::global().engine())));
 
     segment_meta_cstore store;
     auto manifest = generate_metadata(test_size);
@@ -466,7 +461,7 @@ BOOST_AUTO_TEST_CASE(test_segment_meta_cstore_insert_replacements) {
     BOOST_TEST_INFO(
       fmt::format(
         "random_generators::global().engine(): [{}]",
-        random_generators::global().engine()));
+        fmt_streamed(random_generators::global().engine())));
 
     segment_meta_cstore store{};
     auto manifest = generate_metadata(9973);

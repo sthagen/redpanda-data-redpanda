@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 #include "datalake/schema_identifier.h"
@@ -154,7 +155,19 @@ public:
         bad_input,
         invalid_config,
     };
-    friend std::ostream& operator<<(std::ostream&, const errc&);
+    friend fmt::iterator format_to(errc e, fmt::iterator out) {
+        switch (e) {
+        case errc::registry_error:
+            return fmt::format_to(out, "type_resolver::errc::registry_error");
+        case errc::translation_error:
+            return fmt::format_to(
+              out, "type_resolver::errc::translation_error");
+        case errc::bad_input:
+            return fmt::format_to(out, "type_resolver::errc::bad_input");
+        case errc::invalid_config:
+            return fmt::format_to(out, "type_resolver::errc::invalid_config");
+        }
+    }
     virtual ss::future<checked<type_and_buf, errc>>
     resolve_buf_type(std::optional<iobuf> b) const = 0;
     // TODO(iceberg): This should be it's own interface.

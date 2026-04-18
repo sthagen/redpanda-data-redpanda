@@ -17,7 +17,6 @@
 #include "datalake/table_id_provider.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
-#include "pandaproxy/json/rjson_util.h"
 #include "pandaproxy/logger.h"
 #include "pandaproxy/parsing/httpd.h"
 #include "proto/redpanda/core/rest/iceberg.proto.h"

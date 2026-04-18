@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 #include "kafka/protocol/kafka_batch_adapter.h"
 #include "model/fundamental.h"
@@ -66,18 +67,13 @@ public:
     ss::future<storage_t> do_load_slice(model::timeout_clock::time_point) final;
 
     // Implements model::record_batch_reader::impl
-    // NOTE: this stream is intentially devoid of user data.
-    void print(std::ostream& os) final { os << "{kafka::consumer_records}"; }
+    // NOTE: this stream is intentionally devoid of user data.
+    fmt::iterator format_to(fmt::iterator it) const final {
+        return fmt::format_to(it, "{{size {}}}", size_bytes());
+    }
 
     // Release any remaining iobuf that hasn't been consumed
     iobuf release() && { return std::move(_buf); }
-
-    friend std::ostream&
-    operator<<(std::ostream& os, const batch_reader& reader) {
-        // NOTE: this stream is intentially devoid of user data.
-        fmt::print(os, "{{size {}}}", reader.size_bytes());
-        return os;
-    }
 
 private:
     iobuf _buf;

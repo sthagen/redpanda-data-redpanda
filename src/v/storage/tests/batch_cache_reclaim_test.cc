@@ -12,7 +12,6 @@
 #include "storage/record_batch_builder.h"
 
 #include <seastar/core/memory.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/core/thread.hh>
 
 #include <gtest/gtest.h>

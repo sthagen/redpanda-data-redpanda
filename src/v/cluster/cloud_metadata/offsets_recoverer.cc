@@ -18,11 +18,9 @@
 #include "cluster/logger.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/server/group_manager.h"
-#include "model/metadata.h"
 #include "model/namespace.h"
 #include "rpc/connection_cache.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timed_out_error.hh>
 
 namespace cluster::cloud_metadata {

@@ -14,8 +14,6 @@
 
 #include <boost/lexical_cast.hpp>
 
-#include <map>
-
 namespace cloud_storage_clients {
 
 // Documentation for ABS error codes can be found at:

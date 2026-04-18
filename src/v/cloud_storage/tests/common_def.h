@@ -155,8 +155,8 @@ public:
         co_return stop_parser::no;
     }
 
-    void print(std::ostream& o) const override {
-        o << "counting_record_consumer";
+    fmt::iterator format_to(fmt::iterator it) const override {
+        return fmt::format_to(it, "counting_record_consumer");
     }
 
     std::vector<model::record_batch_header>& headers;

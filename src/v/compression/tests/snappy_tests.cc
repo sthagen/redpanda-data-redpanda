@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/iobuf.h"
-#include "bytes/iostream.h"
 #include "compression/internal/snappy_java_compressor.h"
 #include "compression/snappy_standard_compressor.h"
 #include "random/generators.h"
@@ -19,7 +18,6 @@
 #include <seastar/core/byteorder.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/temporary_buffer.hh>
-#include <seastar/util/short_streams.hh>
 
 #include <gtest/gtest.h>
 

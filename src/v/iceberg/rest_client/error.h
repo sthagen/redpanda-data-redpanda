@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/external_fmt.h"
 #include "base/format_to.h"
 #include "base/seastarx.h"
 #include "http/request_builder.h"
@@ -21,6 +22,8 @@
 #include <boost/beast/http/status.hpp>
 
 #include <ada.h>
+#include <type_traits>
+#include <variant>
 
 namespace iceberg::rest_client {
 
@@ -72,6 +75,9 @@ constexpr std::string_view to_string_view(error_kind r) {
         return "timeout";
     }
 }
+inline fmt::iterator format_to(error_kind r, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(r));
+}
 
 constexpr bool is_retriable(error_kind r) {
     switch (r) {
@@ -110,14 +116,6 @@ using expected = tl::expected<T, domain_error>;
 
 } // namespace iceberg::rest_client
 template<>
-struct fmt::formatter<iceberg::rest_client::domain_error>
-  : fmt::formatter<std::string_view> {
-    auto format(
-      const iceberg::rest_client::domain_error&, fmt::format_context& ctx) const
-      -> decltype(ctx.out());
-};
-
-template<>
 struct fmt::formatter<iceberg::rest_client::error_kind>
   : fmt::formatter<std::string_view> {
     auto
@@ -132,6 +130,53 @@ template<>
 struct fmt::formatter<iceberg::rest_client::http_call_error>
   : fmt::formatter<std::string_view> {
     auto format(
-      const iceberg::rest_client::http_call_error&,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+      const iceberg::rest_client::http_call_error& err,
+      fmt::format_context& ctx) const -> decltype(ctx.out()) {
+        return std::visit(
+          [&ctx](const auto& value) {
+              return fmt::format_to(ctx.out(), "http_call_error: {}", value);
+          },
+          err);
+    }
+};
+
+template<>
+struct fmt::formatter<iceberg::rest_client::domain_error>
+  : fmt::formatter<std::string_view> {
+    auto format(
+      const iceberg::rest_client::domain_error& err,
+      fmt::format_context& ctx) const -> decltype(ctx.out()) {
+        return std::visit(
+          [&ctx](const auto& value) -> decltype(ctx.out()) {
+              using T = std::decay_t<decltype(value)>;
+              if constexpr (std::is_same_v<T, http::url_build_error>) {
+                  return fmt::format_to(
+                    ctx.out(), "url_build_error: {}", value);
+              } else if constexpr (
+                std::is_same_v<T, iceberg::rest_client::json_parse_error>) {
+                  return fmt::format_to(
+                    ctx.out(),
+                    "json_parse_error: context: {}, error: {}",
+                    value.context,
+                    value.error);
+              } else if constexpr (
+                std::is_same_v<T, iceberg::rest_client::http_call_error>) {
+                  return fmt::format_to(ctx.out(), "{}", value);
+              } else if constexpr (
+                std::is_same_v<T, iceberg::rest_client::retries_exhausted>) {
+                  auto it = fmt::format_to(
+                    ctx.out(),
+                    "retries_exhausted:[reasons=[{}]",
+                    fmt::join(value.reasons, ", "));
+                  if (value.last_error.has_value()) {
+                      it = fmt::format_to(
+                        it, ", last_error={}", *value.last_error);
+                  }
+                  return fmt::format_to(it, "]");
+              } else {
+                  return fmt::format_to(ctx.out(), "aborted_error: {}", value);
+              }
+          },
+          err);
+    }
 };

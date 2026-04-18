@@ -9,13 +9,9 @@
 
 #include "config/configuration.h"
 #include "random/generators.h"
-#include "reflection/adl.h"
 #include "storage/kvstore.h"
 #include "storage/tests/kvstore_fixture.h"
 #include "test_utils/random_bytes.h"
-
-#include <seastar/core/coroutine.hh>
-#include <seastar/util/file.hh>
 
 #include <gtest/gtest.h>
 

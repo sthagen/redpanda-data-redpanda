@@ -11,12 +11,9 @@
 #include "bytes/iobuf.h"
 #include "datalake/schema_registry.h"
 #include "gmock/gmock.h"
-#include "model/record.h"
 #include "utils/vint.h"
 
 #include <gtest/gtest.h>
-
-#include <variant>
 
 namespace {
 void buf_append(iobuf& b, uint8_t byte) { b.append(&byte, 1); }

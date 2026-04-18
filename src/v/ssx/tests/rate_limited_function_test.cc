@@ -12,9 +12,7 @@
 #include "ssx/rate_limited_function.h"
 
 #include <seastar/core/manual_clock.hh>
-#include <seastar/util/noncopyable_function.hh>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 namespace ssx {

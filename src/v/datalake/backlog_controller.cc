@@ -11,12 +11,10 @@
 
 #include "base/vlog.h"
 #include "config/configuration.h"
-#include "datalake/logger.h"
 #include "metrics/prometheus_sanitize.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/metrics.hh>
-#include <seastar/core/reactor.hh>
 using namespace std::chrono_literals; // NOLINT
 
 namespace datalake {

@@ -9,7 +9,6 @@
 
 #include "bytes/iobuf_parser.h"
 
-#include <gtest/gtest-matchers.h>
 #include <gtest/gtest.h>
 
 namespace {

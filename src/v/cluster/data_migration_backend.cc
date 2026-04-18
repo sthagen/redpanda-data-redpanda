@@ -10,6 +10,7 @@
  */
 #include "cluster/data_migration_backend.h"
 
+#include "base/format_to.h"
 #include "cloud_storage/topic_manifest.h"
 #include "cloud_storage/topic_manifest_downloader.h"
 #include "cloud_storage/topic_mount_handler.h"
@@ -44,7 +45,6 @@
 
 #include <chrono>
 #include <exception>
-#include <memory>
 #include <optional>
 #include <ranges>
 
@@ -2325,16 +2325,13 @@ void backend::topic_scoped_work_state::set_value(errc ec) {
 ss::future<errc> backend::topic_scoped_work_state::future() {
     return _promise.get_shared_future();
 }
-
-std::ostream&
-operator<<(std::ostream& os, const backend::replica_work_state& rws) {
-    fmt::print(
-      os,
+fmt::iterator backend::replica_work_state::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{sought_state: {}, shard: {}, status: {}}}",
-      rws.sought_state,
-      rws.shard,
-      rws.status);
-    return os;
+      sought_state,
+      shard,
+      status);
 }
 
 chunked_vector<partition_assignment>

@@ -13,7 +13,6 @@
 #include "cluster/scheduling/topic_memory_per_partition_default.h"
 #include "config/base_property.h"
 #include "config/bounded_property.h"
-#include "config/node_config.h"
 #include "config/sasl_mechanisms.h"
 #include "config/types.h"
 #include "config/validators.h"

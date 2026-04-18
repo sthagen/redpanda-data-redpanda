@@ -13,7 +13,6 @@
 
 #include <seastar/core/manual_clock.hh>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 namespace ssx {

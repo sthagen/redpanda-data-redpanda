@@ -21,17 +21,13 @@
 #include "test_utils/test.h"
 #include "test_values.h"
 
-#include <seastar/core/file-types.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/seastar.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/util/log.hh>
 
 #include <gtest/gtest.h>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/provider.h>
-#include <openssl/ssl.h>
 #include <openssl/types.h>
 
 #include <cstdlib>

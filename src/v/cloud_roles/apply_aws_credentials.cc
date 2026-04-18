@@ -107,9 +107,8 @@ void apply_aws_credentials::reset_creds(credentials creds) {
     _session_token = aws_creds.session_token;
 }
 
-std::ostream& apply_aws_credentials::print(std::ostream& os) const {
-    fmt::print(os, "apply_aws_credentials");
-    return os;
+fmt::iterator apply_aws_credentials::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "apply_aws_credentials");
 }
 
 } // namespace cloud_roles

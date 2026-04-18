@@ -171,3 +171,20 @@ void tag_invoke(
 }
 
 } // namespace serde
+
+/// Formatter for serde::variant - visits the variant and formats the active
+/// alternative.
+template<typename... Types>
+struct fmt::formatter<serde::variant<Types...>> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    template<typename Ctx>
+    auto format(const serde::variant<Types...>& v, Ctx& ctx) const {
+        return std::visit(
+          [&ctx](const auto& val) {
+              return fmt::format_to(ctx.out(), "{}", val);
+          },
+          static_cast<const std::variant<Types...>&>(v));
+    }
+};

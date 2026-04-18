@@ -1265,11 +1265,9 @@ HEADER_TEMPLATE = """
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "kafka/protocol/errors.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
-{%- if not struct.is_streamable %}
-#include <fmt/format.h>
-{%- endif %}
 
 {%- for header in struct.headers("header") %}
 {%- if header.startswith("<") %}
@@ -1353,7 +1351,7 @@ class response;
 {% for struct in struct.structs() %}
 {{ render_struct(struct) }}
 {%- if  struct.is_streamable %}
-    friend std::ostream& operator<<(std::ostream&, const {{ struct.name }}&);
+    fmt::iterator format_to(fmt::iterator) const;
 {%- endif %}
 
 };
@@ -1368,7 +1366,7 @@ class response;
     void decode(iobuf, api_version);
 {%- endif %}
 {%- if  struct.is_streamable %}
-    friend std::ostream& operator<<(std::ostream&, const {{ struct.name }}&);
+    fmt::iterator format_to(fmt::iterator) const;
 {%- endif %}
 {%- if first_flex > 0 %}
 private:
@@ -1417,9 +1415,10 @@ COMBINED_SOURCE_TEMPLATE = """
 
 #include <algorithm>
 
+#include "base/format_to.h"
+
 #include <fmt/core.h>
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 {%- for header in extra_headers %}
 {%- if header.startswith("<") %}
@@ -1896,19 +1895,18 @@ void {{ struct.name }}::decode(iobuf, api_version) {}
 {% for struct in structs %}
 {%- if struct.is_streamable %}
 {%- if struct.fields %}
-std::ostream& operator<<(std::ostream& o, [[maybe_unused]] const {{ struct.name }}& v) {
-    fmt::print(o,
+fmt::iterator {{ struct.name }}::format_to(fmt::iterator it) const {
+    return fmt::format_to(it,
       "{{'{{' + struct.format + '}}'}}",
       {%- for field in struct.fields %}
-      {%- if field.is_sensitive %}"****"{% else %}v.{{ field.name }}{% endif %}{% if not loop.last %},{% endif %}
+      {%- if field.is_sensitive %}"****"{% else %}{{ field.name }}{% endif %}{% if not loop.last %},{% endif %}
 
       {%- endfor %}
     );
-    return o;
 }
 {%- else %}
-std::ostream& operator<<(std::ostream& o, const {{ struct.name }}&) {
-    return o << "{}";
+fmt::iterator {{ struct.name }}::format_to([[maybe_unused]] fmt::iterator it) const {
+    return fmt::format_to(it, "{{ '{{}}' }}");
 }
 {%- endif %}
 {%- endif %}

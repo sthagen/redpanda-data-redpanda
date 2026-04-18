@@ -16,7 +16,6 @@
 #include "ssx/future-util.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/sleep.hh>
 
 namespace experimental::io {
 

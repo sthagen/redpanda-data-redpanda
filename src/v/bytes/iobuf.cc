@@ -13,22 +13,11 @@
 #include "base/vassert.h"
 #include "bytes/details/io_allocation_size.h"
 
-#include <seastar/core/bitops.hh>
-#include <seastar/core/do_with.hh>
-#include <seastar/core/future-util.hh>
-#include <seastar/core/smp.hh>
-
 #include <algorithm>
 #include <compare>
 #include <cstddef>
 #include <iostream>
-#include <limits>
 #include <string_view>
-
-std::ostream& operator<<(std::ostream& o, const iobuf& io) {
-    return o << "{bytes=" << io.size_bytes()
-             << ", fragments=" << std::distance(io.cbegin(), io.cend()) << "}";
-}
 
 iobuf iobuf::copy() const {
     auto in = iobuf::iterator_consumer(cbegin(), cend());

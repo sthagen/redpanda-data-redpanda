@@ -10,6 +10,8 @@
  */
 
 #pragma once
+
+#include "base/format_to.h"
 #include "bytes/bytes.h"
 #include "compaction/key.h"
 #include "model/fundamental.h"
@@ -74,17 +76,11 @@ public:
 
     virtual ss::future<> close() = 0;
     virtual void set_flag(compacted_index::footer_flags) = 0;
-    virtual void print(std::ostream&) const = 0;
+    virtual fmt::iterator format_to(fmt::iterator it) const = 0;
     const ss::sstring& filename() const { return _name; }
     virtual size_t size_bytes() const = 0;
 
 private:
-    friend std::ostream&
-    operator<<(std::ostream& o, const compacted_index_writer& c) {
-        c.print(o);
-        return o;
-    }
-
     ss::sstring _name;
 };
 

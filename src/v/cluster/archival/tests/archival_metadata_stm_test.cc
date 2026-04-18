@@ -12,10 +12,7 @@
 #include "cloud_storage/types.h"
 #include "cloud_storage_clients/upstream_registry.h"
 #include "cluster/archival/archival_metadata_stm.h"
-#include "cluster/errc.h"
 #include "http/tests/http_imposter.h"
-#include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/timestamp.h"
 #include "raft/fundamental.h"
@@ -23,18 +20,14 @@
 #include "raft/state_machine_manager.h"
 #include "raft/tests/simple_raft_fixture.h"
 #include "storage/tests/utils/disk_log_builder.h"
-#include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/util/defer.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 
-#include <chrono>
 #include <stdexcept>
 
 using namespace std::chrono_literals;

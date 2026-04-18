@@ -18,7 +18,6 @@
 #include "cluster/cloud_metadata/offsets_upload_rpc_types.h"
 #include "cluster/logger.h"
 #include "cluster/topic_table.h"
-#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "raft/consensus.h"
@@ -30,7 +29,6 @@
 #include "storage/snapshot.h"
 
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/fstream.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>

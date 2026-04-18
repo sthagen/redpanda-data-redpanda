@@ -10,17 +10,14 @@
 
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
-#include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/async_manifest_view.h"
 #include "cloud_storage/download_exception.h"
-#include "cloud_storage/offset_translation_layer.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/partition_path_utils.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_partition.h"
-#include "cloud_storage/remote_segment.h"
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/tests/cloud_storage_fixture.h"
 #include "cloud_storage/tests/common_def.h"
@@ -29,15 +26,10 @@
 #include "cloud_storage_clients/types.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
 #include "ssx/future-util.h"
-#include "storage/log.h"
-#include "storage/log_manager.h"
-#include "storage/segment.h"
-#include "storage/types.h"
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 #include "test_utils/scoped_config.h"
@@ -47,19 +39,12 @@
 #include <seastar/core/iostream.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/core/temporary_buffer.hh>
-#include <seastar/core/thread.hh>
-#include <seastar/testing/test_case.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <exception>
-#include <iterator>
-#include <numeric>
 #include <stdexcept>
 #include <system_error>
 

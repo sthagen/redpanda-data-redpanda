@@ -28,7 +28,6 @@
 #include <boost/range/irange.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
-#include <limits>
 #include <optional>
 
 struct fixture {

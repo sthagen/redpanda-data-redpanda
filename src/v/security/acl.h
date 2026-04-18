@@ -11,6 +11,7 @@
 #pragma once
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/type_traits.h"
 #include "kafka/protocol/types.h"
@@ -32,7 +33,6 @@
 
 #include <fmt/core.h>
 
-#include <iosfwd>
 #include <variant>
 
 namespace security {
@@ -96,6 +96,9 @@ constexpr std::string_view to_string_view(resource_type type) {
     }
     __builtin_unreachable();
 }
+inline fmt::iterator format_to(resource_type type, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(type));
+}
 
 template<>
 std::optional<resource_type>
@@ -139,6 +142,9 @@ constexpr std::string_view to_string_view(pattern_type type) {
         return "prefixed";
     }
     __builtin_unreachable();
+}
+inline fmt::iterator format_to(pattern_type type, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(type));
 }
 
 template<>
@@ -191,8 +197,10 @@ constexpr std::string_view to_string_view(acl_operation op) {
     }
     __builtin_unreachable();
 }
+inline fmt::iterator format_to(acl_operation op, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(op));
+}
 
-std::ostream& operator<<(std::ostream&, acl_operation);
 template<>
 std::optional<acl_operation>
 from_string_view<acl_operation>(std::string_view str);
@@ -216,8 +224,10 @@ constexpr std::string_view to_string_view(acl_permission perm) {
     }
     __builtin_unreachable();
 }
+inline fmt::iterator format_to(acl_permission perm, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(perm));
+}
 
-std::ostream& operator<<(std::ostream&, acl_permission);
 template<>
 std::optional<acl_permission>
 from_string_view<acl_permission>(std::string_view str);
@@ -250,14 +260,13 @@ constexpr std::string_view to_string_view(principal_type type) {
     }
     __builtin_unreachable();
 }
+inline fmt::iterator format_to(principal_type type, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(type));
+}
 
 template<>
 std::optional<principal_type>
 from_string_view<principal_type>(std::string_view str);
-
-std::ostream& operator<<(std::ostream&, resource_type);
-std::ostream& operator<<(std::ostream&, pattern_type);
-std::ostream& operator<<(std::ostream&, principal_type);
 
 /**
  * Abstract interface for Kafka principals.
@@ -292,7 +301,8 @@ private:
         return l.type() == r.type() && l.name_view() == r.name_view();
     }
 
-    friend std::ostream& operator<<(std::ostream&, const acl_principal_base&);
+    friend std::ostream&
+    operator<<(std::ostream& os, const acl_principal_base& p);
 };
 
 /**
@@ -409,6 +419,11 @@ struct fmt::formatter<security::acl_principal>
 
 namespace security {
 
+inline std::ostream& operator<<(std::ostream& os, const acl_principal_base& p) {
+    fmt::print(os, "{}", p);
+    return os;
+}
+
 /**
  * Concrete instance of a Kafka principal.
  *
@@ -466,7 +481,14 @@ public:
         return H::combine(std::move(h), e._resource, e._name, e._pattern);
     }
 
-    friend std::ostream& operator<<(std::ostream&, const resource_pattern&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "type {{{}}} name {{{}}} pattern {{{}}}",
+          _resource,
+          _name,
+          _pattern);
+    }
 
     resource_type resource() const { return _resource; }
     const ss::sstring& name() const { return _name; }
@@ -507,7 +529,12 @@ public:
         }
     }
 
-    friend std::ostream& operator<<(std::ostream&, const acl_host&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        if (_addr) {
+            return fmt::format_to(it, "{{{}}}", *_addr);
+        }
+        return fmt::format_to(it, "{{{{any_host}}}}");
+    }
 
     std::optional<ss::net::inet_address> address() const { return _addr; }
 
@@ -547,7 +574,15 @@ public:
           std::move(h), e._principal, e._host, e._operation, e._permission);
     }
 
-    friend std::ostream& operator<<(std::ostream&, const acl_entry&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{principal {} host {} op {} perm {}}}",
+          _principal,
+          _host,
+          _operation,
+          _permission);
+    }
 
     const acl_principal& principal() const { return _principal; }
     const acl_host& host() const { return _host; }
@@ -585,7 +620,9 @@ public:
         return H::combine(std::move(h), e._pattern, e._entry);
     }
 
-    friend std::ostream& operator<<(std::ostream&, const acl_binding&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{pattern {} entry {}}}", _pattern, _entry);
+    }
 
     const resource_pattern& pattern() const { return _pattern; }
     const acl_entry& entry() const { return _entry; }
@@ -615,10 +652,33 @@ public:
         match = 2,
     };
 
+    friend fmt::iterator
+    format_to(serialized_pattern_type type, fmt::iterator out) {
+        switch (type) {
+        case serialized_pattern_type::literal:
+            return fmt::format_to(out, "literal");
+        case serialized_pattern_type::prefixed:
+            return fmt::format_to(out, "prefixed");
+        case serialized_pattern_type::match:
+            return fmt::format_to(out, "match");
+        }
+        __builtin_unreachable();
+    }
+
     enum class resource_subsystem : uint8_t {
         kafka = 0,
         schema_registry = 1,
     };
+
+    friend fmt::iterator format_to(resource_subsystem s, fmt::iterator out) {
+        switch (s) {
+        case resource_subsystem::kafka:
+            return fmt::format_to(out, "kafka");
+        case resource_subsystem::schema_registry:
+            return fmt::format_to(out, "schema_registry");
+        }
+        __builtin_unreachable();
+    }
 
     static serialized_pattern_type to_pattern(security::pattern_type from) {
         switch (from) {
@@ -636,7 +696,9 @@ public:
         friend bool
         operator==(const pattern_match&, const pattern_match&) = default;
 
-        friend std::ostream& operator<<(std::ostream&, const pattern_match&);
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(it, "{{}}");
+        }
 
         auto serde_fields() { return std::tie(); }
     };
@@ -701,8 +763,18 @@ public:
     friend bool operator==(
       const resource_pattern_filter&, const resource_pattern_filter&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const resource_pattern_filter&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        it = fmt::format_to(
+          it, "{{ resource: {} name: {} pattern: ", _resource, _name);
+        if (_pattern) {
+            std::visit(
+              [&it](const auto& v) { it = fmt::format_to(it, "{}", v); },
+              *_pattern);
+        } else {
+            it = fmt::format_to(it, "none");
+        }
+        return fmt::format_to(it, " subsystem: {}}}", _subsystem);
+    }
 
     auto serde_fields() {
         return std::tie(_resource, _name, _pattern, _subsystem);
@@ -714,9 +786,6 @@ private:
     std::optional<pattern_filter_type> _pattern;
     resource_subsystem _subsystem{resource_subsystem::kafka};
 };
-
-std::ostream&
-operator<<(std::ostream&, resource_pattern_filter::serialized_pattern_type);
 
 /*
  * A filter for matching ACL entries.
@@ -773,7 +842,15 @@ public:
     friend bool
     operator==(const acl_entry_filter&, const acl_entry_filter&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const acl_entry_filter&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{ pattern: {} host: {} operation: {}, permission: {} }}",
+          _principal,
+          _host,
+          _operation,
+          _permission);
+    }
 
 private:
     std::optional<acl_principal> _principal;
@@ -835,7 +912,9 @@ public:
     friend bool
     operator==(const acl_binding_filter&, const acl_binding_filter&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const acl_binding_filter&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ pattern: {} acl: {} }}", _pattern, _acl);
+    }
 
     void serde_write(iobuf&) const;
     void serde_read(iobuf_parser&, const serde::header&);

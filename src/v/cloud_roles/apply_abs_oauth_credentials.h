@@ -25,7 +25,7 @@ public:
     add_auth(http::client::request_header& header) const override;
 
     void reset_creds(credentials creds) override;
-    std::ostream& print(std::ostream& os) const override;
+    fmt::iterator format_to(fmt::iterator it) const override;
     bool is_oauth() const override { return true; }
 
 private:

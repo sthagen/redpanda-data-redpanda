@@ -9,15 +9,12 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "container/chunked_circular_buffer.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
 #include "raft/errc.h"
-#include "raft/group_configuration.h"
 #include "raft/persisted_stm.h"
-#include "raft/tests/raft_fixture.h"
 #include "raft/tests/raft_fixture_retry_policy.h"
 #include "raft/tests/stm_test_fixture.h"
 #include "raft/types.h"
@@ -27,7 +24,6 @@
 #include "test_utils/randoms.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sstring.hh>

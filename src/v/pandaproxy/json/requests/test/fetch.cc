@@ -12,7 +12,6 @@
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 #include "json/stringbuffer.h"
-#include "json/writer.h"
 #include "kafka/client/test/utils.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/wire.h"
@@ -23,7 +22,6 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <boost/test/tools/interface.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
 namespace ppj = pandaproxy::json;

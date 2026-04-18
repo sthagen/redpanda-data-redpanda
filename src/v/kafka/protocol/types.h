@@ -11,6 +11,7 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "base/format_to.h"
 #include "bytes/bytes.h"
 #include "model/fundamental.h"
 #include "utils/named_type.h"
@@ -135,7 +136,31 @@ enum class describe_configs_type : int8_t {
     password = 9
 };
 
-std::ostream& operator<<(std::ostream&, describe_configs_type t);
+inline fmt::iterator format_to(describe_configs_type t, fmt::iterator out) {
+    switch (t) {
+    case describe_configs_type::unknown:
+        return fmt::format_to(out, "{{unknown}}");
+    case describe_configs_type::boolean:
+        return fmt::format_to(out, "{{boolean}}");
+    case describe_configs_type::string:
+        return fmt::format_to(out, "{{string}}");
+    case describe_configs_type::int_type:
+        return fmt::format_to(out, "{{int}}");
+    case describe_configs_type::short_type:
+        return fmt::format_to(out, "{{short}}");
+    case describe_configs_type::long_type:
+        return fmt::format_to(out, "{{long}}");
+    case describe_configs_type::double_type:
+        return fmt::format_to(out, "{{double}}");
+    case describe_configs_type::list:
+        return fmt::format_to(out, "{{list}}");
+    case describe_configs_type::class_type:
+        return fmt::format_to(out, "{{class}}");
+    case describe_configs_type::password:
+        return fmt::format_to(out, "{{password}}");
+    }
+    return fmt::format_to(out, "{{unsupported type}}");
+}
 
 inline const kafka::protocol_type consumer_group_protocol_type("consumer");
 
@@ -155,7 +180,18 @@ enum class describe_client_quotas_match_type : int8_t {
     any_specified_name = 2,
 };
 
-std::ostream& operator<<(std::ostream&, describe_client_quotas_match_type t);
+inline fmt::iterator
+format_to(describe_client_quotas_match_type t, fmt::iterator out) {
+    switch (t) {
+    case describe_client_quotas_match_type::exact_name:
+        return fmt::format_to(out, "{{exact_name}}");
+    case describe_client_quotas_match_type::default_name:
+        return fmt::format_to(out, "{{default_name}}");
+    case describe_client_quotas_match_type::any_specified_name:
+        return fmt::format_to(out, "{{any_specified_name}}");
+    }
+    return fmt::format_to(out, "{{unsupported type}}");
+}
 
 /*
  * The names of group states.
@@ -171,11 +207,39 @@ inline constexpr std::string_view group_state_name_dead = "Dead";
 /// An unknown / missing generation id (Kafka protocol specific)
 inline constexpr generation_id unknown_generation_id(-1);
 
-std::ostream& operator<<(std::ostream& os, coordinator_type t);
+inline fmt::iterator format_to(coordinator_type t, fmt::iterator out) {
+    switch (t) {
+    case coordinator_type::group:
+        return fmt::format_to(out, "{{group}}");
+    case coordinator_type::transaction:
+        return fmt::format_to(out, "{{transaction}}");
+    }
+    return fmt::format_to(out, "{{unknown type}}");
+}
 
-std::ostream& operator<<(std::ostream& os, config_resource_type t);
+inline fmt::iterator format_to(config_resource_type t, fmt::iterator out) {
+    switch (t) {
+    case config_resource_type::topic:
+        return fmt::format_to(out, "{{topic}}");
+    case config_resource_type::broker:
+        [[fallthrough]];
+    case config_resource_type::broker_logger:
+        break;
+    }
+    return fmt::format_to(out, "{{unknown type}}");
+}
 
-std::ostream& operator<<(std::ostream& os, describe_configs_source s);
+inline fmt::iterator format_to(describe_configs_source s, fmt::iterator out) {
+    switch (s) {
+    case describe_configs_source::topic:
+        return fmt::format_to(out, "{{topic}}");
+    case describe_configs_source::static_broker_config:
+        return fmt::format_to(out, "{{static_broker_config}}");
+    case describe_configs_source::default_config:
+        return fmt::format_to(out, "{{default_config}}");
+    }
+    return fmt::format_to(out, "{{unknown type}}");
+}
 
 /*
  * TODO this can be moved out of the protocol library and into the server if the
@@ -225,7 +289,19 @@ enum class config_resource_operation : int8_t {
     subtract = 3,
 };
 
-std::ostream& operator<<(std::ostream& os, config_resource_operation);
+inline fmt::iterator format_to(config_resource_operation t, fmt::iterator out) {
+    switch (t) {
+    case config_resource_operation::set:
+        return fmt::format_to(out, "set");
+    case config_resource_operation::append:
+        return fmt::format_to(out, "append");
+    case config_resource_operation::remove:
+        return fmt::format_to(out, "remove");
+    case config_resource_operation::subtract:
+        return fmt::format_to(out, "subtract");
+    }
+    return fmt::format_to(out, "unknown type");
+}
 
 using scram_user_name = named_type<ss::sstring, struct scram_user_name_tag>;
 
@@ -235,7 +311,17 @@ enum class scram_mechanism : int8_t {
     scram_sha_512 = 2,
 };
 
-std::ostream& operator<<(std::ostream& os, scram_mechanism);
+inline fmt::iterator format_to(scram_mechanism m, fmt::iterator out) {
+    switch (m) {
+    case scram_mechanism::scram_sha_256:
+        return fmt::format_to(out, "SCRAM-SHA-256");
+    case scram_mechanism::scram_sha_512:
+        return fmt::format_to(out, "SCRAM-SHA-512");
+    case scram_mechanism::unknown:
+        return fmt::format_to(out, "unknown");
+    }
+    return fmt::format_to(out, "unsupported type");
+}
 
 using topic_authorized_operations
   = named_type<int32_t, struct topic_authorized_operations_tag>;

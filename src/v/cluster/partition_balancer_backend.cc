@@ -11,7 +11,6 @@
 #include "cluster/partition_balancer_backend.h"
 
 #include "cluster/health_monitor_backend.h"
-#include "cluster/health_monitor_frontend.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/logger.h"
 #include "cluster/members_frontend.h"
@@ -27,12 +26,9 @@
 #include "features/enterprise_features.h"
 #include "features/feature_table.h"
 #include "model/metadata.h"
-#include "random/generators.h"
-#include "ssx/future-util.h"
 #include "ssx/minimum_interval_timer.h"
 #include "utils/stable_iterator_adaptor.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/shared_ptr.hh>
 
 #include <chrono>

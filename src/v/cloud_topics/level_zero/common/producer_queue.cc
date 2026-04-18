@@ -15,7 +15,6 @@
 #include "model/record.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
 namespace cloud_topics::l0 {

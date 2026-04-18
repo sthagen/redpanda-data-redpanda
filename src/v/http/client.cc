@@ -9,6 +9,7 @@
 
 #include "http/client.h"
 
+#include "base/external_fmt.h"
 #include "base/likely.h"
 #include "base/vlog.h"
 #include "bytes/details/io_iterator_consumer.h"
@@ -19,7 +20,6 @@
 #include "ssx/sformat.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/iostream.hh>
@@ -28,12 +28,10 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/core/timed_out_error.hh>
-#include <seastar/core/timer.hh>
 #include <seastar/net/api.hh>
 #include <seastar/net/tls.hh>
 #include <seastar/util/defer.hh>
 
-#include <boost/beast/core/buffer_traits.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/core/impl/error.hpp>
 

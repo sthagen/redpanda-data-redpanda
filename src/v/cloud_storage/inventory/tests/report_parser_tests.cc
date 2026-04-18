@@ -15,10 +15,6 @@
 #include "test_utils/randoms.h"
 #include "utils/base64.h"
 
-#include <seastar/core/iostream.hh>
-#include <seastar/util/file.hh>
-
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace cloud_storage::inventory;

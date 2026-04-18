@@ -7,13 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "base/outcome.h"
 #include "cluster/tests/partition_allocator_fixture.h"
-#include "cluster/types.h"
 #include "raft/fundamental.h"
 
-#include <seastar/core/reactor.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <vector>

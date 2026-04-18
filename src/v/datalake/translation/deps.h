@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cluster/fwd.h"
 #include "datalake/coordinator/types.h"
 #include "datalake/data_writer_interface.h"
@@ -215,7 +216,30 @@ enum translation_errc {
     type_resolution_error,
 };
 
-std::ostream& operator<<(std::ostream&, translation_errc);
+inline fmt::iterator format_to(translation_errc ec, fmt::iterator out) {
+    switch (ec) {
+    case no_data:
+        return fmt::format_to(out, "translation_errc::no_data");
+    case file_io_error:
+        return fmt::format_to(out, "translation_errc::file_io_error");
+    case cloud_io_error:
+        return fmt::format_to(out, "translation_errc::cloud_io_error");
+    case flush_error:
+        return fmt::format_to(out, "translation_errc::flush_error");
+    case discard_error:
+        return fmt::format_to(out, "translation_errc::discard_error");
+    case oom_error:
+        return fmt::format_to(out, "translation_errc::oom_error");
+    case time_limit_exceeded:
+        return fmt::format_to(out, "translation_errc::time_limit_exceeded");
+    case shutting_down:
+        return fmt::format_to(out, "translation_errc::shutting_down");
+    case out_of_disk:
+        return fmt::format_to(out, "translation_errc::out_of_disk");
+    case type_resolution_error:
+        return fmt::format_to(out, "translation_errc::type_resolution_error");
+    }
+}
 
 class translation_context {
 public:

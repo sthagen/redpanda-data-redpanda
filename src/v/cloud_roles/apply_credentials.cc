@@ -34,7 +34,4 @@ apply_credentials make_credentials_applier(credentials creds) {
       })};
 }
 
-std::ostream& operator<<(std::ostream& os, const apply_credentials& ac) {
-    return ac.print(os);
-}
 } // namespace cloud_roles

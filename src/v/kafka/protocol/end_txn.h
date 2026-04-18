@@ -36,9 +36,8 @@ struct end_txn_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const end_txn_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -58,9 +57,8 @@ struct end_txn_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const end_txn_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

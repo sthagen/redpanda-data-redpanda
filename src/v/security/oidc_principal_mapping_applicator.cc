@@ -17,9 +17,6 @@
 #include "security/oidc_error.h"
 #include "security/oidc_principal_mapping.h"
 
-#include <boost/algorithm/string.hpp>
-#include <rapidjson/pointer.h>
-
 namespace security::oidc {
 
 namespace detail {

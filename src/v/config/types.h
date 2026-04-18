@@ -10,9 +10,8 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "strings/string_switch.h"
-
-#include <ostream>
 
 /*
  * Because `config::` is used across every part of Redpanda, it's easy to create
@@ -48,12 +47,12 @@ namespace config {
 
 enum class s3_url_style { virtual_host = 0, path };
 
-inline std::ostream& operator<<(std::ostream& os, const s3_url_style& us) {
+inline fmt::iterator format_to(s3_url_style us, fmt::iterator out) {
     switch (us) {
     case s3_url_style::virtual_host:
-        return os << "virtual_host";
+        return fmt::format_to(out, "virtual_host");
     case s3_url_style::path:
-        return os << "path";
+        return fmt::format_to(out, "path");
     }
 }
 
@@ -76,9 +75,8 @@ constexpr std::string_view to_string_view(fips_mode_flag f) {
         return "permissive";
     }
 }
-
-inline std::ostream& operator<<(std::ostream& o, fips_mode_flag f) {
-    return o << to_string_view(f);
+inline fmt::iterator format_to(fips_mode_flag f, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(f));
 }
 
 inline std::istream& operator>>(std::istream& i, fips_mode_flag& f) {
@@ -113,9 +111,8 @@ constexpr std::string_view to_string_view(tls_version v) {
         return "v1.3";
     }
 }
-
-inline std::ostream& operator<<(std::ostream& os, const tls_version& v) {
-    return os << to_string_view(v);
+inline fmt::iterator format_to(tls_version v, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(v));
 }
 
 enum class datalake_catalog_type { object_storage, rest };
@@ -128,14 +125,13 @@ constexpr std::string_view to_string_view(datalake_catalog_type ct) {
         return "rest";
     }
 }
+inline fmt::iterator format_to(datalake_catalog_type ct, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(ct));
+}
 static constexpr auto acceptable_datalake_catalog_types() {
     return std::to_array(
       {to_string_view(datalake_catalog_type::rest),
        to_string_view(datalake_catalog_type::object_storage)});
-}
-
-inline std::ostream& operator<<(std::ostream& o, datalake_catalog_type ct) {
-    return o << to_string_view(ct);
 }
 
 inline std::istream& operator>>(std::istream& is, datalake_catalog_type& ct) {
@@ -167,10 +163,9 @@ constexpr std::string_view to_string_view(datalake_catalog_auth_mode cam) {
         return "gcp";
     }
 }
-
-inline std::ostream&
-operator<<(std::ostream& os, datalake_catalog_auth_mode cam) {
-    return os << to_string_view(cam);
+inline fmt::iterator
+format_to(datalake_catalog_auth_mode cam, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(cam));
 }
 
 inline std::istream&
@@ -206,15 +201,14 @@ constexpr std::string_view to_string_view(tls_name_format format) {
         return "rfc2253";
     }
 }
+inline fmt::iterator format_to(tls_name_format format, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(format));
+}
 
 static constexpr auto acceptable_tls_name_format_values() {
     return std::to_array(
       {to_string_view(tls_name_format::legacy),
        to_string_view(tls_name_format::rfc2253)});
-}
-
-inline std::ostream& operator<<(std::ostream& os, tls_name_format format) {
-    return os << to_string_view(format);
 }
 
 inline std::istream& operator>>(std::istream& is, tls_name_format& format) {
@@ -247,6 +241,9 @@ constexpr std::string_view to_string_view(audit_failure_policy policy) {
         return "permit";
     }
 }
+inline fmt::iterator format_to(audit_failure_policy policy, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(policy));
+}
 
 static constexpr auto acceptable_audit_log_failure_policy_values() {
     return std::to_array(
@@ -254,6 +251,5 @@ static constexpr auto acceptable_audit_log_failure_policy_values() {
        to_string_view(audit_failure_policy::permit)});
 }
 
-std::ostream& operator<<(std::ostream&, audit_failure_policy);
 std::istream& operator>>(std::istream&, audit_failure_policy&);
 } // namespace config

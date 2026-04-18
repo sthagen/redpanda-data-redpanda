@@ -25,8 +25,6 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/util/defer.hh>
 
-#include <fmt/format.h>
-
 namespace kafka::client {
 static constexpr model::node_id client_replica_id{-1};
 static constexpr std::chrono::milliseconds error_backoff(200);

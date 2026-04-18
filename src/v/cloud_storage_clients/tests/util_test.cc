@@ -1,3 +1,4 @@
+#include "base/external_fmt.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "cloud_storage_clients/util.h"

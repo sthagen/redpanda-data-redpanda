@@ -23,15 +23,12 @@
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/storage.h"
 #include "pandaproxy/schema_registry/test/utils.h"
-#include "pandaproxy/schema_registry/util.h"
 
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
-
-#include <stdexcept>
 
 namespace pps = pandaproxy::schema_registry;
 

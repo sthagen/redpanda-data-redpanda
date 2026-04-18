@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/types.h"
 
@@ -46,7 +47,7 @@ struct key_cert {
         return key_file == rhs.key_file && cert_file == rhs.cert_file;
     }
 
-    friend std::ostream& operator<<(std::ostream& o, const key_cert& c);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct p12_container {
@@ -56,7 +57,7 @@ struct p12_container {
     friend bool
     operator==(const p12_container&, const p12_container&) = default;
 
-    friend std::ostream& operator<<(std::ostream& os, const p12_container& p);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 using key_cert_container = std::variant<key_cert, p12_container>;
@@ -140,8 +141,7 @@ public:
 
     bool operator==(const tls_config& rhs) const = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const config::tls_config& c);
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     bool _enabled{false};

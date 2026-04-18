@@ -14,7 +14,6 @@
 #include "model/batch_compression.h"
 #include "model/fundamental.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/record_utils.h"
 #include "random/generators.h"
 #include "test_utils/random_bytes.h"
@@ -24,7 +23,6 @@
 #include <seastar/core/smp.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
-#include <random>
 #include <vector>
 
 namespace model::test {

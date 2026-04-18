@@ -15,7 +15,6 @@
 #include "redpanda/tests/fixture.h"
 #include "test_utils/async.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timed_out_error.hh>
 
 #include <gtest/gtest.h>

@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -369,7 +370,8 @@ private:
     friend class log_replayer_fixture;
     friend class segment_index_observer;
 
-    friend std::ostream& operator<<(std::ostream&, const segment_index&);
+public:
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 using segment_index_ptr = std::unique_ptr<segment_index>;

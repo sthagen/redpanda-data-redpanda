@@ -11,10 +11,8 @@
 
 #include "transform/rpc/service.h"
 
-#include "cluster/types.h"
 #include "kafka/data/log_reader_config.h"
 #include "kafka/data/partition_proxy.h"
-#include "logger.h"
 #include "model/ktp.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -24,7 +22,6 @@
 #include "model/transform.h"
 #include "raft/errc.h"
 #include "storage/record_batch_builder.h"
-#include "storage/types.h"
 #include "transform/rpc/deps.h"
 #include "transform/rpc/serde.h"
 #include "utils/uuid.h"
@@ -34,7 +31,6 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/semaphore.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/coroutine/switch_to.hh>
 
 #include <iterator>

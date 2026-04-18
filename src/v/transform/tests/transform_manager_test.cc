@@ -1,31 +1,19 @@
-#include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/strings/charconv.h"
-#include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/transform.h"
-#include "ssx/semaphore.h"
 #include "test_utils/async.h"
-#include "transform/logger.h"
 #include "transform/tests/test_fixture.h"
 #include "transform/transform_manager.h"
 #include "transform/transform_processor.h"
-#include "utils/human.h"
 #include "utils/uuid.h"
 
-#include <seastar/core/idle_cpu_handler.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/print.hh>
-#include <seastar/core/reactor.hh>
 #include <seastar/core/scheduling.hh>
-#include <seastar/util/later.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
@@ -34,7 +22,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 

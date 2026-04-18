@@ -12,7 +12,6 @@
 #include "config/property.h"
 #include "raft/timeout_jitter.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/unit_test.hpp>

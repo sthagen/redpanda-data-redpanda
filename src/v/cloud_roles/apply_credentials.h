@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_roles/types.h"
 #include "http/client.h"
 
@@ -35,7 +36,7 @@ public:
         /// headers.
         virtual void reset_creds(credentials creds) = 0;
 
-        virtual std::ostream& print(std::ostream& os) const = 0;
+        virtual fmt::iterator format_to(fmt::iterator it) const = 0;
 
         /// Returns true if this implementation is based on oauth tokens.
         /// meant to deal with API that do not support OAuth
@@ -55,15 +56,15 @@ public:
         _impl->reset_creds(std::move(creds));
     }
 
-    std::ostream& print(std::ostream& os) const { return _impl->print(os); }
+    fmt::iterator format_to(fmt::iterator it) const {
+        return _impl->format_to(it);
+    }
 
     bool is_oauth() const { return _impl->is_oauth(); }
 
 private:
     std::unique_ptr<impl> _impl;
 };
-
-std::ostream& operator<<(std::ostream& os, const apply_credentials& ac);
 
 /// Creates a credential applier based on the kind of credentials passed in. The
 /// input credentials object is a sum type, and it can contain any one of the

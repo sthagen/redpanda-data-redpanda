@@ -18,9 +18,7 @@
 #include "json/writer.h"
 
 #include <seastar/core/sstring.hh>
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/log.hh>
 
 #include <optional>
 

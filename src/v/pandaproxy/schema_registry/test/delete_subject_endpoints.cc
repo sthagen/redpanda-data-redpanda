@@ -14,9 +14,7 @@
 #include "pandaproxy/test/utils.h"
 #include "test_utils/boost_fixture.h"
 
-#include <boost/beast/http/field.hpp>
 #include <boost/beast/http/status.hpp>
-#include <boost/beast/http/verb.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
 namespace pp = pandaproxy;

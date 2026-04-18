@@ -11,7 +11,6 @@
 
 #include "redpanda/admin/services/broker.h"
 
-#include "redpanda/admin/services/utils.h"
 #include "serde/protobuf/rpc.h"
 #include "version/version.h"
 

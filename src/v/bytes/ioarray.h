@@ -19,10 +19,10 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/temporary_buffer.hh>
 
+#include <sys/uio.h>
+
 #include <compare>
 #include <ranges>
-
-struct iovec;
 
 // A fixed size chunked array of data normally for IO operations.
 //

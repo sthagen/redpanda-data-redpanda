@@ -10,51 +10,30 @@
  */
 
 #include "absl/container/flat_hash_map.h"
-#include "base/vassert.h"
-#include "bytes/bytes.h"
 #include "kafka/client/client.h"
-#include "kafka/client/configuration.h"
-#include "kafka/client/consumer.h"
 #include "kafka/client/test/fixture.h"
 #include "kafka/client/test/utils.h"
 #include "kafka/protocol/describe_groups.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/find_coordinator.h"
-#include "kafka/protocol/heartbeat.h"
-#include "kafka/protocol/join_group.h"
-#include "kafka/protocol/leave_group.h"
 #include "kafka/protocol/list_groups.h"
-#include "kafka/protocol/list_offset.h"
-#include "kafka/protocol/metadata.h"
 #include "kafka/protocol/offset_fetch.h"
-#include "kafka/protocol/schemata/join_group_request.h"
-#include "kafka/protocol/schemata/join_group_response.h"
 #include "kafka/protocol/schemata/offset_fetch_response.h"
-#include "kafka/protocol/sync_group.h"
-#include "kafka/protocol/wire.h"
 #include "kafka/server/group.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "redpanda/tests/fixture.h"
 #include "ssx/future-util.h"
 #include "test_utils/boost_fixture.h"
-#include "utils/unresolved_address.h"
 
-#include <seastar/core/loop.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/core/timer.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/util/defer.hh>
-#include <seastar/util/log.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <iterator>
-#include <memory>
 #include <vector>
 
 namespace {

@@ -32,10 +32,8 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/core/with_scheduling_group.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/coroutine/switch_to.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 
 #include <stdexcept>
@@ -890,12 +888,4 @@ ss::future<> state_machine_manager::write_initial_recovery_snapshot(
     co_await _initial_recovery_snapshot_mgr.finish_snapshot(writer);
 }
 
-std::ostream& operator<<(
-  std::ostream& o, const state_machine_manager::initial_recovery_snapshot& s) {
-    fmt::print(
-      o,
-      "{{ initial_recovery_next_offsets: {} }}",
-      s.initial_recovery_next_offsets);
-    return o;
-}
 } // namespace raft

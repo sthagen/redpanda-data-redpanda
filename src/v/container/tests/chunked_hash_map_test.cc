@@ -10,7 +10,6 @@
  */
 
 #include "container/chunked_hash_map.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 #include <list>

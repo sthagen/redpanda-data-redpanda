@@ -41,6 +41,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/base",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
@@ -164,6 +165,7 @@ redpanda_cc_library(
         "//src/v/datalake:__subpackages__",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/config",
         "//src/v/metrics",
         "//src/v/model",

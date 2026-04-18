@@ -17,6 +17,8 @@
 #include "serde/rw/rw.h"
 #include "utils/to_string.h"
 
+#include <fmt/ranges.h>
+
 /**
  * A container that contains non-empty, open intervals.
  *
@@ -120,10 +122,6 @@ public:
     friend void write_nested(iobuf& out, interval_set is) {
         using serde::write;
         return write(out, std::move(is.set_));
-    }
-
-    fmt::iterator format_to(fmt::iterator it) const {
-        return fmt::format_to(it, "{}", set_);
     }
 
 private:
@@ -275,3 +273,26 @@ template<std::integral T>
 size_t interval_set<T>::size() const {
     return set_.size();
 }
+
+template<std::integral T, typename Char>
+struct fmt::range_format_kind<interval_set<T>, Char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};
+
+template<std::integral T>
+struct fmt::formatter<interval_set<T>> {
+    constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+    template<typename FormatContext>
+    auto format(const interval_set<T>& v, FormatContext& ctx) const {
+        auto out = ctx.out();
+        out = fmt::format_to(out, "{{");
+        bool first = true;
+        for (const auto& [start, end] : v) {
+            if (!first) {
+                out = fmt::format_to(out, ", ");
+            }
+            out = fmt::format_to(out, "{{{} -> {}}}", start, end);
+            first = false;
+        }
+        return fmt::format_to(out, "}}");
+    }
+};

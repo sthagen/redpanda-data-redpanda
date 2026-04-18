@@ -12,6 +12,8 @@
 
 #include "utils/named_type.h"
 
+#include <fmt/format.h>
+
 #include <vector>
 
 namespace cloud_topics::l0 {
@@ -71,6 +73,3 @@ struct fmt::formatter<cloud_topics::l0::pipeline_stage>
       const cloud_topics::l0::pipeline_stage&, fmt::format_context& ctx) const
       -> decltype(ctx.out());
 };
-
-std::ostream&
-operator<<(std::ostream& o, cloud_topics::l0::pipeline_stage stage);

@@ -14,7 +14,6 @@
 #include "kafka/server/logger.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/when_all.hh>
 #include <seastar/core/with_scheduling_group.hh>
 
 #include <algorithm>

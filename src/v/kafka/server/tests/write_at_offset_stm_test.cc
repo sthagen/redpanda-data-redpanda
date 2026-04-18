@@ -9,7 +9,6 @@
 
 #include "kafka/server/write_at_offset_stm.h"
 #include "raft/tests/stm_test_fixture.h"
-#include "test_utils/test.h"
 
 #include <gmock/gmock.h>
 

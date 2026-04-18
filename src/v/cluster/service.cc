@@ -37,7 +37,6 @@
 #include "rpc/connection_cache.h"
 #include "rpc/errc.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/coroutine/switch_to.hh>

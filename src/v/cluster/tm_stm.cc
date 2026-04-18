@@ -17,11 +17,10 @@
 #include "kafka/protocol/types.h"
 #include "model/record.h"
 #include "raft/errc.h"
+#include "ssx/future-util.h"
 #include "storage/record_batch_builder.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
-#include <seastar/util/bool_class.hh>
 
 #include <cstdint>
 #include <optional>

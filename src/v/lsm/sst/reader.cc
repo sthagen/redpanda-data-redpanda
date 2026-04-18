@@ -21,7 +21,6 @@
 #include "lsm/sst/footer.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/coroutine/as_future.hh>
 
 #include <sys/uio.h>
 
@@ -56,7 +55,7 @@ read_block(io::random_access_file_reader* file, block::handle handle) {
           actual_crc.value(),
           expected_crc,
           handle,
-          fmt::streamed(*file));
+          *file);
     }
     data.trim_back(sizeof(compression_type));
     if (compression != compression_type::none) {

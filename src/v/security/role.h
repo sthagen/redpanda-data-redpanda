@@ -11,13 +11,13 @@
 #pragma once
 
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "security/acl.h"
 #include "security/types.h"
 #include "serde/envelope.h"
 
 #include <seastar/core/sstring.hh>
 
-#include <iosfwd>
 #include <type_traits>
 
 namespace security {
@@ -27,7 +27,15 @@ enum class role_member_type {
     group = 1,
 };
 
-std::ostream& operator<<(std::ostream& os, role_member_type t);
+inline fmt::iterator format_to(role_member_type t, fmt::iterator out) {
+    switch (t) {
+    case role_member_type::user:
+        return fmt::format_to(out, "User");
+    case role_member_type::group:
+        return fmt::format_to(out, "Group");
+    }
+    __builtin_unreachable();
+}
 
 class role_member;
 
@@ -60,10 +68,13 @@ public:
      */
     static role_member_view from_principal(const security::acl_principal& p);
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{{}}}:{{{}}}", _type, _name);
+    }
+
 private:
     friend bool
     operator==(const role_member_view&, const role_member_view&) = default;
-    friend std::ostream& operator<<(std::ostream&, const role_member_view&);
 
     template<typename H>
     friend H AbslHashValue(H h, const role_member_view& e) {
@@ -99,9 +110,12 @@ public:
 
     static role_member from_principal(const security::acl_principal& p);
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", role_member_view{_type, _name});
+    }
+
 private:
     friend bool operator==(const role_member&, const role_member&) = default;
-    friend std::ostream& operator<<(std::ostream&, const role_member&);
 
     template<typename H>
     friend H AbslHashValue(H h, const role_member& e) {
@@ -142,13 +156,44 @@ public:
     static security::acl_principal_view
     to_principal_view(std::string_view role_name);
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        it = fmt::format_to(it, "role members: {{");
+        bool first = true;
+        for (const auto& m : _members) {
+            if (!first) {
+                it = fmt::format_to(it, ",");
+            }
+            it = fmt::format_to(it, "{}", m);
+            first = false;
+        }
+        return fmt::format_to(it, "}}");
+    }
+
 private:
     friend bool operator==(const role&, const role&) = default;
-    friend std::ostream& operator<<(std::ostream&, const role&);
 
     container_type _members;
 };
 
+} // namespace security
+
+/// role has begin()/end() so fmt sees it as a range. Disable that and provide
+/// an explicit formatter that delegates to role::format_to().
+template<>
+struct fmt::range_format_kind<security::role, char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};
+
+template<>
+struct fmt::formatter<security::role> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const security::role& v, fmt::format_context& ctx) const {
+        return v.format_to(ctx.out());
+    }
+};
+
+namespace security {
 /**
  * Require that some type 'T' provide the role_member{_view} interface.
  */

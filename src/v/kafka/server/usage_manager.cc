@@ -11,12 +11,9 @@
 
 #include "kafka/server/usage_manager.h"
 
-#include "base/vlog.h"
 #include "cluster/controller.h"
 #include "cluster/health_monitor_frontend.h"
 #include "config/configuration.h"
-#include "kafka/server/logger.h"
-#include "ssx/future-util.h"
 #include "storage/api.h"
 
 #include <utility>

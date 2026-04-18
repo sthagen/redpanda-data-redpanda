@@ -8,20 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "cloud_io/tests/s3_imposter.h"
-#include "cloud_storage/remote.h"
 #include "cloud_storage/tests/produce_utils.h"
-#include "cloud_storage/types.h"
-#include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"
-#include "cluster/cloud_metadata/uploader.h"
-#include "cluster/config_frontend.h"
-#include "cluster/controller_snapshot.h"
-#include "cluster/feature_manager.h"
-#include "cluster/id_allocator_frontend.h"
 #include "cluster/partition.h"
-#include "cluster/tests/topic_properties_generator.h"
 #include "cluster/types.h"
-#include "config/configuration.h"
 #include "kafka/server/tests/produce_consume_utils.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -30,9 +20,7 @@
 #include "redpanda/tests/fixture.h"
 #include "test_utils/scoped_config.h"
 #include "test_utils/test.h"
-#include "utils/retry_chain_node.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/util/defer.hh>
 
 class TopicRecoveryFixture

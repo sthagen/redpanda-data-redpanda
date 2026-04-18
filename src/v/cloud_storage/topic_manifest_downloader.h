@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_label.h"
@@ -27,7 +28,20 @@ enum class find_topic_manifest_outcome {
     // and a hint must be provided to determine winner.
     multiple_matching_manifests,
 };
-std::ostream& operator<<(std::ostream&, find_topic_manifest_outcome);
+
+inline fmt::iterator
+format_to(find_topic_manifest_outcome o, fmt::iterator out) {
+    switch (o) {
+    case find_topic_manifest_outcome::success:
+        return fmt::format_to(out, "find_topic_manifest_outcome::success");
+    case find_topic_manifest_outcome::no_matching_manifest:
+        return fmt::format_to(
+          out, "find_topic_manifest_outcome::no_matching_manifest");
+    case find_topic_manifest_outcome::multiple_matching_manifests:
+        return fmt::format_to(
+          out, "find_topic_manifest_outcome::multiple_matching_manifests");
+    }
+}
 
 // Encapsulates downloading manifests for a given topic.
 //

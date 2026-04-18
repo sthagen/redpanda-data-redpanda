@@ -29,7 +29,6 @@
 #include "raft/logger.h"
 #include "raft/recovery_stm.h"
 #include "raft/replicate_entries_stm.h"
-#include "raft/rpc_client_protocol.h"
 #include "raft/state_machine_manager.h"
 #include "raft/types.h"
 #include "raft/vote_stm.h"
@@ -44,16 +43,12 @@
 #include "storage/types.h"
 
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/fstream.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/defer.hh>
-
-#include <fmt/ostream.h>
 
 #include <algorithm>
 #include <chrono>
@@ -3322,16 +3317,15 @@ void consensus::trigger_leadership_notification() {
     _leadership_changed.broadcast();
 }
 
-std::ostream& operator<<(std::ostream& o, const consensus& c) {
-    fmt::print(
-      o,
+fmt::iterator consensus::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{log:{}, group_id:{}, term: {}, commit_index: {}, voted_for:{}}}",
-      c._log,
-      c._group,
-      c._term,
-      c._commit_index,
-      c._voted_for);
-    return o;
+      _log,
+      _group,
+      _term,
+      _commit_index,
+      _voted_for);
 }
 
 const group_configuration& consensus::config() const {

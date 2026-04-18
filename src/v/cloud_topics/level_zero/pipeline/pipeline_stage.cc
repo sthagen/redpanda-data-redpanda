@@ -76,9 +76,3 @@ auto fmt::formatter<cloud_topics::l0::pipeline_stage>::format(
     return formatter<std::string_view>::format(
       fmt::format("pipeline_stage{{id:{}}}", o()->get_numeric_id()), ctx);
 }
-
-std::ostream&
-operator<<(std::ostream& o, cloud_topics::l0::pipeline_stage stage) {
-    fmt::print(o, "{}", stage);
-    return o;
-}

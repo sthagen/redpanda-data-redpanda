@@ -187,7 +187,16 @@ inline bool is_deletion_enabled(cleanup_policy_bitflags flags) {
            == cleanup_policy_bitflags::deletion;
 }
 
-std::ostream& operator<<(std::ostream&, cleanup_policy_bitflags);
+inline std::string_view to_string_view(cleanup_policy_bitflags c) {
+    if (c == cleanup_policy_bitflags::none) return "none";
+    if (is_compaction_enabled(c) && is_deletion_enabled(c))
+        return "compact,delete";
+    if (is_compaction_enabled(c)) return "compact";
+    if (is_deletion_enabled(c)) return "delete";
+    return "none";
+}
+
+fmt::iterator format_to(cleanup_policy_bitflags c, fmt::iterator out);
 std::istream& operator>>(std::istream&, cleanup_policy_bitflags&);
 
 // Named after Kafka compaction.strategy topic property
@@ -200,7 +209,7 @@ enum class compaction_strategy : int8_t {
     /// \brief header field compaction is not yet supported
     header,
 };
-std::ostream& operator<<(std::ostream&, compaction_strategy);
+fmt::iterator format_to(compaction_strategy c, fmt::iterator out);
 std::istream& operator>>(std::istream&, compaction_strategy&);
 
 using term_id = named_type<int64_t, struct model_raft_term_id_type>;
@@ -315,7 +324,8 @@ struct topic_partition_view {
 
     model::topic_view topic;
     model::partition_id partition;
-    friend std::ostream& operator<<(std::ostream&, const topic_partition_view&);
+
+    fmt::iterator format_to(fmt::iterator it) const;
     friend auto operator<=>(
       const topic_partition_view&, const topic_partition_view&) = default;
     template<typename H>
@@ -358,7 +368,7 @@ struct topic_partition {
         return topic_partition_view(topic, partition);
     }
 
-    friend std::ostream& operator<<(std::ostream&, const topic_partition&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend void read_nested(
       iobuf_parser& in, topic_partition& tp, const size_t bytes_left_limit) {
@@ -422,7 +432,7 @@ struct ntp {
     ss::sstring path() const;
     std::filesystem::path topic_path() const;
 
-    friend std::ostream& operator<<(std::ostream&, const ntp&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 /**
@@ -439,7 +449,8 @@ enum class control_record_type : int16_t {
     tx_commit = 1,
     unknown = -1
 };
-std::ostream& operator<<(std::ostream&, const control_record_type&);
+
+fmt::iterator format_to(control_record_type crt, fmt::iterator out);
 
 using control_record_version
   = named_type<int16_t, struct control_record_version_tag>;
@@ -523,7 +534,7 @@ static_assert(
     shadow_indexing_mode::full, shadow_indexing_mode::drop_full)
   == shadow_indexing_mode::disabled);
 
-std::ostream& operator<<(std::ostream&, const shadow_indexing_mode&);
+fmt::iterator format_to(shadow_indexing_mode si, fmt::iterator out);
 
 using client_address_t = ss::socket_address;
 
@@ -553,8 +564,8 @@ constexpr std::string_view to_string_view(fips_mode_flag f) {
         return "enabled";
     }
 }
+fmt::iterator format_to(fips_mode_flag f, fmt::iterator out);
 
-std::ostream& operator<<(std::ostream& os, const fips_mode_flag& f);
 std::istream& operator>>(std::istream& is, fips_mode_flag& f);
 
 struct topic_id : named_type<uuid_t, struct topic_id_tag> {
@@ -592,7 +603,7 @@ struct topic_id_partition {
     bool operator==(const topic_id_partition& other) const = default;
     auto operator<=>(const topic_id_partition& other) const noexcept = default;
 
-    friend std::ostream& operator<<(std::ostream&, const topic_id_partition&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend void read_nested(
       iobuf_parser& in, topic_id_partition& tp, const size_t bytes_left_limit) {

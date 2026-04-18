@@ -10,8 +10,6 @@
  */
 #include "cluster/controller_stm.h"
 #include "cluster/migrations/tx_manager_migrator.h"
-#include "config/configuration.h"
-#include "config/node_config.h"
 #include "redpanda/admin/api-doc/recovery.json.hh"
 #include "redpanda/admin/server.h"
 

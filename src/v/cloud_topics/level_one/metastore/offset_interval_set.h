@@ -33,7 +33,6 @@ public:
     struct interval {
         kafka::offset base_offset;
         kafka::offset last_offset;
-        friend std::ostream& operator<<(std::ostream&, const interval&);
     };
     template<bool reverse = false>
     class stream {

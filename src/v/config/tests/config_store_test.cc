@@ -13,16 +13,13 @@
 #include "json/writer.h"
 
 #include <seastar/core/sstring.hh>
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/log.hh>
 
 #include <cstdint>
 #include <iostream>
 #include <iterator>
-#include <random>
 #include <string>
-#include <utility>
 
 namespace {
 
@@ -147,12 +144,6 @@ YAML::Node valid_configuration() {
 } // namespace
 
 namespace std {
-static inline ostream&
-operator<<(ostream& o, const testing::custom_aggregate& c) {
-    o << "int_value=" << c.int_value << ", string_value=" << c.string_value;
-    return o;
-}
-
 static inline std::ostream&
 operator<<(std::ostream& ostr, const std::optional<int16_t>& rhs) {
     if (rhs.has_value()) {

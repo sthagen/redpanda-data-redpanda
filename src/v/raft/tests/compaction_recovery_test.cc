@@ -20,7 +20,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/loop.hh>
 
 #include <algorithm>
 #include <ranges>

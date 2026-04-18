@@ -14,7 +14,6 @@
 #include <seastar/util/later.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-#include <boost/test/unit_test_log.hpp>
 
 using namespace ssx;
 

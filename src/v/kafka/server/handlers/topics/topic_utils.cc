@@ -12,11 +12,8 @@
 #include "cluster/controller_api.h"
 #include "cluster/errc.h"
 #include "cluster/metadata_cache.h"
-#include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
-#include "model/ktp.h"
 
-#include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/loop.hh>
 

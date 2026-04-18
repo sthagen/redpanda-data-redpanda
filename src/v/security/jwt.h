@@ -10,14 +10,15 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "base/oncore.h"
 #include "base/outcome.h"
 #include "base/type_traits.h"
 #include "container/chunked_vector.h"
 #include "crypto/crypto.h"
 #include "json/document.h"
-#include "json/ostreamwrapper.h"
 #include "json/pointer.h"
+#include "json/stringbuffer.h"
 #include "json/writer.h"
 #include "security/oidc_error.h"
 #include "strings/string_switch.h"
@@ -30,7 +31,6 @@
 #include <boost/algorithm/string/split.hpp>
 
 #include <algorithm>
-#include <iosfwd>
 #include <optional>
 #include <string_view>
 
@@ -358,19 +358,20 @@ public:
         });
     }
 
-private:
-    friend std::ostream& operator<<(std::ostream& os, const jwt& jwt) {
-        const auto write = [](std::ostream& os, const auto& doc) {
-            json::OStreamWrapper osw(os);
-            json::Writer<json::OStreamWrapper> h{osw};
-            doc.Accept(h);
+    fmt::iterator format_to(fmt::iterator it) const {
+        const auto write = [](json::StringBuffer& sb, const auto& doc) {
+            json::Writer<json::StringBuffer> w{sb};
+            doc.Accept(w);
         };
-        write(os, jwt._header);
-        os << '.';
-        write(os, jwt._payload);
-        return os;
+        json::StringBuffer sb;
+        write(sb, _header);
+        sb.Put('.');
+        write(sb, _payload);
+        return fmt::format_to(
+          it, "{}", std::string_view{sb.GetString(), sb.GetSize()});
     }
 
+private:
     jwt(json::Document header, json::Document payload)
       : _header{std::move(header)}
       , _payload{std::move(payload)} {}

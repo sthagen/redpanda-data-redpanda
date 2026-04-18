@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "kafka/protocol/schemata/create_topics_request.h"
 #include "kafka/protocol/schemata/create_topics_response.h"
@@ -34,9 +35,8 @@ struct create_topics_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const create_topics_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -88,9 +88,8 @@ struct create_topics_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const create_topics_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

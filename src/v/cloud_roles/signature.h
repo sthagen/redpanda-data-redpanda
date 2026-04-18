@@ -12,11 +12,8 @@
 
 #include "base/outcome.h"
 #include "base/seastarx.h"
-#include "base/units.h"
-#include "base/vassert.h"
 #include "cloud_roles/types.h"
 #include "http/client.h"
-#include "utils/named_type.h"
 
 #include <fmt/chrono.h>
 
@@ -73,7 +70,7 @@ private:
     explicit time_source(Fn&& fn, int);
 
     /// Format date-time according to format string
-    ss::sstring format(auto fmt) const;
+    ss::sstring format(fmt::format_string<const std::tm&> fmt) const;
 
     static timestamp default_source();
     ss::noncopyable_function<timestamp()> _gettime_fn;

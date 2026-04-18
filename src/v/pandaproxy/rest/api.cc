@@ -16,7 +16,7 @@
 #include "pandaproxy/rest/fwd.h"
 #include "pandaproxy/rest/proxy.h"
 
-#include <seastar/core/coroutine.hh>
+#include <seastar/core/coroutine.hh> // NOLINT(misc-include-cleaner): required for co_await/co_return coroutine support
 
 #include <functional>
 

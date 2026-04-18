@@ -13,7 +13,6 @@
 #include "base/vassert.h"
 #include "datalake/logger.h"
 #include "datalake/translation/types.h"
-#include "datalake/translation/utils.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 

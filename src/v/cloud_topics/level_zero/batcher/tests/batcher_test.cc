@@ -8,22 +8,14 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "base/vlog.h"
 #include "bytes/bytes.h"
-#include "bytes/iostream.h"
-#include "cloud_io/io_result.h"
-#include "cloud_io/remote.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/object_utils.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
-#include "model/tests/random_batch.h"
-#include "model/timeout_clock.h"
 #include "model/timestamp.h"
-#include "random/generators.h"
 #include "remote_mock.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/random_bytes.h"
@@ -31,19 +23,13 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/util/later.hh>
 #include <seastar/util/log.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 #include <chrono>
-#include <exception>
 #include <iterator>
-#include <memory>
 #include <system_error>
 
 inline ss::logger test_log("aggregated_uploader_gtest");

@@ -13,7 +13,6 @@
 
 #include "utils/vint.h"
 
-#include <algorithm>
 #include <bit>
 #include <climits>
 #include <type_traits>

@@ -15,7 +15,6 @@
 
 #include <seastar/core/metrics.hh>
 #include <seastar/core/metrics_types.hh>
-#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/smp.hh>
 
 namespace {

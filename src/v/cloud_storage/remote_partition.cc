@@ -14,7 +14,6 @@
 #include "cloud_storage/async_manifest_view.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/materialized_resources.h"
-#include "cloud_storage/offset_translation_layer.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/partition_manifest_downloader.h"
 #include "cloud_storage/remote_path_provider.h"
@@ -28,24 +27,16 @@
 #include "ssx/future-util.h"
 #include "ssx/watchdog.h"
 #include "storage/log_reader.h"
-#include "storage/parser_errc.h"
 #include "storage/types.h"
 #include "utils/retry_chain_node.h"
-#include "utils/stream_utils.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/core/queue.hh>
-#include <seastar/core/semaphore.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/temporary_buffer.hh>
 
 #include <boost/range/adaptor/reversed.hpp>
 
-#include <chrono>
 #include <exception>
 #include <iterator>
 #include <stdexcept>
@@ -530,8 +521,9 @@ public:
         co_return storage_t{};
     }
 
-    void print(std::ostream& o) override {
-        o << "cloud_storage_partition_record_batch_reader";
+    fmt::iterator format_to(fmt::iterator it) const override {
+        return fmt::format_to(
+          it, "cloud_storage_partition_record_batch_reader");
     }
 
 private:

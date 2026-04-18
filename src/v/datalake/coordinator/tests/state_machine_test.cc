@@ -10,15 +10,12 @@
 
 #include "cluster/data_migrated_resources.h"
 #include "cluster/topic_table.h"
-#include "config/node_config.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/coordinator.h"
 #include "datalake/coordinator/state_machine.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
 #include "datalake/record_schema_resolver.h"
 #include "raft/tests/stm_test_fixture.h"
-
-#include <seastar/core/smp.hh>
 
 using coordinator = std::unique_ptr<datalake::coordinator::coordinator>;
 using stm = datalake::coordinator::coordinator_stm;

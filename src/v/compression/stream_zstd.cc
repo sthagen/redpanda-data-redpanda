@@ -12,8 +12,6 @@
 #include "base/likely.h"
 #include "base/units.h"
 #include "base/vassert.h"
-#include "base/vlog.h"
-#include "bytes/bytes.h"
 #include "bytes/details/io_allocation_size.h"
 
 #include <seastar/core/aligned_buffer.hh>

@@ -24,8 +24,6 @@
 #include "net/tls_certificate_probe.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/util/defer.hh>
 
@@ -464,10 +462,6 @@ refresh_credentials make_refresh_credentials(
           retry_params,
           std::move(metrics_tag));
     }
-}
-
-std::ostream& operator<<(std::ostream& os, const refresh_credentials& rc) {
-    return rc.print(os);
 }
 
 } // namespace cloud_roles

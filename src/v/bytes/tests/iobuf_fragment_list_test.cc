@@ -9,7 +9,6 @@
 
 #include "bytes/details/io_fragment.h"
 
-#include <gtest/gtest-matchers.h>
 #include <gtest/gtest.h>
 
 #include <list>

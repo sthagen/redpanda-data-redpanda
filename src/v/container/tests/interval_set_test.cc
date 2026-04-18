@@ -16,8 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include <random>
-
 using set_t = interval_set<uint64_t>;
 
 namespace {

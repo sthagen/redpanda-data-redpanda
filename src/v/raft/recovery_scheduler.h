@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 #include "container/intrusive_list_helpers.h"
@@ -75,8 +76,7 @@ public:
     bool is_active() const { return _is_active; }
     int64_t pending_offset_count() const;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const follower_recovery_state&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     friend class recovery_scheduler_base;

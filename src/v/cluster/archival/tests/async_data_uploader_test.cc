@@ -14,15 +14,8 @@
 #include "model/record_batch_types.h"
 #include "random/generators.h"
 
-#include <seastar/core/file-types.hh>
-#include <seastar/core/fstream.hh>
-#include <seastar/core/iostream.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/scheduling.hh>
-#include <seastar/core/seastar.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/temporary_buffer.hh>
 
 #include <gtest/gtest.h>
 

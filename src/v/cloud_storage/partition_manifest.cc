@@ -20,14 +20,11 @@
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/segment_meta_cstore.h"
 #include "cloud_storage/types.h"
-#include "hashing/xx.h"
-#include "json/document.h"
 #include "json/istreamwrapper.h"
 #include "json/ostreamwrapper.h"
 #include "json/writer.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
-#include "reflection/to_tuple.h"
 #include "reflection/type_traits.h"
 #include "serde/rw/envelope.h"
 #include "serde/rw/iobuf.h"
@@ -42,15 +39,11 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/util/later.hh>
 
-#include <fmt/ostream.h>
 #include <rapidjson/error/en.h>
 
 #include <algorithm>
-#include <charconv>
 #include <exception>
-#include <iterator>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -59,35 +52,11 @@
 #include <type_traits>
 #include <utility>
 
-namespace fmt {
-template<>
-struct fmt::formatter<cloud_storage::partition_manifest::segment_meta> {
-    using segment_meta = cloud_storage::partition_manifest::segment_meta;
-
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    auto format(const segment_meta& m, FormatContext& ctx) {
-        return fmt::format_to(
-          ctx.out(),
-          "{{o={}-{} t={}-{}}}",
-          m.base_offset,
-          m.committed_offset,
-          m.base_timestamp,
-          m.max_timestamp);
-    }
-};
-} // namespace fmt
-
 namespace cloud_storage {
-std::ostream&
-operator<<(std::ostream& s, const partition_manifest_path_components& c) {
-    fmt::print(
-      s, "{{{}: {}-{}-{}-{}}}", c._origin, c._ns, c._topic, c._part, c._rev);
-    return s;
+
+fmt::iterator segment_name_components::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{base_offset: {}, term: {}}}", base_offset, term);
 }
 
 std::optional<segment_name_components>
@@ -2874,11 +2843,23 @@ std::optional<partition_manifest> partition_manifest::do_repair_state() const {
     return std::nullopt;
 }
 
-std::ostream& operator<<(std::ostream& o, const partition_manifest& pm) {
-    o << "{manifest: ";
-    pm.serialize_json(o, false);
-    o << "; last segment: " << pm.last_segment() << "}";
-    return o;
+namespace {
+struct manifest_json_view {
+    const partition_manifest& m;
+    friend std::ostream&
+    operator<<(std::ostream& os, const manifest_json_view& v) {
+        v.m.serialize_json(os, false);
+        return os;
+    }
+};
+} // namespace
+
+fmt::iterator partition_manifest::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{manifest: {}; last segment: {}}}",
+      fmt_streamed(manifest_json_view{*this}),
+      last_segment());
 }
 
 } // namespace cloud_storage

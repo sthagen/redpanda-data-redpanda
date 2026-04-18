@@ -13,7 +13,6 @@
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/level_one/metastore/tests/builders.h"
 #include "gmock/gmock.h"
-#include "test_utils/test_macros.h"
 
 #include <gtest/gtest.h>
 

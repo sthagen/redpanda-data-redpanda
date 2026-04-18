@@ -13,9 +13,7 @@
 #include "kafka/protocol/wire.h"
 #include "random/generators.h"
 #include "test_utils/random_bytes.h"
-#include "utils/base64.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/iterator/counting_iterator.hpp>

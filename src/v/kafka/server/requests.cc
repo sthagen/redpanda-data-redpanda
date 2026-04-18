@@ -18,11 +18,7 @@
 #include "kafka/server/handlers/sasl_handshake.h"
 #include "kafka/server/request_context.h"
 #include "net/types.h"
-#include "security/audit/schemas/iam.h"
-#include "security/audit/schemas/utils.h"
-#include "utils/to_string.h"
 
-#include <seastar/core/print.hh>
 #include <seastar/util/log.hh>
 
 namespace kafka {
@@ -345,18 +341,17 @@ process_result_stages process_request(
       fmt::format("Unsupported API {}", ctx.header().key));
 }
 
-std::ostream& operator<<(std::ostream& os, const request_header& header) {
-    fmt::print(
-      os,
+fmt::iterator request_header::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{key:{}, version:{}, correlation_id:{}, client_id:{}, "
       "number_of_tagged_fields: {}, tags_size_bytes:{}}}",
-      header.key,
-      header.version,
-      header.correlation,
-      header.client_id.value_or(std::string_view("nullopt")),
-      (header.tags ? (*header.tags)().size() : 0),
-      header.tags_size_bytes);
-    return os;
+      key,
+      version,
+      correlation,
+      client_id.value_or(std::string_view("none")),
+      (tags ? (*tags)().size() : 0),
+      tags_size_bytes);
 }
 
 } // namespace kafka

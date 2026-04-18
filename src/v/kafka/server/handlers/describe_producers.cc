@@ -9,17 +9,14 @@
 
 #include "kafka/server/handlers/describe_producers.h"
 
-#include "cluster/errc.h"
 #include "cluster/partition_manager.h"
 #include "cluster/rm_stm.h"
 #include "cluster/shard_table.h"
 #include "kafka/protocol/describe_producers.h"
 #include "kafka/protocol/errors.h"
-#include "kafka/protocol/produce.h"
 #include "kafka/protocol/schemata/describe_producers_response.h"
 #include "kafka/server/group_manager.h"
 #include "kafka/server/group_router.h"
-#include "kafka/server/handlers/details/security.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
@@ -27,9 +24,6 @@
 #include "model/namespace.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/when_all.hh>
-
-#include <chrono>
 
 namespace kafka {
 

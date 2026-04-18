@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/inlined_vector.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 
@@ -19,7 +20,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <iosfwd>
 #include <span>
 
 class bytes_view;
@@ -99,7 +99,7 @@ public:
         return a.data_ < b.data_;
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const bytes& b);
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     container_type data_;
@@ -159,7 +159,9 @@ public:
           a.begin(), a.end(), b.begin(), b.end());
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const bytes_view& b);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{bytes:{}}}", size());
+    }
 
 private:
     explicit bytes_view(container_type data)
@@ -304,3 +306,11 @@ operator^(const std::array<char, Size>& a, const std::array<char, Size>& b) {
       a.begin(), a.end(), b.begin(), out.begin(), std::bit_xor<>());
     return out;
 }
+
+template<>
+struct fmt::range_format_kind<::bytes, char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};
+
+template<>
+struct fmt::range_format_kind<bytes_view, char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};

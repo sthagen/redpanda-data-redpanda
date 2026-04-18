@@ -10,12 +10,8 @@
 
 #include "cloud_topics/level_one/metastore/lsm/debug_reader.h"
 #include "cloud_topics/level_one/metastore/lsm/debug_serde.h"
-#include "cloud_topics/level_one/metastore/lsm/debug_writer.h"
 #include "cloud_topics/level_one/metastore/lsm/keys.h"
-#include "cloud_topics/level_one/metastore/lsm/values.h"
-#include "cloud_topics/level_one/metastore/state.h"
 #include "model/fundamental.h"
-#include "serde/rw/rw.h"
 #include "utils/uuid.h"
 
 #include <gtest/gtest.h>

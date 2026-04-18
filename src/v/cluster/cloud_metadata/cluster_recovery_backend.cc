@@ -13,7 +13,6 @@
 #include "cloud_io/cache_service.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_file.h"
-#include "cloud_storage/types.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/retry.h"
 #include "cloud_topics/state_accessors.h"
@@ -23,8 +22,6 @@
 #include "cluster/cloud_metadata/producer_id_recovery_manager.h"
 #include "cluster/cluster_recovery_reconciler.h"
 #include "cluster/cluster_recovery_table.h"
-#include "cluster/cluster_utils.h"
-#include "cluster/commands.h"
 #include "cluster/config_frontend.h"
 #include "cluster/controller_api.h"
 #include "cluster/errc.h"
@@ -34,7 +31,6 @@
 #include "cluster/security_frontend.h"
 #include "cluster/topic_table.h"
 #include "cluster/topics_frontend.h"
-#include "config/configuration.h"
 #include "features/feature_table.h"
 #include "model/metadata.h"
 #include "raft/group_manager.h"
@@ -43,7 +39,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sharded.hh>

@@ -18,6 +18,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//proto/redpanda/core/admin/internal/cloud_topics/v1:metastore_redpanda_proto",
+        "//src/v/base",
         "//src/v/utils:detailed_error",
         "@fmt",
         "@seastar",
@@ -177,6 +178,7 @@ redpanda_cc_library(
     deps = [
         ":lsm_update",
         ":state",
+        "//src/v/base",
         "//src/v/cluster:state_machine_registry",
         "//src/v/config",
         "//src/v/model",

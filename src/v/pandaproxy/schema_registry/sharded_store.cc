@@ -27,11 +27,9 @@
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/schema_registry/util.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/coroutine/exception.hh>
 
 #include <fmt/core.h>
 

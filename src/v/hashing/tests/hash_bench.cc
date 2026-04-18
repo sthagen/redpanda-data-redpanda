@@ -20,9 +20,7 @@
 #include "random/generators.h"
 #include "test_utils/random_bytes.h"
 
-#include <seastar/core/reactor.hh>
 #include <seastar/core/sstring.hh>
-#include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <boost/crc.hpp>

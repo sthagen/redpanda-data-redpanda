@@ -451,6 +451,7 @@ redpanda_cc_gtest(
         ":compatibility_common",
         ":compatibility_protobuf",
         ":protobuf_utils",
+        "//src/v/base",
         "//src/v/bytes:iobuf_parser",
         "//src/v/pandaproxy/schema_registry:core",
         "//src/v/test_utils:gtest",

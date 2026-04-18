@@ -25,8 +25,6 @@
 
 #include <seastar/util/defer.hh>
 
-#include <fmt/ostream.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 namespace storage {

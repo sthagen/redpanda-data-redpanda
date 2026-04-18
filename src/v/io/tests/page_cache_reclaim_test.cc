@@ -17,7 +17,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/align.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/util/later.hh>

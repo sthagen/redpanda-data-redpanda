@@ -10,7 +10,6 @@
 
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 
-#include "base/units.h"
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/pipeline/serializer.h"

@@ -10,14 +10,10 @@
 #include "kafka/server/protocol_utils.h"
 
 #include "bytes/iobuf.h"
-#include "bytes/iobuf_parser.h"
 #include "kafka/protocol/flex_versions.h"
 #include "strings/utf8.h"
 
 #include <seastar/core/temporary_buffer.hh>
-
-#include <stdexcept>
-#include <vector>
 
 namespace kafka {
 

@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 
-#include "base/vassert.h"
 #include "crypto/crypto.h"
 #include "crypto/ossl_context_service.h"
 #include "random/generators.h"
@@ -17,12 +16,8 @@
 #include "test_utils/runfiles.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/reactor.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/testing/perf_tests.hh>
 
-#include <exception>
-#include <filesystem>
 #include <memory>
 
 static constexpr size_t inner_iters = 1000;

@@ -9,36 +9,23 @@
 
 #include "kafka/server/handlers/describe_configs.h"
 
-#include "base/type_traits.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/types.h"
-#include "config/configuration.h"
-#include "config/data_directory_path.h"
 #include "config/node_config.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/server/handlers/configs/config_response_utils.h"
-#include "kafka/server/handlers/topics/topic_utils.h"
-#include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/validation.h"
-#include "pandaproxy/schema_registry/subject_name_strategy.h"
-#include "reflection/type_traits.h"
 #include "security/acl.h"
 #include "ssx/sformat.h"
 
-#include <seastar/core/do_with.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/util/log.hh>
-
-#include <fmt/ranges.h>
 
 #include <charconv>
-#include <string_view>
-#include <type_traits>
 
 namespace kafka {
 

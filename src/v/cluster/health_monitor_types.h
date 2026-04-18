@@ -11,6 +11,7 @@
 #pragma once
 #include "absl/container/node_hash_map.h"
 #include "absl/container/node_hash_set.h"
+#include "base/format_to.h"
 #include "bytes/iobuf_parser.h"
 #include "cluster/drain_manager.h"
 #include "cluster/errc.h"
@@ -75,7 +76,7 @@ struct node_state
         return _is_alive;
     }
     // clang-format on
-    friend std::ostream& operator<<(std::ostream&, const node_state&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend bool operator==(const node_state&, const node_state&) = default;
 
@@ -88,7 +89,7 @@ private:
 };
 
 enum class follower_status { in_sync, out_of_sync, down };
-std::ostream& operator<<(std::ostream& o, follower_status);
+fmt::iterator format_to(follower_status s, fmt::iterator);
 
 struct followers_stats
   : serde::
@@ -100,7 +101,7 @@ struct followers_stats
 
     auto serde_fields() { return std::tie(in_sync, out_of_sync, down); }
 
-    friend std::ostream& operator<<(std::ostream&, const followers_stats&);
+    fmt::iterator format_to(fmt::iterator it) const;
     friend bool
     operator==(const followers_stats&, const followers_stats&) = default;
 };
@@ -169,7 +170,7 @@ struct partition_status
           cloud_topic_max_gc_eligible_epoch);
     }
 
-    friend std::ostream& operator<<(std::ostream&, const partition_status&);
+    fmt::iterator format_to(fmt::iterator it) const;
     friend bool
     operator==(const partition_status&, const partition_status&) = default;
 };
@@ -192,7 +193,7 @@ struct topic_status
 
     model::topic_namespace tp_ns;
     partition_statuses_t partitions;
-    friend std::ostream& operator<<(std::ostream&, const topic_status&);
+    fmt::iterator format_to(fmt::iterator it) const;
     friend bool operator==(const topic_status&, const topic_status&);
 
     auto serde_fields() { return std::tie(tp_ns, partitions); }
@@ -226,7 +227,7 @@ struct node_liveness_report
           sizeof(node_liveness_report_data) == sizeof(node_liveness_report));
     }
 
-    friend std::ostream& operator<<(std::ostream&, const node_liveness_report&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(node_id_to_last_seen); }
 
@@ -260,7 +261,7 @@ struct node_health_report {
 
     node_health_report copy() const;
 
-    friend std::ostream& operator<<(std::ostream&, const node_health_report&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 using node_health_report_ptr
@@ -317,8 +318,7 @@ struct node_health_report_serde
           std::move(node_liveness_report)};
     }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const node_health_report_serde&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend bool operator==(
       const node_health_report_serde& a, const node_health_report_serde& b);
@@ -340,8 +340,7 @@ struct cluster_health_report
 
     // cluster-wide cached information about total cloud storage usage
     std::optional<size_t> bytes_in_cloud_storage;
-    friend std::ostream&
-    operator<<(std::ostream&, const cluster_health_report&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend bool operator==(
       const cluster_health_report&, const cluster_health_report&) = default;
@@ -478,8 +477,7 @@ struct cluster_health_overview {
     size_t under_replicated_count{};
     std::optional<size_t> bytes_in_cloud_storage;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const cluster_health_overview&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 using include_partitions_info = ss::bool_class<struct include_partitions_tag>;
@@ -504,7 +502,7 @@ struct partitions_filter
     friend bool
     operator==(const partitions_filter&, const partitions_filter&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const partitions_filter&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(namespaces); }
 };
@@ -523,7 +521,7 @@ struct node_report_filter
     friend bool
     operator==(const node_report_filter&, const node_report_filter&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const node_report_filter&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(include_partitions, ntp_filters); }
 };
@@ -539,8 +537,7 @@ struct cluster_report_filter
     // list of requested nodes, if empty report will contain all nodes
     std::vector<model::node_id> nodes;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const cluster_report_filter&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend bool operator==(
       const cluster_report_filter&, const cluster_report_filter&) = default;
@@ -567,8 +564,7 @@ public:
     friend bool operator==(
       const get_node_health_request&, const get_node_health_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const get_node_health_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(_filter, _target_node_id); }
     static constexpr model::node_id node_id_not_set{-1};
@@ -603,8 +599,7 @@ struct get_node_health_reply
         };
     }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const get_node_health_reply&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(error, report); }
 };
@@ -632,8 +627,7 @@ struct get_cluster_health_request
       const get_cluster_health_request&,
       const get_cluster_health_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const get_cluster_health_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     void serde_write(iobuf& out) {
         using serde::write;
@@ -667,8 +661,7 @@ struct get_cluster_health_reply
     operator==(const get_cluster_health_reply&, const get_cluster_health_reply&)
       = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const get_cluster_health_reply&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     get_cluster_health_reply copy() const;
 

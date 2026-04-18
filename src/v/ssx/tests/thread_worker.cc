@@ -9,14 +9,9 @@
 
 #include "ssx/thread_worker.h"
 
-#include <seastar/core/abort_source.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/manual_clock.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/later.hh>
-
-#include <boost/test/unit_test_log.hpp>
 
 #include <algorithm>
 

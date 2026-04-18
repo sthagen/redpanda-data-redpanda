@@ -13,12 +13,10 @@
 
 #include "base/vassert.h"
 #include "random/generators.h"
-#include "ssx/sformat.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/ragel.hh>
 
 #include <fmt/chrono.h>
 #include <fmt/format.h>

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "model/metadata.h"
 #include "serde/envelope.h"
 
@@ -78,8 +79,8 @@ struct leaders_preference
 
     static leaders_preference parse(std::string_view);
 
-    friend std::ostream& operator<<(std::ostream&, type_t);
-    friend std::ostream& operator<<(std::ostream&, const leaders_preference&);
+    fmt::iterator format_to(fmt::iterator it) const;
+
     friend std::istream& operator>>(std::istream&, leaders_preference&);
 
     friend bool
@@ -87,5 +88,10 @@ struct leaders_preference
 
     auto serde_fields() { return std::tie(type, racks); }
 };
+
+inline fmt::iterator
+format_to(leaders_preference::type_t t, fmt::iterator out) {
+    return fmt::format_to(out, "{}", leaders_preference::type_to_string(t));
+}
 
 } // namespace config

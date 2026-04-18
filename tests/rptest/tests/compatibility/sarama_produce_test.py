@@ -90,11 +90,11 @@ class SaramaLegacyProduceTest(RedpandaTest):
     expected_log_lines = defaultdict(dict)
     expected_log_lines[ValidationMode.RELAXED][False] = None
     expected_log_lines[ValidationMode.RELAXED][True] = (
-        "Produced batch for partition {kafka/topic/0} has max_timestamp left unset ({-1}) by client (client_id: {sarama}). Decompressing batch and setting max_timestamp manually since 'kafka_produce_batch_validation' is set to 'relaxed'. It is strongly recommended that you update your client to set the max_timestamp when producing"
+        "Produced batch for partition {kafka/topic/0} has max_timestamp left unset ({-1}) by client (client_id: sarama). Decompressing batch and setting max_timestamp manually since 'kafka_produce_batch_validation' is set to 'relaxed'. It is strongly recommended that you update your client to set the max_timestamp when producing"
     )
     expected_log_lines[ValidationMode.LEGACY][False] = None
     expected_log_lines[ValidationMode.LEGACY][True] = (
-        "Produced batch for partition {kafka/topic/0} has max_timestamp left unset ({-1}) by client (client_id: {sarama}). Accepting batch since 'kafka_produce_batch_validation' is set to 'legacy'. It is strongly recommended that you update your client to set the max_timestamp when producing"
+        "Produced batch for partition {kafka/topic/0} has max_timestamp left unset ({-1}) by client (client_id: sarama). Accepting batch since 'kafka_produce_batch_validation' is set to 'legacy'. It is strongly recommended that you update your client to set the max_timestamp when producing"
     )
     expected_log_lines[ValidationMode.STRICT][False] = None
     expected_log_lines[ValidationMode.STRICT][True] = None

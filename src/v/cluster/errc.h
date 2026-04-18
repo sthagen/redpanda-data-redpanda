@@ -11,7 +11,9 @@
 
 #pragma once
 #include "base/compiler_utils.h"
+#include "base/format_to.h"
 
+#include <string_view>
 #include <system_error>
 
 namespace cluster {
@@ -104,7 +106,7 @@ enum class errc : int16_t {
     feature_sanctioned,
 };
 
-std::ostream& operator<<(std::ostream& o, errc err);
+fmt::iterator format_to(errc err, fmt::iterator);
 
 struct errc_category final : public std::error_category {
     const char* name() const noexcept final { return "cluster::errc"; }

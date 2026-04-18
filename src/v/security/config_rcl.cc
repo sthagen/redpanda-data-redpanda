@@ -18,8 +18,6 @@
 #include "ssx/sformat.h"
 #include "strings/string_switch.h"
 
-#include <boost/algorithm/string/case_conv.hpp>
-
 #include <ada.h>
 #include <charconv>
 #include <optional>
@@ -130,10 +128,6 @@ validate_kerberos_mapping_rules(const std::vector<ss::sstring>& r) noexcept {
 }
 
 namespace oidc {
-std::ostream& operator<<(std::ostream& os, const parsed_url& url) {
-    fmt::print(os, "{}://{}:{}{}", url.scheme, url.host, url.port, url.target);
-    return os;
-}
 result<parsed_url> parse_url(std::string_view url_view) {
     parsed_url result;
     auto url = ada::parse<ada::url_aggregator>(url_view);
@@ -236,13 +230,6 @@ validate_principal_mapping_rule(const ss::sstring& rule) {
         return rule_res.assume_error().message();
     }
     return std::nullopt;
-}
-
-auto format_as(nested_group_behavior b) { return to_string_view(b); }
-
-std::ostream& operator<<(std::ostream& os, nested_group_behavior b) {
-    os << to_string_view(b);
-    return os;
 }
 
 std::istream& operator>>(std::istream& is, nested_group_behavior& b) {

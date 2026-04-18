@@ -502,7 +502,6 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":logger",
-        "//src/v/base",
         "@seastar",
     ],
     visibility = ["//visibility:public"],
@@ -511,6 +510,7 @@ redpanda_cc_library(
         ":transform",
         ":transform_utils",
         ":unresolved_partition_spec",
+        "//src/v/base",
         "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
     ],
@@ -991,6 +991,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":datatypes",
+        "//src/v/base",
         "//src/v/utils:fixed_string",
     ],
 )
@@ -1073,7 +1074,6 @@ redpanda_cc_library(
         "unresolved_partition_spec.h",
     ],
     implementation_deps = [
-        "//src/v/base",
         "@fmt",
     ],
     visibility = ["//visibility:public"],
@@ -1142,6 +1142,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":datatypes",
+        "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/container:chunked_vector",
         "//src/v/utils:uuid",

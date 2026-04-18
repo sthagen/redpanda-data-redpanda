@@ -27,9 +27,7 @@
 #include "model/metadata.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/sleep.hh>
 
 #include <chrono>
@@ -630,6 +628,15 @@ ss::future<shared_consumer_t> make_consumer(
       std::move(mitigater),
       logger);
     return c->initialize().then([c]() mutable { return std::move(c); });
+}
+
+fmt::iterator consumer::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "type={}, member_id={}, name={}",
+      is_leader() ? "leader" : "member",
+      _member_id,
+      _name);
 }
 
 } // namespace kafka::client

@@ -28,9 +28,8 @@
 
 #include <seastar/json/json_elements.hh>
 
-#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/trim.hpp>
 #include <boost/lexical_cast.hpp>
 
 using admin::apply_validator;

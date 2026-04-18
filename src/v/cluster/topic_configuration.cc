@@ -9,12 +9,12 @@
 
 #include "cluster/topic_configuration.h"
 
+#include "base/format_to.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "reflection/adl.h"
 #include "storage/ntp_config.h"
-#include "utils/uuid.h"
 
 #include <seastar/core/sstring.hh>
 
@@ -110,20 +110,17 @@ void topic_configuration::serde_read(iobuf_parser& in, const serde::header& h) {
         properties.remote_delete = storage::ntp_config::legacy_remote_delete;
     }
 }
-
-std::ostream& operator<<(std::ostream& o, const topic_configuration& cfg) {
-    fmt::print(
-      o,
+fmt::iterator topic_configuration::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{ topic: {}, partition_count: {}, replication_factor: {}, is_migrated: "
       "{}, topic_id: {}, properties: {}}}",
-      cfg.tp_ns,
-      cfg.partition_count,
-      cfg.replication_factor,
-      cfg.is_migrated,
-      cfg.tp_id,
-      cfg.properties);
-
-    return o;
+      tp_ns,
+      partition_count,
+      replication_factor,
+      is_migrated,
+      tp_id,
+      properties);
 }
 
 } // namespace cluster

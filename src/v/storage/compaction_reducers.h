@@ -170,7 +170,7 @@ private:
       const model::record_batch&,
       const model::record&,
       bool,
-      std::vector<int32_t>&);
+      chunked_vector<int32_t>&);
 
     ss::future<std::optional<model::record_batch>> filter(model::record_batch);
 
@@ -272,15 +272,14 @@ public:
         size_t num_aborted_txes{0};
         size_t batches_processed{0};
 
-        friend std::ostream& operator<<(std::ostream& os, const stats& s) {
-            fmt::print(
-              os,
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
               "{{ batches processed: {}, aborted_txs: {}, "
               "discarded batches: {} }}",
-              s.batches_processed,
-              s.num_aborted_txes,
-              s.batches_discarded);
-            return os;
+              batches_processed,
+              num_aborted_txes,
+              batches_discarded);
         }
     };
 

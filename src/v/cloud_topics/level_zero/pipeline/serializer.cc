@@ -11,10 +11,8 @@
 #include "cloud_topics/level_zero/pipeline/serializer.h"
 
 #include "cloud_topics/level_zero/common/extent_meta.h"
-#include "model/timeout_clock.h"
 #include "storage/record_batch_utils.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
 namespace cloud_topics::l0 {

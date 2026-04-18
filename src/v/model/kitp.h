@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "model/ktp.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -46,6 +47,10 @@ public:
     topic_partition_view as_tp_view() const { return _tp_view; }
     ktp as_ktp() const { return {_tp_view.topic, _tp_view.partition}; }
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}, topic_id: {}", _tp_view, _id);
+    }
+
 private:
     // Note: the id is not hashed, as it's only available if the request
     // specified a non-default topic_id
@@ -64,12 +69,6 @@ private:
         return std::tie(lhs._id, lhs._tp_view)
                == std::tie(rhs._id, rhs._tp_view);
     };
-
-    friend inline std::ostream&
-    operator<<(std::ostream& os, const kitp_view& v) {
-        fmt::print(os, "{}, topic_id: {}", v._tp_view, v._id);
-        return os;
-    }
 
     topic_id _id;
     topic_partition_view _tp_view;
@@ -119,6 +118,10 @@ public:
 
     const ktp& as_ktp() const { return *this; }
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", as_kitp_view());
+    }
+
 private:
     template<typename H>
     friend inline H AbslHashValue(H h, const kitp& kitp) {
@@ -127,10 +130,6 @@ private:
 
     friend inline bool operator==(const kitp& lhs, const kitp& rhs) {
         return lhs.as_kitp_view() == rhs.as_kitp_view();
-    }
-
-    friend inline std::ostream& operator<<(std::ostream& os, const kitp& v) {
-        return os << v.as_kitp_view();
     }
 
     topic_id _id;

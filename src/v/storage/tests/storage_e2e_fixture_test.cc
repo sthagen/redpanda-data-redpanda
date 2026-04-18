@@ -17,7 +17,6 @@
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/lowres_clock.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 

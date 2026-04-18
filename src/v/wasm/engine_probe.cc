@@ -16,7 +16,6 @@
 #include "metrics/prometheus_sanitize.h"
 
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/weak_ptr.hh>
 
 namespace wasm {
 

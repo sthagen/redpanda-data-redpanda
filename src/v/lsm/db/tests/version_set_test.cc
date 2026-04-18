@@ -15,7 +15,6 @@
 #include "lsm/sst/block_cache.h"
 #include "lsm/sst/builder.h"
 
-#include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

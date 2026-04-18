@@ -13,7 +13,6 @@
 #include "base/vassert.h"
 #include "cluster/cluster_link/table_utils.h"
 #include "cluster/commands.h"
-#include "cluster/errc.h"
 #include "cluster/logger.h"
 #include "cluster_link/model/types.h"
 

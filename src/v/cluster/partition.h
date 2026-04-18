@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_storage/fwd.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/fwd.h"
@@ -401,6 +402,8 @@ public:
     ss::sharded<cloud_topics::state_accessors>*
     get_cloud_topics_state() noexcept;
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
 private:
     ss::future<>
     replicate_unsafe_reset(cloud_storage::partition_manifest manifest);
@@ -466,8 +469,6 @@ private:
       = partition_flush_hook_id_invalid;
 
     bool _started{false};
-
-    friend std::ostream& operator<<(std::ostream& o, const partition& x);
 };
 } // namespace cluster
 namespace std {

@@ -10,11 +10,8 @@
 
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "cloud_topics/types.h"
-#include "gtest/gtest.h"
 #include "model/fundamental.h"
 #include "random/generators.h"
-#include "test_utils/test.h"
-#include "utils/uuid.h"
 
 #include <gtest/gtest.h>
 

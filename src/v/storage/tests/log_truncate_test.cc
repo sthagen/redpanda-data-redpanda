@@ -19,18 +19,13 @@
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
 
-#include <seastar/core/file.hh>
 #include <seastar/util/defer.hh>
-#include <seastar/util/later.hh>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <exception>
 #include <iostream>
 #include <iterator>
-#include <numeric>
-#include <stdexcept>
 
 using namespace storage; // NOLINT
 

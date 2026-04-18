@@ -16,14 +16,11 @@
 #include "random/generators.h"
 #include "serde/json/writer.h"
 
-#include <gtest/gtest.h>
 #include <rapidjson/document.h>
-#include <rapidjson/reader.h>
 #include <rapidjson/writer.h>
 
 #include <cstdlib>
 #include <numbers>
-#include <source_location>
 
 namespace {
 

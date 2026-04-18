@@ -13,13 +13,11 @@
 
 #include "cluster/logger.h"
 #include "cluster/producer_state.h"
-#include "cluster/types.h"
 #include "config/property.h"
 #include "metrics/prometheus_sanitize.h"
 
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics.hh>
-#include <seastar/util/defer.hh>
 
 namespace cluster::tx {
 

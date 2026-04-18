@@ -9,6 +9,8 @@
  */
 #pragma once
 
+#include <fmt/format.h>
+
 #include <system_error>
 
 namespace cloud_topics {
@@ -71,3 +73,11 @@ namespace std {
 template<>
 struct is_error_code_enum<cloud_topics::errc> : true_type {};
 } // namespace std
+
+template<>
+struct fmt::formatter<cloud_topics::errc> : fmt::formatter<std::string> {
+    auto format(cloud_topics::errc e, fmt::format_context& ctx) const {
+        return fmt::formatter<std::string>::format(
+          cloud_topics::errc_category{}.message(static_cast<int>(e)), ctx);
+    }
+};

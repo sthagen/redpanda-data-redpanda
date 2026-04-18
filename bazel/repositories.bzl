@@ -25,7 +25,10 @@ def data_dependency():
         sha256 = "791d9f163f458d0ba4c94251f58ef5af9157952a9569ce0968d89aeb585af34f",
         strip_prefix = "avro-46fe1e36f680d75219cba46368de38321f1810ed",
         url = "https://github.com/redpanda-data/avro/archive/46fe1e36f680d75219cba46368de38321f1810ed.tar.gz",
-        patches = ["//bazel/thirdparty:avro-snappy-includes.patch"],
+        patches = [
+            "//bazel/thirdparty:avro-snappy-includes.patch",
+            "//bazel/thirdparty:avro-fmt-const.patch",
+        ],
         patch_args = ["-p1"],
     )
 

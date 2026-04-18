@@ -15,13 +15,10 @@
 #include "container/intrusive_list_helpers.h"
 #include "metrics/metrics.h"
 
-#include <seastar/core/future.hh>
-#include <seastar/core/metrics.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/noncopyable_function.hh>
 
 #include <memory>
-#include <vector>
 
 namespace resources {
 

@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 
-#include "json/document.h"
 #include "transform/logging/event.h"
 #include "transform/logging/tests/utils.h"
 

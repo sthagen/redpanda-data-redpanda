@@ -17,17 +17,10 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
-#include <seastar/core/memory.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/testing/perf_tests.hh>
-#include <seastar/util/later.hh>
 
-#include <array>
-#include <chrono>
 #include <cstdint>
-#include <iostream>
 #include <optional>
-#include <random>
 
 struct iobuf_reader {
     explicit iobuf_reader(iobuf io)

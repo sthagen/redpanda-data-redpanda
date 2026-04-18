@@ -101,8 +101,6 @@ private:
     friend struct fmt::formatter<license>;
 
     friend bool operator==(const license& a, const license& b) = default;
-
-    friend std::ostream& operator<<(std::ostream& os, const license& lic);
 };
 
 /// Returns a license or an exception indicating the reason why the method
@@ -118,7 +116,9 @@ template<>
 struct formatter<security::license> {
     using type = security::license;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator

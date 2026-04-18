@@ -13,6 +13,8 @@
 
 #include "base/outcome.h"
 
+#include <fmt/format.h>
+
 #include <system_error>
 
 namespace cluster_link {
@@ -75,3 +77,10 @@ namespace std {
 template<>
 struct is_error_code_enum<cluster_link::errc> : true_type {};
 } // namespace std
+
+template<>
+struct fmt::formatter<cluster_link::errc> : fmt::formatter<int> {
+    auto format(cluster_link::errc e, fmt::format_context& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(e), ctx);
+    }
+};

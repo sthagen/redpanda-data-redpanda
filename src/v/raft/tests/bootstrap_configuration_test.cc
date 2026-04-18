@@ -7,24 +7,18 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "model/adl_serde.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
-#include "model/record.h"
 #include "raft/configuration_bootstrap_state.h"
-#include "raft/consensus.h"
 #include "raft/consensus_utils.h"
 #include "raft/group_configuration.h"
 #include "storage/api.h"
 #include "storage/log.h"
 #include "storage/log_manager.h"
-#include "storage/record_batch_builder.h"
 // testing
 #include "raft/tests/simple_record_fixture.h"
 #include "test_utils/boost_fixture.h"
 #include "test_utils/test_env.h"
 
-#include <seastar/core/print.hh>
 #include <seastar/util/log.hh>
 
 using namespace std::chrono_literals; // NOLINT

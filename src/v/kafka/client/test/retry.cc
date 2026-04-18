@@ -11,12 +11,10 @@
 #include "kafka/client/client.h"
 #include "kafka/client/test/fixture.h"
 #include "kafka/client/test/utils.h"
-#include "kafka/protocol/exceptions.h"
 #include "model/timeout_clock.h"
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 inline const model::topic_partition unknown_tp{
   model::topic{"unknown"}, model::partition_id{0}};

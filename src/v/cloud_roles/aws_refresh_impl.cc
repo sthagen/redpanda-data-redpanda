@@ -219,9 +219,8 @@ ss::future<api_response> aws_refresh_impl::make_request_with_token(
       co_await make_api_client("aws"), std::move(req));
 }
 
-std::ostream& aws_refresh_impl::print(std::ostream& os) const {
-    fmt::print(os, "aws_refresh_impl{{address:{}}}", address());
-    return os;
+fmt::iterator aws_refresh_impl::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "aws_refresh_impl{{address:{}}}", address());
 }
 
 } // namespace cloud_roles

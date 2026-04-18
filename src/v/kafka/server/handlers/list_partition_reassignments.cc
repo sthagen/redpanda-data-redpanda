@@ -11,13 +11,9 @@
 #include "kafka/server/handlers/list_partition_reassignments.h"
 
 #include "cluster/metadata_cache.h"
-#include "cluster/shard_table.h"
-#include "cluster/topics_frontend.h"
-#include "config/node_config.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/list_partition_reassignments_request.h"
 #include "kafka/protocol/schemata/list_partition_reassignments_response.h"
-#include "kafka/server/errors.h"
 #include "kafka/server/fwd.h"
 #include "model/namespace.h"
 

@@ -1,19 +1,14 @@
-#include "absl/strings/escaping.h"
 #include "base/outcome.h"
 #include "base/units.h"
 #include "config/mock_property.h"
-#include "model/namespace.h"
 #include "model/transform.h"
-#include "strings/utf8.h"
 #include "test_utils/async.h"
 #include "transform/logging/errc.h"
-#include "transform/logging/event.h"
 #include "transform/logging/io.h"
 #include "transform/logging/log_manager.h"
 #include "transform/logging/tests/utils.h"
 
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/shared_ptr.hh>
 
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>

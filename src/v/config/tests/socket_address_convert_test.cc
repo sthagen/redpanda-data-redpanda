@@ -9,7 +9,6 @@
 
 #include "config/configuration.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <yaml-cpp/yaml.h>

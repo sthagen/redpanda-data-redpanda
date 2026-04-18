@@ -31,7 +31,6 @@
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <unistd.h>
 #include <vector>
 
 namespace transform {

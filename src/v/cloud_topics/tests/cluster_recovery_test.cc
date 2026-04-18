@@ -15,13 +15,11 @@
 #include "cluster/cluster_recovery_manager.h"
 #include "cluster/cluster_recovery_table.h"
 #include "kafka/server/tests/produce_consume_utils.h"
-#include "ssx/future-util.h"
 #include "ssx/sformat.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/gate.hh>
 #include <seastar/util/defer.hh>
 
 #include <gtest/gtest.h>
@@ -47,11 +45,12 @@ struct test_params {
     bool unstable_controller{false};
     bool unstable_metastore{false};
 
-    friend std::ostream& operator<<(std::ostream& os, const test_params& p) {
-        return os << fmt::format(
-                 "controller_{}_metastore_{}",
-                 p.unstable_controller ? "unstable" : "stable",
-                 p.unstable_metastore ? "unstable" : "stable");
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "controller_{}_metastore_{}",
+          unstable_controller ? "unstable" : "stable",
+          unstable_metastore ? "unstable" : "stable");
     }
 };
 

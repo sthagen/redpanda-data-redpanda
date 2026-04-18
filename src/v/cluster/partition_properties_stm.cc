@@ -14,7 +14,6 @@
 #include "base/vassert.h"
 #include "cluster/errc.h"
 #include "cluster/logger.h"
-#include "cluster/types.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -22,10 +21,6 @@
 #include "raft/persisted_stm.h"
 #include "snapshot.h"
 #include "storage/log.h"
-
-#include <seastar/core/chunked_fifo.hh>
-#include <seastar/coroutine/as_future.hh>
-#include <seastar/util/defer.hh>
 
 #include <fmt/format.h>
 
@@ -367,42 +362,38 @@ void partition_properties_stm_factory::create(
     raft->log()->stm_hookset()->add_stm(stm);
 }
 
-std::ostream& operator<<(
-  std::ostream& o, const partition_properties_stm::raft_snapshot& snap) {
-    fmt::print(
-      o,
+fmt::iterator
+partition_properties_stm::raft_snapshot::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{writes_disabled: {}, writes_revision_id: {}}}",
-      snap.writes_disabled,
-      snap.writes_revision_id);
-    return o;
+      writes_disabled,
+      writes_revision_id);
 }
 
-std::ostream& operator<<(
-  std::ostream& o,
-  const partition_properties_stm::update_writes_disabled_cmd& update) {
-    fmt::print(
-      o,
+fmt::iterator partition_properties_stm::update_writes_disabled_cmd::format_to(
+  fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{writes_disabled: {}, writes_revision_id: {}}}",
-      update.writes_disabled,
-      update.writes_revision_id);
-    return o;
+      writes_disabled,
+      writes_revision_id);
 }
 
-std::ostream& operator<<(
-  std::ostream& o, const partition_properties_stm::local_snapshot& snap) {
-    fmt::print(o, "{{state_updates: {}}}", fmt::join(snap.state_updates, ", "));
-    return o;
-}
-
-std::ostream& operator<<(
-  std::ostream& o, const partition_properties_stm::state_snapshot& update) {
-    fmt::print(
-      o,
+fmt::iterator
+partition_properties_stm::state_snapshot::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{update_offset: {}, writes_disabled: {}, writes_revision_id: {}}}",
-      update.update_offset,
-      update.writes_disabled,
-      update.writes_revision_id);
-    return o;
+      update_offset,
+      writes_disabled,
+      writes_revision_id);
+}
+
+fmt::iterator
+partition_properties_stm::local_snapshot::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{state_updates: {}}}", fmt::join(state_updates, ", "));
 }
 
 } // namespace cluster

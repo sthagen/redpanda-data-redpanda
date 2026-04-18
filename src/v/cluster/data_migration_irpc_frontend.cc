@@ -14,8 +14,6 @@
 #include "cluster/data_migration_types.h"
 #include "features/feature_table.h"
 
-#include <seastar/core/shard_id.hh>
-
 namespace cluster::data_migrations {
 
 irpc_frontend::irpc_frontend(

@@ -12,12 +12,10 @@
 #include "config/node_config.h"
 #include "crash_tracker/recorder.h"
 #include "resource_mgmt/memory_sampling.h"
-#include "storage/batch_cache.h"
 #include "test_utils/async.h"
 #include "test_utils/tmp_dir.h"
 
 #include <seastar/core/memory.hh>
-#include <seastar/core/reactor.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
@@ -28,7 +26,6 @@
 
 #include <chrono>
 #include <sstream>
-#include <string>
 
 #ifndef SEASTAR_DEFAULT_ALLOCATOR
 

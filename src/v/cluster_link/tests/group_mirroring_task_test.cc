@@ -14,8 +14,6 @@
 #include "test_utils/async.h"
 #include "test_utils/test.h"
 
-#include <gmock/gmock.h>
-
 using namespace std::chrono_literals;
 
 namespace cluster_link::tests {

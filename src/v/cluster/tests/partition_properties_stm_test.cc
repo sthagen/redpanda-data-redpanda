@@ -17,7 +17,6 @@
 #include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "raft/replicate.h"
 #include "raft/tests/raft_fixture.h"

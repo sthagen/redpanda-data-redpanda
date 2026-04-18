@@ -20,12 +20,10 @@
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/storage.h"
 #include "pandaproxy/schema_registry/types.h"
-#include "ssx/future-util.h"
 #include "storage/record_batch_builder.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
-#include <seastar/coroutine/as_future.hh>
 
 #include <exception>
 #include <optional>

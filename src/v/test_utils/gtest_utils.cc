@@ -15,7 +15,6 @@
 
 #include <seastar/core/lowres_clock.hh>
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 namespace {

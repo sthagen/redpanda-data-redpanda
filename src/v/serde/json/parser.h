@@ -11,12 +11,10 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 
-#include <fmt/format.h>
-
 #include <cstdint>
-#include <iosfwd>
 #include <memory>
 #include <utility>
 
@@ -46,40 +44,36 @@ enum class token {
     eof,
 };
 
-inline constexpr std::string_view format_as(token t) {
+inline fmt::iterator format_to(token t, fmt::iterator out) {
     switch (t) {
     case token::error:
-        return "error";
+        return fmt::format_to(out, "error");
     case token::value_null:
-        return "value_null";
+        return fmt::format_to(out, "value_null");
     case token::value_true:
-        return "value_true";
+        return fmt::format_to(out, "value_true");
     case token::value_false:
-        return "value_false";
+        return fmt::format_to(out, "value_false");
     case token::value_double:
-        return "value_double";
+        return fmt::format_to(out, "value_double");
     case token::value_int:
-        return "value_int";
+        return fmt::format_to(out, "value_int");
     case token::value_string:
-        return "value_string";
+        return fmt::format_to(out, "value_string");
     case token::start_object:
-        return "start_object";
+        return fmt::format_to(out, "start_object");
     case token::key:
-        return "key";
+        return fmt::format_to(out, "key");
     case token::end_object:
-        return "end_object";
+        return fmt::format_to(out, "end_object");
     case token::start_array:
-        return "start_array";
+        return fmt::format_to(out, "start_array");
     case token::end_array:
-        return "end_array";
+        return fmt::format_to(out, "end_array");
     case token::eof:
-        return "eof";
+        return fmt::format_to(out, "eof");
     }
     std::unreachable();
-}
-
-inline std::ostream& operator<<(std::ostream& os, token t) {
-    return os << format_as(t);
 }
 
 class parser {

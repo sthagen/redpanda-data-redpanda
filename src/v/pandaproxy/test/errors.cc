@@ -17,13 +17,11 @@
 #include "pandaproxy/json/error.h"
 #include "pandaproxy/parsing/error.h"
 
-#include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <ostream>
 #include <system_error>
-#include <utility>
 
 namespace bdata = boost::unit_test::data;
 namespace pp = pandaproxy;

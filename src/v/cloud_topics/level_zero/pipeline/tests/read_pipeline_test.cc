@@ -9,14 +9,10 @@
  */
 
 #include "cloud_topics/level_zero/pipeline/read_pipeline.h"
-#include "model/fundamental.h"
 #include "model/namespace.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/util/log.hh>
 
 #include <chrono>
 #include <limits>

@@ -15,11 +15,9 @@
 #include "cluster/errc.h"
 #include "cluster/logger.h"
 #include "cluster/scheduling/allocation_node.h"
-#include "cluster/scheduling/partition_allocator.h"
+#include "cluster/scheduling/allocation_state.h"
 #include "cluster/scheduling/types.h"
-#include "cluster/types.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "random/generators.h"
 
 #include <seastar/core/shared_ptr.hh>

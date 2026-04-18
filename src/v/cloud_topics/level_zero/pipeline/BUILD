@@ -61,6 +61,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/utils:named_type",
+        "@fmt",
     ],
 )
 

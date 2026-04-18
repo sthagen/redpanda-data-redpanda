@@ -11,27 +11,28 @@
 
 #include "compression/lz4_decompression_buffers.h"
 
-#include "base/units.h"
 #include "base/vassert.h"
 
 #include <seastar/coroutine/all.hh>
 
 namespace compression {
 
-std::ostream& operator<<(
-  std::ostream& os, lz4_decompression_buffers::alloc_ctx::allocation_state st) {
+fmt::iterator format_to(
+  lz4_decompression_buffers::alloc_ctx::allocation_state st,
+  fmt::iterator out) {
     switch (st) {
         using enum compression::lz4_decompression_buffers::alloc_ctx::
           allocation_state;
     case no_buffers_allocated:
-        return os << "no buffers allocated";
+        return fmt::format_to(out, "no buffers allocated");
     case input_buffer_allocated:
-        return os << "input buffer allocated";
+        return fmt::format_to(out, "input buffer allocated");
     case output_buffer_allocated:
-        return os << "output buffer allocated";
+        return fmt::format_to(out, "output buffer allocated");
     case both_buffers_allocated:
-        return os << "both buffers allocated";
+        return fmt::format_to(out, "both buffers allocated");
     }
+    return fmt::format_to(out, "");
 }
 
 lz4_decompression_buffers::lz4_decompression_buffers(

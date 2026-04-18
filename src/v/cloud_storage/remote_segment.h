@@ -495,7 +495,16 @@ struct hydration_request {
     kind path_kind;
 };
 
-std::ostream& operator<<(std::ostream&, hydration_request::kind);
+inline fmt::iterator format_to(hydration_request::kind k, fmt::iterator out) {
+    switch (k) {
+    case hydration_request::kind::segment:
+        return fmt::format_to(out, "segment");
+    case hydration_request::kind::tx:
+        return fmt::format_to(out, "tx-range");
+    case hydration_request::kind::index:
+        return fmt::format_to(out, "index");
+    }
+}
 
 struct hydration_loop_state {
     using hydrate_action_t = hydration_request::hydrate_action_t;

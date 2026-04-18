@@ -16,8 +16,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/scattered_message.hh>
 
-#include <fmt/format.h>
-
 namespace net {
 
 batched_output_stream::batched_output_stream(

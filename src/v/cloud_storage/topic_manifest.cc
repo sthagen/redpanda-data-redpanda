@@ -29,7 +29,6 @@
 #include <seastar/core/sstring.hh>
 
 #include <boost/lexical_cast.hpp>
-#include <fmt/ostream.h>
 #include <rapidjson/error/en.h>
 
 #include <chrono>
@@ -243,7 +242,7 @@ void topic_manifest::do_update(const topic_manifest_handler& handler) {
         throw std::runtime_error(fmt_with_ctx(
           fmt::format,
           "topic manifest version {} is not supported",
-          handler._version));
+          handler._version.value_or(-1)));
     }
 
     _rev = handler._revision_id.value();

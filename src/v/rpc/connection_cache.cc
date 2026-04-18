@@ -9,19 +9,13 @@
 
 #include "rpc/connection_cache.h"
 
-#include "rpc/logger.h"
 #include "ssx/semaphore.h"
 #include "utils/backoff_policy.h"
 
 #include <seastar/core/loop.hh>
-#include <seastar/core/semaphore.hh>
 #include <seastar/core/smp.hh>
 
-#include <fmt/format.h>
-
 #include <algorithm>
-#include <chrono>
-#include <iterator>
 #include <ranges>
 #include <vector>
 

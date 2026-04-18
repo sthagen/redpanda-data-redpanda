@@ -8,16 +8,13 @@
 // by the Apache License, Version 2.0
 
 #include "kafka/server/tests/config_response_utils_test_help.h"
-#include "utils/to_string.h"
 
 #include <boost/test/auto_unit_test.hpp>
 #include <boost/test/test_tools.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
-#include <array>
 #include <optional>
 #include <string_view>
-#include <tuple>
 
 std::optional<ss::sstring> get_config(
   const kafka::config_response_container_t& result, std::string_view key) {

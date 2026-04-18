@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
@@ -30,9 +31,8 @@ struct data_directory_path {
     friend bool operator==(
       const data_directory_path&, const data_directory_path&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const config::data_directory_path& p) {
-        return o << "{data_directory=" << p.path << "}";
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{data_directory={}}}", path);
     }
 };
 

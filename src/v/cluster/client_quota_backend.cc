@@ -13,7 +13,6 @@
 #include "cluster/commands.h"
 #include "cluster/controller_snapshot.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/util/variant_utils.hh>
 
 namespace cluster::client_quota {

@@ -12,7 +12,6 @@
 #include "ssx/clock.h"
 #include "ssx/time.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
 
 #include <gtest/gtest.h>

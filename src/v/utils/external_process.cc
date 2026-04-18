@@ -11,17 +11,10 @@
 
 #include "external_process.h"
 
-#include <seastar/core/loop.hh>
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/core/timed_out_error.hh>
-#include <seastar/core/when_all.hh>
-#include <seastar/core/with_timeout.hh>
-#include <seastar/util/later.hh>
 #include <seastar/util/process.hh>
 
-#include <functional>
 #include <optional>
 
 namespace external_process {

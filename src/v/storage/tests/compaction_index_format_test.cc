@@ -11,7 +11,6 @@
 #include "bytes/bytes.h"
 #include "bytes/iobuf_parser.h"
 #include "model/tests/randoms.h"
-#include "random/generators.h"
 #include "reflection/adl.h"
 #include "storage/compacted_index.h"
 #include "storage/compacted_index_reader.h"
@@ -25,7 +24,6 @@
 #include "test_utils/tmpbuf_file.h"
 #include "utils/vint.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 std::unique_ptr<storage::compacted_index_writer> make_dummy_compacted_index(

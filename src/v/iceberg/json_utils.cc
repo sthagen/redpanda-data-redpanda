@@ -10,8 +10,6 @@
 
 #include "iceberg/json_utils.h"
 
-#include <fmt/format.h>
-
 #include <stdexcept>
 
 namespace iceberg {
@@ -34,8 +32,8 @@ parse_string_map(const json::Value& map_json, std::string_view member_name) {
                 "Expected '{}' field to be a string map. Current type "
                 "map<{},{}>",
                 member_name,
-                property.name.GetType(),
-                property.value.GetType()));
+                static_cast<int>(property.name.GetType()),
+                static_cast<int>(property.value.GetType())));
         }
 
         ret.emplace(property.name.GetString(), property.value.GetString());
@@ -82,7 +80,7 @@ parse_required_array(const json::Value& v, std::string_view member_name) {
           fmt::format(
             "Expected array for field '{}': {}",
             member_name,
-            array_json.GetType()));
+            static_cast<int>(array_json.GetType())));
     }
     return array_json.GetArray();
 }
@@ -97,7 +95,9 @@ parse_optional_array(const json::Value& v, std::string_view member_name) {
     if (!val.IsArray()) {
         throw std::invalid_argument(
           fmt::format(
-            "Expected array for field '{}': {}", member_name, val.GetType()));
+            "Expected array for field '{}': {}",
+            member_name,
+            static_cast<int>(val.GetType())));
     }
     return val.GetArray();
 }
@@ -110,7 +110,7 @@ parse_required_object(const json::Value& v, std::string_view member_name) {
           fmt::format(
             "Expected object for field '{}': {}",
             member_name,
-            obj_json.GetType()));
+            static_cast<int>(obj_json.GetType())));
     }
     return obj_json.GetObject();
 }
@@ -125,7 +125,9 @@ parse_optional_object(const json::Value& v, std::string_view member_name) {
     if (!val.IsObject()) {
         throw std::invalid_argument(
           fmt::format(
-            "Expected object for field '{}': {}", member_name, val.GetType()));
+            "Expected object for field '{}': {}",
+            member_name,
+            static_cast<int>(val.GetType())));
     }
     return val.GetObject();
 }

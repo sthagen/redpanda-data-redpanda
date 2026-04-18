@@ -16,12 +16,10 @@
 #include "storage/disk_log_impl.h"
 #include "storage/logger.h"
 #include "storage/segment.h"
-#include "storage/segment_appender.h"
 
 #include <seastar/coroutine/exception.hh>
 
 #include <exception>
-#include <type_traits>
 
 namespace storage {
 
@@ -176,13 +174,17 @@ ss::future<append_result> disk_log_appender::end_of_stream() {
     co_return retval;
 }
 
-std::ostream& operator<<(std::ostream& o, const disk_log_appender& a) {
-    return o << "{offset_idx:" << a._idx
-             << ", active_segment:" << (a._seg_lock ? "yes" : "no")
-             << ", _bytes_left_in_segment:" << a._bytes_left_in_segment
-             << ", _base_offset:" << a._base_offset
-             << ", _last_offset:" << a._last_offset
-             << ", _last_term:" << a._last_term
-             << ", _byte_size:" << a._byte_size << "}";
+fmt::iterator disk_log_appender::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{offset_idx:{}, active_segment:{}, _bytes_left_in_segment:{}, "
+      "_base_offset:{}, _last_offset:{}, _last_term:{}, _byte_size:{}}}",
+      _idx,
+      (_seg_lock ? "yes" : "no"),
+      _bytes_left_in_segment,
+      _base_offset,
+      _last_offset,
+      _last_term,
+      _byte_size);
 }
 } // namespace storage

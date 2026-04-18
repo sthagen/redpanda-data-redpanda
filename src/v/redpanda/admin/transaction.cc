@@ -8,14 +8,12 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "cluster/partition_manager.h"
 #include "cluster/tx_gateway_frontend.h"
 #include "container/lw_shared_container.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
 #include "kafka/server/server.h"
 #include "redpanda/admin/api-doc/transaction.json.hh"
 #include "redpanda/admin/server.h"
-#include "redpanda/admin/util.h"
 
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/json/json_elements.hh>

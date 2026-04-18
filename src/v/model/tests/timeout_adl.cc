@@ -11,7 +11,6 @@
 #include "model/adl_serde.h"
 #include "model/timeout_clock.h"
 #include "reflection/adl.h"
-#include "utils/to_string.h"
 
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>

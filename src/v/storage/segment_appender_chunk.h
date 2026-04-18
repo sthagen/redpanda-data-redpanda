@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "container/intrusive_list_helpers.h"
@@ -133,10 +134,15 @@ private:
     size_t _pos{0};
     size_t _flushed_pos{0};
     std::unique_ptr<char[], ss::free_deleter> _buf;
-    friend std::ostream&
-    operator<<(std::ostream& o, const segment_appender_chunk& c) {
-        return o << "{_alignment:" << c._alignment << ", _pos:" << c._pos
-                 << ", _flushed_pos:" << c._flushed_pos << "}";
+
+public:
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{_alignment:{}, _pos:{}, _flushed_pos:{}}}",
+          _alignment,
+          _pos,
+          _flushed_pos);
     }
 };
 

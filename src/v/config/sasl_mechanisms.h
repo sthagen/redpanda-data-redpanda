@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 #include "json/stringbuffer.h"
@@ -57,8 +58,7 @@ struct sasl_mechanisms_override {
     operator==(const sasl_mechanisms_override&, const sasl_mechanisms_override&)
       = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const sasl_mechanisms_override& ep);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 // Checks if there are any enterprise sasl mechanisms in this override

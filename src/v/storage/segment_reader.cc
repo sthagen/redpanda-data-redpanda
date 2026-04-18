@@ -18,7 +18,7 @@
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
 #include <seastar/core/iostream.hh>
-#include <seastar/core/reactor.hh>
+#include <seastar/core/reactor.hh> // NOLINT(misc-include-cleaner) ss::open_file_dma
 #include <seastar/core/sstring.hh>
 
 namespace storage {
@@ -192,18 +192,6 @@ ss::future<> segment_reader::close() {
     if (_data_file) {
         co_return co_await _data_file.close();
     }
-}
-
-std::ostream& operator<<(std::ostream& os, const segment_reader& seg) {
-    return os << "{" << seg.filename() << ", (" << seg.file_size()
-              << " bytes)}";
-}
-
-std::ostream& operator<<(std::ostream& os, const segment_reader_ptr& seg) {
-    if (seg) {
-        return os << *seg;
-    }
-    return os << "{{log_segment: null}}";
 }
 
 segment_reader_handle::segment_reader_handle(segment_reader* parent)

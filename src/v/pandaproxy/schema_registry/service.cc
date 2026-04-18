@@ -36,7 +36,6 @@
 #include "security/acl.h"
 #include "security/audit/audit_log_manager.h"
 #include "security/authorizer.h"
-#include "security/credential_store.h"
 #include "security/ephemeral_credential_store.h"
 #include "security/request_auth.h"
 #include "ssx/semaphore.h"
@@ -44,14 +43,9 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
-#include <seastar/core/memory.hh>
-#include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/http/api_docs.hh>
-#include <seastar/http/exception.hh>
 #include <seastar/util/log.hh>
 #include <seastar/util/noncopyable_function.hh>
-
-#include <boost/algorithm/string/predicate.hpp>
 
 #include <variant>
 

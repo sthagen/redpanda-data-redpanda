@@ -14,11 +14,7 @@
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
-#include "gmock/gmock.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
-#include "random/generators.h"
-#include "ssx/sformat.h"
 #include "storage/record_batch_builder.h"
 #include "storage/record_batch_utils.h"
 

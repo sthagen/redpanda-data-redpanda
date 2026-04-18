@@ -11,10 +11,9 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "model/record.h"
 #include "raft/group_configuration.h"
-
-#include <fmt/format.h>
 
 namespace raft {
 
@@ -45,24 +44,22 @@ public:
     uint32_t data_batches_seen() const { return _data_batches_seen; }
     uint32_t config_batches_seen() const { return _configurations.size(); }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const configuration_bootstrap_state& s) {
-        fmt::print(
-          o,
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
           "data_seen {} config_seen {} eol {} commit {} term {} prev_idx {} "
           "prev_term {} config_tracker {} commit_base_tracker {} "
           "configurations {}",
-          s._data_batches_seen,
-          s._configurations.size(),
-          s._end_of_log,
-          s._commit_index,
-          s._term,
-          s._prev_log_index,
-          s._prev_log_term,
-          s._log_config_offset_tracker,
-          s._commit_index_base_batch_offset,
-          s._configurations);
-        return o;
+          _data_batches_seen,
+          _configurations.size(),
+          _end_of_log,
+          _commit_index,
+          _term,
+          _prev_log_index,
+          _prev_log_term,
+          _log_config_offset_tracker,
+          _commit_index_base_batch_offset,
+          _configurations);
     }
 
 private:

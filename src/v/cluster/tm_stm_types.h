@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/format_to.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -103,8 +104,8 @@ enum class tx_status : int32_t {
      */
     tombstone = 6,
 };
+fmt::iterator format_to(tx_status, fmt::iterator);
 
-std::ostream& operator<<(std::ostream&, tx_status);
 /**
  * Simple tuple representing state transition error.
  */
@@ -114,8 +115,7 @@ struct state_transition_error {
     tx_status from;
     tx_status to;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const state_transition_error&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct tx_metadata {
@@ -133,7 +133,7 @@ struct tx_metadata {
         model::revision_id topic_revision;
 
         bool operator==(const tx_partition& other) const = default;
-        friend std::ostream& operator<<(std::ostream&, const tx_partition&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
 
     struct tx_group {
@@ -193,7 +193,7 @@ struct tx_metadata {
      */
     bool is_finished() const;
 
-    friend std::ostream& operator<<(std::ostream&, const tx_metadata&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 bool is_state_transition_valid(const tx_metadata&, tx_status);
@@ -369,3 +369,23 @@ struct transaction_metadata_v0 {
     };
 };
 } // namespace cluster
+
+template<>
+struct fmt::formatter<cluster::transaction_metadata_v1::tx_status>
+  : fmt::formatter<int32_t> {
+    auto format(
+      cluster::transaction_metadata_v1::tx_status s,
+      fmt::format_context& ctx) const {
+        return fmt::formatter<int32_t>::format(static_cast<int32_t>(s), ctx);
+    }
+};
+
+template<>
+struct fmt::formatter<cluster::transaction_metadata_v0::tx_status>
+  : fmt::formatter<int32_t> {
+    auto format(
+      cluster::transaction_metadata_v0::tx_status s,
+      fmt::format_context& ctx) const {
+        return fmt::formatter<int32_t>::format(static_cast<int32_t>(s), ctx);
+    }
+};

@@ -13,6 +13,7 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "cluster/errc.h"
 #include "container/chunked_vector.h"
@@ -41,8 +42,7 @@ struct transformed_topic_data
     ss::chunked_fifo<model::record_batch> batches;
 
     transformed_topic_data share();
-    friend std::ostream&
-    operator<<(std::ostream&, const transformed_topic_data&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(tp, batches); }
 };
@@ -60,7 +60,7 @@ struct produce_request
     auto serde_fields() { return std::tie(topic_data, timeout); }
 
     produce_request share();
-    friend std::ostream& operator<<(std::ostream&, const produce_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     ss::chunked_fifo<transformed_topic_data> topic_data;
     model::timeout_clock::duration timeout{};
@@ -80,8 +80,9 @@ struct transformed_topic_data_result
     cluster::errc err{cluster::errc::success};
 
     auto serde_fields() { return std::tie(tp, err); }
-    friend std::ostream&
-    operator<<(std::ostream&, const transformed_topic_data_result&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ errc: {}, tp: {} }}", err, tp);
+    }
 };
 
 struct produce_reply
@@ -130,8 +131,9 @@ struct stored_wasm_binary_metadata
 
     auto serde_fields() { return std::tie(key, offset); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const stored_wasm_binary_metadata&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ key: {}, offset: {} }}", key, offset);
+    }
 
     uuid_t key{};
     model::offset offset;
@@ -150,8 +152,9 @@ struct store_wasm_binary_reply
 
     auto serde_fields() { return std::tie(ec, stored); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const store_wasm_binary_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ errc: {}, stored: {} }}", ec, stored);
+    }
 
     cluster::errc ec = cluster::errc::success;
     stored_wasm_binary_metadata stored;
@@ -170,8 +173,9 @@ struct delete_wasm_binary_request
 
     auto serde_fields() { return std::tie(key, timeout); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const delete_wasm_binary_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ key: {}, timeout: {} }}", key, timeout);
+    }
 
     uuid_t key{};
     model::timeout_clock::duration timeout{};
@@ -188,8 +192,9 @@ struct delete_wasm_binary_reply
 
     auto serde_fields() { return std::tie(ec); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const delete_wasm_binary_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ errc: {} }}", ec);
+    }
 
     cluster::errc ec = cluster::errc::success;
 };
@@ -207,8 +212,10 @@ struct load_wasm_binary_request
 
     auto serde_fields() { return std::tie(offset, timeout); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const load_wasm_binary_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{ offset: {}, timeout: {} }}", offset, timeout);
+    }
 
     model::offset offset;
     model::timeout_clock::duration timeout{};
@@ -244,8 +251,9 @@ struct find_coordinator_request
 
     absl::flat_hash_set<model::transform_offsets_key> keys;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const find_coordinator_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ num_keys: {} }}", keys.size());
+    }
 
     auto serde_fields() { return std::tie(keys); }
 };
@@ -261,8 +269,13 @@ struct find_coordinator_response
       coordinators;
     absl::flat_hash_map<model::transform_offsets_key, cluster::errc> errors;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const find_coordinator_response&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{ coordinators: {}, errors: {} }}",
+          coordinators.size(),
+          errors.size());
+    }
 
     auto serde_fields() { return std::tie(coordinators, errors); }
 };
@@ -286,8 +299,10 @@ struct offset_commit_request
       btree_map<model::transform_offsets_key, model::transform_offsets_value>
         kvs;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const offset_commit_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{ kvs: {}, coordinator: {} }}", kvs.size(), coordinator);
+    }
 
     auto serde_fields() { return std::tie(kvs, coordinator); }
 };
@@ -303,8 +318,9 @@ struct offset_commit_response
 
     cluster::errc errc{cluster::errc::success};
 
-    friend std::ostream&
-    operator<<(std::ostream&, const offset_commit_response&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ errc: {} }}", errc);
+    }
 
     auto serde_fields() { return std::tie(errc); }
 };
@@ -329,7 +345,10 @@ struct offset_fetch_request
 
     auto serde_fields() { return std::tie(keys, coordinator); }
 
-    friend std::ostream& operator<<(std::ostream&, const offset_fetch_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{ keys: {}, coordinator: {} }}", keys.size(), coordinator);
+    }
 };
 
 struct offset_fetch_response
@@ -347,8 +366,10 @@ struct offset_fetch_response
 
     auto serde_fields() { return std::tie(errors, results); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const offset_fetch_response&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{ errc: {}, results: {} }}", errors.size(), results.size());
+    }
 };
 
 struct generate_report_request
@@ -360,8 +381,9 @@ struct generate_report_request
 
     auto serde_fields() { return std::tie(); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const generate_report_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ }}");
+    }
 };
 
 struct generate_report_reply
@@ -375,8 +397,10 @@ struct generate_report_reply
 
     auto serde_fields() { return std::tie(report); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const generate_report_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{ transforms: {} }}", report.transforms.size());
+    }
 
     model::cluster_transform_report report;
 };
@@ -392,7 +416,9 @@ struct list_commits_request
 
     auto serde_fields() { return std::tie(partition); }
 
-    friend std::ostream& operator<<(std::ostream&, const list_commits_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ partition: {} }}", partition);
+    }
 
     model::partition_id partition;
 };
@@ -410,7 +436,10 @@ struct list_commits_reply
 
     auto serde_fields() { return std::tie(errc, map); }
 
-    friend std::ostream& operator<<(std::ostream&, const list_commits_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{ ec: {}, map_size: {} }}", errc, map.size());
+    }
 
     cluster::errc errc{cluster::errc::success};
     model::transform_offsets_map map;
@@ -435,8 +464,13 @@ struct delete_commits_request
 
     auto serde_fields() { return std::tie(partition, ids); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const delete_commits_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{ partition: {}, transform_ids_size: {} }}",
+          partition,
+          ids.size());
+    }
 
     model::partition_id partition;
     absl::btree_set<model::transform_id> ids;
@@ -455,7 +489,9 @@ struct delete_commits_reply
 
     auto serde_fields() { return std::tie(errc); }
 
-    friend std::ostream& operator<<(std::ostream&, const delete_commits_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ ec: {} }}", errc);
+    }
 
     cluster::errc errc{cluster::errc::success};
 };

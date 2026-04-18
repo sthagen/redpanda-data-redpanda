@@ -15,7 +15,6 @@
 #include "cluster/shard_table.h"
 #include "config/configuration.h"
 #include "kafka/data/partition_proxy.h"
-#include "kafka/data/replicated_partition.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/kafka_batch_adapter.h"
 #include "kafka/server/handlers/produce_validation.h"
@@ -28,18 +27,13 @@
 #include "raft/errc.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/execution_stage.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/util/log.hh>
 
-#include <boost/container_hash/extensions.hpp>
-#include <fmt/ostream.h>
-
 #include <chrono>
 #include <exception>
-#include <expected>
 #include <functional>
 
 namespace kafka {

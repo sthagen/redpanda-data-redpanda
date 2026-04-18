@@ -10,6 +10,7 @@
 
 #include "cloud_storage_clients/s3_client.h"
 
+#include "base/external_fmt.h"
 #include "base/units.h"
 #include "base/vlog.h"
 #include "bytes/bytes.h"
@@ -36,16 +37,11 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/gate.hh>
 #include <seastar/core/iostream.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/temporary_buffer.hh>
-#include <seastar/net/inet_address.hh>
 #include <seastar/util/log.hh>
 
-#include <boost/beast/core/error.hpp>
 #include <boost/beast/http/field.hpp>
 #include <boost/beast/http/status.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -1066,14 +1062,14 @@ ss::future<http::client::response_stream_ref> s3_client::do_get_object(
                       vlog(
                         s3_log.debug,
                         "S3 GET request with expected error for key {}: {} "
-                        "{:l}",
+                        "{}",
                         key,
                         ref->get_headers().result(),
                         ref->get_headers());
                   } else {
                       vlog(
                         s3_log.warn,
-                        "S3 GET request failed for key {}: {} {:l}",
+                        "S3 GET request failed for key {}: {} {}",
                         key,
                         ref->get_headers().result(),
                         ref->get_headers());
@@ -1121,7 +1117,7 @@ ss::future<s3_client::head_object_result> s3_client::do_head_object(
                   if (status == boost::beast::http::status::not_found) {
                       vlog(
                         s3_log.debug,
-                        "Object {} not available, error: {:l}",
+                        "Object {} not available, error: {}",
                         key,
                         ref->get_headers());
                       return parse_head_error_response<head_object_result>(
@@ -1129,7 +1125,7 @@ ss::future<s3_client::head_object_result> s3_client::do_head_object(
                   } else if (status != boost::beast::http::status::ok) {
                       vlog(
                         s3_log.warn,
-                        "S3 HEAD request failed for key {}: {} {:l}",
+                        "S3 HEAD request failed for key {}: {} {}",
                         key,
                         status,
                         ref->get_headers());
@@ -1208,7 +1204,7 @@ ss::future<> s3_client::do_put_object(
                       status != ok && !is_no_content_and_accepted) {
                         vlog(
                           s3_log.warn,
-                          "S3 PUT request failed for key {}: {} {:l}",
+                          "S3 PUT request failed for key {}: {} {}",
                           id,
                           status,
                           ref->get_headers());
@@ -1302,7 +1298,7 @@ ss::future<s3_client::list_bucket_result> s3_client::do_list_objects_v2(
                 if (header.result() != boost::beast::http::status::ok) {
                     vlog(
                       s3_log.warn,
-                      "S3 ListObjectsv2 request failed: {} {:l}",
+                      "S3 ListObjectsv2 request failed: {} {}",
                       header.result(),
                       header);
 
@@ -1377,7 +1373,7 @@ ss::future<> s3_client::do_delete_object(
                      != boost::beast::http::status::no_content) { // expect 204
                   vlog(
                     s3_log.warn,
-                    "S3 DeleteObject request failed for key {}: {} {:l}",
+                    "S3 DeleteObject request failed for key {}: {} {}",
                     key,
                     status,
                     ref->get_headers());

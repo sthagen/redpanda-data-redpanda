@@ -11,44 +11,23 @@
 
 #include "crash_tracker/types.h"
 
-#include "version/version.h"
-
 namespace crash_tracker {
 
-std::ostream& operator<<(std::ostream& os, crash_type ct) {
-    switch (ct) {
-    case crash_type::unknown:
-        return os << "unknown";
-    case crash_type::startup_exception:
-        return os << "startup_exception";
-    case crash_type::segfault:
-        return os << "segfault";
-    case crash_type::abort:
-        return os << "abort";
-    case crash_type::illegal_instruction:
-        return os << "illegal_instruction";
-    case crash_type::assertion:
-        return os << "assertion";
-    case crash_type::oom:
-        return os << "oom";
-    }
-}
-
-std::ostream& operator<<(std::ostream& os, const crash_description& cd) {
-    fmt::print(
-      os,
+fmt::iterator crash_description::format_to(fmt::iterator it) const {
+    it = fmt::format_to(
+      it,
       "Redpanda version: {}. Arch: {}. {}",
-      cd.app_version,
-      cd.arch,
-      cd.crash_message.c_str());
+      app_version,
+      arch,
+      crash_message.c_str());
 
-    const auto opt_stacktrace = cd.stacktrace.c_str();
+    const auto opt_stacktrace = stacktrace.c_str();
     const auto has_stacktrace = strlen(opt_stacktrace) > 0;
     if (has_stacktrace) {
-        fmt::print(os, " Backtrace: {}.", opt_stacktrace);
+        it = fmt::format_to(it, " Backtrace: {}.", opt_stacktrace);
     }
 
-    return os;
+    return it;
 }
 
 bool is_crash_loop_limit_reached(std::exception_ptr eptr) {

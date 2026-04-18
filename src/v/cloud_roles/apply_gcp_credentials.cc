@@ -35,9 +35,8 @@ void apply_gcp_credentials::reset_creds(credentials creds) {
       fmt::format("Bearer {}", std::get<gcp_credentials>(creds).oauth_token())};
 }
 
-std::ostream& apply_gcp_credentials::print(std::ostream& os) const {
-    fmt::print(os, "apply_gcp_credentials");
-    return os;
+fmt::iterator apply_gcp_credentials::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "apply_gcp_credentials");
 }
 
 } // namespace cloud_roles

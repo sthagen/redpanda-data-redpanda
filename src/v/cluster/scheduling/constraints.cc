@@ -13,14 +13,12 @@
 #include "absl/container/flat_hash_set.h"
 #include "cluster/members_table.h"
 #include "cluster/scheduling/allocation_node.h"
-#include "cluster/scheduling/allocation_state.h"
 #include "cluster/scheduling/types.h"
 #include "model/metadata.h"
 #include "ssx/sformat.h"
 
 #include <fmt/ostream.h>
 
-#include <ios>
 #include <sstream>
 
 namespace cluster {

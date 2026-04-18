@@ -26,7 +26,6 @@
 #include "storage/batch_cache.h"
 #include "storage/compacted_index_writer.h"
 #include "storage/disk_log_impl.h"
-#include "storage/file_sanitizer.h"
 #include "storage/fs_utils.h"
 #include "storage/kvstore.h"
 #include "storage/log.h"
@@ -34,8 +33,6 @@
 #include "storage/logger.h"
 #include "storage/segment.h"
 #include "storage/segment_appender.h"
-#include "storage/segment_index.h"
-#include "storage/segment_reader.h"
 #include "storage/segment_set.h"
 #include "storage/segment_utils.h"
 #include "storage/storage_resources.h"
@@ -44,34 +41,24 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/file.hh>
-#include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/map_reduce.hh>
-#include <seastar/core/print.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/thread.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/core/with_scheduling_group.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-#include <seastar/coroutine/parallel_for_each.hh>
-#include <seastar/coroutine/switch_to.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/file.hh>
 #include <seastar/util/later.hh>
-
-#include <boost/algorithm/string/predicate.hpp>
-#include <fmt/format.h>
 
 #include <chrono>
 #include <exception>
 #include <filesystem>
 #include <functional>
 #include <optional>
-#include <ranges>
 
 using namespace std::chrono_literals;
 
@@ -1194,22 +1181,22 @@ int64_t log_manager::compaction_backlog() const {
       });
 }
 
-std::ostream& operator<<(std::ostream& o, const log_config& c) {
-    o << "{base_dir:" << c.base_dir
-      << ", max_segment.size:" << c.max_segment_size()
-      << ", file_sanitize_config:" << c.file_config << ", retention_bytes:";
-    if (c.retention_bytes()) {
-        o << *(c.retention_bytes());
-    } else {
-        o << "nullopt";
-    }
-    return o
-           << ", compaction_interval_ms:" << c.compaction_interval().count()
-           << ", log_retention_ms:"
-           << c.log_retention().value_or(std::chrono::milliseconds(-1)).count()
-           << ", with_cache:" << c.cache << ", reclaim_opts:" << c.reclaim_opts
-           << "}";
+fmt::iterator log_config::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{base_dir:{}, max_segment.size:{}, file_sanitize_config:{}, "
+      "retention_bytes:{}, compaction_interval_ms:{}, log_retention_ms:{}, "
+      "with_cache:{}, reclaim_opts:{}}}",
+      base_dir,
+      max_segment_size(),
+      file_config,
+      retention_bytes(),
+      compaction_interval().count(),
+      log_retention().value_or(std::chrono::milliseconds(-1)).count(),
+      cache,
+      reclaim_opts);
 }
+
 std::ostream& operator<<(std::ostream& o, const log_manager& m) {
     return o << "{config:" << m._config << ", logs.size:" << m._logs.size()
              << ", cache:" << m._batch_cache << "}";

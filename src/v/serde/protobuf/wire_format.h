@@ -106,7 +106,7 @@ void write_length(int32_t length, iobuf* out);
 
 template<>
 struct fmt::formatter<serde::pb::tag> {
-    constexpr auto parse(format_parse_context& ctx)
+    constexpr auto parse(format_parse_context& ctx) const
       -> format_parse_context::iterator {
         return ctx.begin();
     }

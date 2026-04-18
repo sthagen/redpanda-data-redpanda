@@ -12,7 +12,6 @@
 #include "config/property.h"
 #include "config/types.h"
 
-#include <gtest/gtest-typed-test.h>
 #include <gtest/gtest.h>
 
 namespace config {

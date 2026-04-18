@@ -12,7 +12,6 @@
 #include "base/oncore.h"
 #include "cluster/logger.h"
 #include "features/feature_table.h"
-#include "ssx/sformat.h"
 
 namespace cluster {
 

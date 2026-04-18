@@ -11,10 +11,9 @@
 
 #include "cluster/self_test_rpc_types.h"
 
+#include "base/format_to.h"
 #include "random/generators.h"
 #include "ssx/future-util.h"
-
-#include <seastar/core/coroutine.hh>
 
 namespace cluster {
 
@@ -30,10 +29,16 @@ ss::sstring self_test_status_as_string(self_test_status sts) {
         __builtin_unreachable();
     }
 }
-
-std::ostream& operator<<(std::ostream& o, self_test_status sts) {
-    fmt::print(o, "{}", self_test_status_as_string(sts));
-    return o;
+fmt::iterator format_to(self_test_status sts, fmt::iterator out) {
+    switch (sts) {
+    case self_test_status::idle:
+        return fmt::format_to(out, "idle");
+    case self_test_status::running:
+        return fmt::format_to(out, "running");
+    case self_test_status::unreachable:
+        return fmt::format_to(out, "unreachable");
+    }
+    __builtin_unreachable();
 }
 
 ss::sstring self_test_stage_as_string(self_test_stage sts) {
@@ -48,10 +53,18 @@ ss::sstring self_test_stage_as_string(self_test_stage sts) {
         return "cloud";
     }
 }
-
-std::ostream& operator<<(std::ostream& o, self_test_stage sts) {
-    fmt::print(o, "{}", self_test_stage_as_string(sts));
-    return o;
+fmt::iterator format_to(self_test_stage sts, fmt::iterator out) {
+    switch (sts) {
+    case self_test_stage::idle:
+        return fmt::format_to(out, "idle");
+    case self_test_stage::disk:
+        return fmt::format_to(out, "disk");
+    case self_test_stage::net:
+        return fmt::format_to(out, "net");
+    case self_test_stage::cloud:
+        return fmt::format_to(out, "cloud");
+    }
+    return fmt::format_to(out, "");
 }
 
 ss::future<cluster::netcheck_request>

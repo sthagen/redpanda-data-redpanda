@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/types.h"
@@ -220,6 +221,8 @@ public:
         _stm_registry.register_factory<T>(std::forward<Args>(args)...);
     }
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
 private:
     enum class partition_shutdown_stage {
         shutdown_requested,
@@ -312,8 +315,9 @@ private:
     // The sharded app may not be initialized if cloud topics isn't enabled.
     ss::sharded<cloud_topics::state_accessors>* _cloud_topics_state;
 
-    friend std::ostream& operator<<(std::ostream&, const partition_manager&);
-    friend std::ostream& operator<<(
-      std::ostream&, const partition_manager::partition_shutdown_stage&);
+    static std::string_view
+    shutdown_stage_string(partition_shutdown_stage stage);
+
+    friend fmt::iterator format_to(partition_shutdown_stage, fmt::iterator);
 };
 } // namespace cluster

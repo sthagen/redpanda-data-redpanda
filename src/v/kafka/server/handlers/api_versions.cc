@@ -9,7 +9,6 @@
 
 #include "features/feature_table.h"
 #include "kafka/protocol/types.h"
-#include "kafka/protocol/wire.h"
 #include "kafka/server/handlers/handlers.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"

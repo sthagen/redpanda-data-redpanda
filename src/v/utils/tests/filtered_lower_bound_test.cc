@@ -15,7 +15,6 @@
 #include <seastar/util/log.hh>
 
 #include <boost/test/unit_test.hpp>
-#include <boost/test/unit_test_log.hpp>
 
 #include <optional>
 #include <random>

@@ -18,11 +18,8 @@
 
 #include <seastar/util/defer.hh>
 
-#include <boost/range/irange.hpp>
-
 #include <chrono>
 #include <cstdio>
-#include <iterator>
 #include <limits>
 
 namespace raft {

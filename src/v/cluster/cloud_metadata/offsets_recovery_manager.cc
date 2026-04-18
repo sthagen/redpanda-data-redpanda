@@ -10,24 +10,12 @@
 
 #include "cluster/cloud_metadata/offsets_recovery_manager.h"
 
-#include "absl/container/node_hash_set.h"
 #include "base/vlog.h"
-#include "cloud_storage/remote_file.h"
-#include "cloud_storage/types.h"
 #include "cluster/cloud_metadata/offsets_recovery_router.h"
 #include "cluster/cloud_metadata/offsets_recovery_rpc_types.h"
-#include "cluster/controller_api.h"
 #include "cluster/logger.h"
-#include "cluster/members_table.h"
-#include "cluster/offsets_recovery_rpc_service.h"
-#include "cluster/topics_frontend.h"
-#include "kafka/server/coordinator_ntp_mapper.h"
-#include "kafka/server/rm_group_frontend.h"
 #include "model/namespace.h"
 #include "utils/retry_chain_node.h"
-
-#include <seastar/core/smp.hh>
-#include <seastar/util/later.hh>
 
 namespace cluster::cloud_metadata {
 

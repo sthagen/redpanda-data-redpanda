@@ -16,8 +16,6 @@
 
 #include <seastar/coroutine/as_future.hh>
 
-#include <fmt/format.h>
-
 using namespace std::chrono_literals;
 
 namespace cloud_topics::l1 {

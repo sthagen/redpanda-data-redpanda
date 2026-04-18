@@ -14,8 +14,6 @@
 #include "gtest/gtest.h"
 #include "wasm/parser/leb128.h"
 
-#include <gtest/gtest.h>
-
 namespace wasm::parser::leb128 {
 
 template<typename T>

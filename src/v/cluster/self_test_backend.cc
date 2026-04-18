@@ -14,13 +14,9 @@
 #include "base/seastarx.h"
 #include "base/vlog.h"
 #include "cluster/logger.h"
-#include "json/document.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/util/log.hh>
 
 namespace cluster {

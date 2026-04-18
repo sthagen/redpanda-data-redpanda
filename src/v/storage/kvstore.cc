@@ -24,11 +24,8 @@
 #include "storage/segment_set.h"
 #include "storage/types.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/metrics.hh>
-#include <seastar/core/thread.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
 #include <exception>
@@ -678,8 +675,8 @@ kvstore::replay_consumer::consume_batch_end() {
     co_return stop_parser::no;
 }
 
-void kvstore::replay_consumer::print(std::ostream& os) const {
-    os << "storage::kvstore";
+fmt::iterator kvstore::replay_consumer::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "storage::kvstore");
 }
 
 ss::future<usage_report> kvstore::disk_usage() const {

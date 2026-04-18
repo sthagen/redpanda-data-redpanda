@@ -9,28 +9,20 @@
 
 #include "cluster/metadata_dissemination_handler.h"
 
-#include "base/likely.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/logger.h"
-#include "cluster/metadata_cache.h"
 #include "cluster/metadata_dissemination_types.h"
 #include "cluster/partition_leaders_table.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "model/timeout_clock.h"
-#include "ssx/async_algorithm.h"
 
-#include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/smp.hh>
 
 #include <boost/range/irange.hpp>
 
-#include <algorithm>
 #include <exception>
-#include <iterator>
 
 namespace cluster {
 metadata_dissemination_handler::metadata_dissemination_handler(

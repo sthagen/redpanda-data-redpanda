@@ -15,12 +15,10 @@
 #include "reflection/adl.h"
 #include "storage/compacted_index.h"
 #include "storage/compacted_index_reader.h"
-#include "storage/logger.h"
-#include "utils/to_string.h"
+#include "utils/to_string.h" // NOLINT(misc-include-cleaner) fmt::formatter for optionals
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
-#include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/temporary_buffer.hh>
@@ -175,8 +173,6 @@ compacted_index_chunk_reader::load_footer() {
     co_return _footer.value();
 }
 
-void compacted_index_chunk_reader::print(std::ostream& o) const { o << *this; }
-
 bool compacted_index_chunk_reader::is_end_of_stream() const {
     return _end_of_stream || (_footer && _byte_index == _footer->size)
            || (_cursor && _cursor->eof());
@@ -249,20 +245,18 @@ compacted_index_chunk_reader::load_slice(model::timeout_clock::time_point t) {
     });
 }
 
-std::ostream&
-operator<<(std::ostream& o, const compacted_index_chunk_reader& r) {
-    fmt::print(
-      o,
+fmt::iterator compacted_index_chunk_reader::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{type:compacted_index_chunk_reader, _max_chunk_memory:{}, "
       "_data_size:{}, _footer:{}, active_cursor:{}, end_of_stream:{}, "
       "_byte_index:{}}}",
-      r._max_chunk_memory,
-      r._data_size,
-      r._footer,
-      (r._cursor ? "yes" : "no"),
-      r.is_end_of_stream(),
-      r._byte_index);
-    return o;
+      _max_chunk_memory,
+      _data_size,
+      _footer,
+      (_cursor ? "yes" : "no"),
+      is_end_of_stream(),
+      _byte_index);
 }
 
 } // namespace storage::internal

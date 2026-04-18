@@ -24,7 +24,6 @@
 #include "cloud_topics/read_replica/snapshot_manager.h"
 #include "cloud_topics/reconciler/reconciler.h"
 #include "cloud_topics/topic_manifest_upload_manager.h"
-#include "cluster/cluster_epoch_service.h"
 #include "cluster/controller.h"
 #include "cluster/utils/partition_change_notifier_impl.h"
 #include "config/node_config.h"
@@ -32,8 +31,6 @@
 #include "ssx/future-util.h"
 #include "ssx/sharded_service_container.h"
 #include "utils/directory_walker.h"
-
-#include <seastar/core/coroutine.hh>
 
 #include <deque>
 #include <filesystem>

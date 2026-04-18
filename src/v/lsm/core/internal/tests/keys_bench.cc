@@ -10,9 +10,7 @@
  */
 
 #include "lsm/core/internal/keys.h"
-#include "random/generators.h"
 
-#include <seastar/core/sstring.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <algorithm>

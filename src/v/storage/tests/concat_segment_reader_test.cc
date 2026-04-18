@@ -9,8 +9,6 @@
  */
 
 #include "bytes/iostream.h"
-#include "model/tests/random_batch.h"
-#include "storage/directories.h"
 #include "storage/log_manager.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/tmp_dir.h"

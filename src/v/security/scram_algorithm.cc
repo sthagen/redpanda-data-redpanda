@@ -6,11 +6,8 @@
 #include "ssx/sformat.h"
 #include "strings/utf8.h"
 #include "utils/base64.h"
-#include "utils/to_string.h"
 
 #include <boost/algorithm/string.hpp>
-
-#include <charconv>
 
 // ALPHA / DIGIT / "/" / "+"
 // NOLINTNEXTLINE
@@ -260,12 +257,6 @@ bool client_first_message::token_authenticated() const {
     return false;
 }
 
-std::ostream& operator<<(std::ostream& os, const client_first_message&) {
-    // NOTE: this stream is intentially left minimal to err away from exposing
-    // anything that may be useful for an attacker to use.
-    return os << "{client_first_message}";
-}
-
 ss::sstring server_first_message::sasl_message() const {
     return ssx::sformat(
       "r={},s={},i={}", _nonce, bytes_to_base64(_salt), _iterations);
@@ -297,12 +288,6 @@ client_final_message::client_final_message(bytes_view data) {
 
 ss::sstring client_final_message::msg_no_proof() const {
     return ssx::sformat("c={},r={}", bytes_to_base64(_channel_binding), _nonce);
-}
-
-std::ostream& operator<<(std::ostream& os, const client_final_message&) {
-    // NOTE: this stream is intentially left minimal to err away from exposing
-    // anything that may be useful for an attacker to use.
-    return os << "{client_final_message}";
 }
 
 ss::sstring server_final_message::sasl_message() const {

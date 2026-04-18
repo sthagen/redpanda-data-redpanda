@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "cloud_storage_clients/types.h"
 #include "model/fundamental.h"
@@ -76,20 +77,28 @@ inline std::error_code make_error_code(error_outcome e) noexcept {
     return {static_cast<int>(e), inventory_error_category()};
 }
 
-inline std::ostream& operator<<(std::ostream& o, error_outcome e) {
-    o << inventory_error_category().message(static_cast<int>(e));
-    return o;
-}
-
 // The identifier for a specific report configuration scheduled to run at a
 // fixed frequency and producing files of a fixed format.
 using inventory_config_id = named_type<ss::sstring, struct inventory_config>;
 
 enum class report_generation_frequency { daily };
-std::ostream& operator<<(std::ostream&, report_generation_frequency);
+
+inline fmt::iterator
+format_to(report_generation_frequency rgf, fmt::iterator out) {
+    switch (rgf) {
+    case report_generation_frequency::daily:
+        return fmt::format_to(out, "Daily");
+    }
+}
 
 enum class report_format { csv };
-std::ostream& operator<<(std::ostream&, report_format);
+
+inline fmt::iterator format_to(report_format rf, fmt::iterator out) {
+    switch (rf) {
+    case report_format::csv:
+        return fmt::format_to(out, "CSV");
+    }
+}
 
 // A string is used instead of a chrono type because the strings returned by the
 // vendor APIs are already roughly ISO-8601 formatted. This format is well
@@ -115,7 +124,16 @@ enum class inventory_creation_result {
     already_exists,
 };
 
-std::ostream& operator<<(std::ostream&, inventory_creation_result);
+inline fmt::iterator
+format_to(inventory_creation_result icr, fmt::iterator out) {
+    switch (icr) {
+        using enum inventory_creation_result;
+    case success:
+        return fmt::format_to(out, "success");
+    case already_exists:
+        return fmt::format_to(out, "already-exists");
+    }
+}
 
 template<typename R>
 using op_result = result<R, error_outcome>;
@@ -158,3 +176,10 @@ template<>
 struct is_error_code_enum<cloud_storage::inventory::error_outcome>
   : true_type {};
 } // namespace std
+
+namespace cloud_storage::inventory {
+inline fmt::iterator format_to(error_outcome e, fmt::iterator out) {
+    return fmt::format_to(
+      out, "{}", inventory_error_category().message(static_cast<int>(e)));
+}
+} // namespace cloud_storage::inventory

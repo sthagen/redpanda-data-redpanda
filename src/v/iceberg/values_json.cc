@@ -19,6 +19,7 @@
 #include <boost/iostreams/stream.hpp>
 #include <boost/range/irange.hpp>
 
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <iomanip>
@@ -34,7 +35,9 @@ parse_string_view(const json::Value& data, std::string_view context = "") {
     if (!data.IsString()) {
         throw std::invalid_argument(
           fmt::format(
-            "Expected JSON string for {}, got {}", context, data.GetType()));
+            "Expected JSON string for {}, got {}",
+            context,
+            static_cast<int>(data.GetType())));
     }
     return std::string_view{data.GetString(), data.GetStringLength()};
 }
@@ -112,28 +115,36 @@ struct primitive_value_parsing_visitor {
     value operator()(const boolean_type&) {
         if (!data_.IsBool()) {
             throw std::invalid_argument(
-              fmt::format("Expected bool value, got {}", data_.GetType()));
+              fmt::format(
+                "Expected bool value, got {}",
+                static_cast<int>(data_.GetType())));
         }
         return boolean_value{data_.GetBool()};
     }
     value operator()(const int_type&) {
         if (!data_.IsInt()) {
             throw std::invalid_argument(
-              fmt::format("Expected int value, got {}", data_.GetType()));
+              fmt::format(
+                "Expected int value, got {}",
+                static_cast<int>(data_.GetType())));
         }
         return int_value{data_.GetInt()};
     }
     value operator()(const long_type&) {
         if (!data_.IsInt64()) {
             throw std::invalid_argument(
-              fmt::format("Expected long value, got {}", data_.GetType()));
+              fmt::format(
+                "Expected long value, got {}",
+                static_cast<int>(data_.GetType())));
         }
         return long_value{data_.GetInt64()};
     }
     value operator()(const float_type&) {
         if (!data_.IsDouble()) {
             throw std::invalid_argument(
-              fmt::format("Expected float value, got {}", data_.GetType()));
+              fmt::format(
+                "Expected float value, got {}",
+                static_cast<int>(data_.GetType())));
         }
         auto v = data_.GetDouble();
         if (
@@ -147,7 +158,9 @@ struct primitive_value_parsing_visitor {
     value operator()(const double_type&) {
         if (!data_.IsDouble()) {
             throw std::invalid_argument(
-              fmt::format("Expected double value, got {}", data_.GetType()));
+              fmt::format(
+                "Expected double value, got {}",
+                static_cast<int>(data_.GetType())));
         }
         return double_value{data_.GetDouble()};
     }
@@ -424,9 +437,11 @@ struct rjson_visitor {
     void operator()(const iceberg::date_value& v, const iceberg::date_type&) {
         const std::chrono::system_clock::time_point tp{
           std::chrono::days(v.val)};
-        const std::chrono::year_month_day ymd{
-          std::chrono::floor<std::chrono::days>(tp)};
-        w.String(fmt::to_string(ymd));
+        const auto tt = std::chrono::system_clock::to_time_t(tp);
+        auto tm = *std::gmtime(&tt);
+        std::array<char, 32> buf{};
+        std::strftime(buf.data(), buf.size(), "%F", &tm);
+        w.String(buf.data());
     }
 
     void operator()(const iceberg::time_value& v, const iceberg::time_type&) {
@@ -437,8 +452,10 @@ struct rjson_visitor {
 
         const std::chrono::system_clock::time_point tp{s};
         const auto tt = std::chrono::system_clock::to_time_t(tp);
-        const auto tm = *std::gmtime(&tt);
-        w.String(fmt::format("{}.{:06}", std::put_time(&tm, "%T"), rest));
+        auto tm = *std::gmtime(&tt);
+        std::array<char, 32> buf{};
+        std::strftime(buf.data(), buf.size(), "%T", &tm);
+        w.String(fmt::format("{}.{:06}", buf.data(), rest));
     }
 
     void operator()(
@@ -450,8 +467,10 @@ struct rjson_visitor {
 
         const std::chrono::system_clock::time_point tp{s};
         const auto tt = std::chrono::system_clock::to_time_t(tp);
-        const auto tm = *std::gmtime(&tt);
-        w.String(fmt::format("{}.{:06}", std::put_time(&tm, "%FT%T"), rest));
+        auto tm = *std::gmtime(&tt);
+        std::array<char, 32> buf{};
+        std::strftime(buf.data(), buf.size(), "%FT%T", &tm);
+        w.String(fmt::format("{}.{:06}", buf.data(), rest));
     }
     void operator()(
       const iceberg::timestamptz_value& v, const iceberg::timestamptz_type&) {
@@ -465,9 +484,10 @@ struct rjson_visitor {
 
         const std::chrono::system_clock::time_point tp{s};
         const auto tt = std::chrono::system_clock::to_time_t(tp);
-        const auto tm = *std::gmtime(&tt);
-        w.String(
-          fmt::format("{}.{:06}+00:00", std::put_time(&tm, "%FT%T"), rest));
+        auto tm = *std::gmtime(&tt);
+        std::array<char, 32> buf{};
+        std::strftime(buf.data(), buf.size(), "%FT%T", &tm);
+        w.String(fmt::format("{}.{:06}+00:00", buf.data(), rest));
     }
 
     void
@@ -475,7 +495,7 @@ struct rjson_visitor {
         w.String(v.val);
     }
     void operator()(const iceberg::uuid_value& v, const iceberg::uuid_type&) {
-        w.String(fmt::to_string(v.val));
+        w.String(fmt::format("{}", v.val));
     }
     void
     operator()(const iceberg::fixed_value& v, const iceberg::fixed_type& t) {
@@ -611,7 +631,7 @@ void value_to_json(
                 fmt::format(
                   "Found null nested field in struct type for value {}", s));
           }
-          w.Key(fmt::to_string(t_field->id));
+          w.Key(fmt::format("{}", t_field->id));
           if (v_field.has_value()) {
               value_to_json(w, v_field.value(), t_field->type);
           } else if (!t_field->required) {

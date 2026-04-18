@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "base/format_to.h"
 #include "base/units.h"
 #include "group_configuration.h"
 #include "model/fundamental.h"
@@ -183,8 +184,7 @@ public:
         return _configuration_force_override != nullptr;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const configuration_manager&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     void reset_override(model::revision_id);

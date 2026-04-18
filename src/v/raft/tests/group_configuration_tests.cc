@@ -480,7 +480,7 @@ struct configuration_advancement_state_machine {
         vlog(
           logger.info,
           "Cancelling reconfiguration in state: {}",
-          current_state);
+          fmt_streamed(current_state));
         cfg.cancel_configuration_change(model::revision_id{0});
         if (dir == direction::original_to_target) {
             dir = direction::target_to_original;
@@ -491,7 +491,9 @@ struct configuration_advancement_state_machine {
     }
     void abort_reconfiguration() {
         vlog(
-          logger.info, "Aborting reconfiguration in state: {}", current_state);
+          logger.info,
+          "Aborting reconfiguration in state: {}",
+          fmt_streamed(current_state));
         cfg.abort_configuration_change(model::revision_id{0});
 
         if (dir == direction::original_to_target) {

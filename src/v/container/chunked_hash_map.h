@@ -15,6 +15,7 @@
 
 #include <ankerl/unordered_dense.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <type_traits>
 
@@ -113,31 +114,66 @@ using chunked_hash_set = ankerl::unordered_dense::segmented_set<
   ankerl::unordered_dense::bucket_type::standard,
   chunked_vector<ankerl::unordered_dense::bucket_type::standard>>;
 
-template<typename K, typename V>
-std::ostream& operator<<(std::ostream& o, const chunked_hash_map<K, V>& r) {
-    o << "{";
-    bool first = true;
-    for (const auto& [k, v] : r) {
-        if (!first) {
-            o << ", ";
-        }
-        o << "{" << k << " -> " << v << "}";
-        first = false;
-    }
-    o << "}";
-    return o;
-}
-template<typename K, typename V>
-struct fmt::formatter<chunked_hash_map<K, V>> {
-    using type = chunked_hash_map<K, V>;
+// Disable fmt's range formatter for chunked_hash_map/set to use our custom
+// formatters instead.
+template<
+  typename K,
+  typename V,
+  typename H,
+  typename E,
+  typename AllocatorOrContainer,
+  typename Bucket,
+  typename BucketContainer,
+  bool IsSegmented,
+  typename Char>
+struct fmt::range_format_kind<
+  ankerl::unordered_dense::detail::table<
+    K,
+    V,
+    H,
+    E,
+    AllocatorOrContainer,
+    Bucket,
+    BucketContainer,
+    IsSegmented>,
+  Char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+template<
+  typename K,
+  typename V,
+  typename H,
+  typename E,
+  typename AllocatorOrContainer,
+  typename Bucket,
+  typename BucketContainer,
+  bool IsSegmented>
+struct fmt::formatter<ankerl::unordered_dense::detail::table<
+  K,
+  V,
+  H,
+  E,
+  AllocatorOrContainer,
+  Bucket,
+  BucketContainer,
+  IsSegmented>> {
+    using type = ankerl::unordered_dense::detail::table<
+      K,
+      V,
+      H,
+      E,
+      AllocatorOrContainer,
+      Bucket,
+      BucketContainer,
+      IsSegmented>;
+
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator
     format(const type& map, FormatContext& ctx) const {
-        // Map formatting is broken until version 11:
-        // https://github.com/fmtlib/fmt/issues/3685
         auto out = ctx.out();
         out = fmt::format_to(out, "[");
         auto it = map.begin();
@@ -168,11 +204,36 @@ memory_usage_lower_bound(const chunked_hash_map<K, V, Hash, EqualTo>& m) {
            + m.values().capacity() * sizeof(m.values()[0]);
 }
 
-template<typename K>
-struct fmt::formatter<chunked_hash_set<K>> {
-    using type = chunked_hash_set<K>;
+template<
+  typename K,
+  typename H,
+  typename E,
+  typename AllocatorOrContainer,
+  typename Bucket,
+  typename BucketContainer,
+  bool IsSegmented>
+struct fmt::formatter<ankerl::unordered_dense::detail::table<
+  K,
+  void,
+  H,
+  E,
+  AllocatorOrContainer,
+  Bucket,
+  BucketContainer,
+  IsSegmented>> {
+    using type = ankerl::unordered_dense::detail::table<
+      K,
+      void,
+      H,
+      E,
+      AllocatorOrContainer,
+      Bucket,
+      BucketContainer,
+      IsSegmented>;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator

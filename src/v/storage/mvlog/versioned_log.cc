@@ -9,14 +9,12 @@
 
 #include "storage/mvlog/versioned_log.h"
 
-#include "container/chunked_vector.h"
 #include "model/offset_interval.h"
 #include "storage/mvlog/file.h"
 #include "storage/mvlog/logger.h"
 #include "storage/mvlog/readable_segment.h"
 #include "storage/mvlog/segment_appender.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/lowres_clock.hh>
 
 #include <chrono>

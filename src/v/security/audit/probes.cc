@@ -17,8 +17,6 @@
 #include <seastar/core/metrics.hh>
 #include <seastar/core/metrics_registration.hh>
 
-#include <chrono>
-
 namespace security::audit {
 
 void audit_probe::setup_metrics(std::function<double()> get_usage_ratio) {

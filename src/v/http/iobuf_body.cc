@@ -12,10 +12,7 @@
 #include "base/vlog.h"
 #include "http/logger.h"
 
-#include <boost/beast/core/buffer_traits.hpp>
-#include <boost/beast/core/detail/buffers_ref.hpp>
 #include <boost/beast/core/error.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/optional/optional.hpp>
 
 namespace http {

@@ -10,13 +10,9 @@
 #include "cluster/client_quota_serde.h"
 #include "cluster/client_quota_store.h"
 #include "cluster/controller_snapshot.h"
-#include "utils/to_string.h"
 
-#include <boost/algorithm/string.hpp>
-#include <boost/range/irange.hpp>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
-#include <fmt/ostream.h>
 
 namespace cluster::client_quota {
 

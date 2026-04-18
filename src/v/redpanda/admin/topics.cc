@@ -21,12 +21,9 @@
 #include "redpanda/admin/util.h"
 #include "ssx/async_algorithm.h"
 
-#include <seastar/core/abort_source.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/json/json_elements.hh>
-
-#include <optional>
 
 using admin::apply_validator;
 

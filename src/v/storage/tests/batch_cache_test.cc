@@ -14,12 +14,7 @@
 #include "storage/record_batch_builder.h"
 #include "test_utils/random_bytes.h"
 
-#include <seastar/core/sharded.hh>
-#include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/defer.hh>
-
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 #include <gtest/gtest.h>
 
 static storage::batch_cache::reclaim_options opts = {

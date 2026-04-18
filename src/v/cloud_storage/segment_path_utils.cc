@@ -13,7 +13,6 @@
 #include "cloud_storage/types.h"
 #include "hashing/xx.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 
 namespace cloud_storage {
 

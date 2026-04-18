@@ -524,7 +524,7 @@ class AccessControlListTest(AccessControlListTestBase):
         )
 
         # Check that the authn_method was set on all brokers
-        pattern = "Started Kafka API server.*:{" + authn_method + "}.*"
+        pattern = "Started Kafka API server.*:" + authn_method
         assert self.redpanda.search_log_all(pattern)
 
         # Once restart is complete, check permissions should succeed when authn_method

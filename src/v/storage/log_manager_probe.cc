@@ -10,7 +10,6 @@
 #include "storage/log_manager_probe.h"
 
 #include "config/configuration.h"
-#include "metrics/prometheus_sanitize.h"
 
 #include <seastar/core/metrics.hh>
 

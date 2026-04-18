@@ -16,7 +16,6 @@
 
 #include <seastar/core/align.hh>
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/sleep.hh>
 
 #include <span>
 

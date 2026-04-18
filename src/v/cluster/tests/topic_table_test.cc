@@ -18,7 +18,6 @@
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 using namespace std::chrono_literals;
 

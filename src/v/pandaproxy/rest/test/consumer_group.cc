@@ -11,11 +11,9 @@
 #include "kafka/protocol/join_group.h"
 #include "pandaproxy/json/requests/create_consumer.h"
 #include "pandaproxy/json/rjson_util.h"
-#include "pandaproxy/rest/configuration.h"
 #include "pandaproxy/test/pandaproxy_fixture.h"
 #include "pandaproxy/test/utils.h"
 #include "test_utils/boost_fixture.h"
-#include "utils/unresolved_address.h"
 
 #include <boost/beast/http/field.hpp>
 #include <boost/beast/http/status.hpp>

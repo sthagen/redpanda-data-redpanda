@@ -15,7 +15,6 @@
 
 #include <seastar/core/temporary_buffer.hh>
 
-#include <lz4.h>
 #include <lz4frame.h>
 
 namespace compression::internal {

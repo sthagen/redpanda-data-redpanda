@@ -28,7 +28,6 @@
 #include "pandaproxy/schema_registry/validation_metrics.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/coroutine/exception.hh>

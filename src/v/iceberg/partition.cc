@@ -16,20 +16,18 @@
 
 namespace iceberg {
 
-std::ostream& operator<<(std::ostream& o, const partition_field& f) {
-    fmt::print(
-      o,
+fmt::iterator partition_field::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{source_id: {}, transform: {}, field_id: {}, name: {}}}",
-      f.source_id,
-      f.transform,
-      f.field_id,
-      f.name);
-    return o;
+      source_id,
+      transform,
+      field_id,
+      name);
 }
 
-std::ostream& operator<<(std::ostream& o, const partition_spec& ps) {
-    fmt::print(o, "{{spec_id: {}, fields: {}}}", ps.spec_id, ps.fields);
-    return o;
+fmt::iterator partition_spec::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{spec_id: {}, fields: {}}}", spec_id, fields);
 }
 
 std::optional<partition_spec> partition_spec::resolve(

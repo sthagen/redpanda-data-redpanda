@@ -247,6 +247,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/config",
         "//src/v/test_utils:gtest",
+        "@fmt",
         "@googletest//:gtest",
     ],
 )

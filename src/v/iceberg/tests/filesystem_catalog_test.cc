@@ -8,18 +8,13 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "base/vlog.h"
 #include "cloud_io/remote.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/filesystem_catalog.h"
-#include "iceberg/logger.h"
 #include "iceberg/schema.h"
-#include "iceberg/table_metadata_json.h"
 #include "iceberg/tests/test_schemas.h"
-#include "iceberg/transform.h"
-#include "json/document.h"
 
 #include <gtest/gtest.h>
 

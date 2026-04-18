@@ -10,8 +10,6 @@
 #include "base/seastarx.h"
 #include "ssx/sformat.h"
 
-#include <seastar/core/reactor.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <boost/uuid/random_generator.hpp>

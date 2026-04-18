@@ -11,20 +11,12 @@
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
 
 #include "cloud_io/basic_cache_service_api.h"
-#include "cloud_io/io_result.h"
-#include "cloud_io/remote.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/reader/materialized_extent.h"
 #include "cloud_topics/logger.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
 
-#include <seastar/core/file.hh>
-#include <seastar/core/fstream.hh>
-#include <seastar/core/io_priority_class.hh>
-#include <seastar/core/iostream.hh>
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/coroutine/as_future.hh>
 
 using namespace std::chrono_literals;
 

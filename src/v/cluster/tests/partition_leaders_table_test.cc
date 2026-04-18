@@ -12,12 +12,9 @@
 #include "absl/container/flat_hash_map.h"
 #include "cluster/commands.h"
 #include "cluster/data_migrated_resources.h"
-#include "cluster/logger.h"
 #include "cluster/partition_leaders_table.h"
-#include "cluster/producer_state.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
-#include "config/node_config.h"
 #include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -29,7 +26,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/sharded.hh>
 
 #include <fmt/core.h>

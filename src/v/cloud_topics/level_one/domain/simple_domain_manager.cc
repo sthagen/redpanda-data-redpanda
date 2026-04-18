@@ -19,9 +19,6 @@
 #include "container/chunked_hash_map.h"
 #include "model/batch_builder.h"
 #include "ssx/future-util.h"
-#include "ssx/sleep_abortable.h"
-
-#include <seastar/core/sleep.hh>
 
 #include <exception>
 

@@ -10,7 +10,6 @@
  */
 
 #include "crypto/crypto.h"
-#include "internal.h"
 #include "ssl_utils.h"
 
 #include <openssl/rand.h>

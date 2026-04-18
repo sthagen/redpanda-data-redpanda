@@ -13,11 +13,8 @@
 #include "raft/tests/raft_fixture.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
 using namespace std::chrono_literals;

@@ -10,6 +10,7 @@
 
 #include "cluster/archival/ntp_archiver_service.h"
 
+#include "base/format_to.h"
 #include "base/vlog.h"
 #include "cloud_storage/async_manifest_view.h"
 #include "cloud_storage/partition_manifest.h"
@@ -26,7 +27,6 @@
 #include "cluster/archival/adjacent_segment_merger.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/archival_policy.h"
-#include "cluster/archival/async_data_uploader.h"
 #include "cluster/archival/logger.h"
 #include "cluster/archival/replica_state_validator.h"
 #include "cluster/archival/retention_calculator.h"
@@ -38,44 +38,34 @@
 #include "container/chunked_vector.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
-#include "model/timeout_clock.h"
 #include "net/connection.h"
 #include "raft/fundamental.h"
 #include "ssx/abort_source.h"
 #include "ssx/checkpoint_mutex.h"
 #include "ssx/future-util.h"
 #include "storage/disk_log_impl.h"
-#include "storage/fs_utils.h"
 #include "storage/ntp_config.h"
 #include "storage/parser.h"
 #include "utils/execution_monitor.h"
 #include "utils/human.h"
 #include "utils/lazy_abort_source.h"
-#include "utils/prefix_logger.h"
 #include "utils/retry_chain_node.h"
 #include "utils/stream_provider.h"
 #include "utils/stream_utils.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/file.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/timed_out_error.hh>
 #include <seastar/core/when_all.hh>
-#include <seastar/coroutine/all.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 #include <seastar/util/noncopyable_function.hh>
-
-#include <fmt/format.h>
 
 #include <algorithm>
 #include <chrono>
@@ -408,6 +398,10 @@ ntp_archiver::ntp_archiver(
     if (_parent.is_read_replica_mode_enabled()) {
         _bucket_override = _parent.get_read_replica_bucket();
     }
+}
+
+fmt::iterator ntp_archiver::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "<ntp_archiver>");
 }
 
 archival_stm_fence ntp_archiver::emit_rw_fence() {
@@ -898,7 +892,7 @@ ss::future<> ntp_archiver::upload_topic_manifest() {
       _rtclog.debug,
       "Uploading topic manifest for {}, topic config {}",
       _parent.ntp(),
-      topic_cfg);
+      topic_cfg.get());
 
     auto replication_factor = cluster::replication_factor(
       _parent.raft()->config().current_config().voters.size());
@@ -2702,48 +2696,39 @@ ntp_archiver::maybe_truncate_manifest() {
     }
     co_return result;
 }
-
-std::ostream& operator<<(std::ostream& os, segment_upload_kind upload_kind) {
-    switch (upload_kind) {
+fmt::iterator format_to(segment_upload_kind e, fmt::iterator out) {
+    switch (e) {
     case segment_upload_kind::non_compacted:
-        fmt::print(os, "non-compacted");
-        break;
+        return fmt::format_to(out, "non-compacted");
     case segment_upload_kind::compacted:
-        fmt::print(os, "compacted");
-        break;
+        return fmt::format_to(out, "compacted");
     }
-    return os;
+    return out;
 }
-
-std::ostream& operator<<(std::ostream& os, flush_response fr) {
-    switch (fr) {
+fmt::iterator format_to(flush_response e, fmt::iterator out) {
+    switch (e) {
     case flush_response::accepted:
-        fmt::print(os, "accepted");
-        break;
+        return fmt::format_to(out, "accepted");
     case flush_response::rejected:
-        fmt::print(os, "rejected");
-        break;
+        return fmt::format_to(out, "rejected");
     }
-    return os;
+    return out;
 }
-
-std::ostream& operator<<(std::ostream& os, flush_result fr) {
-    fmt::print(os, "response: {}, offset: {}", fr.response, fr.offset);
-    return os;
+fmt::iterator flush_result::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "response: {}, offset: {}", response, offset);
 }
-
-std::ostream& operator<<(std::ostream& os, wait_result fr) {
-    switch (fr) {
+fmt::iterator format_to(wait_result e, fmt::iterator out) {
+    switch (e) {
     case wait_result::not_in_progress:
-        return os << "not in progress";
+        return fmt::format_to(out, "not in progress");
     case wait_result::complete:
-        return os << "complete";
+        return fmt::format_to(out, "complete");
     case wait_result::lost_leadership:
-        return os << "lost leadership";
+        return fmt::format_to(out, "lost leadership");
     case wait_result::failed:
-        return os << "failed";
+        return fmt::format_to(out, "failed");
     }
-    return os;
+    return out;
 }
 
 ss::future<ntp_archiver::housekeeping_result> ntp_archiver::housekeeping() {

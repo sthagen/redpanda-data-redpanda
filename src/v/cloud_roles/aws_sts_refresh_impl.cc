@@ -197,9 +197,8 @@ api_response_parse_result aws_sts_refresh_impl::parse_response(iobuf resp) {
     };
 }
 
-std::ostream& aws_sts_refresh_impl::print(std::ostream& os) const {
-    fmt::print(os, "aws_sts_refresh_impl{{address:{}}}", address());
-    return os;
+fmt::iterator aws_sts_refresh_impl::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "aws_sts_refresh_impl{{address:{}}}", address());
 }
 
 } // namespace cloud_roles

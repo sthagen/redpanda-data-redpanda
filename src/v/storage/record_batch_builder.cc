@@ -12,7 +12,6 @@
 #include "model/batch_compression.h"
 #include "model/record.h"
 #include "model/record_utils.h"
-#include "model/timeout_clock.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/smp.hh>

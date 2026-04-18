@@ -9,7 +9,6 @@
 
 #include "config/rest_authn_endpoint.h"
 
-#include "model/metadata.h"
 #include "strings/string_switch.h"
 
 namespace config {
@@ -23,6 +22,9 @@ std::string_view to_string_view(rest_authn_method m) {
     }
     return "invalid";
 }
+fmt::iterator format_to(rest_authn_method m, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(m));
+}
 
 template<>
 std::optional<rest_authn_method>
@@ -33,14 +35,13 @@ from_string_view<rest_authn_method>(std::string_view sv) {
       .default_match(std::nullopt);
 }
 
-std::ostream& operator<<(std::ostream& os, const rest_authn_endpoint& ep) {
+fmt::iterator rest_authn_endpoint::format_to(fmt::iterator it) const {
     std::string_view authn_method_str{"<nullopt>"};
-    if (ep.authn_method) {
-        authn_method_str = to_string_view(*ep.authn_method);
+    if (authn_method) {
+        authn_method_str = to_string_view(*authn_method);
     }
 
-    fmt::print(os, "{{{}:{}:{}}}", ep.name, ep.address, authn_method_str);
-    return os;
+    return fmt::format_to(it, "{{{}:{}:{}}}", name, address, authn_method_str);
 }
 
 rest_authn_method get_authn_method(

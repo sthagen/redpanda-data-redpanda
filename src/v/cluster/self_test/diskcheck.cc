@@ -11,7 +11,6 @@
 
 #include "cluster/self_test/diskcheck.h"
 
-#include "base/vassert.h"
 #include "base/vlog.h"
 #include "cluster/logger.h"
 #include "cluster/self_test/metrics.h"

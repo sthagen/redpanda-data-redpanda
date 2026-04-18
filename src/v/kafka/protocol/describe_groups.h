@@ -31,9 +31,8 @@ struct describe_groups_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const describe_groups_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -71,9 +70,8 @@ struct describe_groups_response final {
         };
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const describe_groups_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

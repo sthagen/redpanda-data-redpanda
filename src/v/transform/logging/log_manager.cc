@@ -23,8 +23,6 @@
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/coroutine/as_future.hh>
 
 #include <algorithm>
 

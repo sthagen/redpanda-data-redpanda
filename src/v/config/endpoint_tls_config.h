@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/convert.h"
 #include "config/tls_config.h"
@@ -25,10 +26,8 @@ struct endpoint_tls_config {
     ss::sstring name;
     tls_config config;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const endpoint_tls_config& cfg) {
-        fmt::print(o, "{{name: {}, tls_config: {}}}", cfg.name, cfg.config);
-        return o;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{name: {}, tls_config: {}}}", name, config);
     }
 
     bool operator==(const endpoint_tls_config& rhs) const = default;

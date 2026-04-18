@@ -13,7 +13,6 @@
 
 #include "absl/container/node_hash_map.h"
 #include "bytes/iobuf.h"
-#include "bytes/iostream.h"
 #include "cluster/cluster_link/frontend.h"
 #include "cluster/config_frontend.h"
 #include "cluster/controller_stm.h"
@@ -23,16 +22,13 @@
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
 #include "cluster/topic_table.h"
-#include "cluster/types.h"
 #include "config/configuration.h"
-#include "config/validators.h"
 #include "features/enterprise_features.h"
 #include "features/feature_table.h"
 #include "hashing/secure.h"
 #include "json/stringbuffer.h"
 #include "json/writer.h"
 #include "model/namespace.h"
-#include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
 #include "net/tls.h"
 #include "net/tls_certificate_probe.h"
@@ -40,17 +36,14 @@
 #include "rpc/types.h"
 #include "security/authorizer.h"
 #include "security/role_store.h"
-#include "ssx/sformat.h"
 #include "utils/unresolved_address.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/net/dns.hh>
 #include <seastar/net/tls.hh>
-#include <seastar/util/defer.hh>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/random/seed_seq.hpp>
@@ -58,11 +51,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <fmt/core.h>
-#include <sys/socket.h>
 
 #include <algorithm>
-#include <climits>
-#include <netdb.h>
 #include <stdexcept>
 
 namespace {

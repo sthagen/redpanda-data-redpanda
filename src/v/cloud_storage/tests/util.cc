@@ -84,36 +84,36 @@ segment_layout generate_segment_layout(
     return {.segments = all_batches, .num_data_batches = num_data_batches};
 }
 
-std::ostream& operator<<(std::ostream& o, const in_memory_segment& ims) {
-    fmt::print(
-      o,
+fmt::iterator in_memory_segment::format_to(fmt::iterator it) const {
+    it = fmt::format_to(
+      it,
       "name {}, base-offset {}, max-offset {}, do-not-reupload {}, "
       "num-config-batches {}, num-config-records {}, delta-offset-overlap {}\n",
-      ims.sname,
-      ims.base_offset,
-      ims.max_offset,
-      ims.do_not_reupload,
-      ims.num_config_batches,
-      ims.num_config_records,
-      ims.delta_offset_overlap);
-    for (size_t i = 0; i < ims.headers.size(); i++) {
-        if (is_internal_record_batch(ims.headers[i].type)) {
-            const auto& h = ims.headers[i];
-            fmt::print(
-              o,
+      sname,
+      base_offset,
+      max_offset,
+      do_not_reupload,
+      num_config_batches,
+      num_config_records,
+      delta_offset_overlap);
+    for (size_t i = 0; i < headers.size(); i++) {
+        if (is_internal_record_batch(headers[i].type)) {
+            const auto& h = headers[i];
+            it = fmt::format_to(
+              it,
               "\tconfiguration-batch {{ base_offset:{}, record_count:{} }}\n",
               h.base_offset,
               h.record_count);
         } else {
-            const auto& h = ims.headers[i];
-            fmt::print(
-              o,
+            const auto& h = headers[i];
+            it = fmt::format_to(
+              it,
               "\tdata-batch {{ base_offset:{}, record_count:{} }}\n",
               h.base_offset,
               h.record_count);
         }
     }
-    return o;
+    return it;
 }
 
 std::unique_ptr<storage::continuous_batch_parser> make_recording_batch_parser(

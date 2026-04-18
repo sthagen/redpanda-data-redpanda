@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "kafka/protocol/schemata/list_transactions_request.h"
 #include "kafka/protocol/schemata/list_transactions_response.h"
 
@@ -30,9 +31,8 @@ struct list_transactions_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const list_transactions_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -49,9 +49,8 @@ struct list_transactions_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const list_transactions_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

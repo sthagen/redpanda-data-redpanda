@@ -11,20 +11,11 @@
 #include "cloud_io/tests/s3_imposter.h"
 
 #include "cloud_storage_clients/client.h"
-#include "cloud_storage_clients/client_probe.h"
 #include "http/tests/utils.h"
 #include "http/utils.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/iostream.hh>
-#include <seastar/core/temporary_buffer.hh>
-#include <seastar/http/function_handlers.hh>
 #include <seastar/net/socket_defs.hh>
-#include <seastar/util/defer.hh>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/core/noncopyable.hpp>
-#include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 
 #include <charconv>

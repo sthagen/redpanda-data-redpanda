@@ -10,7 +10,9 @@
  */
 
 #pragma once
+
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "bytes/bytes.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_vector.h"
@@ -44,9 +46,8 @@ struct member_protocol {
         return name == o.name && metadata == o.metadata;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const member_protocol& p) {
-        return os << p.name << ":" << p.metadata.size();
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}:{}", name, metadata.size());
     }
 };
 
@@ -248,11 +249,11 @@ public:
     described_group_member describe(const kafka::protocol_name&) const;
     described_group_member describe_without_metadata() const;
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
 private:
     using join_promise = ss::promise<join_group_response>;
     using sync_promise = ss::promise<sync_group_response>;
-
-    friend std::ostream& operator<<(std::ostream&, const group_member&);
 
     member_state _state;
     kafka::group_id _group_id;

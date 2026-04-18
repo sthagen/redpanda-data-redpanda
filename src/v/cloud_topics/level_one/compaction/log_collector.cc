@@ -10,16 +10,10 @@
 
 #include "cloud_topics/level_one/compaction/log_collector.h"
 
-#include "cluster/partition.h"
-#include "cluster/partition_manager.h"
 #include "cluster/topic_configuration.h"
 #include "cluster/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "model/namespace.h"
-#include "ssx/future-util.h"
-
-#include <seastar/core/coroutine.hh>
 
 namespace cloud_topics::l1 {
 

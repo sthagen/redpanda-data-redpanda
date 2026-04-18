@@ -2,7 +2,6 @@
 #include "config/mock_property.h"
 #include "kafka/server/datalake_throttle_manager.h"
 #include "random/generators.h"
-#include "ssx/future-util.h"
 #include "test_utils/async.h"
 #include "test_utils/test.h"
 

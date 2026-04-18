@@ -24,9 +24,6 @@
 #include <seastar/core/file-types.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/core/timed_out_error.hh>
-#include <seastar/testing/seastar_test.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>

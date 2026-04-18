@@ -12,24 +12,18 @@
 #include "absl/container/flat_hash_map.h"
 #include "bytes/bytes.h"
 #include "cluster/errc.h"
-#include "cluster/types.h"
 #include "config/mock_property.h"
 #include "features/feature_table.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "kafka/data/partition_proxy.h"
-#include "kafka/data/rpc/client.h"
-#include "kafka/data/rpc/service.h"
 #include "kafka/data/rpc/test/deps.h"
 #include "model/fundamental.h"
 #include "model/ktp.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
-#include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
-#include "model/timeout_clock.h"
 #include "model/transform.h"
 #include "net/server.h"
 #include "net/types.h"
@@ -38,7 +32,6 @@
 #include "rpc/rpc_server.h"
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
-#include "test_utils/test.h"
 #include "transform/rpc/client.h"
 #include "transform/rpc/deps.h"
 #include "transform/rpc/serde.h"
@@ -50,7 +43,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/core/print.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
@@ -60,11 +52,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <exception>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <ostream>

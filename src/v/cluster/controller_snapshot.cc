@@ -11,7 +11,6 @@
 
 #include "cluster/controller_snapshot.h"
 
-#include "security/types.h"
 #include "serde/rw/rw.h"
 
 namespace cluster {

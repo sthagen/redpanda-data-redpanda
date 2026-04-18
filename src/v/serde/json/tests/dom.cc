@@ -13,7 +13,6 @@
 
 #include "absl/strings/escaping.h"
 #include "bytes/iobuf.h"
-#include "bytes/iobuf_parser.h"
 
 #include <seastar/util/variant_utils.hh>
 

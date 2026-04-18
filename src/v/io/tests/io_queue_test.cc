@@ -11,7 +11,6 @@
 #include "base/units.h"
 #include "io/io_queue.h"
 #include "io/tests/common.h"
-#include "random/generators.h"
 
 #include <seastar/core/seastar.hh>
 #include <seastar/core/thread.hh>

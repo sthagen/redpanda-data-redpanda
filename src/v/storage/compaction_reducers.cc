@@ -16,21 +16,16 @@
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "model/record_utils.h"
-#include "random/generators.h"
 #include "storage/compacted_index.h"
 #include "storage/compaction_key.h"
 #include "storage/index_state.h"
 #include "storage/logger.h"
-#include "storage/record_batch_utils.h"
 #include "storage/segment_utils.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 
-#include <boost/range/irange.hpp>
-
 #include <algorithm>
-#include <exception>
 
 namespace storage::internal {
 
@@ -125,7 +120,7 @@ ss::future<> copy_data_segment_reducer::maybe_keep_offset(
   const model::record_batch& batch,
   const model::record& r,
   bool is_last_record_in_batch,
-  std::vector<int32_t>& offset_deltas) {
+  chunked_vector<int32_t>& offset_deltas) {
     if (co_await _should_keep_fn(batch, r, is_last_record_in_batch)) {
         offset_deltas.push_back(r.offset_delta());
         co_return;
@@ -171,7 +166,7 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
     }
 
     // 1. compute which records to keep
-    std::vector<int32_t> offset_deltas;
+    chunked_vector<int32_t> offset_deltas;
     offset_deltas.reserve(batch.record_count());
 
     int32_t records_seen = 0;

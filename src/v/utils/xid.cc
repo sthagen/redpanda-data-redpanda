@@ -15,8 +15,6 @@
 #include "serde/rw/rw.h"
 #include "ssx/sformat.h"
 
-#include <fmt/format.h>
-
 namespace {
 static constexpr std::array<char, 32> b32_alphabet{
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a',

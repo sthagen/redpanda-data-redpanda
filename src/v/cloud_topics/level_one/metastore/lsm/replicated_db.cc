@@ -25,8 +25,6 @@
 #include "ssx/clock.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/coroutine.hh>
-
 namespace cloud_topics::l1 {
 
 namespace {

@@ -58,9 +58,9 @@ struct recovery_request_params
 
     friend bool operator==(
       const recovery_request_params&, const recovery_request_params&) = default;
-};
 
-std::ostream& operator<<(std::ostream&, const recovery_request_params&);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 struct single_status
   : serde::

@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/container/btree_map.h"
 #include "base/vlog.h"
 #include "container/chunked_vector.h"
 #include "model/namespace.h"
@@ -17,8 +16,6 @@
 #include "storage/record_batch_builder.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
-
-#include <seastar/core/sleep.hh>
 
 #include <gtest/gtest.h>
 

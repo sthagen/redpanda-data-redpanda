@@ -14,7 +14,6 @@
 #include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/table_definition.h"
-#include "iceberg/avro_utils.h"
 #include "iceberg/compatibility_utils.h"
 #include "iceberg/conversion/conversion_outcome.h"
 #include "iceberg/conversion/values_avro.h"
@@ -24,9 +23,6 @@
 #include "iceberg/values.h"
 #include "model/fundamental.h"
 #include "model/record.h"
-
-#include <avro/Generic.hh>
-#include <avro/GenericDatum.hh>
 
 namespace datalake {
 
@@ -122,15 +118,6 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
 }
 
 } // namespace
-
-std::ostream& operator<<(std::ostream& o, const record_translator::errc& e) {
-    switch (e) {
-    case record_translator::errc::translation_error:
-        return o << "record_translator::errc::translation_error";
-    case record_translator::errc::unexpected_schema:
-        return o << "record_translator::errc::unexpected_schema";
-    }
-}
 
 record_type
 default_translator::build_type(std::optional<shared_resolved_type_t> val_type) {

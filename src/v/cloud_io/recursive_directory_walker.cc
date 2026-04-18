@@ -16,11 +16,9 @@
 #include "cloud_io/logger.h"
 #include "ssx/watchdog.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/file.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/core/sstring.hh>
 
 #include <algorithm>

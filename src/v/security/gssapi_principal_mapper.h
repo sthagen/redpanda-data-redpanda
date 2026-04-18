@@ -37,8 +37,6 @@ public:
 private:
     friend struct fmt::formatter<gssapi_name>;
 
-    friend std::ostream& operator<<(std::ostream& os, const gssapi_name& n);
-
     ss::sstring _primary;
     ss::sstring _host_name;
     ss::sstring _realm;
@@ -60,9 +58,6 @@ public:
 private:
     friend struct fmt::formatter<gssapi_principal_mapper>;
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const gssapi_principal_mapper& p);
-
     config::binding<std::vector<ss::sstring>> _principal_to_local_rules_binding;
     std::vector<gssapi_rule> _rules;
 };
@@ -73,7 +68,9 @@ template<>
 struct fmt::formatter<security::gssapi_name> {
     using type = security::gssapi_name;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator
@@ -84,7 +81,9 @@ template<>
 struct fmt::formatter<security::gssapi_principal_mapper> {
     using type = security::gssapi_principal_mapper;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator

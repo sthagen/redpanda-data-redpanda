@@ -9,7 +9,6 @@
 
 #include "kafka/server/handlers/alter_configs.h"
 
-#include "absl/container/node_hash_set.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
@@ -27,16 +26,11 @@
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "model/timeout_clock.h"
-#include "pandaproxy/schema_registry/subject_name_strategy.h"
 #include "strings/string_switch.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/do_with.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/util/log.hh>
-
-#include <fmt/ostream.h>
 
 #include <string_view>
 

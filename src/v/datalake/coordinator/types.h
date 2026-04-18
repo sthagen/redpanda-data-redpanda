@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
 #include "datalake/coordinator/partition_state_override.h"
@@ -42,7 +43,30 @@ constexpr bool is_retriable(errc errc) {
            || errc == errc::concurrent_requests;
 }
 
-std::ostream& operator<<(std::ostream&, const errc&);
+inline fmt::iterator format_to(errc e, fmt::iterator out) {
+    switch (e) {
+    case errc::ok:
+        return fmt::format_to(out, "errc::ok");
+    case errc::coordinator_topic_not_exists:
+        return fmt::format_to(out, "errc::coordinator_topic_not_exists");
+    case errc::not_leader:
+        return fmt::format_to(out, "errc::not_leader");
+    case errc::timeout:
+        return fmt::format_to(out, "errc::timeout");
+    case errc::fenced:
+        return fmt::format_to(out, "errc::fenced");
+    case errc::stale:
+        return fmt::format_to(out, "errc::stale");
+    case errc::concurrent_requests:
+        return fmt::format_to(out, "errc::concurrent_requests");
+    case errc::revision_mismatch:
+        return fmt::format_to(out, "errc::revision_mismatch");
+    case errc::incompatible_schema:
+        return fmt::format_to(out, "errc::incompatible_schema");
+    case errc::failed:
+        return fmt::format_to(out, "errc::failed");
+    }
+}
 
 struct ensure_table_exists_reply
   : serde::envelope<
@@ -53,8 +77,9 @@ struct ensure_table_exists_reply
     explicit ensure_table_exists_reply(errc err)
       : errc(err) {}
 
-    friend std::ostream&
-    operator<<(std::ostream&, const ensure_table_exists_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{errc: {}}}", errc);
+    }
 
     errc errc;
 
@@ -80,8 +105,10 @@ struct ensure_table_exists_request
     model::revision_id topic_revision;
     record_schema_components schema_components;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const ensure_table_exists_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{topic: {}, topic_revision: {}}}", topic, topic_revision);
+    }
 
     const model::topic& get_topic() const { return topic; }
 
@@ -99,8 +126,9 @@ struct ensure_dlq_table_exists_reply
     explicit ensure_dlq_table_exists_reply(errc err)
       : errc(err) {}
 
-    friend std::ostream&
-    operator<<(std::ostream&, const ensure_dlq_table_exists_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{errc: {}}}", errc);
+    }
 
     errc errc;
 
@@ -123,8 +151,10 @@ struct ensure_dlq_table_exists_request
     model::topic topic;
     model::revision_id topic_revision;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const ensure_dlq_table_exists_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{topic: {}, topic_revision: {}}}", topic, topic_revision);
+    }
 
     const model::topic& get_topic() const { return topic; }
 
@@ -140,8 +170,9 @@ struct add_translated_data_files_reply
     explicit add_translated_data_files_reply(errc err)
       : errc(err) {}
 
-    friend std::ostream&
-    operator<<(std::ostream&, const add_translated_data_files_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{errc: {}}}", errc);
+    }
 
     errc errc;
 
@@ -186,8 +217,16 @@ struct add_translated_data_files_request
         };
     }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const add_translated_data_files_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{partition: {}, topic_revision: {}, files: {}, translation "
+          "term: {}}}",
+          tp,
+          topic_revision,
+          ranges,
+          translator_term);
+    }
 
     const model::topic& get_topic() const { return tp.topic; }
 
@@ -219,8 +258,10 @@ struct fetch_latest_translated_offset_reply
     // If not ok, the request processing has a problem.
     errc errc;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const fetch_latest_translated_offset_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{errc: {}, offset: {}}}", errc, last_added_offset);
+    }
 
     auto serde_fields() {
         return std::tie(last_added_offset, errc, last_iceberg_committed_offset);
@@ -243,8 +284,10 @@ struct fetch_latest_translated_offset_request
 
     const model::topic& get_topic() const { return tp.topic; }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const fetch_latest_translated_offset_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{partition: {}, topic_revision: {}}}", tp, topic_revision);
+    }
 
     auto serde_fields() { return std::tie(tp, topic_revision); }
 };
@@ -275,8 +318,14 @@ struct per_topic_usage_stats
     model::revision_id revision;
     uint64_t total_kafka_bytes_processed{0};
 
-    friend std::ostream&
-    operator<<(std::ostream&, const per_topic_usage_stats&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{topic: {}, revision: {}, total_kafka_bytes_processed: {}}}",
+          topic,
+          revision,
+          total_kafka_bytes_processed);
+    }
 
     auto serde_fields() {
         return std::tie(topic, revision, total_kafka_bytes_processed);
@@ -288,7 +337,9 @@ struct datalake_usage_stats
       datalake_usage_stats,
       serde::version<0>,
       serde::compat_version<0>> {
-    friend std::ostream& operator<<(std::ostream&, const datalake_usage_stats&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{topic_usages: {} }}", topic_usages);
+    }
 
     chunked_vector<per_topic_usage_stats> topic_usages;
 
@@ -302,7 +353,9 @@ struct usage_stats_reply
     explicit usage_stats_reply(errc err)
       : errc(err) {}
 
-    friend std::ostream& operator<<(std::ostream&, const usage_stats_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{errc: {}, stats: {}}}", errc, stats);
+    }
 
     errc errc;
     // only valid if errc == errc::ok
@@ -325,7 +378,10 @@ struct usage_stats_request
     usage_stats_request() = default;
     explicit usage_stats_request(model::partition_id coordinator_partition)
       : coordinator_partition(coordinator_partition) {}
-    friend std::ostream& operator<<(std::ostream&, const usage_stats_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{coordinator_partition: {}}}", coordinator_partition);
+    }
 
     model::partition_id get_coordinator_partition() {
         return coordinator_partition;
@@ -343,8 +399,10 @@ struct get_topic_state_reply
     explicit get_topic_state_reply(errc err)
       : errc(err) {}
 
-    friend std::ostream&
-    operator<<(std::ostream&, const get_topic_state_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{errc: {}, topic_states size: {}}}", errc, topic_states.size());
+    }
 
     errc errc;
     // Map from topic to its state. Only valid if errc == errc::ok
@@ -376,8 +434,13 @@ struct get_topic_state_request
         return coordinator_partition;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const get_topic_state_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{coordinator_partition: {}, topics_filter: {}}}",
+          coordinator_partition,
+          topics_filter);
+    }
 
     auto serde_fields() {
         return std::tie(coordinator_partition, topics_filter);
@@ -392,8 +455,9 @@ struct reset_topic_state_reply
     reset_topic_state_reply() = default;
     explicit reset_topic_state_reply(errc err)
       : errc(err) {}
-    friend std::ostream&
-    operator<<(std::ostream&, const reset_topic_state_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{errc: {}}}", errc);
+    }
     errc errc;
     auto serde_fields() { return std::tie(errc); }
 };
@@ -431,18 +495,16 @@ struct reset_topic_state_request
         return coordinator_partition;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const reset_topic_state_request& req) {
-        fmt::print(
-          o,
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
           "{{coordinator_partition: {}, topic: {}, topic_revision: {}, "
           "reset_all_partitions: {}, partition_overrides: {} entries}}",
-          req.coordinator_partition,
-          req.topic,
-          req.topic_revision,
-          req.reset_all_partitions,
-          req.partition_overrides.size());
-        return o;
+          coordinator_partition,
+          topic,
+          topic_revision,
+          reset_all_partitions,
+          partition_overrides.size());
     }
 
     auto serde_fields() {

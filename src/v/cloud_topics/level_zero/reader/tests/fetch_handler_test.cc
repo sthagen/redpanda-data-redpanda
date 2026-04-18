@@ -16,21 +16,9 @@
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
-#include "model/timeout_clock.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
-#include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
-#include <seastar/coroutine/as_future.hh>
-#include <seastar/util/later.hh>
-
-#include <chrono>
-#include <exception>
 #include <queue>
-#include <stdexcept>
 
 ss::logger test_log("L0_fetch_handler_test");
 

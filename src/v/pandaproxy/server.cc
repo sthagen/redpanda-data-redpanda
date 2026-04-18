@@ -19,13 +19,10 @@
 #include "rpc/rpc_utils.h"
 #include "utils/truncating_logger.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/http/function_handlers.hh>
+#include <seastar/core/coroutine.hh> // NOLINT(misc-include-cleaner): required for co_await/co_return coroutine support
+#include <seastar/http/function_handlers.hh> // NOLINT(misc-include-cleaner): provides ss::httpd::handler_base
 #include <seastar/http/reply.hh>
 #include <seastar/net/tls.hh>
-
-#include <fmt/chrono.h>
-#include <fmt/ranges.h>
 
 #include <charconv>
 #include <exception>

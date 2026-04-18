@@ -8,11 +8,8 @@
 // by the Apache License, Version 2.0
 
 #include <iterator>
-#include <limits>
 #define BOOST_TEST_MODULE raft
 #include "raft/consensus_utils.h"
-
-#include <seastar/core/circular_buffer.hh>
 
 #include <boost/test/unit_test.hpp>
 

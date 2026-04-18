@@ -10,9 +10,7 @@
 
 #include "cloud_io/remote_api.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
-#include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/write_request_scheduler/write_request_scheduler.h"
-#include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -21,14 +19,10 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/sharded.hh>
-#include <seastar/coroutine/as_future.hh>
 
 #include <gmock/gmock.h>
-
-#include <limits>
 
 using namespace std::chrono_literals;
 using namespace cloud_topics;

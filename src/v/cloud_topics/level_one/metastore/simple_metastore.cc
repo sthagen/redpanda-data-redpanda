@@ -17,8 +17,6 @@
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 
-#include <seastar/core/coroutine.hh>
-
 namespace cloud_topics::l1 {
 
 namespace {

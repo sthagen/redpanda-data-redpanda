@@ -27,7 +27,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/sstring.hh>
 
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 #include <cstddef>

@@ -12,12 +12,11 @@
 #pragma once
 
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "config/configuration.h"
 #include "config/property.h"
 
 #include <boost/range/iterator_range.hpp>
-
-#include <iosfwd>
 
 namespace features {
 
@@ -38,7 +37,38 @@ enum class license_required_feature {
     topic_deletion_disabled,
 };
 
-std::ostream& operator<<(std::ostream&, license_required_feature);
+inline fmt::iterator format_to(license_required_feature f, fmt::iterator out) {
+    switch (f) {
+    case license_required_feature::audit_logging:
+        return fmt::format_to(out, "audit_logging");
+    case license_required_feature::cloud_storage:
+        return fmt::format_to(out, "cloud_storage");
+    case license_required_feature::partition_auto_balancing_continuous:
+        return fmt::format_to(out, "partition_auto_balancing_continuous");
+    case license_required_feature::core_balancing_continuous:
+        return fmt::format_to(out, "core_balancing_continuous");
+    case license_required_feature::gssapi:
+        return fmt::format_to(out, "gssapi");
+    case license_required_feature::oidc:
+        return fmt::format_to(out, "oidc");
+    case license_required_feature::schema_id_validation:
+        return fmt::format_to(out, "schema_id_validation");
+    case license_required_feature::rbac:
+        return fmt::format_to(out, "rbac");
+    case license_required_feature::fips:
+        return fmt::format_to(out, "fips");
+    case license_required_feature::datalake_iceberg:
+        return fmt::format_to(out, "datalake_iceberg");
+    case license_required_feature::leadership_pinning:
+        return fmt::format_to(out, "leadership_pinning");
+    case license_required_feature::shadow_linking:
+        return fmt::format_to(out, "shadow_linking");
+    case license_required_feature::cloud_topics:
+        return fmt::format_to(out, "cloud_topics");
+    case license_required_feature::topic_deletion_disabled:
+        return fmt::format_to(out, "topic_deletion_disabled");
+    }
+}
 
 /**
  * Thin wrapper around two sets to indicate the current state of enterprise

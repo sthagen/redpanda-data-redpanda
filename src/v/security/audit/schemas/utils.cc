@@ -65,15 +65,11 @@
 #include "security/audit/types.h"
 #include "security/authorizer.h"
 #include "security/gssapi_authenticator.h"
-#include "security/mtls.h"
 #include "security/oidc_authenticator.h"
 #include "security/plain_authenticator.h"
 #include "security/request_auth.h"
 #include "security/scram_authenticator.h"
 #include "utils/unresolved_address.h"
-
-#include <seastar/core/lowres_clock.hh>
-#include <seastar/core/smp.hh>
 
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -269,14 +265,14 @@ actor result_to_actor(const security::auth_result& result) {
     } else if (result.acl.has_value() || result.resource_pattern.has_value()) {
         ss::sstring desc;
         if (result.acl.has_value()) {
-            desc += fmt::format("acl: {}", result.acl.value());
+            desc += fmt::format("acl: {}", result.acl.value().get());
         }
         if (result.resource_pattern.has_value()) {
             if (!desc.empty()) {
                 desc += ", ";
             }
             desc += fmt::format(
-              "resource: {}", result.resource_pattern.value());
+              "resource: {}", result.resource_pattern.value().get());
         }
 
         policy.desc = std::move(desc);
@@ -298,114 +294,14 @@ api_activity::activity_id http_method_to_activity_id(std::string_view method) {
       .default_match(api_activity::activity_id::unknown);
 }
 
-std::ostream& operator<<(std::ostream& os, audit_resource_type type) {
-    switch (type) {
-    case audit_resource_type::topic:
-        return os << "topic";
-    case audit_resource_type::group:
-        return os << "group";
-    case audit_resource_type::cluster:
-        return os << "cluster";
-    case audit_resource_type::transactional_id:
-        return os << "transactional_id";
-    case audit_resource_type::acl_binding:
-        return os << "acl_binding";
-    case audit_resource_type::acl_binding_filter:
-        return os << "acl_binding_filter";
-    }
-}
-
-std::ostream& operator<<(std::ostream& os, const category_uid& uid) {
-    switch (uid) {
-    case category_uid::system_activity:
-        return os << "system_activity";
-    case category_uid::findings:
-        return os << "findings";
-    case category_uid::iam:
-        return os << "iam";
-    case category_uid::network_activity:
-        return os << "network_activity";
-    case category_uid::discovery:
-        return os << "discovery";
-    case category_uid::application_activity:
-        return os << "application_activity";
-    }
-}
-
-std::ostream& operator<<(std::ostream& os, const class_uid& uid) {
-    switch (uid) {
-    case class_uid::file_system_activity:
-        return os << "file_system_activity";
-    case class_uid::kernel_extension_activity:
-        return os << "kernel_extension_activity";
-    case class_uid::kernel_activity:
-        return os << "kernel_activity";
-    case class_uid::memory_activity:
-        return os << "memory_activity";
-    case class_uid::module_activity:
-        return os << "module_activity";
-    case class_uid::scheduled_job_activity:
-        return os << "scheduled_job_activity";
-    case class_uid::process_activity:
-        return os << "process_activity";
-    case class_uid::security_finding:
-        return os << "security_finding";
-    case class_uid::account_change:
-        return os << "account_change";
-    case class_uid::authentication:
-        return os << "authentication";
-    case class_uid::authorize_session:
-        return os << "authorize_session";
-    case class_uid::entity_management:
-        return os << "entity_management";
-    case class_uid::user_access_management:
-        return os << "user_access_management";
-    case class_uid::group_management:
-        return os << "group_management";
-    case class_uid::network_activity:
-        return os << "network_activity";
-    case class_uid::http_activity:
-        return os << "http_activity";
-    case class_uid::dns_activity:
-        return os << "dns_activity";
-    case class_uid::dhcp_activity:
-        return os << "dhcp_activity";
-    case class_uid::rdp_activity:
-        return os << "rdp_activity";
-    case class_uid::smb_activity:
-        return os << "smb_activity";
-    case class_uid::ssh_activity:
-        return os << "ssh_activity";
-    case class_uid::ftp_activity:
-        return os << "ftp_activity";
-    case class_uid::email_activity:
-        return os << "email_activity";
-    case class_uid::network_file_activity:
-        return os << "network_file_activity";
-    case class_uid::email_file_activity:
-        return os << "email_file_activity";
-    case class_uid::email_url_activity:
-        return os << "email_url_activity";
-    case class_uid::device_inventory_info:
-        return os << "device_inventory_info";
-    case class_uid::device_config_state:
-        return os << "device_config_state";
-    case class_uid::web_resource_activity:
-        return os << "web_resource_activity";
-    case class_uid::application_lifecycle:
-        return os << "application_lifecycle";
-    case class_uid::api_activity:
-        return os << "api_activity";
-    case class_uid::web_resource_access_activity:
-        return os << "web_resource_access_activity";
-    }
-}
-
-std::ostream& operator<<(std::ostream& os, const ocsf_base_impl& impl) {
-    return os << "{category: " << impl.get_category_uid()
-              << ", class: " << impl.get_class_uid()
-              << ", type_uid: " << impl.get_type_uid()()
-              << ", detail: " << impl.api_info() << "}";
+fmt::iterator ocsf_base_impl::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{category: {}, class: {}, type_uid: {}, detail: {}}}",
+      get_category_uid(),
+      get_class_uid(),
+      get_type_uid()(),
+      api_info());
 }
 
 event_type kafka_api_to_event_type(kafka::api_key key) {

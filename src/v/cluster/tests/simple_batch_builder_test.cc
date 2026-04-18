@@ -11,8 +11,6 @@
 #include "cluster/types.h"
 #include "container/chunked_circular_buffer.h"
 #include "model/record_utils.h"
-#include "random/generators.h"
-#include "reflection/adl.h"
 #include "test_utils/logs.h"
 #include "test_utils/test_env.h"
 

@@ -15,8 +15,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
-#include <seastar/util/later.hh>
 
 #include <queue>
 

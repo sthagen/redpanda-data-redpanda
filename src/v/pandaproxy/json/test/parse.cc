@@ -10,8 +10,6 @@
 #include "pandaproxy/json/requests/produce.h"
 #include "pandaproxy/json/rjson_util.h"
 
-#include <seastar/core/reactor.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/testing/perf_tests.hh>
 
 namespace pp = pandaproxy;

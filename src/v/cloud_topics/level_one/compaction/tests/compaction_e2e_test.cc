@@ -9,7 +9,6 @@
  */
 
 #include "cloud_io/tests/s3_imposter.h"
-#include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cluster/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -18,8 +17,6 @@
 #include "test_utils/async.h"
 
 #include <gtest/gtest.h>
-
-#include <chrono>
 
 using namespace cloud_topics;
 using namespace std::chrono_literals;

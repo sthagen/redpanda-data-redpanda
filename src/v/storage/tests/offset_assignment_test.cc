@@ -9,9 +9,6 @@
 
 #include "model/tests/random_batch.h"
 #include "storage/offset_assignment.h"
-#include "test_utils/gtest_exception.h"
-
-#include <seastar/testing/thread_test_case.hh>
 
 #include <gtest/gtest.h>
 

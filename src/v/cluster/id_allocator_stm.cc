@@ -20,7 +20,6 @@
 #include "storage/ntp_config.h"
 #include "storage/record_batch_builder.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
 namespace cluster {

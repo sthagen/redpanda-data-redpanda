@@ -12,11 +12,9 @@
 
 #include "cloud_roles/types.h"
 #include "cloud_storage_clients/configuration.h"
-#include "cloud_storage_clients/types.h"
 #include "config/configuration.h"
 #include "datalake/logger.h"
 #include "hashing/secure.h"
-#include "net/types.h"
 
 namespace datalake {
 

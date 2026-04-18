@@ -13,7 +13,6 @@
 
 #include "cluster/members_table.h"
 #include "cluster/security_frontend.h"
-#include "cluster_link/errc.h"
 #include "cluster_link/utils.h"
 #include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/serde.h"

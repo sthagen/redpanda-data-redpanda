@@ -286,6 +286,8 @@ enum class state : uint8_t {
 };
 
 std::string_view to_string_view(state s);
+fmt::iterator format_to(state, fmt::iterator);
 std::string_view to_string_view(collection_outcome::status s);
+fmt::iterator format_to(collection_outcome::status, fmt::iterator);
 
 } // namespace cloud_topics::l0::gc

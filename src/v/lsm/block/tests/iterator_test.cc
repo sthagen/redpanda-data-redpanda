@@ -12,9 +12,6 @@
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/tests/iterator_test_harness.h"
 
-#include <seastar/core/file.hh>
-
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 namespace {

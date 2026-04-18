@@ -255,11 +255,6 @@ ss::sstring calculate_sha256_checksum(std::string_view raw_license) {
 
 } // namespace
 
-std::ostream& operator<<(std::ostream& os, const license& lic) {
-    fmt::print(os, "{}", lic);
-    return os;
-}
-
 license make_license(std::string_view raw_license) {
     try {
         license lc{};

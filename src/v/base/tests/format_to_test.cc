@@ -52,7 +52,7 @@ TEST(Formatter, InsideNamespacedFormatTo) {
     EXPECT_EQ("hello: {a: bar, b: 3}", fmt::format("hello: {}", f)) << f;
     ns::bar b{.f = f};
     EXPECT_EQ(
-      "world: {f: {a: bar, b: 3}}", fmt::format("world: {}", fmt::streamed(b)))
+      "world: {f: {a: bar, b: 3}}", fmt::format("world: {}", fmt_streamed(b)))
       << b;
 }
 

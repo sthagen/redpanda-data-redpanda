@@ -12,8 +12,6 @@
 #include "base/format_to.h"
 #include "utils/to_string.h"
 
-#include <ostream>
-
 namespace kafka {
 
 fmt::iterator log_reader_config::format_to(fmt::iterator it) const {

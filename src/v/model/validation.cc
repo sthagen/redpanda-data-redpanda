@@ -10,10 +10,7 @@
 #include "model/validation.h"
 
 #include "base/seastarx.h"
-#include "base/vlog.h"
 #include "model/errc.h"
-
-#include <seastar/util/log.hh>
 
 namespace model {
 

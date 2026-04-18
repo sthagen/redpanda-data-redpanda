@@ -11,7 +11,6 @@
 
 #include "kafka/server/group_recovery_consumer.h"
 
-#include "kafka/protocol/wire.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_metadata.h"
 #include "kafka/server/logger.h"

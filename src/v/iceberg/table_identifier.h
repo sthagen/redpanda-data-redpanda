@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 
@@ -28,9 +29,10 @@ struct table_identifier {
         };
     }
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
     bool operator==(const table_identifier& other) const = default;
 };
-std::ostream& operator<<(std::ostream& o, const table_identifier& id);
 } // namespace iceberg
 
 namespace std {

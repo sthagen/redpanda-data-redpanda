@@ -31,11 +31,9 @@ convert_primitive(T v, avro::Type expected_type, const avro::NodePtr& node) {
     if (node->type() != expected_type) {
         return value_conversion_exception(
           fmt::format(
-            "Schema mismatch detected expected type {} got {}, current node: "
-            "{}",
-            expected_type,
-            node->type(),
-            node));
+            "Schema mismatch detected expected type {} got {}",
+            static_cast<int>(expected_type),
+            static_cast<int>(node->type())));
     }
     return ValueT{std::move(v)};
 }

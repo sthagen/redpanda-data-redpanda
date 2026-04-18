@@ -12,9 +12,6 @@
 #include "lsm/db/iter.h"
 #include "lsm/db/memtable.h"
 
-#include <seastar/core/sharded.hh>
-
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 #include <memory>

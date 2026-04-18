@@ -11,6 +11,9 @@
 
 #pragma once
 
+#include "base/format_to.h"
+
+#include <string_view>
 #include <system_error>
 
 namespace raft {
@@ -41,6 +44,64 @@ enum class errc : int16_t {
     replicate_first_stage_exception,
     invalid_input_records,
 };
+
+inline fmt::iterator format_to(errc e, fmt::iterator out) {
+    switch (e) {
+    case errc::success:
+        return fmt::format_to(out, "raft::errc::success");
+    case errc::disconnected_endpoint:
+        return fmt::format_to(out, "raft::errc::disconnected_endpoint");
+    case errc::exponential_backoff:
+        return fmt::format_to(out, "raft::errc::exponential_backoff");
+    case errc::non_majority_replication:
+        return fmt::format_to(out, "raft::errc::non_majority_replication");
+    case errc::not_leader:
+        return fmt::format_to(out, "raft::errc::not_leader");
+    case errc::vote_dispatch_error:
+        return fmt::format_to(out, "raft::errc::vote_dispatch_error");
+    case errc::append_entries_dispatch_error:
+        return fmt::format_to(out, "raft::errc::append_entries_dispatch_error");
+    case errc::replicated_entry_truncated:
+        return fmt::format_to(out, "raft::errc::replicated_entry_truncated");
+    case errc::leader_flush_failed:
+        return fmt::format_to(out, "raft::errc::leader_flush_failed");
+    case errc::leader_append_failed:
+        return fmt::format_to(out, "raft::errc::leader_append_failed");
+    case errc::timeout:
+        return fmt::format_to(out, "raft::errc::timeout");
+    case errc::configuration_change_in_progress:
+        return fmt::format_to(
+          out, "raft::errc::configuration_change_in_progress");
+    case errc::node_does_not_exists:
+        return fmt::format_to(out, "raft::errc::node_does_not_exists");
+    case errc::leadership_transfer_in_progress:
+        return fmt::format_to(
+          out, "raft::errc::leadership_transfer_in_progress");
+    case errc::transfer_to_current_leader:
+        return fmt::format_to(out, "raft::errc::transfer_to_current_leader");
+    case errc::node_already_exists:
+        return fmt::format_to(out, "raft::errc::node_already_exists");
+    case errc::invalid_configuration_update:
+        return fmt::format_to(out, "raft::errc::invalid_configuration_update");
+    case errc::not_voter:
+        return fmt::format_to(out, "raft::errc::not_voter");
+    case errc::invalid_target_node:
+        return fmt::format_to(out, "raft::errc::invalid_target_node");
+    case errc::shutting_down:
+        return fmt::format_to(out, "raft::errc::shutting_down");
+    case errc::replicate_batcher_cache_error:
+        return fmt::format_to(out, "raft::errc::replicate_batcher_cache_error");
+    case errc::group_not_exists:
+        return fmt::format_to(out, "raft::errc::group_not_exists");
+    case errc::replicate_first_stage_exception:
+        return fmt::format_to(
+          out, "raft::errc::replicate_first_stage_exception");
+    case errc::invalid_input_records:
+        return fmt::format_to(out, "raft::errc::invalid_input_records");
+    }
+    return fmt::format_to(out, "raft::errc::unknown");
+}
+
 struct errc_category final : public std::error_category {
     const char* name() const noexcept final { return "raft::errc"; }
 

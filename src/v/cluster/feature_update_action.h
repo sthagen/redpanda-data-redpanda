@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
 #include "serde/rw/sstring.h"
@@ -46,8 +47,10 @@ struct feature_update_action
 
     auto serde_fields() { return std::tie(feature_name, action); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const feature_update_action&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{feature_name: {}, action: {}}}", feature_name, (int)action);
+    }
 };
 
 } // namespace cluster

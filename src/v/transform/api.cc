@@ -31,7 +31,6 @@
 #include "model/timestamp.h"
 #include "model/transform.h"
 #include "ssx/future-util.h"
-#include "ssx/semaphore.h"
 #include "transform/logging/log_manager.h"
 #include "transform/logging/rpc_client.h"
 #include "transform/rpc/client.h"
@@ -43,13 +42,11 @@
 #include "wasm/engine.h"
 #include "wasm/errc.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/optimized_optional.hh>

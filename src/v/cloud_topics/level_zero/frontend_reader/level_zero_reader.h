@@ -81,7 +81,7 @@ public:
     ss::future<model::record_batch_reader::storage_t>
       do_load_slice(model::timeout_clock::time_point) final;
 
-    void print(std::ostream& o) final;
+    fmt::iterator format_to(fmt::iterator it) const final;
 
     // Register this reader with the STM - this is needed so that L0 doesn't GC
     // any active data during reads.

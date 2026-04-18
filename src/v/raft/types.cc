@@ -9,23 +9,18 @@
 
 #include "raft/types.h"
 
-#include "base/vassert.h"
 #include "model/async_adl_serde.h"
 #include "model/fundamental.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
-#include "model/timeout_clock.h"
 #include "raft/consensus_utils.h"
 #include "raft/errc.h"
 #include "raft/group_configuration.h"
-#include "raft/transfer_leadership.h"
 #include "reflection/adl.h"
 #include "reflection/async_adl.h"
 
 #include <seastar/coroutine/maybe_yield.hh>
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 #include <chrono>
 namespace {
@@ -130,156 +125,27 @@ replicate_stages::replicate_stages(raft::errc ec)
   , replicate_finished(
       ss::make_ready_future<result<replicate_result>>(make_error_code(ec))) {};
 
-std::ostream& operator<<(std::ostream& o, const vnode& id) {
-    fmt::print(o, "{{id: {}, revision: {}}}", id.id(), id.revision());
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const append_entries_reply& r) {
-    fmt::print(
-      o,
-      "{{node_id: {}, target_node_id: {}, group: {}, term: {}, "
-      "last_dirty_log_index: {}, last_flushed_log_index: {}, "
-      "last_term_base_offset: {}, result: {}, may_recover: {}}}",
-      r.node_id,
-      r.target_node_id,
-      r.group,
-      r.term,
-      r.last_dirty_log_index,
-      r.last_flushed_log_index,
-      r.last_term_base_offset,
-      r.result,
-      r.may_recover);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const vote_request& r) {
-    fmt::print(
-      o,
-      "{{node_id: {}, target_node_id: {}, group: {}, term: {}, prev_log_index: "
-      "{}, prev_log_term: {}, leadership_xfer: {}}}",
-      r.node_id,
-      r.target_node_id,
-      r.group,
-      r.term,
-      r.prev_log_index,
-      r.prev_log_term,
-      r.leadership_transfer);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const follower_metrics& i) {
-    fmt::print(
-      o,
-      "{{node_id: {}, is_learner: {}, committed_log_index: {}, "
-      "dirty_log_index: {}, match_index: {}, is_live: {}, "
-      "under_replicated: {}}}",
-      i.id,
-      i.is_learner,
-      i.committed_log_index,
-      i.dirty_log_index,
-      i.match_index,
-      i.is_live,
-      i.under_replicated);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const heartbeat_metadata& hm) {
-    fmt::print(
-      o,
-      "{{node_id: {}, target_node_id: {}, protocol_metadata: {}}}",
-      hm.node_id,
-      hm.target_node_id,
-      hm.meta);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const consistency_level& l) {
-    switch (l) {
-    case consistency_level::quorum_ack:
-        o << "consistency_level::quorum_ack";
-        break;
-    case consistency_level::leader_ack:
-        o << "consistency_level::leader_ack";
-        break;
-    case consistency_level::no_ack:
-        o << "consistency_level::no_ack";
-        break;
-    default:
-        o << "unknown consistency_level";
+fmt::iterator append_entries_request::format_to(fmt::iterator it) const {
+    if (_batches.empty()) {
+        return fmt::format_to(
+          it,
+          "node_id: {}, target_node_id: {}, protocol metadata: {}, batches: "
+          "{{}}",
+          _source_node,
+          _target_node_id,
+          _meta);
+    } else {
+        return fmt::format_to(
+          it,
+          "node_id: {}, target_node_id: {}, protocol metadata: {}, batch "
+          "count: {}, offset range: [{},{}]",
+          _source_node,
+          _target_node_id,
+          _meta,
+          _batches.size(),
+          _batches.front().base_offset(),
+          _batches.back().last_offset());
     }
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const protocol_metadata& m) {
-    fmt::print(
-      o,
-      "{{group: {}, commit_index: {}, term: {}, prev_log_index: {}, "
-      "prev_log_term: {}, last_visible_index: {}, dirty_offset: {}, "
-      "prev_log_delta: {}}}",
-      m.group,
-      m.commit_index,
-      m.term,
-      m.prev_log_index,
-      m.prev_log_term,
-      m.last_visible_index,
-      m.dirty_offset,
-      m.prev_log_delta);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const vote_reply& r) {
-    fmt::print(
-      o,
-      "{{term: {}, target_node: {}, vote_granted: {}, log_ok: {}}}",
-      r.term,
-      r.target_node_id,
-      r.granted,
-      r.log_ok);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const reply_result& r) {
-    switch (r) {
-    case reply_result::success:
-        o << "success";
-        return o;
-    case reply_result::failure:
-        o << "failure";
-        return o;
-    case reply_result::group_unavailable:
-        o << "group_unavailable";
-        return o;
-    case reply_result::follower_busy:
-        o << "follower_busy";
-        return o;
-    }
-    __builtin_unreachable();
-}
-
-std::ostream& operator<<(std::ostream& o, const install_snapshot_request& r) {
-    fmt::print(
-      o,
-      "{{term: {}, group: {}, target_node_id: {}, node_id: {}, "
-      "last_included_index: {}, "
-      "file_offset: {}, chunk_size: {}, done: {}, dirty_offset: {}}}",
-      r.term,
-      r.group,
-      r.target_node_id,
-      r.node_id,
-      r.last_included_index,
-      r.file_offset,
-      r.chunk.size_bytes(),
-      r.done,
-      r.dirty_offset);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const install_snapshot_reply& r) {
-    fmt::print(
-      o,
-      "{{term: {}, target_node_id: {}, bytes_stored: {}, success: {}}}",
-      r.term,
-      r.target_node_id,
-      r.bytes_stored,
-      r.success);
-    return o;
 }
 
 append_entries_request::append_entries_request(
@@ -391,37 +257,6 @@ append_entries_request_serde_wrapper::serde_async_direct_read(
 
     co_return append_entries_request(
       node_id, target_node_id, meta, std::move(batches), batches_size, flush);
-}
-
-std::ostream& operator<<(std::ostream& o, const append_entries_request& r) {
-    if (r._batches.empty()) {
-        fmt::print(
-          o,
-          "node_id: {}, target_node_id: {}, protocol metadata: {}, batches: "
-          "{{}}",
-          r._source_node,
-          r._target_node_id,
-          r._meta);
-    } else {
-        fmt::print(
-          o,
-          "node_id: {}, target_node_id: {}, protocol metadata: {}, batch "
-          "count: {}, offset range: [{},{}]",
-          r._source_node,
-          r._target_node_id,
-          r._meta,
-          r._batches.size(),
-          r._batches.front().base_offset(),
-          r._batches.back().last_offset());
-    }
-    return o;
-}
-
-std::ostream&
-operator<<(std::ostream& o, const transfer_leadership_request& r) {
-    fmt::print(
-      o, "group {} target {} timeout {}", r.group, r.target, r.timeout);
-    return o;
 }
 
 } // namespace raft

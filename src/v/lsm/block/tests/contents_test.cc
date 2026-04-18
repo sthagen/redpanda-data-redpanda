@@ -11,9 +11,6 @@
 #include "lsm/io/memory_persistence.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/file.hh>
-
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 #include <limits>

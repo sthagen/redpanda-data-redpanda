@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "features/feature_state.h"
 #include "security/license.h"
 #include "storage/record_batch_builder.h"
@@ -567,7 +568,9 @@ inline constexpr std::array feature_schema{
 };
 
 std::string_view to_string_view(feature);
+fmt::iterator format_to(feature, fmt::iterator);
 std::string_view to_string_view(feature_state::state);
+fmt::iterator format_to(feature_state::state, fmt::iterator);
 
 /**
  * To enable all shards to efficiently check enablement of features
@@ -843,13 +846,3 @@ private:
 };
 
 } // namespace features
-
-template<>
-struct fmt::formatter<features::feature_state::state> final
-  : fmt::formatter<std::string_view> {
-    template<typename FormatContext>
-    auto
-    format(const features::feature_state::state& s, FormatContext& ctx) const {
-        return formatter<string_view>::format(features::to_string_view(s), ctx);
-    }
-};

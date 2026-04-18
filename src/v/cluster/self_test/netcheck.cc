@@ -16,8 +16,6 @@
 #include "base/vlog.h"
 #include "cluster/logger.h"
 
-#include <seastar/core/coroutine.hh>
-
 #include <boost/range/irange.hpp>
 
 namespace cluster::self_test {

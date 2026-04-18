@@ -10,6 +10,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "cluster/errc.h"
 #include "model/timeout_clock.h"
@@ -46,7 +47,7 @@ public:
     struct part
       : serde::envelope<part, serde::version<1>, serde::compat_version<0>> {
         friend bool operator==(const part&, const part&) = default;
-        friend std::ostream& operator<<(std::ostream&, const part&);
+        fmt::iterator format_to(fmt::iterator it) const;
 
         template<typename H>
         friend H AbslHashValue(H h, const part& e) {
@@ -66,8 +67,7 @@ public:
 
             auto serde_fields() { return std::tie(); }
 
-            friend std::ostream&
-            operator<<(std::ostream&, const client_id_default_match&);
+            fmt::iterator format_to(fmt::iterator it) const;
 
             template<typename H>
             friend H AbslHashValue(H h, const client_id_default_match&) {
@@ -88,8 +88,7 @@ public:
 
             auto serde_fields() { return std::tie(); }
 
-            friend std::ostream&
-            operator<<(std::ostream&, const user_default_match&);
+            fmt::iterator format_to(fmt::iterator it) const;
 
             template<typename H>
             friend H AbslHashValue(H h, const user_default_match&) {
@@ -108,8 +107,7 @@ public:
             friend bool operator==(
               const client_id_match&, const client_id_match&) = default;
 
-            friend std::ostream&
-            operator<<(std::ostream&, const client_id_match&);
+            fmt::iterator format_to(fmt::iterator it) const;
 
             template<typename H>
             friend H AbslHashValue(H h, const client_id_match& c) {
@@ -132,7 +130,7 @@ public:
             friend bool
             operator==(const user_match&, const user_match&) = default;
 
-            friend std::ostream& operator<<(std::ostream&, const user_match&);
+            fmt::iterator format_to(fmt::iterator it) const;
 
             template<typename H>
             friend H AbslHashValue(H h, const user_match& u) {
@@ -157,8 +155,7 @@ public:
               const client_id_prefix_match&,
               const client_id_prefix_match&) = default;
 
-            friend std::ostream&
-            operator<<(std::ostream&, const client_id_prefix_match&);
+            fmt::iterator format_to(fmt::iterator it) const;
 
             template<typename H>
             friend H AbslHashValue(H h, const client_id_prefix_match& c) {
@@ -194,7 +191,7 @@ public:
     struct part_v0
       : serde::envelope<part_v0, serde::version<0>, serde::compat_version<0>> {
         friend bool operator==(const part_v0&, const part_v0&) = default;
-        friend std::ostream& operator<<(std::ostream&, const part_v0&);
+        fmt::iterator format_to(fmt::iterator it) const;
 
         template<typename H>
         friend H AbslHashValue(H h, const part_v0& e) {
@@ -242,7 +239,7 @@ public:
     auto serde_fields() { return std::tie(parts); }
 
     friend bool operator==(const entity_key&, const entity_key&) = default;
-    friend std::ostream& operator<<(std::ostream&, const entity_key&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     template<typename H>
     friend H AbslHashValue(H h, const entity_key& e) {
@@ -265,7 +262,7 @@ public:
           : base{.part = std::forward<T>(t)} {}
 
         friend bool operator==(const part_t&, const part_t&) = default;
-        friend std::ostream& operator<<(std::ostream&, const part_t&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
 
     absl::flat_hash_set<part_t> parts;
@@ -284,7 +281,7 @@ void tag_invoke(
 struct entity_value
   : serde::envelope<entity_value, serde::version<0>, serde::compat_version<0>> {
     friend bool operator==(const entity_value&, const entity_value&) = default;
-    friend std::ostream& operator<<(std::ostream&, const entity_value&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     bool is_empty() const {
         return !producer_byte_rate && !consumer_byte_rate
@@ -328,7 +325,7 @@ struct entity_value_diff
 
         // Custom equality to match the hash function
         friend bool operator==(const entry&, const entry&);
-        friend std::ostream& operator<<(std::ostream&, const entry&);
+        fmt::iterator format_to(fmt::iterator it) const;
 
         constexpr auto serde_fields() { return std::tie(op, type, value); }
 
@@ -349,7 +346,7 @@ struct entity_value_diff
 
     friend bool
     operator==(const entity_value_diff&, const entity_value_diff&) = default;
-    friend std::ostream& operator<<(std::ostream&, const entity_value_diff&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(entries); }
 
@@ -376,9 +373,9 @@ struct alter_delta_cmd_data
       const alter_delta_cmd_data&, const alter_delta_cmd_data&) = default;
 };
 
+/// Note: the string values of these enums need to match the values used in
+/// the kafka client quota handlers
 constexpr std::string_view to_string_view(entity_value_diff::key e) {
-    /// Note: the string values of these enums need to match the values used in
-    /// the kafka client quota handlers
     switch (e) {
     case entity_value_diff::key::producer_byte_rate:
         return "producer_byte_rate";
@@ -387,6 +384,10 @@ constexpr std::string_view to_string_view(entity_value_diff::key e) {
     case entity_value_diff::key::controller_mutation_rate:
         return "controller_mutation_rate";
     }
+}
+
+inline fmt::iterator format_to(entity_value_diff::key e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
 }
 
 template<typename E>

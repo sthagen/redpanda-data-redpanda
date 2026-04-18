@@ -11,6 +11,8 @@
 
 #include "cluster/topic_recovery_status_types.h"
 
+#include "base/format_to.h"
+
 namespace cluster {
 
 void recovery_request_params::populate(
@@ -21,18 +23,15 @@ void recovery_request_params::populate(
         retention_ms = r->retention_ms();
     }
 }
-
-std::ostream& operator<<(std::ostream& os, const recovery_request_params& req) {
-    fmt::print(
+fmt::iterator recovery_request_params::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{topic_names_pattern: {}, retention_bytes: {}, retention_ms: {}}}",
-      req.topic_names_pattern.has_value() ? req.topic_names_pattern.value()
-                                          : "none",
-      req.retention_bytes.has_value()
-        ? fmt::format("{}", req.retention_bytes.value())
-        : "none",
-      req.retention_ms.has_value() ? fmt::format("{}", req.retention_ms.value())
-                                   : "none");
-    return os;
+      topic_names_pattern.has_value() ? topic_names_pattern.value() : "none",
+      retention_bytes.has_value() ? fmt::format("{}", retention_bytes.value())
+                                  : "none",
+      retention_ms.has_value() ? fmt::format("{}", retention_ms.value())
+                               : "none");
 }
 
 bool status_response::is_active() const {

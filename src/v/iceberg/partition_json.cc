@@ -15,8 +15,6 @@
 #include "iceberg/transform_json.h"
 #include "json/document.h"
 
-#include <stdexcept>
-
 namespace iceberg {
 
 partition_field parse_partition_field(const json::Value& v) {

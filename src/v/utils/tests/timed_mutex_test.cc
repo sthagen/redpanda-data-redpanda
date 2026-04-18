@@ -2,7 +2,6 @@
 #include "ssx/semaphore.h"
 #include "utils/timed_mutex.h"
 
-#include <seastar/core/loop.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/testing/thread_test_case.hh>
 

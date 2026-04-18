@@ -27,8 +27,6 @@
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/shared_ptr.hh>
-#include <seastar/util/variant_utils.hh>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -393,7 +391,7 @@ TEST_F_CORO(seastar_test, UncleanDestroy) {
               std::move(result));
         }
 
-        void print(std::ostream&) final {}
+        fmt::iterator format_to(fmt::iterator it) const final { return it; }
 
         ss::future<> finally() noexcept final {
             _resources_initalized = false;

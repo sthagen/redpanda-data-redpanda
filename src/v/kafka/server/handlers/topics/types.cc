@@ -9,10 +9,8 @@
 
 #include "kafka/server/handlers/topics/types.h"
 
-#include "base/units.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "container/chunked_vector.h"
 #include "kafka/server/handlers/configs/config_response_utils.h"
 #include "kafka/server/handlers/configs/config_utils.h"
 #include "model/compression.h"
@@ -20,21 +18,16 @@
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/timestamp.h"
-#include "pandaproxy/schema_registry/subject_name_strategy.h"
 #include "strings/string_switch.h"
 #include "utils/tristate.h"
 
 #include <seastar/core/sstring.hh>
 
-#include <bits/stdint-intn.h>
-#include <bits/stdint-uintn.h>
 #include <boost/lexical_cast/bad_lexical_cast.hpp>
 
 #include <chrono>
 #include <cstddef>
-#include <limits>
 #include <optional>
-#include <ratio>
 #include <string_view>
 #include <vector>
 

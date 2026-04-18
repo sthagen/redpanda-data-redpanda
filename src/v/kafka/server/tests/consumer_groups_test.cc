@@ -33,7 +33,6 @@
 #include "test_utils/scoped_config.h"
 #include "utils/base64.h"
 
-#include <seastar/core/smp.hh>
 #include <seastar/core/sstring.hh>
 
 #include <boost/test/tools/old/interface.hpp>

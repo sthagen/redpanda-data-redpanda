@@ -277,7 +277,9 @@ readers_cache::entry::make_cached_reader(readers_cache* cache) {
 
         ss::future<> finally() noexcept final { return ss::now(); }
 
-        void print(std::ostream& o) final { return _underlying->print(o); };
+        fmt::iterator format_to(fmt::iterator it) const final {
+            return _underlying->format_to(it);
+        }
         ~cached_reader_impl() final = default;
 
     private:

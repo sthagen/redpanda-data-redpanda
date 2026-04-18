@@ -11,7 +11,6 @@
 
 #include "wasm/tests/wasm_fixture.h"
 
-#include "absl/strings/ascii.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
@@ -20,7 +19,6 @@
 #include "model/timestamp.h"
 #include "model/transform.h"
 #include "pandaproxy/schema_registry/types.h"
-#include "schema/registry.h"
 #include "schema/tests/fake_registry.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/random_bytes.h"
@@ -34,11 +32,8 @@
 #include <seastar/core/future.hh>
 #include <seastar/util/file.hh>
 
-#include <fmt/chrono.h>
-
 #include <chrono>
 #include <memory>
-#include <stdexcept>
 
 using namespace std::chrono_literals;
 

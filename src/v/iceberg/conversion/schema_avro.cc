@@ -86,7 +86,7 @@ conversion_outcome<std::optional<iceberg::field_type>>
 inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
     if (is_recursive_type(state, node)) {
         return conversion_exception(
-          fmt::format("Unsupported recursive type: {}", *node));
+          fmt::format("Unsupported recursive type: {}", fmt_streamed(*node)));
     }
     if (state.type_hierarchy.size() >= max_schema_depth) {
         return conversion_exception(
@@ -184,7 +184,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
             return conversion_exception(
               fmt::format(
                 "AVRO_MAP is expected to be a string. Current key type: {}",
-                node->leafAt(0)->type()));
+                fmt_streamed(node->leafAt(0)->type())));
         }
         auto value_t_result = field_type_from_avro(node->leafAt(1), state);
         if (value_t_result.has_error()) {
@@ -284,8 +284,8 @@ field_type_from_avro(const avro::NodePtr& node, state& state) {
           fmt::format(
             "exception thrown while converting AVRO {} schema of type {} to "
             "iceberg - {}",
-            *node,
-            node->type(),
+            fmt_streamed(*node),
+            fmt_streamed(node->type()),
             std::current_exception()));
     }
 }

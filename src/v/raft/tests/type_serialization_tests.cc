@@ -7,30 +7,21 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/container/flat_hash_map.h"
-#include "compression/stream_zstd.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
-#include "model/timeout_clock.h"
-#include "raft/consensus_utils.h"
 #include "raft/group_configuration.h"
-#include "raft/heartbeats.h"
 #include "raft/types.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
-#include "storage/record_batch_builder.h"
-#include "test_utils/randoms.h"
 #include "test_utils/rpc.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-#include <boost/test/unit_test_log.hpp>
 
 #include <chrono>
 #include <cstdint>

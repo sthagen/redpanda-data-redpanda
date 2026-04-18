@@ -18,18 +18,8 @@
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/util/defer.hh>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/outcome/success_failure.hpp>
-#include <fmt/format.h>
 #include <utils/to_string.h>
 
 #include <exception>

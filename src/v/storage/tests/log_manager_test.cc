@@ -10,18 +10,13 @@
 #include "model/fundamental.h"
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
-#include "random/generators.h"
 #include "storage/api.h"
 #include "storage/directories.h"
-#include "storage/disk_log_appender.h"
-#include "storage/file_sanitizer.h"
-#include "storage/record_batch_utils.h"
 #include "storage/segment.h"
 #include "storage/segment_appender.h"
 #include "storage/segment_reader.h"
 #include "test_utils/random_bytes.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/util/defer.hh>
 
 #include <gtest/gtest.h>

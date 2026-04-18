@@ -26,8 +26,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
 
-#include <fmt/ostream.h>
-
 #include <exception>
 
 template<>
@@ -166,8 +164,9 @@ ss::future<batch_consumer::stop_parser> skipping_consumer::consume_batch_end() {
     co_return stop_parser(_reader._state.is_full());
 }
 
-void skipping_consumer::print(std::ostream& os) const {
-    fmt::print(os, "storage::skipping_consumer segment {}", _reader._seg);
+fmt::iterator skipping_consumer::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "storage::skipping_consumer segment {}", _reader._seg);
 }
 
 log_segment_batch_reader::log_segment_batch_reader(

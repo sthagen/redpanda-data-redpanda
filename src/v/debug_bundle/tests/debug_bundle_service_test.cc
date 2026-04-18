@@ -32,7 +32,6 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 #include <seastar/util/process.hh>
 

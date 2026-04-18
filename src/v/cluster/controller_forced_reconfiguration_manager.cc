@@ -12,11 +12,8 @@
 #include "cluster/controller_forced_reconfiguration_manager.h"
 
 #include "cluster/controller.h"
-#include "cluster/members_frontend.h"
-#include "cluster/topics_frontend.h"
 #include "cluster/types.h"
 
-#include <exception>
 #include <expected>
 #include <ranges>
 #include <system_error>

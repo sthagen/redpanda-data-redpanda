@@ -23,14 +23,11 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/util/log.hh>
 
 #include <boost/range/irange.hpp>
-#include <fmt/format.h>
-#include <gtest/gtest.h>
 
 #include <algorithm>
 #include <chrono>

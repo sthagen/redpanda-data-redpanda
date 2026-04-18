@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "model/fundamental.h"
 #include "raft/fwd.h"
@@ -109,6 +110,8 @@ private:
         }
         std::unique_ptr<result<vote_reply>> value;
         vote_stm& _vote_stm;
+
+        fmt::iterator format_to(fmt::iterator it) const;
     };
 
     bool has_request_in_progress() const;
@@ -120,8 +123,6 @@ private:
     ss::future<> wait_for_next_reply();
 
     void fail_election();
-
-    friend std::ostream& operator<<(std::ostream&, const vmeta&);
 
     ss::future<election_success> do_vote();
     ss::future<> self_vote();

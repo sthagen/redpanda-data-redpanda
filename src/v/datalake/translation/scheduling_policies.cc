@@ -83,20 +83,6 @@ fair_scheduling_policy::fair_scheduling_policy(
     initialize_group_shares();
 }
 
-std::ostream&
-operator<<(std::ostream& os, fair_scheduling_policy::translator_group group) {
-    switch (group) {
-    case fair_scheduling_policy::translator_group::other:
-        return os << "translator_group::other";
-    case fair_scheduling_policy::translator_group::unfulfilled_quota:
-        return os << "translator_group::unfulfilled_quota";
-    case fair_scheduling_policy::translator_group::about_to_expire:
-        return os << "translator_group::about_to_expire";
-    case fair_scheduling_policy::translator_group::expired:
-        return os << "translator_group::expired";
-    }
-}
-
 void fair_scheduling_policy::initialize_group_shares() {
     _group_to_shares = {
       {other, fair_scheduling_policy::default_other_shares},

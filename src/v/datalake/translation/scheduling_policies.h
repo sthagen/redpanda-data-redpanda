@@ -90,7 +90,18 @@ private:
         other,
     };
 
-    friend std::ostream& operator<<(std::ostream&, translator_group);
+    friend fmt::iterator format_to(translator_group g, fmt::iterator out) {
+        switch (g) {
+        case translator_group::other:
+            return fmt::format_to(out, "translator_group::other");
+        case translator_group::unfulfilled_quota:
+            return fmt::format_to(out, "translator_group::unfulfilled_quota");
+        case translator_group::about_to_expire:
+            return fmt::format_to(out, "translator_group::about_to_expire");
+        case translator_group::expired:
+            return fmt::format_to(out, "translator_group::expired");
+        }
+    }
 
     /**
      * Picks a random translator group category with probability proportional

@@ -43,7 +43,8 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":aggregator",
-        "//src/v/cloud_io:remote",
+        "//src/v/cloud_io:io_result",
+        "//src/v/cloud_io:remote_api",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:object_utils",
         "//src/v/cloud_topics/level_zero/common:extent_meta",

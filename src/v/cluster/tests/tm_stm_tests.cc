@@ -16,9 +16,6 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
-#include <seastar/util/defer.hh>
-
-#include <gtest/gtest.h>
 
 namespace {
 using namespace raft;

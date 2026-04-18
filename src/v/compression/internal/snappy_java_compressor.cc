@@ -10,15 +10,9 @@
 #include "compression/internal/snappy_java_compressor.h"
 
 #include "base/likely.h"
-#include "base/vlog.h"
-#include "bytes/bytes.h"
 #include "bytes/details/io_iterator_consumer.h"
-#include "bytes/iobuf.h"
 #include "compression/snappy_standard_compressor.h"
-#include "snappy-sinksource.h"
 #include "snappy.h"
-
-#include <fmt/format.h>
 
 #include <cstring>
 

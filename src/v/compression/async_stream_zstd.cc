@@ -12,9 +12,6 @@
 #include "base/likely.h"
 #include "base/units.h"
 #include "base/vassert.h"
-#include "base/vlog.h"
-#include "bytes/bytes.h"
-#include "bytes/details/io_allocation_size.h"
 #include "bytes/ioarray.h"
 
 #include <seastar/core/coroutine.hh>
@@ -23,7 +20,6 @@
 #include <fmt/format.h>
 #include <sys/uio.h>
 
-#include <array>
 #include <zstd.h>
 #include <zstd_errors.h>
 

@@ -11,7 +11,6 @@
 
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/exceptions.h"
-#include "pandaproxy/schema_registry/protobuf.h"
 #include "pandaproxy/schema_registry/test/compatibility_protobuf.h"
 #include "pandaproxy/schema_registry/types.h"
 

@@ -10,11 +10,8 @@
 
 #include "cluster_link/replication/link_replication_mgr.h"
 
-#include "base/units.h"
 #include "cluster_link/logger.h"
-#include "ssx/async_algorithm.h"
 #include "ssx/future-util.h"
-#include "utils/to_string.h"
 
 using namespace std::chrono_literals;
 
@@ -82,15 +79,16 @@ void link_replication_manager::unset_data_probe() {
     }
 }
 
-std::ostream&
-operator<<(std::ostream& os, link_replication_manager::op_type op) {
+fmt::iterator
+format_to(link_replication_manager::op_type op, fmt::iterator out) {
+    using op_type = link_replication_manager::op_type;
     switch (op) {
-    case link_replication_manager::op_type::start:
-        return os << "start";
-    case link_replication_manager::op_type::stop:
-        return os << "stop";
+    case op_type::start:
+        return fmt::format_to(out, "start");
+    case op_type::stop:
+        return fmt::format_to(out, "stop");
     default:
-        return os << "unknown";
+        return fmt::format_to(out, "unknown");
     }
 }
 

@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 #include "utils/named_type.h"
@@ -20,25 +21,79 @@
 
 namespace iceberg {
 
-struct boolean_type {};
-struct int_type {};
-struct long_type {};
-struct float_type {};
-struct double_type {};
+struct boolean_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "boolean");
+    }
+};
+struct int_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "int");
+    }
+};
+struct long_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "long");
+    }
+};
+struct float_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "float");
+    }
+};
+struct double_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "double");
+    }
+};
 struct decimal_type {
     uint32_t precision;
     uint32_t scale;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "decimal({}, {})", precision, scale);
+    }
 };
-struct date_type {};
-struct time_type {};
-struct timestamp_type {};
-struct timestamptz_type {};
-struct string_type {};
-struct uuid_type {};
+struct date_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "date");
+    }
+};
+struct time_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "time");
+    }
+};
+struct timestamp_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "timestamp");
+    }
+};
+struct timestamptz_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "timestamptz");
+    }
+};
+struct string_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "string");
+    }
+};
+struct uuid_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "uuid");
+    }
+};
 struct fixed_type {
     uint64_t length;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "fixed[{}]", length);
+    }
 };
-struct binary_type {};
+struct binary_type {
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "binary");
+    }
+};
 using primitive_type = std::variant<
   boolean_type,
   int_type,
@@ -65,20 +120,12 @@ bool operator==(const field_type& lhs, const field_type& rhs);
 field_type make_copy(const field_type&);
 primitive_type make_copy(const primitive_type&);
 
-std::ostream& operator<<(std::ostream&, const boolean_type&);
-std::ostream& operator<<(std::ostream&, const int_type&);
-std::ostream& operator<<(std::ostream&, const long_type&);
-std::ostream& operator<<(std::ostream&, const float_type&);
-std::ostream& operator<<(std::ostream&, const double_type&);
-std::ostream& operator<<(std::ostream&, const decimal_type&);
-std::ostream& operator<<(std::ostream&, const date_type&);
-std::ostream& operator<<(std::ostream&, const time_type&);
-std::ostream& operator<<(std::ostream&, const timestamp_type&);
-std::ostream& operator<<(std::ostream&, const timestamptz_type&);
-std::ostream& operator<<(std::ostream&, const string_type&);
-std::ostream& operator<<(std::ostream&, const uuid_type&);
-std::ostream& operator<<(std::ostream&, const fixed_type&);
-std::ostream& operator<<(std::ostream&, const binary_type&);
+fmt::iterator format_struct_type(fmt::iterator it, const struct_type&);
+fmt::iterator format_list_type(fmt::iterator it, const list_type&);
+fmt::iterator format_map_type(fmt::iterator it, const map_type&);
+fmt::iterator format_primitive_type(fmt::iterator it, const primitive_type&);
+fmt::iterator format_field_type(fmt::iterator it, const field_type&);
+
 std::ostream& operator<<(std::ostream&, const struct_type&);
 std::ostream& operator<<(std::ostream&, const list_type&);
 std::ostream& operator<<(std::ostream&, const map_type&);
@@ -184,4 +231,75 @@ struct nested_field {
     friend std::ostream& operator<<(std::ostream&, const nested_field&);
 };
 
+fmt::iterator format_nested_field(fmt::iterator it, const nested_field&);
+
 } // namespace iceberg
+
+template<>
+struct fmt::formatter<iceberg::struct_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const iceberg::struct_type& v, fmt::format_context& ctx) const {
+        fmt::memory_buffer buf;
+        iceberg::format_struct_type(fmt::appender(buf), v);
+        return std::copy(buf.begin(), buf.end(), ctx.out());
+    }
+};
+template<>
+struct fmt::formatter<iceberg::list_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const iceberg::list_type& v, fmt::format_context& ctx) const {
+        fmt::memory_buffer buf;
+        iceberg::format_list_type(fmt::appender(buf), v);
+        return std::copy(buf.begin(), buf.end(), ctx.out());
+    }
+};
+template<>
+struct fmt::formatter<iceberg::map_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const iceberg::map_type& v, fmt::format_context& ctx) const {
+        fmt::memory_buffer buf;
+        iceberg::format_map_type(fmt::appender(buf), v);
+        return std::copy(buf.begin(), buf.end(), ctx.out());
+    }
+};
+template<>
+struct fmt::formatter<iceberg::primitive_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto
+    format(const iceberg::primitive_type& v, fmt::format_context& ctx) const {
+        fmt::memory_buffer buf;
+        iceberg::format_primitive_type(fmt::appender(buf), v);
+        return std::copy(buf.begin(), buf.end(), ctx.out());
+    }
+};
+template<>
+struct fmt::formatter<iceberg::field_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const iceberg::field_type& v, fmt::format_context& ctx) const {
+        fmt::memory_buffer buf;
+        iceberg::format_field_type(fmt::appender(buf), v);
+        return std::copy(buf.begin(), buf.end(), ctx.out());
+    }
+};
+template<>
+struct fmt::formatter<iceberg::nested_field> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto
+    format(const iceberg::nested_field& v, fmt::format_context& ctx) const {
+        fmt::memory_buffer buf;
+        iceberg::format_nested_field(fmt::appender(buf), v);
+        return std::copy(buf.begin(), buf.end(), ctx.out());
+    }
+};

@@ -12,10 +12,8 @@
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/test_env.h"
 
-#include <seastar/core/file.hh>
 #include <seastar/core/temporary_buffer.hh>
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 struct fixture : public testing::Test {

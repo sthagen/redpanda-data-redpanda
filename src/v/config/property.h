@@ -148,14 +148,11 @@ public:
 
     operator value_type() const { return value(); } // NOLINT
 
-    void print(std::ostream& o) const override {
-        o << name() << ":";
-
+    fmt::iterator format_to(fmt::iterator it) const override {
         if (is_secret() && !is_default()) {
-            o << secret_placeholder;
-        } else {
-            o << _value;
+            return fmt::format_to(it, "{}:{}", name(), secret_placeholder);
         }
+        return fmt::format_to(it, "{}:{}", name(), _value);
     }
 
     // serialize the value. the key is taken from the property name at the
@@ -991,9 +988,9 @@ public:
         return update_value(n.as<std::chrono::milliseconds>());
     }
 
-    void print(std::ostream& o) const final {
+    fmt::iterator format_to(fmt::iterator it) const final {
         vassert(!is_secret(), "{} must not be a secret", name());
-        o << name() << ":" << _value.value_or(-1ms);
+        return fmt::format_to(it, "{}:{}", name(), _value.value_or(-1ms));
     }
 
     // serialize the value. the key is taken from the property name at the

@@ -19,12 +19,6 @@
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/lowres_clock.hh>
-#include <seastar/core/manual_clock.hh>
-#include <seastar/core/sharded.hh>
-#include <seastar/util/later.hh>
-#include <seastar/util/log.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 inline ss::logger test_log("materialized_extent_reader_gtest");
 

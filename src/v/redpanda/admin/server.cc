@@ -101,8 +101,6 @@
 #include "utils/unresolved_address.h"
 #include "wasm/errc.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/map_reduce.hh>
 #include <seastar/core/prometheus.hh>
@@ -114,7 +112,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/core/with_scheduling_group.hh>
-#include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/http/api_docs.hh>
 #include <seastar/http/common.hh>
@@ -123,31 +120,25 @@
 #include <seastar/http/json_path.hh>
 #include <seastar/http/reply.hh>
 #include <seastar/http/request.hh>
-#include <seastar/http/url.hh>
 #include <seastar/json/json_elements.hh>
 #include <seastar/net/socket_defs.hh>
 #include <seastar/net/tls.hh>
 #include <seastar/util/later.hh>
 #include <seastar/util/log.hh>
 #include <seastar/util/short_streams.hh>
-#include <seastar/util/variant_utils.hh>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/lexical_cast/bad_lexical_cast.hpp>
 #include <fmt/core.h>
 
 #include <algorithm>
-#include <charconv>
 #include <chrono>
 #include <exception>
 #include <iterator>
-#include <limits>
 #include <memory>
-#include <numeric>
 #include <ranges>
 #include <stdexcept>
 #include <system_error>
@@ -2927,7 +2918,7 @@ admin_server::get_decommission_progress_handler(
         f_details.ns = ntp.ns;
         f_details.topic = ntp.tp.topic;
         f_details.partition = ntp.tp.partition;
-        f_details.error = fmt::to_string(details.error);
+        f_details.error = fmt::format("{}", details.error);
 
         ret.reallocation_failure_details.push(f_details);
     }
@@ -5062,6 +5053,10 @@ constexpr std::string_view to_string_view(service_kind kind) {
         return "http-proxy";
     }
     return "invalid";
+}
+
+fmt::iterator format_to(service_kind kind, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(kind));
 }
 
 template<typename E>

@@ -9,14 +9,12 @@
 
 #include "syschecks/syschecks.h"
 
-#include "base/likely.h"
 #include "base/seastarx.h"
 #include "version/version.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/memory.hh>
 #include <seastar/core/posix.hh> // here for workaround
-#include <seastar/core/reactor.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/net/api.hh>
 

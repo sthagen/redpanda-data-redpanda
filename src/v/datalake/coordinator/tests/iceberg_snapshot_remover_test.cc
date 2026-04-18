@@ -20,8 +20,6 @@
 #include "iceberg/transaction.h"
 #include "test_utils/test.h"
 
-#include <seastar/util/defer.hh>
-
 #include <gtest/gtest.h>
 
 using namespace datalake::coordinator;

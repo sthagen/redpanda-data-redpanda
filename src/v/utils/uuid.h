@@ -9,11 +9,13 @@
 #pragma once
 
 #include "absl/hash/hash.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
 
 #include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 #include <compare>
 #include <optional>
@@ -42,7 +44,8 @@ public:
         return {_uuid.begin(), _uuid.end()};
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const uuid_t& u);
+    fmt::iterator format_to(fmt::iterator it) const;
+
     friend std::istream& operator>>(std::istream& is, uuid_t& u);
     friend bool operator==(const uuid_t& u, const uuid_t& v) = default;
     friend std::strong_ordering operator<=>(const uuid_t& u, const uuid_t& v);
@@ -76,3 +79,14 @@ bool operator<(const uuid_t& l, const uuid_t& r);
 // Returns the given UUID incremented by 1.
 // Returns nullopt on overflow (all 0xFF).
 std::optional<uuid_t> next_uuid(const uuid_t& u);
+
+template<>
+struct fmt::formatter<boost::uuids::uuid> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    template<typename FormatContext>
+    auto format(const boost::uuids::uuid& v, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", boost::uuids::to_string(v));
+    }
+};

@@ -1,13 +1,12 @@
 #include "cluster/drain_manager.h"
 
+#include "base/format_to.h"
 #include "base/vlog.h"
-#include "cluster/controller_service.h"
 #include "cluster/logger.h"
 #include "cluster/partition_manager.h"
 #include "random/generators.h"
 
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/core/when_all.hh>
 
 namespace cluster {
@@ -284,20 +283,17 @@ ss::future<> drain_manager::do_restore() {
     _partition_manager.local().unblock_new_leadership();
     co_return;
 }
-
-std::ostream&
-operator<<(std::ostream& os, const drain_manager::drain_status& ds) {
-    fmt::print(
-      os,
+fmt::iterator drain_manager::drain_status::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{finished: {}, errors: {}, partitions: {}, eligible: {}, transferring: "
       "{}, failed: {}}}",
-      ds.finished,
-      ds.errors,
-      ds.partitions,
-      ds.eligible,
-      ds.transferring,
-      ds.failed);
-    return os;
+      finished,
+      errors,
+      partitions,
+      eligible,
+      transferring,
+      failed);
 }
 
 } // namespace cluster

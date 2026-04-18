@@ -11,9 +11,6 @@
 
 #include "cluster/controller_log_limiter.h"
 
-#include "cluster/commands.h"
-#include "ssx/sformat.h"
-
 #include <optional>
 
 namespace cluster {

@@ -11,15 +11,9 @@
 #include "cloud_storage/offset_translation_layer.h"
 
 #include "cloud_storage/logger.h"
-#include "cloud_storage/types.h"
 #include "model/record_batch_types.h"
-#include "ssx/sformat.h"
 #include "storage/parser.h"
 #include "utils/retry_chain_node.h"
-
-#include <seastar/util/log.hh>
-
-#include <exception>
 
 namespace cloud_storage {
 

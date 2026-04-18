@@ -12,8 +12,6 @@
 #include "serde/json/parser.h"
 #include "test_utils/test.h"
 
-#include <gtest/gtest.h>
-
 using namespace serde::json;
 
 namespace {

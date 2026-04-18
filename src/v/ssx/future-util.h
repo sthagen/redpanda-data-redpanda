@@ -21,7 +21,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/core/when_all.hh>
 
 #include <algorithm>
 #include <iterator>

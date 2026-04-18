@@ -15,25 +15,19 @@
 #include "random/generators.h"
 #include "storage/disk_log_impl.h"
 #include "storage/parser.h"
-#include "storage/scoped_file_tracker.h"
 #include "storage/segment.h"
-#include "storage/segment_deduplication_utils.h"
 #include "storage/segment_reader.h"
 #include "storage/segment_utils.h"
-#include "storage/tests/disk_log_builder_fixture.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
-#include "test_utils/test.h"
 
-#include <seastar/core/io_priority_class.hh>
-#include <seastar/core/iostream.hh>
-#include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/defer.hh>
 
+#include <gtest/gtest.h>
+
 #include <chrono>
 #include <numeric>
-#include <stdexcept>
 
 using namespace std::literals::chrono_literals;
 

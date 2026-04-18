@@ -16,13 +16,8 @@
 #include "cluster/partition_leaders_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "model/metadata.h"
-#include "model/record.h"
 #include "model/timeout_clock.h"
 #include "rpc/connection_cache.h"
-
-#include <seastar/core/coroutine.hh>
-#include <seastar/util/later.hh>
 
 #include <chrono>
 

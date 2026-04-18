@@ -52,8 +52,6 @@ public:
 private:
     friend struct fmt::formatter<gssapi_rule>;
 
-    friend std::ostream& operator<<(std::ostream& os, const gssapi_rule& r);
-
     static std::optional<ss::sstring> replace_parameters(
       std::string_view format, std::vector<std::string_view> params);
     static ss::sstring replace_substitution(
@@ -88,7 +86,9 @@ template<>
 struct fmt::formatter<security::gssapi_rule> {
     using type = security::gssapi_rule;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator

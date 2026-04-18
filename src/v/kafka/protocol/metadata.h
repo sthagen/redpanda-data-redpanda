@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "kafka/protocol/schemata/metadata_request.h"
 #include "kafka/protocol/schemata/metadata_response.h"
@@ -70,9 +71,8 @@ struct metadata_request {
         };
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const metadata_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -91,21 +91,10 @@ struct metadata_response {
     void decode(iobuf buf, api_version version) {
         data.decode(std::move(buf), version);
     }
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
+    }
 };
 
 } // namespace kafka
-
-template<>
-struct fmt::formatter<kafka::metadata_response> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) -> decltype(ctx.begin()) {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    auto format(
-      [[maybe_unused]] const kafka::metadata_response& v,
-      FormatContext& ctx) const -> decltype(ctx.out()) {
-        return fmt::format_to(ctx.out(), "{}", v.data);
-    }
-};

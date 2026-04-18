@@ -16,7 +16,6 @@
 #include <boost/test/unit_test.hpp>
 
 #include <memory>
-#include <stdexcept>
 
 namespace {
 auto& local() { return resources::available_memory::local(); }

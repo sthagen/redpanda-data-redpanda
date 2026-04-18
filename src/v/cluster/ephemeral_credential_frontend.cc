@@ -18,14 +18,11 @@
 #include "security/credential_store.h"
 #include "security/ephemeral_credential.h"
 #include "security/ephemeral_credential_store.h"
-#include "security/exceptions.h"
 #include "security/scram_authenticator.h"
 #include "security/scram_credential.h"
 #include "security/types.h"
 
 #include <seastar/coroutine/exception.hh>
-
-#include <fmt/ranges.h>
 
 // namespace
 

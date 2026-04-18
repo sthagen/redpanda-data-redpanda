@@ -15,11 +15,8 @@
 #include "re2/re2.h"
 #include "security/logger.h"
 
-#include <boost/algorithm/string/case_conv.hpp>
 #include <fmt/format.h>
-#include <fmt/ostream.h>
-
-#include <charconv>
+#include <fmt/ranges.h>
 
 /*
  * some older versions of re2 don't have operator for implicit cast to
@@ -127,16 +124,6 @@ std::optional<ss::sstring> gssapi_principal_mapper::apply(
 
     vlog(seclog.warn, "No rules apply to {}, rules: {}", name, rules);
     return std::nullopt;
-}
-
-std::ostream& operator<<(std::ostream& os, const gssapi_name& n) {
-    fmt::print(os, "{}", n);
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const gssapi_principal_mapper& m) {
-    fmt::print(os, "{}", m);
-    return os;
 }
 
 } // namespace security

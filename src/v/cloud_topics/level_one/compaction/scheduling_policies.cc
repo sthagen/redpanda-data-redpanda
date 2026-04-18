@@ -10,12 +10,6 @@
 
 #include "cloud_topics/level_one/compaction/scheduling_policies.h"
 
-#include "model/fundamental.h"
-
-#include <seastar/core/coroutine.hh>
-
-#include <iterator>
-
 namespace cloud_topics::l1 {
 
 cmp_t dirty_ratio_scheduling_policy::get_comparator() const noexcept {

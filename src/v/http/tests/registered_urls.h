@@ -11,14 +11,13 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/http/httpd.hh>
 
 #include <boost/beast/http/field.hpp>
-
-#include <iosfwd>
 
 namespace http_test_utils {
 struct response {
@@ -27,6 +26,11 @@ struct response {
     std::vector<std::pair<ss::sstring, ss::sstring>> headers;
     status_type status;
     std::optional<ss::sstring> content_type;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{status: {}, body: {}}}", static_cast<uint>(status), body);
+    }
 };
 
 struct request_info {
@@ -66,8 +70,6 @@ struct request_info {
         return headers.at(key);
     }
 };
-
-std::ostream& operator<<(std::ostream& os, const response& resp);
 
 struct registered_urls {
     using content_reply_map = absl::flat_hash_map<ss::sstring, response>;

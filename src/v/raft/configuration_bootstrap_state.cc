@@ -13,10 +13,6 @@
 #include "bytes/iobuf_parser.h"
 #include "model/record.h"
 #include "raft/consensus_utils.h"
-#include "raft/types.h"
-#include "reflection/adl.h"
-
-#include <fmt/format.h>
 
 namespace raft {
 void configuration_bootstrap_state::process_configuration(

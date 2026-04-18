@@ -7,12 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/container/btree_set.h"
 #include "storage/scoped_file_tracker.h"
 
 #include <gtest/gtest.h>
-
-#include <filesystem>
 
 using namespace storage;
 

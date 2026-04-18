@@ -16,19 +16,14 @@
 #include "cluster/controller.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_stm.h"
-#include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/logger.h"
 #include "cluster/partition_leaders_table.h"
 #include "cluster/types.h"
 #include "features/enterprise_feature_messages.h"
 #include "model/errc.h"
-#include "model/metadata.h"
 #include "model/namespace.h"
-#include "model/validation.h"
 #include "raft/errc.h"
-#include "raft/fundamental.h"
-#include "random/generators.h"
 #include "rpc/errc.h"
 #include "rpc/types.h"
 #include "security/authorizer.h"
@@ -36,12 +31,9 @@
 #include "security/scram_algorithm.h"
 #include "security/scram_authenticator.h"
 
-#include <seastar/core/coroutine.hh>
-
 #include <boost/algorithm/string/split.hpp>
 
 #include <algorithm>
-#include <regex>
 
 namespace cluster {
 

@@ -11,7 +11,6 @@
 #include "random/generators.h"
 #include "storage/segment_appender.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <cstring>

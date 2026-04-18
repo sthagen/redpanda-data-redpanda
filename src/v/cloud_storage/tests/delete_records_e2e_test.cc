@@ -21,7 +21,6 @@
 #include "test_utils/boost_fixture.h"
 #include "test_utils/scoped_config.h"
 
-#include <boost/algorithm/string/predicate.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
 using tests::kafka_consume_transport;

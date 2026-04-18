@@ -21,8 +21,6 @@
 #include "serde/rw/scalar.h"
 #include "serde/rw/sstring.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 

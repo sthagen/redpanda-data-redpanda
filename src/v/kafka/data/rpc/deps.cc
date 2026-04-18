@@ -24,17 +24,13 @@
 #include "logger.h"
 #include "model/fundamental.h"
 #include "model/ktp.h"
-#include "model/transform.h"
-#include "transform/stm/transform_offsets_stm.h"
 
-#include <seastar/core/do_with.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/util/noncopyable_function.hh>
 
 #include <memory>
-#include <type_traits>
 
 namespace kafka::data::rpc {
 

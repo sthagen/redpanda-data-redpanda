@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "cluster/types.h"
 #include "model/metadata.h"
 #include "reflection/adl.h"
@@ -18,8 +19,6 @@
 #include "utils/named_type.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <fmt/ostream.h>
 
 namespace cluster::node {
 
@@ -112,7 +111,7 @@ struct local_state
         }
         friend bool
         operator==(const log_data_state&, const log_data_state&) = default;
-        friend std::ostream& operator<<(std::ostream&, const log_data_state&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
     std::optional<log_data_state> log_data_size{std::nullopt};
 
@@ -130,7 +129,7 @@ struct local_state
     void set_disks(std::vector<storage::disk>);
 
     friend bool operator==(const local_state&, const local_state&) = default;
-    friend std::ostream& operator<<(std::ostream&, const local_state&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace cluster::node

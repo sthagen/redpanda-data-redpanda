@@ -515,8 +515,8 @@ level_one_log_reader_impl::return_or_close(std::optional<cached_l1_reader> r) {
     }
 }
 
-void level_one_log_reader_impl::print(std::ostream& o) {
-    o << "level_one_cloud_topics_reader";
+fmt::iterator level_one_log_reader_impl::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "level_one_cloud_topics_reader");
 }
 
 void level_one_log_reader_impl::set_end_of_stream() { _end_of_stream = true; }

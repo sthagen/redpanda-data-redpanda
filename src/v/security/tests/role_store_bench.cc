@@ -15,7 +15,6 @@
 #include "security/role_store.h"
 
 #include <seastar/testing/perf_tests.hh>
-#include <seastar/util/later.hh>
 
 #include <boost/range/irange.hpp>
 

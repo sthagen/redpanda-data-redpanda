@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "strings/string_switch.h"
 
@@ -24,7 +25,7 @@ enum class subject_name_strategy : uint8_t {
     topic_record_name,
 };
 
-inline constexpr std::string_view to_string_view(subject_name_strategy e) {
+constexpr std::string_view to_string_view(subject_name_strategy e) {
     switch (e) {
     case subject_name_strategy::topic_name:
         return "TopicNameStrategy";
@@ -34,6 +35,9 @@ inline constexpr std::string_view to_string_view(subject_name_strategy e) {
         return "TopicRecordNameStrategy";
     }
     return "{invalid}";
+}
+inline fmt::iterator format_to(subject_name_strategy e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
 }
 
 inline constexpr std::string_view
@@ -47,11 +51,6 @@ to_string_view_compat(subject_name_strategy e) {
         return "io.confluent.kafka.serializers.subject.TopicRecordNameStrategy";
     }
     return "{invalid}";
-}
-
-inline constexpr std::ostream&
-operator<<(std::ostream& os, subject_name_strategy e) {
-    return os << to_string_view(e);
 }
 
 inline std::istream& operator>>(std::istream& i, subject_name_strategy& e) {

@@ -13,8 +13,6 @@
 
 #include "base/format_to.h"
 
-#include <fmt/ranges.h>
-
 namespace cluster::cluster_link {
 
 fmt::iterator topic_result::format_to(fmt::iterator it) const {

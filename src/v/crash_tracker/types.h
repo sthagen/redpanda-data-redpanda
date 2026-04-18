@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "model/timestamp.h"
 #include "serde/envelope.h"
@@ -19,7 +20,6 @@
 #include "serde/rw/sstring.h"
 
 #include <memory>
-#include <ostream>
 
 namespace crash_tracker {
 
@@ -33,7 +33,24 @@ enum class crash_type {
     oom
 };
 
-std::ostream& operator<<(std::ostream&, crash_type);
+inline fmt::iterator format_to(crash_type ct, fmt::iterator out) {
+    switch (ct) {
+    case crash_type::unknown:
+        return fmt::format_to(out, "unknown");
+    case crash_type::startup_exception:
+        return fmt::format_to(out, "startup_exception");
+    case crash_type::segfault:
+        return fmt::format_to(out, "segfault");
+    case crash_type::abort:
+        return fmt::format_to(out, "abort");
+    case crash_type::illegal_instruction:
+        return fmt::format_to(out, "illegal_instruction");
+    case crash_type::assertion:
+        return fmt::format_to(out, "assertion");
+    case crash_type::oom:
+        return fmt::format_to(out, "oom");
+    }
+}
 
 /// reserved_string is a simple wrapper around a std::array that allows
 /// pre-allocating a string of a certain size with trailing '\0's and allows
@@ -138,7 +155,7 @@ struct crash_description
           type, crash_time, crash_message, stacktrace, app_version, arch);
     }
 
-    friend std::ostream& operator<<(std::ostream&, const crash_description&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct crash_tracker_metadata

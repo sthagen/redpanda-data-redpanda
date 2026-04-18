@@ -164,10 +164,14 @@ private:
         // each state machine that has been added to the manager.
         absl::flat_hash_map<ss::sstring, model::offset>
           initial_recovery_next_offsets;
-    };
 
-    friend std::ostream&
-    operator<<(std::ostream&, const initial_recovery_snapshot&);
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{initial_recovery_next_offsets: {}}}",
+              initial_recovery_next_offsets);
+        }
+    };
 
     state_machine_manager(
       consensus* raft,

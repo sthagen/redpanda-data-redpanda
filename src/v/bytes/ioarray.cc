@@ -17,8 +17,6 @@
 #include <seastar/core/align.hh>
 #include <seastar/core/byteorder.hh>
 
-#include <sys/uio.h>
-
 #include <cstring>
 #include <iterator>
 #include <stdexcept>

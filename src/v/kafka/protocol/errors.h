@@ -10,8 +10,9 @@
  */
 #pragma once
 
+#include "base/format_to.h"
+
 #include <cstdint>
-#include <iosfwd>
 #include <string_view>
 #include <system_error>
 
@@ -241,11 +242,18 @@ enum class error_code : int16_t {
     transactional_id_not_found = 105,
 };
 
-std::ostream& operator<<(std::ostream&, error_code);
 std::string_view error_code_to_str(error_code error);
 std::error_code make_error_code(error_code);
 const std::error_category& error_category() noexcept;
 bool is_retriable(error_code);
+
+inline fmt::iterator format_to(error_code code, fmt::iterator it) {
+    return fmt::format_to(
+      it,
+      "{{ error_code: {} [{}] }}",
+      error_code_to_str(code),
+      static_cast<int16_t>(code));
+}
 
 } // namespace kafka
 

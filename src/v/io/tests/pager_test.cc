@@ -18,7 +18,6 @@
 
 #include <seastar/core/iostream.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/util/later.hh>
 
 #include <boost/range/irange.hpp>
 

@@ -15,7 +15,6 @@
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/util/later.hh>
 
 using namespace std::chrono_literals;
 using namespace ::testing;

@@ -16,7 +16,6 @@
 #include "serde/protobuf/wire_format.h"
 
 #include <seastar/http/reply.hh>
-#include <seastar/json/formatter.hh>
 
 namespace serde::pb::rpc {
 

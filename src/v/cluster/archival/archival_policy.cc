@@ -16,7 +16,6 @@
 #include "config/configuration.h"
 #include "model/fundamental.h"
 
-#include <seastar/core/iostream.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/log.hh>

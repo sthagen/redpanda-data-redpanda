@@ -2,6 +2,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_set.h"
+#include "base/format_to.h"
 #include "cluster/fwd.h"
 #include "cluster/members_manager.h"
 #include "cluster/scheduling/types.h"
@@ -22,6 +23,7 @@ public:
         cancelled,
         finished,
     };
+    friend fmt::iterator format_to(cancellation_state, fmt::iterator);
 
     struct partition_reallocation {
         partition_reallocation(
@@ -37,8 +39,7 @@ public:
         // partition_balancer.
         cancellation_state state;
 
-        friend std::ostream&
-        operator<<(std::ostream&, const partition_reallocation&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
     /**
      * struct describing partition reallocation
@@ -128,7 +129,5 @@ private:
     metrics::public_metric_groups _metrics;
     config::binding<size_t> _max_concurrent_reallocations;
 };
-std::ostream&
-operator<<(std::ostream&, const members_backend::cancellation_state&);
 
 } // namespace cluster

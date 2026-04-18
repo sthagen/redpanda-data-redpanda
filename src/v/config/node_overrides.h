@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "config/convert.h"
 #include "model/fundamental.h"
 #include "ssx/sformat.h"
@@ -54,9 +55,9 @@ struct node_id_override {
      */
     bool ignore_existing_node_id{false};
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
 private:
-    friend std::ostream&
-    operator<<(std::ostream& os, const node_id_override& v);
     friend std::istream& operator>>(std::istream& is, node_id_override& v);
     friend bool
     operator==(const node_id_override&, const node_id_override&) = default;

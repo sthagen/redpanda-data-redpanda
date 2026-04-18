@@ -13,8 +13,6 @@
 #include "serde/protobuf/rpc.h"
 #include "src/v/redpanda/admin/tests/aip_test_message.proto.h"
 
-#include <fmt/ranges.h>
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 #include "cluster/fwd.h"
 #include "cluster/producer_state.h"
@@ -368,7 +369,7 @@ private:
 
     uint8_t active_snapshot_version();
 
-    friend std::ostream& operator<<(std::ostream&, const aborted_tx_state&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     // Defines the commit offset range for the stm bootstrap.
     // Set on first apply upcall and used to identify if the

@@ -23,7 +23,6 @@
  * the License.
  */
 
-#include "random/generators.h"
 #include "serde/json/detail/numeric.h"
 
 #include <seastar/util/variant_utils.hh>
@@ -31,7 +30,6 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string_view>

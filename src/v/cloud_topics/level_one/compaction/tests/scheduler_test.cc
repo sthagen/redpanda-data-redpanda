@@ -15,7 +15,6 @@
 #include "random/generators.h"
 #include "storage/tests/batch_generators.h"
 #include "test_utils/scoped_config.h"
-#include "test_utils/test.h"
 
 #include <gtest/gtest.h>
 

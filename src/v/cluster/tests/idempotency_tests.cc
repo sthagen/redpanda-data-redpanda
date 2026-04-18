@@ -15,8 +15,6 @@
 #include "model/tests/random_batch.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/util/defer.hh>
-
 FIXTURE_TEST(
   test_rm_stm_doesnt_interfere_with_out_of_session_messages,
   rm_stm_test_fixture) {

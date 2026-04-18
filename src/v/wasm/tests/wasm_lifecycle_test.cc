@@ -12,8 +12,6 @@
 #include "wasm/errc.h"
 #include "wasm/tests/wasm_fixture.h"
 
-#include <seastar/core/reactor.hh>
-
 #include <gtest/gtest.h>
 
 TEST_F(WasmTestFixture, CanRestartEngine) {

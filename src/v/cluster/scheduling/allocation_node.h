@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/node_hash_map.h"
+#include "base/format_to.h"
 #include "cluster/scheduling/types.h"
 #include "cluster/types.h"
 #include "config/property.h"
@@ -56,6 +57,8 @@ public:
     }
     // Overall partition space of the node, less reserved partitions
     allocation_capacity max_capacity() const { return _max_capacity; }
+
+    fmt::iterator format_to(fmt::iterator it) const;
 
     void decommission() {
         vassert(
@@ -132,7 +135,6 @@ private:
     int32_t _shard0_reserved{0};
     uint32_t _cpus;
 
-    friend std::ostream& operator<<(std::ostream&, const allocation_node&);
-    friend std::ostream& operator<<(std::ostream& o, state s);
+    friend fmt::iterator format_to(state s, fmt::iterator);
 };
 } // namespace cluster

@@ -16,7 +16,6 @@
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/future-util.hh>
 
 #include <exception>
 

@@ -19,7 +19,6 @@
 #include "datalake/record_translator.h"
 #include "datalake/serde_parquet_writer.h"
 #include "datalake/translation/state_machine.h"
-#include "datalake/translation/utils.h"
 #include "datalake/translation_task.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/utils/txn_reader.h"
@@ -317,13 +316,10 @@ struct timestamped_offset {
     kafka::offset offset;
     model::timestamp ts;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const timestamped_offset& to);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{offset: {}, timestamp: {}}}", offset, ts);
+    }
 };
-std::ostream& operator<<(std::ostream& o, const timestamped_offset& to) {
-    fmt::print(o, "{{offset: {}, timestamp: {}}}", to.offset, to.ts);
-    return o;
-}
 
 } // namespace
 
@@ -441,31 +437,6 @@ private:
 std::unique_ptr<data_source> data_source::make_default_data_source(
   ss::lw_shared_ptr<cluster::partition> partition) {
     return std::make_unique<partition_data_source>(std::move(partition));
-}
-
-std::ostream& operator<<(std::ostream& o, translation_errc ec) {
-    switch (ec) {
-    case no_data:
-        return o << "translation_errc::no_data";
-    case file_io_error:
-        return o << "translation_errc::file_io_error";
-    case cloud_io_error:
-        return o << "translation_errc::cloud_io_error";
-    case flush_error:
-        return o << "translation_errc::flush_error";
-    case discard_error:
-        return o << "translation_errc::discard_error";
-    case oom_error:
-        return o << "translation_errc::oom_error";
-    case time_limit_exceeded:
-        return o << "translation_errc::time_limit_exceeded";
-    case shutting_down:
-        return o << "translation_errc::shutting_down";
-    case out_of_disk:
-        return o << "translation_errc::out_of_disk";
-    case type_resolution_error:
-        return o << "translation_errc::type_resolution_error";
-    }
 }
 
 class partition_translation_context : public translation_context {

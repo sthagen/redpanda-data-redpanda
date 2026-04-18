@@ -55,8 +55,7 @@ public:
         model::revision_id log_revision;
         model::shard_revision_id shard_revision;
 
-        friend std::ostream&
-        operator<<(std::ostream&, const shard_local_assignment&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
 
     enum class hosted_status {
@@ -68,6 +67,7 @@ public:
         /// deleted.
         obsolete,
     };
+    friend fmt::iterator format_to(hosted_status, fmt::iterator);
 
     // unused. This is from a reverted piece of code, retained for serde
     // compatibility
@@ -102,8 +102,7 @@ public:
           : shard_local_state(
               as.group, as.log_revision, status, as.shard_revision) {}
 
-        friend std::ostream&
-        operator<<(std::ostream&, const shard_local_state&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
 
     enum class reconciliation_action {
@@ -127,9 +126,7 @@ public:
         reconciliation_action get_reconciliation_action(
           std::optional<model::revision_id> expected_log_revision) const;
 
-        friend std::ostream& operator<<(std::ostream&, const placement_state&);
-
-        fmt::iterator format_to(fmt::iterator) const;
+        fmt::iterator format_to(fmt::iterator it) const;
 
         placement_state() = default;
 
@@ -309,8 +306,6 @@ private:
 
     std::unique_ptr<probe> _probe;
 };
-
-std::ostream& operator<<(std::ostream&, shard_placement_table::hosted_status);
 
 /// Enum with all key types in the shard_placement key space. All keys in this
 /// key space must be prefixed with the serialized type. Enum type is

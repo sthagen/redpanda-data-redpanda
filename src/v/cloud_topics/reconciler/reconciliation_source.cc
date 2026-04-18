@@ -22,7 +22,6 @@
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "model/timeout_clock.h"
-#include "utils/retry_chain_node.h"
 
 #include <expected>
 #include <utility>

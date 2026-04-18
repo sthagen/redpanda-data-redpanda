@@ -12,12 +12,10 @@
 #include "test_utils/async.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/semaphore.hh>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <stdexcept>
 

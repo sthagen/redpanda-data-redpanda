@@ -353,6 +353,7 @@ redpanda_cc_btest(
         "//src/v/security",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
+        "@fmt",
         "@seastar",
         "@seastar//:testing",
         "@yaml-cpp",

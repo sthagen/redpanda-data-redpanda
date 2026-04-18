@@ -14,18 +14,14 @@
 #include "cluster/errc.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/topics_frontend.h"
-#include "config/node_config.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/alter_partition_reassignments_request.h"
 #include "kafka/protocol/schemata/alter_partition_reassignments_response.h"
 #include "kafka/server/errors.h"
 #include "kafka/server/fwd.h"
-#include "kafka/server/protocol_utils.h"
 #include "model/namespace.h"
 #include "model/timeout_clock.h"
-
-#include <fmt/format.h>
 
 #include <algorithm>
 #include <iterator>

@@ -1,18 +1,14 @@
 #define BOOST_TEST_MODULE utils
 
 #include "base/seastarx.h"
-#include "base/vassert.h"
-#include "base/vlog.h"
 #include "utils/moving_average.h"
 
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/util/log.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>
-#include <ratio>
 
 using namespace std::chrono_literals;
 

@@ -15,8 +15,6 @@
 #include "config/property.h"
 #include "model/timeout_clock.h"
 
-#include <seastar/util/later.hh>
-
 #include <chrono>
 #include <ctime>
 #include <optional>

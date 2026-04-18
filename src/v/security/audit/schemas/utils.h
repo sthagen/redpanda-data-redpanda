@@ -39,6 +39,24 @@ enum class audit_resource_type : int8_t {
     acl_binding_filter
 };
 
+inline fmt::iterator format_to(audit_resource_type type, fmt::iterator out) {
+    switch (type) {
+    case audit_resource_type::topic:
+        return fmt::format_to(out, "topic");
+    case audit_resource_type::group:
+        return fmt::format_to(out, "group");
+    case audit_resource_type::cluster:
+        return fmt::format_to(out, "cluster");
+    case audit_resource_type::transactional_id:
+        return fmt::format_to(out, "transactional_id");
+    case audit_resource_type::acl_binding:
+        return fmt::format_to(out, "acl_binding");
+    case audit_resource_type::acl_binding_filter:
+        return fmt::format_to(out, "acl_binding_filter");
+    }
+    return fmt::format_to(out, "");
+}
+
 template<typename Clock>
 timestamp_t create_timestamp_t(std::chrono::time_point<Clock> time_point) {
     return timestamp_t(
@@ -56,8 +74,6 @@ api_activity_unmapped unmapped_data();
 api_activity_unmapped unmapped_data(const security::auth_result& auth_result);
 
 actor result_to_actor(const security::auth_result& result);
-
-std::ostream& operator<<(std::ostream&, audit_resource_type);
 
 template<typename T>
 concept AuditableResource = std::is_same_v<T, model::topic>

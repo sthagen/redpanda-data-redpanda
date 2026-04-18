@@ -1,5 +1,6 @@
 #include "cluster/members_backend.h"
 
+#include "base/format_to.h"
 #include "cluster/controller_api.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
@@ -7,7 +8,6 @@
 #include "cluster/members_frontend.h"
 #include "cluster/members_manager.h"
 #include "cluster/members_table.h"
-#include "cluster/scheduling/allocation_strategy.h"
 #include "cluster/scheduling/partition_allocator.h"
 #include "cluster/topic_table.h"
 #include "cluster/topics_frontend.h"
@@ -15,11 +15,9 @@
 #include "config/configuration.h"
 #include "metrics/prometheus_sanitize.h"
 #include "model/metadata.h"
-#include "model/namespace.h"
 #include "model/timeout_clock.h"
-#include "random/generators.h"
+#include "utils/to_string.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/util/log.hh>
 
 namespace cluster {
@@ -583,7 +581,7 @@ ss::future<> members_backend::reconcile_reallocation_state(
           meta.current_replica_set,
           meta.new_replica_set,
           reconciliation_state.status(),
-          reconciliation_state.pending_operations());
+          fmt::join(reconciliation_state.pending_operations(), ", "));
         if (reconciliation_state.status() != reconciliation_status::done) {
             co_return;
         }
@@ -738,26 +736,24 @@ ss::future<std::error_code> members_backend::remove_from_raft0(
     co_return co_await _raft0->remove_member(
       raft::vnode(id, raft0_revision), revision);
 }
-
-std::ostream&
-operator<<(std::ostream& o, const members_backend::partition_reallocation& r) {
-    fmt::print(
-      o,
+fmt::iterator
+members_backend::partition_reallocation::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{current: {}, new: {}, state: {}}}",
-      r.current_replica_set,
-      r.new_replica_set,
-      r.state);
-    return o;
+      current_replica_set,
+      new_replica_set,
+      state);
 }
-std::ostream&
-operator<<(std::ostream& o, const members_backend::cancellation_state& state) {
-    switch (state) {
+fmt::iterator
+format_to(members_backend::cancellation_state e, fmt::iterator out) {
+    switch (e) {
     case members_backend::cancellation_state::request_cancel:
-        return o << "request_cancel";
+        return fmt::format_to(out, "request_cancel");
     case members_backend::cancellation_state::cancelled:
-        return o << "cancelled";
+        return fmt::format_to(out, "cancelled");
     case members_backend::cancellation_state::finished:
-        return o << "finished";
+        return fmt::format_to(out, "finished");
     }
 
     __builtin_unreachable();

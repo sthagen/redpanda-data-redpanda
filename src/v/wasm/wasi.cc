@@ -13,14 +13,10 @@
 
 #include "absl/strings/str_join.h"
 #include "base/seastarx.h"
-#include "base/units.h"
-#include "base/vassert.h"
 #include "base/vlog.h"
 #include "ffi.h"
 #include "logger.h"
-#include "strings/utf8.h"
 
-#include <seastar/core/byteorder.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/sstring.hh>
@@ -30,13 +26,9 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
-#include <numeric>
 #include <ranges>
-#include <ratio>
-#include <sstream>
 #include <stdexcept>
 #include <string_view>
-#include <unistd.h>
 #include <utility>
 
 namespace wasm::wasi {

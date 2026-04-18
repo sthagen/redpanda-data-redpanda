@@ -21,7 +21,6 @@
 
 #include <filesystem>
 #include <optional>
-#include <ranges>
 
 static ss::logger segment_set_test_log("segment_set_test");
 

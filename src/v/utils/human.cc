@@ -9,41 +9,33 @@
 
 #include "utils/human.h"
 
-#include "base/seastarx.h"
-
-#include <seastar/core/print.hh>
-
-#include <ostream>
-
 namespace human {
 
-std::ostream& operator<<(std::ostream& o, const ::human::latency& l) {
+fmt::iterator latency::format_to(fmt::iterator it) const {
     constexpr static std::array units{"μs", "ms", "secs"};
     static constexpr double step = 1000;
-    double x = l.value;
+    double x = value;
     for (const char* unit : units) {
         if (x <= step) {
-            fmt::print(o, "{:03.3f}{}", x, unit);
-            return o;
+            return fmt::format_to(it, "{:03.3f}{}", x, unit);
         }
         x /= step;
     }
-    return o << x << "unknown_units";
+    return fmt::format_to(it, "{}unknown_units", x);
 }
 
-std::ostream& operator<<(std::ostream& o, const ::human::bytes& l) {
+fmt::iterator bytes::format_to(fmt::iterator it) const {
     constexpr static std::array units = {
       "bytes", "KiB", "MiB", "GiB", "TiB", "PiB"};
     static constexpr double step = 1024;
-    double x = l.value;
+    double x = value;
     for (auto& unit : units) {
         if (x <= step) {
-            fmt::print(o, "{:03.3f}{}", x, unit);
-            return o;
+            return fmt::format_to(it, "{:03.3f}{}", x, unit);
         }
         x /= step;
     }
-    return o << x << "unknown_units";
+    return fmt::format_to(it, "{}unknown_units", x);
 }
 
 } // namespace human

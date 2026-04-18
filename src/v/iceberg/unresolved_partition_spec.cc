@@ -13,9 +13,6 @@
 #include "iceberg/transform.h"
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
-
-#include <type_traits>
 
 namespace iceberg {
 
@@ -63,20 +60,18 @@ void unresolved_partition_spec::field::autogenerate_name() {
         transform));
 }
 
-std::ostream&
-operator<<(std::ostream& o, const unresolved_partition_spec::field& f) {
-    fmt::print(
-      o,
+fmt::iterator
+unresolved_partition_spec::field::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{source_name: {}, transform: {}, name: {}}}",
-      f.source_name,
-      f.transform,
-      f.name);
-    return o;
+      source_name,
+      transform,
+      name);
 }
 
-std::ostream& operator<<(std::ostream& o, const unresolved_partition_spec& ps) {
-    fmt::print(o, "{{fields: {}}}", ps.fields);
-    return o;
+fmt::iterator unresolved_partition_spec::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{fields: {}}}", fields);
 }
 
 } // namespace iceberg

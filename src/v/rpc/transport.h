@@ -13,6 +13,7 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "container/chunked_hash_map.h"
@@ -166,7 +167,10 @@ private:
     uint32_t _client_correlation_errors = 0;
     uint32_t _requests_blocked_memory = 0;
 
-    friend std::ostream& operator<<(std::ostream& o, const client_probe& p);
+    friend struct fmt::formatter<client_probe>;
+
+public:
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 /**
@@ -207,6 +211,8 @@ public:
     void reset_state() final;
 
     transport_version version() const { return _version; }
+
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     using sequence_t = named_type<uint64_t, struct sequence_tag>;
@@ -295,8 +301,6 @@ private:
     friend class ::rpc_integration_fixture_oc_ns_adl_serde_no_upgrade;
     friend class ::rpc_integration_fixture_oc_ns_adl_only_no_upgrade;
     void set_version(transport_version v) { _version = v; }
-
-    friend std::ostream& operator<<(std::ostream&, const transport&);
 
     std::unique_ptr<client_probe> _probe;
 };
@@ -453,3 +457,23 @@ transport::send_typed_versioned(
 }
 
 } // namespace rpc
+
+template<>
+struct fmt::formatter<rpc::client_probe> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const rpc::client_probe& v, fmt::format_context& ctx) const {
+        return v.format_to(ctx.out());
+    }
+};
+
+template<>
+struct fmt::formatter<rpc::transport> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const rpc::transport& v, fmt::format_context& ctx) const {
+        return v.format_to(ctx.out());
+    }
+};

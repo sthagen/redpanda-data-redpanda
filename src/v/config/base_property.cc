@@ -12,8 +12,6 @@
 #include "base/vassert.h"
 #include "config/config_store.h"
 
-#include <ostream>
-
 namespace config {
 base_property::base_property(
   config_store& conf,
@@ -31,11 +29,6 @@ base_property::base_property(
     }
 }
 
-std::ostream& operator<<(std::ostream& o, const base_property& p) {
-    p.print(o);
-    return o;
-}
-
 std::string_view to_string_view(visibility v) {
     switch (v) {
     case config::visibility::tunable:
@@ -47,6 +40,9 @@ std::string_view to_string_view(visibility v) {
     }
 
     return "{invalid}";
+}
+fmt::iterator format_to(visibility v, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(v));
 }
 
 /**

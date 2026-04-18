@@ -10,6 +10,7 @@
  */
 #pragma once
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/vlog.h"
 #include "config/property.h"
@@ -22,8 +23,6 @@
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <iosfwd>
 
 namespace security {
 
@@ -67,7 +66,36 @@ struct auth_result {
     // If found, the group that was matched to provide authz decision
     std::optional<acl_principal> group;
 
-    friend std::ostream& operator<<(std::ostream& os, const auth_result& a);
+    fmt::iterator format_to(fmt::iterator it) const {
+        it = fmt::format_to(
+          it,
+          "{{authorized:{}, authorization_disabled:{}, is_superuser:{}, "
+          "operation: {}, empty_matches:{}, principal:{}, role:{}, host:{}, "
+          "resource_type:{}, "
+          "resource_name:{}, resource_pattern:",
+          authorized,
+          authorization_disabled,
+          is_superuser,
+          operation,
+          empty_matches,
+          principal,
+          role,
+          host,
+          resource_type,
+          resource_name);
+        if (resource_pattern) {
+            it = fmt::format_to(it, "{}", resource_pattern->get());
+        } else {
+            it = fmt::format_to(it, "none");
+        }
+        it = fmt::format_to(it, ", acl:");
+        if (acl) {
+            it = fmt::format_to(it, "{}", acl->get());
+        } else {
+            it = fmt::format_to(it, "none");
+        }
+        return fmt::format_to(it, "}}");
+    }
 
     explicit operator bool() const noexcept { return is_authorized(); }
 

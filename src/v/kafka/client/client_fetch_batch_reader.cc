@@ -12,9 +12,7 @@
 #include "kafka/client/client_fetch_batch_reader.h"
 
 #include "kafka/client/client.h"
-#include "kafka/client/logger.h"
 #include "kafka/protocol/exceptions.h"
-#include "kafka/protocol/kafka_batch_adapter.h"
 
 #include <seastar/core/coroutine.hh>
 
@@ -84,8 +82,9 @@ public:
     }
 
     // Implements model::record_batch_reader::impl
-    void print(std::ostream& os) final {
-        os << "{pandaproxy::schema_registry::client_fetcher}";
+    fmt::iterator format_to(fmt::iterator it) const final {
+        return fmt::format_to(
+          it, "{{pandaproxy::schema_registry::client_fetcher}}");
     }
 
 private:

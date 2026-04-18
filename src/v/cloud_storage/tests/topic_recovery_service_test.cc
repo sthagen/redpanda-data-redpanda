@@ -18,11 +18,8 @@
 #include "utils/memory_data_source.h"
 
 #include <seastar/core/iostream.hh>
-#include <seastar/core/simple-stream.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/http/request.hh>
-#include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/defer.hh>
 
 #include <memory>
 #include <utility>

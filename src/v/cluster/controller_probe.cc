@@ -11,7 +11,6 @@
 
 #include "cluster/controller_probe.h"
 
-#include "absl/container/flat_hash_set.h"
 #include "cluster/cloud_metadata/uploader.h"
 #include "cluster/controller.h"
 #include "cluster/members_table.h"

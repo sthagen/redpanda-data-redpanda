@@ -11,7 +11,6 @@
 #include "base/vassert.h"
 #include "bytes/bytes.h"
 #include "config/property.h"
-#include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
 #include "gmock/gmock.h"
 #include "iceberg/datatypes.h"
@@ -22,7 +21,6 @@
 #include <gtest/gtest.h>
 
 #include <exception>
-#include <variant>
 
 using namespace pandaproxy::schema_registry;
 using namespace datalake;

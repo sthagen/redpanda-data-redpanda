@@ -13,19 +13,15 @@
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
 #include "random/generators.h"
-#include "storage/disk_log_appender.h"
 #include "storage/file_sanitizer.h"
 #include "storage/log_replayer.h"
 #include "storage/logger.h"
-#include "storage/record_batch_utils.h"
 #include "storage/segment.h"
 #include "storage/segment_index.h"
 #include "storage/segment_reader.h"
 #include "storage/storage_resources.h"
 
 #include <seastar/core/reactor.hh>
-#include <seastar/core/thread.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 #include <gtest/gtest.h>
 

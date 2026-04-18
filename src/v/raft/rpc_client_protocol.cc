@@ -9,11 +9,9 @@
 
 #include "raft/rpc_client_protocol.h"
 
-#include "base/outcome_future_utils.h"
 #include "raft/raftgen_service.h"
 #include "raft/types.h"
 #include "rpc/connection_cache.h"
-#include "rpc/exceptions.h"
 #include "rpc/transport.h"
 #include "rpc/types.h"
 

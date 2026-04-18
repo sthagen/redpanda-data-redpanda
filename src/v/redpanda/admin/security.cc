@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "cluster/controller.h"
 #include "cluster/security_frontend.h"
 #include "config/broker_authn_endpoint.h"
@@ -39,7 +40,6 @@
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/http/exception.hh>
 #include <seastar/http/request.hh>
-#include <seastar/http/url.hh>
 #include <seastar/json/json_elements.hh>
 
 #include <algorithm>
@@ -240,23 +240,22 @@ enum class role_errc {
     role_name_conflict = 40902,
 };
 
-// NOTE(oren): bogus -Wunneeded-internal-declaration here from clang-tidy (?)
-std::ostream& operator<<(std::ostream& os, role_errc code) {
+fmt::iterator format_to(role_errc code, fmt::iterator out) {
     switch (code) {
     case role_errc::malformed_def:
-        return os << "Malformed request";
+        return fmt::format_to(out, "Malformed request");
     case role_errc::invalid_name:
-        return os << "Invalid role name";
+        return fmt::format_to(out, "Invalid role name");
     case role_errc::unrecognized_field:
-        return os << "Unrecognized field";
+        return fmt::format_to(out, "Unrecognized field");
     case role_errc::member_list_conflict:
-        return os << "Conflict between 'add' and 'remove' lists";
+        return fmt::format_to(out, "Conflict between 'add' and 'remove' lists");
     case role_errc::role_not_found:
-        return os << "Role not found";
+        return fmt::format_to(out, "Role not found");
     case role_errc::role_already_exists:
-        return os << "Role already exists";
+        return fmt::format_to(out, "Role already exists");
     case role_errc::role_name_conflict:
-        return os << "Role name conflict";
+        return fmt::format_to(out, "Role name conflict");
     }
     __builtin_unreachable();
 }
@@ -1525,7 +1524,7 @@ admin_server::get_security_report(std::unique_ptr<ss::http::request>) {
         alert.description = ssx::sformat(
           "TLS minimum version is set to {} which is less than {}. This is "
           "insecure and not recommended.",
-          config::shard_local_cfg().tls_min_version,
+          config::shard_local_cfg().tls_min_version(),
           min_secure_tls);
         alerts.push_back(std::move(alert));
     }

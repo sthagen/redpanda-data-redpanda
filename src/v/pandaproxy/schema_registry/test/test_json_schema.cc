@@ -21,7 +21,6 @@
 
 #include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/defer.hh>
 
 #include <boost/test/tools/context.hpp>
 #include <fmt/core.h>
@@ -2477,7 +2476,7 @@ SEASTAR_THREAD_TEST_CASE(test_refs_fixing) {
           pps::make_canonical_json_schema(
             f.store(),
             {pps::context_subject::unqualified("test"),
-             {fmt::format("{}", jsoncons::print(input_schema)),
+             {fmt::format("{}", fmt_streamed(jsoncons::print(input_schema))),
               pps::schema_type::json}})
             .get())
           .get();
@@ -2527,9 +2526,9 @@ SEASTAR_THREAD_TEST_CASE(test_refs_fixing) {
       fmt::format(
         "input_schema:\n{}\n\nexpected_schema:\n{}\n\nprocessed_schema:\n{}"
         "\n\n",
-        jsoncons::pretty_print(input_schema),
-        jsoncons::pretty_print(expected_schema),
-        jsoncons::pretty_print(processed_schema))) {
+        fmt_streamed(jsoncons::pretty_print(input_schema)),
+        fmt_streamed(jsoncons::pretty_print(expected_schema)),
+        fmt_streamed(jsoncons::pretty_print(processed_schema)))) {
         // check that the processed schema is the same as the expected schema,
         // output the difference if not
         auto jpatch = jsoncons::jsonpatch::from_diff(
@@ -2538,6 +2537,6 @@ SEASTAR_THREAD_TEST_CASE(test_refs_fixing) {
           expected_schema == processed_schema,
           fmt::format(
             "differences expected_schema-processed_schema:\n{}\n",
-            jsoncons::pretty_print(jpatch)));
+            fmt_streamed(jsoncons::pretty_print(jpatch))));
     }
 }

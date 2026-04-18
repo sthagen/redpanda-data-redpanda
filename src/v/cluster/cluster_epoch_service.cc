@@ -25,7 +25,6 @@
 #include "utils/backoff_policy.h"
 
 #include <seastar/core/sleep.hh>
-#include <seastar/core/smp.hh>
 
 #include <fmt/chrono.h>
 

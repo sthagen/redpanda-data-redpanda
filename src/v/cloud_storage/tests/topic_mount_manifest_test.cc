@@ -11,8 +11,6 @@
 #include "cloud_storage/remote_label.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/topic_mount_manifest.h"
-#include "cloud_storage/types.h"
-#include "cluster/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "test_utils/test.h"

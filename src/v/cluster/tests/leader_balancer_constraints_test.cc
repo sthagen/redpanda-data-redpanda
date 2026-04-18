@@ -11,7 +11,6 @@
 #include <cstdint>
 #define BOOST_TEST_MODULE leader_balancer_constraints
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "cluster/scheduling/leader_balancer_constraints.h"
 #include "cluster/scheduling/leader_balancer_types.h"
@@ -26,10 +25,6 @@
 #include <boost/test/unit_test_suite.hpp>
 
 #include <algorithm>
-#include <fstream>
-#include <iterator>
-#include <memory>
-#include <sstream>
 #include <tuple>
 #include <vector>
 

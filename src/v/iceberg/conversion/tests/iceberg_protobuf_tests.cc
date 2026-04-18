@@ -8,7 +8,6 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "gtest/gtest.h"
 #include "iceberg/conversion/protobuf_utils.h"
 #include "iceberg/conversion/schema_protobuf.h"
 #include "iceberg/conversion/tests/gmock_iceberg_matchers.h"
@@ -17,18 +16,13 @@
 #include "iceberg/datatypes.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/sstring.hh>
-
 #include <fmt/core.h>
-#include <fmt/ostream.h>
 #include <gmock/gmock.h>
 #include <google/protobuf/compiler/parser.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/io/tokenizer.h>
 #include <google/protobuf/message.h>
 #include <gtest/gtest.h>
-#include <rapidjson/document.h>
 
 #include <memory>
 #include <optional>

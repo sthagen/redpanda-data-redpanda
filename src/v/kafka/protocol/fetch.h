@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/likely.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
@@ -172,8 +173,8 @@ struct fetch_request final {
         return const_iterator(data.topics.cend(), data.topics.cend());
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const fetch_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -312,8 +313,8 @@ struct fetch_response final {
 
     iterator end() { return {data.responses.end(), data.responses.end()}; }
 
-    friend std::ostream& operator<<(std::ostream& os, const fetch_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

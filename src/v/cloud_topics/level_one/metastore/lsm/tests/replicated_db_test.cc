@@ -23,13 +23,10 @@
 #include "lsm/io/persistence.h"
 #include "model/fundamental.h"
 #include "raft/tests/raft_fixture.h"
-#include "random/generators.h"
 #include "storage/disk.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 #include "test_utils/tmp_dir.h"
-
-#include <seastar/util/defer.hh>
 
 #include <gtest/gtest.h>
 

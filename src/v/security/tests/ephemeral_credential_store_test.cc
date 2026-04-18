@@ -6,23 +6,15 @@
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
-#include "random/generators.h"
 #include "security/acl.h"
 #include "security/ephemeral_credential.h"
 #include "security/ephemeral_credential_store.h"
 #include "security/scram_authenticator.h"
-#include "security/scram_credential.h"
 #include "security/tests/randoms.h"
 #include "security/types.h"
 #include "test_utils/randoms.h"
 
-#include <seastar/core/lowres_clock.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/testing/thread_test_case.hh>
-
-#include <chrono>
-
-using namespace std::chrono_literals;
 
 namespace security {
 

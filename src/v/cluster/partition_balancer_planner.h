@@ -175,3 +175,11 @@ private:
 };
 
 } // namespace cluster
+
+template<>
+struct fmt::formatter<cluster::ntp_reassignment_type> : fmt::formatter<int> {
+    auto
+    format(cluster::ntp_reassignment_type t, fmt::format_context& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(t), ctx);
+    }
+};

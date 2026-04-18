@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
@@ -76,7 +77,7 @@ public:
     friend bool
     operator==(const index_columns&, const index_columns&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const index_columns&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     chunked_vector<uint32_t> _relative_offset_index;
@@ -150,7 +151,15 @@ struct index_state
         model::offset offset;
         model::timestamp timestamp;
         size_t filepos;
-        friend std::ostream& operator<<(std::ostream&, const entry&);
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{offset:{}, time:{}, filepos:{}}}",
+              offset,
+              timestamp,
+              filepos);
+        }
     };
 
     index_state() = default;
@@ -277,7 +286,7 @@ struct index_state
 
     friend bool operator==(const index_state&, const index_state&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const index_state&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     void serde_write(iobuf&) const;
     friend void read_nested(iobuf_parser&, index_state&, const size_t);

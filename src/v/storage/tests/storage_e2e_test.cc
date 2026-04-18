@@ -45,7 +45,6 @@
 #include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "test_utils/scoped_config.h"
-#include "test_utils/test_macros.h"
 #include "utils/directory_walker.h"
 #include "utils/tristate.h"
 
@@ -57,7 +56,6 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
-#include <fmt/chrono.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>

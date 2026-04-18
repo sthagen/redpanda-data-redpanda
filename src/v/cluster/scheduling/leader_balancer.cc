@@ -29,20 +29,13 @@
 #include "features/enterprise_feature_messages.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
-#include "raft/rpc_client_protocol.h"
 #include "random/generators.h"
 #include "rpc/connection_cache.h"
 #include "rpc/types.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/timer.hh>
-
-#include <fmt/core.h>
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
 
 #include <algorithm>
 #include <chrono>

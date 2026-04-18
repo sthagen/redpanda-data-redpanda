@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iostream.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -37,8 +38,6 @@
 #include <seastar/util/bool_class.hh>
 #include <seastar/util/log.hh>
 
-#include <ostream>
-
 using namespace raft;
 namespace {
 /**
@@ -58,9 +57,9 @@ struct value_entry
 
     auto serde_fields() { return std::tie(value, update_cnt); }
 
-    friend std::ostream& operator<<(std::ostream& o, const value_entry& ve) {
-        fmt::print(o, "{{value: {}, update_cnt: {}}}", ve.value, ve.update_cnt);
-        return o;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{value: {}, update_cnt: {}}}", value, update_cnt);
     }
 };
 } // namespace

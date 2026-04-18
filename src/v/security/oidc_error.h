@@ -9,6 +9,8 @@
  */
 #pragma once
 
+#include <fmt/format.h>
+
 #include <system_error>
 
 namespace security::oidc {
@@ -108,3 +110,10 @@ template<>
 struct is_error_code_enum<security::oidc::errc> : true_type {};
 
 } // namespace std
+
+template<>
+struct fmt::formatter<security::oidc::errc> : fmt::formatter<int> {
+    auto format(security::oidc::errc e, fmt::format_context& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(e), ctx);
+    }
+};

@@ -11,7 +11,6 @@
 
 #include <boost/test/unit_test.hpp>
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 BOOST_AUTO_TEST_CASE(human_bytes) {
     BOOST_CHECK_EQUAL(fmt::format("{}", human::bytes(-1)), "-1.000bytes");

@@ -16,7 +16,6 @@
 #include "cluster/plugin_frontend.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
-#include "config/node_config.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"

@@ -9,33 +9,23 @@
  * by the Apache License, Version 2.0
  */
 
-#include "base/type_traits.h"
 #include "debug_bundle/debug_bundle_service.h"
 #include "debug_bundle/error.h"
 #include "debug_bundle/json.h"
-#include "debug_bundle/types.h"
 #include "json/document.h"
-#include "json/types.h"
 #include "redpanda/admin/api-doc/debug_bundle.json.hh"
 #include "redpanda/admin/server.h"
-#include "reflection/type_traits.h"
 #include "ssx/sformat.h"
-#include "utils/functional.h"
 
 #include <seastar/core/sstring.hh>
-#include <seastar/http/file_handler.hh>
 #include <seastar/http/reply.hh>
 #include <seastar/json/json_elements.hh>
 #include <seastar/util/short_streams.hh>
 
-#include <boost/lexical_cast/try_lexical_convert.hpp>
 #include <fmt/core.h>
 #include <rapidjson/error/en.h>
 
-#include <algorithm>
-#include <charconv>
 #include <chrono>
-#include <sstream>
 
 namespace {
 

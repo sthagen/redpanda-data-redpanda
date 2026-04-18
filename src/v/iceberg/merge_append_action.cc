@@ -9,7 +9,6 @@
  */
 #include "iceberg/merge_append_action.h"
 
-#include "base/units.h"
 #include "base/vlog.h"
 #include "iceberg/compatibility.h"
 #include "iceberg/logger.h"

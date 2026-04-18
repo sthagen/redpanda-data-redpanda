@@ -11,13 +11,12 @@
 #pragma once
 
 #include "absl/container/btree_set.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/aligned_buffer.hh>
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/gate.hh>
 
 namespace wasm {
 
@@ -120,7 +119,7 @@ struct stack_bounds {
     uint8_t* bottom;
 
     auto operator<=>(const stack_bounds&) const = default;
-    friend std::ostream& operator<<(std::ostream&, const stack_bounds&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 /**

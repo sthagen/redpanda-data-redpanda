@@ -696,7 +696,7 @@ template<>
 struct convert<config::leaders_preference> {
     using type = config::leaders_preference;
 
-    static Node encode(const type& rhs) { return Node(fmt::to_string(rhs)); }
+    static Node encode(const type& rhs) { return Node(fmt::format("{}", rhs)); }
 
     static bool decode(const Node& node, type& rhs) {
         auto node_str = node.as<std::string>();

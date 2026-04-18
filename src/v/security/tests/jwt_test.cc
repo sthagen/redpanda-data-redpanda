@@ -13,13 +13,9 @@
 #include "security/oidc_principal_mapping.h"
 
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/testing/thread_test_case.hh>
 
-#include <boost/test/data/monomorphic/fwd.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
-#include <boost/test/unit_test_suite.hpp>
-#include <fmt/chrono.h>
 
 namespace oidc = security::oidc;
 namespace bdata = boost::unit_test::data;

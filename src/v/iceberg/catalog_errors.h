@@ -9,11 +9,11 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
 
-#include <ostream>
 #include <string_view>
 
 namespace iceberg {
@@ -56,9 +56,8 @@ constexpr std::string_view to_string_view(catalog_errc e) {
         return "not_found";
     }
 }
-
-inline std::ostream& operator<<(std::ostream& o, catalog_errc e) {
-    return o << to_string_view(e);
+inline fmt::iterator format_to(catalog_errc e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
 }
 
 /// Rich error for catalog describe, carrying a human-readable message

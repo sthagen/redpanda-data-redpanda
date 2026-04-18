@@ -22,7 +22,6 @@
 #include <gtest/gtest.h>
 #include <rapidjson/error/en.h>
 
-#include <chrono>
 #include <optional>
 #include <string>
 #include <type_traits>

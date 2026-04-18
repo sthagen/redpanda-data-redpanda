@@ -21,7 +21,6 @@
 #include "utils/s3_fifo.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/weak_ptr.hh>
 
 #include <exception>
 #include <utility>

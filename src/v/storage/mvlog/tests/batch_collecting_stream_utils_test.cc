@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/iostream.h"
-#include "hashing/crc32.h"
-#include "model/record_batch_types.h"
 #include "model/tests/random_batch.h"
 #include "storage/mvlog/batch_collecting_stream_utils.h"
 #include "storage/mvlog/batch_collector.h"

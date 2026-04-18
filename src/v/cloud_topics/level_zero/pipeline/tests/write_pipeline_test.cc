@@ -10,22 +10,13 @@
 
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
-#include "container/chunked_circular_buffer.h"
-#include "model/fundamental.h"
 #include "model/namespace.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/util/later.hh>
-#include <seastar/util/log.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 #include <chrono>
 #include <iterator>

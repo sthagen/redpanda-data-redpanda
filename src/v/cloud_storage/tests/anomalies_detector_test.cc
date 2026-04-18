@@ -26,8 +26,6 @@
 #include "test_utils/boost_fixture.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/util/short_streams.hh>
-
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 

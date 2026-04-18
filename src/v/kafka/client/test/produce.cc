@@ -10,7 +10,6 @@
 #include "kafka/protocol/produce.h"
 
 #include "kafka/client/client.h"
-#include "kafka/client/configuration.h"
 #include "kafka/client/test/fixture.h"
 #include "kafka/client/test/utils.h"
 #include "kafka/client/utils.h"
@@ -19,7 +18,6 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "test_utils/boost_fixture.h"
-#include "utils/unresolved_address.h"
 
 #include <chrono>
 

@@ -13,9 +13,7 @@
 #include "cluster/health_monitor_types.h"
 #include "cluster/tests/partition_balancer_planner_fixture.h"
 #include "test_utils/boost_fixture.h"
-#include "utils/stable_iterator_adaptor.h"
 
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
 static ss::logger logger("pb_planner_test");

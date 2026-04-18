@@ -15,6 +15,8 @@
 #include "model/metadata.h"
 #include "model/transform.h"
 
+#include <seastar/core/chunked_fifo.hh>
+
 namespace cluster {
 
 using model::transform_id;

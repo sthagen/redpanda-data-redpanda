@@ -19,9 +19,6 @@
 #include "cluster/tx_gateway_service.h"
 #include "config/configuration.h"
 #include "rpc/connection_cache.h"
-#include "types.h"
-
-#include <seastar/core/coroutine.hh>
 
 namespace cluster {
 using namespace std::chrono_literals;

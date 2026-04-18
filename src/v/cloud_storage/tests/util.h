@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iostream.h"
 #include "bytes/streambuf.h"
 #include "cloud_storage/async_manifest_view.h"
@@ -84,9 +85,9 @@ struct in_memory_segment {
     int delta_offset_overlap{0};
     std::optional<model::timestamp> base_timestamp;
     std::optional<model::timestamp> last_timestamp;
-};
 
-std::ostream& operator<<(std::ostream& o, const in_memory_segment& ims);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 std::unique_ptr<storage::continuous_batch_parser> make_recording_batch_parser(
   iobuf buf,

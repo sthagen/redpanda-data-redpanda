@@ -11,7 +11,6 @@
 
 #include "base/type_traits.h"
 #include "cloud_storage/remote.h"
-#include "cloud_storage_clients/configuration.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
 #include "cluster/controller_service.h"
@@ -32,7 +31,6 @@
 #include "cluster/topic_recovery_validator.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "config/leaders_preference.h"
 #include "data_migration_types.h"
 #include "features/enterprise_feature_messages.h"
 #include "features/feature_table.h"
@@ -42,9 +40,7 @@
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/validation.h"
-#include "raft/consensus_client_protocol.h"
 #include "raft/errc.h"
-#include "raft/fundamental.h"
 #include "random/generators.h"
 #include "rpc/errc.h"
 #include "rpc/types.h"
@@ -55,18 +51,14 @@
 #include "topic_properties.h"
 #include "topic_rules.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sharded.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
 #include <algorithm>
 #include <iterator>
-#include <memory>
 #include <regex>
-#include <sstream>
 #include <system_error>
 
 namespace {

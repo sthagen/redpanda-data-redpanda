@@ -25,7 +25,6 @@
 #include "security/scram_algorithm.h"
 #include "security/types.h"
 #include "test_utils/boost_fixture.h"
-#include "test_utils/random_bytes.h"
 
 #include <boost/test/unit_test.hpp>
 

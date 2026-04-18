@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 
-#include "gmock/gmock.h"
 #include "serde/parquet/column_stats_collector.h"
 #include "serde/parquet/value.h"
 

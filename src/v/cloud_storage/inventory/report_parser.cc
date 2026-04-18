@@ -14,10 +14,6 @@
 #include "base/vassert.h"
 #include "bytes/iobuf_parser.h"
 
-#include <seastar/util/short_streams.hh>
-
-#include <zlib.h>
-
 namespace {
 constexpr auto newline{'\n'};
 

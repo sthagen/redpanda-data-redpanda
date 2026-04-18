@@ -16,9 +16,7 @@
 #include "cluster/partition.h"
 #include "cluster/simple_batch_builder.h"
 #include "cluster/tx_gateway_frontend.h"
-#include "cluster/tx_utils.h"
 #include "config/configuration.h"
-#include "config/types.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/heartbeat.h"
@@ -36,7 +34,6 @@
 #include "kafka/server/logger.h"
 #include "kafka/server/member.h"
 #include "model/fundamental.h"
-#include "model/namespace.h"
 #include "raft/errc.h"
 #include "ssx/future-util.h"
 #include "storage/record_batch_builder.h"
@@ -48,7 +45,6 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
 #include <functional>
@@ -2823,55 +2819,49 @@ error_code group::validate_existing_member(
     return error_code::none;
 }
 
-std::ostream& operator<<(std::ostream& o, const group& g) {
-    const auto ntp = [&g] {
-        if (g._partition) {
-            return fmt::format("{}", g._partition->ntp());
+fmt::iterator group::format_to(fmt::iterator it) const {
+    const auto ntp_str = [this] {
+        if (_partition) {
+            return fmt::format("{}", _partition->ntp());
         } else {
             return std::string("<none>");
         }
     }();
 
-    auto timer_expires =
-      [](const auto& timer) -> std::optional<group::duration_type> {
+    auto timer_expires = [](const auto& timer) -> std::optional<duration_type> {
         if (timer.armed()) {
-            return timer.get_timeout() - group::clock_type::now();
+            return timer.get_timeout() - clock_type::now();
         }
         return std::nullopt;
     };
 
-    fmt::print(
-      o,
+    it = fmt::format_to(
+      it,
       "id={} state={} gen={} proto_type={} proto={} leader={} "
       "empty={} ntp={} num_members_joining={} new_member_added={} "
       "join_timer={}",
-      g.id(),
-      g.state(),
-      g.generation(),
-      g.protocol_type(),
-      g.protocol(),
-      g.leader(),
-      !g.has_members(),
-      ntp,
-      g._num_members_joining,
-      g._new_member_added,
-      timer_expires(g._join_timer));
+      id(),
+      state(),
+      generation(),
+      protocol_type(),
+      protocol(),
+      leader(),
+      !has_members(),
+      ntp_str,
+      _num_members_joining,
+      _new_member_added,
+      timer_expires(_join_timer));
 
-    fmt::print(o, " pending members [");
-    for (const auto& m : g._pending_members) {
-        fmt::print(o, "{} expires={} ", m.first, timer_expires(m.second));
+    it = fmt::format_to(it, " pending members [");
+    for (const auto& m : _pending_members) {
+        it = fmt::format_to(
+          it, "{} expires={} ", m.first, timer_expires(m.second));
     }
-    fmt::print(o, "] full members [");
-    for (const auto& m : g._members) {
-        fmt::print(o, "{} ", m.second);
+    it = fmt::format_to(it, "] full members [");
+    for (const auto& m : _members) {
+        it = fmt::format_to(it, "{} ", m.second);
     }
-    fmt::print(o, "]");
-
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, group_state gs) {
-    return o << group_state_to_kafka_name(gs);
+    return fmt::format_to(it, "]");
 }
 
 ss::sstring group_state_to_kafka_name(group_state gs) {
@@ -3383,16 +3373,15 @@ void group::try_arm(time_point_type deadline) {
     }
 }
 
-std::ostream& operator<<(std::ostream& o, const group::offset_metadata& md) {
-    fmt::print(
-      o,
+fmt::iterator group::offset_metadata::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{log_offset:{}, offset:{}, metadata:{}, "
       "committed_leader_epoch:{}}}",
-      md.log_offset,
-      md.offset,
-      md.metadata,
-      md.committed_leader_epoch);
-    return o;
+      log_offset,
+      offset,
+      metadata,
+      committed_leader_epoch);
 }
 
 bool group::subscribed(const model::topic& topic) const {

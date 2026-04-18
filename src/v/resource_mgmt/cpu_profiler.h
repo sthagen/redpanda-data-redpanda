@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 
@@ -22,10 +21,8 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/timer.hh>
-#include <seastar/util/backtrace.hh>
 
 #include <chrono>
-#include <cstdint>
 #include <deque>
 
 namespace resources {

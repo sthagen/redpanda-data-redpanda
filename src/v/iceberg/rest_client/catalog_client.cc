@@ -27,7 +27,6 @@
 #include "iceberg/table_requests_json.h"
 #include "json/istreamwrapper.h"
 #include "ssx/future-util.h"
-#include "utils/to_string.h"
 
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>

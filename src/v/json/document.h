@@ -12,6 +12,7 @@
 #include "json/_include_first.h"
 #include "json/allocator.h"
 #include "json/encodings.h"
+#include "json/types.h"
 
 #include <rapidjson/document.h>
 

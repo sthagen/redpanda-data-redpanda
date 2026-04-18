@@ -33,8 +33,6 @@
 #include "test_utils/scoped_config.h"
 #include "test_utils/tmp_dir.h"
 
-#include <seastar/util/defer.hh>
-
 #include <gtest/gtest.h>
 
 #include <functional>

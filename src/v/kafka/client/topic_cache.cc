@@ -15,8 +15,6 @@
 #include "kafka/protocol/metadata.h"
 #include "model/fundamental.h"
 
-#include <seastar/core/future.hh>
-
 #include <ranges>
 
 namespace kafka::client {

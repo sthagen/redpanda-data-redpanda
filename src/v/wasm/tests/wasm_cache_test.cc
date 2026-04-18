@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 
-#include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
@@ -20,7 +19,6 @@
 #include "wasm/engine.h"
 #include "wasm/wasi_logger.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/thread.hh>
@@ -28,7 +26,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <utility>

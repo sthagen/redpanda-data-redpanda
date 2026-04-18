@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "model/timeout_clock.h"
 #include "storage/compacted_index.h"
 #include "storage/fs_utils.h"
@@ -50,7 +51,7 @@ public:
 
         virtual void reset() = 0;
 
-        virtual void print(std::ostream&) const = 0;
+        virtual fmt::iterator format_to(fmt::iterator it) const = 0;
 
         const ss::sstring filename() const { return path(); }
         const segment_full_path& path() const { return _path; }
@@ -133,7 +134,9 @@ public:
         return _impl->load_footer();
     }
 
-    void print(std::ostream& o) const { _impl->print(o); }
+    fmt::iterator format_to(fmt::iterator it) const {
+        return _impl->format_to(it);
+    }
 
     void reset() { _impl->reset(); }
 
@@ -150,12 +153,6 @@ public:
     ss::future<>
     for_each_async(Func f, model::timeout_clock::time_point timeout) {
         return _impl->for_each_async(std::move(f), timeout);
-    }
-
-    friend std::ostream&
-    operator<<(std::ostream& o, const compacted_index_reader& r) {
-        r.print(o);
-        return o;
     }
 
 private:

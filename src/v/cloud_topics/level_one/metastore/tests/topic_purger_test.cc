@@ -13,7 +13,6 @@
 #include "cluster/nt_revision.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
-#include "config/node_config.h"
 #include "gtest/gtest.h"
 #include "model/fundamental.h"
 #include "test_utils/test.h"

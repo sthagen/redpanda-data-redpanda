@@ -13,7 +13,6 @@
 #include "container/intrusive_list_helpers.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/sstring.hh>
 

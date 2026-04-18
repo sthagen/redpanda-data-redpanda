@@ -14,7 +14,6 @@
 #include <seastar/testing/perf_tests.hh>
 #include <seastar/util/later.hh>
 
-#include <cstdlib>
 #include <iterator>
 #include <random>
 

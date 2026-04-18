@@ -245,7 +245,7 @@ void rjson_serialize(
     w.Key("format-version");
     w.Int(iceberg::format_version_to_int(m.format_version));
     w.Key("table-uuid");
-    w.String(fmt::to_string(m.table_uuid));
+    w.String(fmt::format("{}", m.table_uuid));
     w.Key("location");
     w.String(m.location());
     w.Key("last-sequence-number");

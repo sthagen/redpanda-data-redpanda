@@ -9,17 +9,16 @@
 
 #include "cluster/remote_topic_properties.h"
 
+#include "base/format_to.h"
 #include "reflection/adl.h"
 
 namespace cluster {
-
-std::ostream& operator<<(std::ostream& o, const remote_topic_properties& rtps) {
-    fmt::print(
-      o,
+fmt::iterator remote_topic_properties::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{remote_revision: {} remote_partition_count: {}}}",
-      rtps.remote_revision,
-      rtps.remote_partition_count);
-    return o;
+      remote_revision,
+      remote_partition_count);
 }
 
 } // namespace cluster

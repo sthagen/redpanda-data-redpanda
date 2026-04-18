@@ -18,7 +18,6 @@
 #include "random/generators.h"
 #include "test_utils/random_bytes.h"
 
-#include <fmt/chrono.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>

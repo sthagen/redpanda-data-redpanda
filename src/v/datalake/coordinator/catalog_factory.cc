@@ -20,7 +20,6 @@
 #include "iceberg/rest_client/catalog_client.h"
 #include "iceberg/rest_client/client_probe.h"
 #include "net/tls.h"
-#include "net/tls_certificate_probe.h"
 
 #include <ada.h>
 namespace datalake::coordinator {

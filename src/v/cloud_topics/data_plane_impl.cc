@@ -13,7 +13,6 @@
 #include "base/outcome.h"
 #include "cloud_io/cache_service.h"
 #include "cloud_topics/batch_cache/batch_cache.h"
-#include "cloud_topics/cluster_services.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
 #include "cloud_topics/level_zero/cluster_services_impl/cluster_services.h"

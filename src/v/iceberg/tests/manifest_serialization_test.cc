@@ -10,7 +10,6 @@
 
 #include "base/units.h"
 #include "bytes/iobuf.h"
-#include "container/chunked_vector.h"
 #include "iceberg/avro_utils.h"
 #include "iceberg/manifest.h"
 #include "iceberg/manifest_avro.h"
@@ -19,11 +18,9 @@
 #include "iceberg/manifest_list.h"
 #include "iceberg/manifest_list_avro.h"
 #include "iceberg/partition_key_type.h"
-#include "iceberg/schema_json.h"
 #include "iceberg/tests/test_schemas.h"
 #include "serde/avro/tests/avro_comparator.h"
 #include "test_utils/runfiles.h"
-#include "utils/file_io.h"
 
 #include <seastar/core/reactor.hh>
 #include <seastar/core/temporary_buffer.hh>
@@ -32,7 +29,6 @@
 #include <avro/DataFile.hh>
 #include <avro/Generic.hh>
 #include <avro/GenericDatum.hh>
-#include <avro/Stream.hh>
 #include <gtest/gtest.h>
 
 using namespace iceberg;

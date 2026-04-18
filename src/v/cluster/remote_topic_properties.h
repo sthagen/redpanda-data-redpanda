@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "reflection/adl.h"
@@ -38,8 +39,7 @@ struct remote_topic_properties
     friend bool operator==(
       const remote_topic_properties&, const remote_topic_properties&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const remote_topic_properties&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace cluster

@@ -9,7 +9,6 @@
  */
 
 #include "cloud_topics/level_zero/pipeline/circuit_breaker.h"
-#include "test_utils/test.h"
 
 #include <seastar/core/manual_clock.hh>
 

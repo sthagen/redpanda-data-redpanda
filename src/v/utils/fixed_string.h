@@ -10,6 +10,8 @@
  */
 #pragma once
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <string_view>
 
@@ -81,3 +83,11 @@ operator+(const fixed_string<A>& a, const fixed_string<B>& b) noexcept {
 template<size_t N>
 // NOLINTNEXTLINE(hicpp-avoid-c-arrays,modernize-avoid-c-arrays,cppcoreguidelines-avoid-c-arrays)
 fixed_string(const char (&)[N]) -> fixed_string<N - 1>;
+
+template<size_t N>
+struct fmt::formatter<fixed_string<N>> : fmt::formatter<std::string_view> {
+    auto format(const fixed_string<N>& s, fmt::format_context& ctx) const {
+        return fmt::formatter<std::string_view>::format(
+          std::string_view(s), ctx);
+    }
+};

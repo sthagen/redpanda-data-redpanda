@@ -9,7 +9,6 @@
 
 #include "cluster/scheduling/partition_allocator.h"
 
-#include "absl/container/node_hash_set.h"
 #include "base/units.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/controller_snapshot.h"
@@ -29,16 +28,11 @@
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
-#include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-#include <seastar/util/defer.hh>
-#include <seastar/util/later.hh>
 
 #include <sys/resource.h>
 
 #include <algorithm>
-#include <exception>
-#include <iterator>
 #include <memory>
 #include <vector>
 

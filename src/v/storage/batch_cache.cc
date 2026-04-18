@@ -16,13 +16,11 @@
 #include "resource_mgmt/available_memory.h"
 #include "ssx/async_algorithm.h"
 #include "ssx/future-util.h"
-#include "utils/to_string.h"
+#include "utils/to_string.h" // NOLINT(misc-include-cleaner) fmt::formatter for optionals
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/util/defer.hh>
-
-#include <fmt/ostream.h>
 
 namespace storage {
 
@@ -578,41 +576,6 @@ ss::future<> batch_cache::background_reclaimer::reclaim_loop() {
         }
     }
     co_return;
-}
-
-std::ostream&
-operator<<(std::ostream& os, const batch_cache::reclaim_options& opts) {
-    fmt::print(
-      os,
-      "growth window {} stable window {} min_size {} max_size {}",
-      opts.growth_window,
-      opts.stable_window,
-      opts.min_size,
-      opts.max_size);
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& o, const batch_cache& b) {
-    // NOTE: intrusive list have a O(N) for size.
-    // Do _not_ print size of _lru
-    return o << "{is_reclaiming:" << b.is_memory_reclaiming()
-             << ", size_bytes: " << b._size_bytes
-             << ", lru_empty:" << b._lru.empty() << "}";
-}
-std::ostream&
-operator<<(std::ostream& o, const batch_cache_index::read_result& c) {
-    o << "{batches:" << c.batches.size() << ", memory_usage:" << c.memory_usage
-      << ", next_batch:" << c.next_batch << ", next_cache_batch:";
-    if (c.next_cached_batch) {
-        o << *c.next_cached_batch;
-    } else {
-        o << "nullopt";
-    }
-    return o << "}";
-}
-std::ostream& operator<<(std::ostream& o, const batch_cache_index& c) {
-    return o << "{cache_size=" << c._index.size()
-             << ", dirty tracker: " << c._dirty_tracker << "}";
 }
 
 } // namespace storage

@@ -11,10 +11,8 @@
 #include "base/units.h"
 #include "io/persistence.h"
 #include "io/tests/common.h"
-#include "test_utils/test.h"
 
 #include <seastar/util/defer.hh>
-#include <seastar/util/file.hh>
 #include <seastar/util/tmp_file.hh>
 
 namespace io = experimental::io;

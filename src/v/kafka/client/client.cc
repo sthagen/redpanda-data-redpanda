@@ -33,8 +33,6 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/coroutine/exception.hh>
 
 #include <algorithm>
 #include <cstdlib>

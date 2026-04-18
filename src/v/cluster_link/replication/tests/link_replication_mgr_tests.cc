@@ -15,8 +15,6 @@
 #include "test_utils/randoms.h"
 #include "test_utils/test.h"
 
-#include <system_error>
-
 using namespace std::chrono_literals;
 
 namespace {

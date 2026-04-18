@@ -17,8 +17,6 @@
 #include "cloud_storage/remote.h"
 #include "model/fundamental.h"
 
-#include <seastar/core/lowres_clock.hh>
-
 #include <gtest/gtest.h>
 
 using namespace cloud_storage;

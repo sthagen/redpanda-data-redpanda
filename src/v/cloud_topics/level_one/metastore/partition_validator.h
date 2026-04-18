@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "cloud_storage_clients/types.h"
 #include "cloud_topics/level_one/metastore/lsm/state_reader.h"
@@ -49,8 +50,7 @@ enum class anomaly_type : int {
 };
 
 std::string_view to_string_view(anomaly_type t);
-
-inline auto format_as(anomaly_type t) { return to_string_view(t); }
+fmt::iterator format_to(anomaly_type, fmt::iterator);
 
 struct metastore_anomaly {
     anomaly_type type;
@@ -160,7 +160,6 @@ private:
 };
 
 std::string_view to_string_view(partition_validator::errc e);
-
-inline auto format_as(partition_validator::errc e) { return to_string_view(e); }
+fmt::iterator format_to(partition_validator::errc, fmt::iterator);
 
 } // namespace cloud_topics::l1

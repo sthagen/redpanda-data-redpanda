@@ -16,7 +16,6 @@
 #include "kafka/protocol/types.h"
 #include "model/record.h"
 #include "model/tests/random_batch.h"
-#include "test_utils/test.h"
 
 #include <gtest/gtest.h>
 

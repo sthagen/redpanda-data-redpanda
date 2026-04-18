@@ -10,7 +10,6 @@
  */
 #include "kafka/data/cloud_topic_partition.h"
 
-#include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
@@ -18,27 +17,18 @@
 #include "cluster/partition.h"
 #include "cluster/rm_stm.h"
 #include "cluster/types.h"
-#include "kafka/protocol/batch_reader.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/write_at_offset_stm.h"
-#include "logger.h"
 #include "model/fundamental.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
-#include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
-#include "raft/consensus_utils.h"
 #include "raft/errc.h"
 #include "raft/replicate.h"
-#include "storage/record_batch_builder.h"
 #include "storage/types.h"
 
-#include <seastar/core/circular_buffer.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/coroutine/as_future.hh>
 
 #include <optional>
 #include <system_error>

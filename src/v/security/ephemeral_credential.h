@@ -9,12 +9,11 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/format_to.h"
 #include "security/acl.h"
 #include "security/types.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <iosfwd>
 
 namespace security {
 
@@ -41,11 +40,13 @@ public:
     const credential_password& password() const { return _password; }
     const ss::sstring& mechanism() const { return _mechanism; }
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "principal: {}, user: {}", _principal, _user);
+    }
+
 private:
     friend bool operator==(
       const ephemeral_credential&, const ephemeral_credential&) = default;
-
-    friend std::ostream& operator<<(std::ostream&, const ephemeral_credential&);
 
     acl_principal _principal;
     credential_user _user;

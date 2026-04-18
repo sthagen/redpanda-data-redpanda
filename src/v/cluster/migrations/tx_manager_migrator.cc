@@ -11,6 +11,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
+#include "base/format_to.h"
 #include "base/vlog.h"
 #include "cluster/controller_api.h"
 #include "cluster/errc.h"
@@ -33,7 +34,6 @@
 #include "storage/types.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/util/log.hh>
@@ -659,24 +659,23 @@ tx_manager_migrator::copy_from_temporary_to_tx_manager_topic(
 }
 
 ss::future<> tx_manager_migrator::stop() { return ss::now(); }
-
-std::ostream&
-operator<<(std::ostream& o, tx_manager_migrator::migration_step step) {
-    switch (step) {
+fmt::iterator
+format_to(tx_manager_migrator::migration_step e, fmt::iterator out) {
+    switch (e) {
     case tx_manager_migrator::migration_step::create_new_temp_topic:
-        return o << "create_new_temp_topic";
+        return fmt::format_to(out, "create_new_temp_topic");
     case tx_manager_migrator::migration_step::rehash_tx_manager_topic:
-        return o << "rehash_tx_manager_topic";
+        return fmt::format_to(out, "rehash_tx_manager_topic");
     case tx_manager_migrator::migration_step::delete_old_tx_manager_topic:
-        return o << "delete_old_tx_manager_topic";
+        return fmt::format_to(out, "delete_old_tx_manager_topic");
     case tx_manager_migrator::migration_step::create_new_tx_manager_topic:
-        return o << "create_new_tx_manager_topic";
+        return fmt::format_to(out, "create_new_tx_manager_topic");
     case tx_manager_migrator::migration_step::copy_temp_to_new_tx_manger:
-        return o << "copy_temp_to_new_tx_manger";
+        return fmt::format_to(out, "copy_temp_to_new_tx_manger");
     case tx_manager_migrator::migration_step::delete_temp_topic:
-        return o << "delete_temp_topic";
+        return fmt::format_to(out, "delete_temp_topic");
     case tx_manager_migrator::migration_step::finished:
-        return o << "finished";
+        return fmt::format_to(out, "finished");
     }
     __builtin_unreachable();
 }

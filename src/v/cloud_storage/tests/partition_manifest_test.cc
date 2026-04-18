@@ -10,7 +10,6 @@
 
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
-#include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
 #include "cloud_storage/base_manifest.h"
 #include "cloud_storage/partition_manifest.h"
@@ -19,13 +18,10 @@
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/timestamp.h"
 #include "random/generators.h"
 #include "utils/to_string.h" // IWYU pragma: keep
-#include "utils/tracking_allocator.h"
 
-#include <seastar/testing/test_case.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/context.hpp>
@@ -2540,7 +2536,9 @@ SEASTAR_THREAD_TEST_CASE(test_estimate_size_empty) {
 
 SEASTAR_THREAD_TEST_CASE(test_partition_manifest_outofbound_trigger) {
     BOOST_TEST_INFO(
-      fmt::format("random_seed: [{}]", random_generators::global().engine()));
+      fmt::format(
+        "random_seed: [{}]",
+        fmt_streamed(random_generators::global().engine())));
     auto m = partition_manifest{manifest_ntp, model::initial_revision_id(0)};
     BOOST_REQUIRE(m.get_start_offset() == std::nullopt);
     auto max_committed_offset = random_generators::get_int(0, 100000);

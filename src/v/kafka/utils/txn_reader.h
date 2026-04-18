@@ -71,7 +71,7 @@ public:
     ss::future<model::record_batch_reader::storage_t>
     do_load_slice(model::timeout_clock::time_point deadline) override;
 
-    void print(std::ostream& os) override;
+    fmt::iterator format_to(fmt::iterator it) const override;
 
     ss::future<> finally() noexcept final;
 

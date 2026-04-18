@@ -13,8 +13,6 @@
 #include "cluster/archival/logger.h"
 #include "cluster/partition_manager.h"
 
-#include <fmt/format.h>
-
 namespace archival {
 
 struct upload_backlog_sampler : public storage::backlog_controller::sampler {

@@ -13,21 +13,16 @@
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/frontend_reader/l1_reader_cache.h"
-#include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/frontend_reader/tests/l1_reader_fixture.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
-#include "cloud_topics/log_reader_config.h"
 #include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
-#include "test_utils/test.h"
 
 #include <gtest/gtest.h>
 
-#include <chrono>
-#include <map>
 #include <optional>
 
 using namespace cloud_topics;

@@ -11,37 +11,27 @@
 #include "cluster/partition_recovery_manager.h"
 
 #include "absl/container/btree_map.h"
-#include "bytes/streambuf.h"
+#include "base/format_to.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/partition_manifest_downloader.h"
 #include "cloud_storage/recovery_utils.h"
-#include "cloud_storage/remote_label.h"
 #include "cloud_storage/remote_path_provider.h"
-#include "cloud_storage/topic_manifest.h"
 #include "cloud_storage/types.h"
 #include "cluster/topic_recovery_status_frontend.h"
-#include "hashing/xx.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
-#include "model/record_batch_types.h"
 #include "model/timestamp.h"
 #include "storage/ntp_config.h"
 #include "storage/offset_translator_state.h"
-#include "storage/parser.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/file-types.hh>
 #include <seastar/core/fstream.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/iostream.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/core/temporary_buffer.hh>
 #include <seastar/util/log.hh>
-
-#include <boost/algorithm/string/detail/sequence.hpp>
 
 #include <chrono>
 #include <exception>
@@ -240,19 +230,31 @@ using retention = std::variant<
   std::monostate,
   size_bound_deletion_parameters,
   time_bound_deletion_parameters>;
+} // namespace cloud_storage
 
-std::ostream& operator<<(std::ostream& o, const retention& r) {
-    if (std::holds_alternative<std::monostate>(r)) {
-        fmt::print(o, "{{none}}");
-    } else if (std::holds_alternative<size_bound_deletion_parameters>(r)) {
-        auto p = std::get<size_bound_deletion_parameters>(r);
-        fmt::print(o, "{{size-bytes: {}}}", p.bytes);
-    } else if (std::holds_alternative<time_bound_deletion_parameters>(r)) {
-        auto p = std::get<time_bound_deletion_parameters>(r);
-        fmt::print(o, "{{time-ms: {}}}", p.duration.count());
+template<>
+struct fmt::formatter<cloud_storage::retention> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
     }
-    return o;
-}
+    fmt::iterator
+    format(const cloud_storage::retention& r, fmt::format_context& ctx) const {
+        auto it = ctx.out();
+        if (std::holds_alternative<std::monostate>(r)) {
+            return fmt::format_to(it, "{{none}}");
+        } else if (
+          std::holds_alternative<cloud_storage::size_bound_deletion_parameters>(
+            r)) {
+            auto p = std::get<cloud_storage::size_bound_deletion_parameters>(r);
+            return fmt::format_to(it, "{{size-bytes: {}}}", p.bytes);
+        } else {
+            auto p = std::get<cloud_storage::time_bound_deletion_parameters>(r);
+            return fmt::format_to(it, "{{time-ms: {}}}", p.duration.count());
+        }
+    }
+};
+
+namespace cloud_storage {
 
 static retention get_retention_policy(const storage::ntp_config& prop) {
     if (prop.is_remotely_collectable()) {

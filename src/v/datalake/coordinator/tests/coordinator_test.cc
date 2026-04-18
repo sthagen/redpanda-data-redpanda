@@ -10,7 +10,6 @@
 #include "cluster/data_migrated_resources.h"
 #include "cluster/topic_table.h"
 #include "config/mock_property.h"
-#include "config/node_config.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/coordinator.h"
 #include "datalake/coordinator/file_committer.h"

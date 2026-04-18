@@ -19,8 +19,6 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
-
 using namespace cloud_topics;
 using namespace std::chrono_literals;
 

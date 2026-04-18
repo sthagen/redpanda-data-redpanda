@@ -1,8 +1,6 @@
 #include "base/seastarx.h"
 #include "utils/expiring_promise.h"
 
-#include <seastar/core/future.hh>
-#include <seastar/core/shared_future.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 // testing that expiring_promise immediately becomes available after set

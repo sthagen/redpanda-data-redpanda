@@ -22,10 +22,8 @@
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/thread_test_case.hh>
 
-#include <boost/range/algorithm/for_each.hpp>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
-#include <fmt/format.h>
 
 #include <compare>
 #include <cstdint>

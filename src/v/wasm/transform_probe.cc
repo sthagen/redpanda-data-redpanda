@@ -12,11 +12,8 @@
 #include "wasm/transform_probe.h"
 
 #include "metrics/prometheus_sanitize.h"
-#include "utils/log_hist.h"
 
 #include <seastar/core/metrics.hh>
-#include <seastar/core/thread_cputime_clock.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 namespace wasm {
 

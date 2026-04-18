@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
@@ -129,7 +130,7 @@ public:
     // Base offset of the first batch in the most recent term stored in log
     virtual model::offset find_last_term_start_offset() const = 0;
     virtual model::timestamp start_timestamp() const = 0;
-    virtual std::ostream& print(std::ostream& o) const = 0;
+    virtual fmt::iterator format_to(fmt::iterator it) const = 0;
     virtual std::optional<model::term_id> get_term(model::offset) const = 0;
     virtual std::optional<model::offset>
       get_term_last_offset(model::term_id) const = 0;
@@ -271,10 +272,6 @@ public:
 
 private:
     ntp_config _config;
-
-    friend std::ostream& operator<<(std::ostream& o, const log& lg) {
-        return lg.print(o);
-    }
 
 protected:
     ntp_config& mutable_config() { return _config; }

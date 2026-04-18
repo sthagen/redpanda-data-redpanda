@@ -15,7 +15,6 @@
 #include "metrics/prometheus_sanitize.h"
 
 #include <seastar/core/metrics.hh>
-#include <seastar/core/smp.hh>
 
 namespace cloud_storage {
 

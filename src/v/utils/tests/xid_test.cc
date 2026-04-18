@@ -10,7 +10,6 @@
 #include "absl/container/node_hash_map.h"
 #include "random/generators.h"
 #include "serde/rw/rw.h"
-#include "test_utils/test.h"
 #include "utils/xid.h"
 
 #include <boost/lexical_cast.hpp>

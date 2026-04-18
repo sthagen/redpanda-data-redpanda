@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "serde/envelope.h"
 
@@ -26,19 +27,16 @@ inline disk_space_alert max_severity(disk_space_alert a, disk_space_alert b) {
     return std::max(a, b);
 }
 
-inline std::ostream& operator<<(std::ostream& o, const disk_space_alert d) {
+inline fmt::iterator format_to(disk_space_alert d, fmt::iterator out) {
     switch (d) {
     case disk_space_alert::ok:
-        o << "ok";
-        break;
+        return fmt::format_to(out, "ok");
     case disk_space_alert::low_space:
-        o << "low_space";
-        break;
+        return fmt::format_to(out, "low_space");
     case disk_space_alert::degraded:
-        o << "degraded";
-        break;
+        return fmt::format_to(out, "degraded");
     }
-    return o;
+    return fmt::format_to(out, "");
 }
 
 struct disk
@@ -57,7 +55,7 @@ struct disk
     // to represent a disk not only for marshalling data to disk/network.
     unsigned long int fsid;
 
-    friend std::ostream& operator<<(std::ostream&, const disk&);
+    fmt::iterator format_to(fmt::iterator it) const;
     friend bool operator==(const disk&, const disk&) = default;
 };
 

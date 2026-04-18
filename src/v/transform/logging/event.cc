@@ -15,8 +15,6 @@
 #include "json/json.h"
 #include "json/ostreamwrapper.h"
 
-#include <type_traits>
-
 using namespace std::chrono_literals;
 
 namespace {

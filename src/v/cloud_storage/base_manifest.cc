@@ -14,39 +14,6 @@ namespace cloud_storage {
 
 base_manifest::~base_manifest() = default;
 
-std::ostream& operator<<(std::ostream& s, manifest_type t) {
-    switch (t) {
-    case manifest_type::topic:
-        s << "topic";
-        break;
-    case manifest_type::partition:
-        s << "partition";
-        break;
-    case manifest_type::tx_range:
-        s << "tx-range";
-        break;
-    case manifest_type::cluster_metadata:
-        s << "cluster-metadata";
-        break;
-    case manifest_type::spillover:
-        s << "spillover";
-        break;
-    case manifest_type::topic_mount:
-        s << "topic_mount";
-        break;
-    }
-    return s;
-}
-
-std::ostream& operator<<(std::ostream& os, manifest_format f) {
-    switch (f) {
-    case manifest_format::json:
-        return os << "json";
-    case manifest_format::serde:
-        return os << "serde";
-    }
-}
-
 ss::future<serialized_data_stream> base_manifest::serialize() const {
     auto buf = co_await serialize_buf();
     auto size = buf.size_bytes();

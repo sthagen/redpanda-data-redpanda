@@ -10,7 +10,6 @@
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
-#include "storage/log_reader.h"
 #include "storage/mvlog/batch_collector.h"
 #include "storage/mvlog/reader_outcome.h"
 #include "storage/types.h"

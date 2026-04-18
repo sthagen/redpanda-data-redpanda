@@ -9,23 +9,20 @@
 
 #include "compaction/key_offset_map.h"
 #include "config/configuration.h"
-#include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "model/record_batch_types.h"
 #include "model/tests/random_batch.h"
 #include "model/timestamp.h"
-#include "random/generators.h"
-#include "storage/chunk_cache.h"
 #include "storage/disk_log_impl.h"
 #include "storage/segment_deduplication_utils.h"
 #include "storage/segment_utils.h"
-#include "storage/tests/disk_log_builder_fixture.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
-#include "test_utils/test.h"
 
 #include <seastar/core/seastar.hh>
 #include <seastar/util/defer.hh>
+
+#include <gtest/gtest.h>
 
 #include <chrono>
 #include <stdexcept>

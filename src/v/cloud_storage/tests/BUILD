@@ -59,6 +59,7 @@ redpanda_test_cc_library(
         "//src/v/utils:lazy_abort_source",
         "//src/v/utils:stream_provider",
         "@boost//:numeric_conversion",
+        "@fmt",
         "@rapidjson",
         "@seastar",
     ],

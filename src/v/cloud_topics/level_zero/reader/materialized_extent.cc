@@ -21,8 +21,6 @@
 #include "storage/record_batch_utils.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/lowres_clock.hh>
-
 #include <chrono>
 #include <exception>
 

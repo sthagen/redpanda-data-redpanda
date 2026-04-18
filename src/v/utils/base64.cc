@@ -17,8 +17,6 @@
 
 #include <seastar/core/sstring.hh>
 
-#include <ranges>
-
 namespace {
 // Required length is ceil(4n/3) rounded up to 4 bytes
 inline size_t encode_capacity(size_t input_size) {

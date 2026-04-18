@@ -17,10 +17,8 @@
 #include "version/version.h"
 
 #include <seastar/core/app-template.hh>
-#include <seastar/core/iostream.hh>
 
 #include <cerrno>
-#include <filesystem>
 #include <iostream>
 #include <memory>
 

@@ -13,8 +13,6 @@
 #include "cloud_topics/level_one/metastore/lsm/keys.h"
 #include "cloud_topics/logger.h"
 
-#include <seastar/core/coroutine.hh>
-
 namespace cloud_topics::read_replica {
 
 namespace {

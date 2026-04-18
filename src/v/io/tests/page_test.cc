@@ -10,7 +10,6 @@
  */
 #include "io/page.h"
 #include "io/tests/common.h"
-#include "test_utils/test.h"
 
 namespace io = experimental::io;
 

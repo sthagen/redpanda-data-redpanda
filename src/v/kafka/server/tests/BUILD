@@ -741,6 +741,7 @@ redpanda_cc_gtest(
     ],
     cpu = 1,
     deps = [
+        "//src/v/base",
         "//src/v/config",
         "//src/v/kafka/server",
         "//src/v/model",

@@ -10,10 +10,8 @@
 
 #include "storage/offset_to_filepos.h"
 #include "test_utils/archival.h"
-#include "test_utils/gtest_exception.h"
 #include "test_utils/tmp_dir.h"
 
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
 #include <gtest/gtest.h>

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "base/format_to.h"
 #include "storage/mvlog/entry_stream.h"
 #include "storage/mvlog/reader_outcome.h"
 
@@ -27,7 +28,17 @@ enum class collect_stream_outcome {
     // desired offset.
     stop,
 };
-std::ostream& operator<<(std::ostream&, collect_stream_outcome);
+inline fmt::iterator format_to(collect_stream_outcome o, fmt::iterator out) {
+    switch (o) {
+    case collect_stream_outcome::buffer_full:
+        return fmt::format_to(out, "collect_stream_outcome::buffer_full");
+    case collect_stream_outcome::end_of_stream:
+        return fmt::format_to(out, "collect_stream_outcome::end_of_stream");
+    case collect_stream_outcome::stop:
+        return fmt::format_to(out, "collect_stream_outcome::stop");
+    }
+    return fmt::format_to(out, "");
+}
 
 // Parses and collects the record batches from the given entry stream.
 // Ignores other kinds of entries.

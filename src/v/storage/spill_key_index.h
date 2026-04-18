@@ -79,7 +79,7 @@ public:
       int32_t) final;
     ss::future<> append(compacted_index::entry) final;
     ss::future<> close() final;
-    void print(std::ostream&) const final;
+    fmt::iterator format_to(fmt::iterator it) const final;
     void set_flag(compacted_index::footer_flags) final;
     size_t size_bytes() const final;
 
@@ -159,8 +159,6 @@ private:
     compacted_index::footer _footer;
     crc::crc32c _crc;
     ss::gate _gate;
-
-    friend std::ostream& operator<<(std::ostream&, const spill_key_index&);
 };
 
 } // namespace storage::internal

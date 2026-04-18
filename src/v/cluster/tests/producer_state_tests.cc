@@ -12,8 +12,6 @@
 #include "absl/container/flat_hash_map.h"
 #include "cluster/producer_state.h"
 #include "cluster/producer_state_manager.h"
-#include "cluster/types.h"
-#include "config/mock_property.h"
 #include "config/property.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
@@ -21,7 +19,6 @@
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 

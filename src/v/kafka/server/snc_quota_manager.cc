@@ -14,17 +14,14 @@
 #include "metrics/prometheus_sanitize.h"
 #include "ssx/future-util.h"
 #include "ssx/sharded_ptr.h"
-#include "utils/tristate.h"
 
 #include <seastar/core/metrics.hh>
 
-#include <fmt/core.h>
 #include <fmt/ranges.h>
 
 #include <chrono>
 #include <iterator>
 #include <memory>
-#include <numeric>
 
 using namespace std::chrono_literals;
 

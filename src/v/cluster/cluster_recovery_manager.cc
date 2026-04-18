@@ -21,9 +21,6 @@
 #include "config/configuration.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/gate.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/sharded.hh>
 
 namespace cluster {

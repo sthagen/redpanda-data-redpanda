@@ -11,22 +11,18 @@
 
 #include "cluster/scheduling/types.h"
 
-#include "cluster/logger.h"
+#include "base/format_to.h"
 #include "cluster/scheduling/allocation_state.h"
 #include "utils/exceptions.h"
-#include "utils/to_string.h"
-
-#include <fmt/ostream.h>
 
 namespace cluster {
 
-std::ostream& operator<<(std::ostream& o, const allocation_constraints& a) {
-    fmt::print(
-      o,
+fmt::iterator allocation_constraints::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{hard_constraints: {}, soft_constraints: {}}}",
-      a.hard_constraints,
-      a.soft_constraints);
-    return o;
+      hard_constraints,
+      soft_constraints);
 }
 
 void allocation_constraints::add(allocation_constraints other) {
@@ -228,31 +224,27 @@ allocated_partition::~allocated_partition() {
         _state->add_final_count(bs);
     }
 }
-
-std::ostream& operator<<(std::ostream& o, const partition_constraints& pc) {
-    fmt::print(
-      o,
+fmt::iterator partition_constraints::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{partition_id: {}, replication_factor: {}, constraints: {}, "
       "existing_group: {}, existing_replicas: {}}}",
-      pc.partition_id,
-      pc.replication_factor,
-      pc.constraints,
-      pc.existing_group,
-      pc.existing_replicas);
-    return o;
+      partition_id,
+      replication_factor,
+      constraints,
+      existing_group,
+      existing_replicas);
 }
-std::ostream& operator<<(std::ostream& o, const allocation_request& req) {
-    fmt::print(o, "{{partition_constraints: {}}}", req.partitions);
-    return o;
+fmt::iterator allocation_request::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{partition_constraints: [{}]}}", fmt::join(partitions, ", "));
 }
-std::ostream&
-operator<<(std::ostream& o, const simple_allocation_request& req) {
-    fmt::print(
-      o,
+fmt::iterator simple_allocation_request::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{topic: {}, additional_partitions: {}, replication_factor: {}}}",
-      req.tp_ns,
-      req.additional_partitions,
-      req.replication_factor);
-    return o;
+      tp_ns,
+      additional_partitions,
+      replication_factor);
 }
 } // namespace cluster

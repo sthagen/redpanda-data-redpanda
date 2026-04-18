@@ -26,7 +26,6 @@
 #include "config/configuration.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/namespace.h"
 #include "raft/fundamental.h"
 #include "raft/fwd.h"
@@ -35,7 +34,6 @@
 #include "ssx/when_all.h"
 #include "storage/ntp_config.h"
 
-#include <seastar/core/shared_ptr_incomplete.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/defer.hh>
 
@@ -1551,8 +1549,8 @@ ss::shared_ptr<cluster::id_allocator_stm> partition::id_allocator_stm() const {
     return _raft->stm_manager()->get<cluster::id_allocator_stm>();
 }
 
-std::ostream& operator<<(std::ostream& o, const partition& x) {
-    return o << x._raft;
+fmt::iterator partition::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{}", *_raft);
 }
 ss::shared_ptr<cluster::tm_stm> partition::tm_stm() {
     return _raft->stm_manager()->get<cluster::tm_stm>();

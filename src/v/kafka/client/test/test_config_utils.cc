@@ -10,34 +10,27 @@
 #include "config/base_property.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
-#include "config/tls_config.h"
-#include "json/ostreamwrapper.h"
-#include "json/writer.h"
-#include "kafka/client/client.h"
 #include "kafka/client/config_utils.h"
 #include "kafka/client/configuration.h"
-#include "model/namespace.h"
 #include "redpanda/tests/fixture.h"
 #include "security/acl.h"
 #include "security/ephemeral_credential_store.h"
-#include "security/sasl_authentication.h"
 #include "security/scram_authenticator.h"
-#include "security/types.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/util/defer.hh>
-
 #include <boost/test/tools/old/interface.hpp>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <yaml-cpp/emitter.h>
-
-#include <chrono>
 
 namespace kafka::client {
 // BOOST_REQURE_EQUAL fails to find this if it's in the global namespace
 bool operator==(const configuration& lhs, const configuration& rhs) {
-    return fmt::format("{}", config::to_yaml(lhs, config::redact_secrets::no))
-           == fmt::format(
-             "{}", config::to_yaml(rhs, config::redact_secrets::no));
+    auto to_str = [](const configuration& c) {
+        return fmt::format(
+          "{}", fmt_streamed(config::to_yaml(c, config::redact_secrets::no)));
+    };
+    return to_str(lhs) == to_str(rhs);
 }
 
 std::ostream& operator<<(std::ostream& os, const configuration& c) {

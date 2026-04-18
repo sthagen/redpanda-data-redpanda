@@ -18,7 +18,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/core/timer.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/coroutine/switch_to.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -27,7 +26,6 @@
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>
-#include <cstddef>
 #include <memory>
 #include <optional>
 

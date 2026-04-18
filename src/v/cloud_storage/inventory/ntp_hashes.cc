@@ -19,7 +19,6 @@
 #include "serde/rw/vector.h"
 #include "utils/directory_walker.h"
 
-#include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/util/file.hh>
 

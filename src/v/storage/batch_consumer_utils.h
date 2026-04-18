@@ -152,8 +152,8 @@ public:
         co_return stop;
     }
 
-    void print(std::ostream& o) const override {
-        o << "chained_batch_consumer";
+    fmt::iterator format_to(fmt::iterator it) const override {
+        return fmt::format_to(it, "chained_batch_consumer");
     }
 
 private:

@@ -16,7 +16,6 @@
 #include "net/tls.h"
 #include "utils/to_string.h"
 
-#include <seastar/core/do_with.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/net/tls.hh>
 #include <seastar/util/defer.hh>
@@ -111,27 +110,26 @@ std::optional<ss::sstring> tls_config::validate(const tls_config& c) {
     return std::nullopt;
 }
 
-std::ostream& operator<<(std::ostream& o, const config::p12_container& p) {
-    fmt::print(o, "{{ p12 file: {}, p12 password: REDACTED }}", p.p12_path);
-    return o;
+fmt::iterator p12_container::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{ p12 file: {}, p12 password: REDACTED }}", p12_path);
 }
 
-std::ostream& operator<<(std::ostream& o, const config::key_cert& c) {
-    o << "{ "
-      << "key_file: " << c.key_file << " "
-      << "cert_file: " << c.cert_file << " }";
-    return o;
+fmt::iterator key_cert::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{ key_file: {} cert_file: {} }}", key_file, cert_file);
 }
 
-std::ostream& operator<<(std::ostream& o, const config::tls_config& c) {
-    o << "{ "
-      << "enabled: " << c.is_enabled() << " "
-      << "key/cert files: " << c.get_key_cert_files() << " "
-      << "ca file: " << c.get_truststore_file() << " "
-      << "crl file: " << c.get_crl_file() << " "
-      << "client_auth_required: " << c.get_require_client_auth() << ""
-      << " }";
-    return o;
+fmt::iterator tls_config::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{ enabled: {} key/cert files: {} ca file: {} crl file: {} "
+      "client_auth_required: {} }}",
+      is_enabled(),
+      get_key_cert_files(),
+      get_truststore_file(),
+      get_crl_file(),
+      get_require_client_auth());
 }
 
 bool validate_tls_v1_2_cipher_suites(const ss::sstring& s) {

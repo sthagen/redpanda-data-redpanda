@@ -4,8 +4,6 @@
 #include "datalake/tests/test_data_writer.h"
 #include "iceberg/tests/value_generator.h"
 
-#include <seastar/core/seastar.hh>
-
 #include <gtest/gtest.h>
 
 TEST(SerdeParquetWriterTest, CheckIfTheWriterWritesData) {

@@ -13,7 +13,6 @@
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
 #include "cluster_link/tests/deps.h"
-#include "kafka/data/rpc/deps.h"
 #include "test_utils/test.h"
 
 #include <gtest/gtest.h>

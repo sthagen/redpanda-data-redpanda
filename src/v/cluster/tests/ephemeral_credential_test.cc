@@ -13,11 +13,7 @@
 #include "security/credential_store.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/util/defer.hh>
-#include <seastar/util/log.hh>
 
 #include <system_error>
 #include <vector>

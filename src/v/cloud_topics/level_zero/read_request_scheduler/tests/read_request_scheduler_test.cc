@@ -8,27 +8,18 @@
 // by the Apache License, Version 2.0
 
 #include "cloud_topics/errc.h"
-#include "cloud_topics/level_zero/pipeline/event_filter.h"
-#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/read_request_scheduler/read_request_scheduler.h"
 #include "cloud_topics/types.h"
-#include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/test.h"
 #include "utils/uuid.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
-#include <seastar/core/manual_clock.hh>
-#include <seastar/coroutine/as_future.hh>
+#include <seastar/core/sharded.hh>
 
-#include <chrono>
-#include <exception>
 #include <limits>
 
 using namespace std::chrono_literals;

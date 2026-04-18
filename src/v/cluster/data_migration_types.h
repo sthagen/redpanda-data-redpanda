@@ -11,6 +11,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "cluster/errc.h"
 #include "cluster/offsets_snapshot.h"
 #include "container/chunked_vector.h"
@@ -81,7 +82,7 @@ enum class state {
     cancelled,
     deleted // a migration cannot use it
 };
-std::ostream& operator<<(std::ostream& o, state);
+fmt::iterator format_to(state s, fmt::iterator);
 
 /**
  * For each migration state transition that requires work on partitions
@@ -100,7 +101,7 @@ enum class migrated_replica_status {
     can_run,
     done
 };
-std::ostream& operator<<(std::ostream& o, migrated_replica_status);
+fmt::iterator format_to(migrated_replica_status s, fmt::iterator);
 
 /**
  * State of migrated resource i.e. either topic or consumer group, when resource
@@ -115,7 +116,7 @@ enum class migrated_resource_state {
     fully_blocked
 };
 
-std::ostream& operator<<(std::ostream& o, migrated_resource_state);
+fmt::iterator format_to(migrated_resource_state s, fmt::iterator);
 
 /**
  * All migration related services other than data_migrations_frontend are only
@@ -132,16 +133,12 @@ struct cloud_storage_location
       cloud_storage_location,
       serde::version<0>,
       serde::compat_version<0>> {
-    friend std::ostream&
-    operator<<(std::ostream&, const cloud_storage_location&);
-
     ss::sstring hint;
 
     friend bool operator==(
       const cloud_storage_location&, const cloud_storage_location&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const cloud_storage_location&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(hint); }
 };
@@ -180,7 +177,7 @@ struct inbound_topic
 
     friend bool
     operator==(const inbound_topic&, const inbound_topic&) = default;
-    friend std::ostream& operator<<(std::ostream&, const inbound_topic&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 /**
@@ -203,7 +200,7 @@ struct inbound_migration
 
     friend bool
     operator==(const inbound_migration&, const inbound_migration&) = default;
-    friend std::ostream& operator<<(std::ostream&, const inbound_migration&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto topic_nts() const {
         auto pieces = std::vector{std::as_const(topics) | std::views::all};
@@ -232,7 +229,7 @@ struct copy_target
     auto serde_fields() { return std::tie(bucket); }
 
     friend bool operator==(const copy_target&, const copy_target&) = default;
-    friend std::ostream& operator<<(std::ostream&, const copy_target&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 // A struct with information needed to unambiguously find topic data in cloud
@@ -251,7 +248,7 @@ struct topic_location
     friend bool
     operator==(const topic_location&, const topic_location&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const topic_location&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 /**
@@ -283,7 +280,7 @@ struct outbound_migration
 
     friend bool
     operator==(const outbound_migration&, const outbound_migration&) = default;
-    friend std::ostream& operator<<(std::ostream&, const outbound_migration&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto topic_nts() const {
         auto pieces = std::vector{std::as_const(topics) | std::views::all};
@@ -340,8 +337,9 @@ struct topic_work {
     id migration_id;
     state sought_state;
     topic_work_info info;
+
+    fmt::iterator format_to(fmt::iterator it) const;
 };
-std::ostream& operator<<(std::ostream& o, const topic_work& tw);
 
 /**
  * Data migration metadata containing a migration definition, its id and current
@@ -388,7 +386,7 @@ struct migration_metadata
     friend bool
     operator==(const migration_metadata&, const migration_metadata&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const migration_metadata&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct data_migration_ntp_state
@@ -405,7 +403,7 @@ struct data_migration_ntp_state
     auto serde_fields() { return std::tie(ntp, migration, state); }
 
     friend bool operator==(const self&, const self&) = default;
-    friend std::ostream& operator<<(std::ostream&, const self&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct create_migration_cmd_data
@@ -425,8 +423,7 @@ struct create_migration_cmd_data
     friend bool operator==(
       const create_migration_cmd_data&,
       const create_migration_cmd_data&) = default;
-    friend std::ostream&
-    operator<<(std::ostream&, const create_migration_cmd_data&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct update_migration_state_cmd_data
@@ -442,8 +439,7 @@ struct update_migration_state_cmd_data
     friend bool operator==(
       const update_migration_state_cmd_data&,
       const update_migration_state_cmd_data&) = default;
-    friend std::ostream&
-    operator<<(std::ostream&, const update_migration_state_cmd_data&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct remove_migration_cmd_data
@@ -457,8 +453,7 @@ struct remove_migration_cmd_data
     friend bool operator==(
       const remove_migration_cmd_data&,
       const remove_migration_cmd_data&) = default;
-    friend std::ostream&
-    operator<<(std::ostream&, const remove_migration_cmd_data&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct create_migration_request
@@ -472,8 +467,7 @@ struct create_migration_request
     friend bool
     operator==(const create_migration_request&, const create_migration_request&)
       = default;
-    friend std::ostream&
-    operator<<(std::ostream&, const create_migration_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 struct create_migration_reply
   : serde::envelope<
@@ -487,8 +481,7 @@ struct create_migration_reply
     friend bool operator==(
       const create_migration_reply&, const create_migration_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const create_migration_reply&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct update_migration_state_request
@@ -503,8 +496,7 @@ struct update_migration_state_request
       const update_migration_state_request&,
       const update_migration_state_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const update_migration_state_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct update_migration_state_reply
@@ -519,8 +511,7 @@ struct update_migration_state_reply
       const update_migration_state_reply&,
       const update_migration_state_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const update_migration_state_reply&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 struct remove_migration_request
   : serde::envelope<
@@ -532,8 +523,7 @@ struct remove_migration_request
     friend bool
     operator==(const remove_migration_request&, const remove_migration_request&)
       = default;
-    friend std::ostream&
-    operator<<(std::ostream&, const remove_migration_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct remove_migration_reply
@@ -548,8 +538,7 @@ struct remove_migration_reply
     friend bool operator==(
       const remove_migration_reply&, const remove_migration_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const remove_migration_reply&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct check_ntp_states_request
@@ -565,7 +554,7 @@ struct check_ntp_states_request
 
     friend bool operator==(const self&, const self&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const self&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct check_ntp_states_reply
@@ -581,13 +570,13 @@ struct check_ntp_states_reply
 
     friend bool operator==(const self&, const self&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const self&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct entities_status {
     chunked_vector<group_offsets> groups;
 
-    friend std::ostream& operator<<(std::ostream&, const entities_status&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace cluster::data_migrations

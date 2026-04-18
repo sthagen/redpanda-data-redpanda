@@ -41,8 +41,6 @@ public:
 private:
     friend struct fmt::formatter<rule>;
 
-    friend std::ostream& operator<<(std::ostream& os, const rule& r);
-
     std::regex _regex;
     std::optional<ss::sstring> _pattern;
     std::optional<ss::sstring> _replacement;
@@ -57,7 +55,9 @@ template<>
 struct fmt::formatter<security::tls::rule> {
     using type = security::tls::rule;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator

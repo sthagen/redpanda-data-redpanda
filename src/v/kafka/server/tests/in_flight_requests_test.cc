@@ -13,7 +13,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/sleep.hh>
-#include <seastar/core/smp.hh>
 
 #include <gtest/gtest.h>
 

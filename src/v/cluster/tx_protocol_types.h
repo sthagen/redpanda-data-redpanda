@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "cluster/errc.h"
 #include "cluster/tx_errc.h"
 #include "container/chunked_vector.h"
@@ -47,7 +48,7 @@ struct try_abort_reply
     friend bool
     operator==(const try_abort_reply&, const try_abort_reply&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const try_abort_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     static try_abort_reply make_aborted() {
         return {committed_type::no, aborted_type::yes, tx::errc::none};
@@ -86,8 +87,7 @@ struct try_abort_request
     friend bool
     operator==(const try_abort_request&, const try_abort_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const try_abort_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(tm, pid, tx_seq, timeout); }
 };
@@ -114,8 +114,7 @@ struct init_tm_tx_request
     friend bool
     operator==(const init_tm_tx_request&, const init_tm_tx_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const init_tm_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(tx_id, transaction_timeout_ms, timeout);
@@ -138,7 +137,7 @@ struct init_tm_tx_reply
     friend bool
     operator==(const init_tm_tx_reply&, const init_tm_tx_reply&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const init_tm_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     explicit init_tm_tx_reply(tx::errc ec)
       : ec(ec) {}
@@ -150,7 +149,7 @@ struct add_partitions_tx_request {
     struct topic {
         model::topic name{};
         std::vector<model::partition_id> partitions{};
-        friend std::ostream& operator<<(std::ostream&, const topic&);
+        fmt::iterator format_to(fmt::iterator it) const;
     };
     kafka::transactional_id transactional_id{};
     kafka::producer_id producer_id{};
@@ -206,7 +205,7 @@ struct fetch_tx_request
     friend bool
     operator==(const fetch_tx_request&, const fetch_tx_request&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const fetch_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(tx_id, term, tm); }
 };
@@ -244,7 +243,7 @@ struct fetch_tx_reply
         friend bool
         operator==(const tx_partition&, const tx_partition&) = default;
 
-        friend std::ostream& operator<<(std::ostream& o, const tx_partition& r);
+        fmt::iterator format_to(fmt::iterator it) const;
 
         auto serde_fields() { return std::tie(ntp, etag, topic_revision); }
     };
@@ -262,7 +261,7 @@ struct fetch_tx_reply
 
         friend bool operator==(const tx_group&, const tx_group&) = default;
 
-        friend std::ostream& operator<<(std::ostream& o, const tx_group& r);
+        fmt::iterator format_to(fmt::iterator it) const;
 
         auto serde_fields() { return std::tie(group_id, etag); }
     };
@@ -302,7 +301,7 @@ struct fetch_tx_reply
     friend bool
     operator==(const fetch_tx_reply&, const fetch_tx_reply&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const fetch_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(
@@ -336,7 +335,7 @@ struct begin_tx_request
     friend bool
     operator==(const begin_tx_request&, const begin_tx_request&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const begin_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(ntp, pid, tx_seq, transaction_timeout_ms, tm_partition);
@@ -375,7 +374,7 @@ struct begin_tx_reply
     friend bool
     operator==(const begin_tx_reply&, const begin_tx_reply&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const begin_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(ntp, etag, ec, topic_revision); }
 };
@@ -411,8 +410,7 @@ struct prepare_tx_request
     friend bool
     operator==(const prepare_tx_request&, const prepare_tx_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const prepare_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(ntp, etag, tm, pid, tx_seq, timeout);
@@ -432,7 +430,7 @@ struct prepare_tx_reply
     friend bool
     operator==(const prepare_tx_reply&, const prepare_tx_reply&) = default;
 
-    friend std::ostream& operator<<(std::ostream& o, const prepare_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(ec); }
 };
@@ -462,8 +460,7 @@ struct commit_tx_request
 
     auto serde_fields() { return std::tie(ntp, pid, tx_seq, timeout); }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const commit_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct commit_tx_reply
@@ -481,7 +478,7 @@ struct commit_tx_reply
 
     auto serde_fields() { return std::tie(ec); }
 
-    friend std::ostream& operator<<(std::ostream& o, const commit_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct abort_tx_request
@@ -509,7 +506,7 @@ struct abort_tx_request
 
     auto serde_fields() { return std::tie(ntp, pid, tx_seq, timeout); }
 
-    friend std::ostream& operator<<(std::ostream& o, const abort_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct abort_tx_reply
@@ -527,7 +524,7 @@ struct abort_tx_reply
 
     auto serde_fields() { return std::tie(ec); }
 
-    friend std::ostream& operator<<(std::ostream& o, const abort_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct begin_group_tx_request
@@ -578,8 +575,7 @@ struct begin_group_tx_request
         return std::tie(ntp, group_id, pid, tx_seq, timeout, tm_partition);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const begin_group_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct begin_group_tx_reply
@@ -604,8 +600,7 @@ struct begin_group_tx_reply
 
     auto serde_fields() { return std::tie(etag, ec); }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const begin_group_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct prepare_group_tx_request
@@ -653,8 +648,7 @@ struct prepare_group_tx_request
         return std::tie(ntp, group_id, etag, pid, tx_seq, timeout);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const prepare_group_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     friend bool
     operator==(const prepare_group_tx_request&, const prepare_group_tx_request&)
@@ -678,8 +672,7 @@ struct prepare_group_tx_reply
 
     auto serde_fields() { return std::tie(ec); }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const prepare_group_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct commit_group_tx_request
@@ -722,8 +715,7 @@ struct commit_group_tx_request
     friend bool operator==(
       const commit_group_tx_request&, const commit_group_tx_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const commit_group_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(ntp, pid, tx_seq, group_id, timeout);
@@ -745,8 +737,7 @@ struct commit_group_tx_reply
     friend bool operator==(
       const commit_group_tx_reply&, const commit_group_tx_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const commit_group_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(ec); }
 };
@@ -791,8 +782,7 @@ struct abort_group_tx_request
     friend bool operator==(
       const abort_group_tx_request&, const abort_group_tx_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const abort_group_tx_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(ntp, group_id, pid, tx_seq, timeout);
@@ -814,8 +804,7 @@ struct abort_group_tx_reply
     friend bool operator==(
       const abort_group_tx_reply&, const abort_group_tx_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const abort_group_tx_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(ec); }
 };
@@ -860,8 +849,7 @@ struct find_coordinator_reply
     friend bool operator==(
       const find_coordinator_reply&, const find_coordinator_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const find_coordinator_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(coordinator, ntp, ec); }
 };
@@ -885,8 +873,7 @@ struct find_coordinator_request
     operator==(const find_coordinator_request&, const find_coordinator_request&)
       = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const find_coordinator_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() { return std::tie(tid); }
 };
@@ -903,8 +890,7 @@ struct idempotent_request_info
     friend bool operator==(
       const idempotent_request_info&, const idempotent_request_info&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const idempotent_request_info&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(first_sequence, last_sequence, term);
@@ -935,8 +921,7 @@ struct producer_state_info
     friend bool operator==(
       const producer_state_info&, const producer_state_info&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const producer_state_info& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(
@@ -968,8 +953,7 @@ struct get_producers_reply
     friend bool operator==(
       const get_producers_reply&, const get_producers_reply&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const get_producers_reply&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(error_code, producers, producer_count);
@@ -1000,8 +984,7 @@ struct get_producers_request
     friend bool operator==(
       const get_producers_request&, const get_producers_request&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const get_producers_request&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     auto serde_fields() {
         return std::tie(ntp, timeout, max_producers_to_include);
@@ -1009,3 +992,12 @@ struct get_producers_request
 };
 
 } // namespace cluster
+
+template<>
+struct fmt::formatter<cluster::fetch_tx_reply::tx_status>
+  : fmt::formatter<int32_t> {
+    auto format(
+      cluster::fetch_tx_reply::tx_status s, fmt::format_context& ctx) const {
+        return fmt::formatter<int32_t>::format(static_cast<int32_t>(s), ctx);
+    }
+};

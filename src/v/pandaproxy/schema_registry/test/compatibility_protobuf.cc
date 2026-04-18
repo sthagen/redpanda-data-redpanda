@@ -10,7 +10,6 @@
 #include "pandaproxy/schema_registry/test/compatibility_protobuf.h"
 
 #include "absl/container/flat_hash_set.h"
-#include "bytes/iobuf_parser.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/exceptions.h"
 #include "pandaproxy/schema_registry/protobuf.h"
@@ -26,7 +25,6 @@
 #include <fmt/core.h>
 
 #include <array>
-#include <utility>
 
 namespace pp = pandaproxy;
 namespace pps = pp::schema_registry;

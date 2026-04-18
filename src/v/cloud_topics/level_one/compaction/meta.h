@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
@@ -125,16 +126,16 @@ enum class compaction_job_state {
     hard_stop
 };
 
-inline std::ostream& operator<<(std::ostream& o, compaction_job_state s) {
+inline fmt::iterator format_to(compaction_job_state s, fmt::iterator out) {
     switch (s) {
     case compaction_job_state::idle:
-        return o << "idle";
+        return fmt::format_to(out, "idle");
     case compaction_job_state::running:
-        return o << "running";
+        return fmt::format_to(out, "running");
     case compaction_job_state::soft_stop:
-        return o << "soft_stop";
+        return fmt::format_to(out, "soft_stop");
     case compaction_job_state::hard_stop:
-        return o << "hard_stop";
+        return fmt::format_to(out, "hard_stop");
     }
 }
 

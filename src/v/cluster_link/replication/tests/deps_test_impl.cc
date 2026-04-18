@@ -14,7 +14,6 @@
 #include "model/tests/random_batch.h"
 #include "random/generators.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/sleep.hh>
 
 namespace cluster_link::replication::tests {

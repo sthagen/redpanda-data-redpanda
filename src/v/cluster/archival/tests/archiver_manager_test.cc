@@ -7,33 +7,15 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cluster/archival/archiver_manager.h"
 #include "cluster/archival/tests/archival_service_fixture.h"
-#include "cluster/archival/types.h"
-#include "cluster/controller_api.h"
-#include "cluster/errc.h"
-#include "cluster/fwd.h"
-#include "cluster/tests/cluster_test_fixture.h"
-#include "cluster/tests/utils.h"
-#include "cluster/types.h"
-#include "config/configuration.h"
 #include "container/chunked_vector.h"
-#include "http/tests/http_imposter.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "model/namespace.h"
-#include "model/timeout_clock.h"
 #include "random/generators.h"
-#include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/core/shared_ptr.hh>
-#include <seastar/core/timed_out_error.hh>
-
-#include <type_traits>
 
 namespace {
 static ss::logger arch_test_log("archival_service_test");

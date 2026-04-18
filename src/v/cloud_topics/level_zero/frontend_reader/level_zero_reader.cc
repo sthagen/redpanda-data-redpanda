@@ -25,7 +25,6 @@
 
 #include <chrono>
 #include <exception>
-#include <iterator>
 #include <utility>
 #include <variant>
 
@@ -528,8 +527,8 @@ bool level_zero_log_reader_impl::cache_enabled() const {
     return true;
 }
 
-void level_zero_log_reader_impl::print(std::ostream& o) {
-    o << "cloud_topics_reader";
+fmt::iterator level_zero_log_reader_impl::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "cloud_topics_reader");
 }
 
 void level_zero_log_reader_impl::register_with_stm(ctp_stm_api* api) {

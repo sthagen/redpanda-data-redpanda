@@ -119,12 +119,11 @@ struct hashing_visitor {
     }
 };
 
-void ostream_val_ptr(std::ostream& o, const std::optional<value>& v) {
+fmt::iterator format_val_ptr(const std::optional<value>& v, fmt::iterator it) {
     if (v) {
-        o << *v;
-        return;
+        return fmt::format_to(it, "{}", *v);
     }
-    o << "none";
+    return fmt::format_to(it, "none");
 }
 
 struct primitive_value_comparison_visitor {
@@ -352,167 +351,102 @@ bool operator==(const value& lhs, const value& rhs) {
     return std::visit(comparison_visitor{lhs}, rhs);
 }
 
-std::ostream& operator<<(std::ostream& o, const boolean_value& v) {
-    o << fmt::format("boolean({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const int_value& v) {
-    o << fmt::format("int({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const long_value& v) {
-    o << fmt::format("long({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const float_value& v) {
-    o << fmt::format("float({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const double_value& v) {
-    o << fmt::format("double({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const date_value& v) {
-    o << fmt::format("date({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const time_value& v) {
-    o << fmt::format("time({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const timestamp_value& v) {
-    o << fmt::format("timestamp({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const timestamptz_value& v) {
-    o << fmt::format("timestamptz({})", v.val);
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const string_value& v) {
-    iobuf_const_parser buf_parser{v.val};
+fmt::iterator string_value::format_to(fmt::iterator it) const {
+    iobuf_const_parser buf_parser{val};
     static constexpr auto max_len = 16;
-    auto size_bytes = v.val.size_bytes();
+    auto size_bytes = val.size_bytes();
     if (size_bytes > max_len) {
-        o << fmt::format("string(\"{}...\")", buf_parser.read_string(max_len));
-    } else {
-        o << fmt::format("string(\"{}\")", buf_parser.read_string(size_bytes));
+        return fmt::format_to(
+          it, "string(\"{}...\")", buf_parser.read_string(max_len));
     }
-    return o;
+    return fmt::format_to(
+      it, "string(\"{}\")", buf_parser.read_string(size_bytes));
 }
-std::ostream& operator<<(std::ostream& o, const uuid_value& v) {
-    o << fmt::format("uuid({})", ss::sstring(v.val));
-    return o;
+fmt::iterator fixed_value::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "fixed(size_bytes={})", val.size_bytes());
 }
-std::ostream& operator<<(std::ostream& o, const fixed_value& v) {
-    o << fmt::format("fixed(size_bytes={})", v.val.size_bytes());
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const binary_value& v) {
-    o << fmt::format("binary(size_bytes={})", v.val.size_bytes());
-    return o;
-}
-std::ostream& operator<<(std::ostream& o, const decimal_value& v) {
-    o << fmt::format("decimal({})", v.val);
-    return o;
+fmt::iterator binary_value::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "binary(size_bytes={})", val.size_bytes());
 }
 namespace {
-struct value_ostream_visitor {
-    explicit value_ostream_visitor(std::ostream& o)
-      : o_(o) {}
-
-    std::ostream& o_;
+struct primitive_format_visitor {
+    fmt::iterator it;
 
     template<typename T>
-    void operator()(const T& v) {
-        o_ << v;
+    fmt::iterator operator()(const T& v) {
+        return fmt::format_to(it, "{}", v);
     }
 };
 } // namespace
 
-std::ostream& operator<<(std::ostream& o, const primitive_value& v) {
-    std::visit(value_ostream_visitor{o}, v);
-    return o;
+fmt::iterator format_to(const primitive_value& v, fmt::iterator it) {
+    return std::visit(primitive_format_visitor{it}, v);
 }
 
-std::ostream& operator<<(std::ostream& o, const list_value& v) {
-    o << "list{";
+fmt::iterator list_value::format_to(fmt::iterator it) const {
+    it = fmt::format_to(it, "list{{");
     static constexpr size_t max_to_log = 5;
     size_t logged = 0;
-    for (const auto& e : v.elements) {
+    for (const auto& e : elements) {
         if (logged == max_to_log) {
-            o << "...";
+            it = fmt::format_to(it, "...");
             break;
         }
-        ostream_val_ptr(o, e);
-        o << ", ";
+        it = format_val_ptr(e, it);
+        it = fmt::format_to(it, ", ");
         logged++;
     }
-    o << "}";
-    return o;
+    return fmt::format_to(it, "}}");
 }
-std::ostream& operator<<(std::ostream& o, const map_value& v) {
-    o << "map{";
+fmt::iterator map_value::format_to(fmt::iterator it) const {
+    it = fmt::format_to(it, "map{{");
     static constexpr size_t max_to_log = 5;
     size_t logged = 0;
-    for (const auto& kv : v.kvs) {
+    for (const auto& kv : kvs) {
         if (logged == max_to_log) {
-            o << "...";
+            it = fmt::format_to(it, "...");
             break;
         }
-        o << fmt::format("(k={}, v=", kv.key);
-        ostream_val_ptr(o, kv.val);
-        o << "), ";
+        it = fmt::format_to(it, "(k={}, v=", kv.key);
+        it = format_val_ptr(kv.val, it);
+        it = fmt::format_to(it, "), ");
         logged++;
     }
-    o << "}";
-    return o;
+    return fmt::format_to(it, "}}");
 }
-std::ostream& operator<<(std::ostream& o, const struct_value& v) {
-    o << "struct{";
+fmt::iterator struct_value::format_to(fmt::iterator it) const {
+    it = fmt::format_to(it, "struct{{");
     static constexpr size_t max_to_log = 5;
     size_t logged = 0;
-    for (const auto& f : v.fields) {
+    for (const auto& f : fields) {
         if (logged == max_to_log) {
-            o << "...";
+            it = fmt::format_to(it, "...");
             break;
         }
-        ostream_val_ptr(o, f);
-        o << ", ";
+        it = format_val_ptr(f, it);
+        it = fmt::format_to(it, ", ");
         logged++;
     }
-    o << "}";
-    return o;
+    return fmt::format_to(it, "}}");
 }
 
-std::ostream&
-operator<<(std::ostream& o, const std::unique_ptr<struct_value>& v) {
-    if (!v) {
-        o << "struct{nullptr}";
-        return o;
+namespace {
+struct value_format_visitor {
+    fmt::iterator it;
+
+    fmt::iterator operator()(const primitive_value& v) {
+        return format_to(v, it);
     }
-    return o << *v;
-}
 
-std::ostream&
-operator<<(std::ostream& o, const std::unique_ptr<list_value>& v) {
-    if (!v) {
-        o << "list{nullptr}";
-        return o;
+    template<typename T>
+    fmt::iterator operator()(const T& v) {
+        return fmt::format_to(it, "{}", v);
     }
-    return o << *v;
-}
+};
+} // namespace
 
-std::ostream& operator<<(std::ostream& o, const std::unique_ptr<map_value>& v) {
-    if (!v) {
-        o << "map{nullptr}";
-        return o;
-    }
-    return o << *v;
-}
-
-std::ostream& operator<<(std::ostream& o, const value& v) {
-    std::visit(value_ostream_visitor{o}, v);
-    return o;
+fmt::iterator format_to(const value& v, fmt::iterator it) {
+    return std::visit(value_format_visitor{it}, v);
 }
 
 size_t value_hash(const struct_value& v) {

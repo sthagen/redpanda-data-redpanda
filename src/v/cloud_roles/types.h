@@ -10,16 +10,16 @@
 
 #pragma once
 
+#include "base/external_fmt.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "utils/named_type.h"
 
-#include <seastar/core/metrics.hh>
 #include <seastar/core/sstring.hh>
 
 #include <boost/beast/http/status.hpp>
-
-#include <unordered_set>
+#include <boost/beast/http/verb.hpp>
 
 namespace cloud_roles {
 
@@ -41,12 +41,27 @@ bool is_retryable(boost::beast::http::status status);
 
 enum class api_request_error_kind { failed_abort, failed_retryable };
 
-std::ostream& operator<<(std::ostream& os, api_request_error_kind kind);
+inline fmt::iterator format_to(api_request_error_kind kind, fmt::iterator out) {
+    switch (kind) {
+    case api_request_error_kind::failed_abort:
+        return fmt::format_to(out, "failed_abort");
+    case api_request_error_kind::failed_retryable:
+        return fmt::format_to(out, "failed_retryable");
+    }
+}
 
 struct api_request_error {
     boost::beast::http::status status{boost::beast::http::status::ok};
     ss::sstring reason;
     api_request_error_kind error_kind;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "api_request_error{{reason:{}, error_kind:{}}}",
+          reason,
+          error_kind);
+    }
 };
 
 api_request_error make_abort_error(const std::exception& ex);
@@ -57,31 +72,38 @@ api_request_error make_retryable_error(const std::exception& ex);
 api_request_error
 make_retryable_error(ss::sstring reason, boost::beast::http::status status);
 
-std::ostream&
-operator<<(std::ostream& os, const api_request_error& request_error);
-
 using api_response = std::variant<iobuf, api_request_error>;
 
 struct malformed_api_response_error {
     std::vector<ss::sstring> missing_fields;
-};
 
-std::ostream&
-operator<<(std::ostream& os, const malformed_api_response_error& err);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "malformed_api_response_error{{missing_fields:{}}}",
+          missing_fields);
+    }
+};
 
 struct api_response_parse_error {
     ss::sstring reason;
-};
 
-std::ostream& operator<<(std::ostream& os, const api_response_parse_error& err);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "api_response_parse_error{{reason:{}}}", reason);
+    }
+};
 
 using oauth_token_str = named_type<ss::sstring, struct oauth_token_str_tag>;
 
 struct gcp_credentials {
     oauth_token_str oauth_token;
-};
 
-std::ostream& operator<<(std::ostream& os, const gcp_credentials& gc);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "gcp_credentials{{oauth_token:**{}**}}", oauth_token().size());
+    }
+};
 
 using aws_service_name = named_type<ss::sstring, struct aws_service_name_>;
 using aws_region_name = named_type<ss::sstring, struct aws_region_name_>;
@@ -97,24 +119,46 @@ struct aws_credentials {
     std::optional<session_token> session_token;
     aws_region_name region;
     aws_service_name service;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "aws_credentials{{access_key_id: **{}**, secret_access_key: "
+          "**{}**, "
+          "session_token: **{}**, region: {}, service: {}}}",
+          access_key_id().size(),
+          secret_access_key().size(),
+          session_token.value_or(cloud_roles::session_token{})().size(),
+          region(),
+          service());
+    }
 };
 
 struct abs_credentials {
     storage_account storage_account;
     private_key_str shared_key;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "abs_credentials{{storage_account: **{}**, shared_key: **{}**}}",
+          storage_account().size(),
+          shared_key().size());
+    }
 };
 
 // AKS federated OpenID Credentials uses Azure's managed identities to retrieve
 // a Oauth authorization token
 struct abs_oauth_credentials {
     oauth_token_str oauth_token;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "abs_oauth_credentials{{oauth_token:**{}**}}",
+          oauth_token().size());
+    }
 };
-
-std::ostream& operator<<(std::ostream& os, const abs_oauth_credentials& ac);
-
-std::ostream& operator<<(std::ostream& os, const abs_credentials& ac);
-
-std::ostream& operator<<(std::ostream& os, const aws_credentials& ac);
 
 using credentials = std::variant<
   aws_credentials,
@@ -123,7 +167,7 @@ using credentials = std::variant<
   abs_oauth_credentials>;
 
 // tmp trick to ensure that we are not calling into infinite recursion if
-// there is a new credential but no operator<<
+// there is a new credential but no format_to
 template<std::same_as<credentials> Cred>
 std::ostream& operator<<(std::ostream& os, const Cred& c);
 

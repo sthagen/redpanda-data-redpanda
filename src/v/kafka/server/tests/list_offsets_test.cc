@@ -17,10 +17,7 @@
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/smp.hh>
-
 #include <chrono>
-#include <limits>
 
 using namespace std::chrono_literals;
 

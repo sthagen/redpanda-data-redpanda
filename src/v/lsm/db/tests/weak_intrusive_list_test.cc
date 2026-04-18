@@ -7,7 +7,6 @@
 // Modifications copyright 2025 Redpanda Data, Inc.
 
 #include "base/format_to.h"
-#include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "lsm/db/weak_intrusive_list.h"

@@ -17,7 +17,6 @@
 #include "cluster/security_frontend.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/tx_gateway_frontend.h"
-#include "cluster_link/model/filter_utils.h"
 #include "config/broker_authn_endpoint.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
@@ -27,7 +26,6 @@
 #include "features/feature_table.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/offset_fetch.h"
-#include "kafka/protocol/produce.h"
 #include "kafka/protocol/schemata/list_groups_response.h"
 #include "kafka/server/connection_context.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
@@ -68,10 +66,7 @@
 #include "random/generators.h"
 #include "security/acl.h"
 #include "security/audit/schemas/iam.h"
-#include "security/audit/schemas/utils.h"
-#include "security/audit/types.h"
 #include "security/errc.h"
-#include "security/exceptions.h"
 #include "security/gssapi_authenticator.h"
 #include "security/mtls.h"
 #include "security/oidc_authenticator.h"
@@ -81,10 +76,7 @@
 #include "ssx/future-util.h"
 #include "ssx/thread_worker.h"
 #include "ssx/when_all.h"
-#include "strings/string_switch.h"
-#include "strings/utf8.h"
 
-#include <seastar/core/byteorder.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/sharded.hh>
@@ -100,7 +92,6 @@
 #include <chrono>
 #include <exception>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <ranges>
 #include <vector>

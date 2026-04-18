@@ -19,7 +19,6 @@
 #include "kafka/protocol/incremental_alter_configs.h"
 #include "kafka/protocol/metadata.h"
 #include "kafka/server/handlers/topics/types.h"
-#include "kafka/server/rm_group_frontend.h"
 #include "kafka/server/tests/topic_properties_helpers.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -34,7 +33,6 @@
 #include <boost/test/tools/context.hpp>
 #include <boost/test/unit_test.hpp>
 
-#include <functional>
 #include <optional>
 
 using namespace std::chrono_literals; // NOLINT

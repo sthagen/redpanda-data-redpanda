@@ -13,7 +13,6 @@
 #include "config/configuration.h"
 #include "config/sasl_mechanisms.h"
 #include "config/tls_config.h"
-#include "config/types.h"
 #include "http/client.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"

@@ -13,7 +13,6 @@
 #include "cluster/client_quota_serde.h"
 #include "cluster/client_quota_store.h"
 #include "kafka/protocol/errors.h"
-#include "kafka/protocol/exceptions.h"
 #include "kafka/protocol/schemata/alter_client_quotas_request.h"
 #include "kafka/protocol/schemata/alter_client_quotas_response.h"
 #include "kafka/protocol/schemata/describe_client_quotas_request.h"
@@ -26,7 +25,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <boost/outcome/success_failure.hpp>
 #include <boost/range/combine.hpp>
 
 #include <algorithm>

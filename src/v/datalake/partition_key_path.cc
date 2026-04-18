@@ -10,7 +10,6 @@
 
 #include "datalake/partition_key_path.h"
 
-#include "absl/strings/str_replace.h"
 #include "base/vlog.h"
 #include "bytes/iobuf_parser.h"
 #include "datalake/logger.h"
@@ -55,24 +54,28 @@ bool has_millisecond_fraction(std::chrono::microseconds sub_seconds_us) {
 ss::sstring format_timestamp(size_t value, bool include_zone) {
     std::chrono::system_clock::time_point tp{std::chrono::microseconds(value)};
     const auto sub_seconds_us = get_sub_seconds(tp);
+    // Truncate to seconds so that %S does not emit fractional seconds
+    // (fmt >=10 includes sub-second digits in %S when the time_point
+    // carries sub-second precision).
+    const auto tp_s = std::chrono::floor<std::chrono::seconds>(tp);
 
     if (sub_seconds_us == std::chrono::microseconds(0)) {
         if (include_zone) {
-            return ssx::sformat("{:%Y-%m-%dT%H:%M:%S}{:%z}", tp, tp);
+            return ssx::sformat("{:%Y-%m-%dT%H:%M:%S}{:%z}", tp_s, tp_s);
         }
-        return ssx::sformat("{:%Y-%m-%dT%H:%M:%S}Z", tp);
+        return ssx::sformat("{:%Y-%m-%dT%H:%M:%S}Z", tp_s);
     }
 
     if (has_millisecond_fraction(sub_seconds_us)) {
         if (include_zone) {
             return ssx::sformat(
               "{:%Y-%m-%dT%H:%M:%S}.{:06}{:%z}",
-              tp,
+              tp_s,
               get_sub_seconds(tp).count(),
-              tp);
+              tp_s);
         }
         return ssx::sformat(
-          "{:%Y-%m-%dT%H:%M:%S}.{:06}Z", tp, get_sub_seconds(tp).count());
+          "{:%Y-%m-%dT%H:%M:%S}.{:06}Z", tp_s, get_sub_seconds(tp).count());
     }
 
     // no millisecond fraction
@@ -81,10 +84,13 @@ ss::sstring format_timestamp(size_t value, bool include_zone) {
 
     if (include_zone) {
         return ssx::sformat(
-          "{:%Y-%m-%dT%H:%M:%S}.{:03}{:%z}", tp, sub_seconds_ms.count(), tp);
+          "{:%Y-%m-%dT%H:%M:%S}.{:03}{:%z}",
+          tp_s,
+          sub_seconds_ms.count(),
+          tp_s);
     }
     return ssx::sformat(
-      "{:%Y-%m-%dT%H:%M:%S}.{:03}Z", tp, sub_seconds_ms.count());
+      "{:%Y-%m-%dT%H:%M:%S}.{:03}Z", tp_s, sub_seconds_ms.count());
 }
 /**
  * Default formatting rules used for identity type

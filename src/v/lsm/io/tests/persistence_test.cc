@@ -10,7 +10,6 @@
  */
 
 #include "cloud_io/cache_service.h"
-#include "cloud_io/remote.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "cloud_storage_clients/types.h"
@@ -27,7 +26,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/util/defer.hh>
 
-#include <gmock/gmock-matchers.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace lsm::io;

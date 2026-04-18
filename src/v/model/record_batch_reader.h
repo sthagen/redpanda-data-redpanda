@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/likely.h"
 #include "base/seastarx.h"
 #include "container/chunked_circular_buffer.h"
@@ -73,7 +74,7 @@ public:
         virtual ss::future<storage_t>
           do_load_slice(timeout_clock::time_point) = 0;
 
-        virtual void print(std::ostream&) = 0;
+        virtual fmt::iterator format_to(fmt::iterator it) const = 0;
 
         virtual std::optional<private_flags> get_flags() const { return {}; }
 
@@ -381,6 +382,8 @@ public:
 
     std::unique_ptr<impl> release() && { return std::move(_impl); }
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
     // record batch readers may expose these private flags for testing
     // purposes
     struct private_flags {
@@ -400,9 +403,6 @@ private:
     record_batch_reader() = default;
     explicit operator bool() const noexcept { return bool(_impl); }
     friend class ss::optimized_optional<record_batch_reader>;
-
-    friend std::ostream&
-    operator<<(std::ostream& os, const record_batch_reader& r);
 
     std::optional<private_flags> get_flags() const {
         return _impl->get_flags();

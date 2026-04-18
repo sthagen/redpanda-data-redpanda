@@ -10,6 +10,7 @@
 
 #include "cluster/archival/upload_housekeeping_service.h"
 
+#include "base/format_to.h"
 #include "cloud_storage/remote.h"
 #include "cluster/archival/fwd.h"
 #include "cluster/archival/logger.h"
@@ -25,31 +26,24 @@
 #include <chrono>
 #include <exception>
 #include <functional>
-#include <variant>
 
 using namespace std::chrono_literals;
 
 namespace archival {
-
-std::ostream& operator<<(std::ostream& o, housekeeping_state s) {
-    switch (s) {
+fmt::iterator format_to(housekeeping_state e, fmt::iterator out) {
+    switch (e) {
     case housekeeping_state::idle:
-        o << "idle";
-        break;
+        return fmt::format_to(out, "idle");
     case housekeeping_state::active:
-        o << "active";
-        break;
+        return fmt::format_to(out, "active");
     case housekeeping_state::pause:
-        o << "pause";
-        break;
+        return fmt::format_to(out, "pause");
     case housekeeping_state::draining:
-        o << "draining";
-        break;
+        return fmt::format_to(out, "draining");
     case housekeeping_state::stopped:
-        o << "stopped";
-        break;
-    };
-    return o;
+        return fmt::format_to(out, "stopped");
+    }
+    return fmt::format_to(out, "");
 }
 
 upload_housekeeping_service::upload_housekeeping_service(

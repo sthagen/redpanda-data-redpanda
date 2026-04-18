@@ -12,10 +12,7 @@
 #include "storage/backlog_controller.h"
 #include "test_utils/async.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/metrics_api.hh>
-#include <seastar/core/metrics_registration.hh>
-#include <seastar/core/reactor.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/log.hh>

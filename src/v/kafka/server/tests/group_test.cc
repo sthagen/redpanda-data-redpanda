@@ -9,13 +9,11 @@
 
 #include "cluster/partition.h"
 #include "config/configuration.h"
-#include "config/types.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/group.h"
-#include "kafka/server/group_metadata.h"
-#include "utils/to_string.h"
 
+#include <seastar/core/sleep.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
 

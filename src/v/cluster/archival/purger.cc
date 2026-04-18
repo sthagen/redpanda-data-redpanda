@@ -16,8 +16,6 @@
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_partition.h"
 #include "cloud_storage/remote_path_provider.h"
-#include "cloud_storage/topic_manifest.h"
-#include "cloud_storage/tx_range_manifest.h"
 #include "cloud_storage_clients/types.h"
 #include "cluster/archival/logger.h"
 #include "cluster/members_table.h"
@@ -25,7 +23,6 @@
 #include "cluster/topics_frontend.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
-#include "container/chunked_hash_map.h"
 #include "hashing/xx.h"
 
 namespace {

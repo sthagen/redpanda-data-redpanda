@@ -17,8 +17,6 @@
 #include "serde/rw/optional.h"
 #include "serde/rw/uuid.h"
 
-#include <seastar/core/coroutine.hh>
-
 namespace cloud_topics::l1 {
 
 std::expected<apply_write_batch_update, lsm_update_error>

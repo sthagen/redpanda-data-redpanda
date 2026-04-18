@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_storage/base_manifest.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/segment_meta_cstore.h"
@@ -39,8 +40,10 @@ struct partition_manifest_path_components {
     model::partition_id _part;
     model::initial_revision_id _rev;
 
-    friend std::ostream&
-    operator<<(std::ostream& s, const partition_manifest_path_components& c);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{{}: {}-{}-{}-{}}}", _origin, _ns, _topic, _part, _rev);
+    }
 };
 
 struct segment_name_components {
@@ -49,8 +52,7 @@ struct segment_name_components {
 
     auto operator<=>(const segment_name_components&) const = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const segment_name_components& k);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 std::optional<segment_name_components>
@@ -599,6 +601,8 @@ public:
     /// defects. Returns `std::nullopt` otherwise.
     std::optional<partition_manifest> repair_state() const;
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
 private:
     ss::sstring display_name() const;
     std::optional<kafka::offset> compute_start_kafka_offset_local() const;
@@ -711,6 +715,8 @@ private:
     model::offset _applied_offset;
 };
 
-std::ostream& operator<<(std::ostream& o, const partition_manifest& f);
-
 } // namespace cloud_storage
+
+template<>
+struct fmt::range_format_kind<cloud_storage::partition_manifest, char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};

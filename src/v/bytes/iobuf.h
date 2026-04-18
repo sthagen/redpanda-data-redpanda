@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "base/likely.h"
 #include "base/seastarx.h"
 #include "bytes/details/io_allocation_size.h"
@@ -276,6 +277,14 @@ public:
     // this method will throw as to not cause an oversized allocation.
     ss::sstring linearize_to_string() const;
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{bytes={}, fragments={}}}",
+          size_bytes(),
+          std::distance(cbegin(), cend()));
+    }
+
 private:
     void prepend(std::unique_ptr<fragment>);
 
@@ -292,8 +301,11 @@ private:
 
     container _frags;
     size_t _size{0};
-    friend std::ostream& operator<<(std::ostream&, const iobuf&);
 };
+
+template<>
+struct fmt::range_format_kind<iobuf, char>
+  : std::integral_constant<fmt::range_format, fmt::range_format::disabled> {};
 
 inline void iobuf::clear() {
     _frags.clear_and_dispose(&details::dispose_io_fragment);

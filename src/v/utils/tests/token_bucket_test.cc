@@ -14,8 +14,6 @@
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-
-#include <chrono>
 using namespace std::chrono_literals;
 
 constexpr size_t RATE = 25;

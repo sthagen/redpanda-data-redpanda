@@ -13,8 +13,6 @@
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
 
-#include <seastar/core/sleep.hh>
-
 using namespace datalake::translation::scheduling;
 
 class fair_scheduling_policy_fixture_parameterized

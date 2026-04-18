@@ -19,15 +19,12 @@
 #include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/testing/test_case.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/file.hh>
-#include <seastar/util/tmp_file.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
-#include <chrono>
 #include <set>
 
 using namespace cloud_io;

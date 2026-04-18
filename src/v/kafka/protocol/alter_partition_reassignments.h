@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "kafka/protocol/schemata/alter_partition_reassignments_request.h"
 #include "kafka/protocol/schemata/alter_partition_reassignments_response.h"
 
@@ -29,9 +30,8 @@ struct alter_partition_reassignments_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream& operator<<(
-      std::ostream& os, const alter_partition_reassignments_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -48,9 +48,8 @@ struct alter_partition_reassignments_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream& operator<<(
-      std::ostream& os, const alter_partition_reassignments_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

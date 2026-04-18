@@ -32,25 +32,6 @@ role_member_type member_type_for_principal_type(security::principal_type p) {
 }
 } // namespace
 
-std::ostream& operator<<(std::ostream& os, role_member_type t) {
-    switch (t) {
-    case role_member_type::user:
-        return os << "User";
-    case role_member_type::group:
-        return os << "Group";
-    }
-    __builtin_unreachable();
-}
-
-std::ostream& operator<<(std::ostream& os, const role_member_view& m) {
-    fmt::print(os, "{{{}}}:{{{}}}", m.type(), m.name());
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const role_member& m) {
-    return os << role_member_view{m.type(), m.name()};
-}
-
 role_member_view::role_member_view(const role_member& m)
   : _type(m.type())
   , _name(m.name()) {}
@@ -62,11 +43,6 @@ role_member_view::from_principal(const security::acl_principal& p) {
 
 role_member role_member::from_principal(const security::acl_principal& p) {
     return role_member{role_member_view::from_principal(p)};
-}
-
-std::ostream& operator<<(std::ostream& os, const role& r) {
-    fmt::print(os, "role members: {{{}}}", fmt::join(r.members(), ","));
-    return os;
 }
 
 security::acl_principal role::to_principal(std::string_view role_name) {

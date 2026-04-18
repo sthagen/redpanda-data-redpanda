@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "kafka/server/atomic_token_bucket.h"
-#include "utils/to_string.h"
 
 #include <boost/test/unit_test.hpp>
 

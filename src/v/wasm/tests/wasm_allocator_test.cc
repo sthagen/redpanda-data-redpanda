@@ -10,18 +10,13 @@
  */
 
 #include "base/units.h"
-#include "gmock/gmock.h"
 #include "wasm/allocator.h"
-
-#include <seastar/core/reactor.hh>
-#include <seastar/core/when_all.hh>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <limits>
 #include <span>
-#include <stdexcept>
 #include <unistd.h>
 
 namespace wasm {

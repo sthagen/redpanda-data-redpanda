@@ -9,7 +9,6 @@
 
 #include "storage/segment_index.h"
 
-#include "base/vassert.h"
 #include "compaction/utils.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
@@ -21,10 +20,6 @@
 #include <seastar/core/fstream.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/seastar.hh>
-
-#include <bits/stdint-uintn.h>
-#include <boost/container/container_fwd.hpp>
-#include <fmt/format.h>
 
 #include <algorithm>
 
@@ -259,23 +254,32 @@ ss::future<> segment_index::flush_to_file(ss::file backing_file) {
     co_await out.flush();
 }
 
-std::ostream& operator<<(std::ostream& o, const segment_index& i) {
-    return o << "{file:" << i.path() << ", offsets:" << i.base_offset()
-             << ", index:" << i._state << ", step:" << i._step
-             << ", needs_persistence:" << i._needs_persistence << "}";
+fmt::iterator segment_index::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{file:{}, offsets:{}, index:{}, step:{}, needs_persistence:{}}}",
+      path(),
+      base_offset(),
+      _state,
+      _step,
+      _needs_persistence);
 }
 std::ostream& operator<<(std::ostream& o, const segment_index_ptr& i) {
     if (i) {
-        return o << "{ptr=" << *i << "}";
+        fmt::print(o, "{{ptr={}}}", *i);
+    } else {
+        o << "{ptr=nullptr}";
     }
-    return o << "{ptr=nullptr}";
+    return o;
 }
 std::ostream&
 operator<<(std::ostream& o, const std::optional<segment_index::entry>& e) {
     if (e) {
-        return o << *e;
+        fmt::print(o, "{}", *e);
+    } else {
+        o << "{empty segment_index::entry}";
     }
-    return o << "{empty segment_index::entry}";
+    return o;
 }
 
 ss::future<size_t> segment_index::disk_usage() {

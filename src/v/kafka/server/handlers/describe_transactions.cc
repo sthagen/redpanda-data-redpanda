@@ -9,22 +9,17 @@
 
 #include "kafka/server/handlers/describe_transactions.h"
 
-#include "cluster/errc.h"
 #include "cluster/tx_gateway_frontend.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/describe_transactions_request.h"
 #include "kafka/protocol/types.h"
-#include "kafka/server/handlers/details/security.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
-#include "model/namespace.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/when_all.hh>
 
-#include <chrono>
 #include <unordered_map>
 
 namespace kafka {

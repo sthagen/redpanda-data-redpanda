@@ -163,8 +163,10 @@ redpanda_test_cc_library(
         "utils/log_gap_analysis.h",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/model",
         "//src/v/model:batch_compression",
+        "@fmt",
     ],
 )
 

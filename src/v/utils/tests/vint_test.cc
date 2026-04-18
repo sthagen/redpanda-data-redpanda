@@ -17,10 +17,7 @@
 
 #include <boost/test/unit_test.hpp>
 
-#include <array>
 #include <cstdint>
-#include <iostream>
-#include <random>
 
 namespace {
 

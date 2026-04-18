@@ -17,14 +17,9 @@
 
 namespace config {
 
-std::ostream& operator<<(std::ostream& os, leaders_preference::type_t type) {
-    os << leaders_preference::type_to_string(type);
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const leaders_preference& lp) {
-    auto prefix = leaders_preference::type_to_prefix(lp.type);
-    return os << prefix << fmt::format("{}", fmt::join(lp.racks, ","));
+fmt::iterator leaders_preference::format_to(fmt::iterator it) const {
+    auto prefix = type_to_prefix(type);
+    return fmt::format_to(it, "{}{}", prefix, fmt::join(racks, ","));
 }
 
 leaders_preference leaders_preference::parse(std::string_view s) {

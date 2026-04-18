@@ -10,17 +10,12 @@
 
 #include "bytes/iobuf_parser.h"
 #include "raft/heartbeats.h"
-#include "raft/types.h"
 #include "random/generators.h"
 #include "test_utils/randoms.h"
 
-#include <seastar/core/future.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-#include <boost/test/unit_test_log.hpp>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
 
 #include <utility>
 #include <vector>

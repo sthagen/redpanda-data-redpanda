@@ -8,14 +8,12 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/common/fake_io.h"
 #include "cloud_topics/level_one/common/file_arena.h"
 #include "config/property.h"
 #include "ssx/semaphore.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
 
 #include <gtest/gtest.h>

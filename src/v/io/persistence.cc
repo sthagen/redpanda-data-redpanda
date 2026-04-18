@@ -10,8 +10,6 @@
  */
 #include "io/persistence.h"
 
-#include "base/units.h"
-
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>

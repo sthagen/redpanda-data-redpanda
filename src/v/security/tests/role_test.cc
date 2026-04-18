@@ -11,7 +11,6 @@
 #include "security/role.h"
 
 #include <boost/test/unit_test.hpp>
-#include <fmt/ostream.h>
 
 namespace security {
 

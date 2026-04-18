@@ -11,7 +11,6 @@
 #include "cloud_storage/remote_segment_index.h"
 
 #include "cloud_storage/logger.h"
-#include "model/record_batch_types.h"
 #include "raft/consensus.h"
 #include "serde/rw/envelope.h"
 #include "serde/rw/iobuf.h"
@@ -500,8 +499,8 @@ remote_segment_index_builder::consume_batch_end() {
     co_return stop_parser::no;
 }
 
-void remote_segment_index_builder::print(std::ostream& o) const {
-    o << "remote_segment_index_builder";
+fmt::iterator remote_segment_index_builder::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "remote_segment_index_builder");
 }
 
 } // namespace cloud_storage

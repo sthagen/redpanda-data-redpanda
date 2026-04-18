@@ -10,6 +10,8 @@
  */
 
 #pragma once
+
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/vlog.h"
 #include "bytes/iobuf.h"
@@ -75,7 +77,7 @@ struct request_header {
     size_t tags_size_bytes{0};
     bool is_flexible() const { return tags_size_bytes > 0; }
 
-    friend std::ostream& operator<<(std::ostream&, const request_header&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 template<typename T>

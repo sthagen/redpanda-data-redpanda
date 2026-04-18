@@ -17,7 +17,6 @@
 
 #include <seastar/net/inet_address.hh>
 #include <seastar/testing/perf_tests.hh>
-#include <seastar/util/defer.hh>
 
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>

@@ -28,24 +28,21 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/shared_ptr.hh>
-#include <seastar/coroutine/as_future.hh>
-#include <seastar/coroutine/exception.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/max_cardinality_matching.hpp>
 #include <boost/math/special_functions/ulp.hpp>
-#include <boost/outcome/std_result.hpp>
-#include <boost/outcome/success_failure.hpp>
 #include <fmt/core.h>
 #include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <jsoncons/basic_json.hpp>
 #include <jsoncons/json.hpp>
-#include <jsoncons_ext/jsonschema/evaluation_options.hpp>
 #include <jsoncons_ext/jsonschema/json_schema_factory.hpp>
 #include <jsoncons_ext/jsonschema/jsonschema.hpp>
+
+template<typename Json>
+struct fmt::formatter<jsoncons::json_printable<Json>>
+  : fmt::ostream_formatter {};
 #include <rapidjson/error/en.h>
 
 #include <exception>
@@ -241,15 +238,14 @@ bool operator==(
     return lhs.raw() == rhs.raw();
 }
 
-std::ostream& operator<<(std::ostream& os, const json_schema_definition& def) {
-    fmt::print(
-      os,
+fmt::iterator json_schema_definition::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "type: {}, definition: {}, references: {}, metadata: {}",
-      to_string_view(def.type()),
-      def().to_json(),
-      def.refs(),
-      def.meta());
-    return os;
+      to_string_view(type()),
+      (*this)().to_json(),
+      refs(),
+      meta());
 }
 
 schema_definition::raw_string json_schema_definition::raw() const {

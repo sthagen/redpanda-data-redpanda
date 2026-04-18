@@ -13,10 +13,6 @@
 
 namespace config {
 
-std::ostream& operator<<(std::ostream& os, audit_failure_policy policy) {
-    return os << to_string_view(policy);
-}
-
 std::istream& operator>>(std::istream& is, audit_failure_policy& policy) {
     ss::sstring s;
     is >> s;

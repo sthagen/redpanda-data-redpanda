@@ -23,13 +23,10 @@
 #include "ssx/sformat.h"
 #include "utils/inet_address_wrapper.h"
 
-#include <fmt/format.h>
-
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <optional>
-#include <unordered_map>
 
 namespace config {
 

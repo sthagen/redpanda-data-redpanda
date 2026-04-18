@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 
@@ -89,17 +90,9 @@ using schema_changed = ss::bool_class<struct schema_changed_tag>;
 using schema_evolution_result = checked<schema_changed, schema_evolution_errc>;
 using ids_filled = ss::bool_class<struct ids_filled_tag>;
 
+std::string_view to_string_view(type_promoted);
+fmt::iterator format_to(type_promoted, fmt::iterator);
+std::string_view to_string_view(schema_evolution_errc);
+fmt::iterator format_to(schema_evolution_errc, fmt::iterator);
+
 } // namespace iceberg
-
-template<>
-struct fmt::formatter<iceberg::schema_evolution_errc>
-  : formatter<std::string_view> {
-    auto format(iceberg::schema_evolution_errc d, format_context& ctx) const
-      -> format_context::iterator;
-};
-
-template<>
-struct fmt::formatter<iceberg::type_promoted> : formatter<std::string_view> {
-    auto format(iceberg::type_promoted d, format_context& ctx) const
-      -> format_context::iterator;
-};

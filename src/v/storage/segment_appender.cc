@@ -13,7 +13,6 @@
 #include "base/vassert.h"
 #include "base/vlog.h"
 #include "config/configuration.h"
-#include "reflection/adl.h"
 #include "ssx/semaphore.h"
 #include "storage/chunk_cache.h"
 #include "storage/logger.h"
@@ -23,8 +22,6 @@
 #include <seastar/core/align.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
-
-#include <fmt/format.h>
 
 #include <optional>
 #include <ostream>
@@ -826,17 +823,6 @@ fmt::iterator segment_appender::stats::format_to(fmt::iterator it) const {
       last_page_hydrations,
       split_writes,
       writes_completed);
-}
-
-std::ostream&
-operator<<(std::ostream& s, const segment_appender::inflight_write& op) {
-    fmt::print(
-      s,
-      "{{state: {}, committed_offset: {}, alignment: {}}}",
-      (int)op.state,
-      op.committed_offset,
-      op.alignment);
-    return s;
 }
 
 } // namespace storage

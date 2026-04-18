@@ -9,11 +9,9 @@
 
 #include "raft/group_manager.h"
 
-#include "base/likely.h"
 #include "config/configuration.h"
 #include "features/feature_table.h"
 #include "metrics/prometheus_sanitize.h"
-#include "model/metadata.h"
 #include "raft/buffered_protocol.h"
 #include "raft/group_configuration.h"
 #include "raft/rpc_client_protocol.h"

@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "model/fundamental.h"
 #include "serde/envelope.h"
 
@@ -24,8 +25,13 @@ struct partition_state_override
 
     auto serde_fields() { return std::tie(last_committed); }
 
-    friend std::ostream&
-    operator<<(std::ostream&, const partition_state_override&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        if (last_committed.has_value()) {
+            return fmt::format_to(
+              it, "{{last_committed: {}}}", last_committed.value());
+        }
+        return fmt::format_to(it, "{{last_committed: nullopt}}");
+    }
 };
 
 } // namespace datalake::coordinator

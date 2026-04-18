@@ -11,7 +11,6 @@
 #include "config/tls_config.h"
 #include "utils/to_string.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <yaml-cpp/exceptions.h>

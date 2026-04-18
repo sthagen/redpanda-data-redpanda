@@ -11,9 +11,8 @@
 
 #include "cluster/scheduling/allocation_node.h"
 
+#include "base/format_to.h"
 #include "cluster/logger.h"
-
-#include <fmt/ranges.h>
 
 namespace cluster {
 allocation_node::allocation_node(
@@ -136,35 +135,31 @@ void allocation_node::update_core_count(uint32_t core_count) {
     _max_capacity = allocation_capacity(
       (core_count * _partitions_per_shard()) - _partitions_reserve_shard0());
 }
-
-std::ostream& operator<<(std::ostream& o, allocation_node::state s) {
-    switch (s) {
+fmt::iterator format_to(allocation_node::state e, fmt::iterator out) {
+    switch (e) {
     case allocation_node::state::active:
-        return o << "active";
+        return fmt::format_to(out, "active");
     case allocation_node::state::decommissioned:
-        return o << "decommissioned";
+        return fmt::format_to(out, "decommissioned");
     case allocation_node::state::deleted:
-        return o << "deleted";
+        return fmt::format_to(out, "deleted");
     }
-    return o << "unknown";
+    return fmt::format_to(out, "unknown");
 }
-
-std::ostream& operator<<(std::ostream& o, const allocation_node& n) {
-    fmt::print(
-      o,
+fmt::iterator allocation_node::format_to(fmt::iterator it) const {
+    it = fmt::format_to(
+      it,
       "{{node: {}, max_partitions_per_core: {}, state: {}, allocated: {}, "
       "partition_capacity: {}, weights: [",
-      n._id,
-      n._partitions_per_shard(),
-      n._state,
-      n._allocated_partitions,
-      n.partition_capacity());
-
-    for (auto w : n._weights) {
-        fmt::print(o, "({})", w);
+      _id,
+      _partitions_per_shard(),
+      _state,
+      _allocated_partitions,
+      partition_capacity());
+    for (auto w : _weights) {
+        it = fmt::format_to(it, "({})", w);
     }
-    fmt::print(o, "], allocated: {}}}", n._allocated_partitions);
-    return o;
+    return fmt::format_to(it, "], allocated: {}}}", _allocated_partitions);
 }
 
 } // namespace cluster

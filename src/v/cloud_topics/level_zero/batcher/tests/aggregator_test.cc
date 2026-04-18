@@ -14,14 +14,10 @@
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/tests/random_batch.h"
-#include "model/timeout_clock.h"
-#include "random/generators.h"
 
 #include <seastar/core/manual_clock.hh>
 
 #include <gtest/gtest.h>
-
-#include <chrono>
 
 using namespace std::chrono_literals;
 

@@ -7,23 +7,12 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 #include "config/property.h"
-#include "random/generators.h"
 #include "security/mtls.h"
-#include "utils/base64.h"
 
-#include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/bool_class.hh>
-
-#include <boost/algorithm/string.hpp>
-#include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
-#include <boost/test/unit_test_suite.hpp>
 #include <fmt/ostream.h>
-
-#include <regex>
-#include <stdexcept>
 
 namespace security::tls {
 

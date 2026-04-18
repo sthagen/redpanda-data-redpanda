@@ -18,7 +18,6 @@
 #include "serde/rw/uuid.h"
 #include "serde/rw/vector.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 

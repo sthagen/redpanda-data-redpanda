@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/format_to.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/topic_manifest.h"
 #include "cloud_storage/topic_mount_handler.h"
@@ -161,9 +162,9 @@ private:
               status);
             return *revision_id;
         }
-    };
 
-    friend std::ostream& operator<<(std::ostream&, const replica_work_state&);
+        fmt::iterator format_to(fmt::iterator it) const;
+    };
 
     struct topic_work_result {
         model::topic_namespace nt;

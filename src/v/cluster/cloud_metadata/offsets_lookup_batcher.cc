@@ -16,9 +16,7 @@
 #include "cluster/offsets_recovery_rpc_service.h"
 #include "rpc/connection_cache.h"
 
-#include <seastar/core/abort_source.hh>
 #include <seastar/core/timed_out_error.hh>
-#include <seastar/net/packet.hh>
 
 namespace cluster::cloud_metadata {
 

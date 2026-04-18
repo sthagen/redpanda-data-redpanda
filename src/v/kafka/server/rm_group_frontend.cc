@@ -11,26 +11,17 @@
 
 #include "base/vlog.h"
 #include "cluster/controller.h"
-#include "cluster/id_allocator_frontend.h"
 #include "cluster/logger.h"
-#include "cluster/members_table.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/partition_leaders_table.h"
-#include "cluster/partition_manager.h"
-#include "cluster/shard_table.h"
-#include "cluster/tm_stm.h"
-#include "cluster/topics_frontend.h"
 #include "cluster/tx_gateway.h"
 #include "config/configuration.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_router.h"
-#include "kafka/server/logger.h"
 #include "rpc/connection_cache.h"
 
 #include <seastar/core/coroutine.hh>
-
-#include <algorithm>
 
 namespace kafka {
 using namespace std::chrono_literals;

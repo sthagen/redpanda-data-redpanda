@@ -36,7 +36,6 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":iceberg_snapshot_remover",
-        "//src/v/base",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:logger",
         "//src/v/datalake:partition_spec_parser",
@@ -55,6 +54,7 @@ redpanda_cc_library(
         ":snapshot_remover",
         ":state_update",
         ":stm",
+        "//src/v/base",
         "//src/v/cluster",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
@@ -147,9 +147,6 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "data_file",
-    srcs = [
-        "data_file.cc",
-    ],
     hdrs = [
         "data_file.h",
     ],
@@ -257,13 +254,11 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "partition_state_override",
-    srcs = [
-        "partition_state_override.cc",
-    ],
     hdrs = [
         "partition_state_override.h",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/model",
         "//src/v/serde",
         "@fmt",
@@ -281,6 +276,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":translated_offset_range",
+        "//src/v/base",
         "//src/v/container:chunked_hash_map",
         "//src/v/iceberg:manifest_entry",
         "//src/v/model",
@@ -290,9 +286,6 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "model",
-    srcs = [
-        "types.cc",
-    ],
     hdrs = [
         "types.h",
     ],
@@ -300,6 +293,7 @@ redpanda_cc_library(
     deps = [
         ":partition_state_override",
         ":translated_offset_range",
+        "//src/v/base",
         "//src/v/datalake:schema_identifier",
         "//src/v/datalake:types",
         "//src/v/datalake/coordinator:state",
@@ -366,9 +360,6 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "translated_offset_range",
-    srcs = [
-        "translated_offset_range.cc",
-    ],
     hdrs = [
         "translated_offset_range.h",
     ],

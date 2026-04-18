@@ -11,7 +11,6 @@
 #include "security/mtls_rule.h"
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 #include <regex>
 
@@ -37,11 +36,6 @@ rule::rule(
   , _is_default{false}
   , _to_lower{to_lower}
   , _to_upper{to_upper} {}
-
-std::ostream& operator<<(std::ostream& os, const rule& r) {
-    fmt::print(os, "{}", r);
-    return os;
-}
 
 } // namespace security::tls
 

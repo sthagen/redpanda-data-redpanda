@@ -10,8 +10,6 @@
 #include "cloud_topics/level_one/domain/entity_lock_map.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/coroutine.hh>
-
 #include <gtest/gtest.h>
 
 using namespace cloud_topics::l1;

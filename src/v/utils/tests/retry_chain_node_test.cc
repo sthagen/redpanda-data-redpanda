@@ -10,7 +10,6 @@
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/testing/thread_test_case.hh>
 
@@ -18,9 +17,6 @@
 #include <boost/test/unit_test.hpp>
 
 #include <array>
-#include <cstdint>
-#include <iostream>
-#include <random>
 
 using namespace std::chrono_literals;
 

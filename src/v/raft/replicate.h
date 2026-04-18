@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "model/fundamental.h"
 #include "raft/errc.h"
@@ -21,6 +22,18 @@
 namespace raft {
 
 enum class consistency_level { quorum_ack, leader_ack, no_ack };
+
+inline fmt::iterator format_to(consistency_level l, fmt::iterator out) {
+    switch (l) {
+    case consistency_level::quorum_ack:
+        return fmt::format_to(out, "consistency_level::quorum_ack");
+    case consistency_level::leader_ack:
+        return fmt::format_to(out, "consistency_level::leader_ack");
+    case consistency_level::no_ack:
+        return fmt::format_to(out, "consistency_level::no_ack");
+    }
+    return fmt::format_to(out, "unknown consistency_level");
+}
 
 struct replicate_options {
     explicit replicate_options(

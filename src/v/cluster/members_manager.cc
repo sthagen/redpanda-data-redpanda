@@ -9,6 +9,7 @@
 
 #include "cluster/members_manager.h"
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
@@ -16,7 +17,6 @@
 #include "cluster/controller_snapshot.h"
 #include "cluster/controller_stm.h"
 #include "cluster/drain_manager.h"
-#include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
@@ -30,19 +30,11 @@
 #include "raft/errc.h"
 #include "raft/group_configuration.h"
 #include "random/generators.h"
-#include "reflection/adl.h"
 #include "storage/api.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/do_with.hh>
-#include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
-#include <seastar/core/shared_ptr.hh>
-#include <seastar/core/smp.hh>
-
-#include <fmt/ranges.h>
 
 #include <chrono>
 #include <exception>
@@ -1586,19 +1578,16 @@ members_manager::handle_configuration_update_request(
         co_return errc::join_request_dispatch_error;
     }
 }
-
-std::ostream&
-operator<<(std::ostream& o, const members_manager::node_update& u) {
-    fmt::print(
-      o,
+fmt::iterator members_manager::node_update::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{node_id: {}, type: {}, offset: {}, update_raft0: {}, "
       "decom_upd_revision: {}}}",
-      u.id,
-      u.type,
-      u.offset,
-      u.need_raft0_update,
-      u.decommission_update_revision);
-    return o;
+      id,
+      type,
+      offset,
+      need_raft0_update,
+      decommission_update_revision);
 }
 
 ss::future<>

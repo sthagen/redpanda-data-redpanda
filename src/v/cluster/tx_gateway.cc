@@ -9,17 +9,12 @@
 
 #include "cluster/tx_gateway.h"
 
-#include "cluster/logger.h"
 #include "cluster/rm_group_proxy.h"
 #include "cluster/rm_partition_frontend.h"
 #include "cluster/tx_gateway_frontend.h"
-#include "cluster/types.h"
-#include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "tx_protocol_types.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/sharded.hh>
 
 namespace cluster {

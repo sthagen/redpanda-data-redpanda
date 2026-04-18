@@ -38,9 +38,8 @@ struct init_recovery_result {
     ss::sstring message;
 
     bool operator==(const init_recovery_result&) const = default;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
-
-std::ostream& operator<<(std::ostream&, const init_recovery_result&);
 
 struct recovery_task_config {
     cloud_storage_clients::bucket_name bucket;
@@ -53,9 +52,9 @@ struct topic_download_counts {
     int pending_downloads;
     int successful_downloads;
     int failed_downloads;
-};
 
-std::ostream& operator<<(std::ostream&, const topic_download_counts&);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 struct topic_recovery_service
   : ss::peering_sharded_service<topic_recovery_service> {
@@ -66,6 +65,7 @@ struct topic_recovery_service
         creating_topics,
         recovering_data,
     };
+    friend fmt::iterator format_to(state, fmt::iterator);
 
     using download_counts
       = absl::flat_hash_map<model::topic_namespace, topic_download_counts>;
@@ -74,6 +74,8 @@ struct topic_recovery_service
         state state;
         download_counts download_counts;
         std::optional<recovery_request> request;
+
+        fmt::iterator format_to(fmt::iterator it) const;
     };
 
     static constexpr int shard_id = 0;
@@ -192,10 +194,5 @@ private:
 
     boost::circular_buffer<recovery_status> _status_log;
 };
-
-std::ostream&
-operator<<(std::ostream&, const topic_recovery_service::recovery_status&);
-
-std::ostream& operator<<(std::ostream&, const topic_recovery_service::state&);
 
 } // namespace cloud_storage

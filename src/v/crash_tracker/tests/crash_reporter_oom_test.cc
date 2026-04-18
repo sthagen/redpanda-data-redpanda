@@ -8,10 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "config/node_config.h"
 #include "crash_tracker/recorder.h"
 #include "resource_mgmt/memory_sampling.h"
-#include "test_utils/tmp_dir.h"
 #include "utils.h"
 #include "utils/human.h"
 

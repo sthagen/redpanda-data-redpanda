@@ -145,7 +145,6 @@
 #include <seastar/util/noncopyable_function.hh>
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 #include <chrono>
 #include <exception>

@@ -11,11 +11,13 @@
 
 #pragma once
 
+#include "base/format_to.h"
+
 #include <array>
 #include <cstdint>
 #include <iosfwd>
 #include <limits>
-#include <ostream>
+#include <string_view>
 #include <type_traits>
 
 namespace model {
@@ -60,33 +62,23 @@ constexpr auto all_batch_compression_types = [] {
     return types;
 }();
 
-/// operators needed for boost::lexical_cast<compression>
-/// inline to prevent library depdency with the v::compression module
-inline std::ostream& operator<<(std::ostream& os, const compression& c) {
+inline fmt::iterator format_to(compression c, fmt::iterator out) {
     switch (c) {
     case compression::none:
-        os << "none";
-        break;
+        return fmt::format_to(out, "none");
     case compression::gzip:
-        os << "gzip";
-        break;
+        return fmt::format_to(out, "gzip");
     case compression::snappy:
-        os << "snappy";
-        break;
+        return fmt::format_to(out, "snappy");
     case compression::lz4:
-        os << "lz4";
-        break;
+        return fmt::format_to(out, "lz4");
     case compression::zstd:
-        os << "zstd";
-        break;
+        return fmt::format_to(out, "zstd");
     case compression::producer:
-        os << "producer";
-        break;
+        return fmt::format_to(out, "producer");
     default:
-        os << "ERROR";
-        break;
+        return fmt::format_to(out, "ERROR");
     }
-    return os;
 }
 std::istream& operator>>(std::istream&, compression&);
 

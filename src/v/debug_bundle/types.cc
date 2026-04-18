@@ -27,9 +27,6 @@
 #include <system_error>
 
 namespace debug_bundle {
-std::ostream& operator<<(std::ostream& o, const special_date& d) {
-    return o << to_string_view(d);
-}
 
 std::istream& operator>>(std::istream& i, special_date& d) {
     ss::sstring s;
@@ -42,20 +39,6 @@ std::istream& operator>>(std::istream& i, special_date& d) {
           .match(
             to_string_view(special_date::tomorrow), special_date::tomorrow);
     return i;
-}
-
-std::ostream& operator<<(std::ostream& o, const debug_bundle_status& s) {
-    return o << to_string_view(s);
-}
-
-std::ostream& operator<<(std::ostream& o, const partition_selection& p) {
-    fmt::print(o, "{}/{}/{}", p.tn.ns, p.tn.tp, fmt::join(p.partitions, ","));
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const label_selection& l) {
-    fmt::print(o, "{}={}", l.key, l.value);
-    return o;
 }
 
 std::optional<partition_selection>
@@ -92,31 +75,3 @@ partition_selection::from_string_view(std::string_view str) {
 }
 
 } // namespace debug_bundle
-
-auto fmt::formatter<debug_bundle::special_date>::format(
-  debug_bundle::special_date d, format_context& ctx) const
-  -> format_context::iterator {
-    return formatter<string_view>::format(debug_bundle::to_string_view(d), ctx);
-}
-
-auto fmt::formatter<debug_bundle::time_variant>::format(
-  const debug_bundle::time_variant& t, format_context& ctx) const
-  -> format_context::iterator {
-    return ss::visit(
-      t,
-      [&ctx](const debug_bundle::clock::time_point& t) {
-          auto tt = debug_bundle::clock::to_time_t(t);
-          std::tm tm = *std::localtime(&tt);
-          return fmt::format_to(ctx.out(), "{:%FT%T}", tm);
-      },
-      [&ctx](const debug_bundle::special_date& d) {
-          return fmt::format_to(ctx.out(), "{}", d);
-      });
-}
-
-auto fmt::formatter<debug_bundle::partition_selection>::format(
-  const debug_bundle::partition_selection& p, format_context& ctx) const
-  -> format_context::iterator {
-    return fmt::format_to(
-      ctx.out(), "{}/{}/{}", p.tn.ns, p.tn.tp, fmt::join(p.partitions, ","));
-}

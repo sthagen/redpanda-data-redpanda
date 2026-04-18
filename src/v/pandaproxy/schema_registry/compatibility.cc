@@ -13,26 +13,6 @@
 
 namespace pandaproxy::schema_registry {
 
-std::ostream& operator<<(std::ostream& os, const avro_incompatibility_type& t) {
-    switch (t) {
-    case avro_incompatibility_type::name_mismatch:
-        return os << "NAME_MISMATCH";
-    case avro_incompatibility_type::fixed_size_mismatch:
-        return os << "FIXED_SIZE_MISMATCH";
-    case avro_incompatibility_type::missing_enum_symbols:
-        return os << "MISSING_ENUM_SYMBOLS";
-    case avro_incompatibility_type::reader_field_missing_default_value:
-        return os << "READER_FIELD_MISSING_DEFAULT_VALUE";
-    case avro_incompatibility_type::type_mismatch:
-        return os << "TYPE_MISMATCH";
-    case avro_incompatibility_type::missing_union_branch:
-        return os << "MISSING_UNION_BRANCH";
-    case avro_incompatibility_type::unknown:
-        return os << "UNKNOWN";
-    };
-    __builtin_unreachable();
-}
-
 std::string_view description_for_type(avro_incompatibility_type t) {
     switch (t) {
     case avro_incompatibility_type::name_mismatch:
@@ -60,46 +40,11 @@ std::string_view description_for_type(avro_incompatibility_type t) {
     __builtin_unreachable();
 }
 
-std::ostream& operator<<(std::ostream& os, const avro_incompatibility& v) {
-    fmt::print(
-      os,
-      "{{errorType:'{}', description:'{}', additionalInfo:'{}'}}",
-      v._type,
-      v.describe(),
-      v._additional_info);
-    return os;
-}
-
 ss::sstring avro_incompatibility::describe() const {
     return fmt::format(
       fmt::runtime(description_for_type(_type)),
       fmt::arg("path", _path.string()),
       fmt::arg("additional", _additional_info));
-}
-
-std::ostream&
-operator<<(std::ostream& os, const proto_incompatibility_type& t) {
-    switch (t) {
-    case proto_incompatibility_type::message_removed:
-        return os << "MESSAGE_REMOVED";
-    case proto_incompatibility_type::field_kind_changed:
-        return os << "FIELD_KIND_CHANGED";
-    case proto_incompatibility_type::field_scalar_kind_changed:
-        return os << "FIELD_SCALAR_KIND_CHANGED";
-    case proto_incompatibility_type::field_named_type_changed:
-        return os << "FIELD_NAMED_TYPE_CHANGED";
-    case proto_incompatibility_type::required_field_added:
-        return os << "REQUIRED_FIELD_ADDED";
-    case proto_incompatibility_type::required_field_removed:
-        return os << "REQUIRED_FIELD_REMOVED";
-    case proto_incompatibility_type::oneof_field_removed:
-        return os << "ONEOF_FIELD_REMOVED";
-    case proto_incompatibility_type::multiple_fields_moved_to_oneof:
-        return os << "MULTIPLE_FIELDS_MOVED_TO_ONEOF";
-    case proto_incompatibility_type::unknown:
-        return os << "UNKNOWN";
-    }
-    __builtin_unreachable();
 }
 
 std::string_view description_for_type(proto_incompatibility_type t) {
@@ -136,141 +81,139 @@ std::string_view description_for_type(proto_incompatibility_type t) {
     __builtin_unreachable();
 }
 
-std::ostream& operator<<(std::ostream& os, const proto_incompatibility& v) {
-    fmt::print(
-      os, R"({{errorType:"{}", description:"{}"}})", v._type, v.describe());
-    return os;
-}
-
 ss::sstring proto_incompatibility::describe() const {
     return fmt::format(
       fmt::runtime(description_for_type(_type)),
       fmt::arg("path", _path.string()));
 }
 
-std::ostream& operator<<(std::ostream& os, const json_incompatibility_type& t) {
+fmt::iterator format_to(json_incompatibility_type t, fmt::iterator out) {
     switch (t) {
     case json_incompatibility_type::type_narrowed:
-        return os << "TYPE_NARROWED";
+        return fmt::format_to(out, "TYPE_NARROWED");
     case json_incompatibility_type::type_changed:
-        return os << "TYPE_CHANGED";
+        return fmt::format_to(out, "TYPE_CHANGED");
     case json_incompatibility_type::max_length_added:
-        return os << "MAX_LENGTH_ADDED";
+        return fmt::format_to(out, "MAX_LENGTH_ADDED");
     case json_incompatibility_type::max_length_decreased:
-        return os << "MAX_LENGTH_DECREASED";
+        return fmt::format_to(out, "MAX_LENGTH_DECREASED");
     case json_incompatibility_type::min_length_added:
-        return os << "MIN_LENGTH_ADDED";
+        return fmt::format_to(out, "MIN_LENGTH_ADDED");
     case json_incompatibility_type::min_length_increased:
-        return os << "MIN_LENGTH_INCREASED";
+        return fmt::format_to(out, "MIN_LENGTH_INCREASED");
     case json_incompatibility_type::pattern_added:
-        return os << "PATTERN_ADDED";
+        return fmt::format_to(out, "PATTERN_ADDED");
     case json_incompatibility_type::pattern_changed:
-        return os << "PATTERN_CHANGED";
+        return fmt::format_to(out, "PATTERN_CHANGED");
     case json_incompatibility_type::maximum_added:
-        return os << "MAXIMUM_ADDED";
+        return fmt::format_to(out, "MAXIMUM_ADDED");
     case json_incompatibility_type::maximum_decreased:
-        return os << "MAXIMUM_DECREASED";
+        return fmt::format_to(out, "MAXIMUM_DECREASED");
     case json_incompatibility_type::minimum_added:
-        return os << "MINIMUM_ADDED";
+        return fmt::format_to(out, "MINIMUM_ADDED");
     case json_incompatibility_type::minimum_increased:
-        return os << "MINIMUM_INCREASED";
+        return fmt::format_to(out, "MINIMUM_INCREASED");
     case json_incompatibility_type::exclusive_maximum_added:
-        return os << "EXCLUSIVE_MAXIMUM_ADDED";
+        return fmt::format_to(out, "EXCLUSIVE_MAXIMUM_ADDED");
     case json_incompatibility_type::exclusive_maximum_decreased:
-        return os << "EXCLUSIVE_MAXIMUM_DECREASED";
+        return fmt::format_to(out, "EXCLUSIVE_MAXIMUM_DECREASED");
     case json_incompatibility_type::exclusive_minimum_added:
-        return os << "EXCLUSIVE_MINIMUM_ADDED";
+        return fmt::format_to(out, "EXCLUSIVE_MINIMUM_ADDED");
     case json_incompatibility_type::exclusive_minimum_increased:
-        return os << "EXCLUSIVE_MINIMUM_INCREASED";
+        return fmt::format_to(out, "EXCLUSIVE_MINIMUM_INCREASED");
     case json_incompatibility_type::multiple_of_added:
-        return os << "MULTIPLE_OF_ADDED";
+        return fmt::format_to(out, "MULTIPLE_OF_ADDED");
     case json_incompatibility_type::multiple_of_expanded:
-        return os << "MULTIPLE_OF_EXPANDED";
+        return fmt::format_to(out, "MULTIPLE_OF_EXPANDED");
     case json_incompatibility_type::multiple_of_changed:
-        return os << "MULTIPLE_OF_CHANGED";
+        return fmt::format_to(out, "MULTIPLE_OF_CHANGED");
     case json_incompatibility_type::required_attribute_added:
-        return os << "REQUIRED_ATTRIBUTE_ADDED";
+        return fmt::format_to(out, "REQUIRED_ATTRIBUTE_ADDED");
     case json_incompatibility_type::max_properties_added:
-        return os << "MAX_PROPERTIES_ADDED";
+        return fmt::format_to(out, "MAX_PROPERTIES_ADDED");
     case json_incompatibility_type::max_properties_decreased:
-        return os << "MAX_PROPERTIES_DECREASED";
+        return fmt::format_to(out, "MAX_PROPERTIES_DECREASED");
     case json_incompatibility_type::min_properties_added:
-        return os << "MIN_PROPERTIES_ADDED";
+        return fmt::format_to(out, "MIN_PROPERTIES_ADDED");
     case json_incompatibility_type::min_properties_increased:
-        return os << "MIN_PROPERTIES_INCREASED";
+        return fmt::format_to(out, "MIN_PROPERTIES_INCREASED");
     case json_incompatibility_type::additional_properties_removed:
-        return os << "ADDITIONAL_PROPERTIES_REMOVED";
+        return fmt::format_to(out, "ADDITIONAL_PROPERTIES_REMOVED");
     case json_incompatibility_type::additional_properties_narrowed:
-        return os << "ADDITIONAL_PROPERTIES_NARROWED";
+        return fmt::format_to(out, "ADDITIONAL_PROPERTIES_NARROWED");
     case json_incompatibility_type::dependency_array_added:
-        return os << "DEPENDENCY_ARRAY_ADDED";
+        return fmt::format_to(out, "DEPENDENCY_ARRAY_ADDED");
     case json_incompatibility_type::dependency_array_extended:
-        return os << "DEPENDENCY_ARRAY_EXTENDED";
+        return fmt::format_to(out, "DEPENDENCY_ARRAY_EXTENDED");
     case json_incompatibility_type::dependency_array_changed:
-        return os << "DEPENDENCY_ARRAY_CHANGED";
+        return fmt::format_to(out, "DEPENDENCY_ARRAY_CHANGED");
     case json_incompatibility_type::dependency_schema_added:
-        return os << "DEPENDENCY_SCHEMA_ADDED";
+        return fmt::format_to(out, "DEPENDENCY_SCHEMA_ADDED");
     case json_incompatibility_type::property_added_to_open_content_model:
-        return os << "PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL";
+        return fmt::format_to(out, "PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL");
     case json_incompatibility_type::
       required_property_added_to_unopen_content_model:
-        return os << "REQUIRED_PROPERTY_ADDED_TO_UNOPEN_CONTENT_MODEL";
+        return fmt::format_to(
+          out, "REQUIRED_PROPERTY_ADDED_TO_UNOPEN_CONTENT_MODEL");
     case json_incompatibility_type::property_removed_from_closed_content_model:
-        return os << "PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL";
+        return fmt::format_to(
+          out, "PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL");
     case json_incompatibility_type::
       property_removed_not_covered_by_partially_open_content_model:
-        return os << "PROPERTY_REMOVED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_"
-                     "MODEL";
+        return fmt::format_to(
+          out, "PROPERTY_REMOVED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL");
     case json_incompatibility_type::
       property_added_not_covered_by_partially_open_content_model:
-        return os
-               << "PROPERTY_ADDED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL";
+        return fmt::format_to(
+          out, "PROPERTY_ADDED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL");
     case json_incompatibility_type::reserved_property_removed:
-        return os << "RESERVED_PROPERTY_REMOVED";
+        return fmt::format_to(out, "RESERVED_PROPERTY_REMOVED");
     case json_incompatibility_type::reserved_property_conflicts_with_property:
-        return os << "RESERVED_PROPERTY_CONFLICTS_WITH_PROPERTY";
+        return fmt::format_to(out, "RESERVED_PROPERTY_CONFLICTS_WITH_PROPERTY");
     case json_incompatibility_type::max_items_added:
-        return os << "MAX_ITEMS_ADDED";
+        return fmt::format_to(out, "MAX_ITEMS_ADDED");
     case json_incompatibility_type::max_items_decreased:
-        return os << "MAX_ITEMS_DECREASED";
+        return fmt::format_to(out, "MAX_ITEMS_DECREASED");
     case json_incompatibility_type::min_items_added:
-        return os << "MIN_ITEMS_ADDED";
+        return fmt::format_to(out, "MIN_ITEMS_ADDED");
     case json_incompatibility_type::min_items_increased:
-        return os << "MIN_ITEMS_INCREASED";
+        return fmt::format_to(out, "MIN_ITEMS_INCREASED");
     case json_incompatibility_type::unique_items_added:
-        return os << "UNIQUE_ITEMS_ADDED";
+        return fmt::format_to(out, "UNIQUE_ITEMS_ADDED");
     case json_incompatibility_type::additional_items_removed:
-        return os << "ADDITIONAL_ITEMS_REMOVED";
+        return fmt::format_to(out, "ADDITIONAL_ITEMS_REMOVED");
     case json_incompatibility_type::additional_items_narrowed:
-        return os << "ADDITIONAL_ITEMS_NARROWED";
+        return fmt::format_to(out, "ADDITIONAL_ITEMS_NARROWED");
     case json_incompatibility_type::item_added_to_open_content_model:
-        return os << "ITEM_ADDED_TO_OPEN_CONTENT_MODEL";
+        return fmt::format_to(out, "ITEM_ADDED_TO_OPEN_CONTENT_MODEL");
     case json_incompatibility_type::item_removed_from_closed_content_model:
-        return os << "ITEM_REMOVED_FROM_CLOSED_CONTENT_MODEL";
+        return fmt::format_to(out, "ITEM_REMOVED_FROM_CLOSED_CONTENT_MODEL");
     case json_incompatibility_type::
       item_removed_not_covered_by_partially_open_content_model:
-        return os << "ITEM_REMOVED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL";
+        return fmt::format_to(
+          out, "ITEM_REMOVED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL");
     case json_incompatibility_type::
       item_added_not_covered_by_partially_open_content_model:
-        return os << "ITEM_ADDED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL";
+        return fmt::format_to(
+          out, "ITEM_ADDED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL");
     case json_incompatibility_type::enum_array_narrowed:
-        return os << "ENUM_ARRAY_NARROWED";
+        return fmt::format_to(out, "ENUM_ARRAY_NARROWED");
     case json_incompatibility_type::enum_array_changed:
-        return os << "ENUM_ARRAY_CHANGED";
+        return fmt::format_to(out, "ENUM_ARRAY_CHANGED");
     case json_incompatibility_type::combined_type_changed:
-        return os << "COMBINED_TYPE_CHANGED";
+        return fmt::format_to(out, "COMBINED_TYPE_CHANGED");
     case json_incompatibility_type::product_type_extended:
-        return os << "PRODUCT_TYPE_EXTENDED";
+        return fmt::format_to(out, "PRODUCT_TYPE_EXTENDED");
     case json_incompatibility_type::sum_type_extended:
-        return os << "SUM_TYPE_EXTENDED";
+        return fmt::format_to(out, "SUM_TYPE_EXTENDED");
     case json_incompatibility_type::sum_type_narrowed:
-        return os << "SUM_TYPE_NARROWED";
+        return fmt::format_to(out, "SUM_TYPE_NARROWED");
     case json_incompatibility_type::combined_type_subschemas_changed:
-        return os << "COMBINED_TYPE_SUBSCHEMAS_CHANGED";
+        return fmt::format_to(out, "COMBINED_TYPE_SUBSCHEMAS_CHANGED");
     case json_incompatibility_type::not_type_extended:
-        return os << "NOT_TYPE_EXTENDED";
+        return fmt::format_to(out, "NOT_TYPE_EXTENDED");
     case json_incompatibility_type::unknown:
-        return os << "UNKNOWN";
+        return fmt::format_to(out, "UNKNOWN");
     }
     __builtin_unreachable();
 }
@@ -378,12 +321,6 @@ std::string_view description_for_type(json_incompatibility_type t) {
                "check '{path}'";
     }
     __builtin_unreachable();
-}
-
-std::ostream& operator<<(std::ostream& os, const json_incompatibility& v) {
-    fmt::print(
-      os, R"({{errorType:"{}", description:"{}"}})", v._type, v.describe());
-    return os;
 }
 
 ss::sstring json_incompatibility::describe() const {

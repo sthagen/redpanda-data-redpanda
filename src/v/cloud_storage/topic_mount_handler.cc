@@ -22,30 +22,6 @@
 
 namespace cloud_storage {
 
-std::ostream& operator<<(std::ostream& o, const topic_mount_result& r) {
-    switch (r) {
-    case topic_mount_result::mount_manifest_does_not_exist:
-        return o << "{mount_manifest_does_not_exist}";
-    case topic_mount_result::mount_manifest_not_deleted:
-        return o << "{mount_manifest_not_deleted}";
-    case topic_mount_result::mount_manifest_exists:
-        return o << "{topic_manifest_exists}";
-    case topic_mount_result::success:
-        return o << "{success}";
-    }
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const topic_unmount_result& r) {
-    switch (r) {
-    case topic_unmount_result::mount_manifest_not_created:
-        return o << "{mount_manifest_not_created}";
-    case topic_unmount_result::success:
-        return o << "{success}";
-    }
-    return o;
-}
-
 topic_mount_handler::topic_mount_handler(
   const cloud_storage_clients::bucket_name& bucket, remote& remote)
   : _bucket(bucket)

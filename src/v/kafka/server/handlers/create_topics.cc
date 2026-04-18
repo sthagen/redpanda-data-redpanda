@@ -19,7 +19,6 @@
 #include "kafka/protocol/timeout.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/connection_context.h"
-#include "kafka/server/handlers/configs/config_response_utils.h"
 #include "kafka/server/handlers/topics/topic_utils.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/handlers/topics/validators.h"
@@ -27,13 +26,10 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "security/acl.h"
-#include "utils/to_string.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/log.hh>
-
-#include <fmt/ostream.h>
 
 #include <array>
 #include <chrono>

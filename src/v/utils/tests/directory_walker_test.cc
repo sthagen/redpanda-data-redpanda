@@ -14,8 +14,6 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/testing/thread_test_case.hh>
 
-#include <fmt/format.h>
-
 auto test_directory() { return test_env::random_dir_path(); }
 
 SEASTAR_THREAD_TEST_CASE(empty_dir) {

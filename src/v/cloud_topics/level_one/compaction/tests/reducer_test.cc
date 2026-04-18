@@ -13,7 +13,6 @@
 #include "bytes/iostream.h"
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
-#include "cloud_topics/level_one/common/object_utils.h"
 #include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/sink.h"
 #include "cloud_topics/level_one/compaction/source.h"
@@ -36,9 +35,7 @@
 #include "model/record.h"
 #include "model/tests/random_batch.h"
 #include "model/timestamp.h"
-#include "ssx/when_all.h"
 #include "storage/tests/batch_generators.h"
-#include "test_utils/async.h"
 
 #include <seastar/util/defer.hh>
 

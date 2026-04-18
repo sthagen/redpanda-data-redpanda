@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 #include "container/json.h"
@@ -47,7 +48,23 @@ enum class category_uid : uint8_t {
     application_activity = 6
 };
 
-std::ostream& operator<<(std::ostream&, const category_uid&);
+inline fmt::iterator format_to(category_uid uid, fmt::iterator out) {
+    switch (uid) {
+    case category_uid::system_activity:
+        return fmt::format_to(out, "system_activity");
+    case category_uid::findings:
+        return fmt::format_to(out, "findings");
+    case category_uid::iam:
+        return fmt::format_to(out, "iam");
+    case category_uid::network_activity:
+        return fmt::format_to(out, "network_activity");
+    case category_uid::discovery:
+        return fmt::format_to(out, "discovery");
+    case category_uid::application_activity:
+        return fmt::format_to(out, "application_activity");
+    }
+    return fmt::format_to(out, "");
+}
 
 // Defines the class of the event
 // https://schema.ocsf.io/
@@ -86,7 +103,75 @@ enum class class_uid : uint16_t {
     web_resource_access_activity = 6004
 };
 
-std::ostream& operator<<(std::ostream&, const class_uid&);
+inline fmt::iterator format_to(class_uid uid, fmt::iterator out) {
+    switch (uid) {
+    case class_uid::file_system_activity:
+        return fmt::format_to(out, "file_system_activity");
+    case class_uid::kernel_extension_activity:
+        return fmt::format_to(out, "kernel_extension_activity");
+    case class_uid::kernel_activity:
+        return fmt::format_to(out, "kernel_activity");
+    case class_uid::memory_activity:
+        return fmt::format_to(out, "memory_activity");
+    case class_uid::module_activity:
+        return fmt::format_to(out, "module_activity");
+    case class_uid::scheduled_job_activity:
+        return fmt::format_to(out, "scheduled_job_activity");
+    case class_uid::process_activity:
+        return fmt::format_to(out, "process_activity");
+    case class_uid::security_finding:
+        return fmt::format_to(out, "security_finding");
+    case class_uid::account_change:
+        return fmt::format_to(out, "account_change");
+    case class_uid::authentication:
+        return fmt::format_to(out, "authentication");
+    case class_uid::authorize_session:
+        return fmt::format_to(out, "authorize_session");
+    case class_uid::entity_management:
+        return fmt::format_to(out, "entity_management");
+    case class_uid::user_access_management:
+        return fmt::format_to(out, "user_access_management");
+    case class_uid::group_management:
+        return fmt::format_to(out, "group_management");
+    case class_uid::network_activity:
+        return fmt::format_to(out, "network_activity");
+    case class_uid::http_activity:
+        return fmt::format_to(out, "http_activity");
+    case class_uid::dns_activity:
+        return fmt::format_to(out, "dns_activity");
+    case class_uid::dhcp_activity:
+        return fmt::format_to(out, "dhcp_activity");
+    case class_uid::rdp_activity:
+        return fmt::format_to(out, "rdp_activity");
+    case class_uid::smb_activity:
+        return fmt::format_to(out, "smb_activity");
+    case class_uid::ssh_activity:
+        return fmt::format_to(out, "ssh_activity");
+    case class_uid::ftp_activity:
+        return fmt::format_to(out, "ftp_activity");
+    case class_uid::email_activity:
+        return fmt::format_to(out, "email_activity");
+    case class_uid::network_file_activity:
+        return fmt::format_to(out, "network_file_activity");
+    case class_uid::email_file_activity:
+        return fmt::format_to(out, "email_file_activity");
+    case class_uid::email_url_activity:
+        return fmt::format_to(out, "email_url_activity");
+    case class_uid::device_inventory_info:
+        return fmt::format_to(out, "device_inventory_info");
+    case class_uid::device_config_state:
+        return fmt::format_to(out, "device_config_state");
+    case class_uid::web_resource_activity:
+        return fmt::format_to(out, "web_resource_activity");
+    case class_uid::application_lifecycle:
+        return fmt::format_to(out, "application_lifecycle");
+    case class_uid::api_activity:
+        return fmt::format_to(out, "api_activity");
+    case class_uid::web_resource_access_activity:
+        return fmt::format_to(out, "web_resource_access_activity");
+    }
+    return fmt::format_to(out, "");
+}
 
 // Severity of the event
 // Each class defines the same severity fields

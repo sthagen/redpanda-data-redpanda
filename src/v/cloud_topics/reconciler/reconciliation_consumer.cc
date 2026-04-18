@@ -10,8 +10,6 @@
 
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
 
-#include <seastar/core/coroutine.hh>
-
 namespace cloud_topics::reconciler {
 
 ss::future<std::optional<consumer_metadata>> build_from_reader(

@@ -10,26 +10,21 @@
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "rpc/connection_cache.h"
-#include "rpc/exceptions.h"
 #include "rpc/logger.h"
-#include "rpc/parse_utils.h"
 #include "rpc/test/cycling_service.h"
 #include "rpc/test/echo_service.h"
 #include "rpc/test/echo_v2_service.h"
 #include "rpc/test/rpc_integration_fixture.h"
 #include "rpc/types.h"
-#include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 #include "test_utils/random_bytes.h"
 #include "utils/backoff_policy.h"
 
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/metrics_api.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/util/defer.hh>
-#include <seastar/util/file.hh>
 #include <seastar/util/tmp_file.hh>
 
 #include <boost/test/tools/old/interface.hpp>

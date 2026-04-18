@@ -18,8 +18,6 @@
 #include "ssx/actor.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sleep.hh>
 
 #include <chrono>

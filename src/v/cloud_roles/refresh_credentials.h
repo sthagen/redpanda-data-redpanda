@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_roles/logger.h"
 #include "cloud_roles/probe.h"
 #include "cloud_roles/types.h"
@@ -18,7 +19,6 @@
 #include "model/metadata.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/util/noncopyable_function.hh>
 
 #include <memory>
 
@@ -61,7 +61,7 @@ public:
 
         ss::future<> sleep_until_expiry() const;
 
-        virtual std::ostream& print(std::ostream& os) const = 0;
+        virtual fmt::iterator format_to(fmt::iterator it) const = 0;
 
         /// When a retryable error is seen, increment retries and set a small
         /// backoff before attempting to fetch credentials again. If the retries
@@ -136,7 +136,9 @@ public:
 
     void start();
 
-    std::ostream& print(std::ostream& os) const { return _impl->print(os); }
+    fmt::iterator format_to(fmt::iterator it) const {
+        return _impl->format_to(it);
+    }
 
     ss::future<api_response> fetch_credentials() {
         return _impl->fetch_credentials();
@@ -175,8 +177,6 @@ private:
     aws_region_name _region;
     std::unique_ptr<auth_refresh_probe> _probe;
 };
-
-std::ostream& operator<<(std::ostream& os, const refresh_credentials& rc);
 
 static constexpr retry_params default_retry_params{
   .backoff_ms = std::chrono::milliseconds{500}, .max_retries = 8};

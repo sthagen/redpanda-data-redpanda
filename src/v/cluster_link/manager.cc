@@ -14,7 +14,6 @@
 #include "cluster_link/deps.h"
 #include "cluster_link/logger.h"
 #include "cluster_link/model/types.h"
-#include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/deps.h"
 #include "model/namespace.h"
 

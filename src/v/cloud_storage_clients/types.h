@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/types.h"
 #include "utils/named_type.h"
@@ -75,12 +76,12 @@ inline std::error_code make_error_code(error_outcome e) noexcept {
 
 enum class s3_url_style { virtual_host = 0, path };
 
-inline std::ostream& operator<<(std::ostream& os, const s3_url_style& us) {
+inline fmt::iterator format_to(s3_url_style us, fmt::iterator out) {
     switch (us) {
     case s3_url_style::virtual_host:
-        return os << "virtual_host";
+        return fmt::format_to(out, "virtual_host");
     case s3_url_style::path:
-        return os << "path";
+        return fmt::format_to(out, "path");
     }
 }
 
@@ -105,3 +106,18 @@ namespace std {
 template<>
 struct is_error_code_enum<cloud_storage_clients::error_outcome> : true_type {};
 } // namespace std
+
+template<>
+struct fmt::formatter<cloud_storage_clients::error_outcome> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(
+      cloud_storage_clients::error_outcome e, fmt::format_context& ctx) const {
+        return fmt::format_to(
+          ctx.out(),
+          "{}",
+          cloud_storage_clients::error_outcome_category{}.message(
+            static_cast<int>(e)));
+    }
+};

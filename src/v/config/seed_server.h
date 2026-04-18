@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/convert.h"
 #include "utils/unresolved_address.h"
@@ -29,10 +30,8 @@ struct seed_server {
         return lhs.addr < rhs.addr;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const config::seed_server& s) {
-        fmt::print(o, "addr: {}", s.addr);
-        return o;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "addr: {}", addr);
     }
 };
 } // namespace config

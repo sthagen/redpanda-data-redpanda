@@ -10,28 +10,23 @@
 #include "container/chunked_circular_buffer.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
 #include "model/timeout_clock.h"
-#include "raft/configuration_bootstrap_state.h"
 #include "raft/consensus_utils.h"
 #include "raft/group_configuration.h"
-#include "raft/types.h"
 #include "random/generators.h"
 #include "storage/api.h"
 #include "storage/log.h"
 #include "storage/log_manager.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/test_env.h"
-#include "utils/copy_range.h"
 // testing
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/do_with.hh>
-#include <seastar/core/future-util.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 

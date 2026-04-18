@@ -24,7 +24,6 @@
 #include "ssx/sformat.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/shard_id.hh>
 
 namespace {
 ss::logger gclog("level_zero_service");

@@ -13,7 +13,6 @@
 #include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/compaction/logger.h"
-#include "cloud_topics/level_one/compaction/meta.h"
 #include "cloud_topics/level_one/compaction/source.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "cloud_topics/level_one/metastore/retry.h"
@@ -25,8 +24,6 @@
 #include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
-
-#include <exception>
 
 namespace cloud_topics::l1 {
 

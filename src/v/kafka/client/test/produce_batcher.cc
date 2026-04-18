@@ -9,14 +9,10 @@
 
 #include "kafka/client/produce_batcher.h"
 
-#include "cluster/simple_batch_builder.h"
 #include "kafka/client/test/utils.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/produce.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
-#include "reflection/adl.h"
-#include "storage/record_batch_builder.h"
 
 #include <seastar/core/when_all.hh>
 #include <seastar/testing/thread_test_case.hh>

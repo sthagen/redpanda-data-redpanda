@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "config/startup_config.h"
@@ -59,6 +60,9 @@ constexpr std::string_view to_string_view(mode e) {
     }
     return "{invalid}";
 }
+inline fmt::iterator format_to(mode e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
+}
 template<>
 constexpr std::optional<mode> from_string_view<mode>(std::string_view sv) {
     return string_switch<std::optional<mode>>(sv)
@@ -81,6 +85,9 @@ constexpr std::string_view to_string_view(schema_type e) {
     }
     return "{invalid}";
 }
+inline fmt::iterator format_to(schema_type e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
+}
 template<>
 constexpr std::optional<schema_type>
 from_string_view<schema_type>(std::string_view sv) {
@@ -90,8 +97,6 @@ from_string_view<schema_type>(std::string_view sv) {
       .match(to_string_view(schema_type::protobuf), schema_type::protobuf)
       .default_match(std::nullopt);
 }
-
-std::ostream& operator<<(std::ostream& os, const schema_type& v);
 
 enum class output_format { none = 0, resolved, ignore_extensions, serialized };
 
@@ -108,6 +113,9 @@ constexpr std::string_view to_string_view(output_format of) {
     }
     return "";
 }
+inline fmt::iterator format_to(output_format of, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(of));
+}
 
 template<>
 inline std::optional<output_format>
@@ -123,8 +131,6 @@ from_string_view<output_format>(std::string_view sv) {
       .default_match(std::nullopt);
 }
 
-std::ostream& operator<<(std::ostream& os, const output_format& of);
-
 enum class reference_format { none = 0, qualified };
 
 constexpr std::string_view to_string_view(reference_format rf) {
@@ -135,6 +141,9 @@ constexpr std::string_view to_string_view(reference_format rf) {
         break;
     }
     return "";
+}
+inline fmt::iterator format_to(reference_format rf, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(rf));
 }
 
 template<>
@@ -147,8 +156,6 @@ from_string_view<reference_format>(std::string_view sv) {
         reference_format::qualified)
       .default_match(std::nullopt);
 }
-
-std::ostream& operator<<(std::ostream& os, const reference_format& rf);
 
 ///\brief Type representing a global resource for ACLs.
 using registry_resource = named_type<ss::sstring, struct registry_resource_tag>;
@@ -355,7 +362,7 @@ public:
     friend bool operator==(
       const schema_definition& lhs, const schema_definition& rhs) = default;
 
-    friend std::ostream& operator<<(std::ostream& os, const schema_definition&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     schema_type type() const { return _type; }
 
@@ -406,8 +413,7 @@ public:
     friend bool operator==(
       const avro_schema_definition& lhs, const avro_schema_definition& rhs);
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const avro_schema_definition& rhs);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     constexpr schema_type type() const { return schema_type::avro; }
 
@@ -447,8 +453,7 @@ public:
       const protobuf_schema_definition& lhs,
       const protobuf_schema_definition& rhs);
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const protobuf_schema_definition& rhs);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     constexpr schema_type type() const { return schema_type::protobuf; }
 
@@ -482,8 +487,7 @@ public:
     friend bool operator==(
       const json_schema_definition& lhs, const json_schema_definition& rhs);
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const json_schema_definition& rhs);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     constexpr schema_type type() const { return schema_type::json; }
 
@@ -550,9 +554,9 @@ public:
         });
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const valid_schema& def) {
-        def.visit([&os](const auto& def) { os << def; });
-        return os;
+    fmt::iterator format_to(fmt::iterator it) const {
+        visit([&it](const auto& def) { it = fmt::format_to(it, "{}", def); });
+        return it;
     }
 
 private:
@@ -613,6 +617,9 @@ constexpr std::string_view to_string_view(seq_marker_key_type v) {
     }
     return "invalid";
 }
+inline fmt::iterator format_to(seq_marker_key_type v, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(v));
+}
 
 // Record the sequence+node where updates were made to a subject,
 // in order to later generate tombstone keys when doing a permanent
@@ -628,7 +635,7 @@ struct seq_marker {
     // them optional provides compatibility with non-rp schema registries. If
     // either is not present, we can assume a collision has not occurred.
     friend bool operator==(const seq_marker&, const seq_marker&) = default;
-    friend std::ostream& operator<<(std::ostream& os, const seq_marker& v);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 ///\brief A schema with its subject
@@ -643,8 +650,7 @@ public:
     friend bool
     operator==(const subject_schema& lhs, const subject_schema& rhs) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const subject_schema& schema);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     const context_subject& sub() const { return _sub; }
     schema_type type() const { return _def.type(); }
@@ -725,6 +731,9 @@ constexpr std::string_view to_string_view(compatibility_level v) {
     }
     return "{invalid}";
 }
+inline fmt::iterator format_to(compatibility_level v, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(v));
+}
 template<>
 constexpr std::optional<compatibility_level>
 from_string_view<compatibility_level>(std::string_view sv) {
@@ -754,7 +763,11 @@ from_string_view<compatibility_level>(std::string_view sv) {
 struct compatibility_result {
     friend bool operator==(
       const compatibility_result&, const compatibility_result&) = default;
-    friend std::ostream& operator<<(std::ostream&, const compatibility_result&);
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "is_compat: {}, messages: {}", is_compat, messages);
+    }
 
     bool is_compat;
     chunked_vector<ss::sstring> messages;

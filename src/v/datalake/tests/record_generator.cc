@@ -18,19 +18,13 @@
 #include "storage/record_batch_builder.h"
 #include "utils/vint.h"
 
-#include <seastar/core/temporary_buffer.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/util/log.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <avro/Encoder.hh>
-#include <avro/Generic.hh>
 #include <avro/Specific.hh>
 #include <avro/Stream.hh>
 #include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor_database.h>
-#include <google/protobuf/dynamic_message.h>
-#include <google/protobuf/text_format.h>
 #include <rapidjson/error/en.h>
 
 namespace datalake::tests {

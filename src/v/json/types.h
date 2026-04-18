@@ -11,6 +11,9 @@
 
 #include "json/_include_first.h"
 
+#include <fmt/format.h>
+#include <rapidjson/error/error.h>
+#include <rapidjson/pointer.h>
 #include <rapidjson/rapidjson.h>
 
 namespace json {
@@ -19,3 +22,25 @@ using SizeType = rapidjson::SizeType;
 using Type = rapidjson::Type;
 
 } // namespace json
+
+template<>
+struct fmt::formatter<rapidjson::Type> : fmt::formatter<int> {
+    auto format(rapidjson::Type t, fmt::format_context& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(t), ctx);
+    }
+};
+
+template<>
+struct fmt::formatter<rapidjson::ParseErrorCode> : fmt::formatter<int> {
+    auto format(rapidjson::ParseErrorCode e, fmt::format_context& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(e), ctx);
+    }
+};
+
+template<>
+struct fmt::formatter<rapidjson::PointerParseErrorCode> : fmt::formatter<int> {
+    auto
+    format(rapidjson::PointerParseErrorCode e, fmt::format_context& ctx) const {
+        return fmt::formatter<int>::format(static_cast<int>(e), ctx);
+    }
+};

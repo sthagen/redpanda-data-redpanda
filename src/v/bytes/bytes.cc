@@ -28,11 +28,6 @@ size_t to_hex(ss::sstring& out, size_t pos, bytes_view data) {
     return data.size() * 2;
 }
 
-std::ostream& operator<<(std::ostream& os, const bytes& b) {
-    return os << bytes_view(b);
-}
-
-std::ostream& operator<<(std::ostream& os, const bytes_view& b) {
-    fmt::print(os, "{{bytes:{}}}", b.size());
-    return os;
+fmt::iterator bytes::format_to(fmt::iterator it) const {
+    return bytes_view(*this).format_to(it);
 }

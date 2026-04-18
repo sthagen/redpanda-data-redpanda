@@ -13,8 +13,6 @@
 #include "model/metadata.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/testing/thread_test_case.hh>
-
 #include <cstdint>
 using namespace std::chrono_literals;
 

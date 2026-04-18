@@ -10,22 +10,17 @@
 #include "cluster/cluster_utils.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/shard_table.h"
-#include "cluster/simple_batch_builder.h"
 #include "cluster/tests/cluster_test_fixture.h"
 #include "cluster/tests/utils.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
-#include "config/configuration.h"
 #include "model/metadata.h"
 #include "model/timeout_clock.h"
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
-#include "utils/unresolved_address.h"
 
-#include <seastar/core/future-util.hh>
 #include <seastar/core/sstring.hh>
 
-#include <bits/stdint-intn.h>
 #include <boost/test/tools/old/interface.hpp>
 using namespace std::chrono_literals; // NOLINT
 

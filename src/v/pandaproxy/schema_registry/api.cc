@@ -14,8 +14,6 @@
 #include "config/configuration.h"
 #include "kafka/client/configuration.h"
 #include "kafka/data/rpc/deps.h"
-#include "model/metadata.h"
-#include "model/namespace.h"
 #include "pandaproxy/logger.h"
 #include "pandaproxy/schema_registry/configuration.h"
 #include "pandaproxy/schema_registry/schema_id_cache.h"

@@ -14,12 +14,6 @@
 
 namespace cloud_topics::l1 {
 
-std::ostream&
-operator<<(std::ostream& o, const offset_interval_set::interval& iv) {
-    fmt::print(o, "{}", iv);
-    return o;
-}
-
 bool offset_interval_set::empty() const { return iset_.empty(); }
 
 bool offset_interval_set::insert(kafka::offset base, kafka::offset last) {

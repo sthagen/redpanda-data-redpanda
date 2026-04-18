@@ -14,6 +14,8 @@
 #include "absl/random/random.h"
 #include "base/vassert.h"
 
+#include <fmt/ostream.h>
+
 #include <algorithm>
 #include <atomic>
 #include <random>
@@ -116,7 +118,7 @@ fmt::iterator rng::format_to(fmt::iterator it) const {
 
     // the only way to get the internal pcg64 state is to parse it out of the
     // ostream<< output for the engine
-    auto gen_state = fmt::format("{}", gen_);
+    auto gen_state = fmt::format("{}", fmt_streamed(gen_));
     std::stringstream ss(gen_state);
     std::vector<uint64_t> state_vector;
     uint64_t temp{};

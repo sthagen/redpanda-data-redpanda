@@ -10,11 +10,9 @@
  */
 
 #include "cluster/plugin_table.h"
-#include "cluster/types.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/transform.h"
-#include "utils/uuid.h"
 
 #include <seastar/core/sstring.hh>
 

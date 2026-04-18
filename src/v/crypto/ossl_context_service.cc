@@ -19,8 +19,6 @@
 #include "ssx/thread_worker.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/util/bool_class.hh>
 #include <seastar/util/log.hh>
 
 #include <openssl/crypto.h>

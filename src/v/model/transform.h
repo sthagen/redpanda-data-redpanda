@@ -13,6 +13,7 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -106,7 +107,9 @@ struct transform_from_start
 
     auto serde_fields() { return std::tie(delta); }
 
-    friend std::ostream& operator<<(std::ostream&, const transform_from_start&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ start + {} }}", delta);
+    }
     bool operator==(const transform_from_start&) const = default;
 };
 
@@ -134,7 +137,9 @@ struct transform_from_end
 
     auto serde_fields() { return std::tie(delta); }
 
-    friend std::ostream& operator<<(std::ostream&, const transform_from_end&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ end - {} }}", delta);
+    }
     bool operator==(const transform_from_end&) const = default;
 };
 
@@ -183,8 +188,7 @@ struct transform_offset_options
 
     bool operator==(const transform_offset_options&) const = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const transform_offset_options&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     void serde_read(iobuf_parser& in, const serde::header& h);
     void serde_write(iobuf& out) const;
@@ -224,7 +228,7 @@ struct transform_metadata
     friend bool
     operator==(const transform_metadata&, const transform_metadata&) = default;
 
-    friend std::ostream& operator<<(std::ostream&, const transform_metadata&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     void serde_write(iobuf& out) const;
     void serde_read(iobuf_parser& in, const serde::header& h);
@@ -267,8 +271,7 @@ struct transform_offsets_key
 
     auto operator<=>(const transform_offsets_key&) const = default;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const transform_offsets_key&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     template<typename H>
     friend H AbslHashValue(H h, const transform_offsets_key& k) {
@@ -287,8 +290,9 @@ struct transform_offsets_value
       serde::compat_version<0>> {
     kafka::offset offset;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const transform_offsets_value&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{ offset: {} }}", offset);
+    }
 
     auto serde_fields() { return std::tie(offset); }
 };
@@ -328,7 +332,7 @@ struct transform_report
         int64_t lag;
         friend bool operator==(const processor&, const processor&) = default;
 
-        friend std::ostream& operator<<(std::ostream&, const processor&);
+        fmt::iterator format_to(fmt::iterator it) const;
 
         auto serde_fields() { return std::tie(id, status, node, lag); }
     };
@@ -356,11 +360,37 @@ struct transform_report
     void add(processor);
 };
 
-std::string_view
-processor_state_to_string(transform_report::processor::state state);
+inline constexpr std::string_view
+to_string_view(transform_report::processor::state state) {
+    switch (state) {
+    case transform_report::processor::state::inactive:
+        return "inactive";
+    case transform_report::processor::state::running:
+        return "running";
+    case transform_report::processor::state::errored:
+        return "errored";
+    case transform_report::processor::state::unknown:
+        break;
+    }
+    return "unknown";
+}
 
-std::ostream&
-operator<<(std::ostream& os, transform_report::processor::state s);
+inline fmt::iterator
+format_to(transform_report::processor::state state, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(state));
+}
+
+/// Kept as an alias for existing callers.
+inline std::string_view
+processor_state_to_string(transform_report::processor::state state) {
+    return to_string_view(state);
+}
+
+inline fmt::iterator
+transform_report::processor::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{id: {}, status: {}, node: {}, lag: {}}}", id, status, node, lag);
+}
 
 /**
  * A cluster wide view of all the currently running transforms.

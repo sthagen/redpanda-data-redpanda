@@ -14,7 +14,6 @@
 #include "cloud_roles/types.h"
 #include "http/client.h"
 
-#include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/unit_test.hpp>

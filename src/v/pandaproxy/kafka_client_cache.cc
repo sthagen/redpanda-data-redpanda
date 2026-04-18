@@ -14,7 +14,6 @@
 #include "pandaproxy/logger.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/loop.hh>
 #include <seastar/core/rwlock.hh>
 
 #include <chrono>

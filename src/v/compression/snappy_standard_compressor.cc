@@ -12,7 +12,6 @@
 #include "base/likely.h"
 #include "base/units.h"
 #include "base/vassert.h"
-#include "bytes/bytes.h"
 #include "snappy-sinksource.h"
 #include "snappy.h"
 

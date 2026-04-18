@@ -13,6 +13,7 @@
 
 #include "absl/container/node_hash_map.h"
 #include "absl/hash/hash.h"
+#include "base/format_to.h"
 #include "container/chunked_vector.h"
 #include "kafka/client/assignment_plans.h"
 #include "kafka/client/brokers.h"
@@ -79,6 +80,8 @@ public:
     offset_commit(chunked_vector<offset_commit_request_topic> topics);
     ss::future<fetch_response>
     fetch(std::chrono::milliseconds timeout, std::optional<int32_t> max_bytes);
+
+    fmt::iterator format_to(fmt::iterator it) const;
 
 private:
     bool is_leader() const {
@@ -183,16 +186,6 @@ private:
     ss::noncopyable_function<ss::future<>(std::exception_ptr)>
       _external_mitigate;
     prefix_logger* _logger;
-
-    friend std::ostream& operator<<(std::ostream& os, const consumer& c) {
-        fmt::print(
-          os,
-          "type={}, member_id={}, name={}",
-          c.is_leader() ? "leader" : "member",
-          c._member_id,
-          c._name);
-        return os;
-    }
 };
 
 using shared_consumer_t = ss::lw_shared_ptr<consumer>;

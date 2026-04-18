@@ -15,17 +15,6 @@
 
 namespace storage::experimental::mvlog {
 
-std::ostream& operator<<(std::ostream& o, collect_stream_outcome out) {
-    switch (out) {
-    case collect_stream_outcome::buffer_full:
-        return o << "collect_stream_outcome::buffer_full";
-    case collect_stream_outcome::end_of_stream:
-        return o << "collect_stream_outcome::end_of_stream";
-    case collect_stream_outcome::stop:
-        return o << "collect_stream_outcome::stop";
-    }
-}
-
 ss::future<result<collect_stream_outcome, errc>>
 collect_batches_from_stream(entry_stream& entries, batch_collector& collector) {
     while (true) {

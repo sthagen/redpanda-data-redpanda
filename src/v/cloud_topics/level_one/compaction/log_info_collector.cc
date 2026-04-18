@@ -21,12 +21,6 @@
 #include "model/metadata.h"
 #include "model/timestamp.h"
 
-#include <seastar/core/coroutine.hh>
-
-#include <chrono>
-
-using namespace std::chrono_literals;
-
 namespace cloud_topics::l1 {
 
 namespace {

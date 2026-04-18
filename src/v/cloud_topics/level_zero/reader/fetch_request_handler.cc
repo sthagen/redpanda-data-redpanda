@@ -10,20 +10,14 @@
 
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 
-#include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/read_request.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
-#include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
-#include "model/timeout_clock.h"
 #include "ssx/future-util.h"
-#include "storage/types.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/internal/timers.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/defer.hh>

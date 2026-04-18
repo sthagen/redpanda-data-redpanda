@@ -14,8 +14,6 @@
 #include "serde/json/tests/data.h"
 #include "test_utils/test.h"
 
-#include <gtest/gtest.h>
-
 using namespace testing;
 using namespace serde::json;
 

@@ -18,8 +18,6 @@
 #include "model/fundamental.h"
 #include "model/namespace.h"
 
-#include <seastar/core/coroutine.hh>
-
 #include <utility>
 
 namespace cloud_topics {

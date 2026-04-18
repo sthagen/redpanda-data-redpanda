@@ -17,7 +17,6 @@
 #include "test_utils/boost_fixture.h"
 #include "utils/file_io.h"
 
-#include <seastar/core/file.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/algorithm/string/predicate.hpp>

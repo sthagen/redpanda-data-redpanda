@@ -20,21 +20,17 @@
 #include "model/transform.h"
 #include "random/generators.h"
 #include "test_utils/async.h"
-#include "test_utils/randoms.h"
 #include "transform/commit_batcher.h"
 #include "transform/logger.h"
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/print.hh>
 
 #include <fmt/ostream.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <chrono>
-#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <string_view>

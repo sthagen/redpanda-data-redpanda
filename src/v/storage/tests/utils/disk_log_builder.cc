@@ -14,10 +14,6 @@
 #include "storage/disk_log_appender.h"
 #include "storage/types.h"
 
-#include <seastar/core/file.hh>
-#include <seastar/core/future-util.hh>
-#include <seastar/core/thread.hh>
-
 using namespace std::chrono_literals; // NOLINT
 
 // util functions to be moved from storage_fixture

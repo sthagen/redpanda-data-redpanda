@@ -17,7 +17,6 @@
 #include "utils/stream_utils.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>
@@ -26,9 +25,6 @@
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
-
-#include <exception>
-#include <vector>
 
 template<typename... T>
 auto all_equal(const std::tuple<T...>& t) {

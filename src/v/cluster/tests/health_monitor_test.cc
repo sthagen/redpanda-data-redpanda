@@ -13,7 +13,6 @@
 #include "cluster/node/types.h"
 #include "cluster/tests/cluster_test_fixture.h"
 #include "cluster/tests/health_monitor_test_utils.h"
-#include "cluster/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"

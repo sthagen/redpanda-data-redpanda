@@ -16,12 +16,7 @@
 #include "model/metadata.h"
 #include "model/tests/random_batch.h"
 
-#include <seastar/util/defer.hh>
-
 #include <gtest/gtest.h>
-
-#include <numeric>
-#include <variant>
 
 using namespace cloud_topics;
 

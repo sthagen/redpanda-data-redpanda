@@ -17,20 +17,13 @@
 #include "cloud_storage/remote_partition.h"
 #include "cloud_storage/remote_segment.h"
 #include "config/configuration.h"
-#include "config/node_config.h"
 #include "resource_mgmt/memory_groups.h"
 #include "ssx/future-util.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/iostream.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/core/temporary_buffer.hh>
 
 #include <algorithm>
 #include <chrono>
-#include <exception>
-#include <limits>
 
 namespace cloud_storage {
 

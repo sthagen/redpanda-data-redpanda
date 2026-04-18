@@ -19,7 +19,6 @@
 #include "cluster/members_manager.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/coroutine/switch_to.hh>
 
 namespace cluster {
 

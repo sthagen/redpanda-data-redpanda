@@ -12,7 +12,6 @@
 #include "iceberg/merge_append_action.h"
 #include "iceberg/remove_snapshots_action.h"
 #include "iceberg/schema.h"
-#include "iceberg/table_requirement.h"
 #include "iceberg/table_update_applier.h"
 #include "iceberg/update_partition_spec_action.h"
 #include "iceberg/update_schema_action.h"

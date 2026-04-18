@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/container/flat_hash_set.h"
 #include "kafka/client/utils.h"
 
 #include <seastar/core/future.hh>
@@ -15,10 +14,8 @@
 
 #include <boost/test/tools/old/interface.hpp>
 
-#include <chrono>
 #include <exception>
 #include <initializer_list>
-#include <stdexcept>
 
 namespace kc = kafka::client;
 using namespace std::chrono_literals;

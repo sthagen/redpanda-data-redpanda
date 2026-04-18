@@ -19,13 +19,8 @@
 #include <seastar/core/metrics.hh>
 #include <seastar/core/metrics_registration.hh>
 
-#include <fmt/core.h>
-
-#include <iterator>
 #include <limits>
 #include <memory>
-#include <numeric>
-#include <stdexcept>
 
 namespace resources {
 

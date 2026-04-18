@@ -13,7 +13,6 @@
 #include "bytes/iobuf.h"
 #include "iceberg/avro_utils.h"
 #include "iceberg/manifest_file.avrogen.h"
-#include "strings/string_switch.h"
 
 #include <avro/DataFile.hh>
 

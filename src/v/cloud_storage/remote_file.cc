@@ -13,7 +13,6 @@
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/remote.h"
-#include "cloud_storage/types.h"
 #include "cloud_storage_clients/types.h"
 #include "utils/retry_chain_node.h"
 

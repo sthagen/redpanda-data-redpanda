@@ -13,13 +13,10 @@
 
 #include "cluster/cluster_recovery_table.h"
 #include "cluster/topic_table.h"
-#include "config/config_store.h"
 #include "config/configuration.h"
 #include "container/chunked_hash_map.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
-#include "security/acl_store.h"
 #include "security/credential_store.h"
 
 namespace cluster::cloud_metadata {

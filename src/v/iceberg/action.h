@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "iceberg/table_requirement.h"
@@ -43,6 +44,15 @@ public:
 
     virtual ~action() = default;
 };
-std::ostream& operator<<(std::ostream& o, action::errc e);
+inline fmt::iterator format_to(action::errc e, fmt::iterator out) {
+    switch (e) {
+    case action::errc::unexpected_state:
+        return fmt::format_to(out, "action::errc::unexpected_state");
+    case action::errc::io_failed:
+        return fmt::format_to(out, "action::errc::io_failed");
+    case action::errc::shutting_down:
+        return fmt::format_to(out, "action::errc::shutting_down");
+    }
+}
 
 } // namespace iceberg

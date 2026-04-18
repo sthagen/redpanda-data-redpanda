@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "bytes/bytes.h"
 #include "container/chunked_vector.h"
@@ -61,9 +62,20 @@ struct data_file
         };
     }
 
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{remote_path: {}, row_count: {}, file_size_bytes: {}, "
+          "hour_deprecated: {}, table_schema_id: {}, partition_spec_id: {}}}",
+          remote_path,
+          row_count,
+          file_size_bytes,
+          hour_deprecated,
+          table_schema_id,
+          partition_spec_id);
+    }
+
     friend bool operator==(const data_file&, const data_file&) = default;
 };
-
-std::ostream& operator<<(std::ostream& o, const data_file& f);
 
 } // namespace datalake::coordinator

@@ -27,7 +27,7 @@ public:
       retry_params retry_params = default_retry_params);
     ss::future<api_response> fetch_credentials() override;
 
-    std::ostream& print(std::ostream& os) const override;
+    fmt::iterator format_to(fmt::iterator it) const override;
 
 protected:
     api_response_parse_result parse_response(iobuf resp) override;

@@ -9,7 +9,6 @@
  */
 
 #include "absl/strings/str_split.h"
-#include "bytes/iobuf_parser.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "config/types.h"

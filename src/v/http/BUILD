@@ -47,6 +47,7 @@ redpanda_cc_library(
         "@boost//:asio",
         "@boost//:beast",
         "@boost//:optional",
+        "@fmt",
         "@seastar",
     ],
 )

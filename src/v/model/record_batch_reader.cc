@@ -21,6 +21,7 @@
 
 #include <exception>
 #include <memory>
+#include <sstream>
 #include <utility>
 
 namespace model {
@@ -45,12 +46,12 @@ record_batch_reader make_foreign_record_batch_reader(record_batch_reader&& r) {
             return _ptr->is_end_of_stream();
         }
 
-        void print(std::ostream& os) final {
-            fmt::print(
-              os,
+        fmt::iterator format_to(fmt::iterator it) const final {
+            it = fmt::format_to(
+              it,
               "foreign_record_batch_reader. remote_core:{} - proxy for:",
               _ptr.get_owner_shard());
-            _ptr->print(os);
+            return _ptr->format_to(it);
         }
 
         ss::future<storage_t> do_load_slice(timeout_clock::time_point t) final {
@@ -87,12 +88,12 @@ record_batch_reader make_memory_record_batch_reader(storage_t batches) {
               });
         }
 
-        void print(std::ostream& os) final {
+        fmt::iterator format_to(fmt::iterator it) const final {
             auto size = ss::visit(
               _batches,
               [](const data_t& d) { return d.size(); },
               [](const foreign_data_t& d) { return d.buffer->size(); });
-            fmt::print(os, "memory reader {} batches", size);
+            return fmt::format_to(it, "memory reader {} batches", size);
         }
 
     protected:
@@ -129,8 +130,8 @@ record_batch_reader make_empty_record_batch_reader() {
             co_return data_t{};
         }
 
-        void print(std::ostream& os) final {
-            os << "{empty_record_batch_reader}";
+        fmt::iterator format_to(fmt::iterator it) const final {
+            return fmt::format_to(it, "{{empty_record_batch_reader}}");
         }
     };
     return make_record_batch_reader<reader>();
@@ -147,8 +148,8 @@ record_batch_reader make_generating_record_batch_reader(
 
         bool is_end_of_stream() const final { return _end_of_stream; }
 
-        void print(std::ostream& os) final {
-            os << "{generating batch reader}";
+        fmt::iterator format_to(fmt::iterator it) const final {
+            return fmt::format_to(it, "{{generating batch reader}}");
         }
 
     protected:
@@ -192,12 +193,12 @@ make_readahead_record_batch_reader(record_batch_reader&& reader) {
                    && !_readahead_future.has_value();
         }
 
-        void print(std::ostream& os) final {
-            fmt::print(
-              os,
+        fmt::iterator format_to(fmt::iterator it) const final {
+            it = fmt::format_to(
+              it,
               "readahead_reader(buffered={}) wrapping: ",
               _readahead_future.has_value() ? 1 : 0);
-            _underlying->print(os);
+            return _underlying->format_to(it);
         }
 
         ss::future<storage_t>
@@ -251,9 +252,9 @@ record_batch_reader make_chunked_memory_record_batch_reader(
 
         bool is_end_of_stream() const final { return _index >= _data.size(); }
 
-        void print(std::ostream& os) final {
-            fmt::print(
-              os,
+        fmt::iterator format_to(fmt::iterator it) const final {
+            return fmt::format_to(
+              it,
               "fragmented memory reader {} batches of batches",
               _data.size());
         }
@@ -374,9 +375,8 @@ consume_reader_to_chunked_vector(
       chunked_vector<model::record_batch>>(std::move(reader), timeout);
 }
 
-std::ostream& operator<<(std::ostream& os, const record_batch_reader& r) {
-    r._impl->print(os);
-    return os;
+fmt::iterator record_batch_reader::format_to(fmt::iterator it) const {
+    return _impl->format_to(it);
 }
 
 } // namespace model

@@ -9,12 +9,11 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <iosfwd>
 
 namespace security::oidc {
 
@@ -24,7 +23,10 @@ struct parsed_url {
     uint16_t port;
     ss::sstring target;
     friend bool operator==(const parsed_url&, const parsed_url&) = default;
-    friend std::ostream& operator<<(std::ostream&, const parsed_url&);
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}://{}:{}{}", scheme, host, port, target);
+    }
 };
 result<parsed_url> parse_url(std::string_view);
 

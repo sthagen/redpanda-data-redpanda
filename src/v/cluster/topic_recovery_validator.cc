@@ -17,8 +17,6 @@
 
 #include <seastar/coroutine/as_future.hh>
 
-#include <chrono>
-
 using namespace std::chrono_literals;
 
 namespace cluster {

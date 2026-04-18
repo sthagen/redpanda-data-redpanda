@@ -245,11 +245,6 @@ ss::sstring gssapi_rule::replace_substitution(
     return replace_value;
 }
 
-std::ostream& operator<<(std::ostream& os, const gssapi_rule& r) {
-    fmt::print(os, "{}", r);
-    return os;
-}
-
 } // namespace security
 
 template<>

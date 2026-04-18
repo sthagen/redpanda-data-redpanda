@@ -11,14 +11,11 @@
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/multipart_upload.h"
-#include "cloud_storage_clients/s3_client.h"
 #include "cloud_storage_clients/s3_error.h"
 #include "cloud_storage_clients/tests/client_pool_builder.h"
 #include "test_utils/random_bytes.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/seastar.hh>
-#include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/unit_test.hpp>

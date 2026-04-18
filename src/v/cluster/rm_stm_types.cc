@@ -9,6 +9,7 @@
 
 #include "cluster/rm_stm_types.h"
 
+#include "base/format_to.h"
 #include "model/record_batch_types.h"
 #include "storage/record_batch_builder.h"
 
@@ -86,24 +87,18 @@ bool producer_partition_transaction_state::is_in_progress() const {
     return status == partition_transaction_status::ongoing
            || status == partition_transaction_status::initialized;
 }
-
-std::ostream&
-operator<<(std::ostream& o, const partition_transaction_status& status) {
-    switch (status) {
+fmt::iterator format_to(partition_transaction_status e, fmt::iterator out) {
+    switch (e) {
     case partition_transaction_status::ongoing:
-        o << "ongoing";
-        break;
+        return fmt::format_to(out, "ongoing");
     case partition_transaction_status::initialized:
-        o << "initialized";
-        break;
+        return fmt::format_to(out, "initialized");
     case partition_transaction_status::committed:
-        o << "committed";
-        break;
+        return fmt::format_to(out, "committed");
     case partition_transaction_status::aborted:
-        o << "aborted";
-        break;
+        return fmt::format_to(out, "aborted");
     }
-    return o;
+    return fmt::format_to(out, "");
 }
 
 ss::sstring partition_transaction_info::get_status() const {
@@ -130,30 +125,26 @@ std::optional<duration_type> partition_transaction_info::get_timeout() const {
 
     return info->timeout;
 }
-
-std::ostream& operator<<(std::ostream& o, const abort_snapshot& as) {
-    fmt::print(
-      o,
+fmt::iterator abort_snapshot::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{first: {}, last: {}, aborted tx count: {}}}",
-      as.first,
-      as.last,
-      as.aborted.size());
-    return o;
+      first,
+      last,
+      aborted.size());
 }
-
-std::ostream& operator<<(
-  std::ostream& o, const producer_partition_transaction_state& tx_state) {
-    fmt::print(
-      o,
+fmt::iterator
+producer_partition_transaction_state::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{first: {}, last: {}, sequence: {}, timeout: {}, coordinator "
       "partition: {}, status: {} }}",
-      tx_state.first,
-      tx_state.last,
-      tx_state.sequence,
-      tx_state.timeout,
-      tx_state.coordinator_partition,
-      tx_state.status);
-    return o;
+      first,
+      last,
+      sequence,
+      timeout,
+      coordinator_partition,
+      status);
 }
 
 model::record_batch make_fence_batch(
@@ -382,17 +373,15 @@ tx_snapshot_v5 tx_snapshot_v6::downgrade_to_v5() && {
     }
     return result;
 }
-
-std::ostream& operator<<(std::ostream& o, const tx_snapshot_v6& snapshot) {
-    fmt::print(
-      o,
+fmt::iterator tx_snapshot_v6::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{ version: {}, producers: {}, aborted transactions: {}, abort indexes: "
       "{} }}",
       tx_snapshot_v6::version,
-      snapshot.producers.size(),
-      snapshot.aborted.size(),
-      snapshot.abort_indexes.size());
-    return o;
+      producers.size(),
+      aborted.size(),
+      abort_indexes.size());
 }
 
 }; // namespace cluster::tx

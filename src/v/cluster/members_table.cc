@@ -9,7 +9,6 @@
 
 #include "cluster/members_table.h"
 
-#include "base/vassert.h"
 #include "base/vlog.h"
 #include "cluster/controller_snapshot.h"
 #include "cluster/errc.h"

@@ -11,12 +11,10 @@
 #include "crash_tracker/limiter.h"
 #include "crash_tracker/recorder.h"
 #include "crash_tracker/types.h"
-#include "model/timestamp.h"
 #include "utils/arch.h"
 #include "version/version.h"
 
 #include <seastar/core/sstring.hh>
-#include <seastar/util/bool_class.hh>
 
 #include <fmt/core.h>
 #include <gtest/gtest.h>

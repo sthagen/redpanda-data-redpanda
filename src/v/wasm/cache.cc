@@ -11,7 +11,6 @@
 
 #include "wasm/cache.h"
 
-#include "absl/container/btree_set.h"
 #include "logger.h"
 #include "model/transform.h"
 #include "ssx/future-util.h"

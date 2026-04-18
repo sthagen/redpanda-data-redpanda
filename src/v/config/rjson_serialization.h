@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/data_directory_path.h"
 #include "config/endpoint_tls_config.h"
@@ -42,6 +43,11 @@ struct custom_aggregate {
     }
 
     static consteval std::string_view type_name() { return "custom_aggregate"; }
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{string: {}, int: {}}}", string_value, int_value);
+    }
 };
 } // namespace testing
 

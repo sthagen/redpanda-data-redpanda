@@ -10,7 +10,6 @@
  */
 
 #include "raft/heartbeats.h"
-#include "raft/types.h"
 #include "random/generators.h"
 #include "test_utils/randoms.h"
 

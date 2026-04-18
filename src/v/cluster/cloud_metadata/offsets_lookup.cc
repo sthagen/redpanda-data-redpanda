@@ -15,7 +15,6 @@
 #include "cluster/logger.h"
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"
-#include "config/configuration.h"
 #include "kafka/data/partition_proxy.h"
 #include "model/ktp.h"
 

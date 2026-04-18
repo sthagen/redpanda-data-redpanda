@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/likely.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
@@ -242,7 +243,7 @@ struct header {
     /// \brief xxhash64
     uint64_t payload_checksum{0};
 
-    friend std::ostream& operator<<(std::ostream&, const header&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 static constexpr size_t size_of_rpc_header
@@ -481,6 +482,34 @@ struct transport_configuration {
     transport_version version{transport_version::v2};
 };
 
-std::ostream& operator<<(std::ostream&, const status&);
-std::ostream& operator<<(std::ostream&, transport_version);
+inline fmt::iterator format_to(status s, fmt::iterator out) {
+    switch (s) {
+    case status::success:
+        return fmt::format_to(out, "rpc::status::success");
+    case status::method_not_found:
+        return fmt::format_to(out, "rpc::status::method_not_found");
+    case status::request_timeout:
+        return fmt::format_to(out, "rpc::status::request_timeout");
+    case status::server_error:
+        return fmt::format_to(out, "rpc::status::server_error");
+    case status::version_not_supported:
+        return fmt::format_to(out, "rpc::status::version_not_supported");
+    case status::service_unavailable:
+        return fmt::format_to(out, "rpc::status::service_unavailable");
+    }
+    return fmt::format_to(out, "rpc::status::unknown");
+}
 } // namespace rpc
+
+template<>
+struct fmt::formatter<rpc::transport_version> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(rpc::transport_version v, format_context& ctx) const {
+        return fmt::format_to(
+          ctx.out(),
+          "rpc::transport_version::v{}",
+          static_cast<std::underlying_type_t<rpc::transport_version>>(v));
+    }
+};

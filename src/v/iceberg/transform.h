@@ -9,39 +9,71 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "utils/fixed_string.h"
 
 #include <cstdint>
-#include <ostream>
 #include <variant>
 
 namespace iceberg {
 
 struct identity_transform {
     static constexpr fixed_string key{"identity"};
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "identity");
+    }
 };
 struct bucket_transform {
     static constexpr fixed_string key{"bucket"};
     uint32_t n;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "bucket({})", n);
+    }
 };
 struct truncate_transform {
     static constexpr fixed_string key{"truncate"};
     uint32_t length;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "truncate({})", length);
+    }
 };
 struct year_transform {
     static constexpr fixed_string key{"year"};
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "year");
+    }
 };
 struct month_transform {
     static constexpr fixed_string key{"month"};
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "month");
+    }
 };
 struct day_transform {
     static constexpr fixed_string key{"day"};
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "day");
+    }
 };
 struct hour_transform {
     static constexpr fixed_string key{"hour"};
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "hour");
+    }
 };
 struct void_transform {
     static constexpr fixed_string key{"void"};
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "void");
+    }
 };
 
 using transform = std::variant<
@@ -54,7 +86,18 @@ using transform = std::variant<
   hour_transform,
   void_transform>;
 bool operator==(const transform& lhs, const transform& rhs);
-
 std::ostream& operator<<(std::ostream&, const transform&);
 
 } // namespace iceberg
+
+template<>
+struct fmt::formatter<iceberg::transform> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    auto format(const iceberg::transform& t, fmt::format_context& ctx) const {
+        return std::visit(
+          [&ctx](const auto& v) { return fmt::format_to(ctx.out(), "{}", v); },
+          t);
+    }
+};

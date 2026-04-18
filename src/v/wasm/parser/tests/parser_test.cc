@@ -10,14 +10,10 @@
  */
 
 #include "bytes/bytes.h"
-#include "bytes/iobuf_parser.h"
 #include "container/chunked_vector.h"
 #include "gtest/gtest.h"
 #include "wasm/parser/parser.h"
 
-#include <gtest/gtest.h>
-
-#include <limits>
 #include <stdexcept>
 #include <utility>
 #include <wasm.h>

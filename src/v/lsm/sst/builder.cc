@@ -11,7 +11,7 @@
 #include "hashing/crc32c.h"
 #include "lsm/sst/footer.h"
 
-#include <seastar/core/fstream.hh>
+#include <seastar/core/coroutine.hh>
 
 namespace lsm::sst {
 

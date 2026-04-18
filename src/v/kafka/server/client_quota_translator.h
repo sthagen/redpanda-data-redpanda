@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
 #include "utils/named_type.h"
@@ -19,6 +20,7 @@
 #include <seastar/core/sstring.hh>
 
 #include <utility>
+#include <variant>
 
 namespace kafka {
 
@@ -61,8 +63,7 @@ struct client_quota_limits {
 
     friend bool operator==(
       const client_quota_limits&, const client_quota_limits&) = default;
-    friend std::ostream&
-    operator<<(std::ostream& os, const client_quota_limits& l);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 enum class client_quota_type {
@@ -76,15 +77,24 @@ inline constexpr std::array all_client_quota_types = {
   client_quota_type::fetch_quota,
   client_quota_type::partition_mutation_quota};
 
-std::ostream& operator<<(std::ostream&, client_quota_type);
+inline fmt::iterator format_to(client_quota_type t, fmt::iterator out) {
+    switch (t) {
+    case client_quota_type::produce_quota:
+        return fmt::format_to(out, "produce_quota");
+    case client_quota_type::fetch_quota:
+        return fmt::format_to(out, "fetch_quota");
+    case client_quota_type::partition_mutation_quota:
+        return fmt::format_to(out, "partition_mutation_quota");
+    }
+}
 
 struct client_quota_request_ctx {
     client_quota_type q_type;
     std::optional<std::string_view> user;
     std::optional<std::string_view> client_id;
-};
 
-std::ostream& operator<<(std::ostream&, const client_quota_request_ctx&);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 /// client_quota_rule is used for reporting metrics to show which type of rule
 /// is being used for limiting clients
@@ -117,14 +127,41 @@ inline constexpr std::array all_client_quota_rules = {
   client_quota_rule::kafka_user_client_prefix,
   client_quota_rule::kafka_user_client_id};
 
-std::ostream& operator<<(std::ostream&, client_quota_rule);
+inline fmt::iterator format_to(client_quota_rule r, fmt::iterator out) {
+    switch (r) {
+    case client_quota_rule::not_applicable:
+        return fmt::format_to(out, "not_applicable");
+    case client_quota_rule::kafka_client_default:
+        return fmt::format_to(out, "kafka_client_default");
+    case client_quota_rule::kafka_client_prefix:
+        return fmt::format_to(out, "kafka_client_prefix");
+    case client_quota_rule::kafka_client_id:
+        return fmt::format_to(out, "kafka_client_id");
+    case client_quota_rule::kafka_user_default:
+        return fmt::format_to(out, "kafka_user_default");
+    case client_quota_rule::kafka_user_default_client_default:
+        return fmt::format_to(out, "kafka_user_default_client_default");
+    case client_quota_rule::kafka_user_default_client_prefix:
+        return fmt::format_to(out, "kafka_user_default_client_prefix");
+    case client_quota_rule::kafka_user_default_client_id:
+        return fmt::format_to(out, "kafka_user_default_client_id");
+    case client_quota_rule::kafka_user:
+        return fmt::format_to(out, "kafka_user");
+    case client_quota_rule::kafka_user_client_default:
+        return fmt::format_to(out, "kafka_user_client_default");
+    case client_quota_rule::kafka_user_client_prefix:
+        return fmt::format_to(out, "kafka_user_client_prefix");
+    case client_quota_rule::kafka_user_client_id:
+        return fmt::format_to(out, "kafka_user_client_id");
+    }
+}
 
 struct client_quota_value {
     std::optional<uint64_t> limit;
     client_quota_rule rule;
-};
 
-std::ostream& operator<<(std::ostream&, client_quota_value);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 /// client_quota_translator is responsible for providing quota_manager with a
 /// simplified interface to the quota configurations
@@ -171,3 +208,48 @@ private:
 };
 
 } // namespace kafka
+
+template<>
+struct fmt::formatter<kafka::tracker_key> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template<typename Ctx>
+    auto format(const kafka::tracker_key& key, Ctx& ctx) const {
+        return std::visit(
+          [&ctx](const auto& value) {
+              using value_t = std::remove_cvref_t<decltype(value)>;
+              if constexpr (
+                std::is_same_v<
+                  value_t,
+                  std::pair<kafka::k_user, kafka::k_client_id>>) {
+                  return fmt::format_to(
+                    ctx.out(),
+                    "k_user{{{}}}, k_client_id{{{}}}",
+                    value.first,
+                    value.second);
+              } else if constexpr (
+                std::is_same_v<
+                  value_t,
+                  std::pair<kafka::k_user, kafka::k_group_name>>) {
+                  return fmt::format_to(
+                    ctx.out(),
+                    "k_user{{{}}}, k_group_name{{{}}}",
+                    value.first,
+                    value.second);
+              } else if constexpr (std::is_same_v<value_t, kafka::k_user>) {
+                  return fmt::format_to(ctx.out(), "k_user{{{}}}", value);
+              } else if constexpr (
+                std::is_same_v<value_t, kafka::k_client_id>) {
+                  return fmt::format_to(ctx.out(), "k_client_id{{{}}}", value);
+              } else if constexpr (
+                std::is_same_v<value_t, kafka::k_group_name>) {
+                  return fmt::format_to(ctx.out(), "k_group_name{{{}}}", value);
+              } else {
+                  return fmt::format_to(ctx.out(), "k_not_applicable");
+              }
+          },
+          key);
+    }
+};

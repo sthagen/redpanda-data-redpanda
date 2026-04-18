@@ -10,11 +10,8 @@
  */
 
 #include "gmock/gmock.h"
-#include "gtest/gtest.h"
 #include "serde/parquet/shredder.h"
 #include "serde/parquet/value.h"
-
-#include <gtest/gtest.h>
 
 #include <variant>
 

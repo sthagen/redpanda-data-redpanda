@@ -12,8 +12,6 @@
 #include "base/units.h"
 #include "bytes/iobuf.h"
 #include "iceberg/avro_utils.h"
-#include "iceberg/datatypes_json.h"
-#include "iceberg/json_utils.h"
 #include "iceberg/manifest.h"
 #include "iceberg/manifest_entry_type.h"
 #include "iceberg/manifest_entry_values.h"
@@ -24,8 +22,6 @@
 #include "iceberg/schema_json.h"
 #include "iceberg/values_avro.h"
 #include "strings/string_switch.h"
-
-#include <seastar/core/temporary_buffer.hh>
 
 #include <avro/Compiler.hh>
 #include <avro/DataFile.hh>
@@ -102,7 +98,7 @@ metadata_to_map(const manifest_metadata& meta) {
       {"schema", to_json_str(meta.schema)},
       {"content", std::string{content_type_to_str(meta.manifest_content_type)}},
       {"partition-spec", to_json_str(meta.partition_spec.fields)},
-      {"partition-spec-id", fmt::to_string(meta.partition_spec.spec_id())},
+      {"partition-spec-id", fmt::format("{}", meta.partition_spec.spec_id())},
       {"format-version", std::string{format_to_str(meta.format_version)}}};
 }
 // TODO: make DataFileReader::getMetadata const!

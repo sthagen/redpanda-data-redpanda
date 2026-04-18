@@ -16,14 +16,9 @@
 #include "random/generators.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/sstring.hh>
-
 #include <boost/range/iterator_range_core.hpp>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test_log.hpp>
-#include <boost/test/unit_test_suite.hpp>
-
-#include <tuple>
 
 using namespace std::chrono_literals; // NOLINT
 struct fixture {

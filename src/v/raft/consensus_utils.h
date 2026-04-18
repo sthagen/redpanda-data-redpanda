@@ -99,7 +99,9 @@ public:
         });
     }
 
-    void print(std::ostream& os) final { os << "{term assigning reader}"; }
+    fmt::iterator format_to(fmt::iterator it) const final {
+        return fmt::format_to(it, "{{term assigning reader}}");
+    }
 
 private:
     std::unique_ptr<model::record_batch_reader::impl> _source;

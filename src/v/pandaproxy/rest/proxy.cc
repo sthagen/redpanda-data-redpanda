@@ -20,9 +20,7 @@
 #include "pandaproxy/rest/iceberg_handlers.h"
 #include "security/authorizer.h"
 
-#include <seastar/core/future-util.hh>
-#include <seastar/core/memory.hh>
-#include <seastar/coroutine/parallel_for_each.hh>
+#include <seastar/coroutine/parallel_for_each.hh> // NOLINT(misc-include-cleaner): required for co_await/co_return coroutine support
 #include <seastar/http/api_docs.hh>
 
 namespace pandaproxy::rest {

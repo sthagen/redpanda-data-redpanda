@@ -20,8 +20,6 @@
 #include "storage/disk.h"
 #include "test_utils/tmp_dir.h"
 
-#include <seastar/core/coroutine.hh>
-
 #include <gtest/gtest.h>
 
 using namespace cloud_topics;

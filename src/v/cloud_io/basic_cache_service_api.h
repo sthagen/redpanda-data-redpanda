@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 
@@ -44,7 +45,16 @@ enum class [[nodiscard]] cache_element_status {
     in_progress,
 };
 
-std::ostream& operator<<(std::ostream& o, cache_element_status);
+inline fmt::iterator format_to(cache_element_status s, fmt::iterator out) {
+    switch (s) {
+    case cache_element_status::available:
+        return fmt::format_to(out, "cache_element_available");
+    case cache_element_status::not_available:
+        return fmt::format_to(out, "cache_element_not_available");
+    case cache_element_status::in_progress:
+        return fmt::format_to(out, "cache_element_in_progress");
+    }
+}
 
 template<class Clock>
 class basic_cache_service_api;

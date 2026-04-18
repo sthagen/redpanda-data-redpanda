@@ -16,409 +16,277 @@
 
 namespace cloud_storage_clients {
 
-std::ostream& operator<<(std::ostream& o, s3_error_code code) {
+fmt::iterator format_to(s3_error_code code, fmt::iterator out) {
     switch (code) {
     case s3_error_code::access_denied:
-        o << "AccessDenied";
-        break;
+        return fmt::format_to(out, "AccessDenied");
     case s3_error_code::account_problem:
-        o << "AccountProblem";
-        break;
+        return fmt::format_to(out, "AccountProblem");
     case s3_error_code::all_access_disabled:
-        o << "AllAccessDisabled";
-        break;
+        return fmt::format_to(out, "AllAccessDisabled");
     case s3_error_code::ambiguous_grant_by_email_address:
-        o << "AmbiguousGrantByEmailAddress";
-        break;
+        return fmt::format_to(out, "AmbiguousGrantByEmailAddress");
     case s3_error_code::authentication_required:
-        o << "AuthenticationRequired";
-        break;
+        return fmt::format_to(out, "AuthenticationRequired");
     case s3_error_code::authorization_header_malformed:
-        o << "AuthorizationHeaderMalformed";
-        break;
+        return fmt::format_to(out, "AuthorizationHeaderMalformed");
     case s3_error_code::bad_digest:
-        o << "BadDigest";
-        break;
+        return fmt::format_to(out, "BadDigest");
     case s3_error_code::bucket_already_exists:
-        o << "BucketAlreadyExists";
-        break;
+        return fmt::format_to(out, "BucketAlreadyExists");
     case s3_error_code::bucket_already_owned_by_you:
-        o << "BucketAlreadyOwnedByYou";
-        break;
+        return fmt::format_to(out, "BucketAlreadyOwnedByYou");
     case s3_error_code::bucket_not_empty:
-        o << "BucketNotEmpty";
-        break;
+        return fmt::format_to(out, "BucketNotEmpty");
     case s3_error_code::credentials_not_supported:
-        o << "CredentialsNotSupported";
-        break;
+        return fmt::format_to(out, "CredentialsNotSupported");
     case s3_error_code::cross_location_logging_prohibited:
-        o << "CrossLocationLoggingProhibited";
-        break;
+        return fmt::format_to(out, "CrossLocationLoggingProhibited");
     case s3_error_code::entity_too_small:
-        o << "EntityTooSmall";
-        break;
+        return fmt::format_to(out, "EntityTooSmall");
     case s3_error_code::entity_too_large:
-        o << "EntityTooLarge";
-        break;
+        return fmt::format_to(out, "EntityTooLarge");
     case s3_error_code::expired_token:
-        o << "ExpiredToken";
-        break;
+        return fmt::format_to(out, "ExpiredToken");
     case s3_error_code::illegal_location_constraint_exception:
-        o << "IllegalLocationConstraintException";
-        break;
+        return fmt::format_to(out, "IllegalLocationConstraintException");
     case s3_error_code::illegal_versioning_configuration_exception:
-        o << "IllegalVersioningConfigurationException";
-        break;
+        return fmt::format_to(out, "IllegalVersioningConfigurationException");
     case s3_error_code::incomplete_body:
-        o << "IncompleteBody";
-        break;
+        return fmt::format_to(out, "IncompleteBody");
     case s3_error_code::incorrect_number_of_files_in_post_request:
-        o << "IncorrectNumberOfFilesInPostRequest";
-        break;
+        return fmt::format_to(out, "IncorrectNumberOfFilesInPostRequest");
     case s3_error_code::inline_data_too_large:
-        o << "InlineDataTooLarge";
-        break;
+        return fmt::format_to(out, "InlineDataTooLarge");
     case s3_error_code::internal_error:
-        o << "InternalError";
-        break;
+        return fmt::format_to(out, "InternalError");
     case s3_error_code::invalid_access_key_id:
-        o << "InvalidAccessKeyId";
-        break;
+        return fmt::format_to(out, "InvalidAccessKeyId");
     case s3_error_code::invalid_access_point:
-        o << "InvalidAccessPoint";
-        break;
+        return fmt::format_to(out, "InvalidAccessPoint");
     case s3_error_code::invalid_addressing_header:
-        o << "InvalidAddressingHeader";
-        break;
+        return fmt::format_to(out, "InvalidAddressingHeader");
     case s3_error_code::invalid_argument:
-        o << "InvalidArgument";
-        break;
+        return fmt::format_to(out, "InvalidArgument");
     case s3_error_code::invalid_bucket_name:
-        o << "InvalidBucketName";
-        break;
+        return fmt::format_to(out, "InvalidBucketName");
     case s3_error_code::invalid_bucket_state:
-        o << "InvalidBucketState";
-        break;
+        return fmt::format_to(out, "InvalidBucketState");
     case s3_error_code::invalid_digest:
-        o << "InvalidDigest";
-        break;
+        return fmt::format_to(out, "InvalidDigest");
     case s3_error_code::invalid_encryption_algorithm_error:
-        o << "InvalidEncryptionAlgorithmError";
-        break;
+        return fmt::format_to(out, "InvalidEncryptionAlgorithmError");
     case s3_error_code::invalid_location_constraint:
-        o << "InvalidLocationConstraint";
-        break;
+        return fmt::format_to(out, "InvalidLocationConstraint");
     case s3_error_code::invalid_object_state:
-        o << "InvalidObjectState";
-        break;
+        return fmt::format_to(out, "InvalidObjectState");
     case s3_error_code::invalid_part:
-        o << "InvalidPart";
-        break;
+        return fmt::format_to(out, "InvalidPart");
     case s3_error_code::invalid_part_order:
-        o << "InvalidPartOrder";
-        break;
+        return fmt::format_to(out, "InvalidPartOrder");
     case s3_error_code::invalid_payer:
-        o << "InvalidPayer";
-        break;
+        return fmt::format_to(out, "InvalidPayer");
     case s3_error_code::invalid_policy_document:
-        o << "InvalidPolicyDocument";
-        break;
+        return fmt::format_to(out, "InvalidPolicyDocument");
     case s3_error_code::invalid_range:
-        o << "InvalidRange";
-        break;
+        return fmt::format_to(out, "InvalidRange");
     case s3_error_code::invalid_request:
-        o << "InvalidRequest";
-        break;
+        return fmt::format_to(out, "InvalidRequest");
     case s3_error_code::invalid_security:
-        o << "InvalidSecurity";
-        break;
+        return fmt::format_to(out, "InvalidSecurity");
     case s3_error_code::invalid_soaprequest:
-        o << "InvalidSOAPRequest";
-        break;
+        return fmt::format_to(out, "InvalidSOAPRequest");
     case s3_error_code::invalid_storage_class:
-        o << "InvalidStorageClass";
-        break;
+        return fmt::format_to(out, "InvalidStorageClass");
     case s3_error_code::invalid_target_bucket_for_logging:
-        o << "InvalidTargetBucketForLogging";
-        break;
+        return fmt::format_to(out, "InvalidTargetBucketForLogging");
     case s3_error_code::invalid_token:
-        o << "InvalidToken";
-        break;
+        return fmt::format_to(out, "InvalidToken");
     case s3_error_code::invalid_uri:
-        o << "InvalidURI";
-        break;
+        return fmt::format_to(out, "InvalidURI");
     case s3_error_code::key_too_long_error:
-        o << "KeyTooLongError";
-        break;
+        return fmt::format_to(out, "KeyTooLongError");
     case s3_error_code::malformed_aclerror:
-        o << "MalformedACLError";
-        break;
+        return fmt::format_to(out, "MalformedACLError");
     case s3_error_code::malformed_postrequest:
-        o << "MalformedPOSTRequest";
-        break;
+        return fmt::format_to(out, "MalformedPOSTRequest");
     case s3_error_code::malformed_xml:
-        o << "MalformedXML";
-        break;
+        return fmt::format_to(out, "MalformedXML");
     case s3_error_code::max_message_length_exceeded:
-        o << "MaxMessageLengthExceeded";
-        break;
+        return fmt::format_to(out, "MaxMessageLengthExceeded");
     case s3_error_code::max_post_pre_data_length_exceeded_error:
-        o << "MaxPostPreDataLengthExceededError";
-        break;
+        return fmt::format_to(out, "MaxPostPreDataLengthExceededError");
     case s3_error_code::metadata_too_large:
-        o << "MetadataTooLarge";
-        break;
+        return fmt::format_to(out, "MetadataTooLarge");
     case s3_error_code::method_not_allowed:
-        o << "MethodNotAllowed";
-        break;
+        return fmt::format_to(out, "MethodNotAllowed");
     case s3_error_code::missing_attachment:
-        o << "MissingAttachment";
-        break;
+        return fmt::format_to(out, "MissingAttachment");
     case s3_error_code::missing_content_length:
-        o << "MissingContentLength";
-        break;
+        return fmt::format_to(out, "MissingContentLength");
     case s3_error_code::missing_request_body_error:
-        o << "MissingRequestBodyError";
-        break;
+        return fmt::format_to(out, "MissingRequestBodyError");
     case s3_error_code::missing_security_element:
-        o << "MissingSecurityElement";
-        break;
+        return fmt::format_to(out, "MissingSecurityElement");
     case s3_error_code::missing_security_header:
-        o << "MissingSecurityHeader";
-        break;
+        return fmt::format_to(out, "MissingSecurityHeader");
     case s3_error_code::no_logging_status_for_key:
-        o << "NoLoggingStatusForKey";
-        break;
+        return fmt::format_to(out, "NoLoggingStatusForKey");
     case s3_error_code::no_such_bucket:
-        o << "NoSuchBucket";
-        break;
+        return fmt::format_to(out, "NoSuchBucket");
     case s3_error_code::no_such_bucket_policy:
-        o << "NoSuchBucketPolicy";
-        break;
+        return fmt::format_to(out, "NoSuchBucketPolicy");
     case s3_error_code::no_such_key:
-        o << "NoSuchKey";
-        break;
+        return fmt::format_to(out, "NoSuchKey");
     case s3_error_code::no_such_lifecycle_configuration:
-        o << "NoSuchLifecycleConfiguration";
-        break;
+        return fmt::format_to(out, "NoSuchLifecycleConfiguration");
     case s3_error_code::no_such_tag_set:
-        o << "NoSuchTagSet";
-        break;
+        return fmt::format_to(out, "NoSuchTagSet");
     case s3_error_code::no_such_upload:
-        o << "NoSuchUpload";
-        break;
+        return fmt::format_to(out, "NoSuchUpload");
     case s3_error_code::no_such_version:
-        o << "NoSuchVersion";
-        break;
+        return fmt::format_to(out, "NoSuchVersion");
     case s3_error_code::not_implemented:
-        o << "NotImplemented";
-        break;
+        return fmt::format_to(out, "NotImplemented");
     case s3_error_code::not_signed_up:
-        o << "NotSignedUp";
-        break;
+        return fmt::format_to(out, "NotSignedUp");
     case s3_error_code::operation_aborted:
-        o << "OperationAborted";
-        break;
+        return fmt::format_to(out, "OperationAborted");
     case s3_error_code::permanent_redirect:
-        o << "PermanentRedirect";
-        break;
+        return fmt::format_to(out, "PermanentRedirect");
     case s3_error_code::precondition_failed:
-        o << "PreconditionFailed";
-        break;
+        return fmt::format_to(out, "PreconditionFailed");
     case s3_error_code::redirect:
-        o << "Redirect";
-        break;
+        return fmt::format_to(out, "Redirect");
     case s3_error_code::request_header_section_too_large:
-        o << "RequestHeaderSectionTooLarge";
-        break;
+        return fmt::format_to(out, "RequestHeaderSectionTooLarge");
     case s3_error_code::request_is_not_multi_part_content:
-        o << "RequestIsNotMultiPartContent";
-        break;
+        return fmt::format_to(out, "RequestIsNotMultiPartContent");
     case s3_error_code::request_timeout:
-        o << "RequestTimeout";
-        break;
+        return fmt::format_to(out, "RequestTimeout");
     case s3_error_code::request_time_too_skewed:
-        o << "RequestTimeTooSkewed";
-        break;
+        return fmt::format_to(out, "RequestTimeTooSkewed");
     case s3_error_code::request_torrent_of_bucket_error:
-        o << "RequestTorrentOfBucketError";
-        break;
+        return fmt::format_to(out, "RequestTorrentOfBucketError");
     case s3_error_code::restore_already_in_progress:
-        o << "RestoreAlreadyInProgress";
-        break;
+        return fmt::format_to(out, "RestoreAlreadyInProgress");
     case s3_error_code::server_side_encryption_configuration_not_found_error:
-        o << "ServerSideEncryptionConfigurationNotFoundError";
-        break;
+        return fmt::format_to(
+          out, "ServerSideEncryptionConfigurationNotFoundError");
     case s3_error_code::service_unavailable:
-        o << "ServiceUnavailable";
-        break;
+        return fmt::format_to(out, "ServiceUnavailable");
     case s3_error_code::signature_does_not_match:
-        o << "SignatureDoesNotMatch";
-        break;
+        return fmt::format_to(out, "SignatureDoesNotMatch");
     case s3_error_code::slow_down:
-        o << "SlowDown";
-        break;
+        return fmt::format_to(out, "SlowDown");
     case s3_error_code::temporary_redirect:
-        o << "TemporaryRedirect";
-        break;
+        return fmt::format_to(out, "TemporaryRedirect");
     case s3_error_code::token_refresh_required:
-        o << "TokenRefreshRequired";
-        break;
+        return fmt::format_to(out, "TokenRefreshRequired");
     case s3_error_code::too_many_access_points:
-        o << "TooManyAccessPoints";
-        break;
+        return fmt::format_to(out, "TooManyAccessPoints");
     case s3_error_code::too_many_buckets:
-        o << "TooManyBuckets";
-        break;
+        return fmt::format_to(out, "TooManyBuckets");
     case s3_error_code::unexpected_content:
-        o << "UnexpectedContent";
-        break;
+        return fmt::format_to(out, "UnexpectedContent");
     case s3_error_code::unresolvable_grant_by_email_address:
-        o << "UnresolvableGrantByEmailAddress";
-        break;
+        return fmt::format_to(out, "UnresolvableGrantByEmailAddress");
     case s3_error_code::user_key_must_be_specified:
-        o << "UserKeyMustBeSpecified";
-        break;
+        return fmt::format_to(out, "UserKeyMustBeSpecified");
     case s3_error_code::no_such_access_point:
-        o << "NoSuchAccessPoint";
-        break;
+        return fmt::format_to(out, "NoSuchAccessPoint");
     case s3_error_code::invalid_tag:
-        o << "InvalidTag";
-        break;
+        return fmt::format_to(out, "InvalidTag");
     case s3_error_code::malformed_policy:
-        o << "MalformedPolicy";
-        break;
+        return fmt::format_to(out, "MalformedPolicy");
     case s3_error_code::no_such_configuration:
-        o << "NoSuchConfiguration";
-        break;
+        return fmt::format_to(out, "NoSuchConfiguration");
     case s3_error_code::authorization_query_parameters_error:
-        o << "AuthorizationQueryParametersError";
-        break;
+        return fmt::format_to(out, "AuthorizationQueryParametersError");
     case s3_error_code::access_point_already_owned_by_you:
-        o << "AccessPointAlreadyOwnedByYou";
-        break;
+        return fmt::format_to(out, "AccessPointAlreadyOwnedByYou");
     case s3_error_code::access_control_list_not_supported:
-        o << "AccessControlListNotSupported";
-        break;
+        return fmt::format_to(out, "AccessControlListNotSupported");
     case s3_error_code::endpoint_not_found:
-        o << "EndpointNotFound";
-        break;
+        return fmt::format_to(out, "EndpointNotFound");
     case s3_error_code::device_not_active_error:
-        o << "DeviceNotActiveError";
-        break;
+        return fmt::format_to(out, "DeviceNotActiveError");
     case s3_error_code::conditional_request_conflict:
-        o << "ConditionalRequestConflict";
-        break;
+        return fmt::format_to(out, "ConditionalRequestConflict");
     case s3_error_code::connection_closed_by_requester:
-        o << "ConnectionClosedByRequester";
-        break;
+        return fmt::format_to(out, "ConnectionClosedByRequester");
     case s3_error_code::client_token_conflict:
-        o << "ClientTokenConflict";
-        break;
+        return fmt::format_to(out, "ClientTokenConflict");
     case s3_error_code::bucket_has_access_points_attached:
-        o << "BucketHasAccessPointsAttached";
-        break;
+        return fmt::format_to(out, "BucketHasAccessPointsAttached");
     case s3_error_code::invalid_access_point_alias_error:
-        o << "InvalidAccessPointAliasError";
-        break;
+        return fmt::format_to(out, "InvalidAccessPointAliasError");
     case s3_error_code::incorrect_endpoint:
-        o << "IncorrectEndpoint";
-        break;
+        return fmt::format_to(out, "IncorrectEndpoint");
     case s3_error_code::invalid_http_method:
-        o << "InvalidHttpMethod";
-        break;
+        return fmt::format_to(out, "InvalidHttpMethod");
     case s3_error_code::invalid_host_header:
-        o << "InvalidHostHeader";
-        break;
+        return fmt::format_to(out, "InvalidHostHeader");
     case s3_error_code::invalid_bucket_owner_aws_account_id:
-        o << "InvalidBucketOwnerAWSAccountID";
-        break;
+        return fmt::format_to(out, "InvalidBucketOwnerAWSAccountID");
     case s3_error_code::invalid_bucket_acl_with_object_ownership:
-        o << "InvalidBucketAclWithObjectOwnership";
-        break;
+        return fmt::format_to(out, "InvalidBucketAclWithObjectOwnership");
     case s3_error_code::invalid_session_exception:
-        o << "InvalidSessionException";
-        break;
+        return fmt::format_to(out, "InvalidSessionException");
     case s3_error_code::invalid_signature:
-        o << "InvalidSignature";
-        break;
+        return fmt::format_to(out, "InvalidSignature");
     case s3_error_code::kms_disabled_exception:
-        o << "KMS.DisabledException";
-        break;
+        return fmt::format_to(out, "KMS.DisabledException");
     case s3_error_code::kms_invalid_key_usage_exception:
-        o << "KMS.InvalidKeyUsageException";
-        break;
+        return fmt::format_to(out, "KMS.InvalidKeyUsageException");
     case s3_error_code::kms_invalid_state_exception:
-        o << "KMS.KMSInvalidStateException";
-        break;
+        return fmt::format_to(out, "KMS.KMSInvalidStateException");
     case s3_error_code::kms_not_found_exception:
-        o << "KMS.NotFoundException";
-        break;
+        return fmt::format_to(out, "KMS.NotFoundException");
     case s3_error_code::missing_authentication_token:
-        o << "MissingAuthenticationToken";
-        break;
+        return fmt::format_to(out, "MissingAuthenticationToken");
     case s3_error_code::no_such_async_request:
-        o << "NoSuchAsyncRequest";
-        break;
+        return fmt::format_to(out, "NoSuchAsyncRequest");
     case s3_error_code::no_such_cors_configuration:
-        o << "NoSuchCORSConfiguration";
-        break;
+        return fmt::format_to(out, "NoSuchCORSConfiguration");
     case s3_error_code::no_such_multi_region_access_point:
-        o << "NoSuchMultiRegionAccessPoint";
-        break;
+        return fmt::format_to(out, "NoSuchMultiRegionAccessPoint");
     case s3_error_code::no_such_object_lock_configuration:
-        o << "NoSuchObjectLockConfiguration";
-        break;
+        return fmt::format_to(out, "NoSuchObjectLockConfiguration");
     case s3_error_code::no_such_website_configuration:
-        o << "NoSuchWebsiteConfiguration";
-        break;
+        return fmt::format_to(out, "NoSuchWebsiteConfiguration");
     case s3_error_code::not_modified:
-        o << "NotModified";
-        break;
+        return fmt::format_to(out, "NotModified");
     case s3_error_code::not_device_owner_error:
-        o << "NotDeviceOwnerError";
-        break;
+        return fmt::format_to(out, "NotDeviceOwnerError");
     case s3_error_code::no_transformation_defined:
-        o << "NoTransformationDefined";
-        break;
+        return fmt::format_to(out, "NoTransformationDefined");
     case s3_error_code::object_lock_configuration_not_found_error:
-        o << "ObjectLockConfigurationNotFoundError";
-        break;
+        return fmt::format_to(out, "ObjectLockConfigurationNotFoundError");
     case s3_error_code::ownership_controls_not_found_error:
-        o << "OwnershipControlsNotFoundError";
-        break;
+        return fmt::format_to(out, "OwnershipControlsNotFoundError");
     case s3_error_code::permanent_redirect_control_error:
-        o << "PermanentRedirectControlError";
-        break;
+        return fmt::format_to(out, "PermanentRedirectControlError");
     case s3_error_code::response_interrupted:
-        o << "ResponseInterrupted";
-        break;
+        return fmt::format_to(out, "ResponseInterrupted");
     case s3_error_code::token_code_invalid_error:
-        o << "TokenCodeInvalidError";
-        break;
+        return fmt::format_to(out, "TokenCodeInvalidError");
     case s3_error_code::too_many_multi_region_access_pointregions_error:
-        o << "TooManyMultiRegionAccessPointregionsError";
-        break;
+        return fmt::format_to(out, "TooManyMultiRegionAccessPointregionsError");
     case s3_error_code::too_many_multi_region_access_points:
-        o << "TooManyMultiRegionAccessPoints";
-        break;
+        return fmt::format_to(out, "TooManyMultiRegionAccessPoints");
     case s3_error_code::unauthorized_access_error:
-        o << "UnauthorizedAccessError";
-        break;
+        return fmt::format_to(out, "UnauthorizedAccessError");
     case s3_error_code::unexpected_ip_error:
-        o << "UnexpectedIPError";
-        break;
+        return fmt::format_to(out, "UnexpectedIPError");
     case s3_error_code::unsupported_signature:
-        o << "UnsupportedSignature";
-        break;
+        return fmt::format_to(out, "UnsupportedSignature");
     case s3_error_code::unsupported_argument:
-        o << "UnsupportedArgument";
-        break;
+        return fmt::format_to(out, "UnsupportedArgument");
     case s3_error_code::_unknown:
-        o << "_unknown_error_code_";
-        break;
+        return fmt::format_to(out, "_unknown_error_code_");
     }
-    return o;
+    return fmt::format_to(out, "_unknown_error_code_");
 }
 
 // NOLINTNEXTLINE
@@ -627,14 +495,6 @@ std::string_view rest_error_response::request_id() const noexcept {
 }
 std::string_view rest_error_response::resource() const noexcept {
     return _resource;
-}
-
-std::ostream& operator<<(std::ostream& o, const rest_error_response& err) {
-    static constexpr auto format
-      = "code: {}, message: {}, request_id: {}, resource: {}";
-    fmt::print(
-      o, format, err._code_str, err._message, err._request_id, err._resource);
-    return o;
 }
 
 } // namespace cloud_storage_clients

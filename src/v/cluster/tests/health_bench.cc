@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "base/vassert.h"
 #include "cluster/health_monitor_backend.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/tests/health_monitor_test_utils.h"
@@ -17,7 +16,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/testing/perf_tests.hh>
 
-#include <limits>
 #include <optional>
 
 namespace cluster {

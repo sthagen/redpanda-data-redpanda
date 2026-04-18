@@ -10,8 +10,8 @@
 
 #include "cluster/archival/types.h"
 
+#include "base/format_to.h"
 #include "cloud_storage/configuration.h"
-#include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/types.h"
 #include "cluster/archival/logger.h"
 #include "config/configuration.h"
@@ -19,13 +19,13 @@
 
 #include <fmt/chrono.h>
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include <chrono>
 
 using namespace std::chrono_literals;
 
 namespace archival {
-
 std::ostream&
 operator<<(std::ostream& o, const std::optional<segment_time_limit>& tl) {
     if (tl) {
@@ -38,19 +38,17 @@ operator<<(std::ostream& o, const std::optional<segment_time_limit>& tl) {
     }
     return o;
 }
-
-std::ostream& operator<<(std::ostream& o, const configuration& cfg) {
-    fmt::print(
-      o,
+fmt::iterator configuration::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{bucket_name: {}, initial_backoff: {}, "
       "segment_upload_timeout: {}, "
       "manifest_upload_timeout: {}, time_limit: {}}}",
-      cfg.bucket_name,
-      cfg.cloud_storage_initial_backoff(),
-      cfg.segment_upload_timeout(),
-      cfg.manifest_upload_timeout(),
-      cfg.time_limit);
-    return o;
+      bucket_name,
+      cloud_storage_initial_backoff(),
+      segment_upload_timeout(),
+      manifest_upload_timeout(),
+      time_limit);
 }
 
 static ss::sstring get_value_or_throw(

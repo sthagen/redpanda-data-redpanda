@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/validation_error.h"
 #include "json/stringbuffer.h"
@@ -63,6 +64,7 @@ enum class odd_even_constraint {
 using legacy_version = named_type<int64_t, struct legacy_version_tag>;
 
 std::string_view to_string_view(visibility v);
+fmt::iterator format_to(visibility v, fmt::iterator);
 
 class base_property {
 public:
@@ -111,7 +113,7 @@ public:
     virtual void to_json(
       json::Writer<json::StringBuffer>& w, redact_secrets redact) const = 0;
 
-    virtual void print(std::ostream&) const = 0;
+    virtual fmt::iterator format_to(fmt::iterator it) const = 0;
     virtual bool set_value(YAML::Node) = 0;
     virtual void set_value(std::any) = 0;
     virtual void reset() = 0;
@@ -171,7 +173,6 @@ public:
     virtual void notify_original_version(legacy_version) = 0;
 
 private:
-    friend std::ostream& operator<<(std::ostream&, const base_property&);
     std::string_view _name;
     std::string_view _desc;
 

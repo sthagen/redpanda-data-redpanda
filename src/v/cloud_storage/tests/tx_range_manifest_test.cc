@@ -16,7 +16,6 @@
 #include "model/fundamental.h"
 #include "model/record.h"
 
-#include <seastar/testing/test_case.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>

@@ -10,7 +10,6 @@
 #include "security/oidc_authenticator.h"
 
 #include "base/vlog.h"
-#include "config/property.h"
 #include "security/acl.h"
 #include "security/audit/schemas/types.h"
 #include "security/errc.h"
@@ -21,9 +20,6 @@
 
 #include <seastar/core/lowres_clock.hh>
 
-#include <boost/outcome/success_failure.hpp>
-#include <fmt/chrono.h>
-#include <fmt/core.h>
 #include <fmt/ranges.h>
 
 #include <memory>
@@ -157,18 +153,6 @@ authenticator::~authenticator() = default;
 result<authentication_data>
 authenticator::authenticate(std::string_view bearer_token) {
     return _impl->authenticate(bearer_token);
-}
-
-std::ostream& operator<<(std::ostream& os, const sasl_authenticator::state s) {
-    using state = sasl_authenticator::state;
-    switch (s) {
-    case state::init:
-        return os << "init";
-    case state::complete:
-        return os << "complete";
-    case state::failed:
-        return os << "failed";
-    }
 }
 
 sasl_authenticator::sasl_authenticator(service& service)

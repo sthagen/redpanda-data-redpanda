@@ -21,8 +21,6 @@
 
 #include <seastar/core/lowres_clock.hh>
 
-#include <fmt/chrono.h>
-
 using namespace cloud_storage;
 
 static const remote_path_provider path_provider(std::nullopt, std::nullopt);

@@ -10,6 +10,7 @@
 
 #include "cluster/topic_recovery_service.h"
 
+#include "base/format_to.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/recovery_request.h"
 #include "cloud_storage/recovery_utils.h"
@@ -20,17 +21,9 @@
 #include "cluster/types.h"
 
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/coroutine/as_future.hh>
 #include <seastar/http/request.hh>
-#include <seastar/util/defer.hh>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include <boost/outcome/try.hpp>
-#include <boost/uuid/random_generator.hpp>
-#include <boost/uuid/uuid_io.hpp>
 
 namespace {
 
@@ -70,25 +63,21 @@ constexpr int status_log_size{5};
 } // namespace
 
 namespace cloud_storage {
-
-std::ostream& operator<<(std::ostream& os, const init_recovery_result& result) {
-    fmt::print(
-      os,
+fmt::iterator init_recovery_result::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{status_code: {}, message: {}}}",
-      static_cast<int>(result.status_code),
-      result.message);
-    return os;
+      static_cast<int>(status_code),
+      message);
 }
-
-std::ostream& operator<<(std::ostream& os, const topic_download_counts& tds) {
-    fmt::print(
-      os,
+fmt::iterator topic_download_counts::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{pending_downloads: {}, successful_downloads: {}, failed_downloads: "
       "{}}}",
-      tds.pending_downloads,
-      tds.successful_downloads,
-      tds.failed_downloads);
-    return os;
+      pending_downloads,
+      successful_downloads,
+      failed_downloads);
 }
 
 static ss::sstring get_value_or_throw(
@@ -585,43 +574,34 @@ void topic_recovery_service::populate_recovery_status() {
           ntp_cfg->tp_ns, topic_download_counts{expected, 0, 0});
     }
 }
-
-std::ostream&
-operator<<(std::ostream& os, const topic_recovery_service::state& state) {
-    switch (state) {
+fmt::iterator format_to(topic_recovery_service::state e, fmt::iterator out) {
+    switch (e) {
     case topic_recovery_service::state::inactive:
-        os << "inactive";
-        break;
+        return fmt::format_to(out, "inactive");
     case topic_recovery_service::state::starting:
-        os << "starting";
-        break;
+        return fmt::format_to(out, "starting");
     case topic_recovery_service::state::scanning_bucket:
-        os << "scanning_bucket";
-        break;
+        return fmt::format_to(out, "scanning_bucket");
     case topic_recovery_service::state::creating_topics:
-        os << "creating_topics";
-        break;
+        return fmt::format_to(out, "creating_topics");
     case topic_recovery_service::state::recovering_data:
-        os << "recovering_data";
-        break;
+        return fmt::format_to(out, "recovering_data");
     }
-    return os;
+    return fmt::format_to(out, "");
 }
-
-std::ostream&
-operator<<(std::ostream& os, const topic_recovery_service::recovery_status& r) {
-    std::string request = "none";
-    if (r.request.has_value()) {
-        request = fmt::format("{}", r.request);
+fmt::iterator
+topic_recovery_service::recovery_status::format_to(fmt::iterator it) const {
+    std::string req_str = "none";
+    if (request.has_value()) {
+        req_str = fmt::format("{}", request);
     }
 
-    fmt::print(
-      os,
+    return fmt::format_to(
+      it,
       "{{state: {}, topics being downloaded: {}, recovery request: {}}}",
-      r.state,
-      r.download_counts.size(),
-      request);
-    return os;
+      state,
+      download_counts.size(),
+      req_str);
 }
 
 } // namespace cloud_storage

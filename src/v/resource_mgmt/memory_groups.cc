@@ -18,9 +18,6 @@
 
 #include <seastar/core/memory.hh>
 
-#include <cstdint>
-#include <stdexcept>
-
 namespace {
 
 bool wasm_enabled() {

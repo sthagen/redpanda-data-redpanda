@@ -9,7 +9,6 @@
 
 #include "storage/log_replayer.h"
 
-#include "base/likely.h"
 #include "base/vlog.h"
 #include "hashing/crc32c.h"
 #include "model/record.h"
@@ -17,10 +16,6 @@
 #include "storage/logger.h"
 #include "storage/parser.h"
 #include "storage/segment.h"
-#include "utils/vint.h"
-
-#include <limits>
-#include <type_traits>
 
 namespace storage {
 class checksumming_consumer final : public batch_consumer {
@@ -83,8 +78,9 @@ public:
         return (uint32_t)_header.crc == _crc.value();
     }
 
-    void print(std::ostream& os) const override {
-        fmt::print(os, "storage::checksumming_consumer segment {}", *_seg);
+    fmt::iterator format_to(fmt::iterator it) const override {
+        return fmt::format_to(
+          it, "storage::checksumming_consumer segment {}", *_seg);
     }
 
 private:
@@ -117,19 +113,12 @@ log_replayer::checkpoint log_replayer::recover_in_thread() {
     return _ckpt;
 }
 
-std::ostream& operator<<(std::ostream& o, const log_replayer::checkpoint& c) {
-    o << "{ last_offset: ";
-    if (c.last_offset) {
-        o << *c.last_offset;
-    } else {
-        o << "null";
-    }
-    o << ", truncate_file_pos:";
-    if (c.truncate_file_pos) {
-        o << *c.truncate_file_pos;
-    } else {
-        o << "null";
-    }
-    return o << "}";
+fmt::iterator log_replayer::checkpoint::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{last_offset: {}, truncate_file_pos: {}}}",
+      last_offset,
+      truncate_file_pos);
 }
+
 } // namespace storage

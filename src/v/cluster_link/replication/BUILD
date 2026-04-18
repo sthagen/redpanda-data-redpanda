@@ -92,6 +92,7 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/ssx:work_queue",
         "//src/v/utils:to_string",
+        "@fmt",
         "@seastar",
     ],
 )

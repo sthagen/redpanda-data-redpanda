@@ -12,15 +12,8 @@
 #include "serde/rw/envelope.h"
 #include "serde/rw/rw.h"
 #include "serde/rw/scalar.h"
-#include "serde/rw/sstring.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
-
-// utils
-#include "test_types.h"
-
-#include <fmt/ostream.h>
 
 struct envelope_pod
   : serde::envelope<envelope_pod, serde::version<0>, serde::compat_version<0>> {

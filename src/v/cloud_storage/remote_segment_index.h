@@ -212,22 +212,22 @@ public:
       size_t sampling_step,
       std::optional<std::reference_wrapper<segment_record_stats>> maybe_stats);
 
-    virtual consume_result
-    accept_batch_start(const model::record_batch_header&) const;
+    consume_result
+    accept_batch_start(const model::record_batch_header&) const override;
 
-    virtual void consume_batch_start(
+    void consume_batch_start(
       model::record_batch_header,
       size_t physical_base_offset,
-      size_t size_on_disk);
+      size_t size_on_disk) override;
 
-    virtual void skip_batch_start(
+    void skip_batch_start(
       model::record_batch_header,
       size_t physical_base_offset,
-      size_t size_on_disk);
+      size_t size_on_disk) override;
 
-    virtual void consume_records(iobuf&&);
-    virtual ss::future<stop_parser> consume_batch_end();
-    virtual void print(std::ostream&) const;
+    void consume_records(iobuf&&) override;
+    ss::future<stop_parser> consume_batch_end() override;
+    fmt::iterator format_to(fmt::iterator it) const override;
 
 private:
     offset_index& _ix;

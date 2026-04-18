@@ -8,12 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "container/chunked_hash_map.h"
-#include "container/chunked_vector.h"
 #include "datalake/coordinator/partition_state_override.h"
 #include "datalake/coordinator/state.h"
 #include "datalake/coordinator/state_update.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
-#include "datalake/coordinator/translated_offset_range.h"
 #include "model/fundamental.h"
 
 #include <gtest/gtest.h>

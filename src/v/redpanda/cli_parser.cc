@@ -17,7 +17,6 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 
-#include <iostream>
 #include <utility>
 
 namespace po = boost::program_options;

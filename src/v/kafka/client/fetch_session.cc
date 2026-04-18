@@ -12,10 +12,6 @@
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/schemata/offset_commit_request.h"
 
-#include <fmt/ostream.h>
-
-#include <iostream>
-
 namespace kafka::client {
 
 model::offset fetch_session::offset(model::topic_partition_view tpv) const {
@@ -81,9 +77,8 @@ fetch_session::make_offset_commit_request() const {
     return res;
 }
 
-std::ostream& operator<<(std::ostream& os, const fetch_session& fs) {
-    fmt::print(os, "{{id={}, epoch={}}}", fs.id(), fs.epoch());
-    return os;
+fmt::iterator fetch_session::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{id={}, epoch={}}}", id(), epoch());
 }
 
 } // namespace kafka::client

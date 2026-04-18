@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "serde/envelope.h"
 
@@ -18,7 +19,6 @@
 #include <seastar/net/socket_defs.hh>
 
 #include <boost/functional/hash.hpp>
-#include <fmt/ostream.h>
 
 namespace net {
 
@@ -58,13 +58,11 @@ public:
     /// format
     static unresolved_address from_string(std::string_view maybe_address);
 
-private:
-    friend std::ostream&
-    operator<<(std::ostream& o, const unresolved_address& s) {
-        fmt::print(o, "{{host: {}, port: {}}}", s.host(), s.port());
-        return o;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{host: {}, port: {}}}", host(), port());
     }
 
+private:
     ss::sstring _host;
     uint16_t _port{0};
     inet_family _family;

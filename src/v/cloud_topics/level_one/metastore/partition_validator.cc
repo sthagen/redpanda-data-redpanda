@@ -15,10 +15,6 @@
 #include "model/fundamental.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/coroutine.hh>
-
-#include <chrono>
-
 using namespace std::chrono_literals;
 
 namespace cloud_topics::l1 {
@@ -55,6 +51,10 @@ std::string_view to_string_view(anomaly_type t) {
     return "unknown_anomaly";
 }
 
+fmt::iterator format_to(anomaly_type t, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(t));
+}
+
 std::string_view to_string_view(partition_validator::errc e) {
     switch (e) {
     case partition_validator::errc::io_error:
@@ -63,6 +63,10 @@ std::string_view to_string_view(partition_validator::errc e) {
         return "partition_validator::errc::shutting_down";
     }
     return "partition_validator::errc::unknown";
+}
+
+fmt::iterator format_to(partition_validator::errc e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
 }
 
 namespace {

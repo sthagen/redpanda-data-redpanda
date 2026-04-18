@@ -3,8 +3,6 @@
 #include "ssx/sformat.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/testing/thread_test_case.hh>
-
 #include <fmt/core.h>
 
 struct request {

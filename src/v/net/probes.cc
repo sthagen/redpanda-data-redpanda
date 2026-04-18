@@ -14,24 +14,13 @@
 #include "net/client_probe.h"
 #include "net/server_probe.h"
 #include "net/tls_certificate_probe.h"
-#include "net/types.h"
 #include "ssx/sformat.h"
 
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/net/inet_address.hh>
 #include <seastar/net/tls.hh>
-#include <seastar/util/defer.hh>
 
-#include <boost/lexical_cast.hpp>
-#include <fmt/chrono.h>
-#include <fmt/ranges.h>
-
-#include <chrono>
 #include <ostream>
-#include <span>
-#include <string>
 #include <vector>
 
 namespace net {

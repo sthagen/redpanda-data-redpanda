@@ -19,10 +19,8 @@
 
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sstring.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/interface.hpp>
-#include <fmt/format.h>
 
 #include <filesystem>
 #include <string_view>

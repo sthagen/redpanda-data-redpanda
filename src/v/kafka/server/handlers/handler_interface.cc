@@ -11,7 +11,6 @@
 #include "kafka/server/handlers/handler_interface.h"
 
 #include "kafka/server/handlers/handlers.h"
-#include "kafka/server/handlers/produce.h"
 #include "kafka/server/response.h"
 
 #include <optional>

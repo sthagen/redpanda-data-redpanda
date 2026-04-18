@@ -10,17 +10,12 @@
 #include "raft/group_configuration.h"
 
 #include "absl/container/flat_hash_set.h"
-#include "config/config_store.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "raft/broker_compat.h"
-#include "raft/consensus.h"
-#include "raft/consensus_utils.h"
 #include "serde/rw/rw.h"
-
-#include <bits/stdint-uintn.h>
-#include <boost/range/join.hpp>
+#include "utils/to_string.h"
 
 #include <algorithm>
 #include <iterator>
@@ -1460,52 +1455,21 @@ void group_configuration::maybe_set_initial_revision(
     update_all_replicas();
 }
 
-std::ostream& operator<<(std::ostream& o, const group_configuration& c) {
-    fmt::print(
-      o,
-      "{{current: {}, old:{}, revision: {}, update: {}, version: {}}}",
-      c._current,
-      c._old,
-      c._revision,
-      c._configuration_update,
-      c._version);
-    if (c._version < group_configuration::v_5) {
-        fmt::print(o, ", brokers: {}}}", c._brokers);
+fmt::iterator group_configuration::format_to(fmt::iterator it) const {
+    it = fmt::format_to(
+      it,
+      "{{current: {}, old:{}, revision: {}, update: {}, version: {}",
+      _current,
+      _old,
+      _revision,
+      _configuration_update,
+      _version);
+    if (_version < group_configuration::v_5) {
+        it = fmt::format_to(it, ", brokers: {}}}", _brokers);
     } else {
-        fmt::print(o, "}}");
+        it = fmt::format_to(it, "}}");
     }
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const group_nodes& n) {
-    fmt::print(o, "{{voters: {}, learners: {}}}", n.voters, n.learners);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const offset_configuration& c) {
-    fmt::print(o, "{{offset: {}, group_configuration: {}}}", c.offset, c.cfg);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, configuration_state t) {
-    switch (t) {
-    case configuration_state::simple:
-        return o << "simple";
-    case configuration_state::joint:
-        return o << "joint";
-    case configuration_state::transitional:
-        return o << "transitional";
-    }
-    __builtin_unreachable();
-}
-std::ostream& operator<<(std::ostream& o, const configuration_update& u) {
-    fmt::print(
-      o,
-      "{{to_add: {}, to_remove: {}, learner_start_offset: {}}}",
-      u.replicas_to_add,
-      u.replicas_to_remove,
-      u.learner_start_offset);
-    return o;
+    return it;
 }
 group_configuration group_configuration::serde_direct_read(
   iobuf_parser& p, const serde::header& h) {

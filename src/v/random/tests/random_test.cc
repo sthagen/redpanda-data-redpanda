@@ -14,7 +14,6 @@
 #include <boost/test/unit_test.hpp>
 
 #include <set>
-#include <utility>
 
 BOOST_AUTO_TEST_CASE(rng_basic_gen_100_unique_rands) {
     random_generators::rng rng;

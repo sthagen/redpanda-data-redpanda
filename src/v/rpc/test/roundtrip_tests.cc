@@ -9,7 +9,6 @@
 
 #include "reflection/adl.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 // utils
 #include "test_types.h"

@@ -12,11 +12,7 @@
 #include "security/mtls.h"
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 #include <fmt/ranges.h>
-
-#include <regex>
-#include <stdexcept>
 
 namespace security::tls {
 
@@ -26,11 +22,6 @@ std::vector<rule>
 parse_rules(std::optional<std::vector<ss::sstring>> unparsed_rules);
 
 } // namespace detail
-
-std::ostream& operator<<(std::ostream& os, const principal_mapper& p) {
-    fmt::print(os, "{}", p);
-    return os;
-}
 
 principal_mapper::principal_mapper(
   config::binding<std::optional<std::vector<ss::sstring>>> cb)

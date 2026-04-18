@@ -18,7 +18,6 @@
 
 #include <boost/test/tools/old/interface.hpp>
 
-#include <cstddef>
 #include <memory>
 
 struct counter {

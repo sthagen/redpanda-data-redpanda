@@ -17,7 +17,6 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/metrics.hh>
-#include <seastar/core/reactor.hh>
 
 #include <limits>
 

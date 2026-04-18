@@ -24,7 +24,6 @@
 #include <seastar/util/defer.hh>
 
 #include <boost/range/irange.hpp>
-#include <fmt/ostream.h>
 
 #include <iterator>
 #include <utility>
@@ -522,32 +521,28 @@ ss::future<> configuration_manager::adjust_configuration_idx(
       });
 }
 
-std::ostream& operator<<(std::ostream& o, const configuration_manager& m) {
-    fmt::print(o, "{{configurations: [");
+fmt::iterator configuration_manager::format_to(fmt::iterator it) const {
+    it = fmt::format_to(it, "{{configurations: [");
 
-    static auto print_cfg =
-      [](
-        std::ostream& o,
-        const configuration_manager::underlying_t::value_type& p) {
-          fmt::print(
-            o,
-            "{{offset: {}, index: {}, cfg: {}}}",
-            p.first,
-            p.second.idx,
-            p.second.cfg);
-      };
-
-    if (!m._configurations.empty()) {
-        auto it = m._configurations.begin();
-        print_cfg(o, *it);
-        ++it;
-        for (; it != m._configurations.end(); ++it) {
-            fmt::print(o, ",");
-            print_cfg(o, *it);
+    if (!_configurations.empty()) {
+        auto cfg_it = _configurations.begin();
+        it = fmt::format_to(
+          it,
+          "{{offset: {}, index: {}, cfg: {}}}",
+          cfg_it->first,
+          cfg_it->second.idx,
+          cfg_it->second.cfg);
+        ++cfg_it;
+        for (; cfg_it != _configurations.end(); ++cfg_it) {
+            it = fmt::format_to(
+              it,
+              ",{{offset: {}, index: {}, cfg: {}}}",
+              cfg_it->first,
+              cfg_it->second.idx,
+              cfg_it->second.cfg);
         }
     }
-    fmt::print(o, "]}}");
-    return o;
+    return fmt::format_to(it, "]}}");
 }
 
 } // namespace raft

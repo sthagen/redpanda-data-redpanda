@@ -15,22 +15,18 @@
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/metadata.h"
 #include "kafka/protocol/schemata/create_topics_request.h"
-#include "kafka/server/handlers/topics/types.h"
 #include "redpanda/application.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 
 #include <seastar/core/do_with.hh>
-#include <seastar/core/sleep.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 
 #include <algorithm>
 #include <chrono>
-#include <iterator>
 #include <optional>
-#include <vector>
 
 using namespace std::chrono_literals; // NOLINT
 

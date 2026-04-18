@@ -17,9 +17,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/lowres_clock.hh>
-
-#include <gtest/gtest.h>
 
 #include <stdexcept>
 

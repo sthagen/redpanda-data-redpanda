@@ -13,21 +13,16 @@
 #include "cluster/id_allocator_service.h"
 #include "cluster/id_allocator_stm.h"
 #include "cluster/logger.h"
-#include "cluster/members_table.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/partition_leaders_table.h"
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"
 #include "cluster/topics_frontend.h"
-#include "cluster/tx_helpers.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "model/namespace.h"
-#include "model/record_batch_reader.h"
 #include "rpc/connection_cache.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/do_with.hh>
 #include <seastar/core/sharded.hh>
 
 namespace cluster {

@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_topics/level_one/metastore/lsm/state.h"
 #include "cluster/state_machine_registry.h"
 #include "model/fundamental.h"
@@ -90,6 +91,17 @@ private:
     ss::timer<ss::lowres_clock> snapshot_timer_;
 };
 
+inline fmt::iterator format_to(stm::errc e, fmt::iterator out) {
+    switch (e) {
+    case stm::errc::not_leader:
+        return fmt::format_to(out, "stm::errc::not_leader");
+    case stm::errc::raft_error:
+        return fmt::format_to(out, "stm::errc::raft_error");
+    case stm::errc::shutting_down:
+        return fmt::format_to(out, "stm::errc::shutting_down");
+    }
+}
+
 class lsm_stm_factory : public cluster::state_machine_factory {
 public:
     lsm_stm_factory() = default;
@@ -99,7 +111,5 @@ public:
       raft::consensus*,
       const cluster::stm_instance_config&) final;
 };
-
-std::ostream& operator<<(std::ostream& os, stm::errc e);
 
 } // namespace cloud_topics::l1

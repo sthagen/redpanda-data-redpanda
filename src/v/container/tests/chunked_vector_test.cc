@@ -27,7 +27,6 @@
 #include <ranges>
 #include <stdexcept>
 #include <type_traits>
-#include <vector>
 
 using testing::AssertionFailure;
 using testing::AssertionResult;

@@ -32,7 +32,6 @@
 #include "rpc/connection_cache.h"
 #include "types.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>

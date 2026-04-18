@@ -16,9 +16,6 @@
 #include "storage/mvlog/errc.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/iostream.hh>
-
-#include <memory>
 
 namespace storage::experimental::mvlog {
 

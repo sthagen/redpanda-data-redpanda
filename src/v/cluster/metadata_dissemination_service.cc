@@ -10,15 +10,12 @@
 #include "cluster/metadata_dissemination_service.h"
 
 #include "absl/container/flat_hash_set.h"
-#include "base/likely.h"
-#include "base/vassert.h"
 #include "base/vlog.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
-#include "cluster/metadata_cache.h"
 #include "cluster/metadata_dissemination_rpc_service.h"
 #include "cluster/metadata_dissemination_types.h"
 #include "cluster/partition_leaders_table.h"
@@ -27,7 +24,6 @@
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "model/namespace.h"
 #include "model/timeout_clock.h"
 #include "rpc/connection_cache.h"
 #include "rpc/types.h"
@@ -36,7 +32,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>

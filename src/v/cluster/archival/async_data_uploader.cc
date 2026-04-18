@@ -16,8 +16,6 @@
 #include "model/record.h"
 #include "model/timeout_clock.h"
 #include "ssx/future-util.h"
-#include "storage/disk_log_impl.h"
-#include "storage/offset_to_filepos.h"
 #include "storage/record_batch_utils.h"
 #include "utils/retry_chain_node.h"
 

@@ -18,7 +18,7 @@
 #include "serde/rw/envelope.h"
 #include "serde/rw/rw.h"
 #include "serde/rw/scalar.h"
-#include "serde/rw/vector.h"
+#include "serde/rw/vector.h" // NOLINT(misc-include-cleaner) serde specialization
 #include "storage/logger.h"
 
 #include <iterator>
@@ -437,17 +437,18 @@ offset_translator_state offset_translator_state::from_bootstrap_state(
     return state;
 }
 
-std::ostream&
-operator<<(std::ostream& os, const offset_translator_state& state) {
-    const auto& map = state._last_offset2batch;
-
+fmt::iterator offset_translator_state::format_to(fmt::iterator it) const {
+    const auto& map = _last_offset2batch;
     if (map.empty()) {
-        return os << "{empty}";
+        return fmt::format_to(it, "{{empty}}");
     }
-
-    return os << "{base offset/delta: " << map.begin()->first << "/"
-              << map.begin()->second.next_delta << ", map size: " << map.size()
-              << ", last delta: " << map.rbegin()->second.next_delta << "}";
+    return fmt::format_to(
+      it,
+      "{{base offset/delta: {}/{}, map size: {}, last delta: {}}}",
+      map.begin()->first,
+      map.begin()->second.next_delta,
+      map.size(),
+      map.rbegin()->second.next_delta);
 }
 
 } // namespace storage

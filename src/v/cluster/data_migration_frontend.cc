@@ -30,8 +30,6 @@
 #include "ssx/single_sharded.h"
 #include "utils/retry_chain_node.h"
 
-#include <fmt/ostream.h>
-
 #include <exception>
 
 namespace cluster::data_migrations {

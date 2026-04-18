@@ -14,8 +14,6 @@
 
 #include <seastar/util/variant_utils.hh>
 
-#include <avro/Schema.hh>
-
 namespace iceberg {
 std::optional<avro::NodePtr> maybe_flatten_union(const avro::NodePtr& node) {
     if (node->type() != avro::AVRO_UNION || node->leaves() != 2) {

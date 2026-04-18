@@ -9,8 +9,6 @@
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 
-#include <boost/test/tools/old/interface.hpp>
-
 #include <algorithm>
 
 absl::node_hash_map<model::node_id, size_t>

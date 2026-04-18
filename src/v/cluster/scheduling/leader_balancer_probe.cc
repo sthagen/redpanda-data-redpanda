@@ -10,9 +10,7 @@
  */
 #include "cluster/scheduling/leader_balancer_probe.h"
 
-#include "config/configuration.h"
 #include "metrics/prometheus_sanitize.h"
-#include "model/fundamental.h"
 
 #include <seastar/core/metrics.hh>
 

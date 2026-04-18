@@ -15,8 +15,6 @@
 #include "compression/stream_zstd.h"
 #include "random/generators.h"
 
-#include <seastar/core/reactor.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/testing/perf_tests.hh>
 
 static inline iobuf gen(const size_t data_size) {

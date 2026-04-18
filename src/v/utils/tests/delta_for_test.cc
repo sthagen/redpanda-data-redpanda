@@ -13,9 +13,6 @@
 #include "random/generators.h"
 #include "utils/delta_for.h"
 
-#include <seastar/testing/test_case.hh>
-#include <seastar/testing/thread_test_case.hh>
-
 #include <boost/numeric/conversion/cast.hpp>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>

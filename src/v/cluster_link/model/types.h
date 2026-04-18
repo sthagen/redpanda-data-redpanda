@@ -151,10 +151,13 @@ static constexpr std::string_view to_string_view(mirror_topic_status s) {
     }
 }
 
+static inline fmt::iterator
+format_to(mirror_topic_status s, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(s));
+}
+
 bool is_valid_status_transition(
   mirror_topic_status current, mirror_topic_status target) noexcept;
-
-std::ostream& operator<<(std::ostream& os, mirror_topic_status s);
 
 enum class task_state : uint8_t {
     /// The task is currently active and processing
@@ -187,7 +190,9 @@ static constexpr std::string_view to_string_view(task_state st) {
     }
 }
 
-std::ostream& operator<<(std::ostream& os, task_state s);
+static inline fmt::iterator format_to(task_state st, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(st));
+}
 
 /**
  * @brief SCRAM credentials to use for authentication
@@ -413,7 +418,10 @@ static constexpr std::string_view to_string_view(filter_pattern_type f) {
     return "unknown";
 }
 
-std::ostream& operator<<(std::ostream& os, filter_pattern_type f);
+static inline fmt::iterator
+format_to(filter_pattern_type f, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(f));
+}
 
 /// Whether or not the filter is an inclusive or exclusive filter
 enum class filter_type : uint8_t { include, exclude };
@@ -428,7 +436,9 @@ static constexpr std::string_view to_string_view(filter_type f) {
     return "unknown";
 }
 
-std::ostream& operator<<(std::ostream& os, filter_type f);
+static inline fmt::iterator format_to(filter_type f, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(f));
+}
 
 struct resource_name_filter_pattern
   : serde::envelope<
@@ -603,6 +613,10 @@ static constexpr std::string_view to_string_view(acl_resource r) {
     return "unknown";
 }
 
+static inline fmt::iterator format_to(acl_resource r, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(r));
+}
+
 enum class acl_pattern : uint8_t { any, literal, prefixed, match };
 
 static constexpr std::string_view to_string_view(acl_pattern p) {
@@ -617,6 +631,10 @@ static constexpr std::string_view to_string_view(acl_pattern p) {
         return "match";
     }
     return "unknown";
+}
+
+static inline fmt::iterator format_to(acl_pattern p, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(p));
 }
 
 enum class acl_operation : uint8_t {
@@ -664,6 +682,10 @@ static constexpr std::string_view to_string_view(acl_operation op) {
     return "unknown";
 }
 
+static inline fmt::iterator format_to(acl_operation op, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(op));
+}
+
 enum class acl_permission_type : uint8_t { any, allow, deny };
 
 static constexpr std::string_view to_string_view(acl_permission_type p) {
@@ -676,6 +698,11 @@ static constexpr std::string_view to_string_view(acl_permission_type p) {
         return "deny";
     }
     return "unknown";
+}
+
+static inline fmt::iterator
+format_to(acl_permission_type p, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(p));
 }
 
 struct acl_resource_filter
@@ -805,8 +832,10 @@ static constexpr std::string_view to_string_view(link_status s) {
         return "paused";
     }
 }
-std::ostream& operator<<(std::ostream& os, const link_status& s);
 
+static inline fmt::iterator format_to(link_status s, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(s));
+}
 /**
  * Link state. The state is modified by the cluster link tasks and is
  * persisted to the cluster link table.
@@ -1245,15 +1274,21 @@ using status_report_ret_t = std::expected<shadow_link_status_report, errc>;
 } // namespace cluster_link::model
 
 template<>
-struct fmt::formatter<cluster_link::model::mirror_topic_status>
-  : fmt::formatter<string_view> {
+struct fmt::formatter<cluster_link::model::mirror_topic_status> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
     auto format(cluster_link::model::mirror_topic_status s, format_context& ctx)
-      -> decltype(ctx.out());
+      const -> decltype(ctx.out()) {
+        return cluster_link::model::format_to(s, ctx.out());
+    }
 };
 
 template<>
-struct fmt::formatter<cluster_link::model::task_state>
-  : fmt::formatter<string_view> {
+struct fmt::formatter<cluster_link::model::task_state> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
     auto format(cluster_link::model::task_state, format_context& ctx) const
       -> decltype(ctx.out());
 };
@@ -1261,9 +1296,9 @@ struct fmt::formatter<cluster_link::model::task_state>
 template<>
 struct fmt::formatter<cluster_link::model::scram_credentials>
   : fmt::formatter<string_view> {
-    auto
-    format(const cluster_link::model::scram_credentials& m, format_context& ctx)
-      -> decltype(ctx.out());
+    auto format(
+      const cluster_link::model::scram_credentials& m,
+      format_context& ctx) const -> decltype(ctx.out());
 };
 
 template<>
@@ -1273,7 +1308,7 @@ struct fmt::formatter<
     auto format(
       const std::optional<
         cluster_link::model::connection_config::authn_variant>& m,
-      format_context& ctx) -> decltype(ctx.out());
+      format_context& ctx) const -> decltype(ctx.out());
 };
 
 template<>
@@ -1297,9 +1332,9 @@ struct fmt::formatter<cluster_link::model::tls_file_or_value>
 
         return it;
     }
-    auto
-    format(const cluster_link::model::tls_file_or_value& m, format_context& ctx)
-      -> decltype(ctx.out());
+    auto format(
+      const cluster_link::model::tls_file_or_value& m,
+      format_context& ctx) const -> decltype(ctx.out());
 
 private:
     bool _is_sensitive{false};
@@ -1326,7 +1361,7 @@ struct fmt::formatter<std::optional<cluster_link::model::tls_file_or_value>>
     }
     auto format(
       const std::optional<cluster_link::model::tls_file_or_value>& m,
-      format_context& ctx) -> decltype(ctx.out());
+      format_context& ctx) const -> decltype(ctx.out());
 
 private:
     bool _is_sensitive{false};
@@ -1335,15 +1370,16 @@ private:
 template<>
 struct fmt::formatter<cluster_link::model::connection_config>
   : fmt::formatter<string_view> {
-    auto
-    format(const cluster_link::model::connection_config& m, format_context& ctx)
-      -> decltype(ctx.out());
+    auto format(
+      const cluster_link::model::connection_config& m,
+      format_context& ctx) const -> decltype(ctx.out());
 };
 
 template<>
 struct fmt::formatter<std::optional<model::topic_id>>
   : fmt::formatter<string_view> {
-    auto format(const std::optional<model::topic_id>& m, format_context& ctx)
+    auto
+    format(const std::optional<model::topic_id>& m, format_context& ctx) const
       -> decltype(ctx.out());
 };
 
@@ -1356,15 +1392,19 @@ struct fmt::formatter<cluster_link::model::mirror_topic_metadata>
 };
 
 template<>
-struct fmt::formatter<cluster_link::model::filter_pattern_type>
-  : fmt::formatter<string_view> {
+struct fmt::formatter<cluster_link::model::filter_pattern_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
     auto format(cluster_link::model::filter_pattern_type s, format_context& ctx)
       const -> decltype(ctx.out());
 };
 
 template<>
-struct fmt::formatter<cluster_link::model::filter_type>
-  : fmt::formatter<string_view> {
+struct fmt::formatter<cluster_link::model::filter_type> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
     auto format(cluster_link::model::filter_type s, format_context& ctx) const
       -> decltype(ctx.out());
 };
@@ -1414,7 +1454,8 @@ struct fmt::formatter<cluster_link::model::link_state>
 template<>
 struct fmt::formatter<cluster_link::model::metadata>
   : fmt::formatter<string_view> {
-    auto format(const cluster_link::model::metadata& m, format_context& ctx)
+    auto
+    format(const cluster_link::model::metadata& m, format_context& ctx) const
       -> decltype(ctx.out());
 };
 
@@ -1422,8 +1463,8 @@ template<>
 struct fmt::formatter<cluster_link::model::add_mirror_topic_cmd>
   : fmt::formatter<string_view> {
     auto format(
-      const cluster_link::model::add_mirror_topic_cmd& m, format_context& ctx)
-      -> decltype(ctx.out());
+      const cluster_link::model::add_mirror_topic_cmd& m,
+      format_context& ctx) const -> decltype(ctx.out());
 };
 
 template<>
@@ -1431,7 +1472,7 @@ struct fmt::formatter<cluster_link::model::update_mirror_topic_status_cmd>
   : fmt::formatter<string_view> {
     auto format(
       const cluster_link::model::update_mirror_topic_status_cmd& m,
-      format_context& ctx) -> decltype(ctx.out());
+      format_context& ctx) const -> decltype(ctx.out());
 };
 
 template<>
@@ -1439,7 +1480,7 @@ struct fmt::formatter<cluster_link::model::update_mirror_topic_properties_cmd>
   : fmt::formatter<string_view> {
     auto format(
       const cluster_link::model::update_mirror_topic_properties_cmd& m,
-      format_context& ctx) -> decltype(ctx.out());
+      format_context& ctx) const -> decltype(ctx.out());
 };
 
 template<>

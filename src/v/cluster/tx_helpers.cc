@@ -1,10 +1,5 @@
 #include "cluster/tx_helpers.h"
 
-#include "base/vlog.h"
-#include "cluster/logger.h"
-
-#include <seastar/core/coroutine.hh>
-
 namespace cluster {
 
 ss::future<bool>

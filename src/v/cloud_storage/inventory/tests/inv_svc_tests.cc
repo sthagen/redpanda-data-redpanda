@@ -28,11 +28,8 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sleep.hh>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/replace.hpp>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

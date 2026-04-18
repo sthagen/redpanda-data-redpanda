@@ -11,8 +11,6 @@
 
 #include "model/record.h"
 
-#include <seastar/core/smp.hh>
-
 namespace reflection {
 
 void adl<model::topic>::to(iobuf& out, model::topic&& t) {

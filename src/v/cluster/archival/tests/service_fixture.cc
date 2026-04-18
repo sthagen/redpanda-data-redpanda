@@ -12,36 +12,23 @@
 
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
-#include "bytes/iobuf_parser.h"
 #include "cloud_storage/base_manifest.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/remote_segment.h"
 #include "cloud_storage_clients/configuration.h"
-#include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/archival/types.h"
 #include "cluster/members_table.h"
 #include "config/configuration.h"
 #include "container/chunked_circular_buffer.h"
 #include "model/tests/random_batch.h"
-#include "random/generators.h"
 #include "storage/directories.h"
-#include "storage/disk_log_impl.h"
 #include "test_utils/async.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/core/temporary_buffer.hh>
-#include <seastar/core/thread.hh>
-#include <seastar/http/function_handlers.hh>
-#include <seastar/net/socket_defs.hh>
-#include <seastar/util/defer.hh>
-#include <seastar/util/tmp_file.hh>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/core/noncopyable.hpp>
-#include <boost/property_tree/json_parser.hpp>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 

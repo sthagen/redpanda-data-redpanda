@@ -15,8 +15,6 @@
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/loop.hh>
-
 using namespace std::chrono_literals; // NOLINT
 
 FIXTURE_TEST(test_querying_ntp_status, cluster_test_fixture) {

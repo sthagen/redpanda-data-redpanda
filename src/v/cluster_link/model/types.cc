@@ -57,18 +57,6 @@ bool is_valid_status_transition(
     }
 }
 
-std::ostream& operator<<(std::ostream& os, const link_status& s) {
-    return os << fmt::format("{}", s);
-}
-
-std::ostream& operator<<(std::ostream& os, mirror_topic_status s) {
-    return os << fmt::format("{}", s);
-}
-
-std::ostream& operator<<(std::ostream& os, task_state s) {
-    return os << fmt::format("{}", s);
-}
-
 std::ostream& operator<<(std::ostream& os, const scram_credentials& creds) {
     return os << fmt::format("{}", creds);
 }
@@ -91,14 +79,6 @@ std::ostream& operator<<(std::ostream& os, const connection_config& cfg) {
 
 std::ostream& operator<<(std::ostream& os, const mirror_topic_metadata& md) {
     return os << fmt::format("{}", md);
-}
-
-std::ostream& operator<<(std::ostream& os, filter_pattern_type f) {
-    return os << fmt::format("{}", f);
-}
-
-std::ostream& operator<<(std::ostream& os, filter_type f) {
-    return os << fmt::format("{}", f);
 }
 
 std::ostream&
@@ -277,10 +257,6 @@ update_cluster_link_configuration_cmd::copy() const {
 fmt::iterator delete_mirror_topic_cmd::format_to(fmt::iterator it) const {
     return fmt::format_to(it, "{{topic: {}}}", topic);
 }
-auto format_as(acl_resource r) { return to_string_view(r); }
-auto format_as(acl_pattern p) { return to_string_view(p); }
-auto format_as(acl_operation o) { return to_string_view(o); }
-auto format_as(acl_permission_type p) { return to_string_view(p); }
 
 fmt::iterator delete_shadow_link_cmd::format_to(fmt::iterator it) const {
     return fmt::format_to(
@@ -406,11 +382,11 @@ fmt::iterator shadow_link_status_report::format_to(fmt::iterator it) const {
 auto fmt::formatter<cluster_link::model::task_state>::format(
   cluster_link::model::task_state st, format_context& ctx) const
   -> decltype(ctx.out()) {
-    return fmt::format_to(ctx.out(), "{}", to_string_view(st));
+    return cluster_link::model::format_to(st, ctx.out());
 }
 
 auto fmt::formatter<cluster_link::model::scram_credentials>::format(
-  const cluster_link::model::scram_credentials& c, format_context& ctx)
+  const cluster_link::model::scram_credentials& c, format_context& ctx) const
   -> decltype(ctx.out()) {
     auto time = std::format(
       "{:%FT%H:%M:%S}", ::model::to_time_point(c.password_last_updated));
@@ -428,7 +404,7 @@ auto fmt::formatter<
   format(
     const std::optional<cluster_link::model::connection_config::authn_variant>&
       m,
-    format_context& ctx) -> decltype(ctx.out()) {
+    format_context& ctx) const -> decltype(ctx.out()) {
     if (!m) {
         return fmt::format_to(ctx.out(), "none");
     }
@@ -438,7 +414,7 @@ auto fmt::formatter<
 }
 
 auto fmt::formatter<cluster_link::model::tls_file_or_value>::format(
-  const cluster_link::model::tls_file_or_value& t, format_context& ctx)
+  const cluster_link::model::tls_file_or_value& t, format_context& ctx) const
   -> decltype(ctx.out()) {
     return ss::visit(
       t,
@@ -458,7 +434,7 @@ auto fmt::formatter<cluster_link::model::tls_file_or_value>::format(
 auto fmt::formatter<std::optional<cluster_link::model::tls_file_or_value>>::
   format(
     const std::optional<cluster_link::model::tls_file_or_value>& m,
-    format_context& ctx) -> decltype(ctx.out()) {
+    format_context& ctx) const -> decltype(ctx.out()) {
     if (!m) {
         return fmt::format_to(ctx.out(), "not-set");
     }
@@ -469,7 +445,7 @@ auto fmt::formatter<std::optional<cluster_link::model::tls_file_or_value>>::
 }
 
 auto fmt::formatter<cluster_link::model::connection_config>::format(
-  const cluster_link::model::connection_config& c, format_context& ctx)
+  const cluster_link::model::connection_config& c, format_context& ctx) const
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
@@ -494,7 +470,7 @@ auto fmt::formatter<cluster_link::model::connection_config>::format(
 }
 
 auto fmt::formatter<std::optional<model::topic_id>>::format(
-  const std::optional<model::topic_id>& m, format_context& ctx)
+  const std::optional<model::topic_id>& m, format_context& ctx) const
   -> decltype(ctx.out()) {
     if (!m) {
         return fmt::format_to(ctx.out(), "none");
@@ -533,13 +509,13 @@ auto fmt::formatter<
 auto fmt::formatter<cluster_link::model::filter_pattern_type>::format(
   cluster_link::model::filter_pattern_type s, format_context& ctx) const
   -> decltype(ctx.out()) {
-    return fmt::format_to(ctx.out(), "{}", to_string_view(s));
+    return cluster_link::model::format_to(s, ctx.out());
 }
 
 auto fmt::formatter<cluster_link::model::filter_type>::format(
   cluster_link::model::filter_type s, format_context& ctx) const
   -> decltype(ctx.out()) {
-    return fmt::format_to(ctx.out(), "{}", to_string_view(s));
+    return cluster_link::model::format_to(s, ctx.out());
 }
 
 auto fmt::formatter<cluster_link::model::resource_name_filter_pattern>::format(
@@ -593,7 +569,7 @@ auto fmt::formatter<cluster_link::model::link_state>::format(
 }
 
 auto fmt::formatter<cluster_link::model::metadata>::format(
-  const cluster_link::model::metadata& m, format_context& ctx)
+  const cluster_link::model::metadata& m, format_context& ctx) const
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
@@ -606,7 +582,7 @@ auto fmt::formatter<cluster_link::model::metadata>::format(
 }
 
 auto fmt::formatter<cluster_link::model::add_mirror_topic_cmd>::format(
-  const cluster_link::model::add_mirror_topic_cmd& m, format_context& ctx)
+  const cluster_link::model::add_mirror_topic_cmd& m, format_context& ctx) const
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(), "{{topic: {}, metadata: {}}}", m.topic, m.metadata);
@@ -615,7 +591,7 @@ auto fmt::formatter<cluster_link::model::add_mirror_topic_cmd>::format(
 auto fmt::formatter<cluster_link::model::update_mirror_topic_status_cmd>::
   format(
     const cluster_link::model::update_mirror_topic_status_cmd& m,
-    format_context& ctx) -> decltype(ctx.out()) {
+    format_context& ctx) const -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(), "{{topic: {}, state: {}}}", m.topic, m.status);
 }
@@ -623,7 +599,7 @@ auto fmt::formatter<cluster_link::model::update_mirror_topic_status_cmd>::
 auto fmt::formatter<cluster_link::model::update_mirror_topic_properties_cmd>::
   format(
     const cluster_link::model::update_mirror_topic_properties_cmd& m,
-    format_context& ctx) -> decltype(ctx.out()) {
+    format_context& ctx) const -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
       "{{topic={}, partition_count={}, replication_factor={}, "

@@ -13,7 +13,6 @@
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "config/node_config.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
 

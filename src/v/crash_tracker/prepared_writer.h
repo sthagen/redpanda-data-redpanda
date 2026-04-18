@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "crash_tracker/types.h"
@@ -71,7 +72,20 @@ public:
 
 private:
     enum class state { uninitialized, initialized, filled, written, released };
-    friend std::ostream& operator<<(std::ostream&, state);
+    friend fmt::iterator format_to(state s, fmt::iterator out) {
+        switch (s) {
+        case state::uninitialized:
+            return fmt::format_to(out, "uninitialized");
+        case state::initialized:
+            return fmt::format_to(out, "initialized");
+        case state::filled:
+            return fmt::format_to(out, "filled");
+        case state::written:
+            return fmt::format_to(out, "written");
+        case state::released:
+            return fmt::format_to(out, "released");
+        }
+    }
 
     // Returns true on success, false on failure
     bool try_write_crash();

@@ -8,7 +8,6 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cluster/commands.h"
 #include "cluster/feature_manager.h"
 #include "cluster/fwd.h"
 #include "cluster/security_frontend.h"
@@ -20,8 +19,6 @@
 #include "security/role_store.h"
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
-
-#include <boost/range/irange.hpp>
 
 #include <algorithm>
 

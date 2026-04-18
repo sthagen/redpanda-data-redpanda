@@ -34,7 +34,7 @@ public:
     /// encountered during the fetch operation
     ss::future<api_response> fetch_credentials() override;
 
-    std::ostream& print(std::ostream& os) const override;
+    fmt::iterator format_to(fmt::iterator it) const override;
 
 protected:
     /// Helper to parse the iobuf returned from API into a credentials

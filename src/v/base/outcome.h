@@ -22,6 +22,7 @@
 #include <boost/outcome/iostream_support.hpp>
 #include <boost/outcome/try.hpp>
 #include <boost/outcome/utils.hpp>
+#include <fmt/format.h>
 
 namespace outcome = boost::outcome_v2;
 
@@ -43,3 +44,18 @@ using checked
 
 template<class T>
 constexpr bool is_result_v = outcome::is_basic_result_v<T>;
+
+template<typename T, typename E, typename P>
+struct fmt::formatter<boost::outcome_v2::basic_result<T, E, P>> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    template<typename Ctx>
+    auto
+    format(const boost::outcome_v2::basic_result<T, E, P>& r, Ctx& ctx) const {
+        if (r.has_value()) {
+            return fmt::format_to(ctx.out(), "{}", r.value());
+        }
+        return fmt::format_to(ctx.out(), "{}", r.error());
+    }
+};

@@ -9,26 +9,19 @@
 
 #include "raft/replicate_entries_stm.h"
 
-#include "base/likely.h"
 #include "base/outcome.h"
 #include "base/outcome_future_utils.h"
-#include "features/feature_table.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "raft/consensus.h"
-#include "raft/consensus_utils.h"
 #include "raft/errc.h"
 #include "raft/group_configuration.h"
 #include "raft/logger.h"
-#include "raft/raftgen_service.h"
 #include "raft/types.h"
 #include "rpc/types.h"
 #include "ssx/async_algorithm.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/semaphore.hh>
 #include <seastar/util/defer.hh>
 
 #include <chrono>

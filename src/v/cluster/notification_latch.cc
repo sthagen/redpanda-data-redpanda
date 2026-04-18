@@ -12,10 +12,8 @@
 #include "utils/expiring_promise.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/shared_ptr.hh>
 
 #include <memory>
-#include <stdexcept>
 #include <utility>
 
 namespace cluster {

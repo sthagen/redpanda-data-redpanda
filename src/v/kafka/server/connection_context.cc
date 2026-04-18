@@ -16,12 +16,10 @@
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
 #include "bytes/scattered_message.h"
-#include "cluster/types.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
 #include "container/chunked_hash_map.h"
 #include "kafka/protocol/sasl_authenticate.h"
-#include "kafka/server/datalake_throttle_manager.h"
 #include "kafka/server/handlers/fetch.h"
 #include "kafka/server/handlers/handler_interface.h"
 #include "kafka/server/handlers/produce.h"
@@ -36,14 +34,11 @@
 #include "model/fundamental.h"
 #include "net/exceptions.h"
 #include "security/authorizer.h"
-#include "security/exceptions.h"
 #include "security/gssapi_authenticator.h"
 #include "security/oidc_authenticator.h"
 #include "security/plain_authenticator.h"
 #include "security/scram_authenticator.h"
-#include "utils/windowed_sum_tracker.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/scattered_message.hh>
 #include <seastar/core/semaphore.hh>
@@ -51,7 +46,6 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/core/temporary_buffer.hh>
-#include <seastar/core/with_timeout.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/switch_to.hh>
 
@@ -1233,13 +1227,12 @@ ss::future<> connection_context::client_protocol_state::maybe_process_responses(
     });
 }
 
-std::ostream& operator<<(std::ostream& o, const virtual_connection_id& id) {
-    fmt::print(
-      o,
+fmt::iterator virtual_connection_id::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{virtual_cluster_id: {}, connection_id: {}}}",
-      id.virtual_cluster_id,
-      id.connection_id);
-    return o;
+      virtual_cluster_id,
+      connection_id);
 }
 
 void last_value::update(std::optional<std::string_view> new_value) {

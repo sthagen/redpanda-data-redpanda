@@ -46,38 +46,25 @@ replication_monitor::replication_monitor(consensus* r)
     });
 }
 
-std::ostream& operator<<(std::ostream& o, const replication_monitor& mon) {
+fmt::iterator replication_monitor::format_to(fmt::iterator it) const {
     static constexpr long max_waiters_to_print = 3;
-    auto view = std::views::values(mon._waiters);
+    it = fmt::format_to(
+      it,
+      "{{count: {}, pending_majority_waiters: {}, waiters: [",
+      _waiters.size(),
+      _pending_majority_replication_waiters);
+    auto view = std::views::values(_waiters);
     auto end = std::ranges::next(
       view.begin(), max_waiters_to_print, view.end());
-    fmt::print(
-      o,
-      "{{count: {}, pending_majority_waiters: {}, waiters: [{}]}}",
-      mon._waiters.size(),
-      mon._pending_majority_replication_waiters,
-      fmt::join(view.begin(), end, ","));
-    return o;
-}
-
-std::ostream&
-operator<<(std::ostream& o, const replication_monitor::waiter& entry) {
-    fmt::print(
-      o, "{{type: {}, append result: {}}}", entry.type, entry.append_info);
-    return o;
-}
-
-std::ostream&
-operator<<(std::ostream& o, const replication_monitor::wait_type& type) {
-    switch (type) {
-    case replication_monitor::commit:
-        fmt::print(o, "commit");
-        break;
-    case replication_monitor::majority_replication:
-        fmt::print(o, "majority_replication");
-        break;
+    bool first = true;
+    for (auto cur = view.begin(); cur != end; ++cur) {
+        if (!first) {
+            it = fmt::format_to(it, ",");
+        }
+        it = fmt::format_to(it, "{}", **cur);
+        first = false;
     }
-    return o;
+    return fmt::format_to(it, "]}}");
 }
 
 ss::future<> replication_monitor::stop() {

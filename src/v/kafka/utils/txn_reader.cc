@@ -185,8 +185,8 @@ read_committed_reader::read_committed_reader(
   : _tracker(std::move(tracker))
   , _underlying(std::move(reader).release()) {}
 
-void read_committed_reader::print(std::ostream& os) {
-    os << "transform::txn_reader{}";
+fmt::iterator read_committed_reader::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "transform::txn_reader{{}}");
 }
 
 bool read_committed_reader::is_end_of_stream() const {

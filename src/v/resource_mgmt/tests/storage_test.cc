@@ -8,12 +8,9 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "config/configuration.h"
-#include "config/property.h"
 #include "random/generators.h"
 #include "resource_mgmt/storage.h"
 
-#include <seastar/core/future.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 using ep = storage::eviction_policy;

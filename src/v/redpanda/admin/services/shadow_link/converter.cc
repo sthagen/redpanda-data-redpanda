@@ -13,13 +13,11 @@
 
 #include "bytes/iobuf_parser.h"
 #include "cluster_link/model/types.h"
-#include "config/configuration.h"
 #include "crypto/crypto.h"
 #include "serde/protobuf/rpc.h"
 #include "utils/base64.h"
 
 #include <seastar/core/memory.hh>
-#include <seastar/util/defer.hh>
 
 #include <algorithm>
 #include <new>

@@ -13,8 +13,10 @@
 #include <seastar/core/sstring.hh>
 
 #include <boost/test/unit_test.hpp>
+#include <fmt/format.h>
 
 #include <set>
+#include <sstream>
 #include <string_view>
 
 BOOST_AUTO_TEST_CASE(named_type_basic) {
@@ -83,11 +85,58 @@ BOOST_AUTO_TEST_CASE(named_type_rvalue_overload) {
 BOOST_AUTO_TEST_CASE(named_type_stream_operators) {
     using int_alias = named_type<uint64_t, struct int_t_alias_test_module>;
     int_alias value{123};
-    std::stringstream stream;
-    fmt::print(stream, "{}", value);
+    std::stringstream stream{fmt::format("{}", value)};
     int_alias from_str_value;
     stream >> from_str_value;
     BOOST_REQUIRE_EQUAL(from_str_value, value);
+}
+
+struct fmt_only_type {};
+struct unformattable_type {};
+
+template<>
+struct fmt::formatter<fmt_only_type> : formatter<std::string_view> {
+    template<typename FormatContext>
+    auto format(const fmt_only_type&, FormatContext& ctx) const {
+        return formatter<std::string_view>::format("fmt-only", ctx);
+    }
+};
+
+BOOST_AUTO_TEST_CASE(named_type_8bit_stream_output_is_numeric) {
+    using byte_alias = named_type<uint8_t, struct named_type_byte_tag>;
+
+    auto out = fmt::format("{}", byte_alias{65});
+
+    BOOST_REQUIRE_EQUAL(out, "65");
+}
+
+BOOST_AUTO_TEST_CASE(named_type_streams_fmt_only_underlying_type) {
+    using fmt_only_alias
+      = named_type<fmt_only_type, struct named_type_fmt_only_tag>;
+
+    auto out = fmt::format("{}", fmt_only_alias{fmt_only_type{}});
+
+    BOOST_REQUIRE_EQUAL(out, "fmt-only");
+}
+
+template<typename T>
+concept ostream_insertable = requires(std::ostream& os, const T& value) {
+    { os << value } -> std::same_as<std::ostream&>;
+};
+
+using unformattable_alias
+  = named_type<unformattable_type, struct named_type_unformattable_tag>;
+static_assert(!ostream_insertable<unformattable_alias>);
+
+BOOST_AUTO_TEST_CASE(named_type_formats_like_its_underlying_type) {
+    using int_alias = named_type<int, struct named_type_int_fmt_tag>;
+    BOOST_REQUIRE_EQUAL(fmt::format("{:>4}", int_alias{7}), "   7");
+
+    using monostate_alias
+      = named_type<std::monostate, struct named_type_empty_tag>;
+    BOOST_REQUIRE_EQUAL(
+      fmt::format("{}", monostate_alias{}),
+      fmt::format("{}", std::monostate{}));
 }
 
 static_assert(

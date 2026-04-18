@@ -18,7 +18,6 @@
 #include <span>
 #include <stdexcept>
 #include <string_view>
-#include <valarray>
 
 namespace wasm::ffi {
 
@@ -182,18 +181,6 @@ size_t reader::remaining_bytes() const { return slice_remainder().size(); }
 
 array<uint8_t> reader::slice_remainder() const {
     return _input.subspan(_offset);
-}
-
-std::ostream& operator<<(std::ostream& o, val_type vt) {
-    switch (vt) {
-    case val_type::i32:
-        o << "i32";
-        break;
-    case val_type::i64:
-        o << "i64";
-        break;
-    }
-    return o;
 }
 
 } // namespace wasm::ffi

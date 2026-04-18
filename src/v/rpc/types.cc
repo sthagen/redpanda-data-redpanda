@@ -10,12 +10,8 @@
 #include "rpc/types.h"
 
 #include "hashing/crc32c.h"
-#include "reflection/for_each_field.h"
 
 #include <seastar/core/byteorder.hh>
-
-#include <boost/crc.hpp>
-#include <fmt/format.h>
 
 #include <ostream>
 
@@ -38,42 +34,20 @@ uint32_t checksum_header_only(const header& h) {
     return crc.value();
 }
 
-std::ostream& operator<<(std::ostream& o, const header& h) {
+fmt::iterator header::format_to(fmt::iterator it) const {
     // NOTE: if we use the int8_t types, ostream doesn't print 0's
-    // artificially ast version and compression as ints
-    return o << "{version:" << int(h.version)
-             << ", header_checksum:" << h.header_checksum
-             << ", compression:" << static_cast<int>(h.compression)
-             << ", payload_size:" << h.payload_size << ", meta:" << h.meta
-             << ", correlation_id:" << h.correlation_id
-             << ", payload_checksum:" << h.payload_checksum << "}";
-}
-
-std::ostream& operator<<(std::ostream& o, const status& s) {
-    switch (s) {
-    case status::success:
-        return o << "rpc::status::success";
-    case status::method_not_found:
-        return o << "rpc::status::method_not_found";
-    case status::request_timeout:
-        return o << "rpc::status::request_timeout";
-    case status::server_error:
-        return o << "rpc::status::server_error";
-    case status::version_not_supported:
-        return o << "rpc::status::version_not_supported";
-    case status::service_unavailable:
-        return o << "rpc::status::service_unavailable";
-    default:
-        return o << "rpc::status::unknown";
-    }
-}
-
-std::ostream& operator<<(std::ostream& o, transport_version v) {
-    fmt::print(
-      o,
-      "rpc::transport_version::v{}",
-      static_cast<std::underlying_type_t<transport_version>>(v));
-    return o;
+    // artificially cast version and compression as ints
+    return fmt::format_to(
+      it,
+      "{{version:{}, header_checksum:{}, compression:{}, payload_size:{}, "
+      "meta:{}, correlation_id:{}, payload_checksum:{}}}",
+      int(version),
+      header_checksum,
+      static_cast<int>(compression),
+      payload_size,
+      meta,
+      correlation_id,
+      payload_checksum);
 }
 
 } // namespace rpc

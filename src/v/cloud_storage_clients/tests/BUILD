@@ -96,6 +96,7 @@ redpanda_cc_gtest(
         "util_test.cc",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/cloud_storage_clients",

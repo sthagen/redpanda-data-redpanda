@@ -143,8 +143,7 @@ struct virtual_connection_id {
     friend bool operator==(
       const virtual_connection_id&, const virtual_connection_id&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const virtual_connection_id& id);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 class last_value {

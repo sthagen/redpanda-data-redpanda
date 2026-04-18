@@ -11,17 +11,12 @@
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/types.h"
-#include "cluster/archival/adjacent_segment_merger.h"
-#include "cluster/archival/archival_policy.h"
 #include "cluster/archival/segment_reupload.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/offset_interval.h"
 #include "model/record.h"
 #include "model/timeout_clock.h"
 #include "random/generators.h"
-#include "storage/log_manager.h"
-#include "storage/record_batch_utils.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
 #include "test_utils/archival.h"
@@ -33,6 +28,8 @@
 #include <gtest/gtest.h>
 
 #include <variant>
+
+using namespace std::chrono_literals;
 
 using namespace archival;
 

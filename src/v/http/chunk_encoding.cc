@@ -14,12 +14,7 @@
 #include <seastar/core/temporary_buffer.hh>
 
 #include <boost/asio/buffer.hpp>
-#include <boost/asio/error.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/core/error.hpp>
-#include <boost/beast/http.hpp>
 #include <boost/beast/http/chunk_encode.hpp>
-#include <boost/beast/http/field.hpp>
 
 namespace http {
 

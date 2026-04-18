@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
 #include "storage/ntp_config.h"
@@ -111,8 +112,12 @@ private:
         return std::filesystem::path(make_string());
     }
     ss::sstring make_string() const;
-    friend std::ostream& operator<<(std::ostream&, const partition_path&);
     friend class segment_full_path;
+
+public:
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}_{}", ntp.path(), revision_id);
+    }
 };
 
 class segment_full_path {
@@ -215,9 +220,10 @@ private:
       , dir_part(dir_part)
       , file_part(file_part) {}
 
-    friend std::ostream& operator<<(std::ostream&, const segment_full_path&);
+public:
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", string());
+    }
 };
-
-std::ostream& operator<<(std::ostream&, const segment_full_path&);
 
 } // namespace storage

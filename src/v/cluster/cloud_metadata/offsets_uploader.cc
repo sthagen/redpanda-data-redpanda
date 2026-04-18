@@ -9,22 +9,17 @@
  */
 #include "cluster/cloud_metadata/offsets_uploader.h"
 
-#include "base/outcome.h"
 #include "base/vlog.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage_clients/types.h"
 #include "cluster/cloud_metadata/error_outcome.h"
 #include "cluster/cloud_metadata/key_utils.h"
-#include "cluster/cloud_metadata/types.h"
 #include "cluster/logger.h"
 #include "config/configuration.h"
 #include "kafka/server/group_manager.h"
 #include "ssx/future-util.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/lowres_clock.hh>
-
-#include <chrono>
 #include <exception>
 
 using namespace std::chrono_literals;

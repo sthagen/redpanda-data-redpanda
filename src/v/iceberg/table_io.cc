@@ -51,7 +51,7 @@ ss::future<checked<size_t, metadata_io::errc>>
 table_io::upload_version_hint(const version_hint_path& path, int version) {
     return upload_object<int>(
       path(), version, "iceberg::version_hint", [](int v) {
-          return iobuf::from(fmt::to_string(v));
+          return iobuf::from(fmt::format("{}", v));
       });
 }
 

@@ -15,8 +15,6 @@
 #include "test_utils/random_bytes.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/reactor.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <cstddef>

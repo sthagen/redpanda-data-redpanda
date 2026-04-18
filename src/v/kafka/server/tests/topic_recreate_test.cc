@@ -7,19 +7,13 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/container/flat_hash_map.h"
 #include "container/chunked_vector.h"
-#include "kafka/protocol/batch_consumer.h"
 #include "kafka/protocol/create_topics.h"
 #include "kafka/protocol/delete_topics.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/metadata.h"
-#include "kafka/protocol/produce.h"
-#include "kafka/server/handlers/topics/types.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
-#include "model/timeout_clock.h"
 #include "redpanda/application.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/async.h"

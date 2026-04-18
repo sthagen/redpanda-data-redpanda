@@ -50,10 +50,8 @@ get_sasl_mechanisms(const std::string_view listener) {
     return it->sasl_mechanisms;
 }
 
-std::ostream&
-operator<<(std::ostream& os, const sasl_mechanisms_override& rhs) {
-    fmt::print(os, "{{{}:{}}}", rhs.listener, rhs.sasl_mechanisms);
-    return os;
+fmt::iterator sasl_mechanisms_override::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{{}:{}}}", listener, sasl_mechanisms);
 }
 
 bool is_enterprise_sasl_mechanisms_override(

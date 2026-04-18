@@ -18,7 +18,6 @@
 #include "model/namespace.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/loop.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
 

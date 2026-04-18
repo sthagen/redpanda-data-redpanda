@@ -32,25 +32,14 @@
 #include "storage/segment_utils.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/file-types.hh>
-#include <seastar/core/file.hh>
-#include <seastar/core/fstream.hh>
-#include <seastar/core/future.hh>
-#include <seastar/core/seastar.hh>
-#include <seastar/core/shared_ptr.hh>
-#include <seastar/core/thread.hh>
-#include <seastar/util/defer.hh>
-
-#include <cstring>
-#include <filesystem>
-// delete
 #include <seastar/core/future-util.hh>
+#include <seastar/core/future.hh>
+#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/when_all.hh>
 
-#include <yaml-cpp/yaml.h>
-
 #include <algorithm>
+#include <cstring>
+#include <filesystem>
 #include <iterator>
 #include <vector>
 

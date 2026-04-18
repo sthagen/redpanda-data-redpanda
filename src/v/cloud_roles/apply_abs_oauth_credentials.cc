@@ -40,9 +40,8 @@ void apply_abs_oauth_credentials::reset_creds(credentials creds) {
     *this = apply_abs_oauth_credentials{std::get<abs_oauth_credentials>(creds)};
 }
 
-std::ostream& apply_abs_oauth_credentials::print(std::ostream& os) const {
-    fmt::print(os, "apply_abs_oauth_credentials");
-    return os;
+fmt::iterator apply_abs_oauth_credentials::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "apply_abs_oauth_credentials");
 }
 
 } // namespace cloud_roles

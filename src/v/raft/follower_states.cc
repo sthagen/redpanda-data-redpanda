@@ -47,12 +47,12 @@ void follower_states::update_with_configuration(
     }
 }
 
-std::ostream& operator<<(std::ostream& o, const follower_states& s) {
-    o << "{followers:" << s._followers.size() << ", [";
-    for (auto& f : s) {
-        o << f.second;
+fmt::iterator follower_states::format_to(fmt::iterator it) const {
+    it = fmt::format_to(it, "{{followers:{}, [", _followers.size());
+    for (const auto& f : *this) {
+        it = fmt::format_to(it, "{}", f.second);
     }
-    return o << "]}";
+    return fmt::format_to(it, "]}}");
 }
 
 void follower_index_metadata::reset() {
@@ -73,28 +73,27 @@ void follower_index_metadata::reset() {
     coordinated_compaction_offsets_sender = std::make_unique<void_executor>();
 }
 
-std::ostream& operator<<(std::ostream& o, const follower_index_metadata& i) {
-    fmt::print(
-      o,
+fmt::iterator follower_index_metadata::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{node_id: {}, last_flushed_log_index: {}, last_dirty_log_index: {}, "
       "match_index: {}, next_index: {}, expected_log_end_offset: {}, "
       "heartbeats_failed: {}, last_sent_seq: {}, last_received_seq: {}, "
       "last_successful_received_seq: {}, is_learner: {}, is_recovering: {}, "
       "max_cleanly_compacted_offset: {}}}",
-      i.node_id,
-      i.last_flushed_log_index,
-      i.last_dirty_log_index,
-      i.match_index,
-      i.next_index,
-      i.expected_log_end_offset,
-      i.heartbeats_failed,
-      i.last_sent_seq,
-      i.last_received_seq,
-      i.last_successful_received_seq,
-      i.is_learner,
-      i.is_recovering,
-      i.max_cleanly_compacted_offset);
-    return o;
+      node_id,
+      last_flushed_log_index,
+      last_dirty_log_index,
+      match_index,
+      next_index,
+      expected_log_end_offset,
+      heartbeats_failed,
+      last_sent_seq,
+      last_received_seq,
+      last_successful_received_seq,
+      is_learner,
+      is_recovering,
+      max_cleanly_compacted_offset);
 }
 
 } // namespace raft

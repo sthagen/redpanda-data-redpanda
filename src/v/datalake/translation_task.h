@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "datalake/cloud_data_io.h"
 #include "datalake/coordinator/translated_offset_range.h"
@@ -106,7 +107,28 @@ public:
     size_t buffered_bytes() const;
 
 private:
-    friend std::ostream& operator<<(std::ostream&, errc);
+    friend fmt::iterator format_to(errc e, fmt::iterator out) {
+        switch (e) {
+        case errc::file_io_error:
+            return fmt::format_to(out, "local file IO error");
+        case errc::cloud_io_error:
+            return fmt::format_to(out, "cloud IO error");
+        case errc::flush_error:
+            return fmt::format_to(out, "writer flush error");
+        case errc::no_data:
+            return fmt::format_to(out, "no data to translate");
+        case errc::oom_error:
+            return fmt::format_to(out, "memory exhausted");
+        case errc::time_limit_exceeded:
+            return fmt::format_to(out, "time limit exceeded");
+        case errc::shutting_down:
+            return fmt::format_to(out, "shutting down");
+        case errc::out_of_disk:
+            return fmt::format_to(out, "disk exhausted");
+        case errc::type_resolution_error:
+            return fmt::format_to(out, "type resolution error");
+        }
+    }
 
     ss::future<errc> delete_remote_files(
       chunked_vector<remote_path>, retry_chain_node& parent_rcn);

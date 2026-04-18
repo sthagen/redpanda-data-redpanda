@@ -26,7 +26,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/core/queue.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/util/variant_utils.hh>
 

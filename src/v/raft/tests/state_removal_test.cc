@@ -13,7 +13,6 @@
 #include "utils/directory_walker.h"
 
 #include <seastar/core/sstring.hh>
-#include <seastar/util/defer.hh>
 using namespace raft;
 struct state_removal_test : public raft::raft_fixture {
     bytes kvstore_key(raft::metadata_key key, raft::group_id group) {

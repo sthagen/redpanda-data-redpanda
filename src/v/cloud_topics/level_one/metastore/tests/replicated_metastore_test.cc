@@ -22,7 +22,6 @@
 #include "lsm/lsm.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
-#include "serde/rw/rw.h"
 
 using namespace cloud_topics::l1;
 

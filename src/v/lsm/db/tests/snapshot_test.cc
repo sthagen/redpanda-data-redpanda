@@ -6,7 +6,6 @@
 //
 // Modifications copyright 2025 Redpanda Data, Inc.
 
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "lsm/core/internal/keys.h"
 #include "lsm/db/snapshot.h"

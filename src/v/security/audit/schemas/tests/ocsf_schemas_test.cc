@@ -10,7 +10,6 @@
 
 #include "json/json.h"
 #include "security/audit/schemas/types.h"
-#include "security/audit/schemas/utils.h"
 #include "security/request_auth.h"
 #include "security/types.h"
 
@@ -22,9 +21,6 @@
 #include <optional>
 #define BOOST_TEST_MODULE security_audit
 
-#include "json/reader.h"
-#include "json/stream.h"
-#include "json/stringbuffer.h"
 #include "security/audit/schemas/application_activity.h"
 #include "security/audit/schemas/iam.h"
 #include "security/audit/schemas/schemas.h"

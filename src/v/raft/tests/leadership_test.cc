@@ -10,7 +10,6 @@
 #include "raft/tests/raft_fixture.h"
 #include "test_utils/async.h"
 
-#include <gmock/gmock.h>
 using namespace raft;
 struct leadership_test_fixture : raft_fixture {
     ::testing::AssertionResult assert_single_leader() {

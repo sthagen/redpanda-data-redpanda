@@ -13,8 +13,6 @@
 #include "base/seastarx.h"
 #include "metrics/metrics.h"
 
-#include <seastar/core/metrics_registration.hh>
-
 namespace cloud_roles {
 
 class auth_refresh_probe {

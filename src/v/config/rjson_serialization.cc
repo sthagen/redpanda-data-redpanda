@@ -153,7 +153,7 @@ void rjson_serialize(
 }
 
 /**
- * Helper for enum/bitfield types that implement operator<< for ostream.
+ * Helper for enum/bitfield types that are formattable via fmt.
  * Otherwise they would be JSON-ized as their integer representation.
  */
 template<typename T>

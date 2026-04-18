@@ -15,7 +15,6 @@
 
 #include <seastar/core/seastar.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/util/defer.hh>
 #include <seastar/util/file.hh>
 
 #include <gtest/gtest.h>

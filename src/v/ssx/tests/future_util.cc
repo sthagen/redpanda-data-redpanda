@@ -9,7 +9,6 @@
 
 #include "ssx/future-util.h"
 
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
 #include <seastar/testing/thread_test_case.hh>
 

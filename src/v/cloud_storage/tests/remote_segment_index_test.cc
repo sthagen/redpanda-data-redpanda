@@ -16,14 +16,11 @@
 #include "model/namespace.h"
 #include "random/generators.h"
 
-#include <seastar/testing/test_case.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
-
-#include <stdexcept>
 
 using namespace cloud_storage;
 

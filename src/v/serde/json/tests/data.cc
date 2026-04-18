@@ -11,7 +11,6 @@
 
 #include "serde/json/tests/data.h"
 
-#include "base/vassert.h"
 #include "test_utils/runfiles.h"
 #include "utils/file_io.h"
 

@@ -18,7 +18,6 @@
 #include "model/fundamental.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/async.h"
-#include "test_utils/test.h"
 
 #include <seastar/util/defer.hh>
 using namespace kafka::client;

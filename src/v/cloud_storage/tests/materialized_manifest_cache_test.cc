@@ -17,7 +17,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/timed_out_error.hh>
-#include <seastar/testing/seastar_test.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>

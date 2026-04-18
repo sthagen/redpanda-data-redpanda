@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cluster/tm_stm.h"
 #include "cluster/tx_coordinator_mapper.h"
 #include "cluster/tx_hash_ranges.h"
 

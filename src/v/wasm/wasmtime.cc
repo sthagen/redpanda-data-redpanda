@@ -42,15 +42,10 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-#include <seastar/util/backtrace.hh>
 #include <seastar/util/bool_class.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/noncopyable_function.hh>
-#include <seastar/util/optimized_optional.hh>
-
-#include <fmt/ostream.h>
 
 #include <algorithm>
 #include <alloca.h>
@@ -59,7 +54,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <pthread.h>
 #include <unistd.h>
 #include <utility>
 #include <variant>

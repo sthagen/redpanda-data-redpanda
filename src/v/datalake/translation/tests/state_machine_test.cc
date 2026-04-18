@@ -8,9 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "datalake/translation/state_machine.h"
-#include "datalake/translation/utils.h"
 #include "raft/tests/stm_test_fixture.h"
-#include "storage/disk_log_impl.h"
 #include "test_utils/scoped_config.h"
 
 using stm = datalake::translation::translation_stm;

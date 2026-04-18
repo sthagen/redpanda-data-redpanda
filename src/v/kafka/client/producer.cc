@@ -13,7 +13,6 @@
 #include "kafka/client/brokers.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/exceptions.h"
-#include "kafka/client/logger.h"
 #include "kafka/client/utils.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/produce.h"

@@ -207,17 +207,4 @@ void translation_probe::register_invalid_record_metric() {
     }
 }
 
-std::ostream&
-operator<<(std::ostream& os, translation_probe::invalid_record_cause cause) {
-    using enum translation_probe::invalid_record_cause;
-
-    switch (cause) {
-    case failed_kafka_schema_resolution:
-        return os << "failed_kafka_schema_resolution";
-    case failed_data_translation:
-        return os << "failed_data_translation";
-    case failed_iceberg_schema_resolution:
-        return os << "failed_iceberg_schema_resolution";
-    }
-}
 }; // namespace datalake

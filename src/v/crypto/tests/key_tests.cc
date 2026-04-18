@@ -12,14 +12,11 @@
 #include "crypto/crypto.h"
 #include "crypto/exceptions.h"
 #include "crypto/types.h"
-#include "crypto_test_utils.h"
 #include "gtest/gtest.h"
 #include "test_utils/test.h"
 #include "test_values.h"
 
 #include <gtest/gtest.h>
-
-#include <stdexcept>
 
 using namespace test_values;
 

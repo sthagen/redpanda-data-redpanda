@@ -10,18 +10,11 @@
  */
 #include "compaction/key_offset_map.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
-#include "storage/compaction_reducers.h"
-#include "storage/lock_manager.h"
-#include "storage/log_reader.h"
 #include "storage/probe.h"
 #include "storage/segment_deduplication_utils.h"
 #include "storage/segment_set.h"
-#include "storage/segment_utils.h"
 #include "storage/tests/batch_generators.h"
 #include "storage/tests/storage_test_fixture.h"
-#include "storage/types.h"
-#include "test_utils/test.h"
 
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/defer.hh>

@@ -23,19 +23,19 @@
 #include <seastar/util/bool_class.hh>
 
 namespace raft {
-std::ostream& operator<<(std::ostream& o, const vote_stm::vmeta& m) {
-    o << "{value: ";
-    if (m.value) {
-        if (m.value->has_error()) {
-            auto& e = m.value->error();
-            o << "{" << *m.value << ", message: " << e.message() << "}";
+fmt::iterator vote_stm::vmeta::format_to(fmt::iterator it) const {
+    it = fmt::format_to(it, "{{value: ");
+    if (value) {
+        if (value->has_error()) {
+            auto& e = value->error();
+            it = fmt::format_to(it, "{{{}, message: {}}}", *value, e.message());
         } else {
-            o << "[" << *m.value << "]";
+            it = fmt::format_to(it, "[{}]", *value);
         }
     } else {
-        o << "nullptr";
+        it = fmt::format_to(it, "nullptr");
     }
-    return o << "}";
+    return fmt::format_to(it, "}}");
 }
 vote_stm::vote_stm(consensus* p, is_prevote prevote)
   : _ptr(p)

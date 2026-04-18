@@ -9,8 +9,9 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/format_to.h"
+
 #include <cstdint>
-#include <ostream>
 #include <source_location>
 
 namespace vlog {
@@ -32,11 +33,6 @@ consteval const char* file_basename(
 }
 } // namespace detail
 
-// file_line represents a source file (without the full path) and the line
-// number in a file.
-//
-// Usage is similar to std::source_location, but the full path is dropped so
-// that we don't include local paths from CI machines, etc.
 struct file_line {
     const char* filename;
     unsigned line;
@@ -48,8 +44,8 @@ struct file_line {
           .line = src.line()};
     }
 
-    friend std::ostream& operator<<(std::ostream& o, const file_line& fl) {
-        return o << fl.filename << ":" << fl.line;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}:{}", filename, line);
     }
 };
 

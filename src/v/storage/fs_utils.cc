@@ -127,14 +127,4 @@ segment_full_path segment_full_path::to_staging() const {
     }
 }
 
-std::ostream& operator<<(std::ostream& o, const partition_path& p) {
-    o << ss::format("{}_{}", p.ntp.path(), p.revision_id);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const segment_full_path& p) {
-    o << p.string();
-    return o;
-}
-
 } // namespace storage

@@ -13,7 +13,6 @@
 #include "model/fundamental.h"
 #include "random/generators.h"
 #include "test_utils/scoped_config.h"
-#include "test_utils/test.h"
 
 #include <gtest/gtest.h>
 

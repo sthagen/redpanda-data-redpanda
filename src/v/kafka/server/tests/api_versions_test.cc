@@ -11,10 +11,6 @@
 #include "redpanda/tests/fixture.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/smp.hh>
-#include <seastar/net/inet_address.hh>
-#include <seastar/net/ip.hh>
-
 // https://github.com/apache/kafka/blob/eaccb92/core/src/test/scala/unit/kafka/server/ApiVersionsRequestTest.scala
 
 FIXTURE_TEST(validate_latest_version, redpanda_thread_fixture) {

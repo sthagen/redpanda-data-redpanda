@@ -8,15 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_one/common/fake_io.h"
-#include "cloud_topics/level_one/metastore/simple_metastore.h"
 #include "cloud_topics/reconciler/reconciler.h"
-#include "cloud_topics/reconciler/reconciliation_source.h"
 #include "cloud_topics/reconciler/tests/test_utils.h"
 #include "model/fundamental.h"
-#include "model/record.h"
-#include "model/record_batch_reader.h"
-#include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
 #include "test_utils/metrics.h"
 

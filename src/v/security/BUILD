@@ -82,7 +82,6 @@ redpanda_cc_library(
     srcs = [
         "acl.cc",
         "authorizer.cc",
-        "credential.cc",
         "gssapi_authenticator.cc",
         "gssapi_principal_mapper.cc",
         "jwt.cc",

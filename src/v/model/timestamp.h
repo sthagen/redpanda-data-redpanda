@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/lowres_clock.hh>
@@ -29,7 +30,8 @@ namespace model {
 
 enum class timestamp_type : uint8_t { create_time = 0, append_time = 1 };
 
-std::ostream& operator<<(std::ostream&, timestamp_type);
+fmt::iterator format_to(timestamp_type ts, fmt::iterator out);
+
 std::istream& operator>>(std::istream&, timestamp_type&);
 
 class timestamp {
@@ -80,7 +82,7 @@ public:
         return lhs;
     }
 
-    friend std::ostream& operator<<(std::ostream&, timestamp);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     // ADL helpers for interfacing with the serde library.
     friend void write_nested(iobuf& out, timestamp ts);

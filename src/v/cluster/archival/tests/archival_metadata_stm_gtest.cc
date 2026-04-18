@@ -21,15 +21,10 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_future.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
-
-#include <gtest/gtest.h>
-
-#include <exception>
 
 using cloud_storage::segment_name;
 using segment_meta = cloud_storage::partition_manifest::segment_meta;

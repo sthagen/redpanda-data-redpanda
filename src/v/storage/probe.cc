@@ -12,7 +12,6 @@
 #include "config/configuration.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
-#include "storage/logger.h"
 #include "storage/readers_cache_probe.h"
 #include "storage/segment.h"
 

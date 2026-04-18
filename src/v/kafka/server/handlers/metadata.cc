@@ -9,7 +9,6 @@
 
 #include "kafka/server/handlers/metadata.h"
 
-#include "base/likely.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
@@ -31,18 +30,12 @@
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "security/acl.h"
-#include "utils/to_string.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
-#include <seastar/core/thread.hh>
-
-#include <boost/numeric/conversion/cast.hpp>
-#include <fmt/ostream.h>
 
 #include <algorithm>
 #include <iterator>
-#include <type_traits>
 
 namespace {
 using is_node_isolated_or_decommissioned

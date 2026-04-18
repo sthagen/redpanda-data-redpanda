@@ -16,30 +16,14 @@
 #include "cloud_storage/logger.h"
 #include "cloud_storage/materialized_resources.h"
 #include "cloud_storage/types.h"
-#include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/types.h"
-#include "cloud_storage_clients/util.h"
-#include "model/metadata.h"
-#include "ssx/future-util.h"
 #include "ssx/semaphore.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/fstream.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/lowres_clock.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/core/timed_out_error.hh>
-#include <seastar/core/weak_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/coroutine/maybe_yield.hh>
 
-#include <boost/beast/http/error.hpp>
-#include <boost/beast/http/field.hpp>
-#include <boost/range/irange.hpp>
-#include <fmt/chrono.h>
-
-#include <exception>
 #include <iterator>
 #include <utility>
 #include <variant>
@@ -510,7 +494,7 @@ ss::future<download_result> remote::object_exists(
     _as.check();
     auto holder = _gate.hold();
     co_return co_await io().object_exists(
-      bucket, path, parent, fmt::to_string(object_type));
+      bucket, path, parent, fmt::format("{}", object_type));
 }
 
 ss::future<download_result> remote::segment_exists(
@@ -523,7 +507,7 @@ ss::future<download_result> remote::segment_exists(
       bucket,
       cloud_storage_clients::object_key{segment_path},
       parent,
-      fmt::to_string(existence_check_type::segment));
+      fmt::format("{}", existence_check_type::segment));
 }
 
 ss::future<upload_result> remote::delete_object(

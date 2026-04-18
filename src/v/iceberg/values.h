@@ -10,6 +10,7 @@
 #pragma once
 
 #include "absl/numeric/int128.h"
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_vector.h"
 #include "iceberg/datatypes.h"
@@ -18,80 +19,122 @@
 #include <optional>
 #include <variant>
 
+template<>
+struct fmt::formatter<absl::int128> : fmt::ostream_formatter {};
+
+template<>
+struct fmt::formatter<absl::uint128> : fmt::ostream_formatter {};
+
 namespace iceberg {
 
 struct boolean_value {
     static std::string_view name() { return "boolean"; }
     bool val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "boolean({})", val);
+    }
 };
 
 struct int_value {
     static std::string_view name() { return "int"; }
     int32_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "int({})", val);
+    }
 };
 
 struct long_value {
     static std::string_view name() { return "long"; }
     int64_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "long({})", val);
+    }
 };
 
 struct float_value {
     static std::string_view name() { return "float"; }
     float val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "float({})", val);
+    }
 };
 
 struct double_value {
     static std::string_view name() { return "double"; }
     double val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "double({})", val);
+    }
 };
 
 struct date_value {
     static std::string_view name() { return "date"; }
     // Days since 1970-01-01.
     int32_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "date({})", val);
+    }
 };
 
 struct time_value {
     static std::string_view name() { return "time"; }
     // Microseconds since midnight.
     int64_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "time({})", val);
+    }
 };
 
 struct timestamp_value {
     static std::string_view name() { return "timestamp"; }
     // Microseconds since 1970-01-01 00:00:00.
     int64_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "timestamp({})", val);
+    }
 };
 
 struct timestamptz_value {
     static std::string_view name() { return "timestamptz"; }
     // Microseconds since 1970-01-01 00:00:00 UTC.
     int64_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "timestamptz({})", val);
+    }
 };
 
 struct string_value {
     static std::string_view name() { return "string"; }
     iobuf val;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct uuid_value {
     static std::string_view name() { return "uuid"; }
     uuid_t val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "uuid({})", ss::sstring(val));
+    }
 };
 
 struct fixed_value {
     static std::string_view name() { return "fixed"; }
     iobuf val;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct binary_value {
     static std::string_view name() { return "binary"; }
     iobuf val;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 struct decimal_value {
     static std::string_view name() { return "decimal"; }
     absl::int128 val;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "decimal({})", val);
+    }
 };
 
 using primitive_value = std::variant<
@@ -126,6 +169,7 @@ struct struct_value {
     // The order of these fields must align with the corresponding struct type
     // as defined in the schema, see `iceberg::struct_type`.
     chunked_vector<std::optional<value>> fields;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 bool operator==(const struct_value&, const struct_value&);
 bool operator==(
@@ -133,6 +177,7 @@ bool operator==(
 
 struct list_value {
     chunked_vector<std::optional<value>> elements;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 bool operator==(const list_value&, const list_value&);
 bool operator==(
@@ -149,6 +194,7 @@ bool operator==(const kv_value&, const kv_value&);
 
 struct map_value {
     chunked_vector<kv_value> kvs;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 bool operator==(const map_value&, const map_value&);
 bool operator==(
@@ -156,29 +202,6 @@ bool operator==(
 bool operator==(const value&, const value&);
 
 value make_copy(const value&);
-
-std::ostream& operator<<(std::ostream&, const boolean_value&);
-std::ostream& operator<<(std::ostream&, const int_value&);
-std::ostream& operator<<(std::ostream&, const long_value&);
-std::ostream& operator<<(std::ostream&, const float_value&);
-std::ostream& operator<<(std::ostream&, const double_value&);
-std::ostream& operator<<(std::ostream&, const date_value&);
-std::ostream& operator<<(std::ostream&, const time_value&);
-std::ostream& operator<<(std::ostream&, const timestamp_value&);
-std::ostream& operator<<(std::ostream&, const timestamptz_value&);
-std::ostream& operator<<(std::ostream&, const string_value&);
-std::ostream& operator<<(std::ostream&, const uuid_value&);
-std::ostream& operator<<(std::ostream&, const fixed_value&);
-std::ostream& operator<<(std::ostream&, const binary_value&);
-std::ostream& operator<<(std::ostream&, const decimal_value&);
-std::ostream& operator<<(std::ostream&, const primitive_value&);
-std::ostream& operator<<(std::ostream&, const struct_value&);
-std::ostream& operator<<(std::ostream&, const list_value&);
-std::ostream& operator<<(std::ostream&, const map_value&);
-std::ostream& operator<<(std::ostream&, const std::unique_ptr<struct_value>&);
-std::ostream& operator<<(std::ostream&, const std::unique_ptr<list_value>&);
-std::ostream& operator<<(std::ostream&, const std::unique_ptr<map_value>&);
-std::ostream& operator<<(std::ostream&, const value&);
 
 size_t value_hash(const struct_value&);
 size_t value_hash(const value&);
@@ -247,7 +270,32 @@ struct primitive_value_type<binary_value> {
 template<typename TVal>
 using primitive_value_type_t = typename primitive_value_type<TVal>::type;
 
+fmt::iterator format_to(const primitive_value& v, fmt::iterator it);
+fmt::iterator format_to(const value& v, fmt::iterator it);
+
 } // namespace iceberg
+
+template<>
+struct fmt::formatter<iceberg::primitive_value> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    fmt::iterator
+    format(const iceberg::primitive_value& v, fmt::format_context& ctx) const {
+        return iceberg::format_to(v, ctx.out());
+    }
+};
+
+template<>
+struct fmt::formatter<iceberg::value> {
+    constexpr auto parse(fmt::format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+    fmt::iterator
+    format(const iceberg::value& v, fmt::format_context& ctx) const {
+        return iceberg::format_to(v, ctx.out());
+    }
+};
 
 namespace std {
 

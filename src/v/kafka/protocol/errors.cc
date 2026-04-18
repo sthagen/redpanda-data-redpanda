@@ -9,8 +9,6 @@
 
 #include "kafka/protocol/errors.h"
 
-#include <iostream>
-
 namespace kafka {
 
 std::string_view error_code_to_str(error_code error) {
@@ -206,11 +204,6 @@ std::string_view error_code_to_str(error_code error) {
     default:
         return "unknown_error_code";
     }
-}
-
-std::ostream& operator<<(std::ostream& o, error_code code) {
-    return o << "{ error_code: " << error_code_to_str(code) << " ["
-             << (int16_t)code << "] }";
 }
 
 std::error_code make_error_code(kafka::error_code ec) {

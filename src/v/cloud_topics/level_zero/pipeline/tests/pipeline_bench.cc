@@ -12,10 +12,7 @@
 #include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "model/namespace.h"
-#include "model/record_batch_reader.h"
-#include "random/generators.h"
 #include "ssx/future-util.h"
-#include "storage/types.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/gate.hh>

@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_storage/remote.h"
 #include "cluster/archival/fwd.h"
 #include "cluster/archival/probe.h"
@@ -48,7 +49,7 @@ enum class housekeeping_state {
     stopped,
 };
 
-std::ostream& operator<<(std::ostream& o, housekeeping_state s);
+fmt::iterator format_to(housekeeping_state s, fmt::iterator);
 
 /// Controls housekeeping jobs
 ///

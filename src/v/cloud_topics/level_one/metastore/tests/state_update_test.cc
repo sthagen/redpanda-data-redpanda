@@ -8,13 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_split.h"
 #include "cloud_topics/level_one/common/object_id.h"
-#include "cloud_topics/level_one/metastore/lsm/keys.h"
 #include "cloud_topics/level_one/metastore/lsm/state_reader.h"
 #include "cloud_topics/level_one/metastore/lsm/state_update.h"
-#include "cloud_topics/level_one/metastore/lsm/values.h"
 #include "cloud_topics/level_one/metastore/lsm/write_batch_row.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "cloud_topics/level_one/metastore/tests/state_utils.h"
@@ -22,8 +18,6 @@
 #include "lsm/io/memory_persistence.h"
 #include "lsm/lsm.h"
 #include "model/fundamental.h"
-#include "serde/rw/rw.h"
-#include "utils/uuid.h"
 
 #include <gtest/gtest.h>
 

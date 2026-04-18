@@ -23,11 +23,8 @@
 #include "utils/log_hist.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/map_reduce.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shard_id.hh>
-#include <seastar/core/shared_ptr.hh>
-#include <seastar/core/smp.hh>
 #include <seastar/util/later.hh>
 
 #include <fmt/chrono.h>
@@ -36,7 +33,6 @@
 #include <memory>
 #include <optional>
 #include <string_view>
-#include <variant>
 
 using namespace std::chrono_literals;
 
@@ -74,7 +70,8 @@ public:
                     sm::description(
                       "Client quota throttling delay per rule and "
                       "quota type (in seconds)"),
-                    {rule_label(rule), quota_type_label(quota_type)})
+                    {rule_label(fmt::format("{}", rule)),
+                     quota_type_label(fmt::format("{}", quota_type))})
                     .aggregate({sm::shard_label}));
                 metric_defs.emplace_back(
                   sm::make_histogram(
@@ -84,7 +81,9 @@ public:
                     },
                     sm::description(
                       "Client quota throughput per rule and quota type"),
-                    {rule_label(rule), quota_type_label(quota_type)})
+                    {rule_label(fmt::format("{}", rule)),
+                     quota_type_label(fmt::format("{}", quota_type))})
+
                     .aggregate({sm::shard_label}));
             }
         }

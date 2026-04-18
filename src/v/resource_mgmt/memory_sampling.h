@@ -14,8 +14,6 @@
 #include "base/seastarx.h"
 #include "config/property.h"
 
-#include <seastar/core/condition-variable.hh>
-#include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/memory.hh>
 #include <seastar/core/sharded.hh>

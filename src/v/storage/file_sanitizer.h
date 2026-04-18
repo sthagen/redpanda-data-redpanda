@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/vassert.h"
 #include "config/node_config.h"
 #include "ssx/sformat.h"
@@ -46,9 +47,12 @@ struct sanitizer_op
       : name_op(std::move(operation))
       , bt(ss::current_backtrace()) {}
 
-    friend std::ostream& operator<<(std::ostream& o, const sanitizer_op& s) {
-        return o << "{sanitizer_op: " << s.name_op << ", backtrace:\n"
-                 << s.bt << "\n}";
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{sanitizer_op: {}, backtrace:\n{}\n}}",
+          name_op,
+          fmt_streamed(bt));
     }
 };
 
@@ -431,7 +435,7 @@ private:
             return "unknown";
         }
 
-        return fmt::format("{}", _appender_ptr->_inflight);
+        return fmt::format("[{}]", fmt::join(_appender_ptr->_inflight, ", "));
     }
 
     ss::sstring maybe_dump_appender_pending_flushes() const {
@@ -439,7 +443,7 @@ private:
             return "unknown";
         }
 
-        return fmt::format("{}", _appender_ptr->_flush_ops);
+        return fmt::format("[{}]", fmt::join(_appender_ptr->_flush_ops, ", "));
     }
 
 private:

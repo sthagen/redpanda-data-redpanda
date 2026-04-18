@@ -10,8 +10,6 @@
 #include "utils/hdr_hist.h"
 #include "utils/log_hist.h"
 
-#include <seastar/core/reactor.hh>
-#include <seastar/core/sharded.hh>
 #include <seastar/testing/perf_tests.hh>
 
 static constexpr int number_of_values_to_record = 100'000'000;

@@ -11,19 +11,18 @@
 
 #include "producer_state.h"
 
+#include "base/format_to.h"
 #include "base/vassert.h"
-#include "cluster/logger.h"
 
 namespace cluster::tx {
-
-std::ostream& operator<<(std::ostream& os, request_state state) {
-    switch (state) {
+fmt::iterator format_to(request_state e, fmt::iterator out) {
+    switch (e) {
     case request_state::initialized:
-        return os << "initialized";
+        return fmt::format_to(out, "initialized");
     case request_state::in_progress:
-        return os << "in_progress";
+        return fmt::format_to(out, "in_progress");
     case request_state::completed:
-        return os << "completed";
+        return fmt::format_to(out, "completed");
     }
 }
 
@@ -285,46 +284,40 @@ bool producer_state::operator==(const producer_state& other) const {
            && _requests == other._requests
            && _transaction_state == other._transaction_state;
 }
-
-std::ostream& operator<<(std::ostream& o, const request& request) {
-    fmt::print(
-      o,
+fmt::iterator request::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{ first: {}, last: {}, term: {}, result_available: {}, state: {} }}",
-      request._first_sequence,
-      request._last_sequence,
-      request._term,
-      request._result.available(),
-      request._state);
-    return o;
+      _first_sequence,
+      _last_sequence,
+      _term,
+      _result.available(),
+      _state);
 }
-
-std::ostream& operator<<(std::ostream& o, const requests& requests) {
-    fmt::print(
-      o,
+fmt::iterator requests::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{ inflight: {}, finished: {} }}",
-      requests._inflight_requests.size(),
-      requests._finished_requests.size());
-    return o;
+      _inflight_requests.size(),
+      _finished_requests.size());
 }
-
-std::ostream& operator<<(std::ostream& o, const producer_state& state) {
-    fmt::print(
-      o,
+fmt::iterator producer_state::format_to(fmt::iterator it) const {
+    it = fmt::format_to(
+      it,
       "{{ id: {}, group: {}, requests: {}, "
       "ms_since_last_update: {}, evicted: {}, last_known_sequence: {}, ",
-      state._id,
-      state._group,
-      state._requests,
-      state.ms_since_last_update(),
-      state._evicted,
-      state.last_sequence_number());
-    if (state._transaction_state) {
-        fmt::print(o, "transaction_state: {}", *state._transaction_state);
+      _id,
+      _group,
+      _requests,
+      ms_since_last_update(),
+      _evicted,
+      last_sequence_number());
+    if (_transaction_state) {
+        it = fmt::format_to(it, "transaction_state: {}", *_transaction_state);
     } else {
-        fmt::print(o, "transaction_state: {{ null }}");
+        it = fmt::format_to(it, "transaction_state: {{ null }}");
     }
-    fmt::print(o, "}}");
-    return o;
+    return fmt::format_to(it, "}}");
 }
 
 void producer_state::shutdown_input() {

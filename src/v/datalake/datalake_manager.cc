@@ -12,7 +12,6 @@
 
 #include "cluster/partition_manager.h"
 #include "cluster/topic_table.h"
-#include "cluster/types.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
 #include "datalake/backlog_controller.h"
@@ -23,7 +22,6 @@
 #include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
-#include "raft/group_manager.h"
 #include "schema/registry.h"
 #include "utils/directory_walker.h"
 #include "utils/human.h"

@@ -7,12 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "gmock/gmock.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/test.h"
-
-#include <gtest/gtest-matchers.h>
 
 template<typename... Offsets>
 chunked_circular_buffer<model::record_batch> make_batches(Offsets... o) {

@@ -14,7 +14,6 @@
 
 #include <boost/beast/http/field.hpp>
 #include <boost/beast/http/status.hpp>
-#include <boost/beast/http/verb.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
 FIXTURE_TEST(pandaproxy_list_topics, pandaproxy_test_fixture) {

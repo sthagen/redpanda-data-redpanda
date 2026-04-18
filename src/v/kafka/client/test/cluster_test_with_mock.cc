@@ -11,7 +11,6 @@
 #include "kafka/client/cluster.h"
 #include "kafka/client/test/cluster_mock.h"
 #include "test_utils/async.h"
-#include "test_utils/test.h"
 
 #include <seastar/util/defer.hh>
 

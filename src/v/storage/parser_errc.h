@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "base/format_to.h"
+
 #include <system_error>
 
 namespace storage {
@@ -24,7 +26,7 @@ enum class parser_errc {
     not_enough_bytes_in_parser_for_one_record,
 };
 
-inline std::string to_string(parser_errc err) {
+inline std::string_view to_string_view(parser_errc err) {
     switch (err) {
     case parser_errc::none:
         return "storage::parser_errc::success";
@@ -47,7 +49,7 @@ struct parser_errc_category final : public std::error_category {
     const char* name() const noexcept final { return "storage::parser_errc"; }
 
     std::string message(int c) const final {
-        return to_string(static_cast<parser_errc>(c));
+        return std::string(to_string_view(static_cast<parser_errc>(c)));
     }
 };
 inline const std::error_category& error_category() noexcept {
@@ -58,8 +60,8 @@ inline std::error_code make_error_code(parser_errc e) noexcept {
     return std::error_code(static_cast<int>(e), error_category());
 }
 
-inline std::ostream& operator<<(std::ostream& os, parser_errc err) {
-    return os << to_string(err);
+inline fmt::iterator format_to(parser_errc err, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(err));
 }
 
 } // namespace storage

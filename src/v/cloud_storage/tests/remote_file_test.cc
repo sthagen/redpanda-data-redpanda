@@ -20,7 +20,6 @@
 #include "utils/lazy_abort_source.h"
 
 #include <seastar/core/seastar.hh>
-#include <seastar/testing/test_case.hh>
 #include <seastar/util/defer.hh>
 
 #include <boost/test/unit_test.hpp>

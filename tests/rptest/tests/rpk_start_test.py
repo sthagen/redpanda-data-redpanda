@@ -291,7 +291,7 @@ class RpkRedpandaStartTest(RedpandaTest):
 
             # We check that rpc_server_tls is enabled on start:
             assert self.redpanda.search_log_node(
-                node, "redpanda.rpc_server_tls:{ enabled: 1"
+                node, "redpanda.rpc_server_tls:{ enabled: true"
             )
 
         self.redpanda.for_nodes(self.redpanda.nodes, start_cluster)
@@ -348,7 +348,7 @@ class RpkRedpandaStartTest(RedpandaTest):
 
         # Check that we don't enable rpc and print a warning
         assert self.redpanda.search_log_all(
-            "redpanda.rpc_server_tls:{ enabled: 0", self.redpanda.nodes
+            "redpanda.rpc_server_tls:{ enabled: false", self.redpanda.nodes
         )
         assert self.redpanda.search_log_all(
             "WARNING: Due to an old rpk bug, your redpanda.yaml's redpanda.rpc_server_tls property is an array",
@@ -388,7 +388,7 @@ class RpkRedpandaStartTest(RedpandaTest):
         # to a topic.
         self.redpanda.for_nodes(self.redpanda.nodes, start_cluster)
         assert self.redpanda.search_log_all(
-            "redpanda.rpc_server_tls:{ enabled: 0", self.redpanda.nodes
+            "redpanda.rpc_server_tls:{ enabled: false", self.redpanda.nodes
         )
 
         try:
@@ -418,7 +418,7 @@ class RpkRedpandaStartTest(RedpandaTest):
         self.redpanda.stop()
         self.redpanda.for_nodes(self.redpanda.nodes, start_cluster)
         assert self.redpanda.search_log_all(
-            "redpanda.rpc_server_tls:{ enabled: 1", self.redpanda.nodes
+            "redpanda.rpc_server_tls:{ enabled: true", self.redpanda.nodes
         )
 
         try:

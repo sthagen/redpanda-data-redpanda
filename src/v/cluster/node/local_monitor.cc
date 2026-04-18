@@ -23,13 +23,9 @@
 #include "utils/human.h"
 #include "version/version.h"
 
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/file.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sstring.hh>
-
-#include <fmt/core.h>
 
 #include <algorithm>
 #include <cassert>

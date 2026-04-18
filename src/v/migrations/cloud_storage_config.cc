@@ -11,16 +11,8 @@
 
 #include "base/vlog.h"
 #include "cluster/controller.h"
-#include "cluster/feature_manager.h"
 #include "cluster/topics_frontend.h"
-#include "features/feature_table.h"
 #include "features/logger.h"
-#include "migrations/feature_migrator.h"
-#include "ssx/future-util.h"
-
-#include <seastar/core/sleep.hh>
-
-#include <type_traits>
 
 using namespace std::chrono_literals;
 

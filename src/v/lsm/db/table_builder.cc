@@ -12,7 +12,6 @@
 #include "lsm/sst/builder.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/coroutine/as_future.hh>
 
 namespace lsm::db {
 

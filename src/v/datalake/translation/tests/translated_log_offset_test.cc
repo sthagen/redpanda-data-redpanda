@@ -7,7 +7,6 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "datalake/translation/types.h"
 #include "datalake/translation/utils.h"
 #include "gtest/gtest.h"
 #include "model/fundamental.h"

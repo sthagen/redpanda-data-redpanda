@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 #include "iceberg/transform.h"
@@ -27,8 +28,9 @@ struct unresolved_partition_spec {
 
         void autogenerate_name();
 
+        fmt::iterator format_to(fmt::iterator it) const;
+
         friend bool operator==(const field&, const field&) = default;
-        friend std::ostream& operator<<(std::ostream&, const field&);
     };
 
     chunked_vector<field> fields;
@@ -41,14 +43,13 @@ struct unresolved_partition_spec {
       const unresolved_partition_spec&,
       const unresolved_partition_spec&) = default;
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
     unresolved_partition_spec copy() const {
         return {
           .fields = fields.copy(),
         };
     }
-
-    friend std::ostream&
-    operator<<(std::ostream&, const unresolved_partition_spec&);
 };
 
 } // namespace iceberg

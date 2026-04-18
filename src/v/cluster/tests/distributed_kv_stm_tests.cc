@@ -10,9 +10,7 @@
 #include "base/seastarx.h"
 #include "cluster/distributed_kv_stm.h"
 #include "cluster/tests/raft_fixture_retry_policy.h"
-#include "raft/errc.h"
 #include "raft/tests/raft_fixture.h"
-#include "serde/envelope.h"
 #include "test_utils/async.h"
 #include "test_utils/test.h"
 
@@ -20,7 +18,6 @@
 #include <seastar/core/shared_ptr.hh>
 
 #include <memory>
-#include <tuple>
 
 static ss::logger test_logger{"kv_stm-test"};
 

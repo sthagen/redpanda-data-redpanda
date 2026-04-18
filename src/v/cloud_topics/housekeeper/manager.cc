@@ -18,7 +18,6 @@
 #include "cloud_topics/state_accessors.h"
 #include "config/configuration.h"
 #include "model/timeout_clock.h"
-#include "utils/retry_chain_node.h"
 
 #include <exception>
 #include <memory>

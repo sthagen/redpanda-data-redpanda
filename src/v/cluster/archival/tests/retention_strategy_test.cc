@@ -13,7 +13,6 @@
 #include "test_utils/tmp_dir.h"
 
 #include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/defer.hh>
 
 using namespace storage;
 using namespace archival;

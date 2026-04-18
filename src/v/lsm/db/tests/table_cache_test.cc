@@ -13,7 +13,6 @@
 #include "lsm/sst/builder.h"
 #include "test_utils/async.h"
 
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 namespace {

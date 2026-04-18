@@ -80,7 +80,7 @@ public:
 
     model::timestamp start_timestamp() const final;
 
-    std::ostream& print(std::ostream& o) const final;
+    fmt::iterator format_to(fmt::iterator it) const final;
 
     std::optional<model::term_id> get_term(model::offset) const final;
 
@@ -158,9 +158,5 @@ public:
 private:
     ss::shared_ptr<storage::log> _underlying_log;
     std::optional<append_delay_generator> _append_delay_generator;
-    friend std::ostream&
-    operator<<(std::ostream& o, const failure_injectable_log& lg) {
-        return lg.print(o);
-    }
 };
 } // namespace raft

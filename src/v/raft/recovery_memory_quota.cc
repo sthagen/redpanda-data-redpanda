@@ -15,8 +15,6 @@
 #include "resource_mgmt/memory_groups.h"
 #include "ssx/semaphore.h"
 
-#include <seastar/core/memory.hh>
-
 namespace raft {
 
 static constexpr size_t max_recovery_memory = 32_MiB;

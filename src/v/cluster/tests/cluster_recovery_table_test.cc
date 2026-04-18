@@ -11,7 +11,6 @@
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/cluster_recovery_table.h"
 #include "cluster/commands.h"
-#include "cluster/logger.h"
 #include "cluster/types.h"
 #include "test_utils/async.h"
 #include "test_utils/test.h"

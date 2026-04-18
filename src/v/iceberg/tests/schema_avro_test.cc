@@ -12,7 +12,6 @@
 #include "iceberg/schema_avro.h"
 #include "iceberg/tests/test_schemas.h"
 
-#include <avro/LogicalType.hh>
 #include <avro/Node.hh>
 #include <avro/Types.hh>
 #include <gtest/gtest.h>

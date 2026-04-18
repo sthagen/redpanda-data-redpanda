@@ -53,6 +53,10 @@ std::string_view to_string_view(debug_serde_errc e) {
     return "unknown";
 }
 
+fmt::iterator format_to(debug_serde_errc e, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(e));
+}
+
 namespace {
 
 std::optional<uuid_t> parse_uuid(const std::string& s) {

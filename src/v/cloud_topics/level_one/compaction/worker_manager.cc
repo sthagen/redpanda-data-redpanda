@@ -15,7 +15,6 @@
 #include "cloud_topics/level_one/compaction/worker.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
-#include "model/fundamental.h"
 #include "resource_mgmt/cpu_scheduling.h"
 #include "ssx/future-util.h"
 

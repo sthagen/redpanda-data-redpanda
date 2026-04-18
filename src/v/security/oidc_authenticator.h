@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #pragma once
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "security/acl.h"
 #include "security/fwd.h"
@@ -63,6 +64,19 @@ private:
 class sasl_authenticator final : public sasl_mechanism {
 public:
     enum class state { init = 0, complete, failed };
+
+    friend fmt::iterator format_to(state s, fmt::iterator out) {
+        switch (s) {
+        case state::init:
+            return fmt::format_to(out, "init");
+        case state::complete:
+            return fmt::format_to(out, "complete");
+        case state::failed:
+            return fmt::format_to(out, "failed");
+        }
+        return fmt::format_to(out, "");
+    }
+
     static constexpr const char* name = "OAUTHBEARER";
 
     explicit sasl_authenticator(oidc::service& service);
@@ -95,9 +109,6 @@ public:
     }
 
 private:
-    friend std::ostream&
-    operator<<(std::ostream& os, const sasl_authenticator::state s);
-
     authenticator _authenticator;
     authentication_data _auth_data;
     security::audit::user _audit_user;

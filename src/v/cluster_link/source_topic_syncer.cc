@@ -16,8 +16,6 @@
 #include "cluster_link/model/types.h"
 #include "model/namespace.h"
 
-#include <fmt/ranges.h>
-
 namespace cluster_link {
 
 using properties_set = model::topic_metadata_mirroring_config::properties_set;

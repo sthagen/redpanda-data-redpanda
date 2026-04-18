@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "kafka/protocol/schemata/describe_user_scram_credentials_request.h"
 #include "kafka/protocol/schemata/describe_user_scram_credentials_response.h"
 
@@ -28,9 +29,8 @@ struct describe_user_scram_credentials_request final {
         data.decode(reader, version);
     }
 
-    friend std::ostream& operator<<(
-      std::ostream& os, const describe_user_scram_credentials_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -47,9 +47,8 @@ struct describe_user_scram_credentials_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream& operator<<(
-      std::ostream& os, const describe_user_scram_credentials_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 } // namespace kafka

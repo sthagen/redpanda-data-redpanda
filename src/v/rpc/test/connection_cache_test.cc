@@ -8,21 +8,12 @@
 // by the Apache License, Version 2.0
 
 #include "absl/container/flat_hash_map.h"
-#include "base/vlog.h"
-#include "config/tls_config.h"
 #include "model/metadata.h"
 #include "rpc/connection_cache.h"
-#include "rpc/logger.h"
 
-#include <seastar/core/abort_source.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/defer.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-
-#include <chrono>
 
 SEASTAR_THREAD_TEST_CASE(connection_allocation_strategy_add_test) {
     constexpr int number_of_nodes = 10;

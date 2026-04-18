@@ -336,7 +336,7 @@ std::optional<error_code_and_msg> validate_batch(
               "is set to '{}'. It is strongly recommended that you update your "
               "client to set the max_timestamp when producing: {}.",
               ntp,
-              client_id,
+              client_id.value_or(""),
               config::shard_local_cfg().kafka_produce_batch_validation.name(),
               validation_mode,
               batch.header());
@@ -367,7 +367,7 @@ std::optional<error_code_and_msg> validate_batch(
               "strongly recommended that you update your client to set the "
               "max_timestamp when producing: {}.",
               ntp,
-              client_id,
+              client_id.value_or(""),
               config::shard_local_cfg().kafka_produce_batch_validation.name(),
               validation_mode,
               batch.header());

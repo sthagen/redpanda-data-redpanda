@@ -12,8 +12,6 @@
 #include "model/timestamp.h"
 #include "storage/tests/disk_log_builder_fixture.h"
 
-#include <seastar/core/file.hh>
-
 #include <gtest/gtest.h>
 
 namespace {

@@ -11,7 +11,6 @@
 #include "cluster/config_frontend.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "config/node_config.h"
 #include "features/feature_table.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/incremental_alter_configs.h"
@@ -28,11 +27,8 @@
 #include "storage/ntp_config.h"
 #include "strings/string_switch.h"
 
-#include <seastar/core/do_with.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/util/log.hh>
-
-#include <fmt/ostream.h>
 
 #include <string_view>
 

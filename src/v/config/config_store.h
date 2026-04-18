@@ -221,12 +221,12 @@ public:
         return all;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const config::config_store& c) {
-        o << "{ ";
-        c.for_each([&o](const auto& property) { o << property << " "; });
-        o << "}";
-        return o;
+    fmt::iterator format_to(fmt::iterator it) const {
+        it = fmt::format_to(it, "{{ ");
+        for_each([&it](const auto& property) {
+            it = fmt::format_to(it, "{} ", property);
+        });
+        return fmt::format_to(it, "}}");
     }
 
     void notify_original_version(legacy_version ov) {

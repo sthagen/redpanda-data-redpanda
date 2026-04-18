@@ -19,7 +19,6 @@
 #include "random/generators.h"
 
 #include <boost/range/irange.hpp>
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <iostream>

@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "config/convert.h"
 #include "config/from_string_view.h"
 #include "config/property.h"
@@ -34,6 +35,7 @@ enum class rest_authn_method {
 };
 
 std::string_view to_string_view(rest_authn_method m);
+fmt::iterator format_to(rest_authn_method m, fmt::iterator);
 
 template<>
 std::optional<rest_authn_method>
@@ -47,8 +49,7 @@ struct rest_authn_endpoint {
     friend bool operator==(
       const rest_authn_endpoint&, const rest_authn_endpoint&) = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const rest_authn_endpoint& ep);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 // A helper method that searches for the listener within a vector of

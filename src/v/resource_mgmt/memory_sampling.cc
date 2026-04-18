@@ -18,7 +18,6 @@
 #include "ssx/sformat.h"
 #include "utils/human.h"
 
-#include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/memory.hh>
 #include <seastar/core/smp.hh>
@@ -27,7 +26,6 @@
 #include <seastar/util/memory_diagnostics.hh>
 
 #include <chrono>
-#include <limits>
 #include <vector>
 
 constexpr std::string_view diagnostics_header() { return "Top-N alloc sites:"; }

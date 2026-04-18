@@ -9,15 +9,11 @@
 
 #include "container/chunked_vector.h"
 #include "kafka/protocol/wire.h"
-#include "kafka/server/group_manager.h"
 #include "kafka/server/member.h"
-#include "utils/to_string.h"
 
-#include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/unit_test.hpp>
-#include <fmt/ostream.h>
 
 namespace kafka {
 

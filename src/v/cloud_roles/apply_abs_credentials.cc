@@ -33,9 +33,8 @@ void apply_abs_credentials::reset_creds(credentials creds) {
     _signature = signature_abs{abs_creds.storage_account, abs_creds.shared_key};
 };
 
-std::ostream& apply_abs_credentials::print(std::ostream& os) const {
-    fmt::print(os, "apply_abs_credentials");
-    return os;
+fmt::iterator apply_abs_credentials::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "apply_abs_credentials");
 }
 
 } // namespace cloud_roles

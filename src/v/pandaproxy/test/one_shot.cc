@@ -18,7 +18,6 @@
 
 #include "pandaproxy/util.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sleep.hh>
@@ -29,7 +28,7 @@
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
-#include <chrono>
+#include <chrono> // NOLINT(misc-include-cleaner): needed for std::chrono_literals
 #include <stdexcept>
 
 namespace pp = pandaproxy;

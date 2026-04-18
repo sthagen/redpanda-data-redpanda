@@ -16,6 +16,7 @@
  * llvm-cov show src/v/bytes/tests/fuzz_iobuf -instr-profile=default.profdata
  * -format=html ../src/v/bytes/iobuf.h ../src/v/bytes/iobuf.cc > cov.html
  */
+#include "base/format_to.h"
 #include "base/units.h"
 #include "base/vassert.h"
 #include "bytes/iobuf.h"
@@ -699,14 +700,13 @@ private:
         explicit op_spec(op_type op)
           : op(op) {}
 
-        friend std::ostream& operator<<(std::ostream& os, const op_spec& op) {
-            fmt::print(
-              os,
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
               "{}(size={}, data.size={})",
-              op.op,
-              (op.size.has_value() ? fmt::format("{}", *op.size) : "null"),
-              op.data.size());
-            return os;
+              op,
+              (size.has_value() ? fmt::format("{}", *size) : "null"),
+              data.size());
         }
     };
 

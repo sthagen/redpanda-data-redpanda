@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cluster_link/replication/partition_replicator.h"
 #include "cluster_link/replication/replication_probe.h"
 #include "cluster_link/replication/types.h"
@@ -64,7 +65,7 @@ private:
 
     // Allowed operations on a replicator
     enum class op_type : uint8_t { start, stop };
-    friend std::ostream& operator<<(std::ostream& os, op_type);
+    friend fmt::iterator format_to(op_type op, fmt::iterator out);
     struct ntp_target_state {
         op_type op;
         std::optional<::model::term_id> term;

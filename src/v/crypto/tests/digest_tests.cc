@@ -17,9 +17,6 @@
 
 #include <gtest/gtest.h>
 
-#include <iterator>
-#include <type_traits>
-
 using namespace test_values;
 
 // NOLINTBEGIN

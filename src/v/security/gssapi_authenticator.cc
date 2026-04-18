@@ -11,7 +11,6 @@
 
 #include "base/vlog.h"
 #include "bytes/bytes.h"
-#include "kafka/protocol/wire.h"
 #include "security/acl.h"
 #include "security/errc.h"
 #include "security/gssapi.h"
@@ -21,37 +20,13 @@
 #include "thirdparty/krb5/gssapi.h"
 #include "thirdparty/krb5/gssapi_ext.h"
 
-#include <seastar/core/lowres_clock.hh>
-
-#include <boost/outcome/basic_outcome.hpp>
 #include <boost/outcome/success_failure.hpp>
-#include <fmt/ranges.h>
 
-#include <array>
 #include <sstream>
 #include <string_view>
 #include <utility>
 
 namespace security {
-
-std::ostream&
-operator<<(std::ostream& os, const gssapi_authenticator::state s) {
-    using state = gssapi_authenticator::state;
-    switch (s) {
-    case state::init:
-        return os << "init";
-    case state::more:
-        return os << "more";
-    case state::ssfcap:
-        return os << "ssfcap";
-    case state::ssfreq:
-        return os << "ssfreq";
-    case state::complete:
-        return os << "complete";
-    case state::failed:
-        return os << "failed";
-    }
-}
 
 static void display_status_1(std::string_view m, OM_uint32 code, int type) {
     while (true) {

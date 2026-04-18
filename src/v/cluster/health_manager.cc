@@ -12,7 +12,6 @@
 
 #include "base/seastarx.h"
 #include "base/vlog.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
 #include "cluster/partition_leaders_table.h"
@@ -22,7 +21,6 @@
 #include "model/namespace.h"
 #include "model/transform.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/timer.hh>
 

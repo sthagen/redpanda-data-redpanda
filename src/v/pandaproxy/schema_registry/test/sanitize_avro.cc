@@ -9,7 +9,6 @@
 
 #include "pandaproxy/json/rjson_util.h"
 #include "pandaproxy/schema_registry/avro.h"
-#include "pandaproxy/schema_registry/test/compatibility_avro.h"
 #include "pandaproxy/schema_registry/types.h"
 
 #include <boost/test/unit_test.hpp>

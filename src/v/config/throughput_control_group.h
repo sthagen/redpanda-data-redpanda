@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 #include "json/_include_first.h"
@@ -45,8 +46,7 @@ struct throughput_control_group {
     operator==(const throughput_control_group&, const throughput_control_group&)
       = default;
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const throughput_control_group& tcg);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     bool match_client_id(std::optional<std::string_view> client_id) const;
     bool is_noname() const noexcept;

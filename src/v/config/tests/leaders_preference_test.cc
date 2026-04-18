@@ -27,7 +27,7 @@ SEASTAR_THREAD_TEST_CASE(parse_leaders_preference) {
 
     { // default round trip lp -> str -> lp
         lp orig{};
-        auto parsed = lp::parse(fmt::to_string(orig));
+        auto parsed = lp::parse(fmt::format("{}", orig));
         BOOST_CHECK_EQUAL(orig, parsed);
     }
 
@@ -60,7 +60,7 @@ SEASTAR_THREAD_TEST_CASE(parse_leaders_preference) {
             lp orig{};
             orig.type = pref_type;
             orig.racks = {rack_a, rack_b};
-            auto parsed = lp::parse(fmt::to_string(orig));
+            auto parsed = lp::parse(fmt::format("{}", orig));
             BOOST_CHECK_EQUAL(orig, parsed);
         }
 
@@ -98,7 +98,7 @@ SEASTAR_THREAD_TEST_CASE(parse_leaders_preference) {
         lp orig{};
         orig.type = lp_t::racks;
         orig.racks = {rack_a, rack_b};
-        auto parsed = lp::parse(fmt::to_string(orig));
+        auto parsed = lp::parse(fmt::format("{}", orig));
         BOOST_CHECK_EQUAL(orig, parsed);
     }
 }

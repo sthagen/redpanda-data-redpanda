@@ -217,7 +217,7 @@ private:
           model::record_batch_header header, size_t, size_t) override;
         void consume_records(iobuf&&) override;
         ss::future<stop_parser> consume_batch_end() override;
-        void print(std::ostream&) const override;
+        fmt::iterator format_to(fmt::iterator it) const override;
 
     private:
         kvstore* _store;

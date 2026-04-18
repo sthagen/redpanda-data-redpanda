@@ -12,7 +12,6 @@
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 
-#include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 using namespace model; // NOLINT

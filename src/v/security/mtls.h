@@ -36,9 +36,6 @@ public:
 private:
     friend struct fmt::formatter<principal_mapper>;
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const principal_mapper& p);
-
     config::binding<std::optional<std::vector<ss::sstring>>> _binding;
     std::vector<rule> _rules;
 };
@@ -65,7 +62,9 @@ template<>
 struct fmt::formatter<security::tls::principal_mapper> {
     using type = security::tls::principal_mapper;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator

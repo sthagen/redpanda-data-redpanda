@@ -15,7 +15,6 @@
 #include "ssx/future-util.h"
 
 #include <seastar/core/reactor.hh>
-#include <seastar/util/later.hh>
 
 namespace kafka {
 

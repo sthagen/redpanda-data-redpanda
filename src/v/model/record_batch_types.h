@@ -11,10 +11,11 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "utils/named_type.h"
 
 #include <cstdint>
-#include <ostream>
+#include <string_view>
 #include <vector>
 
 namespace model {
@@ -66,7 +67,7 @@ enum class record_batch_type : int8_t {
     MAX = ct_read_replica_stm,
 };
 
-std::ostream& operator<<(std::ostream& o, record_batch_type bt);
+fmt::iterator format_to(record_batch_type bt, fmt::iterator out);
 
 // The set of batch types that may appear in a data partition that aren't
 // assigned a new translated offset. When translated, such batches are given an

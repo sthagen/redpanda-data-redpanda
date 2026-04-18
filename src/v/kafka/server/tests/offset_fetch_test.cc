@@ -9,13 +9,7 @@
 
 #include "kafka/protocol/offset_fetch.h"
 #include "redpanda/tests/fixture.h"
-#include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
-
-#include <seastar/core/smp.hh>
-
-#include <chrono>
-#include <limits>
 
 FIXTURE_TEST(offset_fetch, redpanda_thread_fixture) {
     auto client = make_kafka_client().get();

@@ -39,7 +39,7 @@ struct requirement_json_serializing_visitor {
     void operator()(const iceberg::table_requirement::assert_table_uuid& req) {
         serialize_type("assert-table-uuid");
         w.Key("uuid");
-        w.String(fmt::to_string(req.uuid));
+        w.String(fmt::format("{}", req.uuid));
     }
 
     void operator()(

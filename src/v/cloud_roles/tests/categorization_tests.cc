@@ -12,7 +12,6 @@
 #include "cloud_roles/refresh_credentials.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/gate.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 inline ss::logger test_log("test"); // NOLINT

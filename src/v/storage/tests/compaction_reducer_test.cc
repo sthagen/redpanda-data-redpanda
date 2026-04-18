@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 #include "compaction/key.h"
-#include "random/generators.h"
 #include "storage/compacted_index.h"
 #include "storage/compaction_reducers.h"
 #include "test_utils/random_bytes.h"

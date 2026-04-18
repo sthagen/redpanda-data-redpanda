@@ -10,7 +10,6 @@
 
 #include "iceberg/datatypes.h"
 
-#include <ranges>
 #include <variant>
 
 namespace iceberg {
@@ -98,7 +97,7 @@ ss::sstring format_nested_field_ptr_type(const iceberg::nested_field_ptr& ptr) {
     if (ptr == nullptr) {
         return "null";
     }
-    return fmt::to_string(ptr->type);
+    return fmt::format("{}", ptr->type);
 }
 
 ss::sstring
@@ -123,118 +122,70 @@ field_type make_copy(const field_type& type) {
     return std::visit(type_copying_visitor{}, type);
 }
 
-std::ostream& operator<<(std::ostream& o, const boolean_type&) {
-    o << "boolean";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const int_type&) {
-    o << "int";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const long_type&) {
-    o << "long";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const float_type&) {
-    o << "float";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const double_type&) {
-    o << "double";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const decimal_type& t) {
-    o << fmt::format("decimal({}, {})", t.precision, t.scale);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const date_type&) {
-    o << "date";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const time_type&) {
-    o << "time";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const timestamp_type&) {
-    o << "timestamp";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const timestamptz_type&) {
-    o << "timestamptz";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const string_type&) {
-    o << "string";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const uuid_type&) {
-    o << "uuid";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const fixed_type& t) {
-    // NOTE: square brackets to match how fixed type is serialized as JSON,
-    // though this matching isn't necessarily important for operator<<.
-    o << fmt::format("fixed[{}]", t.length);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const binary_type&) {
-    o << "binary";
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const struct_type& st) {
-    /**
-     * Struct is printed as struct[field_1_name<field_1_type>,...]
-     */
-    fmt::print(o, "struct[");
+fmt::iterator format_struct_type(fmt::iterator it, const struct_type& st) {
+    it = fmt::format_to(it, "struct[");
     if (!st.fields.empty()) {
-        auto it = st.fields.begin();
-        fmt::print(o, "{}", format_nested_field_ptr_name_type(*it));
-        ++it;
-        for (; it != st.fields.end(); ++it) {
-            fmt::print(o, ", {}", format_nested_field_ptr_name_type(*it));
+        auto fit = st.fields.begin();
+        it = fmt::format_to(it, "{}", format_nested_field_ptr_name_type(*fit));
+        ++fit;
+        for (; fit != st.fields.end(); ++fit) {
+            it = fmt::format_to(
+              it, ", {}", format_nested_field_ptr_name_type(*fit));
         }
     }
-
-    fmt::print(o, "]");
-    return o;
+    return fmt::format_to(it, "]");
 }
 
-std::ostream& operator<<(std::ostream& o, const list_type& lt) {
-    fmt::print(o, "list<{}>", format_nested_field_ptr_type(lt.element_field));
-    return o;
+fmt::iterator format_list_type(fmt::iterator it, const list_type& lt) {
+    return fmt::format_to(
+      it, "list<{}>", format_nested_field_ptr_type(lt.element_field));
 }
 
-std::ostream& operator<<(std::ostream& o, const map_type& mt) {
-    fmt::print(
-      o,
+fmt::iterator format_map_type(fmt::iterator it, const map_type& mt) {
+    return fmt::format_to(
+      it,
       "map<{},{}>",
       format_nested_field_ptr_type(mt.key_field),
       format_nested_field_ptr_type(mt.value_field));
-    return o;
 }
 
-std::ostream& operator<<(std::ostream& o, const nested_field& nf) {
-    fmt::print(
-      o,
+fmt::iterator format_nested_field(fmt::iterator it, const nested_field& nf) {
+    return fmt::format_to(
+      it,
       "{{id: {}, name: {}, required: {}, type: {}}}",
       nf.id,
       nf.name,
       nf.required,
       nf.type);
+}
+
+fmt::iterator format_primitive_type(fmt::iterator it, const primitive_type& t) {
+    return std::visit(
+      [it](const auto& v) { return fmt::format_to(it, "{}", v); }, t);
+}
+
+fmt::iterator format_field_type(fmt::iterator it, const field_type& t) {
+    return std::visit(
+      [it](const auto& v) { return fmt::format_to(it, "{}", v); }, t);
+}
+
+std::ostream& operator<<(std::ostream& o, const struct_type& st) {
+    fmt::print(o, "{}", st);
+    return o;
+}
+
+std::ostream& operator<<(std::ostream& o, const list_type& lt) {
+    fmt::print(o, "{}", lt);
+    return o;
+}
+
+std::ostream& operator<<(std::ostream& o, const map_type& mt) {
+    fmt::print(o, "{}", mt);
+    return o;
+}
+
+std::ostream& operator<<(std::ostream& o, const nested_field& nf) {
+    fmt::print(o, "{}", nf);
     return o;
 }
 
@@ -289,26 +240,13 @@ bool operator==(const map_type& lhs, const map_type& rhs) {
     return true;
 }
 
-namespace {
-struct ostream_visitor {
-    explicit ostream_visitor(std::ostream& o)
-      : os(o) {}
-    std::ostream& os;
-
-    template<typename T>
-    void operator()(const T& v) const {
-        os << v;
-    }
-};
-} // namespace
-
 std::ostream& operator<<(std::ostream& o, const primitive_type& t) {
-    std::visit(ostream_visitor{o}, t);
+    fmt::print(o, "{}", t);
     return o;
 }
 
 std::ostream& operator<<(std::ostream& o, const field_type& t) {
-    std::visit(ostream_visitor{o}, t);
+    fmt::print(o, "{}", t);
     return o;
 }
 

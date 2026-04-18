@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "proto/redpanda/core/admin/internal/cloud_topics/v1/metastore.proto.h"
 #include "utils/detailed_error.h"
 
@@ -28,6 +29,7 @@ enum class debug_serde_errc {
 using debug_serde_error = detailed_error<debug_serde_errc>;
 
 std::string_view to_string_view(debug_serde_errc e);
+fmt::iterator format_to(debug_serde_errc, fmt::iterator);
 
 /// Encode a typed proto key into the raw LSM key string.
 std::expected<ss::sstring, debug_serde_error>
@@ -38,7 +40,3 @@ std::expected<iobuf, debug_serde_error>
 debug_encode_value(const proto::admin::metastore::row_value&);
 
 } // namespace cloud_topics::l1
-
-inline auto format_as(cloud_topics::l1::debug_serde_errc e) {
-    return cloud_topics::l1::to_string_view(e);
-}

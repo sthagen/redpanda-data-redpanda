@@ -9,8 +9,6 @@
  */
 
 #include "base/vlog.h"
-#include "cluster/archival/fwd.h"
-#include "cluster/archival/logger.h"
 #include "cluster/archival/types.h"
 #include "cluster/archival/upload_housekeeping_service.h"
 #include "utils/retry_chain_node.h"
@@ -20,8 +18,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/testing/thread_test_case.hh>
-#include <seastar/util/defer.hh>
-#include <seastar/util/later.hh>
 #include <seastar/util/log.hh>
 
 #include <chrono>

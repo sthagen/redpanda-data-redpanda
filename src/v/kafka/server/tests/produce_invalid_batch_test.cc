@@ -19,11 +19,6 @@
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/metrics_types.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/core/smp.hh>
-#include <seastar/util/bool_class.hh>
-
 #include <vector>
 
 using namespace std::chrono_literals;

@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "datalake/base_types.h"
 #include "iceberg/datatypes.h"
@@ -33,7 +34,32 @@ enum class writer_error {
     out_of_disk,
     unknown_error,
 };
-std::ostream& operator<<(std::ostream&, const writer_error&);
+inline fmt::iterator format_to(writer_error ev, fmt::iterator out) {
+    switch (ev) {
+    case writer_error::ok:
+        return fmt::format_to(out, "Ok");
+    case writer_error::parquet_conversion_error:
+        return fmt::format_to(out, "Parquet Conversion Error");
+    case writer_error::file_io_error:
+        return fmt::format_to(out, "File IO Error");
+    case writer_error::no_data:
+        return fmt::format_to(out, "No data");
+    case writer_error::flush_error:
+        return fmt::format_to(out, "Flush failed");
+    case writer_error::oom_error:
+        return fmt::format_to(out, "Memory exhausted");
+    case writer_error::time_limit_exceeded:
+        return fmt::format_to(out, "Time limit exceeded");
+    case writer_error::shutting_down:
+        return fmt::format_to(out, "Shutting down");
+    case writer_error::out_of_disk:
+        return fmt::format_to(out, "Disk exhausted");
+    case writer_error::unknown_error:
+        return fmt::format_to(out, "Unknown error");
+    case writer_error::retryable_type_resolution_error:
+        return fmt::format_to(out, "Retryable type resolution error");
+    }
+}
 
 // Recoverable errors are the class of errors that donot leave the underlying
 // writers in a bad shape. Upon recoverable errors the translator may choose to

@@ -9,7 +9,6 @@
 
 #include "storage/mvlog/skipping_data_source.h"
 
-#include "io/pager.h"
 #include "storage/mvlog/file.h"
 
 #include <seastar/core/coroutine.hh>

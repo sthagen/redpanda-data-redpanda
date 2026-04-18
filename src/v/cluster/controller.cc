@@ -9,7 +9,6 @@
 
 #include "cluster/controller.h"
 
-#include "base/likely.h"
 #include "cloud_storage/topic_mount_handler.h"
 #include "cluster/bootstrap_backend.h"
 #include "cluster/client_quota_backend.h"
@@ -54,7 +53,6 @@
 #include "cluster/members_frontend.h"
 #include "cluster/members_manager.h"
 #include "cluster/members_table.h"
-#include "cluster/metadata_dissemination_service.h"
 #include "cluster/metrics_reporter.h"
 #include "cluster/node_status_table.h"
 #include "cluster/partition_balancer_backend.h"
@@ -81,7 +79,6 @@
 #include "model/timeout_clock.h"
 #include "raft/fundamental.h"
 #include "raft/fwd.h"
-#include "security/acl.h"
 #include "security/authorizer.h"
 #include "security/credential_store.h"
 #include "security/ephemeral_credential_store.h"
@@ -93,9 +90,7 @@
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/core/thread.hh>
 #include <seastar/coroutine/switch_to.hh>
-#include <seastar/util/later.hh>
 
 #include <algorithm>
 #include <chrono>

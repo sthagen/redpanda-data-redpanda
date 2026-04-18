@@ -14,8 +14,6 @@
 #include "serde/json/tests/dom_serde.h"
 #include "test_utils/test.h"
 
-#include <gtest/gtest.h>
-
 using namespace serde::json;
 
 // Parse DOM model using both serde::json and rapidjson

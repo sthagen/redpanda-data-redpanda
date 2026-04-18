@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "cluster/types.h"
 #include "kafka/protocol/wire.h"
 #include "reflection/async_adl.h"
@@ -63,8 +64,7 @@ enum class partition_transaction_status : int8_t {
     committed = 4,
     aborted = 5
 };
-
-std::ostream& operator<<(std::ostream&, const partition_transaction_status&);
+fmt::iterator format_to(partition_transaction_status, fmt::iterator);
 
 // Captures the information about the transaction within a single data
 // partition. A user initiated transaction can span multiple data partitions but
@@ -138,7 +138,7 @@ struct abort_snapshot {
     bool match(abort_index idx) {
         return idx.first == first && idx.last == last;
     }
-    friend std::ostream& operator<<(std::ostream&, const abort_snapshot&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     bool operator==(const abort_snapshot&) const = default;
 };
@@ -177,14 +177,13 @@ struct producer_partition_transaction_state
 
     bool is_in_progress() const;
 
+    fmt::iterator format_to(fmt::iterator it) const;
+
     auto serde_fields() {
         return std::tie(
           first, last, sequence, timeout, coordinator_partition, status);
     }
 };
-
-std::ostream&
-operator<<(std::ostream& o, const producer_partition_transaction_state&);
 
 struct producer_state_snapshot
   : serde::envelope<
@@ -352,7 +351,7 @@ struct tx_snapshot_v6
 
     tx_snapshot_v5 downgrade_to_v5() &&;
 
-    friend std::ostream& operator<<(std::ostream&, const tx_snapshot_v6&);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     bool operator==(const tx_snapshot_v6&) const = default;
 

@@ -10,7 +10,6 @@
  */
 
 #include "kafka/client/utils.h"
-#include "kafka/protocol/offset_commit.h"
 
 #include <gtest/gtest.h>
 

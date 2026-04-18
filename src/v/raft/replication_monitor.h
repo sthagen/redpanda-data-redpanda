@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
 #include "storage/types.h"
@@ -69,6 +70,17 @@ public:
 
 private:
     enum wait_type : int8_t { commit, majority_replication };
+
+    static constexpr std::string_view wait_type_to_string(wait_type t) {
+        switch (t) {
+        case commit:
+            return "commit";
+        case majority_replication:
+            return "majority_replication";
+        }
+        return "";
+    }
+
     struct waiter {
         waiter(
           replication_monitor*, storage::append_result, wait_type) noexcept;
@@ -77,6 +89,14 @@ private:
         replication_monitor* monitor;
         storage::append_result append_info;
         wait_type type;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{type: {}, append result: {}}}",
+              wait_type_to_string(type),
+              append_info);
+        }
     };
 
     ss::future<> do_notify_replicated();
@@ -107,9 +127,7 @@ private:
     size_t _pending_majority_replication_waiters{0};
 
 public:
-    friend std::ostream& operator<<(std::ostream&, const replication_monitor&);
-    friend std::ostream& operator<<(std::ostream&, const waiter&);
-    friend std::ostream& operator<<(std::ostream&, const wait_type&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace raft

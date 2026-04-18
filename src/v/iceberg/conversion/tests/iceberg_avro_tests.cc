@@ -8,7 +8,6 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "bytes/iobuf_parser.h"
-#include "gtest/gtest.h"
 #include "iceberg/avro_decimal.h"
 #include "iceberg/conversion/avro_utils.h"
 #include "iceberg/conversion/schema_avro.h"

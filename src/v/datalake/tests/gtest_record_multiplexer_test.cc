@@ -22,7 +22,6 @@
 #include "datalake/tests/test_utils.h"
 #include "datalake/translation/translation_probe.h"
 #include "features/feature_table.h"
-#include "iceberg/filesystem_catalog.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record_batch_reader.h"
@@ -31,8 +30,6 @@
 #include "test_utils/tmp_dir.h"
 
 #include <gtest/gtest.h>
-
-#include <filesystem>
 
 using namespace datalake;
 namespace {

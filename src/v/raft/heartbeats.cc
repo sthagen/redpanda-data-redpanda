@@ -11,8 +11,6 @@
 
 #include "raft/heartbeats.h"
 
-#include "raft/types.h"
-
 #include <seastar/coroutine/maybe_yield.hh>
 
 #include <cstdint>

@@ -7,8 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/container/btree_map.h"
-#include "base/vlog.h"
 #include "cluster/members_frontend.h"
 #include "cluster/tests/cluster_test_fixture.h"
 #include "cluster/tests/tx_compaction_utils.h"

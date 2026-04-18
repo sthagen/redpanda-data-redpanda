@@ -20,7 +20,6 @@
 
 #include <seastar/core/fstream.hh>
 #include <seastar/core/reactor.hh>
-#include <seastar/coroutine/as_future.hh>
 
 #include <exception>
 #include <system_error>

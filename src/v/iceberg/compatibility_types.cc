@@ -10,6 +10,8 @@
 
 #include "iceberg/compatibility_types.h"
 
+#include "base/format_to.h"
+
 #include <fmt/format.h>
 
 namespace iceberg {
@@ -23,6 +25,10 @@ std::string_view to_string_view(type_promoted tp) {
     case type_promoted::changes_partition:
         return "type_promoted::changes_partition";
     }
+}
+
+fmt::iterator format_to(type_promoted tp, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(tp));
 }
 
 std::string_view to_string_view(schema_evolution_errc ec) {
@@ -46,6 +52,10 @@ std::string_view to_string_view(schema_evolution_errc ec) {
     }
 }
 
+fmt::iterator format_to(schema_evolution_errc ec, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(ec));
+}
+
 schema_transform_state&
 operator+=(schema_transform_state& lhs, const schema_transform_state& rhs) {
     lhs.n_removed += rhs.n_removed;
@@ -56,15 +66,3 @@ operator+=(schema_transform_state& lhs, const schema_transform_state& rhs) {
 }
 
 } // namespace iceberg
-
-auto fmt::formatter<iceberg::schema_evolution_errc>::format(
-  iceberg::schema_evolution_errc ec, format_context& ctx) const
-  -> format_context::iterator {
-    return formatter<string_view>::format(iceberg::to_string_view(ec), ctx);
-}
-
-auto fmt::formatter<iceberg::type_promoted>::format(
-  iceberg::type_promoted ec, format_context& ctx) const
-  -> format_context::iterator {
-    return formatter<string_view>::format(iceberg::to_string_view(ec), ctx);
-}

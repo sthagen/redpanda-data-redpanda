@@ -7,9 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "pandaproxy/schema_registry/error.h"
-#include "pandaproxy/schema_registry/exceptions.h"
-#include "pandaproxy/schema_registry/protobuf.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/test/compatibility_protobuf.h"
 #include "pandaproxy/schema_registry/types.h"

@@ -146,7 +146,7 @@ auto to_admin_type(
   const cluster::data_migrations::migration_metadata& meta) {
     typename StateAdmin<Migration>::type ret;
     ret.id = meta.id;
-    ret.state = fmt::to_string(meta.state);
+    ret.state = fmt::format("{}", meta.state);
     ret.migration = to_admin_type(migration);
     ret.created_timestamp = meta.created_timestamp.value();
     if (meta.completed_timestamp != model::timestamp::missing()) {

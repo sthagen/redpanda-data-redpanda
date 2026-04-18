@@ -10,7 +10,6 @@
  */
 #include "cluster/client_quota_serde.h"
 #include "cluster/client_quota_store.h"
-#include "config/configuration.h"
 #include "kafka/server/quota_manager.h"
 
 #include <seastar/coroutine/maybe_yield.hh>

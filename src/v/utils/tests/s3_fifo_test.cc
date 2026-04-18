@@ -11,8 +11,6 @@
 #include "test_utils/test.h"
 #include "utils/s3_fifo.h"
 
-#include <map>
-
 namespace utils::s3_fifo::testing_details {
 class cache_hook_accessor {
 public:

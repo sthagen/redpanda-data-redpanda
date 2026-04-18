@@ -64,7 +64,17 @@ enum class segment_name_format : int16_t {
     v3 = 3
 };
 
-std::ostream& operator<<(std::ostream& o, const segment_name_format& r);
+inline fmt::iterator format_to(segment_name_format r, fmt::iterator out) {
+    switch (r) {
+    case segment_name_format::v1:
+        return fmt::format_to(out, "{{v1}}");
+    case segment_name_format::v2:
+        return fmt::format_to(out, "{{v2}}");
+    case segment_name_format::v3:
+        return fmt::format_to(out, "{{v3}}");
+    }
+}
+
 enum class manifest_version : int32_t {
     v1 = 1,
     v2 = 2,
@@ -166,8 +176,30 @@ struct segment_meta
           meta.delta_offset(),
           meta.delta_offset_end());
     }
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{is_compacted: {}, size_bytes: {}, base_offset: {}, "
+          "committed_offset: "
+          "{}, base_timestamp: {}, max_timestamp: {}, delta_offset: {}, "
+          "ntp_revision: {}, archiver_term: {}, segment_term: {}, "
+          "delta_offset_end: {}, sname_format: {}, metadata_size_hint: {}}}",
+          is_compacted,
+          size_bytes,
+          base_offset,
+          committed_offset,
+          base_timestamp,
+          max_timestamp,
+          delta_offset,
+          ntp_revision,
+          archiver_term,
+          segment_term,
+          delta_offset_end,
+          sname_format,
+          metadata_size_hint);
+    }
 };
-std::ostream& operator<<(std::ostream& o, const segment_meta& r);
 
 enum class error_outcome {
     // Represent general failure that can't be handled and doesn't fit into
@@ -286,14 +318,34 @@ struct spillover_manifest_path_components
           c.base_ts(),
           c.last_ts());
     }
-};
 
-std::ostream&
-operator<<(std::ostream& o, const spillover_manifest_path_components& c);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{base: {}, last: {}, base_kafka: {}, next_kafka: {}, base_ts: "
+          "{}, "
+          "last_ts: {}}}",
+          base,
+          last,
+          base_kafka,
+          next_kafka,
+          base_ts,
+          last_ts);
+    }
+};
 
 enum class scrub_status : uint8_t { full, partial, failed };
 
-std::ostream& operator<<(std::ostream& o, const scrub_status&);
+inline fmt::iterator format_to(scrub_status s, fmt::iterator out) {
+    switch (s) {
+    case scrub_status::full:
+        return fmt::format_to(out, "{{full}}");
+    case scrub_status::partial:
+        return fmt::format_to(out, "{{partial}}");
+    case scrub_status::failed:
+        return fmt::format_to(out, "{{failed}}");
+    }
+}
 
 enum class anomaly_type : int8_t {
     missing_delta,
@@ -304,7 +356,22 @@ enum class anomaly_type : int8_t {
     offset_overlap
 };
 
-std::ostream& operator<<(std::ostream& o, const anomaly_type&);
+inline fmt::iterator format_to(anomaly_type t, fmt::iterator out) {
+    switch (t) {
+    case anomaly_type::missing_delta:
+        return fmt::format_to(out, "{{missing_delta}}");
+    case anomaly_type::non_monotonical_delta:
+        return fmt::format_to(out, "{{non_monotonical_delta}}");
+    case anomaly_type::end_delta_smaller:
+        return fmt::format_to(out, "{{end_delta_smaller}}");
+    case anomaly_type::committed_smaller:
+        return fmt::format_to(out, "{{committed_smaller}}");
+    case anomaly_type::offset_gap:
+        return fmt::format_to(out, "{{offset_gap}}");
+    case anomaly_type::offset_overlap:
+        return fmt::format_to(out, "{{offset_overlap}}");
+    }
+}
 
 struct anomaly_meta
   : serde::envelope<anomaly_meta, serde::version<0>, serde::compat_version<0>> {
@@ -320,9 +387,12 @@ struct anomaly_meta
     friend H AbslHashValue(H h, const anomaly_meta& am) {
         return H::combine(std::move(h), am.type, am.at);
     }
-};
 
-std::ostream& operator<<(std::ostream& o, const anomaly_meta&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it, "{{type: {}, at: {}, previous: {}}}", type, at, previous);
+    }
+};
 
 using segment_meta_anomalies = absl::node_hash_set<anomaly_meta>;
 
@@ -376,9 +446,9 @@ struct anomalies
     anomalies& operator+=(anomalies&&);
 
     friend bool operator==(const anomalies& lhs, const anomalies& rhs);
-};
 
-std::ostream& operator<<(std::ostream& o, const anomalies& a);
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 enum class upload_type {
     object,
@@ -409,7 +479,10 @@ constexpr std::string_view to_string(upload_type t) {
         return "inventory-configuration";
     }
 }
-std::ostream& operator<<(std::ostream&, upload_type);
+
+inline fmt::iterator format_to(upload_type t, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string(t));
+}
 
 enum class download_type { object, segment_index, inventory_report_manifest };
 
@@ -425,11 +498,23 @@ constexpr std::string_view to_string(download_type t) {
     }
 }
 
-std::ostream& operator<<(std::ostream&, download_type);
+inline fmt::iterator format_to(download_type t, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string(t));
+}
 
 enum class existence_check_type { object, segment, manifest };
 
-std::ostream& operator<<(std::ostream&, existence_check_type);
+inline fmt::iterator format_to(existence_check_type t, fmt::iterator out) {
+    switch (t) {
+        using enum existence_check_type;
+    case object:
+        return fmt::format_to(out, "object");
+    case segment:
+        return fmt::format_to(out, "segment");
+    case manifest:
+        return fmt::format_to(out, "manifest");
+    }
+}
 
 class remote_probe;
 struct upload_request {
@@ -525,3 +610,16 @@ namespace std {
 template<>
 struct is_error_code_enum<cloud_storage::error_outcome> : true_type {};
 } // namespace std
+
+template<>
+struct fmt::formatter<cloud_storage::error_outcome>
+  : fmt::formatter<std::string_view> {
+    auto
+    format(cloud_storage::error_outcome e, fmt::format_context& ctx) const {
+        return fmt::format_to(
+          ctx.out(),
+          "{}:{}",
+          cloud_storage::error_outcome_category{}.name(),
+          static_cast<int>(e));
+    }
+};

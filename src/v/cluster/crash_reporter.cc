@@ -29,13 +29,11 @@
 #include "storage/kvstore.h"
 #include "utils/prefix_logger.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/sleep.hh>
 
 #include <fmt/core.h>
 
 #include <exception>
-#include <iterator>
 
 namespace cluster {
 

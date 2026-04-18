@@ -23,7 +23,6 @@
 #include <seastar/core/file-types.hh>
 #include <seastar/core/file.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/core/sleep.hh>
 #include <seastar/util/print_safe.hh>
 
 #include <fmt/core.h>

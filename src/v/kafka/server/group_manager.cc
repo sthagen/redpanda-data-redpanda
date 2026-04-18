@@ -13,7 +13,6 @@
 #include "cluster/cluster_utils.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/logger.h"
-#include "cluster/metadata_cache.h"
 #include "cluster/offsets_snapshot.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"

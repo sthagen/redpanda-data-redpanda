@@ -11,6 +11,7 @@
 
 #include "feature_table.h"
 
+#include "base/format_to.h"
 #include "cluster/feature_update_action.h"
 #include "cluster/version.h"
 #include "config/configuration.h"
@@ -152,6 +153,10 @@ std::string_view to_string_view(feature f) {
     __builtin_unreachable();
 }
 
+fmt::iterator format_to(feature f, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(f));
+}
+
 std::string_view to_string_view(feature_state::state s) {
     switch (s) {
     case feature_state::state::unavailable:
@@ -171,6 +176,10 @@ std::string_view to_string_view(feature_state::state s) {
     }
     __builtin_unreachable();
 };
+
+fmt::iterator format_to(feature_state::state s, fmt::iterator out) {
+    return fmt::format_to(out, "{}", to_string_view(s));
+}
 
 // The version that this redpanda node will report: increment this
 // on protocol changes to raft0 structures, like adding new services.

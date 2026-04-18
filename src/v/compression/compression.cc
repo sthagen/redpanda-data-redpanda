@@ -10,7 +10,6 @@
 #include "compression/compression.h"
 
 #include "base/vassert.h"
-#include "base/vlog.h"
 #include "compression/async_stream_zstd.h"
 #include "compression/internal/gzip_compressor.h"
 #include "compression/internal/lz4_frame_compressor.h"
@@ -89,20 +88,6 @@ ss::future<iobuf> stream_compressor::uncompress(iobuf io, type t) {
     default:
         return ss::make_ready_future<iobuf>(compressor::uncompress(io, t));
     }
-}
-
-std::ostream& operator<<(std::ostream& os, const type& c) {
-    switch (c) {
-    case type::gzip:
-        return os << "gzip";
-    case type::java_snappy:
-        return os << "java_snappy";
-    case type::lz4:
-        return os << "lz4";
-    case type::zstd:
-        return os << "zstd";
-    }
-    return os << "compression::type::unknown(" << std::to_underlying(c) << ")";
 }
 
 } // namespace compression

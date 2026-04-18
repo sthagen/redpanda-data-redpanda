@@ -11,15 +11,10 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/lowres_clock.hh>
-#include <seastar/core/manual_clock.hh>
-#include <seastar/core/semaphore.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/core/timer.hh>
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-
-#include <chrono>
 
 using namespace std::chrono_literals;
 namespace ss = seastar;

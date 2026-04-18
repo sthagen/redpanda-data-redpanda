@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/likely.h"
 #include "base/seastarx.h"
 #include "config/property.h"
@@ -992,7 +993,8 @@ private:
     // simulate storage issues
     bool _inject_error_in_append_entries = false;
 
-    friend std::ostream& operator<<(std::ostream&, const consensus&);
+public:
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace raft

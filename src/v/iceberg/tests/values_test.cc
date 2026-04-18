@@ -258,171 +258,164 @@ TEST(ValuesTest, TestNestedValueEquality) {
 }
 
 TEST(ValuesTest, TestPrimitiveTypesOStream) {
-    EXPECT_STREQ("boolean(true)", fmt::to_string(boolean_value{true}).c_str());
-    EXPECT_STREQ(
-      "boolean(false)", fmt::to_string(boolean_value{false}).c_str());
+    EXPECT_EQ("boolean(true)", fmt::format("{}", boolean_value{true}));
+    EXPECT_EQ("boolean(false)", fmt::format("{}", boolean_value{false}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "int(-2147483648)",
-      fmt::to_string(int_value{std::numeric_limits<int32_t>::min()}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", int_value{std::numeric_limits<int32_t>::min()}));
+    EXPECT_EQ(
       "int(2147483647)",
-      fmt::to_string(int_value{std::numeric_limits<int32_t>::max()}).c_str());
+      fmt::format("{}", int_value{std::numeric_limits<int32_t>::max()}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "long(-9223372036854775808)",
-      fmt::to_string(long_value{std::numeric_limits<long>::min()}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", long_value{std::numeric_limits<long>::min()}));
+    EXPECT_EQ(
       "long(9223372036854775807)",
-      fmt::to_string(long_value{std::numeric_limits<long>::max()}).c_str());
+      fmt::format("{}", long_value{std::numeric_limits<long>::max()}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "double(-1.7976931348623157e+308)",
-      fmt::to_string(double_value{-std::numeric_limits<double>::max()})
-        .c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", double_value{-std::numeric_limits<double>::max()}));
+    EXPECT_EQ(
       "double(2.2250738585072014e-308)",
-      fmt::to_string(double_value{std::numeric_limits<double>::min()}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", double_value{std::numeric_limits<double>::min()}));
+    EXPECT_EQ(
       "double(1.7976931348623157e+308)",
-      fmt::to_string(double_value{std::numeric_limits<double>::max()}).c_str());
+      fmt::format("{}", double_value{std::numeric_limits<double>::max()}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "decimal(-170141183460469231731687303715884105728)",
-      fmt::to_string(decimal_value{std::numeric_limits<absl::int128>::min()})
-        .c_str());
-    EXPECT_STREQ(
+      fmt::format(
+        "{}", decimal_value{std::numeric_limits<absl::int128>::min()}));
+    EXPECT_EQ(
       "decimal(170141183460469231731687303715884105727)",
-      fmt::to_string(decimal_value{std::numeric_limits<absl::int128>::max()})
-        .c_str());
+      fmt::format(
+        "{}", decimal_value{std::numeric_limits<absl::int128>::max()}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "date(-2147483648)",
-      fmt::to_string(date_value{std::numeric_limits<int32_t>::min()}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", date_value{std::numeric_limits<int32_t>::min()}));
+    EXPECT_EQ(
       "date(2147483647)",
-      fmt::to_string(date_value{std::numeric_limits<int32_t>::max()}).c_str());
+      fmt::format("{}", date_value{std::numeric_limits<int32_t>::max()}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "time(-9223372036854775808)",
-      fmt::to_string(time_value{std::numeric_limits<long>::min()}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", time_value{std::numeric_limits<long>::min()}));
+    EXPECT_EQ(
       "time(9223372036854775807)",
-      fmt::to_string(time_value{std::numeric_limits<long>::max()}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", time_value{std::numeric_limits<long>::max()}));
+    EXPECT_EQ(
       "timestamp(-9223372036854775808)",
-      fmt::to_string(timestamp_value{std::numeric_limits<long>::min()})
-        .c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", timestamp_value{std::numeric_limits<long>::min()}));
+    EXPECT_EQ(
       "timestamp(9223372036854775807)",
-      fmt::to_string(timestamp_value{std::numeric_limits<long>::max()})
-        .c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", timestamp_value{std::numeric_limits<long>::max()}));
+    EXPECT_EQ(
       "timestamptz(-9223372036854775808)",
-      fmt::to_string(timestamptz_value{std::numeric_limits<long>::min()})
-        .c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", timestamptz_value{std::numeric_limits<long>::min()}));
+    EXPECT_EQ(
       "timestamptz(9223372036854775807)",
-      fmt::to_string(timestamptz_value{std::numeric_limits<long>::max()})
-        .c_str());
+      fmt::format("{}", timestamptz_value{std::numeric_limits<long>::max()}));
 
-    EXPECT_STREQ("string(\"\")", fmt::to_string(string_value{}).c_str());
-    EXPECT_STREQ(
+    EXPECT_EQ("string(\"\")", fmt::format("{}", string_value{}));
+    EXPECT_EQ(
       "string(\"0000000000000000\")",
-      fmt::to_string(string_value{iobuf::from("0000000000000000")}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", string_value{iobuf::from("0000000000000000")}));
+    EXPECT_EQ(
       "string(\"0000000000000000...\")",
-      fmt::to_string(string_value{iobuf::from("00000000000000000")}).c_str());
+      fmt::format("{}", string_value{iobuf::from("00000000000000000")}));
 
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "uuid(00000000-0000-0000-0000-000000000000)",
-      fmt::to_string(uuid_value{}).c_str());
-    EXPECT_STREQ(
+      fmt::format("{}", uuid_value{}));
+    EXPECT_EQ(
       "uuid(deadbeef-0000-0000-0000-000000000000)",
-      fmt::to_string(
-        uuid_value{uuid_t::from_string("deadbeef-0000-0000-0000-000000000000")})
-        .c_str());
+      fmt::format(
+        "{}",
+        uuid_value{
+          uuid_t::from_string("deadbeef-0000-0000-0000-000000000000")}));
 
-    EXPECT_STREQ(
-      "binary(size_bytes=0)", fmt::to_string(binary_value{}).c_str());
-    EXPECT_STREQ(
+    EXPECT_EQ("binary(size_bytes=0)", fmt::format("{}", binary_value{}));
+    EXPECT_EQ(
       "binary(size_bytes=16)",
-      fmt::to_string(binary_value{iobuf::from("0000000000000000")}).c_str());
+      fmt::format("{}", binary_value{iobuf::from("0000000000000000")}));
 
-    EXPECT_STREQ("fixed(size_bytes=0)", fmt::to_string(fixed_value{}).c_str());
-    EXPECT_STREQ(
+    EXPECT_EQ("fixed(size_bytes=0)", fmt::format("{}", fixed_value{}));
+    EXPECT_EQ(
       "fixed(size_bytes=16)",
-      fmt::to_string(fixed_value{iobuf::from("0000000000000000")}).c_str());
+      fmt::format("{}", fixed_value{iobuf::from("0000000000000000")}));
 }
 
 TEST(ValuesTest, TestStructOStream) {
     struct_value val;
-    EXPECT_STREQ("struct{}", fmt::to_string(val).c_str());
+    EXPECT_EQ("struct{}", fmt::format("{}", val));
     val.fields.emplace_back(std::nullopt);
-    EXPECT_STREQ("struct{none, }", fmt::to_string(val).c_str());
+    EXPECT_EQ("struct{none, }", fmt::format("{}", val));
     val.fields.emplace_back(int_value{1});
-    EXPECT_STREQ("struct{none, int(1), }", fmt::to_string(val).c_str());
+    EXPECT_EQ("struct{none, int(1), }", fmt::format("{}", val));
     val.fields.emplace_back(long_value{1});
     val.fields.emplace_back(long_value{1});
     val.fields.emplace_back(long_value{1});
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "struct{none, int(1), long(1), long(1), long(1), }",
-      fmt::to_string(val).c_str());
+      fmt::format("{}", val));
     val.fields.emplace_back(int_value{1});
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "struct{none, int(1), long(1), long(1), long(1), ...}",
-      fmt::to_string(val).c_str());
+      fmt::format("{}", val));
 }
 
 TEST(ValuesTest, TestListOStream) {
     list_value val;
-    EXPECT_STREQ("list{}", fmt::to_string(val).c_str());
+    EXPECT_EQ("list{}", fmt::format("{}", val));
     val.elements.emplace_back(std::nullopt);
-    EXPECT_STREQ("list{none, }", fmt::to_string(val).c_str());
+    EXPECT_EQ("list{none, }", fmt::format("{}", val));
     val.elements.emplace_back(int_value{1});
-    EXPECT_STREQ("list{none, int(1), }", fmt::to_string(val).c_str());
+    EXPECT_EQ("list{none, int(1), }", fmt::format("{}", val));
     val.elements.emplace_back(int_value{1});
     val.elements.emplace_back(int_value{1});
     val.elements.emplace_back(int_value{1});
-    EXPECT_STREQ(
-      "list{none, int(1), int(1), int(1), int(1), }",
-      fmt::to_string(val).c_str());
+    EXPECT_EQ(
+      "list{none, int(1), int(1), int(1), int(1), }", fmt::format("{}", val));
     val.elements.emplace_back(int_value{1});
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "list{none, int(1), int(1), int(1), int(1), ...}",
-      fmt::to_string(val).c_str());
+      fmt::format("{}", val));
 }
 
 TEST(ValuesTest, TestMapOStream) {
     map_value val;
-    EXPECT_STREQ("map{}", fmt::to_string(val).c_str());
+    EXPECT_EQ("map{}", fmt::format("{}", val));
     val.kvs.emplace_back(kv_value{int_value{0}, std::nullopt});
-    EXPECT_STREQ("map{(k=int(0), v=none), }", fmt::to_string(val).c_str());
+    EXPECT_EQ("map{(k=int(0), v=none), }", fmt::format("{}", val));
     val.kvs.emplace_back(kv_value{int_value{0}, int_value{1}});
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "map{(k=int(0), v=none), (k=int(0), v=int(1)), }",
-      fmt::to_string(val).c_str());
+      fmt::format("{}", val));
     val.kvs.emplace_back(kv_value{int_value{0}, std::nullopt});
     val.kvs.emplace_back(kv_value{int_value{0}, std::nullopt});
     val.kvs.emplace_back(kv_value{int_value{0}, std::nullopt});
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "map{(k=int(0), v=none), (k=int(0), v=int(1)), (k=int(0), v=none), "
       "(k=int(0), v=none), (k=int(0), v=none), }",
-      fmt::to_string(val).c_str());
+      fmt::format("{}", val));
     val.kvs.emplace_back(kv_value{int_value{0}, std::nullopt});
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "map{(k=int(0), v=none), (k=int(0), v=int(1)), (k=int(0), v=none), "
       "(k=int(0), v=none), (k=int(0), v=none), ...}",
-      fmt::to_string(val).c_str());
+      fmt::format("{}", val));
 }
 
 TEST(ValuesTest, TestValueOStream) {
     auto schema_field_type = test_nested_schema_type();
     auto zero_val = tests::make_value({.max_elements = 1}, schema_field_type);
-    EXPECT_STREQ(
+    EXPECT_EQ(
       "struct{string(\"\"), int(0), boolean(false), list{string(\"\"), }, "
       "map{(k=string(\"\"), v=map{(k=string(\"\"), v=int(0)), }), }, ...}",
-      fmt::to_string(zero_val).c_str());
+      fmt::format("{}", zero_val));
 }
 
 TEST(ValuesTest, TestHashContainerStructs) {

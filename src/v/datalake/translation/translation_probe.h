@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "metrics/metrics.h"
 #include "model/fundamental.h"
 
@@ -103,7 +104,19 @@ private:
     size_t _decompressed_bytes_processed = 0;
 };
 
-std::ostream&
-operator<<(std::ostream& os, translation_probe::invalid_record_cause cause);
+inline fmt::iterator
+format_to(translation_probe::invalid_record_cause cause, fmt::iterator out) {
+    switch (cause) {
+    case translation_probe::invalid_record_cause::
+      failed_kafka_schema_resolution:
+        return fmt::format_to(out, "failed_kafka_schema_resolution");
+    case translation_probe::invalid_record_cause::failed_data_translation:
+        return fmt::format_to(out, "failed_data_translation");
+    case translation_probe::invalid_record_cause::
+      failed_iceberg_schema_resolution:
+        return fmt::format_to(out, "failed_iceberg_schema_resolution");
+    }
+    __builtin_unreachable();
+}
 
 }; // namespace datalake

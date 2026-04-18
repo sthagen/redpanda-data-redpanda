@@ -52,7 +52,9 @@ template<typename T, size_t chunk_size>
 struct fmt::formatter<ss::chunked_fifo<T, chunk_size>> {
     using type = ss::chunked_fifo<T, chunk_size>;
 
-    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     typename FormatContext::iterator
@@ -132,28 +134,32 @@ std::ostream& operator<<(std::ostream& o, const absl::btree_set<K>& s) {
 
 template<>
 struct fmt::formatter<absl::Time> {
-    constexpr format_parse_context::iterator parse(format_parse_context& ctx) {
+    constexpr format_parse_context::iterator
+    parse(format_parse_context& ctx) const {
         return ctx.begin();
     }
 
     format_context::iterator
-    format(const absl::Time& t, fmt::format_context& ctx);
+    format(const absl::Time& t, fmt::format_context& ctx) const;
 };
 
 template<>
 struct fmt::formatter<absl::Duration> {
-    constexpr format_parse_context::iterator parse(format_parse_context& ctx) {
+    constexpr format_parse_context::iterator
+    parse(format_parse_context& ctx) const {
         return ctx.begin();
     }
 
     format_context::iterator
-    format(const absl::Duration& d, fmt::format_context& ctx);
+    format(const absl::Duration& d, fmt::format_context& ctx) const;
 };
 
 template<>
 struct fmt::formatter<std::monostate> {
-    constexpr format_parse_context::iterator parse(format_parse_context& ctx) {
+    constexpr format_parse_context::iterator
+    parse(format_parse_context& ctx) const {
         return ctx.begin();
     }
-    format_context::iterator format(const std::monostate&, format_context& ctx);
+    format_context::iterator
+    format(const std::monostate&, format_context& ctx) const;
 };

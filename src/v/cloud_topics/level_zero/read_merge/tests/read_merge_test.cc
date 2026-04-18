@@ -7,26 +7,18 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/level_zero/pipeline/event_filter.h"
-#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/read_merge/read_merge.h"
 #include "cloud_topics/types.h"
-#include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/test.h"
 #include "utils/uuid.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/manual_clock.hh>
-#include <seastar/core/when_all.hh>
-#include <seastar/coroutine/as_future.hh>
 
-#include <chrono>
 #include <expected>
 #include <limits>
 

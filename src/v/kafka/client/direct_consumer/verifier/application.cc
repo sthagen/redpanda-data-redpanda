@@ -1,6 +1,5 @@
 #include "kafka/client/direct_consumer/verifier/application.h"
 
-#include "absl/strings/strip.h"
 #include "base/vlog.h"
 #include "bytes/iostream.h"
 #include "net/dns.h"
@@ -10,8 +9,6 @@
 #include "utils/unresolved_address.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/http/api_docs.hh>
-#include <seastar/util/short_streams.hh>
 
 #include <utility>
 using namespace std::chrono_literals;

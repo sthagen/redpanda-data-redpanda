@@ -9,23 +9,18 @@
 
 #include "pandaproxy/kafka_client_cache.h"
 
-#include "config/node_config.h"
 #include "config/rest_authn_endpoint.h"
 #include "kafka/client/configuration.h"
 #include "pandaproxy/types.h"
 #include "security/scram_authenticator.h"
-#include "ssx/future-util.h"
 
-#include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/core/timer.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>
-#include <vector>
 
 using namespace std::chrono_literals;
 

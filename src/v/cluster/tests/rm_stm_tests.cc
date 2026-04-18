@@ -11,22 +11,18 @@
 #include "cluster/rm_stm_types.h"
 #include "cluster/tests/randoms.h"
 #include "cluster/tests/rm_stm_test_fixture.h"
-#include "finjector/hbadger.h"
 #include "finjector/stress_fiber.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
 #include "model/timestamp.h"
 #include "raft/consensus.h"
-#include "raft/consensus_utils.h"
 #include "raft/tests/raft_fixture_base.h"
 #include "random/generators.h"
-#include "storage/record_batch_builder.h"
+#include "storage/disk_log_impl.h"
 #include "storage/tests/batch_generators.h"
-#include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
 #include "test_utils/async.h"
 #include "test_utils/boost_fixture.h"
@@ -34,8 +30,6 @@
 #include "utils/directory_walker.h"
 
 #include <seastar/util/defer.hh>
-
-#include <system_error>
 
 using namespace std::chrono_literals;
 
@@ -1367,4 +1361,101 @@ FIXTURE_TEST(
     // exceeds it, causing last_stable_offset() to return invalid_lso.
     auto lso = follower_stm->last_stable_offset();
     BOOST_REQUIRE_NE(lso, model::invalid_lso);
+}
+// Stress test for the lock inversion between
+// state_machine_manager::take_snapshot and concurrent tx operations. The
+// inversion:
+//
+//   take_snapshot path:  acquire _apply_mutex -> stm->take_raft_snapshot
+//                                             -> block on _state_lock.write
+//   tx op path:          acquire _state_lock.read -> wait_no_throw/sync
+//                                                 -> wait for apply
+//                                                 -> need _apply_mutex
+//
+// When both paths run concurrently, tx ops stall until _sync_timeout fires
+// (default 10s), after which they return errc::timeout. The test verifies
+// that concurrent tx ops and raft snapshots produce no timeout errors.
+//
+// To make the test sensitive to the bug, reduce internal_rpc_request_timeout_ms
+// (which drives _sync_timeout) to a value shorter than the snapshot duration.
+FIXTURE_TEST(test_no_deadlock_raft_snapshot_with_tx_ops, rm_stm_test_fixture) {
+    start_and_disable_auto_abort();
+
+    struct test_state {
+        ss::abort_source as;
+        int64_t pid_counter = 0;
+        int tx_completed = 0;
+        int tx_timeouts = 0;
+        int snapshots_taken = 0;
+    };
+    auto state = ss::make_lw_shared<test_state>();
+    auto stm = _stm;
+    auto raft = _raft;
+
+    // Tx loop: begin -> replicate one data batch -> commit, fresh pid per
+    // round.
+    auto tx_fiber = ss::do_until(
+      [state] { return state->as.abort_requested(); },
+      [state, stm] {
+          auto pid = model::producer_identity{state->pid_counter++, 0};
+          auto tx_seq = model::tx_seq{0};
+
+          return stm->begin_tx(pid, tx_seq, timeout, model::partition_id(0))
+            .then([state, stm, pid, tx_seq](auto term) -> ss::future<> {
+                if (!term) {
+                    if (term.error() == cluster::tx::errc::timeout) {
+                        ++state->tx_timeouts;
+                    }
+                    return ss::now();
+                }
+                return replicate_all(*stm, make_batches(pid, 0, 1, true))
+                  .then([state, stm, pid, tx_seq](auto result) -> ss::future<> {
+                      if (!result) {
+                          return stm->abort_tx(pid, tx_seq, timeout)
+                            .discard_result();
+                      }
+                      return stm->commit_tx(pid, tx_seq, timeout)
+                        .then([state](cluster::tx::errc err) {
+                            if (err == cluster::tx::errc::none) {
+                                ++state->tx_completed;
+                            } else if (err == cluster::tx::errc::timeout) {
+                                ++state->tx_timeouts;
+                            }
+                        });
+                  });
+            })
+            .handle_exception([](std::exception_ptr) {});
+      });
+
+    auto snapshot_fiber = ss::do_until(
+      [state] { return state->as.abort_requested(); },
+      [state, stm, raft]() -> ss::future<> {
+          auto offset = stm->last_applied_offset();
+          if (offset < model::offset{0}) {
+              return ss::sleep(1ms);
+          }
+          return raft->stm_manager()
+            ->take_snapshot(offset)
+            .then([state](auto) { ++state->snapshots_taken; })
+            .handle_exception([](std::exception_ptr) {});
+      });
+
+    ss::sleep(5s).finally([state] { state->as.request_abort(); }).get();
+    ss::with_timeout(
+      ss::lowres_clock::now() + 15s,
+      ss::when_all_succeed(std::move(tx_fiber), std::move(snapshot_fiber)))
+      .get();
+
+    vlog(
+      logger.info,
+      "tx_completed={} tx_timeouts={} snapshots_taken={}",
+      state->tx_completed,
+      state->tx_timeouts,
+      state->snapshots_taken);
+
+    BOOST_REQUIRE_GT(state->tx_completed, 0);
+    BOOST_REQUIRE_GT(state->snapshots_taken, 0);
+    // Tx operations must not time out due to lock contention with snapshots.
+    // Failures here indicate the lock inversion stall is live.
+    BOOST_REQUIRE_EQUAL(state->tx_timeouts, 0);
 }

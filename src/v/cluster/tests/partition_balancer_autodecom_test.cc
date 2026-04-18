@@ -10,7 +10,6 @@
 #include "cluster/health_monitor_types.h"
 #include "cluster/partition_balancer_planner.h"
 #include "model/fundamental.h"
-#include "utils/to_string.h"
 
 #include <gtest/gtest.h>
 

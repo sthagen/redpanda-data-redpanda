@@ -48,9 +48,8 @@ struct list_offsets_request final {
         return tp_dups.find(tp) != tp_dups.end();
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const list_offsets_request& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 
@@ -110,9 +109,8 @@ struct list_offsets_response final {
         data.decode(std::move(buf), version);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& os, const list_offsets_response& r) {
-        return os << r.data;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{}", data);
     }
 };
 

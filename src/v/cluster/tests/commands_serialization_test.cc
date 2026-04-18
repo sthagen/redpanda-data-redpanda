@@ -9,8 +9,6 @@
 
 #include "base/units.h"
 #include "cluster/commands.h"
-#include "cluster/simple_batch_builder.h"
-#include "cluster/tests/topic_table_fixture.h"
 #include "cluster/tests/utils.h"
 #include "cluster/types.h"
 #include "model/compression.h"
@@ -19,12 +17,8 @@
 #include "raft/fundamental.h"
 #include "test_utils/boost_fixture.h"
 
-#include <seastar/core/abort_source.hh>
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/sharded.hh>
-#include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <boost/test/tools/old/interface.hpp>

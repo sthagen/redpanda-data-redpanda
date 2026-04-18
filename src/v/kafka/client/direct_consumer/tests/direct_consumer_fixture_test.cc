@@ -13,8 +13,6 @@
 #include "model/fundamental.h"
 #include "redpanda/tests/fixture.h"
 
-#include <seastar/util/defer.hh>
-
 #include <fmt/format.h>
 
 #include <unordered_map>

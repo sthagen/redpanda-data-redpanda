@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "storage/compacted_index_reader.h"
 
 #include <seastar/core/file.hh>
@@ -38,8 +39,6 @@ public:
 
     void reset() final;
 
-    void print(std::ostream&) const final;
-
     bool is_end_of_stream() const final;
 
     ss::future<ss::circular_buffer<compacted_index::entry>>
@@ -58,8 +57,8 @@ private:
     std::optional<ss::input_stream<char>> _cursor;
     ss::abort_source* _as;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const compacted_index_chunk_reader&);
+public:
+    fmt::iterator format_to(fmt::iterator it) const final;
 };
 
 } // namespace storage::internal

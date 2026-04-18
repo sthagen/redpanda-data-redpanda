@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #pragma once
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "container/chunked_vector.h"
 #include "datalake/base_types.h"
@@ -42,7 +43,16 @@ public:
       chunked_vector<remote_path> files_to_delete,
       retry_chain_node& rtc_parent);
 
-    friend std::ostream& operator<<(std::ostream&, errc);
+    friend fmt::iterator format_to(errc ec, fmt::iterator out) {
+        switch (ec) {
+        case errc::file_io_error:
+            return fmt::format_to(out, "cloud operation local file io error");
+        case errc::cloud_op_error:
+            return fmt::format_to(out, "cloud operation error");
+        case errc::cloud_op_timeout:
+            return fmt::format_to(out, "cloud operation timeout");
+        }
+    }
 
 private:
     cloud_io::remote* _cloud_io;

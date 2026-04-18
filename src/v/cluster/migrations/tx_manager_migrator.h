@@ -214,7 +214,7 @@ private:
 
     bool is_migration_required() const;
 
-    friend std::ostream& operator<<(std::ostream&, migration_step);
+    friend fmt::iterator format_to(migration_step, fmt::iterator);
     ss::sharded<topics_frontend>& _topics_frontend;
     ss::sharded<controller_api>& _controller_api;
     ss::sharded<topic_table>& _topics;

@@ -15,7 +15,6 @@
 #include "cluster/logger.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/node_status_table.h"
-#include "config/node_config.h"
 #include "ssx/future-util.h"
 
 namespace cluster {

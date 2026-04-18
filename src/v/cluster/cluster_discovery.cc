@@ -19,7 +19,6 @@
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "storage/kvstore.h"
 #include "utils/directory_walker.h"
 
 #include <seastar/core/seastar.hh>

@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "base/format_to.h"
+
 #include <system_error>
 
 namespace storage::experimental::mvlog {
@@ -54,9 +56,18 @@ inline std::error_code make_error_code(errc e) noexcept {
     return {static_cast<int>(e), error_category()};
 }
 
-inline std::ostream& operator<<(std::ostream& o, errc e) {
-    o << error_category().message(static_cast<int>(e));
-    return o;
+inline fmt::iterator format_to(errc e, fmt::iterator out) {
+    switch (e) {
+    case errc::none:
+        return fmt::format_to(out, "none");
+    case errc::broken_data_invariant:
+        return fmt::format_to(out, "broken_data_invariant");
+    case errc::checksum_mismatch:
+        return fmt::format_to(out, "checksum_mismatch");
+    case errc::short_read:
+        return fmt::format_to(out, "short_read");
+    }
+    return fmt::format_to(out, "");
 }
 
 } // namespace storage::experimental::mvlog

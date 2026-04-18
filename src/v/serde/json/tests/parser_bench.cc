@@ -18,11 +18,7 @@
 #include <seastar/testing/perf_tests.hh>
 
 #include <boost/test/unit_test.hpp>
-#include <rapidjson/document.h>
-#include <rapidjson/error/en.h>
 #include <rapidjson/istreamwrapper.h>
-
-#include <utility>
 
 using namespace serde::json;
 

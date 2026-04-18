@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #pragma once
+#include "base/format_to.h"
 #include "security/acl.h"
 #include "security/gssapi_principal_mapper.h"
 #include "security/sasl_authentication.h"
@@ -25,6 +26,25 @@ class gssapi_authenticator final : public sasl_mechanism {
 
 public:
     enum class state { init = 0, more, ssfcap, ssfreq, complete, failed };
+
+    friend fmt::iterator format_to(state s, fmt::iterator out) {
+        switch (s) {
+        case state::init:
+            return fmt::format_to(out, "init");
+        case state::more:
+            return fmt::format_to(out, "more");
+        case state::ssfcap:
+            return fmt::format_to(out, "ssfcap");
+        case state::ssfreq:
+            return fmt::format_to(out, "ssfreq");
+        case state::complete:
+            return fmt::format_to(out, "complete");
+        case state::failed:
+            return fmt::format_to(out, "failed");
+        }
+        return fmt::format_to(out, "");
+    }
+
     static constexpr const char* name = "GSSAPI";
 
     gssapi_authenticator(
@@ -57,9 +77,6 @@ public:
     const char* mechanism_name() const override { return name; }
 
 private:
-    friend std::ostream&
-    operator<<(std::ostream& os, const gssapi_authenticator::state s);
-
     ssx::singleton_thread_worker& _worker;
     security::acl_principal _principal;
     std::optional<clock_type::time_point> _session_expiry;

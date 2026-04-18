@@ -4,7 +4,6 @@
 #include "redpanda/cli_parser.h"
 
 #include <seastar/core/app-template.hh>
-#include <seastar/core/future.hh>
 using namespace kafka::client;
 
 int main(int ac, char* av[], char** /*env*/) {

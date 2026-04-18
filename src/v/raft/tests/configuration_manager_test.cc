@@ -8,21 +8,15 @@
 // by the Apache License, Version 2.0
 
 #include "base/units.h"
-#include "config/configuration.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/tests/randoms.h"
 #include "raft/configuration_manager.h"
 #include "raft/group_configuration.h"
 #include "raft/logger.h"
-#include "raft/types.h"
-#include "random/generators.h"
 #include "storage/api.h"
 #include "storage/kvstore.h"
 #include "storage/log_manager.h"
-#include "storage/types.h"
 #include "test_utils/boost_fixture.h"
-#include "test_utils/randoms.h"
 #include "test_utils/test_env.h"
 
 #include <seastar/core/abort_source.hh>

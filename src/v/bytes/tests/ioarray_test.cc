@@ -12,9 +12,6 @@
 #include "base/seastarx.h"
 #include "bytes/ioarray.h"
 
-#include <seastar/core/file.hh>
-
-#include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
 #include <random>

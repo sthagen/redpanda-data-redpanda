@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "thirdparty/krb5/krb5.h"
@@ -24,9 +25,8 @@ struct error_impl {
     ::krb5_error_code ec{0};
     ss::sstring msg;
 
-    friend std::ostream& operator<<(std::ostream& os, const error_impl& impl) {
-        os << impl.msg << " (ec: " << impl.ec << ")";
-        return os;
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{} (ec: {})", msg, ec);
     }
 };
 

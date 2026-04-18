@@ -17,7 +17,6 @@
 #include <seastar/core/memory.hh>
 #include <seastar/util/defer.hh>
 
-#include <fmt/core.h>
 #include <gtest/gtest.h>
 
 #include <new>

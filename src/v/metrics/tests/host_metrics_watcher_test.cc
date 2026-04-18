@@ -10,8 +10,6 @@
  */
 #include "metrics/host_metrics_watcher.h"
 
-#include <seastar/util/defer.hh>
-
 #include <gtest/gtest.h>
 
 #include <stdexcept>

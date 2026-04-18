@@ -12,8 +12,6 @@
 #include "container/tests/bench_utils.h"
 #include "random/generators.h"
 
-#include <seastar/core/map_reduce.hh>
-#include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <algorithm>

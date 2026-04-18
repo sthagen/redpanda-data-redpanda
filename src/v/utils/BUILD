@@ -15,8 +15,8 @@ redpanda_cc_library(
         "auto_fmt.h",
     ],
     deps = [
-        "//src/v/reflection:to_tuple",
-        "@fmt",
+        "//src/v/base",
+        "//src/v/reflection:arity",
     ],
 )
 

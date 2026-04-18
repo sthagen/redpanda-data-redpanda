@@ -9,14 +9,13 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/format_to.h"
 #include "bytes/bytes.h"
 #include "model/timestamp.h"
 #include "reflection/adl.h"
 #include "security/acl.h"
 #include "serde/envelope.h"
 #include "serde/rw/bytes.h"
-
-#include <iosfwd>
 
 namespace security {
 
@@ -68,9 +67,13 @@ public:
           _salt, _server_key, _stored_key, _iterations, _password_set_at);
     }
 
-private:
-    friend std::ostream& operator<<(std::ostream&, const scram_credential&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        // NOTE: this is intentionally left minimal to err away from exposing
+        // anything that may be useful for an attacker to use.
+        return fmt::format_to(it, "{{scram_credential}}");
+    }
 
+private:
     bytes _salt;
     bytes _server_key;
     bytes _stored_key;

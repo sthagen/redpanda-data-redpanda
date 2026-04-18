@@ -39,8 +39,8 @@ public:
         _reset_creds_called = true;
     }
 
-    std::ostream& print(std::ostream& os) const override {
-        return os << "mock_apply_credentials_impl";
+    fmt::iterator format_to(fmt::iterator it) const override {
+        return fmt::format_to(it, "mock_apply_credentials_impl");
     }
 
     bool is_oauth() const override { return false; }

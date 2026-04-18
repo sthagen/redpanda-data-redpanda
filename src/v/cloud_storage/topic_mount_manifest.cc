@@ -9,10 +9,8 @@
  */
 #include "cloud_storage/topic_mount_manifest.h"
 
-#include "base/vlog.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/logger.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"

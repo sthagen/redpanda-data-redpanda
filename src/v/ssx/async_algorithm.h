@@ -13,7 +13,6 @@
 
 #include "base/seastarx.h"
 
-#include <seastar/core/do_with.hh>
 #include <seastar/core/future.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 

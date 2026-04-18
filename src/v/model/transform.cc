@@ -22,12 +22,10 @@
 #include "serde/rw/vector.h"
 #include "utils/vint.h"
 
-#include <seastar/core/print.hh>
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <algorithm>
 #include <optional>
 #include <stdexcept>
 
@@ -79,33 +77,21 @@ void append_vint_to_iobuf(iobuf& b, int64_t v) {
 
 } // namespace
 
-std::ostream& operator<<(std::ostream& os, const transform_from_start& o) {
-    fmt::print(os, "{{ start + {} }}", o.delta);
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const transform_from_end& o) {
-    fmt::print(os, "{{ end - {} }}", o.delta);
-    return os;
-}
-
-std::ostream&
-operator<<(std::ostream& os, const transform_offset_options& opts) {
-    ss::visit(
-      opts.position,
-      [&os](transform_offset_options::latest_offset) {
-          fmt::print(os, "{{ latest_offset }}");
+fmt::iterator transform_offset_options::format_to(fmt::iterator it) const {
+    return ss::visit(
+      position,
+      [&it](transform_offset_options::latest_offset) {
+          return fmt::format_to(it, "{{ latest_offset }}");
       },
-      [&os](model::timestamp ts) {
-          fmt::print(os, "{{ timequery: {} }}", ts.value());
+      [&it](model::timestamp ts) {
+          return fmt::format_to(it, "{{ timequery: {} }}", ts.value());
       },
-      [&os](model::transform_from_start off) {
-          fmt::print(os, "{{ offset: {} }}", off);
+      [&it](model::transform_from_start off) {
+          return fmt::format_to(it, "{{ offset: {} }}", off);
       },
-      [&os](model::transform_from_end off) {
-          fmt::print(os, "{{ offset: {} }}", off);
+      [&it](model::transform_from_end off) {
+          return fmt::format_to(it, "{{ offset: {} }}", off);
       });
-    return os;
 }
 
 /**
@@ -156,19 +142,18 @@ void transform_offset_options::serde_write(iobuf& out) const {
     serde::write(out, position);
 }
 
-std::ostream& operator<<(std::ostream& os, const transform_metadata& meta) {
-    fmt::print(
-      os,
+fmt::iterator transform_metadata::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{name: \"{}\", input: {}, outputs: {}, "
       "env: <redacted>, uuid: {}, source_ptr: {}, is_paused: {} }}",
-      meta.name,
-      meta.input_topic,
-      meta.output_topics,
-      // skip env becuase of pii
-      meta.uuid,
-      meta.source_ptr,
-      meta.paused);
-    return os;
+      name,
+      input_topic,
+      output_topics,
+      // skip env because of pii
+      uuid,
+      source_ptr,
+      paused);
 }
 
 void transform_metadata::serde_write(iobuf& out) const {
@@ -218,14 +203,13 @@ bool transform_metadata_patch::empty() const noexcept {
            && !compression_mode.has_value();
 }
 
-std::ostream& operator<<(std::ostream& os, const transform_offsets_key& key) {
-    fmt::print(
-      os,
+fmt::iterator transform_offsets_key::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
       "{{ transform id: {}, partition: {}, output_topic: {} }}",
-      key.id,
-      key.partition,
-      key.output_topic);
-    return os;
+      id,
+      partition,
+      output_topic);
 }
 
 void transform_offsets_key::serde_read(
@@ -249,24 +233,6 @@ void transform_offsets_key::serde_write(iobuf& out) const {
     serde::write(out, id);
     serde::write(out, partition);
     serde::write(out, output_topic);
-}
-
-std::ostream&
-operator<<(std::ostream& os, const transform_offsets_value& value) {
-    fmt::print(os, "{{ offset: {} }}", value.offset);
-    return os;
-}
-
-std::ostream&
-operator<<(std::ostream& os, const transform_report::processor& p) {
-    fmt::print(
-      os,
-      "{{id: {}, status: {}, node: {}, lag: {}}}",
-      p.id,
-      p.status,
-      p.node,
-      p.lag);
-    return os;
 }
 
 transform_report::transform_report(transform_metadata meta)
@@ -296,26 +262,6 @@ void cluster_transform_report::merge(const cluster_transform_report& other) {
             add(tid, treport.metadata, preport);
         }
     }
-}
-
-std::ostream&
-operator<<(std::ostream& os, transform_report::processor::state s) {
-    return os << processor_state_to_string(s);
-}
-
-std::string_view
-processor_state_to_string(transform_report::processor::state state) {
-    switch (state) {
-    case transform_report::processor::state::inactive:
-        return "inactive";
-    case transform_report::processor::state::running:
-        return "running";
-    case transform_report::processor::state::errored:
-        return "errored";
-    case transform_report::processor::state::unknown:
-        break;
-    }
-    return "unknown";
 }
 
 transformed_data::transformed_data(iobuf d)

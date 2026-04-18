@@ -14,12 +14,9 @@
 #include "security/authorizer.h"
 #include "security/role.h"
 #include "security/role_store.h"
-#include "utils/base64.h"
 
 #include <seastar/util/defer.hh>
 
-#include <boost/algorithm/string.hpp>
-#include <fmt/ostream.h>
 #include <gtest/gtest.h>
 
 namespace security {

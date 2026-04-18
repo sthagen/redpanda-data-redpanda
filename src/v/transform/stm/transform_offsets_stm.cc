@@ -11,8 +11,6 @@
 
 #include "transform/stm/transform_offsets_stm.h"
 
-#include "model/metadata.h"
-
 #include <seastar/util/log.hh>
 
 namespace transform {

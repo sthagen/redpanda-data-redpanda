@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "kafka/client/direct_consumer/data_queue.h"
-#include "test_utils/test.h"
 
 #include <gtest/gtest.h>
 

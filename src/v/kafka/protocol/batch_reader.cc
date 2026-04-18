@@ -15,7 +15,6 @@
 #include "model/record.h"
 #include "model/timeout_clock.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/loop.hh>
 
 namespace kafka {

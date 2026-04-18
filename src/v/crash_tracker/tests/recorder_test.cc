@@ -11,7 +11,6 @@
 #include "config/node_config.h"
 #include "crash_tracker/recorder.h"
 #include "crash_tracker/types.h"
-#include "test_utils/tmp_dir.h"
 #include "utils.h"
 
 #include <seastar/core/memory.hh>

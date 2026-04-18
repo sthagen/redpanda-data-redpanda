@@ -14,7 +14,6 @@
 #include "cluster/errc.h"
 #include "cluster/topic_table.h"
 #include "config/configuration.h"
-#include "config/node_config.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"

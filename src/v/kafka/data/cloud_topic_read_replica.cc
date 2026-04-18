@@ -19,13 +19,10 @@
 #include "cloud_topics/state_accessors.h"
 #include "cluster/partition.h"
 #include "kafka/protocol/errors.h"
-#include "model/offset_interval.h"
 #include "raft/consensus.h"
 #include "raft/errc.h"
 #include "storage/log_reader.h"
 #include "storage/translating_reader.h"
-
-#include <seastar/core/coroutine.hh>
 
 namespace cloud_topics::read_replica {
 
@@ -50,7 +47,9 @@ public:
         return reader_->do_load_slice(deadline);
     }
 
-    void print(std::ostream& o) override { reader_->print(o); }
+    fmt::iterator format_to(fmt::iterator it) const override {
+        return reader_->format_to(it);
+    }
 
 private:
     // The metastore must be kept alive for the lifetime of the reader

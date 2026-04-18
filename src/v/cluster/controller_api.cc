@@ -32,12 +32,10 @@
 #include "ssx/future-util.h"
 
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-#include <seastar/util/variant_utils.hh>
 
 namespace cluster {
 

@@ -20,9 +20,6 @@
 #include "cloud_topics/logger.h"
 #include "lsm/io/cloud_cache_persistence.h"
 #include "lsm/proto/manifest.proto.h"
-#include "ssx/sleep_abortable.h"
-
-#include <seastar/core/sleep.hh>
 
 namespace cloud_topics::l1 {
 namespace {

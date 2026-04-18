@@ -19,6 +19,7 @@ redpanda_test_cc_library(
         "//src/v/utils:uuid",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@boost//:beast",
+        "@fmt",
         "@seastar",
     ],
 )

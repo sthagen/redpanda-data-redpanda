@@ -13,7 +13,6 @@
 
 #include "crash_tracker/logger.h"
 #include "crash_tracker/types.h"
-#include "hashing/xx.h"
 #include "model/timestamp.h"
 #include "utils/arch.h"
 #include "version/version.h"
@@ -21,38 +20,17 @@
 #include <seastar/core/file-types.hh>
 #include <seastar/core/file.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/core/sleep.hh>
-#include <seastar/util/print_safe.hh>
 
-#include <fmt/chrono.h>
-
-#include <chrono>
 #include <fcntl.h>
 #include <system_error>
 #include <unistd.h>
 
-using namespace std::chrono_literals;
-
 namespace crash_tracker {
-
-std::ostream& operator<<(std::ostream& os, prepared_writer::state s) {
-    switch (s) {
-    case prepared_writer::state::uninitialized:
-        return os << "uninitialized";
-    case prepared_writer::state::initialized:
-        return os << "initialized";
-    case prepared_writer::state::filled:
-        return os << "filled";
-    case prepared_writer::state::written:
-        return os << "written";
-    case prepared_writer::state::released:
-        return os << "released";
-    }
-}
 
 ss::future<>
 prepared_writer::initialize(std::filesystem::path crash_file_path) {
-    vassert(_state == state::uninitialized, "Unexpected state: {}", _state);
+    vassert(
+      _state == state::uninitialized, "Unexpected state: {}", _state.load());
     _crash_report_file_name = std::move(crash_file_path);
 
     _serde_output.reserve_memory(crash_description::serde_size_overestimate);

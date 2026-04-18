@@ -12,7 +12,6 @@
 #include "base/units.h"
 #include "metrics/metrics.h"
 #include "test_utils/metrics.h"
-#include "wasm/logger.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

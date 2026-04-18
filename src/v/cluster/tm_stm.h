@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/btree_set.h"
+#include "base/format_to.h"
 #include "cluster/fwd.h"
 #include "cluster/logger.h"
 #include "cluster/state_machine_registry.h"
@@ -140,16 +141,13 @@ public:
         operator==(const draining_txs&, const draining_txs&) = default;
 
         auto serde_fields() { return std::tie(id, ranges, transactions); }
-
-        friend std::ostream&
-        operator<<(std::ostream& o, const draining_txs& txes) {
-            fmt::print(
-              o,
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
               "{{ id: {}, ranges: {}, transactions: {} }}",
-              txes.id,
-              txes.ranges,
-              txes.transactions.size());
-            return o;
+              id,
+              ranges,
+              transactions.size());
         }
     };
 
@@ -193,19 +191,16 @@ public:
               included_transactions,
               draining);
         }
-
-        friend std::ostream&
-        operator<<(std::ostream& o, const locally_hosted_txs& txes) {
-            fmt::print(
-              o,
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
               "{{ inited: {}, hash ranges: {}, excluded: {}, included: {}, "
               "draining: {} }}",
-              txes.inited,
-              txes.hash_ranges,
-              txes.excluded_transactions.size(),
-              txes.included_transactions.size(),
-              txes.draining);
-            return o;
+              inited,
+              hash_ranges,
+              excluded_transactions.size(),
+              included_transactions.size(),
+              draining);
         }
     };
 
@@ -513,3 +508,13 @@ struct adl<cluster::tm_stm::locally_hosted_txs> {
 };
 
 } // namespace reflection
+
+template<>
+struct fmt::formatter<cluster::tm_stm::op_status>
+  : fmt::formatter<std::underlying_type_t<cluster::tm_stm::op_status>> {
+    auto format(cluster::tm_stm::op_status s, fmt::format_context& ctx) const {
+        return fmt::
+          formatter<std::underlying_type_t<cluster::tm_stm::op_status>>::format(
+            static_cast<int>(s), ctx);
+    }
+};

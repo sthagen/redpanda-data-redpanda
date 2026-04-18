@@ -8,7 +8,6 @@
 
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
-#include "lsm/core/internal/files.h"
 #include "lsm/core/internal/keys.h"
 #include "lsm/core/internal/options.h"
 #include "lsm/db/flush_task.h"

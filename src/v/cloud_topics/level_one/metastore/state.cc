@@ -10,8 +10,6 @@
 
 #include "cloud_topics/level_one/metastore/state.h"
 
-#include "model/namespace.h"
-
 namespace cloud_topics::l1 {
 
 std::optional<std::reference_wrapper<const partition_state>>

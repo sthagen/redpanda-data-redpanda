@@ -8,8 +8,6 @@
 
 #include <boost/test/tools/old/interface.hpp>
 
-#include <system_error>
-
 model::topic_namespace make_tp_ns(const ss::sstring& tp) {
     return model::topic_namespace(model::kafka_namespace, model::topic(tp));
 }

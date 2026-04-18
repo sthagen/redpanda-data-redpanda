@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
@@ -79,13 +80,7 @@ public:
     virtual void consume_records(iobuf&&) = 0;
     virtual ss::future<stop_parser> consume_batch_end() = 0;
 
-    virtual void print(std::ostream&) const = 0;
-
-private:
-    friend std::ostream& operator<<(std::ostream& os, const batch_consumer& c) {
-        c.print(os);
-        return os;
-    }
+    virtual fmt::iterator format_to(fmt::iterator it) const = 0;
 };
 
 class continuous_batch_parser {

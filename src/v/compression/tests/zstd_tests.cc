@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "base/units.h"
-#include "base/vassert.h"
 #include "compression/async_stream_zstd.h"
 #include "compression/internal/gzip_compressor.h"
 #include "compression/internal/lz4_frame_compressor.h"

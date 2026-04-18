@@ -44,7 +44,7 @@ std::error_code make_error_code(recovery_error_code e) noexcept;
 /// creating topics and changing topic settings, different types of errors can
 /// be encountered during the process. The context message contains a
 /// description of the original errors and the error code denotes the stage of
-/// recovery the error occured in.
+/// recovery the error occurred in.
 struct recovery_error_ctx {
     recovery_error_code error_code;
     ss::sstring context;

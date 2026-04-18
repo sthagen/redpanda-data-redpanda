@@ -14,11 +14,8 @@
 #include "ssx/when_all.h"
 #include "storage/segment.h"
 
-#include <seastar/core/future-util.hh>
 #include <seastar/core/rwlock.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <stdexcept>
 
 namespace storage {
 

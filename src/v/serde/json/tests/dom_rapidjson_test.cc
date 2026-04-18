@@ -14,8 +14,6 @@
 #include "test_utils/test.h"
 #include "utils/file_io.h"
 
-#include <gtest/gtest.h>
-
 using namespace serde::json;
 
 constexpr auto golden = R"(json_value(array(

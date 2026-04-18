@@ -51,8 +51,21 @@ struct protocol_metadata
     // offset delta corresponding to the prev_log_index
     model::offset_delta prev_log_delta{};
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const protocol_metadata& m);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{group: {}, commit_index: {}, term: {}, prev_log_index: {}, "
+          "prev_log_term: {}, last_visible_index: {}, dirty_offset: {}, "
+          "prev_log_delta: {}}}",
+          group,
+          commit_index,
+          term,
+          prev_log_index,
+          prev_log_term,
+          last_visible_index,
+          dirty_offset,
+          prev_log_delta);
+    }
 
     friend bool
     operator==(const protocol_metadata&, const protocol_metadata&) = default;
@@ -87,7 +100,20 @@ struct follower_metrics {
     bool is_live;
     bool under_replicated;
 
-    friend std::ostream& operator<<(std::ostream& o, const follower_metrics& i);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{node_id: {}, is_learner: {}, committed_log_index: {}, "
+          "dirty_log_index: {}, match_index: {}, is_live: {}, "
+          "under_replicated: {}}}",
+          id,
+          is_learner,
+          committed_log_index,
+          dirty_log_index,
+          match_index,
+          is_live,
+          under_replicated);
+    }
 };
 using flush_after_append = ss::bool_class<struct flush_after_append_tag>;
 
@@ -140,8 +166,7 @@ struct append_entries_request
         return _batches;
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const append_entries_request& r);
+    fmt::iterator format_to(fmt::iterator it) const;
 
     ss::future<> serde_async_write(iobuf& out);
 
@@ -220,8 +245,22 @@ struct append_entries_reply
     // older nodes are always ready for recovery.
     bool may_recover = true;
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const append_entries_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{node_id: {}, target_node_id: {}, group: {}, term: {}, "
+          "last_dirty_log_index: {}, last_flushed_log_index: {}, "
+          "last_term_base_offset: {}, result: {}, may_recover: {}}}",
+          node_id,
+          target_node_id,
+          group,
+          term,
+          last_dirty_log_index,
+          last_flushed_log_index,
+          last_term_base_offset,
+          result,
+          may_recover);
+    }
 
     friend bool operator==(
       const append_entries_reply&, const append_entries_reply&) = default;
@@ -247,8 +286,15 @@ struct heartbeat_metadata {
 
     friend bool
     operator==(const heartbeat_metadata&, const heartbeat_metadata&) = default;
-    friend std::ostream&
-    operator<<(std::ostream& o, const heartbeat_metadata& r);
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{node_id: {}, target_node_id: {}, protocol_metadata: {}}}",
+          node_id,
+          target_node_id,
+          meta);
+    }
 };
 
 struct vote_request
@@ -269,7 +315,19 @@ struct vote_request
     vnode source_node() const { return node_id; }
     vnode target_node() const { return target_node_id; }
 
-    friend std::ostream& operator<<(std::ostream& o, const vote_request& r);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{node_id: {}, target_node_id: {}, group: {}, term: {}, "
+          "prev_log_index: {}, prev_log_term: {}, leadership_xfer: {}}}",
+          node_id,
+          target_node_id,
+          group,
+          term,
+          prev_log_index,
+          prev_log_term,
+          leadership_transfer);
+    }
 
     friend bool operator==(const vote_request&, const vote_request&) = default;
 
@@ -303,7 +361,15 @@ struct vote_reply
     // replying node
     vnode node_id;
 
-    friend std::ostream& operator<<(std::ostream& o, const vote_reply& r);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{term: {}, target_node: {}, vote_granted: {}, log_ok: {}}}",
+          term,
+          target_node_id,
+          granted,
+          log_ok);
+    }
 
     friend bool operator==(const vote_reply&, const vote_reply&) = default;
 
@@ -378,8 +444,22 @@ struct install_snapshot_request
     raft::group_id target_group() const { return group; }
     vnode source_node() const { return node_id; }
     vnode target_node() const { return target_node_id; }
-    friend std::ostream&
-    operator<<(std::ostream&, const install_snapshot_request&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{term: {}, group: {}, target_node_id: {}, node_id: {}, "
+          "last_included_index: {}, "
+          "file_offset: {}, chunk_size: {}, done: {}, dirty_offset: {}}}",
+          term,
+          group,
+          target_node_id,
+          node_id,
+          last_included_index,
+          file_offset,
+          chunk.size_bytes(),
+          done,
+          dirty_offset);
+    }
 
     friend bool
     operator==(const install_snapshot_request&, const install_snapshot_request&)
@@ -453,8 +533,15 @@ struct install_snapshot_reply
     // replying node
     vnode node_id;
 
-    friend std::ostream&
-    operator<<(std::ostream&, const install_snapshot_reply&);
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
+          "{{term: {}, target_node_id: {}, bytes_stored: {}, success: {}}}",
+          term,
+          target_node_id,
+          bytes_stored,
+          success);
+    }
 
     friend bool operator==(
       const install_snapshot_reply&, const install_snapshot_reply&) = default;
@@ -501,16 +588,14 @@ struct timeout_now_request
         return std::tie(target_node_id, node_id, group, term);
     }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const timeout_now_request& r) {
-        fmt::print(
-          o,
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(
+          it,
           "target_node_id {} node_id {} group {} term {}",
-          r.target_node_id,
-          r.node_id,
-          r.group,
-          r.term);
-        return o;
+          target_node_id,
+          node_id,
+          group,
+          term);
     }
 };
 
@@ -529,17 +614,17 @@ struct timeout_now_reply
 
     auto serde_fields() { return std::tie(target_node_id, term, result); }
 
-    friend std::ostream&
-    operator<<(std::ostream& o, const timeout_now_reply& r) {
-        fmt::print(
-          o,
-          "target_node_id {} term {} result {}",
-          r.target_node_id,
-          r.term,
-          static_cast<std::underlying_type_t<status>>(r.result));
-        return o;
+    friend constexpr uint8_t format_as(status s) {
+        return static_cast<uint8_t>(s);
     }
+
+    fmt::iterator format_to(fmt::iterator it) const;
 };
+
+inline fmt::iterator timeout_now_reply::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "target_node_id {} term {} result {}", target_node_id, term, result);
+}
 
 // key types used to store data in key-value store
 enum class metadata_key : int8_t {
@@ -565,9 +650,6 @@ struct scheduling_config {
     ss::scheduling_group recv_sg;
     ss::scheduling_group send_sg;
 };
-
-std::ostream& operator<<(std::ostream& o, const consistency_level& l);
-std::ostream& operator<<(std::ostream& o, const reply_result&);
 
 using with_learner_recovery_throttle
   = ss::bool_class<struct with_recovery_throttle_tag>;

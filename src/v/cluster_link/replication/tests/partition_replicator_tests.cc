@@ -23,8 +23,6 @@
 
 #include <seastar/core/sleep.hh>
 
-#include <system_error>
-
 using namespace std::chrono_literals;
 
 namespace cluster_link::replication {

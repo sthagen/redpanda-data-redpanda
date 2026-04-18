@@ -32,16 +32,9 @@
 #include "utils/retry_chain_node.h"
 #include "utils/stream_provider.h"
 
-#include <seastar/core/app-template.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/iostream.hh>
-#include <seastar/core/resource.hh>
-#include <seastar/core/temporary_buffer.hh>
-#include <seastar/core/thread.hh>
-#include <seastar/testing/test_case.hh>
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
-#include <seastar/util/later.hh>
 
 #include <boost/range/irange.hpp>
 

@@ -9,20 +9,16 @@
 
 #include "model/fundamental.h"
 #include "random/generators.h"
-#include "storage/file_sanitizer.h"
 #include "storage/opfuzz/opfuzz.h"
 #include "storage/tests/storage_test_fixture.h"
 #include "storage/types.h"
-#include "test_utils/test_macros.h"
 
 #include <seastar/util/defer.hh>
-#include <seastar/util/log.hh>
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <iterator>
-#include <optional>
 
 inline model::cleanup_policy_bitflags randcompaction() {
     auto c = model::cleanup_policy_bitflags::compaction;

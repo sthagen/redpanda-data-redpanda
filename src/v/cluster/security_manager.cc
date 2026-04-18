@@ -10,20 +10,15 @@
  */
 #include "cluster/security_manager.h"
 
-#include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
 #include "cluster/controller_snapshot.h"
-#include "model/metadata.h"
-#include "raft/fundamental.h"
 #include "security/authorizer.h"
 #include "security/credential_store.h"
 #include "security/role_store.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
-#include <iterator>
 #include <system_error>
 #include <vector>
 

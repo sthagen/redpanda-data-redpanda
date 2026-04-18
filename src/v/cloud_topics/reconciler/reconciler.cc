@@ -19,10 +19,8 @@
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/retry.h"
-#include "cloud_topics/log_reader_config.h"
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
 #include "cloud_topics/reconciler/reconciliation_source.h"
-#include "cloud_topics/types.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"
@@ -42,7 +40,6 @@
 #include <exception>
 #include <expected>
 #include <iterator>
-#include <random>
 
 using namespace std::chrono_literals;
 

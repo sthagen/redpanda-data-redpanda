@@ -9,19 +9,15 @@
 
 #include "kafka/server/handlers/find_coordinator.h"
 
-#include "cluster/topics_frontend.h"
 #include "cluster/tx_gateway_frontend.h"
 #include "config/configuration.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/find_coordinator.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
-#include "kafka/server/rm_group_frontend.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 
 #include <seastar/util/log.hh>
-
-#include <fmt/ostream.h>
 
 #include <expected>
 #include <iterator>

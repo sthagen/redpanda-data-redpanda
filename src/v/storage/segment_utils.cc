@@ -9,13 +9,10 @@
 
 #include "storage/segment_utils.h"
 
-#include "absl/container/btree_map.h"
-#include "absl/container/flat_hash_map.h"
 #include "base/likely.h"
 #include "base/units.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
-#include "bytes/iobuf_parser.h"
 #include "config/configuration.h"
 #include "container/chunked_vector.h"
 #include "model/adl_serde.h"
@@ -25,7 +22,6 @@
 #include "reflection/adl.h"
 #include "ssx/future-util.h"
 #include "ssx/when_all.h"
-#include "storage/chunk_cache.h"
 #include "storage/compacted_index.h"
 #include "storage/compacted_index_writer.h"
 #include "storage/compaction_reducers.h"
@@ -34,32 +30,27 @@
 #include "storage/fs_utils.h"
 #include "storage/fwd.h"
 #include "storage/index_state.h"
-#include "storage/kvstore.h"
 #include "storage/lock_manager.h"
 #include "storage/log_reader.h"
 #include "storage/logger.h"
-#include "storage/ntp_config.h"
 #include "storage/scoped_file_tracker.h"
 #include "storage/segment.h"
 #include "storage/types.h"
 #include "utils/file_io.h"
 
-#include <seastar/core/coroutine.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/file-types.hh>
 #include <seastar/core/file.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/iostream.hh>
-#include <seastar/core/reactor.hh>
+#include <seastar/core/reactor.hh> // NOLINT(misc-include-cleaner) ss::open_file_dma, ss::file_stat
 #include <seastar/core/rwlock.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
-#include <seastar/util/defer.hh>
 
 #include <fmt/core.h>
-#include <fmt/format.h>
 #include <roaring/roaring.hh>
 
 #include <optional>

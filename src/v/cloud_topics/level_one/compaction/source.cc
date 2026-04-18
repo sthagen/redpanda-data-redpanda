@@ -24,8 +24,6 @@
 #include "model/record_batch_reader.h"
 #include "model/timeout_clock.h"
 
-#include <seastar/core/coroutine.hh>
-
 namespace cloud_topics::l1 {
 
 namespace {

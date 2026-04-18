@@ -14,7 +14,6 @@
 #include <seastar/core/sstring.hh>
 
 #include <fmt/format.h>
-#include <fmt/ostream.h>
 
 #if FMT_VERSION < 90100
 #error fmt library version is too old, must be >= 90100

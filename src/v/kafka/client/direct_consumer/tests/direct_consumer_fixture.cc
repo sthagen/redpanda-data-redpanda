@@ -18,7 +18,6 @@
 #include <chrono>
 #include <exception>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 
 ss::logger logger{"direct-consumer-fixture"};

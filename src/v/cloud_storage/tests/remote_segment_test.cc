@@ -23,21 +23,13 @@
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
-#include "storage/types.h"
 #include "test_utils/boost_fixture.h"
 #include "utils/lazy_abort_source.h"
 #include "utils/retry_chain_node.h"
 #include "utils/stream_provider.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/iostream.hh>
-#include <seastar/core/seastar.hh>
-#include <seastar/core/temporary_buffer.hh>
-#include <seastar/core/thread.hh>
-#include <seastar/testing/test_case.hh>
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
-#include <seastar/util/tmp_file.hh>
 
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>

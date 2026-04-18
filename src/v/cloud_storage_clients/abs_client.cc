@@ -1108,12 +1108,12 @@ ss::future<http::client::response_stream_ref> abs_client::do_get_object(
           && status == boost::beast::http::status::not_found) {
             vlog(
               abs_log.debug,
-              "ABS replied with expected error: {:l}",
+              "ABS replied with expected error: {}",
               response_stream->get_headers());
         } else {
             vlog(
               abs_log.warn,
-              "ABS replied with error: {:l}",
+              "ABS replied with error: {}",
               response_stream->get_headers());
         }
 

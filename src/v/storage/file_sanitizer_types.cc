@@ -12,10 +12,7 @@
 #include "storage/file_sanitizer_types.h"
 
 #include "json/document.h"
-#include "json/schema.h"
-#include "json/stringbuffer.h"
 #include "json/validator.h"
-#include "json/writer.h"
 #include "model/fundamental.h"
 #include "storage/logger.h"
 #include "strings/string_switch.h"
@@ -23,8 +20,6 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/seastar.hh>
-
-#include <functional>
 
 namespace {
 std::optional<model::record_batch_type>
@@ -179,36 +174,6 @@ file_sanitize_config::get_config_for_ntp(const model::ntp& ntp) const {
     return std::nullopt;
 }
 
-std::ostream& operator<<(std::ostream& o, const ntp_sanitizer_config& cfg) {
-    o << "{sanitize_only=" << cfg.sanitize_only
-      << ", failure_injection=" << static_cast<bool>(cfg.finjection_cfg) << "}";
-
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const file_sanitize_config& cfg) {
-    o << "{sanitize_only=" << cfg._sanitize_only
-      << ", ntps_with_failure_injection_count: "
-      << cfg._ntp_failure_configs.size() << "}";
-
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, failable_op_type op) {
-    switch (op) {
-    case failable_op_type::write:
-        return o << "write";
-    case failable_op_type::falloc:
-        return o << "falloc";
-    case failable_op_type::flush:
-        return o << "flush";
-    case failable_op_type::truncate:
-        return o << "truncate";
-    case failable_op_type::close:
-        return o << "close";
-    }
-}
-
 std::istream& operator>>(std::istream& i, failable_op_type& op) {
     ss::sstring s;
     i >> s;
@@ -237,7 +202,7 @@ make_finjector_file_config(std::filesystem::path config_path) {
           storage::stlog.warn,
           "Failed to read failure injection config file at {}: {}",
           config_path,
-          doc.GetParseError());
+          static_cast<int>(doc.GetParseError()));
     }
 
     try {

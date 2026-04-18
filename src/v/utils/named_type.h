@@ -9,9 +9,11 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
-#include <fmt/ostream.h>
+
+#include "base/format_to.h"
 
 #include <cstdint>
+#include <istream>
 #include <limits>
 #include <ostream>
 #include <type_traits>
@@ -26,6 +28,7 @@ template<typename T, typename Tag>
 class base_named_type<T, Tag, std::true_type> {
 public:
     using type = T;
+    using named_type_tag = void;
     constexpr base_named_type() = default;
     constexpr explicit base_named_type(const type& v)
       : _value(v) {}
@@ -98,10 +101,11 @@ public:
         return base_named_type(std::numeric_limits<type>::max());
     }
 
-    friend std::ostream& operator<<(std::ostream& o, const base_named_type& t) {
-        fmt::print(o, "{}", t._value);
-        return o;
-    };
+    friend std::ostream&
+    operator<<(std::ostream& os, const base_named_type& t) {
+        fmt::print(os, "{}", t._value);
+        return os;
+    }
 
     friend std::istream& operator>>(std::istream& i, base_named_type& t) {
         return i >> t._value;
@@ -114,6 +118,7 @@ template<typename T, typename Tag>
 class base_named_type<T, Tag, std::false_type> {
 public:
     using type = T;
+    using named_type_tag = void;
     static constexpr bool move_noexcept
       = std::is_nothrow_move_constructible<T>::value;
 
@@ -173,10 +178,12 @@ public:
     constexpr operator const type&() const& { return _value; }
     constexpr operator type() && { return std::move(_value); }
 
-    friend std::ostream& operator<<(std::ostream& o, const base_named_type& t) {
-        fmt::print(o, "{}", t._value);
-        return o;
-    };
+    friend std::ostream& operator<<(std::ostream& os, const base_named_type& t)
+    requires fmt::is_formattable<type>::value
+    {
+        fmt::print(os, "{}", t._value);
+        return os;
+    }
 
     friend std::istream& operator>>(std::istream& i, base_named_type& t) {
         return i >> t._value;
@@ -193,6 +200,27 @@ using named_type = detail::base_named_type<
   T,
   Tag,
   std::conditional_t<std::is_arithmetic_v<T>, std::true_type, std::false_type>>;
+
+template<typename T, typename Char>
+  struct fmt::formatter < T,
+  Char, std::enable_if_t < requires {
+    typename T::named_type_tag;
+    typename T::type;
+}
+  // Named-type-derived classes may provide their own format_to for a
+  // domain-specific representation. In that case, let base/format_to.h's
+  // generic formatter handle them instead of collapsing back to the wrapped
+  // type's formatter.
+  && !fmt::HasFormatToMethod<T>
+  && fmt::is_formattable<typename T::type, Char>::value >>
+  : fmt::formatter<typename T::type, Char> {
+    using base_t = fmt::formatter<typename T::type, Char>;
+
+    template<typename FormatContext>
+    auto format(const T& value, FormatContext& ctx) const {
+        return base_t::format(value(), ctx);
+    }
+};
 
 namespace std {
 template<typename T, typename Tag>

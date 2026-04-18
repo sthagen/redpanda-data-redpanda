@@ -60,13 +60,8 @@
 #include "utils/unresolved_address.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
-#include <seastar/core/timed_out_error.hh>
-#include <seastar/util/log.hh>
-
-#include <fmt/format.h>
 
 #include <chrono>
 #include <cstddef>

@@ -9,7 +9,6 @@
 
 #include "kafka/client/produce_partition.h"
 
-#include "kafka/client/brokers.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/test/utils.h"
 #include "kafka/protocol/errors.h"
@@ -21,9 +20,6 @@
 #include <seastar/testing/thread_test_case.hh>
 
 #include <boost/test/tools/old/interface.hpp>
-
-#include <exception>
-#include <system_error>
 
 namespace kc = kafka::client;
 

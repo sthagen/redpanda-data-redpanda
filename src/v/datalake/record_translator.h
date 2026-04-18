@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/schema_identifier.h"
@@ -32,7 +33,16 @@ public:
         translation_error,
         unexpected_schema,
     };
-    friend std::ostream& operator<<(std::ostream&, const errc&);
+    friend fmt::iterator format_to(errc e, fmt::iterator out) {
+        switch (e) {
+        case errc::translation_error:
+            return fmt::format_to(
+              out, "record_translator::errc::translation_error");
+        case errc::unexpected_schema:
+            return fmt::format_to(
+              out, "record_translator::errc::unexpected_schema");
+        }
+    }
 
     virtual record_type
     build_type(std::optional<shared_resolved_type_t> val_type) = 0;

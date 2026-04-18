@@ -11,8 +11,9 @@
 
 #pragma once
 
+#include "base/format_to.h"
+
 #include <chrono>
-#include <iosfwd>
 
 /// \brief usage: fmt::format("{}", human::bytes(3234.234));
 //  or fmt::format("{}", human::latency(321.048));
@@ -21,7 +22,7 @@ struct bytes {
     explicit bytes(double x)
       : value(x) {}
     double value;
-    friend std::ostream& operator<<(std::ostream& o, const bytes&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 struct latency {
     // the input should be in microseconds
@@ -32,6 +33,6 @@ struct latency {
       : value(
           std::chrono::duration_cast<std::chrono::microseconds>(d).count()) {}
     double value;
-    friend std::ostream& operator<<(std::ostream& o, const latency&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 } // namespace human

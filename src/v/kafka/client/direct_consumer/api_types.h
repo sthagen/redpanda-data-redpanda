@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/format_to.h"
 #include "base/outcome.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
@@ -30,12 +31,12 @@ enum class offset_reset_policy : int8_t {
     latest,
 };
 
-inline std::ostream& operator<<(std::ostream& os, offset_reset_policy p) {
+inline fmt::iterator format_to(offset_reset_policy p, fmt::iterator out) {
     switch (p) {
     case offset_reset_policy::earliest:
-        return os << "earliest";
+        return fmt::format_to(out, "earliest");
     case offset_reset_policy::latest:
-        return os << "latest";
+        return fmt::format_to(out, "latest");
     }
 }
 

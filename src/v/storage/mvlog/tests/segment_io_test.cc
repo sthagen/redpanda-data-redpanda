@@ -11,7 +11,6 @@
 #include "model/tests/random_batch.h"
 #include "storage/mvlog/batch_collecting_stream_utils.h"
 #include "storage/mvlog/batch_collector.h"
-#include "storage/mvlog/entry.h"
 #include "storage/mvlog/entry_stream.h"
 #include "storage/mvlog/file.h"
 #include "storage/mvlog/readable_segment.h"

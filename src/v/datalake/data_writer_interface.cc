@@ -10,36 +10,9 @@
 
 #include "datalake/data_writer_interface.h"
 
-#include <fmt/core.h>
 namespace datalake {
-std::ostream& operator<<(std::ostream& os, const writer_error& ev) {
-    switch (ev) {
-    case writer_error::ok:
-        return os << "Ok";
-    case writer_error::parquet_conversion_error:
-        return os << "Parquet Conversion Error";
-    case writer_error::file_io_error:
-        return os << "File IO Error";
-    case writer_error::no_data:
-        return os << "No data";
-    case writer_error::flush_error:
-        return os << "Flush failed";
-    case writer_error::oom_error:
-        return os << "Memory exhausted";
-    case writer_error::time_limit_exceeded:
-        return os << "Time limit exceeded";
-    case writer_error::shutting_down:
-        return os << "Shutting down";
-    case writer_error::out_of_disk:
-        return os << "Disk exhausted";
-    case writer_error::unknown_error:
-        return os << "Unknown error";
-    case writer_error::retryable_type_resolution_error:
-        return os << "Retryable type resolution error";
-    }
-}
 std::string data_writer_error_category::message(int ev) const {
-    return fmt::to_string(static_cast<writer_error>(ev));
+    return fmt::format("{}", static_cast<writer_error>(ev));
 }
 
 writer_error map_to_writer_error(reservation_error reservation_err) {

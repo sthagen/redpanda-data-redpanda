@@ -15,12 +15,9 @@
 #include <seastar/core/align.hh>
 #include <seastar/core/aligned_buffer.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/loop.hh>
-#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-#include <seastar/util/later.hh>
 
 #include <sys/mman.h>
 
@@ -145,10 +142,8 @@ void stack_allocator::deallocate(stack_memory mem) {
     _memory_pool.push_back(std::move(mem));
 }
 
-std::ostream& operator<<(std::ostream& os, const stack_bounds& bounds) {
-    return os << ss::format(
-             "{{.top = {}, .bottom = {}}}",
-             fmt::ptr(bounds.top),
-             fmt::ptr(bounds.bottom));
+fmt::iterator stack_bounds::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{.top = {}, .bottom = {}}}", fmt::ptr(top), fmt::ptr(bottom));
 }
 } // namespace wasm
