@@ -8,6 +8,7 @@
 # by the Apache License, Version 2.0
 
 from contextlib import contextmanager, nullcontext
+import re
 import time
 import socket
 import random
@@ -47,7 +48,12 @@ from rptest.services.multi_cluster_services import (
     ServiceType,
     SecondaryClusterSpec,
 )
-from rptest.services.redpanda import LoggingConfig, TLSProvider
+from rptest.services.redpanda import (
+    CLOUD_TOPICS_CONFIG_STR,
+    LoggingConfig,
+    SISettings,
+    TLSProvider,
+)
 from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManager
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.util import bg_thread_cm, wait_until_result
@@ -92,6 +98,27 @@ DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
 CONTROLLER_LOCKED_TASKS = [
     "Source Topic Sync",
     "Security Migrator Task",
+]
+
+ALL_STORAGE_MODES = [
+    TopicSpec.STORAGE_MODE_LOCAL,
+    TopicSpec.STORAGE_MODE_TIERED,
+    TopicSpec.STORAGE_MODE_CLOUD,
+    TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+]
+
+# Log messages that are expected when running shadow link tests with
+# cloud / tiered_cloud storage modes.
+CLOUD_TOPICS_SHADOW_LINK_LOG_ALLOW_LIST = [
+    # Cloud-topics subsystem may not be initialized immediately after a
+    # node restart; the replicator retries until it becomes available.
+    re.compile(r".*cloud-topics subsystem is not initialized"),
+    # The cloud-topics STM may time out during epoch fencing under load
+    # or immediately after leadership changes.
+    re.compile(r".*ctp_stm\.cc.*Sync timeout"),
+    # Exceptional futures from abort_requested during graceful shutdown
+    # of cloud-topics coroutines.
+    re.compile(r".*Exceptional future ignored.*abort_requested_exception"),
 ]
 
 
@@ -430,12 +457,65 @@ class ShadowLinkTestBase(PreallocNodesTest):
         *args: Any,
         **kwargs: Any,
     ):
+        # Detect storage mode from @matrix injected args and configure
+        # SI settings / cloud topics config when a non-local mode is
+        # requested.  This keeps individual test methods free from
+        # boilerplate cluster-setup logic.
+        storage_mode = (test_context.injected_args or {}).get("storage_mode")
+        needs_si = storage_mode in (
+            TopicSpec.STORAGE_MODE_TIERED,
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+        )
+        needs_cloud_topics = storage_mode in (
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+        )
+
+        if needs_si and "si_settings" not in kwargs:
+            kwargs["si_settings"] = SISettings(
+                test_context,
+                cloud_storage_max_connections=10,
+                cloud_storage_enable_remote_read=True,
+                cloud_storage_enable_remote_write=True,
+                fast_uploads=True,
+            )
+
         kwargs.setdefault("extra_rp_conf", {}).update(
             {
                 "enable_shadow_linking": True,
                 "group_initial_rebalance_delay": 1000,
             }
         )
+
+        if needs_cloud_topics:
+            kwargs["extra_rp_conf"].update(
+                {
+                    CLOUD_TOPICS_CONFIG_STR: True,
+                    "enable_cluster_metadata_upload_loop": False,
+                }
+            )
+
+        # Propagate SI / cloud-topics config to the secondary (source)
+        # cluster, creating a fresh SecondaryClusterArgs to avoid
+        # mutating the shared default instance.
+        if needs_si:
+            sec_kwargs = dict(secondary_cluster_args.kwargs)
+            if "si_settings" not in sec_kwargs:
+                sec_kwargs["si_settings"] = kwargs.get("si_settings")
+            if needs_cloud_topics:
+                sec_extra = dict(sec_kwargs.get("extra_rp_conf", {}))
+                sec_extra.update(
+                    {
+                        CLOUD_TOPICS_CONFIG_STR: True,
+                        "enable_cluster_metadata_upload_loop": False,
+                    }
+                )
+                sec_kwargs["extra_rp_conf"] = sec_extra
+            secondary_cluster_args = SecondaryClusterArgs(
+                *secondary_cluster_args.args, **sec_kwargs
+            )
+
         kwargs.setdefault(
             "log_config",
             LoggingConfig(
@@ -753,6 +833,80 @@ class ShadowLinkTestBase(PreallocNodesTest):
 
     def target_default_client(self):
         return DefaultClient(self.target_cluster.service)
+
+    @staticmethod
+    def _topic_config_from_spec(spec: TopicSpec) -> dict[str, str]:
+        """Extract topic-level config from a TopicSpec for rpk creation."""
+        config: dict[str, str] = {}
+        if spec.cleanup_policy:
+            config["cleanup.policy"] = spec.cleanup_policy
+        if spec.segment_bytes:
+            config["segment.bytes"] = str(spec.segment_bytes)
+        if spec.retention_bytes:
+            config["retention.bytes"] = str(spec.retention_bytes)
+        if spec.retention_ms is not None:
+            config["retention.ms"] = str(spec.retention_ms)
+        if spec.max_message_bytes:
+            config["max.message.bytes"] = str(spec.max_message_bytes)
+        if spec.delete_retention_ms:
+            config["delete.retention.ms"] = str(spec.delete_retention_ms)
+        if spec.min_cleanable_dirty_ratio is not None:
+            config["min.cleanable.dirty.ratio"] = str(spec.min_cleanable_dirty_ratio)
+        if spec.message_timestamp_type is not None:
+            config["message.timestamp.type"] = spec.message_timestamp_type
+        if spec.max_compaction_lag_ms is not None:
+            config["max.compaction.lag.ms"] = str(spec.max_compaction_lag_ms)
+        if spec.min_compaction_lag_ms is not None:
+            config["min.compaction.lag.ms"] = str(spec.min_compaction_lag_ms)
+        if spec.compression_type is not None:
+            config["compression.type"] = str(spec.compression_type)
+        return config
+
+    def create_source_topic(self, topic: TopicSpec, storage_mode: str | None = None):
+        """Create a topic on the source cluster with the given storage mode.
+
+        For local / None delegates to DefaultClient (existing behaviour).
+        For tiered / cloud / tiered_cloud uses rpk so the storage mode
+        property can be set, and activates feature flags when necessary.
+        """
+        if storage_mode is None or storage_mode == TopicSpec.STORAGE_MODE_LOCAL:
+            self.source_default_client().create_topic(topic)
+            return
+
+        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+            self.source_cluster_service.set_feature_active(
+                "tiered_cloud_topics", True, timeout_sec=30
+            )
+            self.target_cluster.service.set_feature_active(
+                "tiered_cloud_topics", True, timeout_sec=30
+            )
+
+        config = self._topic_config_from_spec(topic)
+        config[TopicSpec.PROPERTY_STORAGE_MODE] = storage_mode
+
+        source_rpk = RpkTool(self.source_cluster.service)
+
+        def try_create():
+            try:
+                source_rpk.create_topic(
+                    topic=topic.name,
+                    partitions=topic.partition_count,
+                    replicas=topic.replication_factor,
+                    config=config,
+                )
+                return True
+            except Exception as e:
+                if "INVALID_CONFIG" in str(e):
+                    return False
+                raise
+
+        wait_until(
+            try_create,
+            timeout_sec=30,
+            backoff_sec=2,
+            err_msg=f"Failed to create source topic {topic.name} "
+            f"with storage_mode={storage_mode}",
+        )
 
     def topic_exists_in_source(self, topic: str) -> bool:
         topics = RpkTool(self.source_cluster_service).list_topics()

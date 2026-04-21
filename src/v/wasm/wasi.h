@@ -223,7 +223,7 @@ struct event_t {
     errno_t error;
 
     /**
-     * The type of event that occured
+     * The type of event that occurred
      */
     event_type_t type;
 

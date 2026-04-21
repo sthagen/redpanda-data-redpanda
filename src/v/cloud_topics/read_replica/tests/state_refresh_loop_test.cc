@@ -10,7 +10,7 @@
 
 #include "cloud_io/cache_service.h"
 #include "cloud_io/remote.h"
-#include "cloud_io/tests/s3_imposter.h"
+#include "cloud_io/tests/db_s3_imposter_fixture.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "cloud_topics/level_one/metastore/domain_uuid.h"
 #include "cloud_topics/level_one/metastore/manifest_io.h"
@@ -58,7 +58,7 @@ auto state_matches(
 
 class StateRefreshLoopTest
   : public raft::stm_raft_fixture<stm>
-  , public s3_imposter_fixture {
+  , public db_s3_imposter_fixture {
 public:
     StateRefreshLoopTest()
       : reader_staging_base_dir_("state_refresh_loop_test") {}
@@ -116,7 +116,7 @@ public:
     };
 
     void SetUp() override {
-        set_expectations_and_listen({});
+        db_s3_imposter_fixture::start().get();
 
         cfg_.get("election_timeout_ms").set_value(1000ms);
         cfg_.get("raft_heartbeat_interval_ms").set_value(100ms);
@@ -204,6 +204,7 @@ public:
         refresh_nodes_.clear();
         test_cache_.stop().get();
         sr_.reset();
+        db_s3_imposter_fixture::stop().get();
     }
 
     refresh_node* wait_get_leader() {

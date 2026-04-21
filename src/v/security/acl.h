@@ -14,9 +14,7 @@
 #include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/type_traits.h"
-#include "kafka/protocol/types.h"
 #include "model/fundamental.h"
-#include "pandaproxy/schema_registry/types.h"
 #include "security/audit/schemas/types.h"
 #include "serde/envelope.h"
 #include "serde/rw/enum.h"
@@ -105,24 +103,7 @@ std::optional<resource_type>
 from_string_view<resource_type>(std::string_view str);
 
 template<typename T>
-consteval resource_type get_resource_type() {
-    namespace ppsr = pandaproxy::schema_registry;
-    if constexpr (std::is_same_v<T, model::topic>) {
-        return resource_type::topic;
-    } else if constexpr (std::is_same_v<T, kafka::group_id>) {
-        return resource_type::group;
-    } else if constexpr (std::is_same_v<T, security::acl_cluster_name>) {
-        return resource_type::cluster;
-    } else if constexpr (std::is_same_v<T, kafka::transactional_id>) {
-        return resource_type::transactional_id;
-    } else if constexpr (std::is_same_v<T, ppsr::context_subject>) {
-        return resource_type::sr_subject;
-    } else if constexpr (std::is_same_v<T, ppsr::registry_resource>) {
-        return resource_type::sr_registry;
-    } else {
-        static_assert(base::unsupported_type<T>::value, "Unsupported type");
-    }
-}
+resource_type get_resource_type();
 
 /*
  * A pattern rule for matching ACL resource names.

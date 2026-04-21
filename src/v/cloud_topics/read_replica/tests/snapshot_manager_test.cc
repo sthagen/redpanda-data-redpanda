@@ -9,7 +9,7 @@
  */
 
 #include "cloud_io/cache_service.h"
-#include "cloud_io/tests/s3_imposter.h"
+#include "cloud_io/tests/db_s3_imposter_fixture.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "cloud_topics/level_one/metastore/domain_uuid.h"
 #include "cloud_topics/read_replica/snapshot_manager.h"
@@ -36,10 +36,10 @@ using o = kafka::offset;
 } // namespace
 class SnapshotManagerTest
   : public ::testing::Test
-  , public s3_imposter_fixture {
+  , public db_s3_imposter_fixture {
 public:
     void SetUp() override {
-        set_expectations_and_listen({});
+        db_s3_imposter_fixture::start().get();
         sr_ = cloud_io::scoped_remote::create(10, conf);
         config::shard_local_cfg()
           .cloud_storage_readreplica_manifest_sync_timeout_ms.set_value(500ms);
@@ -87,6 +87,7 @@ public:
         }
         writer_cache_.stop().get();
         sr_.reset();
+        db_s3_imposter_fixture::stop().get();
     }
 
     // Helper to write data to a domain's database using L1 metastore semantics

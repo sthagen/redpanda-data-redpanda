@@ -482,3 +482,20 @@ http_archive(
     strip_prefix = "antithesis-sdk-cpp-0.4.7",
     urls = ["https://github.com/antithesishq/antithesis-sdk-cpp/archive/refs/tags/0.4.7.tar.gz"],
 )
+
+# JSON parser conformance corpus used by
+# //src/v/serde/json/tests:json_test_suite_test. MIT-licensed; see
+# https://github.com/nst/JSONTestSuite.
+http_archive(
+    name = "nst_json_test_suite",
+    build_file_content = """
+filegroup(
+    name = "test_parsing",
+    srcs = glob(["test_parsing/*.json"]),
+    visibility = ["//visibility:public"],
+)
+""",
+    integrity = "sha256-Mqsvs3zCZnnb2RZNu3BTvO8QE0ZD1TywzvRd52gNzcw=",
+    strip_prefix = "JSONTestSuite-1ef36fa01286573e846ac449e8683f8833c5b26a",
+    urls = ["https://github.com/nst/JSONTestSuite/archive/1ef36fa01286573e846ac449e8683f8833c5b26a.tar.gz"],
+)

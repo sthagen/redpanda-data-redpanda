@@ -245,7 +245,7 @@ ss::future<reconnect_result_t> client::get_connected(
         // Reconnect attempts have to stop if:
         // - shutdown method was called
         // - abort was requested
-        // - unrecoverable error occured
+        // - unrecoverable error occurred
         // - timeout reached
         try {
             // base_transport::connect calls _dispatcher_gate.close

@@ -10,7 +10,7 @@
 
 namespace test_utils {
 
-std::string get_runfile_path(std::string_view path) {
+std::string get_runfile_path(std::string_view path, std::string_view repo) {
     using bazel::tools::cpp::runfiles::Runfiles;
     std::string error;
     std::unique_ptr<Runfiles> runfiles;
@@ -25,7 +25,7 @@ std::string get_runfile_path(std::string_view path) {
     if (runfiles == nullptr) {
         throw std::runtime_error(error);
     }
-    return runfiles->Rlocation(fmt::format("_main/{}", path));
+    return runfiles->Rlocation(fmt::format("{}/{}", repo, path));
 }
 
 } // namespace test_utils

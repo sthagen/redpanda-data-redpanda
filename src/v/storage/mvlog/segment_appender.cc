@@ -19,6 +19,8 @@
 namespace storage::experimental::mvlog {
 
 ss::future<> segment_appender::append(model::record_batch batch) {
+    auto base_offset = batch.base_offset();
+    auto last_offset = batch.last_offset();
     // Build the body of the entry first so we can checksum its size.
     record_batch_entry_body entry_body;
     entry_body.term = batch.term();
@@ -42,8 +44,8 @@ ss::future<> segment_appender::append(model::record_batch batch) {
     vlog(
       log.trace,
       "Appended offsets [{}, {}], pos [{}, {})",
-      batch.base_offset(),
-      batch.last_offset(),
+      base_offset,
+      last_offset,
       orig_size,
       file_->size());
 }

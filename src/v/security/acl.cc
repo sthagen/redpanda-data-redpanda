@@ -12,6 +12,8 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
+#include "kafka/protocol/types.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "security/acl_store.h"
 #include "serde/read_header.h"
 #include "serde/rw/rw.h"
@@ -706,6 +708,36 @@ void acl_binding_filter::testing_serde_full_read_v2(
       in, bytes_left_limit);
     *this = acl_binding_filter{res._pattern, res._acl};
 }
+
+template<typename T>
+resource_type get_resource_type() {
+    if constexpr (std::is_same_v<T, model::topic>) {
+        return resource_type::topic;
+    } else if constexpr (std::is_same_v<T, kafka::group_id>) {
+        return resource_type::group;
+    } else if constexpr (std::is_same_v<T, acl_cluster_name>) {
+        return resource_type::cluster;
+    } else if constexpr (std::is_same_v<T, kafka::transactional_id>) {
+        return resource_type::transactional_id;
+    } else if constexpr (
+      std::is_same_v<T, pandaproxy::schema_registry::context_subject>) {
+        return resource_type::sr_subject;
+    } else if constexpr (
+      std::is_same_v<T, pandaproxy::schema_registry::registry_resource>) {
+        return resource_type::sr_registry;
+    } else {
+        static_assert(base::unsupported_type<T>::value, "Unsupported type");
+    }
+}
+
+template resource_type get_resource_type<model::topic>();
+template resource_type get_resource_type<kafka::group_id>();
+template resource_type get_resource_type<acl_cluster_name>();
+template resource_type get_resource_type<kafka::transactional_id>();
+template resource_type
+get_resource_type<pandaproxy::schema_registry::context_subject>();
+template resource_type
+get_resource_type<pandaproxy::schema_registry::registry_resource>();
 
 template<typename T>
 const std::vector<acl_operation>& get_allowed_operations() {

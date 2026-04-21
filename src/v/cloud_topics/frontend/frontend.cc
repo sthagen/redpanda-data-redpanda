@@ -26,6 +26,7 @@
 #include "cluster/partition.h"
 #include "cluster/rm_stm_types.h"
 #include "cluster/types.h"
+#include "kafka/protocol/errors.h"
 #include "kafka/server/write_at_offset_stm.h"
 #include "model/fundamental.h"
 #include "model/offset_interval.h"

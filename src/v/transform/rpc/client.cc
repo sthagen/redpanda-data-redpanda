@@ -1016,12 +1016,13 @@ ss::future<cluster::errc> client::do_remote_delete_committed_offsets(
   model::partition_id partition,
   absl::btree_set<model::transform_id> ids,
   model::timeout_clock::duration timeout) {
+    auto ids_size = ids.size();
     vlog(
       log.trace,
       "delete_committed_offsets(node={}): {} {}",
       node,
       partition,
-      ids.size());
+      ids_size);
     auto resp = co_await _connections->local()
                   .with_node_client<impl::transform_rpc_client_protocol>(
                     _self,
@@ -1041,7 +1042,7 @@ ss::future<cluster::errc> client::do_remote_delete_committed_offsets(
       "delete_committed_offsets(node={}): {} {}",
       node,
       resp,
-      ids.size());
+      ids_size);
     if (resp.has_error()) {
         co_return map_errc(resp.error());
     }

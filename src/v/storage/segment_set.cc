@@ -470,7 +470,7 @@ static ss::future<segment_set> do_recover(
 /**
  * \brief Open all segments in a directory.
  *
- * Returns an exceptional future if any error occured opening a
+ * Returns an exceptional future if any error occurred opening a
  * segment. Otherwise all open segment readers are returned.
  */
 static ss::future<segment_set::underlying_t> open_segments(

@@ -221,8 +221,8 @@ ss::future<log_eviction_stm::offset_result> log_eviction_stm::truncate(
       "Replicating prefix_truncate command, redpanda start offset: {}, kafka "
       "start offset: {} "
       "current last snapshot offset: {}, current last visible offset: {}",
-      val.rp_start_offset,
-      val.kafka_start_offset,
+      rp_start_offset,
+      kafka_start_offset,
       _raft->last_snapshot_index(),
       _raft->last_visible_index());
 

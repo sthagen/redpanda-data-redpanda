@@ -10,7 +10,7 @@
 
 #include "cloud_io/cache_service.h"
 #include "cloud_io/remote.h"
-#include "cloud_io/tests/s3_imposter.h"
+#include "cloud_io/tests/db_s3_imposter_fixture.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "cloud_topics/level_one/common/file_io.h"
 #include "cloud_topics/level_one/common/object_id.h"
@@ -292,7 +292,7 @@ struct test_params {
 
 class DbDomainManagerTest
   : public raft::raft_fixture
-  , public s3_imposter_fixture {
+  , public db_s3_imposter_fixture {
 public:
     static constexpr auto num_nodes = 3;
     using opt_ref = std::optional<std::reference_wrapper<domain_manager_node>>;
@@ -310,7 +310,7 @@ public:
         cfg.get("raft_heartbeat_interval_ms").set_value(50ms);
         cfg.get("raft_heartbeat_timeout_ms").set_value(500ms);
 
-        set_expectations_and_listen({});
+        db_s3_imposter_fixture::start().get();
         sr = cloud_io::scoped_remote::create(10, conf);
 
         // Set up cloud cache.
@@ -386,6 +386,7 @@ public:
         sr.reset();
         test_cache.stop().get();
         cache_tmpdir.reset();
+        db_s3_imposter_fixture::stop().get();
     }
 
     // Returns the node of the current leader.

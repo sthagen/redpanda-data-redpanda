@@ -108,7 +108,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cloud_io:cache",
         "//src/v/cloud_io:remote",
-        "//src/v/cloud_io/tests:s3_imposter",
+        "//src/v/cloud_io/tests:db_s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics/level_one/metastore:domain_uuid",

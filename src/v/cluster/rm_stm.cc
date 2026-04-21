@@ -1754,11 +1754,12 @@ void rm_stm::apply_fence(model::producer_identity pid, model::record_batch b) {
     }
     auto producer = result.value().first;
     auto header = b.header();
+    auto base_offset = b.base_offset();
     auto batch_data = read_fence_batch(std::move(b));
     vlog(
       _ctx_log.trace,
       "applying fence batch, offset: {}, pid: {}",
-      b.base_offset(),
+      base_offset,
       batch_data.bid.pid);
     producer->apply_transaction_begin(header, batch_data);
     _highest_producer_id = std::max(

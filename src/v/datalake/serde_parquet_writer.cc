@@ -23,7 +23,7 @@ ss::future<writer_error> serde_parquet_writer::add_data_struct(
     // Hence, the current solution is to return those errors on the subsequent
     // call to `add_data_struct`.
     //
-    // Similar to `local_parquet_file_writer` once an error has occured further
+    // Similar to `local_parquet_file_writer` once an error has occurred further
     // writes are prevented.
     if (_error != writer_error::ok) {
         co_return _error;

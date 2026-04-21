@@ -1,8 +1,7 @@
 from ducktape.mark import matrix
 
-from rptest.clients.rpk import RpkTool
-
 from rptest.tests.cluster_linking_test_base import (
+    ALL_STORAGE_MODES,
     ClusterLinkingProgressVerifier,
     ShadowLinkPreAllocTestBase,
 )
@@ -24,8 +23,8 @@ class ClusterLinkingScaleTest(ShadowLinkPreAllocTestBase):
         )
 
     @cluster(num_nodes=7)
-    @matrix(topic_count=[1, 5, 10])
-    def test_many_partitions(self, topic_count: int):
+    @matrix(topic_count=[1, 5, 10], storage_mode=ALL_STORAGE_MODES)
+    def test_many_partitions(self, topic_count: int, storage_mode: str):
         topics = [
             TopicSpec(
                 name=f"source-topic-{i}",
@@ -36,12 +35,9 @@ class ClusterLinkingScaleTest(ShadowLinkPreAllocTestBase):
         ]
 
         self.create_link("many_partitions_link")
-        source_rpk = RpkTool(self.source_cluster_service)
 
         for topic in topics:
-            source_rpk.create_topic(
-                topic.name, topic.partition_count, topic.replication_factor
-            )
+            self.create_source_topic(topic, storage_mode)
 
         total_bytes = 5 * 1024 * 1024 * 1024  # 5GB
         msg_size = 4 * 1024

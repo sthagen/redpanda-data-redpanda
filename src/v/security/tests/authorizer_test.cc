@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 #include "absl/container/flat_hash_set.h"
 #include "config/mock_property.h"
+#include "kafka/protocol/types.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "random/generators.h"
 #include "security/acl.h"

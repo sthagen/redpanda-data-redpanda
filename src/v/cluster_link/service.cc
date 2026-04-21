@@ -529,7 +529,22 @@ public:
 
     bool can_prefix_truncate() const final {
         _gate.check();
-        return _partition->get_ntp_config().is_locally_collectable();
+        const auto& cfg = _partition->get_ntp_config();
+        // Cloud topics manage local retention via L1, so
+        // is_locally_collectable() returns false. However, prefix
+        // truncation is still supported through the cloud-topics
+        // frontend, so we fall back to is_remotely_collectable().
+        // We also require the cloud-topics subsystem to be
+        // initialized — after a node restart it may not be ready
+        // yet, and make_partition_proxy() would throw.
+        if (cfg.cloud_topic_enabled()) {
+            auto ct_state = _partition->get_cloud_topics_state();
+            if (!ct_state || !ct_state->local_is_initialized()) {
+                return false;
+            }
+            return cfg.is_remotely_collectable();
+        }
+        return cfg.is_locally_collectable();
     }
 
     ss::future<kafka::error_code> prefix_truncate(
