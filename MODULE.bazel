@@ -33,6 +33,7 @@ single_version_override(
     ],
 )
 
+bazel_dep(name = "libxml2", version = "2.15.2")
 bazel_dep(name = "lz4", version = "1.9.4")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "protobuf", version = "33.5")
@@ -99,7 +100,6 @@ use_repo(non_module_dependencies, "jsoncons")
 use_repo(non_module_dependencies, "krb5")
 use_repo(non_module_dependencies, "libpciaccess")
 use_repo(non_module_dependencies, "libprotobuf_mutator")
-use_repo(non_module_dependencies, "libxml2")
 use_repo(non_module_dependencies, "lksctp")
 use_repo(non_module_dependencies, "openssl")
 use_repo(non_module_dependencies, "openssl-fips")

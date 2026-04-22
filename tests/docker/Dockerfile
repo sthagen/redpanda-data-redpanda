@@ -372,7 +372,7 @@ FROM librdkafka AS final
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/python-deps /
 RUN /python-deps
-ENV PATH="/opt/.ducktape-venv/bin:$PATH"
+ENV PATH="/opt/.ducktape-venv/bin:/opt/redpanda_installs/bin:$PATH"
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/teleport /
 RUN --mount=target=/running/teleport,type=tmpfs --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -404,6 +404,9 @@ RUN /addr2line && \
 # copy offline_log_viewer
 RUN mkdir -p /opt/scripts/offline_log_viewer
 COPY --chown=0:0 --chmod=0755 tools/offline_log_viewer /opt/scripts/offline_log_viewer
+
+# copy controller forced reconfiguration script onto PATH
+COPY --chown=0:0 --chmod=0755 tools/controller_forced_reconfiguration/invoke_controller_reconfiguration.py /usr/local/bin/invoke_controller_reconfiguration
 
 # copy remote_scripts
 RUN mkdir -p /opt/remote

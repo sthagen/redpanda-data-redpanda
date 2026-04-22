@@ -475,6 +475,54 @@ native_package = rule(
     toolchains = ["@bazel_tools//tools/cpp:toolchain_type"],
 )
 
+def _script_package_impl(ctx):
+    out = ctx.actions.declare_directory(ctx.attr.out)
+
+    commands = ["mkdir -p {out}/bin".format(out = out.path)]
+    inputs = []
+
+    for target, output_name in ctx.attr.scripts.items():
+        files = target.files.to_list()
+        if len(files) != 1:
+            fail("script_package expected label {} for output '{}' to resolve to exactly one file, got {}".format(
+                target.label,
+                output_name,
+                len(files),
+            ))
+
+        f = files[0]
+        commands.append("cp {src} {out}/bin/{name}".format(
+            src = f.path,
+            out = out.path,
+            name = output_name,
+        ))
+        commands.append("chmod +x {out}/bin/{name}".format(
+            out = out.path,
+            name = output_name,
+        ))
+        inputs.append(f)
+
+    ctx.actions.run_shell(
+        outputs = [out],
+        inputs = inputs,
+        command = " && ".join(commands),
+        mnemonic = "BuildingScriptPackage",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+script_package = rule(
+    implementation = _script_package_impl,
+    attrs = {
+        "scripts": attr.label_keyed_string_dict(
+            allow_files = True,
+            doc = "Map of script source labels to output binary names.",
+        ),
+        "out": attr.string(
+            mandatory = True,
+        ),
+    },
+)
+
 def _prepare_deb_package_content(ctx, dynamic_loader_path):
     # Prepare list of binaries to process
     binaries = []

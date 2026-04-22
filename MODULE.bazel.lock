@@ -107,6 +107,8 @@
     "https://bcr.bazel.build/modules/libpfm/4.11.0/MODULE.bazel": "45061ff025b301940f1e30d2c16bea596c25b176c8b6b3087e92615adbd52902",
     "https://bcr.bazel.build/modules/liburing/2.14/MODULE.bazel": "83a452082f02c8fc4a19a8b379356d8a990fe4b2a2cd33beb6478a1a6611c1bc",
     "https://bcr.bazel.build/modules/liburing/2.14/source.json": "8af2769c7cd50cc015eb1a20ed85c721f5b5422d67d7d8dd281099bfccea28aa",
+    "https://bcr.bazel.build/modules/libxml2/2.15.2/MODULE.bazel": "21d1714e5b8416649cab195083b411c897a1052fcb88da9926ef933c2e846ced",
+    "https://bcr.bazel.build/modules/libxml2/2.15.2/source.json": "17c76aa0d1c8bb6e674c5f50621a97d4368e1dd31c5d973a7bd4935cd8e8e076",
     "https://bcr.bazel.build/modules/lz4/1.9.4/MODULE.bazel": "e3d307b1d354d70f6c809167eafecf5d622c3f27e3971ab7273410f429c7f83a",
     "https://bcr.bazel.build/modules/lz4/1.9.4/source.json": "233f0bdfc21f254e3dda14683ddc487ca68c6a3a83b7d5db904c503f85bd089b",
     "https://bcr.bazel.build/modules/nlohmann_json/3.11.3/MODULE.bazel": "87023db2f55fc3a9949c7b08dc711fae4d4be339a80a99d04453c4bb3998eefc",
@@ -182,6 +184,7 @@
     "https://bcr.bazel.build/modules/rules_cc/0.2.13/MODULE.bazel": "eecdd666eda6be16a8d9dc15e44b5c75133405e820f620a234acc4b1fdc5aa37",
     "https://bcr.bazel.build/modules/rules_cc/0.2.17/MODULE.bazel": "1849602c86cb60da8613d2de887f9566a6d354a6df6d7009f9d04a14402f9a84",
     "https://bcr.bazel.build/modules/rules_cc/0.2.17/source.json": "3832f45d145354049137c0090df04629d9c2b5493dc5c2bf46f1834040133a07",
+    "https://bcr.bazel.build/modules/rules_cc/0.2.9/MODULE.bazel": "34263f1dca62ea664265438cef714d7db124c03e1ed55ebb4f1dc860164308d1",
     "https://bcr.bazel.build/modules/rules_foreign_cc/0.10.1/MODULE.bazel": "b9527010e5fef060af92b6724edb3691970a5b1f76f74b21d39f7d433641be60",
     "https://bcr.bazel.build/modules/rules_foreign_cc/0.12.0/MODULE.bazel": "d850fab025ce79a845077035861034393f1cc1efc1d9d58d766272a26ba67def",
     "https://bcr.bazel.build/modules/rules_foreign_cc/0.12.0/source.json": "c97ddc022179fe30d1a9b94425d1e56d0a633f72332c55463e584a52ce1b38ac",
@@ -304,7 +307,7 @@
   "moduleExtensions": {
     "//bazel:extensions.bzl%non_module_dependencies": {
       "general": {
-        "bzlTransitiveDigest": "wLKvpZbW0I9xXgkrj1e5pRqR6N6bLiXc2VZIyW0KEr8=",
+        "bzlTransitiveDigest": "jLVsqIO34YP2a08gX3nxYU+4L3Ube8ezmAVI3qQ6s1c=",
         "usagesDigest": "FEiDyZe9eAU6yEqnarZf0XMEUk+prUyYClvq1RU1J98=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -416,15 +419,6 @@
               "sha256": "0847a2ee65552a92643131e934b50164e8b79fadc7be24b180a1c8d6dbb05952",
               "strip_prefix": "libprotobuf-mutator-dc4ced337a9fb4047e2dc727268fbac55ca82f73",
               "url": "https://github.com/google/libprotobuf-mutator/archive/dc4ced337a9fb4047e2dc727268fbac55ca82f73.zip"
-            }
-          },
-          "libxml2": {
-            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
-            "attributes": {
-              "build_file": "@@//bazel/thirdparty:libxml2.BUILD",
-              "sha256": "2769234c4fe2fab9b0b043e891c2af0f1ae51c8d4b94799472981e676ed8009e",
-              "strip_prefix": "libxml2-2.15.2",
-              "url": "https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies/libxml2-v2.15.2.tar.gz"
             }
           },
           "lksctp": {

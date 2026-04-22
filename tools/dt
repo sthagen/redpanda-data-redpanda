@@ -70,6 +70,7 @@ class DucktapeRunner:
         self.bazel_out = self.build_root / "bazel-out"
         self.rp_install_dir = self.bazel_out / "redpanda"
         self.dcv_install_dir = self.bazel_out / "direct_consumer_verifier"
+        self.cfr_install_dir = self.bazel_out / "controller_forced_reconfiguration"
         self.rp_installs_dir = self.build_root / "redpanda_installs"
         self.ducktape_dir = self.build_root / "ducktape"
 
@@ -130,6 +131,17 @@ class DucktapeRunner:
             cwd=self.src_dir,
         )
 
+        # Build controller forced reconfiguration script
+        self.run_cmd(
+            [
+                "bazel",
+                "build",
+                *self.bazel_config.split(),
+                "//bazel/packaging:controller_forced_reconfiguration_ducktape",
+            ],
+            cwd=self.src_dir,
+        )
+
     def link_bazel_artifacts(self):
         """Link bazel build artifacts to expected locations."""
         self.log("Linking bazel artifacts...")
@@ -170,6 +182,20 @@ class DucktapeRunner:
             "direct_consumer_verifier",
             use_hardlink,
         )
+        self._link_package_artifacts(
+            "controller_forced_reconfiguration_ducktape",
+            "controller_forced_reconfiguration",
+            use_hardlink,
+        )
+
+        # Create flat bin directory with symlinks for PATH-accessible scripts
+        rp_installs_bin = self.rp_installs_dir / "bin"
+        rp_installs_bin.mkdir(parents=True, exist_ok=True)
+        cfr_script = self.cfr_install_dir / "bin" / "invoke_controller_reconfiguration"
+        cfr_link = rp_installs_bin / "invoke_controller_reconfiguration"
+        if cfr_link.exists() or cfr_link.is_symlink():
+            cfr_link.unlink()
+        cfr_link.symlink_to(cfr_script)
 
         # CORE-13183: symlink libexec/redpanda to bin/redpanda for ducktape
         rp_bazel_out = self.bazel_out / "redpanda"

@@ -11,4 +11,5 @@ all:
     included:
         - tests/
         - transactions/
+        - cfr_tests/
         - direct_consumer_tests/
