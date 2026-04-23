@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
-#include "feature_backend.h"
+#include "cluster/feature_backend.h"
 
 #include "cluster/controller_snapshot.h"
 #include "cluster/logger.h"

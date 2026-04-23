@@ -11,9 +11,9 @@
 #pragma once
 #include "base/format_to.h"
 #include "base/seastarx.h"
+#include "cluster/drain_status.h"
 #include "cluster/fwd.h"
 #include "reflection/adl.h"
-#include "serde/envelope.h"
 #include "ssx/semaphore.h"
 
 #include <seastar/core/abort_source.hh>
@@ -35,37 +35,6 @@ class drain_manager : public ss::peering_sharded_service<drain_manager> {
       = std::chrono::seconds(5);
 
 public:
-    /*
-     * finished:     draining has completed
-     * errors:       draining finished with errors
-     * partitions:   total partitions
-     * eligible:     total drain-eligible partitions
-     * transferring: total partitions currently transferring
-     * failed:       total transfers failed in last batch
-     *
-     * the optional fields may not be set if draining has been requested, but
-     * not yet started. in this case the values are not yet known.
-     */
-    struct drain_status
-      : serde::
-          envelope<drain_status, serde::version<0>, serde::compat_version<0>> {
-        bool finished{false};
-        bool errors{false};
-        std::optional<size_t> partitions;
-        std::optional<size_t> eligible;
-        std::optional<size_t> transferring;
-        std::optional<size_t> failed;
-
-        fmt::iterator format_to(fmt::iterator it) const;
-        friend bool
-        operator==(const drain_status&, const drain_status&) = default;
-
-        auto serde_fields() {
-            return std::tie(
-              finished, errors, partitions, eligible, transferring, failed);
-        }
-    };
-
     explicit drain_manager(ss::sharded<cluster::partition_manager>&);
 
     ss::future<> start();
@@ -107,8 +76,8 @@ private:
 
 namespace reflection {
 template<>
-struct adl<cluster::drain_manager::drain_status> {
-    void to(iobuf& out, cluster::drain_manager::drain_status&& r) {
+struct adl<cluster::drain_status> {
+    void to(iobuf& out, cluster::drain_status&& r) {
         serialize(
           out,
           r.finished,
@@ -118,7 +87,7 @@ struct adl<cluster::drain_manager::drain_status> {
           r.transferring,
           r.failed);
     }
-    cluster::drain_manager::drain_status from(iobuf_parser& in) {
+    cluster::drain_status from(iobuf_parser& in) {
         auto finished = adl<bool>{}.from(in);
         auto errors = adl<bool>{}.from(in);
         auto partitions = adl<std::optional<size_t>>{}.from(in);

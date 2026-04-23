@@ -13,7 +13,7 @@
 #include "absl/container/node_hash_set.h"
 #include "base/format_to.h"
 #include "bytes/iobuf_parser.h"
-#include "cluster/drain_manager.h"
+#include "cluster/drain_status.h"
 #include "cluster/errc.h"
 #include "cluster/node/types.h"
 #include "cluster/types.h"
@@ -249,14 +249,14 @@ struct node_health_report {
     model::node_id id;
     node::local_state local_state;
     topics_t topics;
-    std::optional<drain_manager::drain_status> drain_status;
+    std::optional<cluster::drain_status> drain_status;
     node_liveness_report node_liveness_report;
 
     node_health_report(
       model::node_id,
       node::local_state,
       chunked_vector<topic_status>,
-      std::optional<drain_manager::drain_status>,
+      std::optional<cluster::drain_status>,
       struct node_liveness_report);
 
     node_health_report copy() const;
@@ -280,7 +280,7 @@ struct node_health_report_serde
     model::node_id id;
     node::local_state local_state;
     chunked_vector<topic_status> topics;
-    std::optional<drain_manager::drain_status> drain_status;
+    std::optional<cluster::drain_status> drain_status;
     node_liveness_report node_liveness_report;
 
     auto serde_fields() {
@@ -294,7 +294,7 @@ struct node_health_report_serde
       model::node_id id,
       node::local_state local_state,
       chunked_vector<topic_status> topics,
-      std::optional<drain_manager::drain_status> drain_status,
+      std::optional<cluster::drain_status> drain_status,
       struct node_liveness_report node_liveness_report)
       : id(id)
       , local_state(std::move(local_state))

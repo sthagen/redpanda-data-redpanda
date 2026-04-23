@@ -31,6 +31,7 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import time
 from typing import Optional, Any
 
@@ -239,6 +240,84 @@ class Minio:
         )
 
         await stream_until_eof(self.process, "minio", True, log_path)
+
+        return await self.process.wait()
+
+
+class IcebergRESTCatalog:
+    """Iceberg REST catalog backed by JDBC/SQLite, using Minio for S3 storage."""
+
+    def __init__(
+        self,
+        jar_path: Path,
+        directory: Path,
+        rp_config: dict[str, Any],
+        port: int,
+    ) -> None:
+        self.jar_path = jar_path
+        self.directory = directory
+        self.rp_cfg = rp_config
+        self.port = port
+        self.stopped = False
+        self.process: asyncio.subprocess.Process
+
+    def stop(self) -> None:
+        if not self.stopped:
+            self.stopped = True
+            send_signal(self.process, signal.SIGINT, "iceberg-rest-catalog")
+
+    async def run(self) -> int:
+        log_path = self.directory / "iceberg-rest-catalog.log"
+        db_path = self.directory / "catalog.db"
+
+        # NOTE: we'll only configure this when using MinIO from this file
+        # (assume no TLS).
+        s3_endpoint = f"http://{self.rp_cfg['cloud_storage_api_endpoint']}:{self.rp_cfg['cloud_storage_api_endpoint_port']}"
+        warehouse = f"s3://{self.rp_cfg['cloud_storage_bucket']}/iceberg"
+
+        env = {
+            **os.environ,
+            "REST_PORT": str(self.port),
+            "CATALOG_CATALOG__IMPL": "org.apache.iceberg.jdbc.JdbcCatalog",
+            "CATALOG_URI": f"jdbc:sqlite:file:{db_path}",
+            "CATALOG_JDBC_USER": "user",
+            "CATALOG_JDBC_PASSWORD": "password",
+            "CATALOG_WAREHOUSE": warehouse,
+            "CATALOG_IO__IMPL": "org.apache.iceberg.aws.s3.S3FileIO",
+            "CATALOG_S3_ENDPOINT": s3_endpoint,
+            "AWS_ACCESS_KEY_ID": self.rp_cfg["cloud_storage_access_key"],
+            "AWS_SECRET_ACCESS_KEY": self.rp_cfg["cloud_storage_secret_key"],
+            "AWS_REGION": self.rp_cfg["cloud_storage_region"],
+        }
+
+        # Write a log4j config that suppresses debug noise.
+        log4j_props = self.directory / "log4j.properties"
+        log4j_props.write_text(
+            "log4j.rootLogger=WARN, stdout\n"
+            "log4j.appender.stdout=org.apache.log4j.ConsoleAppender\n"
+            "log4j.appender.stdout.Target=System.out\n"
+            "log4j.appender.stdout.layout=org.apache.log4j.PatternLayout\n"
+            "log4j.appender.stdout.layout.ConversionPattern="
+            "%d{HH:mm:ss} %-5p [%c{1}] %m%n\n"
+        )
+        args = [
+            "java",
+            f"-Dlog4j.configuration=file:{log4j_props}",
+            "-jar",
+            str(self.jar_path),
+        ]
+        print(f"Running: {args}")
+        print(f"  warehouse: {warehouse}")
+        print(f"  s3_endpoint: {s3_endpoint}")
+        print(f"  port: {self.port}")
+        self.process = await asyncio.create_subprocess_exec(
+            *args,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        await stream_until_eof(self.process, "iceberg-catalog", True, log_path)
 
         return await self.process.wait()
 
@@ -663,6 +742,24 @@ async def main() -> None:
         help="whether to spin up an instance of minio and use Redpanda configuration presets for it",
         default=True,
     )
+    parser.add_argument(
+        "--use-iceberg-catalog",
+        action=argparse.BooleanOptionalAction,
+        help="spin up an Iceberg REST catalog backed by Minio (requires --use-minio)",
+        default=True,
+    )
+    parser.add_argument(
+        "--iceberg-catalog-jar",
+        type=Path,
+        help="path to iceberg-rest-catalog-all.jar",
+        default=None,
+    )
+    parser.add_argument(
+        "--iceberg-catalog-port",
+        type=int,
+        help="Iceberg REST catalog listening port",
+        default=8181,
+    )
     parser.add_argument("--rpk", type=Path, help="path to rpk executable", default=None)
     parser.add_argument(
         "--prometheus",
@@ -716,6 +813,17 @@ async def main() -> None:
 
     if args.directory is None:
         args.directory = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")) / "data"
+
+    if (
+        args.use_iceberg_catalog
+        and args.use_minio
+        and args.iceberg_catalog_jar
+        and not shutil.which("java")
+    ):
+        sys.exit(
+            "ERROR: --use-iceberg-catalog requires 'java' in PATH; "
+            "install a JDK or pass --no-use-iceberg-catalog"
+        )
 
     if (
         args.delete_data_dir
@@ -790,6 +898,12 @@ async def main() -> None:
             default_minio_rp_config = dataclasses.asdict(DefaultMinioRedpandaConfig())
             config_dict["redpanda"] = config_dict["redpanda"] | default_minio_rp_config
 
+        if args.use_iceberg_catalog and args.use_minio and args.iceberg_catalog_jar:
+            config_dict["redpanda"] = config_dict["redpanda"] | {
+                "iceberg_catalog_type": "rest",
+                "iceberg_rest_catalog_endpoint": f"http://{args.listen_address}:{args.iceberg_catalog_port}",
+            }
+
         if args.config_overrides:
             try:
                 config_overrides = json.loads(args.config_overrides)
@@ -825,6 +939,19 @@ async def main() -> None:
         )
         minio_task = asyncio.create_task(minio.run())
         await ensure_bucket_exists(node_metas[0].config_dict["redpanda"])
+
+    iceberg_catalog = None
+    iceberg_catalog_task = None
+    if args.use_iceberg_catalog and args.use_minio and args.iceberg_catalog_jar:
+        catalog_dir = args.directory / "iceberg-catalog"
+        catalog_dir.mkdir(parents=True, exist_ok=True)
+        iceberg_catalog = IcebergRESTCatalog(
+            args.iceberg_catalog_jar,
+            catalog_dir,
+            node_metas[0].config_dict["redpanda"],
+            port=args.iceberg_catalog_port,
+        )
+        iceberg_catalog_task = asyncio.create_task(iceberg_catalog.run())
 
     prometheus = None
     prometheus_task = None
@@ -893,6 +1020,8 @@ async def main() -> None:
     def stop() -> None:
         for n in nodes:
             n.stop()
+        if iceberg_catalog:
+            iceberg_catalog.stop()
         if minio:
             minio.stop()
         if prometheus:
@@ -929,6 +1058,7 @@ async def main() -> None:
 
     # Cleanup: if redpanda shuts down but we didn't request the shutdown
     # then let's go ahead and tear down other services too so we exit
+    await stop_and_wait("iceberg-catalog", iceberg_catalog, iceberg_catalog_task)
     await stop_and_wait("minio", minio, minio_task)
     await stop_and_wait("prometheus", prometheus, prometheus_task)
     await stop_and_wait("grafana", grafana, grafana_task)

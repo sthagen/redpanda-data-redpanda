@@ -15,6 +15,7 @@
 #include "cluster/controller_snapshot.h"
 #include "cluster/feature_manager.h"
 #include "cluster/security_frontend.h"
+#include "cluster/security_types.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"

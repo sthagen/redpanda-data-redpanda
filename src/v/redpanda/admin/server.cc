@@ -23,6 +23,8 @@
 #include "cluster/controller.h"
 #include "cluster/controller_api.h"
 #include "cluster/controller_stm.h"
+#include "cluster/drain_manager.h"
+#include "cluster/drain_status.h"
 #include "cluster/errc.h"
 #include "cluster/feature_manager.h"
 #include "cluster/fwd.h"
@@ -1154,8 +1156,7 @@ map_partition_results(std::vector<cluster::move_cancellation_result> results) {
 }
 
 ss::httpd::broker_json::maintenance_status fill_maintenance_status(
-  const cluster::broker_state& b_state,
-  const cluster::drain_manager::drain_status& s) {
+  const cluster::broker_state& b_state, const cluster::drain_status& s) {
     ss::httpd::broker_json::maintenance_status ret;
     ret.draining = b_state.get_maintenance_state()
                    == model::maintenance_state::active;

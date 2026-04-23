@@ -11,9 +11,9 @@
 
 #include "cluster/node_status_backend.h"
 
-#include "cluster/cluster_utils.h"
 #include "cluster/errc.h"
 #include "cluster/logger.h"
+#include "cluster/members_table.h"
 #include "cluster/node_status_rpc_service.h"
 #include "cluster/node_status_table.h"
 #include "config/node_config.h"
@@ -93,7 +93,7 @@ node_status_backend::node_status_backend(
 }
 
 ss::future<> node_status_backend::drain_notifications_queue() {
-    auto deferred = ss::defer([this] { _draining = false; });
+    auto deferred = ss::defer([this]() noexcept { _draining = false; });
     while (!_pending_member_notifications.empty()) {
         auto& notification = _pending_member_notifications.front();
         co_await handle_members_updated_notification(
@@ -286,7 +286,7 @@ result<node_status> node_status_backend::process_reply(
   model::node_id target_node_id, result<node_status_reply> reply) {
     vassert(ss::this_shard_id() == shard, "invoked on a wrong shard");
 
-    auto reset_timeout_counter = ss::defer([this, target_node_id]() {
+    auto reset_timeout_counter = ss::defer([this, target_node_id]() noexcept {
         auto iter = _discovered_peers.find(target_node_id);
         if (iter != _discovered_peers.end()) {
             iter->second.consecutive_timeouts = 0;

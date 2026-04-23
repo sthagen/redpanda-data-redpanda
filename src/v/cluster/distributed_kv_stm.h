@@ -13,9 +13,9 @@
 
 #include "base/outcome.h"
 #include "base/units.h"
+#include "cluster/distributed_kv_stm_types.h"
 #include "cluster/errc.h"
 #include "cluster/logger.h"
-#include "distributed_kv_stm_types.h"
 #include "hashing/murmur.h"
 #include "raft/consensus.h"
 #include "raft/persisted_stm.h"

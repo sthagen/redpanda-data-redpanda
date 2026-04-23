@@ -11,8 +11,10 @@
 
 #pragma once
 #include "cluster/cluster_link/fwd.h"
+#include "cluster/cluster_link_rpc_types.h"
 #include "cluster/controller_service.h"
 #include "cluster/fwd.h"
+#include "cluster/plugin_rpc_types.h"
 #include "cluster/types.h"
 #include "features/fwd.h"
 #include "rpc/fwd.h"

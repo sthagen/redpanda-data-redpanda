@@ -14,12 +14,12 @@
 #include "base/vassert.h"
 #include "cluster/errc.h"
 #include "cluster/logger.h"
+#include "cluster/snapshot.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record_batch_types.h"
 #include "raft/persisted_stm.h"
-#include "snapshot.h"
 #include "storage/log.h"
 
 #include <fmt/format.h>

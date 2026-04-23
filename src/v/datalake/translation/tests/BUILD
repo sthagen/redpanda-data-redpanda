@@ -81,6 +81,7 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         ":scheduler_fixture",
+        "//src/v/cluster:fwd",
         "//src/v/datalake/translation:partition_translator",
         "//src/v/datalake/translation:translator_deps",
         "//src/v/model",

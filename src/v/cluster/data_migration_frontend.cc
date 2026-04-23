@@ -11,9 +11,9 @@
 #include "cluster/data_migration_frontend.h"
 
 #include "cloud_storage/topic_mount_handler.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
 #include "cluster/controller_stm.h"
+#include "cluster/controller_utils.h"
 #include "cluster/data_migration_rpc_service.h"
 #include "cluster/data_migration_table.h"
 #include "cluster/data_migration_types.h"

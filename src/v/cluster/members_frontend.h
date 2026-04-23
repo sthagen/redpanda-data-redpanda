@@ -11,8 +11,8 @@
 
 #pragma once
 
-#include "cluster/cluster_utils.h"
 #include "cluster/controller_stm.h"
+#include "cluster/controller_utils.h"
 #include "cluster/fwd.h"
 #include "model/metadata.h"
 #include "model/timeout_clock.h"

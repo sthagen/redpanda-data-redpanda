@@ -10,8 +10,8 @@
 #include "cluster/bootstrap_service.h"
 
 #include "cluster/bootstrap_types.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/logger.h"
+#include "cluster/rpc_utils.h"
 #include "config/node_config.h"
 #include "features/feature_table.h"
 #include "storage/api.h"

@@ -8,7 +8,8 @@ redpanda_cc_gtest(
     memory = "256MiB",
     deps = [
         "//src/v/bytes",
-        "//src/v/cluster",
+        "//src/v/cluster:errc",
+        "//src/v/cluster:types",
         "//src/v/config",
         "//src/v/features",
         "//src/v/kafka/data:partition_proxy",

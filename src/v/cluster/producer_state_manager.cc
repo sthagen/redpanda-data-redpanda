@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
-#include "producer_state_manager.h"
+#include "cluster/producer_state_manager.h"
 
 #include "cluster/logger.h"
 #include "cluster/producer_state.h"

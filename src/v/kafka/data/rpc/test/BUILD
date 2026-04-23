@@ -28,6 +28,8 @@ redpanda_cc_gtest(
     memory = "256MiB",
     deps = [
         ":test_deps",
+        "//src/v/cluster:errc",
+        "//src/v/cluster:types",
         "//src/v/kafka/data/rpc",
         "//src/v/model",
         "//src/v/net",

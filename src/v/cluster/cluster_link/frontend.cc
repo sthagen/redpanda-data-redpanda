@@ -10,6 +10,7 @@
 
 #include "cluster/cluster_link/frontend.h"
 
+#include "cluster/cluster_link_rpc_types.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_stm.h"
 #include "cluster/errc.h"

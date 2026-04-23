@@ -7,6 +7,8 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import time
+
 from ducktape.tests.test import TestContext
 from typing import Any
 from ducktape.utils.util import wait_until
@@ -266,6 +268,99 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
         ct_utils.wait_until_l1_partition_size(
             self.admin, topic, partition, lambda size: size > 0
         )
+
+
+class EndToEndCloudTopicsStorageModeToggleTest(EndToEndCloudTopicsBase):
+    """Exercise toggling a topic between 'cloud' and 'tiered_cloud' storage
+    modes while a rate-limited producer is running, then validate the
+    resulting log with a sequential consumer."""
+
+    topics = (
+        TopicSpec(
+            name=EndToEndCloudTopicsBase.s3_topic_name,
+            partition_count=5,
+            replication_factor=3,
+        ),
+    )
+
+    def __init__(self, test_context, extra_rp_conf=None, env=None):
+        super(EndToEndCloudTopicsStorageModeToggleTest, self).__init__(
+            test_context, extra_rp_conf, env
+        )
+        self.msg_size = 16 * 1024
+        # Size the workload so the producer is still sending when the
+        # toggle window ends: at ~10 MB/s with 16 KiB messages this is
+        # ~400s of traffic, vs. a 5-minute toggle window.
+        self.msg_count = 250_000
+        self.rate_limit_bps = 10 * 1024 * 1024  # 10 MB/s
+        self.toggle_duration_sec = 5 * 60
+        self.toggle_interval_sec = 5
+
+    @cluster(num_nodes=5)
+    def test_toggle_storage_mode(self):
+        assert self.redpanda is not None
+        assert self.topic is not None
+        # Enable tiered cloud topics so we can flip into that mode. The
+        # topic is created in 'cloud' mode by the base setUp.
+        self.redpanda.set_feature_active("tiered_cloud_topics", True, timeout_sec=30)
+
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            self.topic,
+            msg_size=self.msg_size,
+            msg_count=self.msg_count,
+            rate_limit_bps=self.rate_limit_bps,
+            tolerate_failed_produce=True,
+        )
+        consumer = KgoVerifierSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            self.topic,
+            self.msg_size,
+            loop=False,
+            producer=producer,
+        )
+        try:
+            producer.start()
+
+            start = time.time()
+            mode = TopicSpec.STORAGE_MODE_CLOUD
+            while time.time() - start < self.toggle_duration_sec:
+                time.sleep(self.toggle_interval_sec)
+                mode = (
+                    TopicSpec.STORAGE_MODE_TIERED_CLOUD
+                    if mode == TopicSpec.STORAGE_MODE_CLOUD
+                    else TopicSpec.STORAGE_MODE_CLOUD
+                )
+                self.rpk.alter_topic_config(
+                    self.topic, TopicSpec.PROPERTY_STORAGE_MODE, mode
+                )
+                self.logger.info(
+                    f"switched storage mode of {self.topic} to {mode} "
+                    f"(acked={producer.produce_status.acked})"
+                )
+
+            # Let the producer run to completion so the consumer has a
+            # natural stopping point.
+            producer.wait(timeout_sec=10 * 60)
+            self.logger.info(
+                f"producer finished with acked={producer.produce_status.acked}, "
+                f"bad_offsets={producer.produce_status.bad_offsets}"
+            )
+
+            # Passing the producer to the consumer makes wait() block
+            # until the consumer has read every produced offset and
+            # validates reads internally.
+            consumer.start(clean=False)
+            consumer.wait(timeout_sec=10 * 60)
+
+            self.wait_until_all_reconciled()
+        finally:
+            producer.stop()
+            consumer.stop()
+            producer.free()
+            consumer.free()
 
 
 class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):

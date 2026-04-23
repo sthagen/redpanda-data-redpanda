@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
-#include "topic_metrics_watcher.h"
+#include "cluster/topic_metrics_watcher.h"
 
 #include "cluster/logger.h"
 #include "metrics/metrics_registry.h"

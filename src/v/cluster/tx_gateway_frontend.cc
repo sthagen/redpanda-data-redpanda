@@ -24,13 +24,13 @@
 #include "cluster/tx_gateway_service.h"
 #include "cluster/tx_helpers.h"
 #include "cluster/tx_topic_manager.h"
+#include "cluster/types.h"
 #include "config/configuration.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "rpc/connection_cache.h"
-#include "types.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>

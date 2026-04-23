@@ -10,6 +10,7 @@
 #include "cluster/types.h"
 
 #include "base/format_to.h"
+#include "cluster/security_types.h"
 #include "cluster/topic_properties.h"
 #include "model/compression.h"
 #include "model/fundamental.h"

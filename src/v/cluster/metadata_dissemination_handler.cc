@@ -9,6 +9,7 @@
 
 #include "cluster/metadata_dissemination_handler.h"
 
+#include "base/likely.h"
 #include "cluster/logger.h"
 #include "cluster/metadata_dissemination_types.h"
 #include "cluster/partition_leaders_table.h"

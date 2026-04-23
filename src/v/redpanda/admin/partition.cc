@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "cluster/cluster_utils.h"
 #include "cluster/controller.h"
 #include "cluster/controller_api.h"
 #include "cluster/metadata_cache.h"

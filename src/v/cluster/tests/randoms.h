@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "cluster/drain_status.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/partition_balancer_state.h"
 #include "cluster/partition_balancer_types.h"
@@ -72,8 +73,8 @@ inline topic_status random_topic_status() {
     return {model::random_topic_namespace(), std::move(partitions)};
 }
 
-inline drain_manager::drain_status random_drain_status() {
-    return drain_manager::drain_status{
+inline drain_status random_drain_status() {
+    return drain_status{
       {},
       tests::random_bool(),
       tests::random_bool(),

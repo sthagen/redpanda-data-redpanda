@@ -10,6 +10,7 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
         "//src/v/cluster",
+        "//src/v/cluster:commands",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -27,8 +28,12 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_lib",
-        "//src/v/cluster",
+        "//src/v/cluster:cluster_link_rpc_types",
+        "//src/v/cluster:cluster_link_table",
+        "//src/v/cluster:commands",
+        "//src/v/cluster:controller_snapshot",
         "//src/v/cluster:table_utils",
+        "//src/v/cluster:types",
         "//src/v/cluster_link/model",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
@@ -45,6 +50,16 @@ redpanda_cc_gtest(
     deps = [
         ":test_lib",
         "//src/v/cluster",
+        "//src/v/cluster:client_quota_backend",
+        "//src/v/cluster:cluster_link_table",
+        "//src/v/cluster:cluster_link_types",
+        "//src/v/cluster:cluster_recovery_table",
+        "//src/v/cluster:commands",
+        "//src/v/cluster:controller_log_limiter",
+        "//src/v/cluster:data_migration_table",
+        "//src/v/cluster:feature_backend",
+        "//src/v/cluster:notification",
+        "//src/v/cluster:plugin_backend",
         "//src/v/model",
         "//src/v/raft",
         "//src/v/test_utils:gtest",

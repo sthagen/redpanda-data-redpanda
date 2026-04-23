@@ -11,14 +11,15 @@
 
 #include "cluster/security_frontend.h"
 
-#include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
 #include "cluster/controller.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_stm.h"
+#include "cluster/controller_utils.h"
 #include "cluster/fwd.h"
 #include "cluster/logger.h"
 #include "cluster/partition_leaders_table.h"
+#include "cluster/security_types.h"
 #include "cluster/types.h"
 #include "features/enterprise_feature_messages.h"
 #include "model/errc.h"

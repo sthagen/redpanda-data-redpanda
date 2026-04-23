@@ -13,11 +13,12 @@
 
 #include "base/format_to.h"
 #include "cluster/cluster_utils.h"
+#include "cluster/controller_utils.h"
 #include "cluster/logger.h"
 #include "cluster/topic_table.h"
+#include "cluster/types.h"
 #include "metrics/prometheus_sanitize.h"
 #include "ssx/async_algorithm.h"
-#include "types.h"
 
 #include <seastar/util/defer.hh>
 

@@ -7,9 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "client_quota_store.h"
+#include "cluster/client_quota_store.h"
 
-#include "client_quota_serde.h"
+#include "cluster/client_quota_serde.h"
 
 namespace cluster::client_quota {
 

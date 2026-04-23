@@ -12,11 +12,11 @@
 
 #include "base/vassert.h"
 #include "cluster/data_migration_types.h"
+#include "cluster/errc.h"
+#include "cluster/logger.h"
 #include "cluster_utils.h"
 #include "container/chunked_vector.h"
-#include "errc.h"
 #include "kafka/protocol/types.h"
-#include "logger.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "partition_leaders_table.h"

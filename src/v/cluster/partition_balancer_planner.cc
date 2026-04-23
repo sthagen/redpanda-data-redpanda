@@ -23,6 +23,7 @@
 #include "cluster/scheduling/constraints.h"
 #include "cluster/scheduling/partition_allocator.h"
 #include "cluster/scheduling/types.h"
+#include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"

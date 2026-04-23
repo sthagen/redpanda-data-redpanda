@@ -81,7 +81,7 @@ health_monitor_frontend::is_alive(model::node_id id) const {
     return alive(
       status->last_seen + _alive_timeout() >= model::timeout_clock::now());
 }
-ss::future<result<std::optional<cluster::drain_manager::drain_status>>>
+ss::future<result<std::optional<cluster::drain_status>>>
 health_monitor_frontend::get_node_drain_status(
   model::node_id node_id, model::timeout_clock::time_point deadline) {
     return dispatch_to_backend([node_id, deadline](health_monitor_backend& be) {

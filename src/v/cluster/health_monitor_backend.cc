@@ -16,6 +16,7 @@
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cluster/cloud_storage_size_reducer.h"
 #include "cluster/controller_service.h"
+#include "cluster/drain_manager.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/health_monitor_types.h"
@@ -1081,7 +1082,7 @@ std::chrono::milliseconds health_monitor_backend::max_metadata_age() {
     return config::shard_local_cfg().health_monitor_max_metadata_age();
 }
 
-ss::future<result<std::optional<cluster::drain_manager::drain_status>>>
+ss::future<result<std::optional<cluster::drain_status>>>
 health_monitor_backend::get_node_drain_status(
   model::node_id node_id, model::timeout_clock::time_point deadline) {
     if (node_id == _self) {

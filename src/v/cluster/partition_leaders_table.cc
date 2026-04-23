@@ -9,6 +9,7 @@
 
 #include "cluster/partition_leaders_table.h"
 
+#include "absl/container/btree_map.h"
 #include "cluster/logger.h"
 #include "cluster/topic_table.h"
 #include "model/fundamental.h"

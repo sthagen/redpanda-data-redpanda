@@ -11,6 +11,7 @@
 #include "cluster_link/tests/deps.h"
 
 #include "cluster/cluster_link/tests/utils.h"
+#include "cluster/cluster_link_rpc_types.h"
 #include "cluster/types.h"
 #include "cluster_link/types.h"
 

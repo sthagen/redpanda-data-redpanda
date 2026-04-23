@@ -13,10 +13,10 @@
 #include "base/outcome.h"
 #include "cluster/data_migration_group_proxy.h"
 #include "cluster/data_migration_types.h"
+#include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/notification.h"
 #include "container/chunked_hash_map.h"
-#include "errc.h"
 #include "model/fundamental.h"
 
 #include <seastar/core/abort_source.hh>

@@ -10,12 +10,12 @@
 #include "kafka/server/group_manager.h"
 
 #include "cluster/cloud_metadata/error_outcome.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/logger.h"
 #include "cluster/offsets_snapshot.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"
+#include "cluster/rpc_utils.h"
 #include "cluster/simple_batch_builder.h"
 #include "cluster/topic_table.h"
 #include "config/configuration.h"

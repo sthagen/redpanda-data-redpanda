@@ -18,6 +18,7 @@
 #include "cluster/fwd.h"
 #include "cluster/logger.h"
 #include "cluster/members_manager.h"
+#include "cluster/security_types.h"
 #include "cluster/types.h"
 #include "features/feature_table.h"
 #include "security/credential_store.h"

@@ -1,6 +1,7 @@
 #include "cluster/members_backend.h"
 
 #include "base/format_to.h"
+#include "cluster/cluster_utils.h"
 #include "cluster/controller_api.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"

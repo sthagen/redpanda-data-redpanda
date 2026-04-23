@@ -10,7 +10,7 @@ redpanda_cc_gtest(
     memory = "64MiB",
     deps = [
         "//src/v/base",
-        "//src/v/cluster",
+        "//src/v/cluster:errc",
         "//src/v/config",
         "//src/v/model",
         "//src/v/random:generators",

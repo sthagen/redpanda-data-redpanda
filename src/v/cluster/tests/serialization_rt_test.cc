@@ -11,9 +11,11 @@
 #include "cluster/commands.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/metadata_dissemination_types.h"
+#include "cluster/security_types.h"
 #include "cluster/tests/randoms.h"
 #include "cluster/tests/topic_properties_generator.h"
 #include "cluster/tx_protocol_types.h"
+#include "cluster/types.h"
 #include "container/chunked_vector.h"
 #include "model/compression.h"
 #include "model/fundamental.h"
@@ -686,8 +688,8 @@ cluster::partitions_filter random_partitions_filter() {
     return {.namespaces = ret};
 }
 
-cluster::drain_manager::drain_status random_drain_status() {
-    cluster::drain_manager::drain_status data{
+cluster::drain_status random_drain_status() {
+    cluster::drain_status data{
       .finished = tests::random_bool(),
       .errors = tests::random_bool(),
     };

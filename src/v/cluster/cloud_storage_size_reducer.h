@@ -10,8 +10,8 @@
 
 #pragma once
 
-#include "cluster/cluster_utils.h"
 #include "cluster/fwd.h"
+#include "cluster/rpc_utils.h"
 #include "cluster/topic_table_partition_generator.h"
 #include "cluster/types.h"
 #include "config/node_config.h"

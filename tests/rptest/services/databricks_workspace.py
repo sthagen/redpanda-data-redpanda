@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Set
@@ -57,10 +58,21 @@ class DatabricksWorkspace(Service):
         self._cleanup_dbx_locations()
         super().stop(**kwargs)
 
-    def create_catalog(self, bucket: str) -> "DatabricksCatalogInfo":
+    def create_catalog(
+        self, bucket: str, name_prefix: str = "panda"
+    ) -> "DatabricksCatalogInfo":
         """
         Creates a brand new catalog in the databricks workspace.
+
+        name_prefix controls the catalog name prefix, e.g. "panda" produces
+        "panda-catalog-{uuid}" and "oxla" produces "oxla-catalog-{uuid}".
         """
+
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name_prefix):
+            raise ValueError(
+                f"name_prefix must be non-empty and contain only alphanumeric "
+                f"characters, hyphens, or underscores; got: {name_prefix!r}"
+            )
 
         self._location_names.add(bucket)
 
@@ -76,7 +88,7 @@ class DatabricksWorkspace(Service):
             self.logger.error(f"Failed to create external location: {str(e)}")
             raise
 
-        requested_catalog_name = f"panda-catalog-{uuid.uuid1()}"
+        requested_catalog_name = f"{name_prefix}-catalog-{uuid.uuid1()}"
         self._catalog_names.add(requested_catalog_name)
 
         catalog_info: CatalogInfo = self._client.catalogs.create(

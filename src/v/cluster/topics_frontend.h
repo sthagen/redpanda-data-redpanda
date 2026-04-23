@@ -15,6 +15,7 @@
 #include "cloud_storage/fwd.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
+#include "cluster/partition_balancer_types.h"
 #include "cluster/scheduling/types.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
@@ -22,7 +23,6 @@
 #include "features/fwd.h"
 #include "model/metadata.h"
 #include "model/timeout_clock.h"
-#include "partition_balancer_types.h"
 #include "rpc/fwd.h"
 #include "storage/api.h"
 

@@ -138,6 +138,7 @@ redpanda_cc_library(
         ":parsing",
         "//src/v/base",
         "//src/v/bytes:iobuf_parser",
+        "//src/v/cluster:fwd",
         "//src/v/config",
         "//src/v/hashing:jump_consistent",
         "//src/v/hashing:xx",

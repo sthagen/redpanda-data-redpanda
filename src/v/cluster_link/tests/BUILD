@@ -10,7 +10,9 @@ redpanda_test_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/cluster",
+        "//src/v/cluster:cluster_link_rpc_types",
+        "//src/v/cluster:cluster_link_table",
+        "//src/v/cluster:types",
         "//src/v/cluster/cluster_link/tests:test_lib",
         "//src/v/cluster_link:impl",
         "//src/v/cluster_link:utils",
@@ -33,7 +35,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_deps",
-        "//src/v/cluster",
+        "//src/v/cluster:cluster_link_table",
         "//src/v/cluster/cluster_link/tests:test_lib",
         "//src/v/cluster_link:impl",
         "//src/v/cluster_link/replication/tests:deps_test_impl",
@@ -81,6 +83,8 @@ redpanda_cc_gtest(
     flaky = True,
     deps = [
         ":test_deps",
+        "//src/v/cluster:cluster_link_table",
+        "//src/v/cluster:fwd",
         "//src/v/cluster_link:impl",
         "//src/v/cluster_link/model",
         "//src/v/kafka/data/rpc",
@@ -113,6 +117,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_deps",
+        "//src/v/cluster:cluster_link_table",
         "//src/v/cluster_link:source_topic_syncer",
         "//src/v/cluster_link/model",
         "//src/v/kafka/server:topic_config_utils",
@@ -129,6 +134,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_deps",
+        "//src/v/cluster:cluster_link_table",
         "//src/v/cluster_link:impl",
         "//src/v/config",
         "//src/v/test_utils:gtest",
@@ -144,6 +150,8 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_deps",
+        "//src/v/cluster:cluster_link_table",
+        "//src/v/cluster:fwd",
         "//src/v/cluster_link:group_mirroring_task",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
@@ -158,6 +166,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_deps",
+        "//src/v/cluster:cluster_link_table",
         "//src/v/cluster_link:security_migrator",
         "//src/v/kafka/server:security",
         "//src/v/security",
@@ -174,6 +183,15 @@ redpanda_cc_gtest(
     ],
     cpu = 1,
     deps = [
+        "//src/v/cluster:fwd",
+        "//src/v/cluster:inventory_service",
+        "//src/v/cluster:leader_balancer_strategy",
+        "//src/v/cluster:node_status_backend",
+        "//src/v/cluster:partition_properties_stm",
+        "//src/v/cluster:self_test",
+        "//src/v/cluster:topic_metrics_watcher",
+        "//src/v/cluster:topic_table",
+        "//src/v/cluster:tx_manager_migrator_rpc",
         "//src/v/cluster_link",
         "//src/v/cluster_link/replication:deps",
         "//src/v/cluster_link/replication:mux_remote_consumer",

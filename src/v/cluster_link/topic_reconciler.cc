@@ -11,6 +11,7 @@
 
 #include "cluster_link/topic_reconciler.h"
 
+#include "cluster/cluster_link_rpc_types.h"
 #include "cluster/types.h"
 #include "cluster_link/logger.h"
 #include "cluster_link/model/types.h"

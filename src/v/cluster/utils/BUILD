@@ -26,6 +26,12 @@ redpanda_cc_library(
     deps = [
         ":partition_change_notifier_api",
         "//src/v/cluster",
+        "//src/v/cluster:errc",
+        "//src/v/cluster:fwd",
+        "//src/v/cluster:ntp_callbacks",
+        "//src/v/cluster:partition_properties_stm",
+        "//src/v/cluster:state_machine_registry",
+        "//src/v/cluster:topic_table",
         "//src/v/container:chunked_hash_map",
         "//src/v/raft",
         "@seastar",

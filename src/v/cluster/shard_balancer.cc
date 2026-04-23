@@ -11,14 +11,14 @@
 
 #include "cluster/shard_balancer.h"
 
-#include "cluster/cluster_utils.h"
+#include "cluster/controller_utils.h"
 #include "cluster/logger.h"
+#include "cluster/types.h"
 #include "config/node_config.h"
 #include "features/enterprise_feature_messages.h"
 #include "features/enterprise_features.h"
 #include "random/generators.h"
 #include "ssx/async_algorithm.h"
-#include "types.h"
 
 namespace cluster {
 

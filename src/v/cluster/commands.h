@@ -12,7 +12,9 @@
 #pragma once
 #include "bytes/iobuf_parser.h"
 #include "cluster/client_quota_serde.h"
+#include "cluster/cluster_link_rpc_types.h"
 #include "cluster/data_migration_types.h"
+#include "cluster/security_types.h"
 #include "cluster/simple_batch_builder.h"
 #include "cluster/types.h"
 #include "cluster_link/model/types.h"

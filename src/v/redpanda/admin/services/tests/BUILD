@@ -8,6 +8,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//proto/redpanda/core/admin/v2:security_redpanda_proto",
+        "//src/v/cluster:fwd",
         "//src/v/redpanda/admin/services:security",
         "//src/v/security",
         "//src/v/serde/protobuf:rpc",

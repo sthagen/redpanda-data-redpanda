@@ -13,10 +13,10 @@
 #include "base/outcome.h"
 #include "cluster/data_migration_group_proxy.h"
 #include "cluster/data_migration_rpc_service.h"
+#include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/leader_router.h"
 #include "cluster/offsets_snapshot.h"
-#include "errc.h"
 #include "model/fundamental.h"
 
 #include <seastar/core/abort_source.hh>

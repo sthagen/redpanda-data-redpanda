@@ -17,8 +17,11 @@
 #include "cluster/rm_stm.h"
 #include "cluster/shard_table.h"
 #include "cluster/tx_gateway_service.h"
+#include "cluster/types.h"
 #include "config/configuration.h"
 #include "rpc/connection_cache.h"
+
+#include <seastar/core/coroutine.hh>
 
 namespace cluster {
 using namespace std::chrono_literals;

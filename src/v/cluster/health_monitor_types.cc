@@ -11,9 +11,11 @@
 #include "cluster/health_monitor_types.h"
 
 #include "base/format_to.h"
-#include "cluster/drain_manager.h"
+#include "cluster/drain_status.h"
+#include "cluster/errc.h"
 #include "cluster/node/types.h"
-#include "health_monitor_types.h"
+#include "features/feature_table.h"
+#include "model/adl_serde.h"
 #include "model/metadata.h"
 
 #include <seastar/core/sharded.hh>
@@ -80,7 +82,7 @@ node_health_report::node_health_report(
   model::node_id id,
   node::local_state local_state,
   chunked_vector<topic_status> topics_vec,
-  std::optional<drain_manager::drain_status> drain_status,
+  std::optional<cluster::drain_status> drain_status,
   struct node_liveness_report node_liveness_report)
   : id(id)
   , local_state(std::move(local_state))

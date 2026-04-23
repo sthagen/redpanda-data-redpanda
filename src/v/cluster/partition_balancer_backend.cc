@@ -21,6 +21,7 @@
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "config/node_config.h"
 #include "config/property.h"
 #include "features/enterprise_feature_messages.h"
 #include "features/enterprise_features.h"

@@ -1,0 +1,21 @@
+diff --git a/util/mkbuildinf.pl b/util/mkbuildinf.pl
+index abcdef1..1234567 100644
+--- a/util/mkbuildinf.pl
++++ b/util/mkbuildinf.pl
+@@ -11,6 +11,16 @@ use warnings;
+ my $platform = pop @ARGV;
+ my $cflags = join(' ', @ARGV);
+ $cflags =~ s(\\)(\\\\)g;
++
++# Strip sandbox/build-root absolute paths so the output is reproducible
++# across different Bazel output bases and sandbox instances. Note: the
++# cflags modified here are only embedded as a diagnostic string (shown by
++# `openssl version -a`), not used for actual compilation.
++my $ebr = $ENV{'EXT_BUILD_ROOT'} // '';
++if ($ebr ne '') {
++    $cflags =~ s/\Q$ebr\E\/?/./g;
++}
++
+ $cflags = "compiler: $cflags";
+
+ # Use the value of the envvar SOURCE_DATE_EPOCH, even if it's

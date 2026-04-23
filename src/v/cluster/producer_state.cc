@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
-#include "producer_state.h"
+#include "cluster/producer_state.h"
 
 #include "base/format_to.h"
 #include "base/vassert.h"

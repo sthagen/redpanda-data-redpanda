@@ -16,6 +16,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/cluster:fwd",
         "//src/v/model",
         "@seastar",
     ],

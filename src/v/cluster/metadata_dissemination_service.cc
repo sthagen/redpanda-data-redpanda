@@ -11,7 +11,6 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "base/vlog.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/logger.h"
@@ -20,6 +19,7 @@
 #include "cluster/metadata_dissemination_types.h"
 #include "cluster/partition_leaders_table.h"
 #include "cluster/partition_manager.h"
+#include "cluster/rpc_utils.h"
 #include "cluster/topic_table.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"

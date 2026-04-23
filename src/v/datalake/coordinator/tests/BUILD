@@ -30,7 +30,8 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         ":state_test_utils",
-        "//src/v/cluster",
+        "//src/v/cluster:data_migrated_resources",
+        "//src/v/cluster:topic_table",
         "//src/v/config",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:logger",
@@ -143,7 +144,8 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         ":state_test_utils",
-        "//src/v/cluster",
+        "//src/v/cluster:data_migrated_resources",
+        "//src/v/cluster:topic_table",
         "//src/v/config",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:record_schema_resolver",

@@ -13,7 +13,9 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/cluster:distributed_kv_stm",
         "//src/v/cluster:state_machine_registry",
+        "//src/v/cluster:topic_table",
         "//src/v/model",
         "@seastar",
     ],

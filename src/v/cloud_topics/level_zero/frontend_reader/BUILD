@@ -30,6 +30,12 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
+        "//src/v/cluster:fwd",
+        "//src/v/cluster:members_table",
+        "//src/v/cluster:partition_leaders_table",
+        "//src/v/cluster:partition_properties_stm",
+        "//src/v/cluster:state_machine_registry",
+        "//src/v/cluster:topic_table",
         "//src/v/model",
         "//src/v/storage",
         "//src/v/utils:prefix_logger",

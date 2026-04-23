@@ -49,6 +49,9 @@ redpanda_cc_library(
     deps = [
         "//proto/redpanda/core/admin/v2:shadow_link_redpanda_proto",
         "//src/v/cluster",
+        "//src/v/cluster:fwd",
+        "//src/v/cluster:members_table",
+        "//src/v/cluster:partition_leaders_table",
         "//src/v/cluster_link:fwd",
         "//src/v/cluster_link/model",
         "//src/v/redpanda/admin/proxy:client",

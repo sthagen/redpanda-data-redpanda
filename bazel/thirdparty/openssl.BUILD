@@ -67,6 +67,10 @@ configure_make(
     }),
     env = {
         "OPENSSL_BUILD_JOBS": "$(BUILD_JOBS)",
+        # Pin the build timestamp to epoch 0 for reproducible builds.
+        # Without this, mkbuildinf.pl embeds the current time into
+        # crypto/buildinf.h.
+        "SOURCE_DATE_EPOCH": "0",
     },
     lib_source = ":srcs",
     out_binaries = [

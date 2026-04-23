@@ -49,6 +49,7 @@ class DatalakeServices:
         ],
         catalog_type: CatalogType = CatalogType.REST_JDBC,
         warehouse_name: str = CatalogService.DEFAULT_WAREHOUSE_NAME,
+        catalog_name_prefix: str = "panda",
     ):
         self.test_ctx = test_ctx
         self.redpanda = redpanda
@@ -65,6 +66,7 @@ class DatalakeServices:
         self.query_engines: list[QueryEngineBase] = []
 
         self._catalog_type = catalog_type
+        self._catalog_name_prefix = catalog_name_prefix
         self._cloud_storage_bucket = self.redpanda.si_settings.cloud_storage_bucket
 
     def setUp(self):
@@ -411,7 +413,10 @@ class DatalakeServices:
             )
 
             dbx_workspace = DatabricksWorkspace(self.test_ctx)
-            dbx_catalog_info = dbx_workspace.create_catalog(self._cloud_storage_bucket)
+            dbx_catalog_info = dbx_workspace.create_catalog(
+                self._cloud_storage_bucket,
+                name_prefix=self._catalog_name_prefix,
+            )
 
             # Override.
             self.warehouse_name = dbx_catalog_info.name

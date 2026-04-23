@@ -10,8 +10,8 @@
 #pragma once
 #include "base/seastarx.h"
 #include "cluster/cloud_metadata/error_outcome.h"
-#include "cluster/cluster_utils.h"
 #include "cluster/fwd.h"
+#include "cluster/rpc_utils.h"
 #include "config/node_config.h"
 #include "model/record.h"
 #include "rpc/connection_cache.h"

@@ -8,7 +8,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "client_quota_serde.h"
+#include "cluster/client_quota_serde.h"
 
 #include "base/format_to.h"
 #include "serde/rw/envelope.h"

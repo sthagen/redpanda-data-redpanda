@@ -33,9 +33,17 @@ configure_make(
         # Build a static library
         "--disable-shared",
         "--enable-static",
+
+        # Use a fixed runstatedir so the autoconf-derived path doesn't embed
+        # the sandbox directory into compiled objects.
+        "--runstatedir=/var/run/hwloc",
     ],
     env = {
         "HWLOC_BUILD_JOBS": "$(BUILD_JOBS)",
+        # Remap the sandbox root in __FILE__ expansions so that inlined
+        # headers (helper.h, plugins.h) produce deterministic assert strings.
+        "CFLAGS": "-ffile-prefix-map=$$EXT_BUILD_ROOT=.",
+        "CXXFLAGS": "-ffile-prefix-map=$$EXT_BUILD_ROOT=.",
     },
     lib_source = ":srcs",
     out_binaries = [

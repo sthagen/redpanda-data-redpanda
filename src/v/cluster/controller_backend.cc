@@ -17,6 +17,7 @@
 #include "base/vassert.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/cluster_utils.h"
+#include "cluster/controller_utils.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "cluster/logger.h"
@@ -38,6 +39,7 @@
 #include "raft/group_configuration.h"
 #include "ssx/event.h"
 #include "ssx/future-util.h"
+#include "storage/offset_translator.h"
 #include "types.h"
 
 #include <seastar/core/abort_source.hh>

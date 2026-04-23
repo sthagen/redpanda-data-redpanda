@@ -12,11 +12,11 @@
 
 #include "cloud_storage/remote.h"
 #include "cluster/node/local_monitor.h"
+#include "cluster/self_test/cloudcheck.h"
+#include "cluster/self_test/diskcheck.h"
+#include "cluster/self_test/netcheck.h"
+#include "cluster/self_test_rpc_types.h"
 #include "rpc/connection_cache.h"
-#include "self_test/cloudcheck.h"
-#include "self_test/diskcheck.h"
-#include "self_test/netcheck.h"
-#include "self_test_rpc_types.h"
 #include "ssx/mutex.h"
 #include "utils/uuid.h"
 

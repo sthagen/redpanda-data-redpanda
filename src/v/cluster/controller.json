@@ -4,7 +4,10 @@
     "includes": [
         "cluster/types.h",
         "cluster/health_monitor_types.h",
-        "cluster/client_quota_serde.h"
+        "cluster/client_quota_serde.h",
+        "cluster/plugin_rpc_types.h",
+        "cluster/cluster_link_rpc_types.h",
+        "cluster/security_types.h"
     ],
     "methods": [
         {

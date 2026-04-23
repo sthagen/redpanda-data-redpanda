@@ -65,7 +65,7 @@ public:
     /**
      * Return drain status for a given node.
      */
-    ss::future<result<std::optional<cluster::drain_manager::drain_status>>>
+    ss::future<result<std::optional<cluster::drain_status>>>
     get_node_drain_status(
       model::node_id node_id, model::timeout_clock::time_point deadline);
 

@@ -9,7 +9,6 @@
 
 #include "kafka/server/handlers/create_topics.h"
 
-#include "cluster/cluster_utils.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"

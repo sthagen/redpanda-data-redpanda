@@ -11,6 +11,7 @@
 #include "cluster/cluster_link/table.h"
 #include "cluster/cluster_link/table_utils.h"
 #include "cluster/cluster_link/tests/utils.h"
+#include "cluster/cluster_link_rpc_types.h"
 #include "cluster/commands.h"
 #include "cluster/controller_snapshot.h"
 #include "cluster/types.h"

@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0
 
 #include "cluster/cluster_utils.h"
+#include "cluster/controller_utils.h"
 #include "cluster/members_table.h"
+#include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "model/metadata.h"
 #include "utils/unresolved_address.h"

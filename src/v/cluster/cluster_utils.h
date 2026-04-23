@@ -10,23 +10,21 @@
  */
 
 #pragma once
-#include "cluster/controller_stm.h"
 #include "cluster/errc.h"
-#include "cluster/fwd.h"
 #include "cluster/members_table.h"
 #include "cluster/types.h"
-#include "config/node_config.h"
-#include "config/tls_config.h"
-#include "rpc/connection_cache.h"
-#include "rpc/rpc_utils.h"
-#include "rpc/types.h"
+#include "model/metadata.h"
+#include "raft/fundamental.h"
+#include "utils/functional.h"
 
-#include <seastar/core/sharded.hh>
+#include <seastar/core/sstring.hh>
 
+#include <algorithm>
 #include <concepts>
+#include <optional>
 #include <ranges>
 #include <system_error>
-#include <utility>
+#include <vector>
 
 namespace detail {
 
@@ -69,14 +67,7 @@ const model::topic_namespace& extract_tp_ns(const T& t) {
 
 } // namespace detail
 
-namespace config {
-struct configuration;
-}
-
 namespace cluster {
-
-class metadata_cache;
-class partition;
 
 /// Creates the same topic_result for all requests
 template<template<typename...> class Container = std::vector>
@@ -88,118 +79,9 @@ Container<topic_result> make_error_topic_results(
       });
 }
 
-ss::future<> update_broker_client(
-  model::node_id,
-  ss::sharded<rpc::connection_cache>&,
-  model::node_id node,
-  net::unresolved_address addr,
-  config::tls_config);
-
-ss::future<> remove_broker_client(
-  model::node_id, ss::sharded<rpc::connection_cache>&, model::node_id);
-
-template<typename Proto, typename Func>
-requires requires(Func&& f, Proto c) { f(c); }
-auto with_client(
-  model::node_id self,
-  ss::sharded<rpc::connection_cache>& cache,
-  model::node_id id,
-  net::unresolved_address addr,
-  config::tls_config tls_config,
-  rpc::clock_type::duration connection_timeout,
-  Func&& f) {
-    return update_broker_client(
-             self, cache, id, std::move(addr), std::move(tls_config))
-      .then([id,
-             self,
-             &cache,
-             f = std::forward<Func>(f),
-             connection_timeout]() mutable {
-          return cache.local().with_node_client<Proto, Func>(
-            self,
-            ss::this_shard_id(),
-            id,
-            connection_timeout,
-            std::forward<Func>(f));
-      });
-}
-
-/// Creates current broker instance using its configuration.
-model::broker make_self_broker(const config::node_config& node_cfg);
-
-template<typename Proto, typename Func>
-requires requires(Func&& f, Proto c) { f(c); }
-auto do_with_client_one_shot(
-  net::unresolved_address addr,
-  config::tls_config tls_config,
-  rpc::clock_type::duration connection_timeout,
-  rpc::transport_version v,
-  Func&& f) {
-    return rpc::maybe_build_reloadable_certificate_credentials(
-             std::move(tls_config))
-      .then([v,
-             f = std::forward<Func>(f),
-             connection_timeout,
-             addr = std::move(addr)](
-              ss::shared_ptr<ss::tls::certificate_credentials>&& cert) mutable {
-          auto transport = ss::make_lw_shared<rpc::transport>(
-            rpc::transport_configuration{
-              .server_addr = std::move(addr),
-              .credentials = std::move(cert),
-              .disable_metrics = net::metrics_disabled(true),
-              .version = v});
-
-          return transport->connect(connection_timeout)
-            .then([transport, f = std::forward<Func>(f)]() mutable {
-                return ss::futurize_invoke(
-                  std::forward<Func>(f), Proto(transport));
-            })
-            .finally([transport] {
-                transport->shutdown();
-                return transport->stop().finally([transport] {});
-            });
-      });
-}
-
 bool are_replica_sets_equal(
   const std::vector<model::broker_shard>&,
   const std::vector<model::broker_shard>&);
-
-template<typename Cmd>
-ss::future<std::error_code> replicate_and_wait(
-  ss::sharded<controller_stm>& stm,
-  ss::sharded<ss::abort_source>& as,
-  Cmd&& cmd,
-  model::timeout_clock::time_point timeout,
-  std::optional<model::term_id> term = std::nullopt) {
-    return stm.invoke_on(
-      controller_stm_shard,
-      [cmd = std::forward<Cmd>(cmd), term, &as, timeout](
-        controller_stm& stm) mutable {
-          return do_replicate_and_wait(
-            stm, as.local(), std::forward<Cmd>(cmd), timeout, term);
-      });
-}
-
-template<typename Cmd>
-ss::future<std::error_code> do_replicate_and_wait(
-  controller_stm& stm,
-  ss::abort_source& as,
-  Cmd&& cmd,
-  model::timeout_clock::time_point timeout,
-  std::optional<model::term_id> term = std::nullopt) {
-    vassert(
-      ss::this_shard_id() == controller_stm_shard,
-      "do_replicate_and_wait must be called on controller_stm_shard");
-
-    if (!stm.throttle<Cmd>()) {
-        return ss::make_ready_future<std::error_code>(
-          errc::throttling_quota_exceeded);
-    }
-
-    auto b = serde_serialize_cmd(std::forward<Cmd>(cmd));
-    return stm.replicate_and_wait(std::move(b), timeout, as, term);
-}
 
 custom_assignable_topic_configuration_vector
   without_custom_assignments(topic_configuration_vector);
@@ -311,19 +193,6 @@ find_shard_on_node(const replicas_t& replicas, model::node_id node) {
     return std::nullopt;
 }
 
-/// Calculates expected log revision of a partition with replicas assignment
-/// determined by partition_replicas_view on a particular node (if the partition
-/// is expected to be there)
-std::optional<model::revision_id> log_revision_on_node(
-  const topic_table::partition_replicas_view&, model::node_id);
-
-/// Calculates the partition placement target (i.e. log revision and shard id)
-/// on a particular node of a partition with replicas assignment determined by
-/// partition_replicas_view (including effects of an in-progress or cancelled
-/// update if present).
-std::optional<shard_placement_target> placement_target_on_node(
-  const topic_table::partition_replicas_view&, model::node_id);
-
 // check if replica is moving from node
 inline bool moving_from_node(
   model::node_id node,
@@ -354,10 +223,6 @@ inline bool moving_to_node(
 
 cluster::errc map_update_interruption_error_code(std::error_code);
 
-partition_state get_partition_state(ss::lw_shared_ptr<cluster::partition>);
-partition_raft_state get_partition_raft_state(consensus_ptr);
-std::vector<partition_stm_state> get_partition_stm_state(consensus_ptr);
-
 /**
  * Check that the configuration is valid, if not return a string with the
  * error cause.
@@ -370,27 +235,5 @@ std::vector<partition_stm_state> get_partition_stm_state(consensus_ptr);
 std::optional<ss::sstring> check_result_configuration(
   const members_table::cache_t& current_brokers,
   const model::broker& to_update);
-
-/// Copies the state of all persisted stms from source kvs
-ss::future<> copy_persistent_stm_state(
-  model::ntp ntp,
-  storage::kvstore& source_kvs,
-  ss::shard_id target_shard,
-  ss::sharded<storage::api>&);
-
-ss::future<> remove_persistent_stm_state(model::ntp ntp, storage::kvstore&);
-
-/// Copies all bits of partition kvstore state from source kvstore to kvstore on
-/// target shard.
-ss::future<> copy_persistent_state(
-  const model::ntp&,
-  raft::group_id,
-  storage::kvstore& source_kvs,
-  ss::shard_id target_shard,
-  ss::sharded<storage::api>&);
-
-/// Removes all bits of partition kvstore state in source kvstore.
-ss::future<> remove_persistent_state(
-  const model::ntp&, raft::group_id, storage::kvstore& source_kvs);
 
 } // namespace cluster

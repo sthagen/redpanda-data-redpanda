@@ -16,6 +16,7 @@
 #include "cluster/partition_leaders_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "config/node_config.h"
 #include "model/timeout_clock.h"
 #include "rpc/connection_cache.h"
 

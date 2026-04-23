@@ -11,9 +11,9 @@
 
 #include "feature_manager.h"
 
-#include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
 #include "cluster/controller_service.h"
+#include "cluster/controller_utils.h"
 #include "cluster/health_monitor_backend.h"
 #include "cluster/health_monitor_frontend.h"
 #include "cluster/health_monitor_types.h"
@@ -32,6 +32,7 @@
 #include "model/timeout_clock.h"
 #include "pandaproxy/schema_registry/schema_id_validation.h"
 #include "raft/group_manager.h"
+#include "rpc/connection_cache.h"
 #include "security/role_store.h"
 #include "security/types.h"
 
