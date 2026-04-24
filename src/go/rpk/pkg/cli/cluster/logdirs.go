@@ -12,6 +12,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -26,6 +27,104 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/types"
 )
+
+type logDirRow struct {
+	Broker    int32  `json:"broker" yaml:"broker"`
+	Dir       string `json:"dir" yaml:"dir"`
+	Topic     string `json:"topic" yaml:"topic"`
+	Partition int32  `json:"partition" yaml:"partition"`
+	Size      int64  `json:"size" yaml:"size"`
+	Error     string `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
+// collapseLogDirRows merges consecutive rows where shouldChange returns false,
+// accumulating size into the prior row.
+func collapseLogDirRows(rows []logDirRow, shouldChange func(prior, current logDirRow) bool) []logDirRow {
+	if len(rows) == 0 {
+		return rows
+	}
+	prior := rows[0]
+	keep := rows[:0]
+	for _, current := range rows[1:] {
+		if shouldChange(prior, current) {
+			keep = append(keep, prior)
+			prior = current
+			continue
+		}
+		prior.Size += current.Size
+	}
+	return append(keep, prior)
+}
+
+// aggregateAndSortLogDirs validates aggregateInto, collapses rows to the
+// requested granularity, and optionally sorts by size descending.
+func aggregateAndSortLogDirs(rows []logDirRow, aggregateInto string, sortBySize bool) ([]logDirRow, error) {
+	switch strings.ToLower(aggregateInto) {
+	default:
+		return nil, fmt.Errorf("unrecognized --aggregate-into %q", aggregateInto)
+	case "", "partition":
+		// no collapse needed
+	case "broker":
+		rows = collapseLogDirRows(rows, func(prior, current logDirRow) bool {
+			return prior.Broker != current.Broker
+		})
+	case "dir":
+		rows = collapseLogDirRows(rows, func(prior, current logDirRow) bool {
+			return prior.Broker != current.Broker || prior.Dir != current.Dir
+		})
+	case "topic":
+		rows = collapseLogDirRows(rows, func(prior, current logDirRow) bool {
+			return prior.Broker != current.Broker || prior.Dir != current.Dir || prior.Topic != current.Topic
+		})
+	}
+	if sortBySize {
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].Size >= rows[j].Size })
+	}
+	return rows, nil
+}
+
+func printLogDirs(f config.OutFormatter, rows []logDirRow, aggregateInto string, human bool, sortBySize bool, w io.Writer) {
+	var err error
+	rows, err = aggregateAndSortLogDirs(rows, aggregateInto, sortBySize)
+	out.MaybeDie(err, "invalid --aggregate-into value")
+
+	if isText, _, t, err := f.Format(rows); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+
+	sizeFn := func(size int64) string {
+		if human {
+			return units.HumanSize(float64(size))
+		}
+		return strconv.Itoa(int(size))
+	}
+
+	var tw *out.TabWriter
+	var printRow func(r logDirRow)
+	switch strings.ToLower(aggregateInto) {
+	default:
+		// unreachable: validated in aggregateAndSortLogDirs
+	case "", "partition":
+		tw = out.NewTableTo(w, "BROKER", "DIR", "TOPIC", "PARTITION", "SIZE", "ERROR")
+		printRow = func(r logDirRow) { tw.Print(r.Broker, r.Dir, r.Topic, r.Partition, sizeFn(r.Size), r.Error) }
+	case "broker":
+		tw = out.NewTableTo(w, "BROKER", "SIZE", "ERROR")
+		printRow = func(r logDirRow) { tw.Print(r.Broker, sizeFn(r.Size), r.Error) }
+	case "dir":
+		tw = out.NewTableTo(w, "BROKER", "DIR", "SIZE", "ERROR")
+		printRow = func(r logDirRow) { tw.Print(r.Broker, r.Dir, sizeFn(r.Size), r.Error) }
+	case "topic":
+		tw = out.NewTableTo(w, "BROKER", "DIR", "TOPIC", "SIZE", "ERROR")
+		printRow = func(r logDirRow) { tw.Print(r.Broker, r.Dir, r.Topic, sizeFn(r.Size), r.Error) }
+	}
+
+	defer tw.Flush()
+	for _, r := range rows {
+		printRow(r)
+	}
+}
 
 func newLogdirsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd := &cobra.Command{
@@ -69,7 +168,12 @@ where revision is a Redpanda internal concept.
 `,
 
 		Args: cobra.ExactArgs(0),
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]logDirRow{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -92,27 +196,19 @@ where revision is a Redpanda internal concept.
 				s = listed.TopicsSet()
 			}
 
-			type row struct {
-				Broker    int32
-				Dir       string
-				Topic     string
-				Partition int32
-				Size      int64
-				Err       string
-			}
-			var rows []row
+			var rows []logDirRow
 
 			eachDir := func(d kadm.DescribedLogDir) {
 				if d.Err != nil {
-					rows = append(rows, row{
+					rows = append(rows, logDirRow{
 						Broker: d.Broker,
 						Dir:    d.Dir,
-						Err:    d.Err.Error(),
+						Error:  d.Err.Error(),
 					})
 					return
 				}
 				d.Topics.Each(func(p kadm.DescribedLogDirPartition) {
-					rows = append(rows, row{
+					rows = append(rows, logDirRow{
 						Broker:    d.Broker,
 						Dir:       d.Dir,
 						Topic:     p.Topic,
@@ -132,78 +228,10 @@ where revision is a Redpanda internal concept.
 				desc.Each(eachDir)
 			}
 
-			// First we deeply sort our rows, we will use this for
-			// in-place aggregating.
+			// Deeply sort rows first so aggregation can collapse consecutive equal keys.
 			types.Sort(rows)
 
-			// For aggregate into, we merge rows. If shouldChange
-			// returns true, we know we need to move to a new row.
-			collapse := func(shouldChange func(prior, current row) bool) {
-				if len(rows) == 0 {
-					return
-				}
-				prior := rows[0]
-				keep := rows[:0]
-				for _, current := range rows[1:] {
-					if shouldChange(prior, current) {
-						keep = append(keep, prior)
-						prior = current
-						continue
-					}
-					prior.Size += current.Size
-				}
-				rows = append(keep, prior)
-			}
-
-			sizeFn := func(size int64) string {
-				if human {
-					return units.HumanSize(float64(size))
-				}
-				return strconv.Itoa(int(size))
-			}
-
-			var headers []string
-			var rowfn func(*out.TabWriter, row)
-			switch strings.ToLower(aggregateInto) {
-			default:
-				out.Die("unrecognized --aggregate-into %q", aggregateInto)
-
-			case "broker":
-				headers = []string{"broker", "size", "error"}
-				collapse(func(prior, current row) bool { return prior.Broker != current.Broker })
-				rowfn = func(tw *out.TabWriter, r row) { tw.Print(r.Broker, sizeFn(r.Size), r.Err) }
-
-			case "dir":
-				headers = []string{"broker", "dir", "size", "error"}
-				collapse(func(prior, current row) bool { return prior.Broker != current.Broker || prior.Dir != current.Dir })
-				rowfn = func(tw *out.TabWriter, r row) { tw.Print(r.Broker, r.Dir, sizeFn(r.Size), r.Err) }
-
-			case "topic":
-				headers = []string{"broker", "dir", "topic", "size", "error"}
-				collapse(func(prior, current row) bool {
-					return prior.Broker != current.Broker || prior.Dir != current.Dir || prior.Topic != current.Topic
-				})
-				rowfn = func(tw *out.TabWriter, r row) { tw.Print(r.Broker, r.Dir, r.Topic, sizeFn(r.Size), r.Err) }
-
-			case "", "partition":
-				headers = []string{"broker", "dir", "topic", "partition", "size", "error"}
-				rowfn = func(tw *out.TabWriter, r row) { tw.Print(r.Broker, r.Dir, r.Topic, r.Partition, sizeFn(r.Size), r.Err) }
-			}
-
-			// Finally, if we are sorting by size, we perform a
-			// stable sort. We want stable to preserve ordering for
-			// what we have already ordered and aggregated.
-			if sortBySize {
-				sort.SliceStable(rows, func(i, j int) bool {
-					return rows[i].Size >= rows[j].Size
-				})
-			}
-
-			tw := out.NewTable(headers...)
-			defer tw.Flush()
-			for _, row := range rows {
-				rowfn(tw, row)
-			}
+			printLogDirs(f, rows, aggregateInto, human, sortBySize, cmd.OutOrStdout())
 		},
 	}
 
@@ -217,5 +245,6 @@ where revision is a Redpanda internal concept.
 		opts := []string{"broker", "dir", "topic"}
 		return opts, cobra.ShellCompDirectiveDefault
 	})
+	p.InstallFormatFlag(cmd)
 	return cmd
 }

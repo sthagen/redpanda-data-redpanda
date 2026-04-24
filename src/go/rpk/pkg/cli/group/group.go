@@ -13,6 +13,7 @@ package group
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
@@ -84,6 +85,46 @@ members and their lag), and manage offsets.
 	return cmd
 }
 
+type listedGroup struct {
+	Broker int32  `json:"broker" yaml:"broker"`
+	Group  string `json:"group" yaml:"group"`
+	State  string `json:"state,omitempty" yaml:"state,omitempty"`
+}
+
+func buildListedGroups(groups []kadm.ListedGroup) []listedGroup {
+	result := make([]listedGroup, 0, len(groups))
+	for _, g := range groups {
+		result = append(result, listedGroup{
+			Broker: g.Coordinator,
+			Group:  g.Group,
+			State:  g.State,
+		})
+	}
+	return result
+}
+
+func printGroupList(f config.OutFormatter, groups []listedGroup, w io.Writer) {
+	if isText, _, t, err := f.Format(groups); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	hasState := slices.ContainsFunc(groups, func(g listedGroup) bool { return g.State != "" })
+	if hasState {
+		tw := out.NewTableTo(w, "BROKER", "GROUP", "STATE")
+		defer tw.Flush()
+		for _, g := range groups {
+			tw.Print(g.Broker, g.Group, g.State)
+		}
+	} else {
+		tw := out.NewTableTo(w, "BROKER", "GROUP")
+		defer tw.Flush()
+		for _, g := range groups {
+			tw.Print(g.Broker, g.Group)
+		}
+	}
+}
+
 func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var filterStates []string
 	validStates := []string{"PreparingRebalance", "CompletingRebalance", "Stable", "Dead", "Empty"}
@@ -106,7 +147,12 @@ The STATE columns shows which state the group is in:
   - Empty: The group currently has no members.
 `,
 		Args: cobra.ExactArgs(0),
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]listedGroup{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -132,31 +178,7 @@ The STATE columns shows which state the group is in:
 			listed, err := adm.ListGroups(context.Background(), normalizedFilterStates...)
 			out.HandleShardError("ListGroups", err)
 
-			groups := listed.Sorted()
-			isV4Response := slices.ContainsFunc(groups, func(g kadm.ListedGroup) bool { return g.State != "" })
-
-			// Conditionally hide the STATE column for older brokers that
-			// do not return the state of the consumer group
-			if !isV4Response {
-				tw := out.NewTable("BROKER", "GROUP")
-				defer tw.Flush()
-				for _, g := range groups {
-					tw.PrintStructFields(struct {
-						Broker int32
-						Group  string
-					}{g.Coordinator, g.Group})
-				}
-			} else {
-				tw := out.NewTable("BROKER", "GROUP", "STATE")
-				defer tw.Flush()
-				for _, g := range groups {
-					tw.PrintStructFields(struct {
-						Broker int32
-						Group  string
-						State  string
-					}{g.Coordinator, g.Group, g.State})
-				}
-			}
+			printGroupList(f, buildListedGroups(listed.Sorted()), cmd.OutOrStdout())
 		},
 	}
 
@@ -165,11 +187,42 @@ The STATE columns shows which state the group is in:
 	cmd.RegisterFlagCompletionFunc("states", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return validStates, cobra.ShellCompDirectiveDefault
 	})
+	p.InstallFormatFlag(cmd)
 	return cmd
 }
 
+type deletedGroup struct {
+	Group  string `json:"group" yaml:"group"`
+	Status string `json:"status" yaml:"status"`
+}
+
+func buildDeletedGroups(groups []kadm.DeleteGroupResponse) []deletedGroup {
+	result := make([]deletedGroup, 0, len(groups))
+	for _, g := range groups {
+		status := "OK"
+		if g.Err != nil {
+			status = g.Err.Error()
+		}
+		result = append(result, deletedGroup{Group: g.Group, Status: status})
+	}
+	return result
+}
+
+func printGroupDelete(f config.OutFormatter, groups []deletedGroup, w io.Writer) {
+	if isText, _, t, err := f.Format(groups); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := out.NewTableTo(w, "GROUP", "STATUS")
+	defer tw.Flush()
+	for _, g := range groups {
+		tw.Print(g.Group, g.Status)
+	}
+}
+
 func newDeleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "delete [GROUPS...]",
 		Short: "Delete groups from brokers",
 		Long: `Delete groups from brokers.
@@ -192,7 +245,12 @@ automatically are cleaned up, such as when you create temporary groups for
 quick investigation or testing. This command helps you do that.
 `,
 		Args: cobra.MinimumNArgs(1),
-		Run: func(_ *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]deletedGroup{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -203,21 +261,9 @@ quick investigation or testing. This command helps you do that.
 			deleted, err := adm.DeleteGroups(context.Background(), args...)
 			out.HandleShardError("DeleteGroups", err)
 
-			tw := out.NewTable("GROUP", "STATUS")
-			defer tw.Flush()
-			for _, g := range deleted.Sorted() {
-				status := "OK"
-				if g.Err != nil {
-					status = g.Err.Error()
-				}
-				tw.PrintStructFields(struct {
-					Group  string
-					Status string
-				}{
-					g.Group,
-					status,
-				})
-			}
+			printGroupDelete(f, buildDeletedGroups(deleted.Sorted()), cmd.OutOrStdout())
 		},
 	}
+	p.InstallFormatFlag(cmd)
+	return cmd
 }

@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "auth",
@@ -19,5 +19,16 @@ go_library(
         "//src/go/rpk/pkg/out",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_test(
+    name = "auth_test",
+    srcs = ["list_test.go"],
+    embed = [":auth"],
+    deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
+        "@com_github_stretchr_testify//require",
     ],
 )

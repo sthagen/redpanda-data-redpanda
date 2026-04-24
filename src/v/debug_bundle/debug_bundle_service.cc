@@ -600,6 +600,14 @@ result<std::vector<ss::sstring>> service::build_rpk_arguments(
               rv.emplace_back(
                 ssx::sformat(
                   "{}={}", sasl_mechanism_variable, creds.mechanism));
+          },
+          [&rv](const bearer_creds& creds) mutable {
+              // rpk accepts -Xpass=token:<TOKEN> for OAUTHBEARER
+              rv.emplace_back(
+                ssx::sformat("{}=token:{}", password_variable, creds.token));
+              rv.emplace_back(
+                ssx::sformat(
+                  "{}={}", sasl_mechanism_variable, creds.mechanism));
           });
     }
     if (params.controller_logs_size_limit_bytes.has_value()) {

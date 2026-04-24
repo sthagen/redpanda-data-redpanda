@@ -11,6 +11,7 @@ package maintenance
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/redpanda-data/common-go/rpadmin"
 
@@ -21,20 +22,66 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newMaintenanceReportTable() *out.TabWriter {
-	headers := []string{
-		"Node-ID", "Enabled", "Finished", "Errors",
-		"Partitions", "Eligible", "Transferring", "Failed",
+type brokerMaintenanceStatus struct {
+	NodeID       int   `json:"node_id" yaml:"node_id"`
+	Enabled      bool  `json:"enabled" yaml:"enabled"`
+	Finished     *bool `json:"finished,omitempty" yaml:"finished,omitempty"`
+	Errors       *bool `json:"errors,omitempty" yaml:"errors,omitempty"`
+	Partitions   *int  `json:"partitions,omitempty" yaml:"partitions,omitempty"`
+	Eligible     *int  `json:"eligible,omitempty" yaml:"eligible,omitempty"`
+	Transferring *int  `json:"transferring,omitempty" yaml:"transferring,omitempty"`
+	Failed       *int  `json:"failed,omitempty" yaml:"failed,omitempty"`
+}
+
+func buildMaintenanceStatuses(brokers []rpadmin.Broker) []brokerMaintenanceStatus {
+	statuses := make([]brokerMaintenanceStatus, 0, len(brokers))
+	for _, b := range brokers {
+		s := brokerMaintenanceStatus{NodeID: b.NodeID}
+		if b.Maintenance != nil {
+			s.Enabled = b.Maintenance.Draining
+			s.Finished = b.Maintenance.Finished
+			s.Errors = b.Maintenance.Errors
+			s.Partitions = b.Maintenance.Partitions
+			s.Eligible = b.Maintenance.Eligible
+			s.Transferring = b.Maintenance.Transferring
+			s.Failed = b.Maintenance.Failed
+		}
+		statuses = append(statuses, s)
 	}
-	return out.NewTable(headers...)
+	return statuses
+}
+
+func printMaintenanceStatus(f config.OutFormatter, statuses []brokerMaintenanceStatus, w io.Writer) {
+	if isText, _, t, err := f.Format(statuses); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := newMaintenanceReportTable(w)
+	defer tw.Flush()
+	for _, s := range statuses {
+		tw.Print(
+			s.NodeID,
+			s.Enabled,
+			nullableToStr(s.Finished),
+			nullableToStr(s.Errors),
+			nullableToStr(s.Partitions),
+			nullableToStr(s.Eligible),
+			nullableToStr(s.Transferring),
+			nullableToStr(s.Failed),
+		)
+	}
 }
 
 func nullableToStr[V any](v *V) string {
 	if v == nil {
 		return "-"
 	}
-
 	return fmt.Sprint(*v)
+}
+
+func newMaintenanceReportTable(w io.Writer) *out.TabWriter {
+	return out.NewTableTo(w, "Node-ID", "Enabled", "Finished", "Errors", "Partitions", "Eligible", "Transferring", "Failed")
 }
 
 func addBrokerMaintenanceReport(table *out.TabWriter, b rpadmin.Broker) {
@@ -65,7 +112,7 @@ output can be used to monitor the progress of node draining.
 Field descriptions:
 
         NODE-ID: the node ID
-        ENABLED: true if the node is currently in maintenance mode
+        ENABLED: true if the node is currently in maintenance mode (draining)
        FINISHED: leadership draining has completed
          ERRORS: errors have been encountered while draining
      PARTITIONS: number of partitions whose leadership has moved
@@ -80,9 +127,17 @@ Notes:
 
    - Only partitions with more than one replica are eligible for leadership
      transfer.
+
+   - FINISHED, ERRORS, PARTITIONS, ELIGIBLE, TRANSFERRING, and FAILED are only
+     populated while a node is in maintenance mode (ENABLED=true).
 `,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, _ []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]brokerMaintenanceStatus{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			config.CheckExitCloudAdmin(p)
@@ -101,12 +156,9 @@ Notes:
 				out.Die("maintenance mode is not supported in this cluster")
 			}
 
-			table := newMaintenanceReportTable()
-			defer table.Flush()
-			for _, broker := range brokers {
-				addBrokerMaintenanceReport(table, broker)
-			}
+			printMaintenanceStatus(f, buildMaintenanceStatuses(brokers), cmd.OutOrStdout())
 		},
 	}
+	p.InstallFormatFlag(cmd)
 	return cmd
 }

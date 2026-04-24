@@ -2379,3 +2379,54 @@ TEST(SegmentReuploadUnit, test_new_segment_never_skip_offsets) {
           == candidate_creation_error::offset_inside_batch);
     }
 }
+
+TEST(SegmentReuploadUnit, test_collect_stale_after_prefix_truncate) {
+    cloud_storage::partition_manifest m;
+    m.update(
+       cloud_storage::manifest_format::json, make_manifest_stream(manifest))
+      .get();
+
+    temporary_dir tmp_dir("test_collect_stale");
+    auto data_path = tmp_dir.get_path();
+    using namespace storage;
+
+    auto b = disk_log_builder{
+      log_config{{data_path.string()}, 4_KiB, make_sanitized_file_config()},
+      {model::record_batch_type::raft_configuration},
+      raft::group_id{1}};
+    b | start(ntp_config{{"test_ns", "test_tpc", 0}, {data_path}});
+    auto defer = ss::defer([&b] { b.stop().get(); });
+
+    ss::abort_source as;
+    b.get_log()->start(std::nullopt, as).get();
+
+    b | add_segment(0);
+    b.add_random_batch(
+       model::offset(0),
+       1,
+       maybe_compress_batches::yes,
+       model::record_batch_type::raft_configuration)
+      .get();
+    for (int i = 1; i < 50; ++i) {
+        b | add_random_batch(model::offset(i), 1);
+    }
+
+    archival::segment_collector collector{
+      segment_collector_mode::non_compacted_reupload,
+      model::offset{10},
+      m,
+      b.get_disk_log_impl(),
+      max_upload_size};
+
+    collector.collect_segments();
+
+    b.get_log()
+      ->truncate_prefix(storage::truncate_prefix_config(model::offset{22}))
+      .get();
+
+    auto result = collector.make_upload_candidate(segment_lock_timeout).get();
+    ASSERT_TRUE(
+      std::holds_alternative<candidate_creation_error>(result)
+      && std::get<candidate_creation_error>(result)
+           == candidate_creation_error::concurrency_error);
+}

@@ -45,10 +45,10 @@ go_test(
     embed = [":transform"],
     deps = [
         "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
         "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@com_github_twmb_franz_go//pkg/kgo",
-        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

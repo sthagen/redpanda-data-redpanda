@@ -12,7 +12,9 @@ package group
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"sort"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/kafka"
@@ -22,6 +24,55 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/twmb/franz-go/pkg/kadm"
 )
+
+type offsetDeleteResult struct {
+	Topic     string `json:"topic" yaml:"topic"`
+	Partition int32  `json:"partition" yaml:"partition"`
+	Status    string `json:"status" yaml:"status"`
+}
+
+func buildOffsetDeleteResults(responses kadm.DeleteOffsetsResponses) ([]offsetDeleteResult, bool) {
+	ok := true
+	var results []offsetDeleteResult
+
+	topics := make([]string, 0, len(responses))
+	for topic := range responses {
+		topics = append(topics, topic)
+	}
+	sort.Strings(topics)
+
+	for _, topic := range topics {
+		partitionErrors := responses[topic]
+		partitions := make([]int32, 0, len(partitionErrors))
+		for p := range partitionErrors {
+			partitions = append(partitions, p)
+		}
+		sort.Slice(partitions, func(i, j int) bool { return partitions[i] < partitions[j] })
+
+		for _, partition := range partitions {
+			msg := "OK"
+			if e := partitionErrors[partition]; e != nil {
+				ok = false
+				msg = e.Error()
+			}
+			results = append(results, offsetDeleteResult{Topic: topic, Partition: partition, Status: msg})
+		}
+	}
+	return results, ok
+}
+
+func printOffsetDeleteResults(f config.OutFormatter, results []offsetDeleteResult, w io.Writer) {
+	if isText, _, t, err := f.Format(results); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := out.NewTabWriterTo(w)
+	defer tw.Flush()
+	for _, r := range results {
+		tw.Print(r.Topic, r.Partition, r.Status)
+	}
+}
 
 func NewOffsetDeleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var (
@@ -51,7 +102,12 @@ topic_a 1
 topic_b 0
 `,
 		Args: cobra.ExactArgs(1),
-		Run: func(_ *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]offsetDeleteResult{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -81,19 +137,8 @@ topic_b 0
 			responses, err := adm.DeleteOffsets(context.Background(), args[0], topicsSet)
 			out.MaybeDieErr(err)
 
-			tw := out.NewTabWriter()
-			ok := true
-			for topic, partitionErrors := range responses {
-				for partition, err := range partitionErrors {
-					msg := "OK"
-					if err != nil {
-						ok = false
-						msg = err.Error()
-					}
-					fmt.Fprintf(tw, "%s\t%d\t%s\n", topic, partition, msg)
-				}
-			}
-			tw.Flush()
+			results, ok := buildOffsetDeleteResults(responses)
+			printOffsetDeleteResults(f, results, cmd.OutOrStdout())
 			if !ok { // At least one row contained an error.
 				os.Exit(1)
 			}
@@ -102,6 +147,7 @@ topic_b 0
 	cmd.Flags().StringVarP(&fromFile, "from-file", "f", "", "File of topic/partition tuples for which to delete offsets for")
 	cmd.Flags().StringArrayVarP(&topicPartitions, "topic", "t", nil, "topic:partition_id (repeatable; e.g. -t foo:0,1,2 )")
 	cmd.MarkFlagsMutuallyExclusive("from-file", "topic")
+	p.InstallFormatFlag(cmd)
 	return cmd
 }
 

@@ -1548,12 +1548,17 @@ void admin_server::register_config_routes() {
               include_defaults = str_to_bool(include_defaults_str);
           }
 
+          auto pending = config::use_pending::yes;
+          if (get_boolean_query_param(req, "suppress_pending")) {
+              pending = config::use_pending::no;
+          }
+
           auto key_str = req.get_query_param("key");
           if (!key_str.empty()) {
               // Write a single key to json.
               try {
                   config::shard_local_cfg().to_json_single_key(
-                    writer, config::redact_secrets::yes, key_str);
+                    writer, config::redact_secrets::yes, key_str, pending);
               } catch (const std::out_of_range&) {
                   throw ss::httpd::bad_param_exception(
                     fmt::format("Unknown property {{{}}}", key_str));
@@ -1563,9 +1568,15 @@ void admin_server::register_config_routes() {
               config::shard_local_cfg().to_json(
                 writer,
                 config::redact_secrets::yes,
-                [include_defaults](config::base_property& p) {
-                    return include_defaults || !p.is_default();
-                });
+                [include_defaults, pending](config::base_property& p) {
+                    if (include_defaults) {
+                        return true;
+                    }
+                    return pending == config::use_pending::yes
+                             ? !p.is_default_pending()
+                             : !p.is_default();
+                },
+                pending);
           }
 
           reply.set_status(ss::http::reply::status_type::ok, buf.GetString());
@@ -2070,7 +2081,13 @@ void admin_server::check_license(const ss::sstring& msg) const {
 void admin_server::register_cluster_config_routes() {
     register_route<superuser>(
       ss::httpd::cluster_config_json::get_cluster_config_status,
-      [this](std::unique_ptr<ss::http::request>) {
+      [this](std::unique_ptr<ss::http::request> req) {
+          auto local_node = _controller->self();
+          auto show_pending = get_boolean_query_param(*req, "show_pending");
+          auto local_pending
+            = show_pending
+                ? config::shard_local_cfg().properties_pending_restart()
+                : std::vector<ss::sstring>{};
           auto& cfg = _controller->get_config_manager();
           return cfg
             .invoke_on(
@@ -2078,7 +2095,8 @@ void admin_server::register_cluster_config_routes() {
               [](cluster::config_manager& manager) {
                   return manager.get_projected_status();
               })
-            .then([](auto statuses) {
+            .then([local_node,
+                   local_pending = std::move(local_pending)](auto statuses) {
                 std::vector<
                   ss::httpd::cluster_config_json::cluster_config_status>
                   res;
@@ -2096,9 +2114,19 @@ void admin_server::register_cluster_config_routes() {
                     // is then cleared in the subsequent operator=).
                     rs.invalid.push(ss::sstring("hack"));
                     rs.unknown.push(ss::sstring("hack"));
+                    rs.pending.push(ss::sstring("hack"));
 
                     rs.invalid = s.second.invalid;
                     rs.unknown = s.second.unknown;
+
+                    if (s.first == local_node) {
+                        rs.pending = local_pending;
+                    } else {
+                        // TODO: Pending state is local-only: extending
+                        // config_status (on-wire type) is needed to
+                        // propagate pending info from remote nodes.
+                        rs.pending = std::vector<ss::sstring>{};
+                    }
                 }
 
                 return ss::json::json_return_type(res);

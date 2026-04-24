@@ -127,6 +127,7 @@ jobs:
           path: ./fork
       - name: Backport commits and get details
         if: needs.backport-type.outputs.commented_on == 'pr'
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.ACTIONS_BOT_TOKEN }}
           ORIG_TITLE: ${{ github.event.client_payload.github.payload.issue.title }}
@@ -139,14 +140,105 @@ jobs:
         id: pr_details
         run: $SCRIPT_DIR/pr_details.sh
         shell: bash
+      - name: AI-assisted backport
+        if: needs.backport-type.outputs.commented_on == 'pr' && steps.pr_details.outcome == 'failure'
+        id: ai_backport
+        uses: anthropics/claude-code-action@v1
+        env:
+          GITHUB_TOKEN: ${{ env.ACTIONS_BOT_TOKEN }}
+          GH_REPO: ${{ env.TARGET_FULL_REPO }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ env.ACTIONS_BOT_TOKEN }}
+          allowed_bots: ""
+          allowed_non_write_users: ""
+          show_full_output: true
+          track_progress: false
+          claude_args: >
+            --model opus
+            --max-turns 40
+            --disallowed-tools "WebFetch,WebSearch"
+            --allowed-tools "
+              Bash(git *),
+              Bash(gh *),
+              Bash(date *),
+              Bash(grep *),
+              Bash(wc *),
+              Bash(echo *),
+              Bash(printf *),
+              Bash(cat *),
+              Bash(cd *),
+              Read,
+              Write,
+              Edit,
+              Glob,
+              Grep,
+              Agent"
+          prompt: |
+            The plain `git cherry-pick` in the prior step failed. Re-do the
+            backport using the skill at
+            ${{ github.workspace }}/.claude/skills/create-backport-branch/SKILL.md.
+
+            Preflight (bash):
+              cd "${{ github.workspace }}/fork"
+              git cherry-pick --abort || true
+              export SKILL_REPORT_FILE="${{ github.workspace }}/.ai-backport-meta/report.md"
+              mkdir -p "$(dirname "$SKILL_REPORT_FILE")"
+
+            Invoke the skill with:
+              $0 = ${{ env.BACKPORT_BRANCH }}  (target — the release branch)
+              $1 = ${{ env.PR_NUMBER }}        (pr-number)
+
+            When the skill finishes successfully:
+              branch=$(git branch --show-current)
+              git push --set-upstream origin "$branch"
+
+            If the skill aborts (modify/delete, architectural unknown, etc.),
+            exit 1. Do NOT push, do NOT write a report file.
+      - name: Load AI skill report
+        id: load_ai_handoff
+        if: steps.ai_backport.outcome == 'success'
+        run: |
+          report="${GITHUB_WORKSPACE}/.ai-backport-meta/report.md"
+          if [[ ! -s "$report" ]]; then
+            echo "::error::Skill report file missing or empty at $report (skill probably aborted)"
+            exit 1
+          fi
+          branch=$(cd "${GITHUB_WORKSPACE}/fork" && git branch --list 'ai-backport-pr-*' --sort=-committerdate --format='%(refname:short)' | head -1)
+          if [[ -z "$branch" ]]; then
+            echo "::error::Report file written but no ai-backport-pr-* branch found"
+            exit 1
+          fi
+          {
+            echo "AI_HEAD_BRANCH=$branch"
+            echo "AI_REPORT_FILE=$report"
+          } >> "$GITHUB_ENV"
+          echo "AI branch: $branch"
+          echo "AI report: $report ($(wc -l < "$report") lines)"
+        shell: bash
+      - name: Diagnostic after AI
+        if: always() && needs.backport-type.outputs.commented_on == 'pr'
+        run: |
+          cd "${GITHUB_WORKSPACE}/fork" 2>/dev/null || exit 0
+          echo "== git log =="
+          git log --oneline -20 || true
+          echo "== git status =="
+          git status || true
+          echo "== current branch =="
+          git branch --show-current || true
+          echo "== remotes =="
+          git remote -v || true
+          echo "== AI_HEAD_BRANCH =="
+          echo "${AI_HEAD_BRANCH:-<unset>}"
+        shell: bash
       - name: Create pull request
-        if: needs.backport-type.outputs.commented_on == 'pr'
+        if: needs.backport-type.outputs.commented_on == 'pr' && (steps.pr_details.outcome == 'success' || steps.load_ai_handoff.outcome == 'success')
         env:
           GITHUB_TOKEN: ${{ env.ACTIONS_BOT_TOKEN }}
           TARGET_MILESTONE: ${{ steps.create_milestone.outputs.milestone }}
           ORIG_TITLE: ${{ github.event.client_payload.github.payload.issue.title }}
           AUTHOR: ${{ github.event.client_payload.pull_request.user.login }}
-          HEAD_BRANCH: ${{ steps.pr_details.outputs.head_branch }}
+          HEAD_BRANCH: ${{ env.AI_HEAD_BRANCH || steps.pr_details.outputs.head_branch }}
           FIXING_ISSUE_URLS: ${{ steps.pr_details.outputs.fixing_issue_urls }}
           ORIG_PR_NUMBER: ${{ github.event.client_payload.pull_request.number }}
           ORIG_PR_URL: ${{ github.event.client_payload.pull_request.html_url }}
@@ -154,7 +246,25 @@ jobs:
         id: create_pr
         run: $SCRIPT_DIR/create_pr.sh
         shell: bash
+      - name: Label AI-assisted PR
+        if: steps.load_ai_handoff.outcome == 'success' && steps.create_pr.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ env.ACTIONS_BOT_TOKEN }}
+          PR_HEAD: ${{ env.AI_HEAD_BRANCH }}
+          GIT_USER: ${{ steps.user.outputs.username }}
+        run: |
+          pr_num=$(gh pr list --repo "$TARGET_FULL_REPO" \
+            --head "$GIT_USER:$PR_HEAD" --state open \
+            --json number --jq '.[0].number')
+          if [[ -z "$pr_num" ]]; then
+            echo "::warning::Could not find backport PR with head=$GIT_USER:$PR_HEAD"
+            exit 0
+          fi
+          gh pr edit "$pr_num" --repo "$TARGET_FULL_REPO" \
+            --add-label ai-resolved-conflicts
+        shell: bash
       - name: Add reaction
+        if: steps.pr_details.outcome == 'success' || steps.load_ai_handoff.outcome == 'success'
         uses: peter-evans/create-or-update-comment@v4
         with:
           token: ${{ env.ACTIONS_BOT_TOKEN }}
@@ -162,22 +272,22 @@ jobs:
           comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
           reactions: hooray
       - name: Failed reaction
+        if: always() && steps.pr_details.outcome == 'failure' && steps.load_ai_handoff.outcome != 'success'
         uses: peter-evans/create-or-update-comment@v4
-        if: failure()
         with:
           token: ${{ env.ACTIONS_BOT_TOKEN }}
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
           comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
           reactions: "-1"
       - name: Post Error
-        if: failure()
+        if: always() && steps.pr_details.outcome == 'failure' && steps.load_ai_handoff.outcome != 'success'
         env:
           COMMENTED_ON: ${{ needs.backport-type.outputs.commented_on }}
           GITHUB_TOKEN: ${{ env.ACTIONS_BOT_TOKEN }}
         run: $SCRIPT_DIR/post_error.sh
         shell: bash
       - name: Create Issue On Error
-        if: failure()
+        if: always() && steps.pr_details.outcome == 'failure' && steps.load_ai_handoff.outcome != 'success'
         env:
           GITHUB_TOKEN: ${{ env.ACTIONS_BOT_TOKEN }}
           TARGET_MILESTONE: ${{ steps.create_milestone.outputs.milestone }}

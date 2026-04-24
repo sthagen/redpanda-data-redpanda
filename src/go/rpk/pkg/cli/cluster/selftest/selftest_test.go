@@ -10,13 +10,35 @@
 package selftest
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
 	"github.com/redpanda-data/common-go/rpadmin"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPrintSelfTestStatus(t *testing.T) {
+	f := config.OutFormatter{Kind: "text"}
+
+	t.Run("running nodes prints status message", func(t *testing.T) {
+		var buf bytes.Buffer
+		require.NoError(t, printSelfTestStatus(f, []rpadmin.SelfTestNodeReport{
+			{NodeID: 0, Status: "running", Stage: "disk"},
+		}, &buf))
+		require.Equal(t, "Node 0 is still running disk self test\n", buf.String())
+	})
+
+	t.Run("uninitialized prints idle message", func(t *testing.T) {
+		var buf bytes.Buffer
+		require.NoError(t, printSelfTestStatus(f, []rpadmin.SelfTestNodeReport{
+			{NodeID: 0, Status: "idle", Stage: "idle"},
+		}, &buf))
+		require.Equal(t, "All nodes are idle with no cached test results\n", buf.String())
+	})
+}
 
 func TestClusterStatus(t *testing.T) {
 	for _, test := range []struct {

@@ -215,10 +215,16 @@ func args2strings(args []any) []string {
 	return sargs
 }
 
+// SectionTo prints header in uppercase, followed by a line of =, to w.
+func SectionTo(w io.Writer, header string) {
+	upper := norm(header)
+	fmt.Fprintln(w, upper)
+	fmt.Fprintln(w, strings.Repeat("=", len(upper)))
+}
+
 // Section prints header in uppercase, followed by a line of =.
 func Section(header string) {
-	fmt.Println(norm(header))
-	fmt.Println(strings.Repeat("=", len(header)))
+	SectionTo(os.Stdout, header)
 }
 
 // TabWriter writes tab delimited output.
@@ -317,6 +323,22 @@ func (t *TabWriter) PrintColumn(header string, args ...any) {
 // Line prints a newline in our tab writer. This will reset tab spacing.
 func (t *TabWriter) Line(sprint ...any) {
 	fmt.Fprint(t.Writer, append(sprint, "\n")...)
+}
+
+// TableRows parses tabwriter-formatted output into whitespace-tokenized rows.
+// Intended for tests: column widths aren't preserved, so assertions don't
+// couple to tabwriter padding choices. Section-underline rows (all '=', as
+// written by Section) are dropped since their length is just len(title).
+func TableRows(s string) [][]string {
+	var rows [][]string
+	for _, line := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 1 && strings.Trim(fields[0], "=") == "" {
+			continue
+		}
+		rows = append(rows, fields)
+	}
+	return rows
 }
 
 func WithLogBanner(s string, additionalArgs ...any) string {

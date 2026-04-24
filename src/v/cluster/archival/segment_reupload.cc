@@ -856,6 +856,16 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
     auto locks_resolved = co_await ss::when_all_succeed(
       locks.begin(), locks.end());
 
+    if (_log.offsets().start_offset > _begin_inclusive) {
+        vlog(
+          archival_log.debug,
+          "Base offset of the log {} has advanced beyond the begin offset of "
+          "the candidate {}, aborting candidate creation",
+          _log.offsets().start_offset,
+          _begin_inclusive);
+        co_return candidate_creation_error::concurrency_error;
+    }
+
     std::vector<uint64_t> current_gen;
     current_gen.reserve(_segments.size());
     std::transform(

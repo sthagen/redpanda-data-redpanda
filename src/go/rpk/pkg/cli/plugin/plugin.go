@@ -11,6 +11,7 @@
 package plugin
 
 import (
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/plugin"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -18,7 +19,7 @@ import (
 
 const urlBase = "https://vectorized-public.s3.us-west-2.amazonaws.com/rpk-plugins"
 
-func NewCommand(fs afero.Fs) *cobra.Command {
+func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plugin",
 		Short: "List, download, update, and remove rpk plugins",
@@ -68,7 +69,7 @@ example, "foo_bar_baz" corresponds to the command "rpk foo bar baz".
 		Args: cobra.ExactArgs(0),
 	}
 	cmd.AddCommand(
-		newListCommand(fs),
+		newListCommand(fs, p),
 		newInstallCommand(fs),
 		newUninstallCommand(fs),
 	)

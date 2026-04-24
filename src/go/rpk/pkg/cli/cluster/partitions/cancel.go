@@ -11,6 +11,7 @@ package partitions
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/redpanda-data/common-go/rpadmin"
 
@@ -28,6 +29,13 @@ type movementCancelHandler struct {
 	noConfirm bool
 }
 
+type movementCancelResult struct {
+	Namespace string `json:"namespace" yaml:"namespace"`
+	Topic     string `json:"topic" yaml:"topic"`
+	Partition int    `json:"partition" yaml:"partition"`
+	Result    string `json:"result" yaml:"result"`
+}
+
 func newMovementCancelCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	m := &movementCancelHandler{
 		fs: fs,
@@ -39,14 +47,14 @@ func newMovementCancelCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Short:   "Cancel ongoing partition movements",
 		Long: `Cancel ongoing partition movements.
 
-By default, this command cancels all the partition movements in the cluster. 
-To ensure that you do not accidentally cancel all partition movements, this 
-command prompts users for confirmation before issuing the cancellation request. 
+By default, this command cancels all the partition movements in the cluster.
+To ensure that you do not accidentally cancel all partition movements, this
+command prompts users for confirmation before issuing the cancellation request.
 You can use "--no-confirm" to disable the confirmation prompt:
 
     rpk cluster partitions move-cancel --no-confirm
 
-If "--node" is set, this command will only stop the partition movements 
+If "--node" is set, this command will only stop the partition movements
 occurring in the specified node:
 
     rpk cluster partitions move-cancel --node 1
@@ -56,10 +64,16 @@ occurring in the specified node:
 	}
 	cmd.Flags().IntVar(&m.node, "node", -1, "ID of a specific node on which to cancel ongoing partition movements")
 	cmd.Flags().BoolVar(&m.noConfirm, "no-confirm", false, "Disable confirmation prompt")
+	p.InstallFormatFlag(cmd)
 	return cmd
 }
 
 func (m *movementCancelHandler) runMovementCancel(cmd *cobra.Command, _ []string) {
+	f := m.p.Formatter
+	if h, ok := f.Help([]movementCancelResult{}); ok {
+		out.Exit(h)
+	}
+
 	p, err := m.p.LoadVirtualProfile(m.fs)
 	out.MaybeDie(err, "rpk unable to load config: %v", err)
 	config.CheckExitCloudAdmin(p)
@@ -90,29 +104,39 @@ func (m *movementCancelHandler) runMovementCancel(cmd *cobra.Command, _ []string
 		out.MaybeDie(err, "unable to cancel partition movements: %v", err)
 	}
 
-	if len(movements) == 0 {
-		fmt.Println("There are no ongoing partition movements to cancel")
-		return
-	}
-	printMovementsResult(movements)
+	err = printMovementsResult(f, buildMovementCancelResult(movements), cmd.OutOrStdout())
+	out.MaybeDieErr(err)
 }
 
-func printMovementsResult(movements []rpadmin.PartitionsMovementResult) {
-	headers := []string{
-		"NAMESPACE",
-		"TOPIC",
-		"PARTITION",
-		"RESULT",
-	}
-	tw := out.NewTable(headers...)
-	defer tw.Flush()
+func buildMovementCancelResult(movements []rpadmin.PartitionsMovementResult) []movementCancelResult {
+	results := make([]movementCancelResult, 0, len(movements))
 	for _, m := range movements {
-		result := struct {
-			Namespace string
-			Topic     string
-			Partition int
-			Result    string
-		}{m.Namespace, m.Topic, m.Partition, m.Result}
-		tw.PrintStructFields(result)
+		results = append(results, movementCancelResult{
+			Namespace: m.Namespace,
+			Topic:     m.Topic,
+			Partition: m.Partition,
+			Result:    m.Result,
+		})
 	}
+	return results
+}
+
+func printMovementsResult(f config.OutFormatter, results []movementCancelResult, w io.Writer) error {
+	if isText, _, formatted, err := f.Format(results); !isText {
+		if err != nil {
+			return fmt.Errorf("unable to print movement cancel results in the required format %q: %v", f.Kind, err)
+		}
+		fmt.Fprintln(w, formatted)
+		return nil
+	}
+	if len(results) == 0 {
+		fmt.Fprintln(w, "There are no ongoing partition movements to cancel")
+		return nil
+	}
+	tw := out.NewTableTo(w, "Namespace", "Topic", "Partition", "Result")
+	defer tw.Flush()
+	for _, r := range results {
+		tw.PrintStructFields(r)
+	}
+	return nil
 }

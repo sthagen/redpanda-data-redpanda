@@ -33,6 +33,11 @@ fixing_issue_urls=$(gh api graphql -f query='{
   }
 }' --jq '.data.resource.closingIssuesReferences.nodes | map(.url) | join(" ")')
 
+# Emit fixing_issue_urls now so downstream steps (e.g. the AI fallback's
+# create_pr call) can read it even if the cherry-pick below fails and we
+# exit via backport_failure.
+echo "fixing_issue_urls=$fixing_issue_urls" >>$GITHUB_OUTPUT
+
 suffix=$((RANDOM % 1000))
 git config --global user.email "$GIT_EMAIL"
 git config --global user.name "$GIT_USER"
@@ -65,4 +70,3 @@ fi
 git push --set-upstream origin "$head_branch"
 git remote rm upstream
 echo "head_branch=$head_branch" >>$GITHUB_OUTPUT
-echo "fixing_issue_urls=$fixing_issue_urls" >>$GITHUB_OUTPUT

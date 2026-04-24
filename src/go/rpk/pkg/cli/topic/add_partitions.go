@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -24,6 +25,24 @@ import (
 	"go.uber.org/zap"
 )
 
+type addPartitionsResult struct {
+	Topic  string `json:"topic" yaml:"topic"`
+	Status string `json:"status" yaml:"status"`
+}
+
+func printAddPartitionsResults(f config.OutFormatter, results []addPartitionsResult, w io.Writer) {
+	if isText, _, t, err := f.Format(results); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := out.NewTableTo(w, "TOPIC", "STATUS")
+	defer tw.Flush()
+	for _, r := range results {
+		tw.Print(r.Topic, r.Status)
+	}
+}
+
 func newAddPartitionsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var num int
 	var force bool
@@ -32,7 +51,12 @@ func newAddPartitionsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Short: "Add partitions to existing topics",
 		Args:  cobra.MinimumNArgs(1),
 		Long:  `Add partitions to existing topics.`,
-		Run: func(_ *cobra.Command, topics []string) {
+		Run: func(cmd *cobra.Command, topics []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]addPartitionsResult{}); ok {
+				out.Exit(h)
+			}
+
 			if !force {
 				for _, t := range topics {
 					if t == "__consumer_offsets" || t == "_schemas" || t == "__transaction_state" || t == "coprocessor_internal_topic" {
@@ -61,9 +85,7 @@ func newAddPartitionsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				}
 			}()
 
-			tw := out.NewTable("topic", "status")
-			defer tw.Flush()
-
+			var results []addPartitionsResult
 			for _, resp := range resps.Sorted() {
 				msg := "OK"
 				if resp.ErrMessage != "" {
@@ -82,12 +104,14 @@ func newAddPartitionsCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 					}
 					exit1 = true
 				}
-				tw.Print(resp.Topic, msg)
+				results = append(results, addPartitionsResult{Topic: resp.Topic, Status: msg})
 			}
+			printAddPartitionsResults(f, results, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().IntVarP(&num, "num", "n", 0, "Number of partitions to add to each topic")
 	cmd.MarkFlagRequired("num")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force change the partition count in internal topics, e.g. __consumer_offsets.")
+	p.InstallFormatFlag(cmd)
 	return cmd
 }

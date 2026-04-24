@@ -10,6 +10,8 @@
 package profile
 
 import (
+	"fmt"
+	"io"
 	"sort"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -18,18 +20,55 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type profileListItem struct {
+	Name        string `json:"name" yaml:"name"`
+	Description string `json:"description" yaml:"description"`
+	Current     bool   `json:"current" yaml:"current"`
+}
+
+func buildProfileList(y *config.RpkYaml) []profileListItem {
+	items := make([]profileListItem, 0, len(y.Profiles))
+	for _, p := range y.Profiles {
+		items = append(items, profileListItem{
+			Name:        p.Name,
+			Description: p.Description,
+			Current:     p.Name == y.CurrentProfile,
+		})
+	}
+	return items
+}
+
+func printProfileList(f config.OutFormatter, items []profileListItem, w io.Writer) {
+	if isText, _, t, err := f.Format(items); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := out.NewTableTo(w, "Name", "Description")
+	defer tw.Flush()
+	for _, item := range items {
+		name := item.Name
+		if item.Current {
+			name += "*"
+		}
+		tw.Print(name, item.Description)
+	}
+}
+
 func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List rpk profiles",
 		Args:    cobra.ExactArgs(0),
-		Run: func(*cobra.Command, []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]profileListItem{}); ok {
+				out.Exit(h)
+			}
+
 			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
-
-			tw := out.NewTable("name", "description")
-			defer tw.Flush()
 
 			y, ok := cfg.ActualRpkYaml()
 			if !ok {
@@ -40,13 +79,9 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				return y.Profiles[i].Name < y.Profiles[j].Name
 			})
 
-			for _, p := range y.Profiles {
-				name := p.Name
-				if name == y.CurrentProfile {
-					name += "*"
-				}
-				tw.Print(name, p.Description)
-			}
+			printProfileList(f, buildProfileList(y), cmd.OutOrStdout())
 		},
 	}
+	p.InstallFormatFlag(cmd)
+	return cmd
 }

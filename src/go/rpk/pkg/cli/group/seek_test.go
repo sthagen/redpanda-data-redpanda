@@ -10,12 +10,47 @@
 package group
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/testfs"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kadm"
 )
+
+func TestPrintSeekResults(t *testing.T) {
+	f := config.OutFormatter{Kind: "text"}
+
+	t.Run("no errors omits ERROR column", func(t *testing.T) {
+		results := []seekCommitResult{
+			{Topic: "foo", Partition: 0, Prior: 10, Current: 0},
+			{Topic: "bar", Partition: 1, Prior: 5, Current: 5},
+		}
+		var buf bytes.Buffer
+		printSeekResults(f, results, &buf)
+		require.Equal(t, [][]string{
+			{"TOPIC", "PARTITION", "PRIOR-OFFSET", "CURRENT-OFFSET"},
+			{"foo", "0", "10", "0"},
+			{"bar", "1", "5", "5"},
+		}, out.TableRows(buf.String()))
+	})
+
+	t.Run("with errors adds ERROR column", func(t *testing.T) {
+		results := []seekCommitResult{
+			{Topic: "foo", Partition: 0, Prior: 10, Current: 0, Error: "some error"},
+			{Topic: "bar", Partition: 1, Prior: 5, Current: 5},
+		}
+		var buf bytes.Buffer
+		printSeekResults(f, results, &buf)
+		require.Equal(t, [][]string{
+			{"TOPIC", "PARTITION", "PRIOR-OFFSET", "CURRENT-OFFSET", "ERROR"},
+			{"foo", "0", "10", "0", "some", "error"},
+			{"bar", "1", "5", "5"},
+		}, out.TableRows(buf.String()))
+	})
+}
 
 func TestParseSeekFile(t *testing.T) {
 	keep := map[string]bool{"foo": true}

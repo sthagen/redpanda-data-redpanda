@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -59,114 +60,65 @@ func setupTestTopics() kadm.TopicDetails {
 	}
 }
 
-type testCase struct {
-	Kind   string
-	Output string
-}
-
-func JSON(t *testing.T, o any) testCase {
-	expected, err := json.Marshal(o)
-	require.NoError(t, err)
-	return testCase{Kind: "json", Output: string(expected) + "\n"}
-}
-
-func YAML(t *testing.T, o any) testCase {
-	expected, err := yaml.Marshal(o)
-	require.NoError(t, err)
-	return testCase{Kind: "yaml", Output: string(expected) + "\n"}
-}
-
-func Text(s string) testCase {
-	return testCase{Kind: "text", Output: s}
-}
-
 func TestSummarizedListView(t *testing.T) {
 	topics := setupTestTopics()
 	s := summarizedListView(false, topics)
 
-	cases := []testCase{
-		Text(`NAME        PARTITIONS  REPLICAS
-test-topic  2           3
-`),
-		JSON(t, s),
-		YAML(t, s),
-	}
-
-	for _, c := range cases {
-		f := config.OutFormatter{Kind: c.Kind}
-		b := &strings.Builder{}
-		printSummarizedListView(f, s, b)
-		require.Equal(t, c.Output, b.String())
-	}
+	f := config.OutFormatter{Kind: "text"}
+	b := &strings.Builder{}
+	printSummarizedListView(f, s, b)
+	require.Equal(t, [][]string{
+		{"NAME", "PARTITIONS", "REPLICAS"},
+		{"test-topic", "2", "3"},
+	}, out.TableRows(b.String()))
 }
 
 func TestDetailedListView(t *testing.T) {
 	topics := setupTestTopics()
 	d := detailedListView(false, topics)
 
-	cases := []testCase{
-		Text(`test-topic, 2 partitions, 3 replicas
-      PARTITION  LEADER  EPOCH  REPLICAS  OFFLINE_REPLICAS
-      0          1       5      [1 2 3]   []
-      1          2       3      [1 2 3]   [1]
-`),
-		JSON(t, d),
-		YAML(t, d),
-	}
-
-	for _, c := range cases {
-		f := config.OutFormatter{Kind: c.Kind}
-		b := &strings.Builder{}
-		printDetailedListView(f, d, b)
-		require.Equal(t, c.Output, b.String())
-	}
+	f := config.OutFormatter{Kind: "text"}
+	b := &strings.Builder{}
+	printDetailedListView(f, d, b)
+	require.Equal(t, [][]string{
+		{"test-topic,", "2", "partitions,", "3", "replicas"},
+		{"PARTITION", "LEADER", "EPOCH", "REPLICAS", "OFFLINE_REPLICAS"},
+		{"0", "1", "5", "[1", "2", "3]", "[]"},
+		{"1", "2", "3", "[1", "2", "3]", "[1]"},
+	}, out.TableRows(b.String()))
 }
 
 func TestSummarizedListViewWithInternal(t *testing.T) {
 	topics := setupTestTopics()
 	s := summarizedListView(true, topics)
 
-	cases := []testCase{
-		Text(`NAME            PARTITIONS  REPLICAS
-internal-topic  1           1
-test-topic      2           3
-`),
-		JSON(t, s),
-		YAML(t, s),
-	}
-
-	for _, c := range cases {
-		f := config.OutFormatter{Kind: c.Kind}
-		b := &strings.Builder{}
-		printSummarizedListView(f, s, b)
-		require.Equal(t, c.Output, b.String())
-	}
+	f := config.OutFormatter{Kind: "text"}
+	b := &strings.Builder{}
+	printSummarizedListView(f, s, b)
+	require.Equal(t, [][]string{
+		{"NAME", "PARTITIONS", "REPLICAS"},
+		{"internal-topic", "1", "1"},
+		{"test-topic", "2", "3"},
+	}, out.TableRows(b.String()))
 }
 
 func TestDetailedListViewWithInternal(t *testing.T) {
 	topics := setupTestTopics()
 	d := detailedListView(true, topics)
 
-	cases := []testCase{
-		Text(`internal-topic (internal), 1 partitions, 1 replicas
-      PARTITION  LEADER  EPOCH  REPLICAS
-      0          1       1      [1]
-
-test-topic, 2 partitions, 3 replicas
-      PARTITION  LEADER  EPOCH  REPLICAS  OFFLINE_REPLICAS
-      0          1       5      [1 2 3]   []
-      1          2       3      [1 2 3]   [1]
-`),
-		JSON(t, d),
-		YAML(t, d),
-	}
-
-	for _, c := range cases {
-		f := config.OutFormatter{Kind: c.Kind}
-		b := &strings.Builder{}
-		printDetailedListView(f, d, b)
-		require.Equal(t, c.Output, b.String())
-	}
+	f := config.OutFormatter{Kind: "text"}
+	b := &strings.Builder{}
+	printDetailedListView(f, d, b)
+	require.Equal(t, [][]string{
+		{"internal-topic", "(internal),", "1", "partitions,", "1", "replicas"},
+		{"PARTITION", "LEADER", "EPOCH", "REPLICAS"},
+		{"0", "1", "1", "[1]"},
+		{},
+		{"test-topic,", "2", "partitions,", "3", "replicas"},
+		{"PARTITION", "LEADER", "EPOCH", "REPLICAS", "OFFLINE_REPLICAS"},
+		{"0", "1", "5", "[1", "2", "3]", "[]"},
+		{"1", "2", "3", "[1", "2", "3]", "[1]"},
+	}, out.TableRows(b.String()))
 }
 
 func TestEmptyTopicList(t *testing.T) {

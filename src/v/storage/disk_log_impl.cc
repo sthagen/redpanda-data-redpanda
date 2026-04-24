@@ -3417,6 +3417,29 @@ ss::future<> disk_log_impl::truncate_prefix(truncate_prefix_config cfg) {
           })
           .discard_result();
     });
+
+    std::optional<ss::rwlock::holder> front_lock;
+    if (
+      !_segs.empty()
+      && _segs.front()->offsets().get_base_offset() < cfg.start_offset) {
+        // If after removing full segments, the new start offset is still within
+        // the front segment there is a chance that there are active readers
+        // that rely on offset translation state which we are about to prefix
+        // truncate.
+        //
+        // To avoid interfering with those readers, we acquire the front
+        // segment's write lock to wait for those readers to finish.
+        //
+        // The correct reading protocol (safe from races) is to acquire read
+        // locks and only then check log start offset.
+
+        // Evict readers before acquiring the segment write lock to avoid
+        // deadlocks.
+        auto cache_lock = co_await _readers_cache->evict_segment_readers(
+          _segs.front());
+        front_lock = co_await _segs.front()->write_lock();
+    }
+
     // We truncate the segments before truncating offset translator to wait for
     // readers that started reading from the start of the log before we advanced
     // the start offset and thus can still need offset translation info.

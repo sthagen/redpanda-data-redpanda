@@ -1,0 +1,11 @@
+# Bazel target patterns packaged and submitted to Antithesis by the
+# "Nightly Antithesis Fixture Tests" Buildkite schedule (redpanda
+# pipeline, PIPELINE_ACTION=antithesis-fixture-submit).
+#
+# Each entry:
+#   - target:   Bazel label or pattern (required)
+#   - duration: AT run length in minutes (optional; defaults to 30)
+targets:
+  - target: "//src/v/cluster/tests/..."
+  - target: "//src/v/raft/tests/..."
+  - target: "//src/v/storage/tests/..."

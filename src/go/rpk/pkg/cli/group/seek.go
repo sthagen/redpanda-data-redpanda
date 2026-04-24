@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -85,7 +86,12 @@ Seek group G to the beginning of a topic it was not previously consuming:
     rpk group seek G --to start --topics foo --allow-new-topics
 `,
 		Args: cobra.ExactArgs(1),
-		Run: func(_ *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]seekCommitResult{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -94,8 +100,8 @@ Seek group G to the beginning of a topic it was not previously consuming:
 			defer adm.Close()
 
 			var n int
-			for _, f := range []string{to, toGroup, toFile} {
-				if f != "" {
+			for _, flag := range []string{to, toGroup, toFile} {
+				if flag != "" {
 					n++
 				}
 			}
@@ -114,7 +120,7 @@ Seek group G to the beginning of a topic it was not previously consuming:
 
 			group := args[0]
 
-			seek(fs, adm, group, to, toGroup, toFile, tset, allowNewTopics)
+			seek(fs, adm, group, to, toGroup, toFile, tset, allowNewTopics, f, cmd.OutOrStdout())
 		},
 	}
 
@@ -123,6 +129,7 @@ Seek group G to the beginning of a topic it was not previously consuming:
 	cmd.Flags().StringVar(&toFile, "to-file", "", "Seek to offsets as specified in the file")
 	cmd.Flags().StringSliceVar(&topics, "topics", nil, "Only seek these topics, if any are specified")
 	cmd.Flags().BoolVar(&allowNewTopics, "allow-new-topics", false, "Allow seeking to new topics not currently consumed (implied with --to-group or --to-file)")
+	p.InstallFormatFlag(cmd)
 
 	return cmd
 }
@@ -208,6 +215,8 @@ func seek(
 	toFile string,
 	topics map[string]bool,
 	allowNewTopics bool,
+	f config.OutFormatter,
+	w io.Writer,
 ) {
 	current := seekFetch(adm, group, topics, true)
 	var commitTo kadm.Offsets
@@ -261,51 +270,62 @@ func seek(
 	committed, err := adm.CommitOffsets(context.Background(), group, commitTo)
 	out.MaybeDie(err, "unable to commit offsets: %v", err)
 
-	useErr := committed.Error() != nil
-	headers := []string{"topic", "partition", "prior-offset", "current-offset"}
-	if useErr {
-		headers = append(headers, "error")
-	}
-	tw := out.NewTable(headers...)
-	defer tw.Flush()
+	results := make([]seekCommitResult, 0, len(committed))
 	for _, c := range committed.Sorted() {
-		s := seekCommit{c.Topic, c.Partition, -1, -1}
+		r := seekCommitResult{Topic: c.Topic, Partition: c.Partition, Prior: -1, Current: -1}
 		if o, exists := current.Lookup(c.Topic, c.Partition); exists {
-			s.Prior = o.At
+			r.Prior = o.At
 		}
 		if o, exists := commitTo.Lookup(c.Topic, c.Partition); exists {
-			s.Current = o.At
+			r.Current = o.At
 		}
-		se := seekCommitErr{c.Topic, c.Partition, -1, -1, ""}
 		if c.Err != nil {
 			// Redpanda / Kafka send UnknownMemberID when issuing OffsetCommit
 			// if the group is not empty. This error is unclear to end users, so
 			// we remap it here.
 			if errors.Is(c.Err, kerr.UnknownMemberID) {
-				se.Error = "INVALID_OPERATION: seeking a non-empty group is not allowed."
+				r.Error = "INVALID_OPERATION: seeking a non-empty group is not allowed."
 			} else {
-				se.Error = c.Err.Error()
+				r.Error = c.Err.Error()
 			}
 		}
+		results = append(results, r)
+	}
+	printSeekResults(f, results, w)
+}
+
+func printSeekResults(f config.OutFormatter, results []seekCommitResult, w io.Writer) {
+	if isText, _, t, err := f.Format(results); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	useErr := false
+	for _, r := range results {
+		if r.Error != "" {
+			useErr = true
+			break
+		}
+	}
+	headers := []string{"TOPIC", "PARTITION", "PRIOR-OFFSET", "CURRENT-OFFSET"}
+	if useErr {
+		headers = append(headers, "ERROR")
+	}
+	tw := out.NewTableTo(w, headers...)
+	defer tw.Flush()
+	for _, r := range results {
 		if useErr {
-			tw.PrintStructFields(se)
+			tw.Print(r.Topic, r.Partition, r.Prior, r.Current, r.Error)
 		} else {
-			tw.PrintStructFields(s)
+			tw.Print(r.Topic, r.Partition, r.Prior, r.Current)
 		}
 	}
 }
 
-type seekCommit struct {
-	Topic     string
-	Partition int32
-	Prior     int64
-	Current   int64
-}
-
-type seekCommitErr struct {
-	Topic     string
-	Partition int32
-	Prior     int64
-	Current   int64
-	Error     string
+type seekCommitResult struct {
+	Topic     string `json:"topic" yaml:"topic"`
+	Partition int32  `json:"partition" yaml:"partition"`
+	Prior     int64  `json:"prior_offset" yaml:"prior_offset"`
+	Current   int64  `json:"current_offset" yaml:"current_offset"`
+	Error     string `json:"error,omitempty" yaml:"error,omitempty"`
 }

@@ -11,6 +11,8 @@ package topic
 
 import (
 	"context"
+	"fmt"
+	"io"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/kafka"
@@ -21,6 +23,24 @@ import (
 	"github.com/twmb/franz-go/pkg/kmsg"
 	"go.uber.org/zap"
 )
+
+type alterConfigResult struct {
+	Topic  string `json:"topic" yaml:"topic"`
+	Status string `json:"status" yaml:"status"`
+}
+
+func printAlterConfigResults(f config.OutFormatter, results []alterConfigResult, w io.Writer) {
+	if isText, _, t, err := f.Format(results); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := out.NewTableTo(w, "TOPIC", "STATUS")
+	defer tw.Flush()
+	for _, r := range results {
+		tw.Print(r.Topic, r.Status)
+	}
+}
 
 func newAlterConfigCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var (
@@ -52,7 +72,12 @@ The --dry option will validate whether the requested configuration change is
 valid, but does not apply it.
 Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 		Args: cobra.MinimumNArgs(1),
-		Run: func(_ *cobra.Command, topics []string) {
+		Run: func(cmd *cobra.Command, topics []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]alterConfigResult{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -158,9 +183,7 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 			resp, err := req.RequestWith(context.Background(), cl)
 			out.MaybeDie(err, "unable to incrementally update configs: %v", err)
 
-			tw := out.NewTable("TOPIC", "STATUS")
-			defer tw.Flush()
-
+			var results []alterConfigResult
 			for _, resource := range resp.Resources {
 				msg := "OK"
 				if rrwErrorCode := rrwErrors[resource.ResourceName]; resource.ErrorCode != 0 || rrwErrorCode != 0 {
@@ -174,8 +197,9 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 						msg += ": " + *resource.ErrorMessage
 					}
 				}
-				tw.Print(resource.ResourceName, msg)
+				results = append(results, alterConfigResult{Topic: resource.ResourceName, Status: msg})
 			}
+			printAlterConfigResults(f, results, cmd.OutOrStdout())
 		},
 	}
 
@@ -187,5 +211,6 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 	cmd.Flags().BoolVar(&dry, "dry", false, "Dry run: validate the alter request, but do not apply")
 	cmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Disable confirmation prompt")
 
+	p.InstallFormatFlag(cmd)
 	return cmd
 }

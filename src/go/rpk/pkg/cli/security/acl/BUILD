@@ -29,9 +29,14 @@ go_library(
 go_test(
     name = "acl_test",
     size = "small",
-    srcs = ["common_test.go"],
+    srcs = [
+        "common_test.go",
+        "delete_test.go",
+    ],
     embed = [":acl"],
     deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
         "@com_github_redpanda_data_common_go_rpsr//:rpsr",
         "@com_github_stretchr_testify//require",
         "@com_github_twmb_franz_go_pkg_kadm//:kadm",

@@ -10,8 +10,8 @@
 package selftest
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -33,8 +33,72 @@ const (
 	statusRunning = "running"
 )
 
+// selfTestResult mirrors rpadmin.SelfTestNodeResult with yaml tags for
+// structured output support.
+type selfTestResult struct {
+	P50            *uint   `json:"p50,omitempty" yaml:"p50,omitempty"`
+	P90            *uint   `json:"p90,omitempty" yaml:"p90,omitempty"`
+	P99            *uint   `json:"p99,omitempty" yaml:"p99,omitempty"`
+	P999           *uint   `json:"p999,omitempty" yaml:"p999,omitempty"`
+	MaxLatency     *uint   `json:"max_latency,omitempty" yaml:"max_latency,omitempty"`
+	RequestsPerSec *uint   `json:"rps,omitempty" yaml:"rps,omitempty"`
+	BytesPerSec    *uint   `json:"bps,omitempty" yaml:"bps,omitempty"`
+	Timeouts       uint    `json:"timeouts" yaml:"timeouts"`
+	TestID         string  `json:"test_id" yaml:"test_id"`
+	TestName       string  `json:"name" yaml:"name"`
+	TestInfo       string  `json:"info" yaml:"info"`
+	TestType       string  `json:"test_type" yaml:"test_type"`
+	StartTime      int64   `json:"start_time" yaml:"start_time"`
+	EndTime        int64   `json:"end_time" yaml:"end_time"`
+	Duration       uint    `json:"duration" yaml:"duration"`
+	Warning        *string `json:"warning,omitempty" yaml:"warning,omitempty"`
+	Error          *string `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
+// selfTestNodeReport mirrors rpadmin.SelfTestNodeReport with yaml tags for
+// structured output support.
+type selfTestNodeReport struct {
+	NodeID  int              `json:"node_id" yaml:"node_id"`
+	Status  string           `json:"status" yaml:"status"`
+	Stage   string           `json:"stage" yaml:"stage"`
+	Results []selfTestResult `json:"results,omitempty" yaml:"results,omitempty"`
+}
+
+func toSelfTestNodeReports(reports []rpadmin.SelfTestNodeReport) []selfTestNodeReport {
+	result := make([]selfTestNodeReport, 0, len(reports))
+	for _, r := range reports {
+		nr := selfTestNodeReport{
+			NodeID: r.NodeID,
+			Status: r.Status,
+			Stage:  r.Stage,
+		}
+		for _, res := range r.Results {
+			nr.Results = append(nr.Results, selfTestResult{
+				P50:            res.P50,
+				P90:            res.P90,
+				P99:            res.P99,
+				P999:           res.P999,
+				MaxLatency:     res.MaxLatency,
+				RequestsPerSec: res.RequestsPerSec,
+				BytesPerSec:    res.BytesPerSec,
+				Timeouts:       res.Timeouts,
+				TestID:         res.TestID,
+				TestName:       res.TestName,
+				TestInfo:       res.TestInfo,
+				TestType:       res.TestType,
+				StartTime:      res.StartTime,
+				EndTime:        res.EndTime,
+				Duration:       res.Duration,
+				Warning:        res.Warning,
+				Error:          res.Error,
+			})
+		}
+		result = append(result, nr)
+	}
+	return result
+}
+
 func newStatusCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	var format string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Returns the status of the current running tests or the cached results of the last completed run.",
@@ -66,69 +130,78 @@ If Tiered Storage is not enabled, the cloud storage tests won't run and a warnin
 `,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, _ []string) {
-			// Load config settings
+			f := p.Formatter
+			if h, ok := f.Help([]selfTestNodeReport{}); ok {
+				out.Exit(h)
+			}
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			config.CheckExitCloudAdmin(p)
 
-			// Create new HTTP client for communication w/ admin server
 			cl, err := adminapi.NewClient(cmd.Context(), fs, p)
 			out.MaybeDie(err, "unable to initialize admin client: %v", err)
 
-			// Make HTTP GET request to any node requesting for status
-			// Returns last runs results, or status of which nodes have jobs running
 			reports, err := cl.SelfTestStatus(cmd.Context())
 			out.MaybeDie(err, "unable to query self-test status: %v", err)
 
-			if format == "json" {
-				asJSON, err := json.MarshalIndent(reports, "", "\t")
-				out.MaybeDie(err, "unable to format response as JSON: %v", err)
-				fmt.Print(string(asJSON))
-				return
-			}
-
-			// If there is outstanding work, indicate which nodes, then exit
-			running := runningNodes(reports)
-			if len(running) > 0 {
-				keys := make([]int, 0, len(running))
-				for k := range running {
-					keys = append(keys, k)
-				}
-				sort.Ints(keys)
-				for _, k := range keys {
-					fmt.Printf("Node %v is still running %v self test\n", k, running[k])
-				}
-				return
-			}
-
-			// .. or redpanda has never run any tests, no cached data exists
-			if isUninitialized(reports) {
-				fmt.Println("All nodes are idle with no cached test results")
-				return
-			}
-
-			// In all other cases there are results, print them and exit
-			tw := out.NewTabWriter()
-			defer tw.Flush()
-			for _, report := range reports {
-				header := makeReportHeader(report)
-				tw.PrintColumn(header)
-				tw.PrintColumn(strings.Repeat("=", len(header)))
-				tableResults := makeReportTable(report)
-				if len(tableResults) == 0 {
-					tw.PrintColumn("INFO", "No cached results for node")
-					tw.Line()
-					continue
-				}
-				for _, row := range tableResults {
-					all := rowDataAsInterface(row[1:])
-					tw.PrintColumn(row[0], all...)
-				}
-			}
+			err = printSelfTestStatus(f, reports, cmd.OutOrStdout())
+			out.MaybeDieErr(err)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "text", "Output format (text, json)")
+	p.InstallFormatFlag(cmd)
 	return cmd
+}
+
+func printSelfTestStatus(f config.OutFormatter, reports []rpadmin.SelfTestNodeReport, w io.Writer) error {
+	converted := toSelfTestNodeReports(reports)
+	if isText, _, formatted, err := f.Format(converted); !isText {
+		if err != nil {
+			return fmt.Errorf("unable to format self-test status: %w", err)
+		}
+		fmt.Fprintln(w, formatted)
+		return nil
+	}
+
+	// If there is outstanding work, indicate which nodes, then exit.
+	running := runningNodes(reports)
+	if len(running) > 0 {
+		keys := make([]int, 0, len(running))
+		for k := range running {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+		for _, k := range keys {
+			fmt.Fprintf(w, "Node %v is still running %v self test\n", k, running[k])
+		}
+		return nil
+	}
+
+	// No cached data exists if Redpanda has never run any tests.
+	if isUninitialized(reports) {
+		fmt.Fprintln(w, "All nodes are idle with no cached test results")
+		return nil
+	}
+
+	// Print results grouped by node.
+	tw := out.NewTabWriterTo(w)
+	defer tw.Flush()
+	for _, report := range reports {
+		header := makeReportHeader(report)
+		tw.PrintColumn(header)
+		tw.PrintColumn(strings.Repeat("=", len(header)))
+		tableResults := makeReportTable(report)
+		if len(tableResults) == 0 {
+			tw.PrintColumn("INFO", "No cached results for node")
+			tw.Line()
+			continue
+		}
+		for _, row := range tableResults {
+			all := rowDataAsInterface(row[1:])
+			tw.PrintColumn(row[0], all...)
+		}
+	}
+	return nil
 }
 
 func rowDataAsInterface(row []string) []any {

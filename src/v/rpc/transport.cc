@@ -452,7 +452,8 @@ void transport::setup_metrics(
       "rpc_client",
       labels,
       aggregate_labels,
-      _probe->defs(labels, aggregate_labels));
+      _probe->defs(
+        labels, aggregate_labels, [this] { return _correlations.size(); }));
 }
 
 timing_info* transport::get_timing(uint32_t correlation) {
@@ -481,7 +482,8 @@ fmt::iterator transport::format_to(fmt::iterator it) const {
 
 std::vector<ss::metrics::metric_definition> client_probe::defs(
   const std::vector<ss::metrics::label_instance>& labels,
-  const std::vector<ss::metrics::label>& aggregate_labels) {
+  const std::vector<ss::metrics::label>& aggregate_labels,
+  std::function<size_t()> pending_count) {
     namespace sm = ss::metrics;
     std::vector<sm::metric_definition> ret;
 
@@ -496,7 +498,7 @@ std::vector<ss::metrics::metric_definition> client_probe::defs(
     ret.emplace_back(
       sm::make_gauge(
         "requests_pending",
-        [this] { return _requests_pending; },
+        [pending_count = std::move(pending_count)] { return pending_count(); },
         sm::description("Number of requests pending"),
         labels)
         .aggregate(aggregate_labels));
@@ -580,14 +582,13 @@ std::vector<ss::metrics::metric_definition> client_probe::defs(
 fmt::iterator client_probe::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it,
-      "{{ requests_sent: {}, requests_pending: {}, requests_completed: {}, "
+      "{{ requests_sent: {}, requests_completed: {}, "
       "request_errors: {}, request_timeouts: {}, in_bytes: {}, out_bytes: {}, "
       "connects: {}, connections: {}, connection_errors: {}, "
       "read_dispatch_errors: {}, corrupted_headers: {}, "
       "server_correlation_errors: {}, client_correlation_errors: {}, "
       "requests_blocked_memory: {} }}",
       _requests,
-      _requests_pending,
       _requests_completed,
       _request_errors,
       _request_timeouts,

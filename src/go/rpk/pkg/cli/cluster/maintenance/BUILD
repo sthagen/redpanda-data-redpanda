@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "maintenance",
@@ -17,5 +17,17 @@ go_library(
         "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_test(
+    name = "maintenance_test",
+    srcs = ["status_test.go"],
+    embed = [":maintenance"],
+    deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
+        "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
+        "@com_github_stretchr_testify//require",
     ],
 )

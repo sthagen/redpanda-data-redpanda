@@ -384,6 +384,34 @@ TEST_F_CORO(debug_bundle_service_started_fixture, test_all_parameters) {
     }
 }
 
+TEST_F_CORO(debug_bundle_service_started_fixture, test_bearer_creds_args) {
+    debug_bundle::job_id_t job_id(uuid_t::create());
+
+    ss::sstring token = "eyJhbGciOiJSUzI1NiJ9.test-payload";
+    ss::sstring mechanism = "OAUTHBEARER";
+
+    debug_bundle::debug_bundle_parameters params{
+      .authn_options = debug_bundle::bearer_creds{
+        .token = token, .mechanism = mechanism}};
+
+    co_await run_bundle(job_id, std::move(params));
+
+    auto status = co_await _service.local().rpk_debug_bundle_status();
+    ASSERT_TRUE_CORO(status.has_value()) << status.assume_error().message();
+    ASSERT_FALSE_CORO(status.assume_value().cout.empty());
+
+    // rpk-shim echoes all args; token appears as -Xpass=token:<TOKEN>
+    auto expected = ssx::sformat(
+      "debug bundle --output {}/{}.zip --verbose -Xpass=token:{} "
+      "-Xsasl.mechanism={}\n",
+      (_data_dir / debug_bundle::service::debug_bundle_dir_name).native(),
+      job_id,
+      token,
+      mechanism);
+    EXPECT_EQ(status.assume_value().cout[0], expected)
+      << status.assume_value().cout[0] << " != " << expected;
+}
+
 TEST_F_CORO(debug_bundle_service_started_fixture, try_running_multiple) {
     auto res = co_await _service.invoke_on(
       debug_bundle::service_shard, [](debug_bundle::service& s) {
@@ -674,6 +702,11 @@ ss::future<> wait_for_file_to_be_created(
     throw std::runtime_error(
       fmt::format("Timed out waiting for process file '{}' to exist", file));
 }
+
+ss::future<> wait_for_kvstore_to_populate(
+  storage::kvstore* kvstore,
+  std::chrono::seconds timeout = std::chrono::seconds{10});
+
 TEST_F_CORO(debug_bundle_service_started_fixture, check_clean_up) {
     using namespace std::chrono_literals;
     debug_bundle::job_id_t job1(uuid_t::create());
@@ -695,8 +728,12 @@ TEST_F_CORO(debug_bundle_service_started_fixture, check_clean_up) {
         ASSERT_TRUE_CORO(res.has_value()) << res.assume_error().message();
         ASSERT_NO_THROW_CORO(
           co_await wait_for_file_to_be_created(job1_file, 10s));
+        // wait_for_kvstore_to_populate is the reliable signal that set_metadata
+        // has finished: it writes the .out file then updates the kvstore.
+        // Using a 30s budget to absorb SHA256 latency on slow sandbox I/O.
         ASSERT_NO_THROW_CORO(
-          co_await wait_for_file_to_be_created(job1_out_file, 10s));
+          co_await wait_for_kvstore_to_populate(_kvstore.get(), 30s));
+        ASSERT_TRUE_CORO(co_await ss::file_exists(job1_out_file.native()));
     }
     {
         auto res
@@ -706,15 +743,15 @@ TEST_F_CORO(debug_bundle_service_started_fixture, check_clean_up) {
         ASSERT_NO_THROW_CORO(
           co_await wait_for_file_to_be_created(job2_file, 10s));
         ASSERT_NO_THROW_CORO(
-          co_await wait_for_file_to_be_created(job2_out_file, 10s));
+          co_await wait_for_kvstore_to_populate(_kvstore.get(), 30s));
+        ASSERT_TRUE_CORO(co_await ss::file_exists(job2_out_file.native()));
     }
     EXPECT_FALSE(co_await ss::file_exists(job1_file.native()));
     EXPECT_FALSE(co_await ss::file_exists(job1_out_file.native()));
 }
 
 ss::future<> wait_for_kvstore_to_populate(
-  storage::kvstore* kvstore,
-  std::chrono::seconds timeout = std::chrono::seconds{10}) {
+  storage::kvstore* kvstore, std::chrono::seconds timeout) {
     const auto start_time = debug_bundle::clock::now();
     while (debug_bundle::clock::now() - start_time <= timeout) {
         auto metadata_buf = kvstore->get(

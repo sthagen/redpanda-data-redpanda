@@ -9,6 +9,7 @@
 
 #include "cluster/config_frontend.h"
 #include "cluster/controller.h"
+#include "config/configuration.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/create_partitions.h"
 #include "kafka/protocol/create_topics.h"
@@ -51,6 +52,11 @@ public:
             },
             model::timeout_clock::now() + 5s)
           .get();
+        // Tests have no restart mechanism, so promote pending values
+        // immediately so that needs_restart properties take effect.
+        ss::smp::invoke_on_all([] {
+            config::shard_local_cfg().promote_pending();
+        }).get();
     }
 
     template<typename Func>

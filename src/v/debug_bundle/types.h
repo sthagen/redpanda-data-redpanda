@@ -73,8 +73,18 @@ struct scram_creds {
 
     friend bool operator==(const scram_creds&, const scram_creds&) = default;
 };
+
+/// OAUTHBEARER credentials for authn; carries the raw bearer token
+struct bearer_creds {
+    ss::sstring token;
+    /// Always "OAUTHBEARER"
+    ss::sstring mechanism;
+
+    friend bool operator==(const bearer_creds&, const bearer_creds&) = default;
+};
+
 /// Variant so it can be expanded as new authn methods are added to rpk
-using debug_bundle_authn_options = std::variant<scram_creds>;
+using debug_bundle_authn_options = std::variant<scram_creds, bearer_creds>;
 
 /// Used to collect topics and partitions for the "--partitions" option for "rpk
 /// debug_bundle"

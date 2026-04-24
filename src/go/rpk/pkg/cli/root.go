@@ -124,7 +124,7 @@ func Execute() {
 		debug.NewCommand(fs, p),
 		generate.NewCommand(fs, p),
 		group.NewCommand(fs, p),
-		plugincmd.NewCommand(fs),
+		plugincmd.NewCommand(fs, p),
 		registry.NewCommand(fs, p),
 		security.NewCommand(fs, p),
 		shadow.NewCommand(fs, p),

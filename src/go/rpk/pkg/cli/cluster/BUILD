@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cluster",
@@ -32,5 +32,16 @@ go_library(
         "@com_github_twmb_franz_go_pkg_kadm//:kadm",
         "@com_github_twmb_types//:types",
         "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "cluster_test",
+    srcs = ["logdirs_test.go"],
+    embed = [":cluster"],
+    deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
+        "@com_github_stretchr_testify//require",
     ],
 )

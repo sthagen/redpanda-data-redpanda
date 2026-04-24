@@ -53,6 +53,7 @@ using JsonTestTypes = ::testing::Types<
   clock::time_point,
   time_variant,
   scram_creds,
+  bearer_creds,
   debug_bundle_authn_options,
   partition_selection,
   debug_bundle_parameters,
@@ -105,12 +106,17 @@ TYPED_TEST(JsonTypeTest, BasicType) {
           = R"({"username": "user", "password": "pass", "mechanism": "SCRAM-SHA-256"})";
         this->expected = scram_creds{
           .username{"user"}, .password{"pass"}, .mechanism{"SCRAM-SHA-256"}};
+    } else if constexpr (std::is_same_v<TypeParam, bearer_creds>) {
+        this->json_input
+          = R"({"token": "my-jwt-token", "mechanism": "OAUTHBEARER"})";
+        this->expected = bearer_creds{
+          .token{"my-jwt-token"}, .mechanism{"OAUTHBEARER"}};
     } else if constexpr (
       std::is_same_v<TypeParam, debug_bundle_authn_options>) {
         this->json_input
-          = R"({"username": "user", "password": "pass", "mechanism": "SCRAM-SHA-256"})";
-        this->expected = TypeParam{scram_creds{
-          .username{"user"}, .password{"pass"}, .mechanism{"SCRAM-SHA-256"}}};
+          = R"({"token": "my-jwt-token", "mechanism": "OAUTHBEARER"})";
+        this->expected = TypeParam{
+          bearer_creds{.token{"my-jwt-token"}, .mechanism{"OAUTHBEARER"}}};
     } else if constexpr (std::is_same_v<TypeParam, partition_selection>) {
         this->json_input = R"("foo/bar/1")";
         this->expected = {
@@ -241,11 +247,16 @@ TYPED_TEST(JsonTypeTest, TypeIsInvalid) {
         this->json_input = R"({"credential": "user:pass:SCRAM-SHA-256"})";
         this->expected = scram_creds{
           .username{"user"}, .password{"pass"}, .mechanism{"SCRAM-SHA-256"}};
+    } else if constexpr (std::is_same_v<TypeParam, bearer_creds>) {
+        // Missing required "token" field
+        this->json_input = R"({"mechanism": "OAUTHBEARER"})";
+        this->expected = bearer_creds{
+          .token{"my-jwt-token"}, .mechanism{"OAUTHBEARER"}};
     } else if constexpr (
       std::is_same_v<TypeParam, debug_bundle_authn_options>) {
         this->json_input = R"(42)";
-        this->expected = TypeParam{scram_creds{
-          .username{"user"}, .password{"pass"}, .mechanism{"SCRAM-SHA-256"}}};
+        this->expected = TypeParam{
+          bearer_creds{.token{"my-jwt-token"}, .mechanism{"OAUTHBEARER"}}};
     } else if constexpr (std::is_same_v<TypeParam, partition_selection>) {
         this->json_input = R"("invalid")";
         this->expected = {
@@ -297,12 +308,17 @@ TYPED_TEST(JsonTypeTest, ValidateControlCharacters) {
           = R"({"username": "user\r", "password": "pass", "mechanism": "SCRAM-SHA-256"})";
         this->expected = scram_creds{
           .username{"user"}, .password{"pass"}, .mechanism{"SCRAM-SHA-256"}};
+    } else if constexpr (std::is_same_v<TypeParam, bearer_creds>) {
+        this->json_input
+          = R"({"token": "bad\ntoken", "mechanism": "OAUTHBEARER"})";
+        this->expected = bearer_creds{
+          .token{"my-jwt-token"}, .mechanism{"OAUTHBEARER"}};
     } else if constexpr (
       std::is_same_v<TypeParam, debug_bundle_authn_options>) {
         this->json_input
-          = R"({"username": "user", "password": "\fpass", "mechanism": "SCRAM-SHA-256"})";
-        this->expected = TypeParam{scram_creds{
-          .username{"user"}, .password{"pass"}, .mechanism{"SCRAM-SHA-256"}}};
+          = R"({"token": "bad\ntoken", "mechanism": "OAUTHBEARER"})";
+        this->expected = TypeParam{
+          bearer_creds{.token{"my-jwt-token"}, .mechanism{"OAUTHBEARER"}}};
     } else {
         return;
     }
@@ -324,4 +340,49 @@ TYPED_TEST(JsonTypeTest, ValidateControlCharacters) {
       res.assume_error().message().find("invalid control character")
       != std::string::npos)
       << res.assume_error().message();
+}
+
+/// Verify that debug_bundle_parameters accepts OAUTHBEARER authentication.
+TEST(JsonTest, ParametersWithBearerAuth) {
+    const ss::sstring json_input = R"({
+  "authentication": {
+    "token": "my-jwt-token",
+    "mechanism": "OAUTHBEARER"
+  }
+})";
+
+    json::Document doc;
+    ASSERT_NO_THROW(doc.Parse(json_input));
+    ASSERT_FALSE(doc.HasParseError());
+
+    debug_bundle::result<debug_bundle_parameters> res{outcome::success()};
+    ASSERT_NO_THROW(res = from_json<debug_bundle_parameters>(doc));
+    ASSERT_TRUE(res.has_value()) << res.assume_error().message();
+
+    const auto& params = res.assume_value();
+    ASSERT_TRUE(params.authn_options.has_value());
+    ASSERT_TRUE(
+      std::holds_alternative<bearer_creds>(params.authn_options.value()));
+    const auto& bc = std::get<bearer_creds>(params.authn_options.value());
+    EXPECT_EQ(bc.token, "my-jwt-token");
+    EXPECT_EQ(bc.mechanism, "OAUTHBEARER");
+}
+
+/// Verify that {mechanism: OAUTHBEARER} with no token is rejected with a parse
+/// error (maps to HTTP 400 in the admin API).
+TEST(JsonTest, BearerAuthMissingTokenIsRejected) {
+    const ss::sstring json_input = R"({
+  "authentication": {
+    "mechanism": "OAUTHBEARER"
+  }
+})";
+
+    json::Document doc;
+    ASSERT_NO_THROW(doc.Parse(json_input));
+    ASSERT_FALSE(doc.HasParseError());
+
+    debug_bundle::result<debug_bundle_parameters> res{outcome::success()};
+    ASSERT_NO_THROW(res = from_json<debug_bundle_parameters>(doc));
+    ASSERT_TRUE(res.has_error());
+    EXPECT_EQ(res.assume_error().code(), error_code::invalid_parameters);
 }

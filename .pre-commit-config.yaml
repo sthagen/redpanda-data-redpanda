@@ -32,11 +32,16 @@ repos:
       - id: golangci-lint-full
         name: Go linting (golangci-lint)
         entry: bash -c 'cd src/go/rpk && golangci-lint run --timeout=10m --verbose'
+        language_version: 1.26.2
         files: '^src/go/rpk/.*\.go$|^src/go/rpk/go\.(mod|sum)$|^src/go/rpk/\.golangci\.yml$'
+        pass_filenames: false
+
       - id: golangci-lint-config-verify
         name: Go lint config verify
-        entry: bash -c 'cd src/go/rpk && golangci-lint config verify'
+        entry: bash -c 'cd src/go/rpk && golangci-lint config verify --config .golangci.yml'
+        language_version: 1.26.2
         files: '^src/go/rpk/\.golangci\.yml$'
+        pass_filenames: false
 
   # Local hooks
   - repo: local

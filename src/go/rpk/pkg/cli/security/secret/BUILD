@@ -25,7 +25,14 @@ go_library(
 
 go_test(
     name = "secret_test",
-    srcs = ["secret_test.go"],
+    srcs = [
+        "list_test.go",
+        "secret_test.go",
+    ],
     embed = [":secret"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
+        "@com_github_stretchr_testify//require",
+    ],
 )

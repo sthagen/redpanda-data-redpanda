@@ -28,6 +28,7 @@ go_test(
     srcs = ["selftest_test.go"],
     embed = [":selftest"],
     deps = [
+        "//src/go/rpk/pkg/config",
         "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_stretchr_testify//require",
     ],

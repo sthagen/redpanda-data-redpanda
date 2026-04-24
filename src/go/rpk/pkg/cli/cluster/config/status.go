@@ -12,6 +12,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 
 	"go.uber.org/zap"
@@ -22,6 +23,7 @@ import (
 
 	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"connectrpc.com/connect"
+	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
@@ -29,6 +31,41 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
+
+type nodeConfigStatus struct {
+	Node          int64    `json:"node" yaml:"node"`
+	ConfigVersion int64    `json:"config_version" yaml:"config_version"`
+	NeedsRestart  bool     `json:"needs_restart" yaml:"needs_restart"`
+	Invalid       []string `json:"invalid" yaml:"invalid"`
+	Unknown       []string `json:"unknown" yaml:"unknown"`
+}
+
+func buildNodeStatuses(resp rpadmin.ConfigStatusResponse) []nodeConfigStatus {
+	statuses := make([]nodeConfigStatus, 0, len(resp))
+	for _, node := range resp {
+		statuses = append(statuses, nodeConfigStatus{
+			Node:          node.NodeID,
+			ConfigVersion: node.ConfigVersion,
+			NeedsRestart:  node.Restart,
+			Invalid:       node.Invalid,
+			Unknown:       node.Unknown,
+		})
+	}
+	return statuses
+}
+
+func printNodeStatus(f config.OutFormatter, statuses []nodeConfigStatus, w io.Writer) {
+	if isText, _, t, err := f.Format(statuses); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, t)
+		return
+	}
+	tw := out.NewTableTo(w, "NODE", "CONFIG-VERSION", "NEEDS-RESTART", "INVALID", "UNKNOWN")
+	defer tw.Flush()
+	for _, s := range statuses {
+		tw.Print(s.Node, s.ConfigVersion, s.NeedsRestart, s.Invalid, s.Unknown)
+	}
+}
 
 func newStatusCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd := &cobra.Command{
@@ -46,6 +83,11 @@ a lower number shows that a node is out of sync, perhaps because it
 is offline.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]nodeConfigStatus{}); ok {
+				out.Exit(h)
+			}
+
 			vp, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -71,26 +113,15 @@ is offline.`,
 				client, err := adminapi.NewClient(cmd.Context(), fs, vp)
 				out.MaybeDie(err, "unable to initialize admin client: %v", err)
 
-				// GET the status endpoint
 				resp, err := client.ClusterConfigStatus(cmd.Context(), false)
 				out.MaybeDie(err, "error fetching status: %v", err)
 
-				tw := out.NewTable("NODE", "CONFIG-VERSION", "NEEDS-RESTART", "INVALID", "UNKNOWN")
-				defer tw.Flush()
-
-				for _, node := range resp {
-					tw.PrintStructFields(struct {
-						ID      int64
-						Version int64
-						Restart bool
-						Invalid []string
-						Unknown []string
-					}{node.NodeID, node.ConfigVersion, node.Restart, node.Invalid, node.Unknown})
-				}
+				printNodeStatus(f, buildNodeStatuses(resp), cmd.OutOrStdout())
 			}
 		},
 	}
 
+	p.InstallFormatFlag(cmd)
 	return cmd
 }
 

@@ -35,9 +35,16 @@ go_library(
 go_test(
     name = "partitions_test",
     size = "small",
-    srcs = ["move_test.go"],
+    srcs = [
+        "cancel_test.go",
+        "move_status_test.go",
+        "move_test.go",
+        "status_test.go",
+    ],
     embed = [":partitions"],
     deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
         "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_stretchr_testify//require",
     ],

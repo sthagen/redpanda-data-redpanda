@@ -167,12 +167,46 @@ debug_bundle::result<T> from_json(const json::Value& v) {
             return std::move(sc);
         }
         return parse_error(": expected scram_creds");
-    } else if constexpr (std::is_same_v<T, debug_bundle_authn_options>) {
-        auto r = from_json<scram_creds>(v);
-        if (r.has_value()) {
-            return T{std::move(r).assume_value()};
+    } else if constexpr (std::is_same_v<T, bearer_creds>) {
+        if (v.IsObject()) {
+            auto o = v.GetObject();
+            bearer_creds bc;
+            if (
+              auto r = from_json<decltype(bc.token)>(o, "token", true);
+              r.has_value()) {
+                bc.token = std::move(r).assume_value();
+            } else {
+                return std::move(r).assume_error();
+            }
+            if (
+              auto r = from_json<decltype(bc.mechanism)>(o, "mechanism", true);
+              r.has_value()) {
+                bc.mechanism = std::move(r).assume_value();
+            } else {
+                return std::move(r).assume_error();
+            }
+            return std::move(bc);
         }
-        return std::move(r).assume_error();
+        return parse_error(": expected bearer_creds");
+    } else if constexpr (std::is_same_v<T, debug_bundle_authn_options>) {
+        // Dispatch on the presence of "token" (OAUTHBEARER) vs "username"
+        // (SCRAM)
+        if (v.IsObject()) {
+            auto o = v.GetObject();
+            if (o.HasMember("token")) {
+                auto r = from_json<bearer_creds>(v);
+                if (r.has_value()) {
+                    return T{std::move(r).assume_value()};
+                }
+                return std::move(r).assume_error();
+            }
+            auto r = from_json<scram_creds>(v);
+            if (r.has_value()) {
+                return T{std::move(r).assume_value()};
+            }
+            return std::move(r).assume_error();
+        }
+        return parse_error(": expected authentication credentials object");
     } else if constexpr (std::is_same_v<T, partition_selection>) {
         if (v.IsString()) {
             auto r = partition_selection::from_string_view(as_string_view(v));

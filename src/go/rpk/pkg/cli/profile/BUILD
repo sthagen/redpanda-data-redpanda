@@ -46,6 +46,7 @@ go_test(
     size = "small",
     srcs = [
         "create_test.go",
+        "list_test.go",
         "print_test.go",
         "prompt_test.go",
         "validate_test.go",
@@ -57,6 +58,7 @@ go_test(
     },
     deps = [
         "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
         "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",
         "@com_github_fatih_color//:color",
         "@com_github_spf13_afero//:afero",

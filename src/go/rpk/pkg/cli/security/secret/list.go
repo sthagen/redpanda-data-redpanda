@@ -11,6 +11,8 @@ package secret
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
@@ -22,6 +24,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type secretListItem struct {
+	ID     string   `json:"id" yaml:"id"`
+	Scopes []string `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+}
+
 func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var nameContains string
 
@@ -30,6 +37,10 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Short: "List all secrets",
 		Long:  "List all secrets in your Redpanda Cloud cluster",
 		Run: func(cmd *cobra.Command, _ []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]secretListItem{}); ok {
+				out.Exit(h)
+			}
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			if !p.CheckFromCloud() {
@@ -56,30 +67,41 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			response, err := cl.Secret.ListSecrets(cmd.Context(), connect.NewRequest(request))
 			out.MaybeDie(err, "unable to list secrets: %v", err)
 
-			tw := out.NewTable("NAME", "SCOPES")
-			defer tw.Flush()
+			var items []secretListItem
 			for _, secret := range response.Msg.Secrets {
-				var secretScopes []string
+				var scopes []string
 				for _, scope := range secret.Scopes {
 					name, ok := mapScopeToName()[scope]
 					if !ok {
-						fmt.Printf("invalid scope: %s,", scope.String())
+						fmt.Fprintf(os.Stderr, "invalid scope: %s\n", scope.String())
 						name = "invalid"
 					}
-					secretScopes = append(secretScopes, name)
+					scopes = append(scopes, name)
 				}
-				tw.PrintStructFields(struct {
-					Name   string
-					Scopes string
-				}{
-					Name:   secret.Id,
-					Scopes: strings.Join(secretScopes, ", "),
+				items = append(items, secretListItem{
+					ID:     secret.Id,
+					Scopes: scopes,
 				})
 			}
+			printSecretList(f, items, cmd.OutOrStdout())
 		},
 	}
 
 	cmd.Flags().StringVar(&nameContains, "name-contains", "", "Substring match on secret name")
+	p.InstallFormatFlag(cmd)
 
 	return cmd
+}
+
+func printSecretList(f config.OutFormatter, items []secretListItem, w io.Writer) {
+	if isText, _, formatted, err := f.Format(items); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintln(w, formatted)
+		return
+	}
+	tw := out.NewTableTo(w, "NAME", "SCOPES")
+	defer tw.Flush()
+	for _, item := range items {
+		tw.Print(item.ID, strings.Join(item.Scopes, ", "))
+	}
 }

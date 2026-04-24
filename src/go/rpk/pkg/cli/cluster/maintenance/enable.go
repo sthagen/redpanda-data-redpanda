@@ -110,7 +110,7 @@ node exists that is already in maintenance mode then an error will be returned.
 				}
 				retries = 3
 				if table == nil {
-					table = newMaintenanceReportTable()
+					table = newMaintenanceReportTable(cmd.OutOrStdout())
 				}
 				addBrokerMaintenanceReport(table, b)
 				table.Flush()

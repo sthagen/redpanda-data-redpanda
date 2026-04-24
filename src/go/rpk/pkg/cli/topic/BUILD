@@ -47,9 +47,12 @@ go_test(
     name = "topic_test",
     size = "small",
     srcs = [
+        "add_partitions_test.go",
         "analyze_test.go",
+        "config_test.go",
         "consume_test.go",
         "create_test.go",
+        "delete_test.go",
         "describe_test.go",
         "list_test.go",
         "trim_test.go",
@@ -58,6 +61,7 @@ go_test(
     embed = [":topic"],
     deps = [
         "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_stretchr_testify//assert",

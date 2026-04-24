@@ -12,6 +12,7 @@ package acl
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"go.uber.org/zap"
 
@@ -61,7 +62,10 @@ resource names:
 `,
 		Args: cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, _ []string) {
-			f := p.Formatter // always text for now
+			f := p.Formatter
+			if h, ok := f.Help(&aclDeleteOutput{}); ok {
+				out.Exit(h)
+			}
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -101,9 +105,10 @@ resource names:
 				printAllFilters = false
 				printDeletionsHeader = true
 			}
-			deleteReqResp(cmd.Context(), adm, srClient, printAllFilters, printDeletionsHeader, kBuilder, srACLs, filteredSRACLs)
+			deleteReqResp(cmd.Context(), adm, srClient, printAllFilters, printDeletionsHeader, kBuilder, srACLs, filteredSRACLs, f, cmd.OutOrStdout())
 		},
 	}
+	p.InstallFormatFlag(cmd)
 	p.InstallKafkaFlags(cmd)
 	a.addDeleteFlags(cmd)
 	cmd.Flags().BoolVarP(&printAllFilters, "print-filters", "f", false, "Print the filters that were requested (failed filters are always printed)")
@@ -133,6 +138,11 @@ func (a *acls) addDeleteFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVar(&a.denyHosts, denyHostFlag, nil, "Denied host ACLs to remove (repeatable)")
 }
 
+type aclDeleteOutput struct {
+	Filters   []aclWithMessage `json:"filters,omitempty" yaml:"filters,omitempty"`
+	Deletions []aclWithMessage `json:"deletions" yaml:"deletions"`
+}
+
 func deleteReqResp(
 	ctx context.Context,
 	adm *kadm.Client,
@@ -142,6 +152,8 @@ func deleteReqResp(
 	b *kadm.ACLBuilder,
 	srACLsFilter []rpsr.ACL,
 	filteredSRACLs []rpsr.ACL,
+	f config.OutFormatter,
+	w io.Writer,
 ) {
 	var (
 		kResults  []kadm.DeleteACLsResult
@@ -170,69 +182,57 @@ func deleteReqResp(
 		}
 		srResults = filteredSRACLs
 	}
-	// If any filters failed, or if all filters are requested, we print the
-	// filter section.
+
+	// Build the structured output.
+	output := aclDeleteOutput{
+		Deletions: []aclWithMessage{},
+	}
+
+	// If any filters failed, or if all filters are requested, include them.
 	var printFailedFilters bool
-	for _, f := range kResults {
-		if f.Err != nil {
+	for _, r := range kResults {
+		if r.Err != nil {
 			printFailedFilters = true
 			break
 		}
 	}
-
 	if printAllFilters || printFailedFilters {
-		out.Section("filters")
-		printDeleteFilters(printAllFilters, kResults, srACLsFilter)
-		fmt.Println()
-		printDeletionsHeader = true
-	}
-	if printDeletionsHeader {
-		out.Section("deletions")
-	}
-	printDeleteResults(kResults, srResults, srErr)
-}
-
-func printDeleteFilters(all bool, kResults kadm.DeleteACLsResults, srACLs []rpsr.ACL) {
-	var results []aclWithMessage
-	for _, f := range kResults {
-		if f.Err == nil && !all {
-			continue
+		for _, r := range kResults {
+			if r.Err == nil && !printAllFilters {
+				continue
+			}
+			output.Filters = append(output.Filters, aclWithMessage{
+				unptr(r.Principal),
+				unptr(r.Host),
+				r.Type.String(),
+				unptr(r.Name),
+				r.Pattern.String(),
+				r.Operation.String(),
+				r.Permission.String(),
+				kafka.ErrMessage(r.Err),
+			})
 		}
-		results = append(results, aclWithMessage{
-			unptr(f.Principal),
-			unptr(f.Host),
-			f.Type.String(),
-			unptr(f.Name),
-			f.Pattern.String(),
-			f.Operation.String(),
-			f.Permission.String(),
-			kafka.ErrMessage(f.Err),
-		})
+		for _, r := range srACLsFilter {
+			msg := ""
+			if srErr != nil {
+				msg = srErr.Error()
+			}
+			output.Filters = append(output.Filters, aclWithMessage{
+				Principal:           r.Principal,
+				Host:                r.Host,
+				ResourceType:        string(r.ResourceType),
+				ResourceName:        r.Resource,
+				ResourcePatternType: string(r.PatternType),
+				Operation:           string(r.Operation),
+				Permission:          string(r.Permission),
+				Message:             msg,
+			})
+		}
 	}
-	for _, f := range srACLs {
-		results = append(results, aclWithMessage{
-			Principal:           f.Principal,
-			Host:                f.Host,
-			ResourceType:        string(f.ResourceType),
-			ResourceName:        f.Resource,
-			ResourcePatternType: string(f.PatternType),
-			Operation:           string(f.Operation),
-			Permission:          string(f.Permission),
-		})
-	}
-	types.Sort(results)
-	tw := out.NewTable(headersWithError...)
-	defer tw.Flush()
-	for _, f := range results {
-		tw.PrintStructFields(f)
-	}
-}
 
-func printDeleteResults(kResults kadm.DeleteACLsResults, srACLs []rpsr.ACL, srErr error) {
-	var results []aclWithMessage
-	for _, f := range kResults {
-		for _, d := range f.Deleted {
-			results = append(results, aclWithMessage{
+	for _, r := range kResults {
+		for _, d := range r.Deleted {
+			output.Deletions = append(output.Deletions, aclWithMessage{
 				d.Principal,
 				d.Host,
 				d.Type.String(),
@@ -244,26 +244,53 @@ func printDeleteResults(kResults kadm.DeleteACLsResults, srACLs []rpsr.ACL, srEr
 			})
 		}
 	}
-	for _, f := range srACLs {
+	for _, r := range srResults {
 		msg := ""
 		if srErr != nil {
 			msg = srErr.Error()
 		}
-		results = append(results, aclWithMessage{
-			Principal:           f.Principal,
-			Host:                f.Host,
-			ResourceType:        string(f.ResourceType),
-			ResourceName:        f.Resource,
-			ResourcePatternType: string(f.PatternType),
-			Operation:           string(f.Operation),
-			Permission:          string(f.Permission),
+		output.Deletions = append(output.Deletions, aclWithMessage{
+			Principal:           r.Principal,
+			Host:                r.Host,
+			ResourceType:        string(r.ResourceType),
+			ResourceName:        r.Resource,
+			ResourcePatternType: string(r.PatternType),
+			Operation:           string(r.Operation),
+			Permission:          string(r.Permission),
 			Message:             msg,
 		})
 	}
-	types.Sort(results)
-	tw := out.NewTable(headersWithError...)
-	defer tw.Flush()
-	for _, f := range results {
-		tw.PrintStructFields(f)
+
+	types.Sort(output)
+
+	// Presence of filters implies a deletions section header is needed.
+	if len(output.Filters) > 0 {
+		printDeletionsHeader = true
 	}
+	printDeleteOutput(f, output, printDeletionsHeader, w)
+}
+
+func printDeleteOutput(f config.OutFormatter, output aclDeleteOutput, printDeletionsHeader bool, w io.Writer) {
+	if isText, _, t, err := f.Format(&output); !isText {
+		out.MaybeDie(err, "unable to print in the requested format %q: %v", f.Kind, err)
+		fmt.Fprintf(w, "%s\n", t)
+		return
+	}
+	if len(output.Filters) > 0 {
+		out.SectionTo(w, "filters")
+		tw := out.NewTableTo(w, headersWithError...)
+		for _, r := range output.Filters {
+			tw.PrintStructFields(r)
+		}
+		tw.Flush()
+		fmt.Fprintln(w)
+	}
+	if printDeletionsHeader {
+		out.SectionTo(w, "deletions")
+	}
+	tw := out.NewTableTo(w, headersWithError...)
+	for _, r := range output.Deletions {
+		tw.PrintStructFields(r)
+	}
+	tw.Flush()
 }

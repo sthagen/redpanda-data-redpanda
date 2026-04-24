@@ -50,6 +50,21 @@ if [[ $FIXING_ISSUE_URLS != "" ]]; then
   backport_issue_urls=$(echo "$backport_issue_urls" | sed 's/.$//')
 fi
 
+# If the AI path produced a skill report, use it as the PR body but still
+# append the Fixes: lines so the backport PR auto-closes the backport issues
+# this script just created. Otherwise fall back to the plain one-line summary.
+if [[ -n ${AI_REPORT_FILE:-} && -s $AI_REPORT_FILE ]]; then
+  combined_body=$(mktemp)
+  cat "$AI_REPORT_FILE" >"$combined_body"
+  if [[ -n $backport_issue_urls ]]; then
+    printf '\n\n%s\n' "$backport_issue_urls" >>"$combined_body"
+  fi
+  body_args=(--body-file "$combined_body")
+else
+  body_args=(--body "Backport of PR $ORIG_ISSUE_URL
+$backport_issue_urls")
+fi
+
 gh pr create --title "[$BACKPORT_BRANCH] $ORIG_TITLE" \
   --base "$BACKPORT_BRANCH" \
   --label "kind/backport" \
@@ -57,5 +72,4 @@ gh pr create --title "[$BACKPORT_BRANCH] $ORIG_TITLE" \
   --repo "$TARGET_ORG/$TARGET_REPO" \
   --reviewer "$AUTHOR" \
   --milestone "$TARGET_MILESTONE" \
-  --body "Backport of PR $ORIG_ISSUE_URL
-$backport_issue_urls"
+  "${body_args[@]}"

@@ -125,6 +125,14 @@ public:
         }
     }
 
+    void promote_pending() {
+        for_each([](auto& p) {
+            if (p.has_pending()) {
+                p.promote_pending();
+            }
+        });
+    }
+
     /**
      *
      * @param filter optional callback for filtering out config properties.
@@ -133,8 +141,8 @@ public:
     void to_json(
       json::Writer<json::StringBuffer>& w,
       redact_secrets redact,
-      std::optional<std::function<bool(base_property&)>> filter
-      = std::nullopt) const {
+      std::optional<std::function<bool(base_property&)>> filter = std::nullopt,
+      use_pending pending = use_pending::yes) const {
         w.StartObject();
 
         for (const auto& [name, property] : _properties) {
@@ -147,7 +155,7 @@ public:
             }
 
             w.Key(name.data(), name.size());
-            property->to_json(w, redact);
+            property->to_json(w, redact, pending);
         }
 
         w.EndObject();
@@ -157,13 +165,14 @@ public:
     void to_json_single_key(
       json::Writer<json::StringBuffer>& w,
       redact_secrets redact,
-      std::string_view key) {
+      std::string_view key,
+      use_pending pending = use_pending::yes) {
         // Whether key was either an original property name or an
         // alias, we will obtain the original property here.
         const auto& property = get(key);
         w.StartObject();
         w.Key(key.data(), key.size());
-        property.to_json(w, redact);
+        property.to_json(w, redact, pending);
         w.EndObject();
     }
 
@@ -195,6 +204,18 @@ public:
         }
 
         w.EndObject();
+    }
+
+    /// Return names of properties that need a restart and have a pending
+    /// value that differs from the current live value.
+    std::vector<ss::sstring> properties_pending_restart() const {
+        std::vector<ss::sstring> result;
+        for (const auto& [name, prop] : _properties) {
+            if (prop->has_pending()) {
+                result.emplace_back(name);
+            }
+        }
+        return result;
     }
 
     std::set<std::string_view> property_names() const {

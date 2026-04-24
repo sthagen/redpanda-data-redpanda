@@ -28,9 +28,15 @@ go_library(
 go_test(
     name = "group_test",
     size = "small",
-    srcs = ["seek_test.go"],
+    srcs = [
+        "group_test.go",
+        "offset_delete_test.go",
+        "seek_test.go",
+    ],
     embed = [":group"],
     deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
         "//src/go/rpk/pkg/testfs",
         "@com_github_stretchr_testify//require",
         "@com_github_twmb_franz_go_pkg_kadm//:kadm",

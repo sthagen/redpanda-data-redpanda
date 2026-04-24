@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "brokers",
@@ -21,5 +21,17 @@ go_library(
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_twmb_types//:types",
+    ],
+)
+
+go_test(
+    name = "brokers_test",
+    srcs = ["decommission_status_test.go"],
+    embed = [":brokers"],
+    deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/out",
+        "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
+        "@com_github_stretchr_testify//require",
     ],
 )
