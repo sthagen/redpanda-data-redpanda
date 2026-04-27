@@ -236,6 +236,8 @@ struct topic_properties
     model::redpanda_storage_mode storage_mode{
       storage::ntp_config::default_storage_mode};
 
+    bool is_local_topic() const;
+
     bool is_cloud_topic() const {
         return storage_mode == model::redpanda_storage_mode::cloud
                || storage_mode == model::redpanda_storage_mode::tiered_cloud;

@@ -26,7 +26,7 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError, RequestException
 from urllib3.util.retry import Retry
 
-from rptest.services.redpanda_types import SaslCredentials
+from rptest.services.redpanda_types import OAuthBearerCredentials, SaslCredentials
 from rptest.util import not_none, wait_until_result
 from rptest.utils.mode_checks import is_debug_mode
 
@@ -456,7 +456,7 @@ class DebugBundleLabelSelection:
 
 
 class DebugBundleStartConfigParams(NamedTuple):
-    authentication: Optional[SaslCredentials] = None
+    authentication: Optional[SaslCredentials | OAuthBearerCredentials] = None
     controller_logs_size_limit_bytes: Optional[int] = None
     cpu_profiler_wait_seconds: Optional[int] = None
     logs_since: Optional[str] = None

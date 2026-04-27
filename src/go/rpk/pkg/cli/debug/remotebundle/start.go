@@ -78,16 +78,6 @@ Use the flag '--no-confirm' to avoid the confirmation prompt.
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			config.CheckExitCloudAdmin(p)
 
-			// Remote debug bundle forwards SASL credentials to the broker so
-			// rpk running on the broker can authenticate to Kafka. The broker
-			// API currently only accepts a SCRAM-shaped payload; until that
-			// gains OAUTHBEARER support (tracked in redpanda#30222), reject
-			// up front rather than silently sending the request with no auth
-			// (which then fails confusingly on secured clusters).
-			if p.KafkaAPI.SASL != nil && strings.EqualFold(p.KafkaAPI.SASL.Mechanism, adminapi.OAuthBearer) {
-				out.Die("OAUTHBEARER is not yet supported for remote debug bundle collection; use SCRAM-SHA-256 or SCRAM-SHA-512 credentials to run this command")
-			}
-
 			if !noConfirm {
 				printBrokers(p.AdminAPI.Addresses)
 				confirmed, err := out.Confirm("Confirm debug bundle collection from these brokers?")
@@ -260,9 +250,12 @@ func (o *remoteBundleOptions) toRpadminOptions(p *config.RpkProfile) []rpadmin.D
 		}
 		opts = append(opts, rpadmin.WithLabelSelector(dbls))
 	}
-	if p.HasSASLCredentials() {
-		s := p.KafkaAPI.SASL
-		opts = append(opts, rpadmin.WithSCRAMAuthentication(s.User, s.Password, s.Mechanism))
+	if s := p.KafkaAPI.SASL; s != nil {
+		if strings.EqualFold(s.Mechanism, adminapi.OAuthBearer) {
+			opts = append(opts, rpadmin.WithOAuthBearerAuthentication(adminapi.OAuthBearerToken(s.Password)))
+		} else if p.HasSASLCredentials() {
+			opts = append(opts, rpadmin.WithSCRAMAuthentication(s.User, s.Password, s.Mechanism))
+		}
 	}
 	if tls := p.KafkaAPI.TLS; tls != nil {
 		opts = append(opts, rpadmin.WithTLS(true, tls.InsecureSkipVerify))

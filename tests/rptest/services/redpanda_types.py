@@ -46,6 +46,14 @@ class SaslCredentials:
         return self.algorithm
 
 
+@dataclass
+class OAuthBearerCredentials:
+    """Bearer token credentials for OAUTHBEARER authentication in debug bundle."""
+
+    token: str
+    mechanism: str = "OAUTHBEARER"
+
+
 class SecurityProtocol(Enum):
     """The four possible security protocol options for Kafka authentication."""
 

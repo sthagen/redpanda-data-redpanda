@@ -46,7 +46,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5
 	github.com/redpanda-data/common-go/proto v0.0.0-20260223115805-73fb9bd9c2c0
-	github.com/redpanda-data/common-go/rpadmin v0.2.5
+	github.com/redpanda-data/common-go/rpadmin v0.2.6
 	github.com/redpanda-data/common-go/rpsr v0.1.4
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
 	github.com/rs/xid v1.6.0
