@@ -89,7 +89,7 @@ func TestPrintSummaryView(t *testing.T) {
 	b := &strings.Builder{}
 	printSummary(f, s, b)
 	require.Equal(t, [][]string{
-		{"NAME", "INPUT", "TOPIC", "OUTPUT", "TOPIC", "RUNNING", "LAG"},
+		{"NAME", "INPUT-TOPIC", "OUTPUT-TOPIC", "RUNNING", "LAG"},
 		{"foo2bar", "foo", "bar", "2", "/", "3", "7"},
 		{"scrubber", "pii", "cleaned,", "munged", "0", "/", "1", "99"},
 	}, out.TableRows(b.String()))

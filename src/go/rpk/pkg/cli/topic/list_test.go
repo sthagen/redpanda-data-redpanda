@@ -82,7 +82,7 @@ func TestDetailedListView(t *testing.T) {
 	printDetailedListView(f, d, b)
 	require.Equal(t, [][]string{
 		{"test-topic,", "2", "partitions,", "3", "replicas"},
-		{"PARTITION", "LEADER", "EPOCH", "REPLICAS", "OFFLINE_REPLICAS"},
+		{"PARTITION", "LEADER", "EPOCH", "REPLICAS", "OFFLINE-REPLICAS"},
 		{"0", "1", "5", "[1", "2", "3]", "[]"},
 		{"1", "2", "3", "[1", "2", "3]", "[1]"},
 	}, out.TableRows(b.String()))
@@ -115,7 +115,7 @@ func TestDetailedListViewWithInternal(t *testing.T) {
 		{"0", "1", "1", "[1]"},
 		{},
 		{"test-topic,", "2", "partitions,", "3", "replicas"},
-		{"PARTITION", "LEADER", "EPOCH", "REPLICAS", "OFFLINE_REPLICAS"},
+		{"PARTITION", "LEADER", "EPOCH", "REPLICAS", "OFFLINE-REPLICAS"},
 		{"0", "1", "5", "[1", "2", "3]", "[]"},
 		{"1", "2", "3", "[1", "2", "3]", "[1]"},
 	}, out.TableRows(b.String()))

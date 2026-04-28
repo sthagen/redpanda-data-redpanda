@@ -195,7 +195,7 @@ func printStatusTasks(tasks []taskStatus) {
 		fmt.Println("No tasks to display right now.")
 		return
 	}
-	t := out.NewTable("Name", "Broker_ID", "Shard", "State", "Reason")
+	t := out.NewTable("Name", "Broker-ID", "Shard", "State", "Reason")
 	defer t.Flush()
 	for _, task := range tasks {
 		t.Print(task.Name, task.BrokerID, task.Shard, task.State, task.Reason)
@@ -225,7 +225,7 @@ func printStatusTopics(topics []topicStatus, props []string) {
 }
 
 func printStatusPartitionTable(partitions []partitionInfo) {
-	t := out.NewTable("", "Partition", "SRC_LSO", "SRC_HWM", "DST_HWM", "Lag")
+	t := out.NewTable("", "Partition", "SRC-LSO", "SRC-HWM", "DST-HWM", "Lag")
 	defer t.Flush()
 	for _, p := range partitions {
 		t.Print("", p.PartitionID, p.SrcLSO, p.SrcHWM, p.DstHWM, p.Lag)

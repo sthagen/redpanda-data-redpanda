@@ -226,10 +226,10 @@ func printDetailedListView(f config.OutFormatter, topics []detailedListTopic, w 
 		}
 		headers = append(headers, "replicas")
 		if topic.isOffline {
-			headers = append(headers, "offline_replicas")
+			headers = append(headers, "offline-replicas")
 		}
 		if topic.isLoadErr {
-			headers = append(headers, "load_error")
+			headers = append(headers, "load-error")
 		}
 		printPartitionTable(w, headers, topic, topic.PartitionList)
 		if i != len(topics)-1 {

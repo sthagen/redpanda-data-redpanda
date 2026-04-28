@@ -243,7 +243,9 @@ func NewTable(headers ...string) *TabWriter {
 func NewTableTo(w io.Writer, headers ...string) *TabWriter {
 	var iheaders []any
 	for _, header := range headers {
-		iheaders = append(iheaders, norm(header))
+		// Normalize headers: replace spaces and underscores with `-` so all
+		// table headers render with a consistent separator.
+		iheaders = append(iheaders, strings.ReplaceAll(strings.ReplaceAll(norm(header), " ", "-"), "_", "-"))
 	}
 	t := NewTabWriterTo(w)
 	if len(iheaders) > 0 {

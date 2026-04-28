@@ -155,7 +155,7 @@ func printSummary(f config.OutFormatter, s []summarizedTransformMetadata, w io.W
 		fmt.Fprintf(w, "%s\n", t)
 		return
 	}
-	tw := out.NewTableTo(w, "Name", "Input Topic", "Output Topic", "Running", "Lag")
+	tw := out.NewTableTo(w, "Name", "Input-Topic", "Output-Topic", "Running", "Lag")
 	defer tw.Flush()
 	for _, m := range s {
 		tw.Print(m.Name, m.InputTopic, strings.Join(m.OutputTopics, ", "), m.Running, m.Lag)
