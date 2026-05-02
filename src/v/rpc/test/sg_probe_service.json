@@ -1,0 +1,15 @@
+{
+    "namespace": "sg_probe",
+    "service_name": "probe",
+    "includes": [
+        "rpc/test/rpc_gen_types.h"
+    ],
+    "run_handlers_in_scheduling_group": true,
+    "methods": [
+        {
+            "name": "current_scheduling_group",
+            "input_type": "probe_req",
+            "output_type": "probe_resp"
+        }
+    ]
+}

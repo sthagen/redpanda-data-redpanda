@@ -138,6 +138,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 genhtml/
+coverage-out/
 
 # Translations
 *.mo

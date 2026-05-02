@@ -71,7 +71,33 @@ struct replace_objects_db_update {
     // Validates the given update is well-formed:
     // - There are new objects
     // - Input extents are in order and form contiguous intervals
-    // - Compaction updates align with new extents
+    // - Every partition in new_objects has an entry in expected_epochs and
+    //   vice versa
+    std::expected<void, db_update_error> validate_inputs() const;
+
+    chunked_vector<new_object> new_objects;
+    chunked_hash_map<
+      model::topic_id,
+      chunked_hash_map<
+        model::partition_id,
+        partition_state::compaction_epoch_t>>
+      expected_epochs;
+};
+
+struct compact_objects_db_update {
+    ss::future<std::expected<void, db_update_error>>
+    build_rows(state_reader&, chunked_vector<write_batch_row>&) const;
+
+    /// Returns the set of object IDs referenced by the extents being replaced.
+    ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
+    discover_replaced_object_ids(state_reader&) const;
+
+    // Validates the given update is well-formed:
+    // - There are new objects
+    // - Input extents are in order and form contiguous intervals
+    // - Every partition in new_objects has a compaction_update entry and
+    //   vice versa (the bidirectional invariant that gates the OCC epoch
+    //   bump)
     std::expected<void, db_update_error> validate_inputs() const;
 
     chunked_vector<new_object> new_objects;

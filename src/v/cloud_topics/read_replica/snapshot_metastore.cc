@@ -201,7 +201,8 @@ snapshot_metastore::add_objects(
 }
 
 ss::future<std::expected<void, l1::metastore::errc>>
-snapshot_metastore::replace_objects(const object_metadata_builder&) {
+snapshot_metastore::replace_objects(
+  const object_metadata_builder&, const replace_epoch_map_t&) {
     co_return std::unexpected(errc::invalid_request);
 }
 

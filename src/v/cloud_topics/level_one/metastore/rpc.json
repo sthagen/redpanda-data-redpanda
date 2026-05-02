@@ -1,6 +1,7 @@
 {
     "namespace": "cloud_topics::l1::rpc::impl",
     "service_name": "l1_rpc",
+    "run_handlers_in_scheduling_group": true,
     "includes": [
         "cloud_topics/level_one/metastore/rpc_types.h"
     ],
@@ -11,7 +12,17 @@
             "output_type": "add_objects_reply"
         },
         {
-            "name": "replace_objects",
+            "name": "compact_objects",
+            "input_type": "compact_objects_request",
+            "output_type": "compact_objects_reply",
+            "legacy_id": {
+                "name": "replace_objects",
+                "input_type": "replace_objects_request",
+                "output_type": "replace_objects_reply"
+            }
+        },
+        {
+            "name": "replace_objects_no_compact",
             "input_type": "replace_objects_request",
             "output_type": "replace_objects_reply"
         },

@@ -132,6 +132,7 @@ redpanda_cc_btest(
         ":echo_rpc",
         ":echo_v2_rpc",
         ":rpc_integration_fixture",
+        ":sg_probe_rpc",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/rpc",
@@ -194,6 +195,15 @@ redpanda_cc_rpc_library(
     name = "echo_v2_rpc",
     src = "echo_v2_service.json",
     out = "echo_v2_service.h",
+    deps = [
+        ":rpc_gen_types",
+    ],
+)
+
+redpanda_cc_rpc_library(
+    name = "sg_probe_rpc",
+    src = "sg_probe_service.json",
+    out = "sg_probe_service.h",
     deps = [
         ":rpc_gen_types",
     ],

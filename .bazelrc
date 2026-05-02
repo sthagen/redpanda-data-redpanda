@@ -1,6 +1,20 @@
 common --registry=https://bcr.bazel.build
 common --extra_toolchains=@current_llvm_toolchain//:all
 
+# Store repositories also in the remote cache to speed up fetches and avoid
+# flakiness due to Github
+startup --experimental_remote_repo_contents_cache
+
+# Bazel 9 removes native C++ rule symbols. Autoload them for external rulesets
+# that have not migrated all generated BUILD/Starlark files to explicit loads.
+common --incompatible_autoload_externally=+@rules_cc
+
+# Bazel 9 no longer enables this rules_cc toolchain feature by default. Keep
+# external dependency headers on -isystem include paths so their warnings are
+# not promoted by Redpanda's -Werror settings.
+build --features=external_include_paths
+build --host_features=external_include_paths
+
 # Fail the build if MODULE.bazel declares a direct dependency on a version
 # that doesn't match what the resolved module graph actually uses.
 common --check_direct_dependencies=error
@@ -287,16 +301,10 @@ build:stamp-full --stamp --workspace_status_command='./bazel/stamp_vars.sh full'
 # Coverage
 # =================================
 coverage --config=coverage
-build:coverage --action_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
-build:coverage --action_env=GCOV=llvm-profdata
-build:coverage --copt=-DNDEBUG
-build:coverage --define=dynamic_link_tests=true
+build:coverage --repo_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
 build:coverage --combined_report=lcov
 build:coverage --experimental_use_llvm_covmap
 build:coverage --experimental_generate_llvm_lcov
-build:coverage --experimental_split_coverage_postprocessing
-build:coverage --experimental_fetch_all_coverage_outputs
-build:coverage --collect_code_coverage
 build:coverage --instrumentation_filter="^//src/v[/:]"
 
 # sanitizer is a deprecated alias for debug

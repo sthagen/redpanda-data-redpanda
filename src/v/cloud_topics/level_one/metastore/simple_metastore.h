@@ -70,10 +70,10 @@ public:
     ss::future<std::expected<add_response, errc>> add_objects(
       const chunked_vector<object_metadata>&, const term_offset_map_t&);
 
-    ss::future<std::expected<void, errc>>
-    replace_objects(const object_metadata_builder&) override;
-    ss::future<std::expected<void, errc>>
-    replace_objects(const chunked_vector<object_metadata>&);
+    ss::future<std::expected<void, errc>> replace_objects(
+      const object_metadata_builder&, const replace_epoch_map_t&) override;
+    ss::future<std::expected<void, errc>> replace_objects(
+      const chunked_vector<object_metadata>&, const replace_epoch_map_t&);
 
     ss::future<std::expected<void, errc>>
     set_start_offset(const model::topic_id_partition&, kafka::offset) override;

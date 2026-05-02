@@ -255,7 +255,8 @@ simple_metastore::add_objects(
 
 ss::future<std::expected<void, metastore::errc>>
 simple_metastore::replace_objects(
-  const metastore::object_metadata_builder& builder) {
+  const metastore::object_metadata_builder& builder,
+  const replace_epoch_map_t& epoch_map) {
     auto& simple_builder = dynamic_cast<const simple_object_builder&>(builder);
     if (!simple_builder.pending_objects_.empty()) {
         vlog(
@@ -264,18 +265,27 @@ simple_metastore::replace_objects(
           simple_builder.pending_objects_.size());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
-    co_return co_await replace_objects(simple_builder.finished_objects_);
+    co_return co_await replace_objects(
+      simple_builder.finished_objects_, epoch_map);
 }
 
 ss::future<std::expected<void, metastore::errc>>
 simple_metastore::replace_objects(
-  const chunked_vector<object_metadata>& objects) {
+  const chunked_vector<object_metadata>& objects,
+  const replace_epoch_map_t& epoch_map) {
     chunked_vector<new_object> new_objects;
     for (const auto& o : objects) {
         new_objects.emplace_back(make_new_object(o));
     }
+    chunked_hash_map<
+      model::topic_id_partition,
+      partition_state::compaction_epoch_t>
+      expected_epochs;
+    for (const auto& [tp, epoch] : epoch_map) {
+        expected_epochs[tp] = partition_state::compaction_epoch_t{epoch()};
+    }
     auto update_res = replace_objects_update::build(
-      state_, std::move(new_objects));
+      state_, std::move(new_objects), std::move(expected_epochs));
     if (!update_res.has_value()) {
         vlog(cd_log.debug, "Object replacement failed: {}", update_res.error());
         co_return std::unexpected(metastore::errc::invalid_request);
@@ -548,7 +558,7 @@ simple_metastore::compact_objects(
         compaction_updates[tp] = std::move(p_update);
     }
 
-    auto update_res = replace_objects_update::build(
+    auto update_res = compact_objects_update::build(
       state_, std::move(new_objects), std::move(compaction_updates));
     if (!update_res.has_value()) {
         vlog(cd_log.debug, "Object replacement failed: {}", update_res.error());

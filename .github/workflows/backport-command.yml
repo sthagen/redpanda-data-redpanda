@@ -156,7 +156,7 @@ jobs:
           track_progress: false
           claude_args: >
             --model opus
-            --max-turns 40
+            --max-turns 80
             --disallowed-tools "WebFetch,WebSearch"
             --allowed-tools "
               Bash(git *),

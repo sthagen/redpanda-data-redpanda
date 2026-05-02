@@ -3,6 +3,8 @@ load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
+exports_files(["run-cov"])
+
 buildifier(
     name = "buildifier.check",
     exclude_patterns = [

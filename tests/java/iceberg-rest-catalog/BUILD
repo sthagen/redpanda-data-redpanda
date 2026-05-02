@@ -14,11 +14,10 @@ genrule(
         OUT_PATH=$$(realpath $(OUTS))
         SRC_DIR=$$(dirname $(location gradlew))
         cd $$SRC_DIR
-        chmod +x ./gradlew
+        export GRADLE_USER_HOME="$$(pwd)/.gradle-home"
         ./gradlew --no-daemon shadowJar
         cp build/libs/iceberg-rest-catalog-all.jar $$OUT_PATH
     """,
-    local = True,
     tags = ["requires-network"],
     visibility = ["//visibility:public"],
 )

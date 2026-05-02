@@ -27,7 +27,6 @@ class partition_probe;
 
 namespace cloud_topics {
 class state_accessors;
-class l1_reader_cache;
 class level_one_reader_probe;
 namespace l1 {
 class io;
@@ -158,7 +157,6 @@ private:
     metadata_provider* metadata_provider_;
     snapshot_provider* snapshot_provider_;
     cloud_topics::level_one_reader_probe* l1_reader_probe_;
-    cloud_topics::l1_reader_cache* l1_reader_cache_;
 };
 
 } // namespace cloud_topics::read_replica

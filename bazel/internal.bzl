@@ -26,3 +26,19 @@ def antithesis_deps():
         "//bazel:antithesis_enabled": ["//bazel/antithesis:instrumentation"],
         "//conditions:default": [],
     })
+
+def _filtered_filegroup_impl(ctx):
+    return [DefaultInfo(files = depset([
+        f
+        for src in ctx.attr.srcs
+        for f in src[DefaultInfo].files.to_list()
+        if any([include in f.path for include in ctx.attr.path_includes])
+    ]))]
+
+filtered_filegroup = rule(
+    implementation = _filtered_filegroup_impl,
+    attrs = {
+        "path_includes": attr.string_list(mandatory = True),
+        "srcs": attr.label_list(allow_files = True, mandatory = True),
+    },
+)

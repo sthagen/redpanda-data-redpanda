@@ -42,7 +42,7 @@ public:
       l1::io* io,
       cluster::metadata_cache* metadata_cache,
       level_one_reader_probe* l1_reader_probe,
-      l1_reader_cache* l1_reader_cache_,
+      l1_reader_cache* l1_reader_cache,
       read_replica::metadata_provider* rr_metadata_provider,
       read_replica::snapshot_provider* rr_snapshot_provider)
       : data_plane(data_plane)
@@ -50,7 +50,7 @@ public:
       , l1_io(io)
       , metadata_cache(metadata_cache)
       , l1_reader_probe(l1_reader_probe)
-      , l1_reader_cache_(l1_reader_cache_)
+      , l1_reader_cache_(l1_reader_cache)
       , rr_metadata_provider_(rr_metadata_provider)
       , rr_snapshot_provider_(rr_snapshot_provider) {}
 
@@ -58,8 +58,8 @@ public:
     l1::metastore* get_l1_metastore() { return l1_metastore; }
     l1::io* get_l1_io() { return l1_io; }
     level_one_reader_probe* get_l1_reader_probe() { return l1_reader_probe; }
-    cluster::metadata_cache* get_metadata_cache() { return metadata_cache; }
     l1_reader_cache* get_l1_reader_cache() { return l1_reader_cache_; }
+    cluster::metadata_cache* get_metadata_cache() { return metadata_cache; }
     read_replica::metadata_provider* get_rr_metadata_provider() {
         return rr_metadata_provider_;
     }

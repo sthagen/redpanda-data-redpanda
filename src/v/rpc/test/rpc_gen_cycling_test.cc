@@ -15,6 +15,7 @@
 #include "rpc/test/echo_service.h"
 #include "rpc/test/echo_v2_service.h"
 #include "rpc/test/rpc_integration_fixture.h"
+#include "rpc/test/sg_probe_service.h"
 #include "rpc/types.h"
 #include "test_utils/boost_fixture.h"
 #include "test_utils/random_bytes.h"
@@ -153,6 +154,18 @@ struct echo_v2_impl final : echo_v2::echo_service {
     }
 };
 
+struct sg_probe_impl final : sg_probe::probe_service {
+    sg_probe_impl(ss::scheduling_group& sc, ss::smp_service_group& ssg)
+      : sg_probe::probe_service(sc, ssg) {}
+
+    ss::future<sg_probe::probe_resp> current_scheduling_group(
+      sg_probe::probe_req, rpc::streaming_context&) final {
+        return ss::make_ready_future<sg_probe::probe_resp>(sg_probe::probe_resp{
+          .scheduling_group_name = ss::sstring(
+            ss::current_scheduling_group().name())});
+    }
+};
+
 class rpc_integration_fixture : public rpc_simple_integration_fixture {
 public:
     rpc_integration_fixture()
@@ -217,6 +230,31 @@ FIXTURE_TEST(echo_round_trip, rpc_integration_fixture) {
     auto ret = f.get();
     BOOST_REQUIRE(ret.has_value());
     BOOST_REQUIRE_EQUAL(ret.value().data.str, payload);
+}
+
+// Verify run_handlers_in_scheduling_group: registering the service with a
+// non-default scheduling group must cause its handlers to execute on it.
+FIXTURE_TEST(sg_probe_runs_in_scheduling_group, rpc_integration_fixture) {
+    constexpr auto sg_name = "rpc_handler_test_sg";
+    auto sg = ss::create_scheduling_group(sg_name, 100).get();
+    auto cleanup_sg = ss::defer(
+      [&sg] { ss::destroy_scheduling_group(sg).get(); });
+
+    configure_server();
+    server().register_service<sg_probe_impl>(sg, _ssg);
+    start_server();
+
+    auto t = ss::make_lw_shared<rpc::transport>(client_config());
+    t->connect(model::no_timeout).get();
+    auto stop = ss::defer([&t] { t->stop().get(); });
+    sg_probe::probe_client_protocol client(t);
+
+    auto ret = client
+                 .current_scheduling_group(
+                   sg_probe::probe_req{}, rpc::client_opts(rpc::no_timeout))
+                 .get();
+    BOOST_REQUIRE(ret.has_value());
+    BOOST_CHECK_EQUAL(ret.value().data.scheduling_group_name, sg_name);
 }
 
 FIXTURE_TEST(basic_cache_ops, rpc_integration_fixture) {

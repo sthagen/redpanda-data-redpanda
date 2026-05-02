@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Redpanda Data, Inc.
+ * Copyright 2026 Redpanda Data, Inc.
  *
  * Licensed as a Redpanda Enterprise file under the Redpanda Community
  * License (the "License"); you may not use this file except in compliance with
@@ -9,86 +9,106 @@
  */
 #pragma once
 
-#include "cloud_topics/level_one/common/object.h"
-#include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
+#include "cloud_topics/log_reader_config.h"
+#include "config/property.h"
 #include "container/intrusive_list_helpers.h"
 #include "model/fundamental.h"
-#include "ssx/future-util.h"
+#include "model/record_batch_reader.h"
 
-#include <seastar/core/future.hh>
+#include <seastar/core/condition-variable.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timer.hh>
 
-#include <memory>
+#include <chrono>
+#include <optional>
 
 namespace cloud_topics {
 
-/// Cached L1 object reader with its live I/O stream.
-struct cached_l1_reader {
-    l1::object_id oid;
-    kafka::offset last_object_offset;
-    kafka::offset next_offset;
-    std::unique_ptr<l1::object_reader> reader;
-};
-
-/// Cache of live L1 object readers. Each cached reader holds an open I/O
-/// stream positioned at the next offset to read, preserving readahead
-/// buffers across fetches. On take, the caller gets the reader directly
-/// without reopening a stream.
-///
-/// Entries are evicted after a 60s TTL or when the cache is full (LRU).
-/// With at most max_cached_readers entries, linear scans are cheap.
+/// Per-shard cache of L1 reader instances. Readers are cached between
+/// fetches so that subsequent reads at the same offset can reuse the
+/// positioned reader, its open object stream, and its lookahead metadata
+/// buffer.
 class l1_reader_cache {
 public:
-    static constexpr size_t default_max_cached_readers = 128;
+    struct stats {
+        size_t in_use_readers;
+        size_t cached_readers;
+    };
 
-    explicit l1_reader_cache(size_t max_readers = default_max_cached_readers)
-      : _max_cached_readers(max_readers) {}
+    l1_reader_cache(
+      config::binding<std::chrono::milliseconds> eviction_timeout,
+      config::binding<size_t> target_max_size);
 
-    /// Try to take a cached reader for the given partition. Returns the
-    /// reader if one exists whose next_offset matches start_offset.
-    /// Otherwise returns nullopt.
-    std::optional<cached_l1_reader> take_reader(
-      const model::topic_id_partition& tidp, kafka::offset start_offset);
+    l1_reader_cache(const l1_reader_cache&) = delete;
+    l1_reader_cache& operator=(const l1_reader_cache&) = delete;
+    l1_reader_cache(l1_reader_cache&&) = delete;
+    l1_reader_cache& operator=(l1_reader_cache&&) = delete;
 
-    /// Return a reader to the cache for future reuse. If the reader is
-    /// exhausted (next_offset > last_object_offset) or the cache is
-    /// shutting down, the reader is closed instead. If the cache is
-    /// full, the least-recently-used entry is evicted.
-    ss::future<> return_reader(
-      const model::topic_id_partition& tidp, cached_l1_reader entry);
+    ~l1_reader_cache();
 
-    /// Close all cached readers and cancel the TTL timer.
+    /// Look up a cached reader for the given partition and config.
+    /// Returns a wrapped reader on hit, nullopt on miss.
+    std::optional<model::record_batch_reader> get_reader(
+      const model::topic_id_partition& tidp,
+      const cloud_topic_log_reader_config& cfg);
+
+    /// Wrap a newly-created reader so it will be returned to the cache
+    /// when the caller is done with it.
+    model::record_batch_reader
+    put(std::unique_ptr<level_one_log_reader_impl> reader);
+
+    stats get_stats() const;
+
     ss::future<> stop();
 
-    /// How long a reader survives without being taken.
-    static constexpr std::chrono::seconds ttl{60};
-
-    /// How often the TTL sweep runs.
-    static constexpr std::chrono::seconds eviction_interval{10};
-
 private:
-    struct cache_entry {
-        cached_l1_reader reader;
-        model::topic_id_partition tidp;
-        ss::lowres_clock::time_point atime;
+    struct entry {
+        model::record_batch_reader make_cached_reader(l1_reader_cache*);
+        std::unique_ptr<level_one_log_reader_impl> reader;
+        ss::lowres_clock::time_point last_used = ss::lowres_clock::now();
         safe_intrusive_list_hook _hook;
     };
 
-    ss::future<> evict_stale();
-    void arm_timer();
+    struct entry_guard {
+        entry_guard(entry_guard&&) noexcept = default;
+        entry_guard& operator=(entry_guard&&) noexcept = default;
+        entry_guard(const entry_guard&) = delete;
+        entry_guard& operator=(const entry_guard&) = delete;
 
-    /// Close an object_reader, swallowing exceptions. Takes ownership so
-    /// the reader stays alive for the duration of the close.
-    static ss::future<> close_reader_safe(std::unique_ptr<l1::object_reader>);
+        explicit entry_guard(entry* e, l1_reader_cache* c)
+          : _e(e)
+          , _cache(c) {}
 
-    size_t _max_cached_readers;
-    counted_intrusive_list<cache_entry, &cache_entry::_hook> _entries;
-    ss::timer<ss::lowres_clock> _ttl_timer{[this] {
-        ssx::spawn_with_gate(_gate, [this] { return evict_stale(); });
-    }};
+        ~entry_guard() noexcept;
+
+    private:
+        entry* _e;
+        l1_reader_cache* _cache;
+    };
+
+    ss::future<> maybe_evict();
+    void maybe_evict_size();
+    bool over_size_limit() const;
+    void dispose_in_background(entry* e);
+    ss::future<> wait_for_no_inuse_readers();
+    void arm_eviction_timer();
+
+    config::binding<std::chrono::milliseconds> _eviction_timeout;
     ss::gate _gate;
+    ss::timer<ss::lowres_clock> _eviction_timer;
+
+    counted_intrusive_list<entry, &entry::_hook> _readers;
+    counted_intrusive_list<entry, &entry::_hook> _in_use;
+    config::binding<size_t> _target_max_size;
+    ss::condition_variable _in_use_reader_destroyed;
+
+    // Probe counters
+    uint64_t _cache_hits{0};
+    uint64_t _cache_misses{0};
+    uint64_t _readers_added{0};
+    uint64_t _readers_evicted{0};
 };
 
 } // namespace cloud_topics

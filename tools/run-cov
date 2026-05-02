@@ -1,0 +1,1297 @@
+#!/usr/bin/env python3
+# Copyright 2026 Redpanda Data, Inc.
+#
+# Use of this software is governed by the Business Source License
+# included in the file licenses/BSL.md
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0
+"""Run a Bazel C++ test with code coverage and generate reports.
+
+Usage:
+    tools/run-cov [OPTIONS] <bazel_target> [-- <extra_bazel_args>...]
+
+Report modes:
+    terminal  - Summary table and optional annotated source (default)
+    html      - Interactive HTML report via genhtml
+    llm       - Markdown report optimized for AI coding agents
+    all       - Generate all report types
+
+Diff coverage:
+    --diff REF  Show coverage of changed lines only.
+                Accepts: git ref, commit range (abc..def),
+                commit:SHA (single commit), pr, pr:NUMBER
+
+Examples:
+    tools/run-cov //src/v/bytes/tests:iobuf_test
+    tools/run-cov -r all //src/v/bytes/tests:iobuf_test
+    tools/run-cov -f iobuf.cc //src/v/bytes/tests:iobuf_test
+    tools/run-cov --reuse --diff dev //src/v/bytes/tests:iobuf_test
+    tools/run-cov --reuse --diff pr -r llm
+"""
+
+import argparse
+import fnmatch
+import os
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass, field
+
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FunctionCoverage:
+    name: str
+    line: int
+    hit_count: int
+
+
+@dataclass
+class LineCoverage:
+    line: int
+    hit_count: int
+
+
+@dataclass
+class BranchCoverage:
+    line: int
+    block: int
+    branch: int
+    hit_count: int  # -1 for "-" (never instantiated)
+
+
+@dataclass
+class FileCoverage:
+    path: str
+    functions: list[FunctionCoverage] = field(default_factory=list)
+    lines: list[LineCoverage] = field(default_factory=list)
+    branches: list[BranchCoverage] = field(default_factory=list)
+    lines_found: int = 0
+    lines_hit: int = 0
+    functions_found: int = 0
+    functions_hit: int = 0
+    branches_found: int = 0
+    branches_hit: int = 0
+
+
+@dataclass
+class CoverageReport:
+    files: list[FileCoverage] = field(default_factory=list)
+    total_lines_found: int = 0
+    total_lines_hit: int = 0
+    total_functions_found: int = 0
+    total_functions_hit: int = 0
+    total_branches_found: int = 0
+    total_branches_hit: int = 0
+
+
+@dataclass
+class DiffInfo:
+    """Parsed unified diff: maps file paths to sets of added line numbers."""
+
+    changed_lines: dict[str, set[int]] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# LCOV parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_lcov(path: str) -> CoverageReport:
+    """Parse an LCOV .dat file into a CoverageReport."""
+    files: dict[str, FileCoverage] = {}
+    current: FileCoverage | None = None
+
+    # FN and FNDA may appear in different orders within a record, so
+    # accumulate them separately and merge at end_of_record.
+    fn_lines: dict[str, int] = {}
+    fnda_counts: dict[str, int] = {}
+
+    with open(path) as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            if line.startswith("SF:"):
+                filepath = line[3:]
+                if filepath in files:
+                    current = files[filepath]
+                else:
+                    current = FileCoverage(path=filepath)
+                    files[filepath] = current
+                fn_lines.clear()
+                fnda_counts.clear()
+
+            elif line == "end_of_record":
+                if current is not None:
+                    for name, fn_line in fn_lines.items():
+                        hit = fnda_counts.get(name, 0)
+                        current.functions.append(
+                            FunctionCoverage(name=name, line=fn_line, hit_count=hit)
+                        )
+                current = None
+                fn_lines.clear()
+                fnda_counts.clear()
+
+            elif current is None:
+                continue
+
+            elif line.startswith("FN:"):
+                parts = line[3:].split(",", 1)
+                if len(parts) == 2:
+                    fn_lines[parts[1]] = int(parts[0])
+
+            elif line.startswith("FNDA:"):
+                parts = line[5:].split(",", 1)
+                if len(parts) == 2:
+                    fnda_counts[parts[1]] = int(parts[0])
+
+            elif line.startswith("FNF:"):
+                current.functions_found = int(line[4:])
+            elif line.startswith("FNH:"):
+                current.functions_hit = int(line[4:])
+
+            elif line.startswith("DA:"):
+                parts = line[3:].split(",")
+                if len(parts) >= 2:
+                    current.lines.append(
+                        LineCoverage(line=int(parts[0]), hit_count=int(parts[1]))
+                    )
+
+            elif line.startswith("LF:"):
+                current.lines_found = int(line[3:])
+            elif line.startswith("LH:"):
+                current.lines_hit = int(line[3:])
+
+            elif line.startswith("BRDA:"):
+                parts = line[5:].split(",")
+                if len(parts) == 4:
+                    taken = -1 if parts[3] == "-" else int(parts[3])
+                    current.branches.append(
+                        BranchCoverage(
+                            line=int(parts[0]),
+                            block=int(parts[1]),
+                            branch=int(parts[2]),
+                            hit_count=taken,
+                        )
+                    )
+
+            elif line.startswith("BRF:"):
+                current.branches_found = int(line[4:])
+            elif line.startswith("BRH:"):
+                current.branches_hit = int(line[4:])
+
+    report = CoverageReport(files=list(files.values()))
+    for fc in report.files:
+        report.total_lines_found += fc.lines_found
+        report.total_lines_hit += fc.lines_hit
+        report.total_functions_found += fc.functions_found
+        report.total_functions_hit += fc.functions_hit
+        report.total_branches_found += fc.branches_found
+        report.total_branches_hit += fc.branches_hit
+
+    return report
+
+
+# ---------------------------------------------------------------------------
+# C++ name demangling
+# ---------------------------------------------------------------------------
+
+
+def demangle_names(names: list[str], toolchain_bin: str | None) -> dict[str, str]:
+    """Batch-demangle C++ names. Returns mangled -> demangled mapping."""
+    if not names:
+        return {}
+
+    candidates = []
+    if toolchain_bin:
+        llvm_cxxfilt = os.path.join(toolchain_bin, "llvm-cxxfilt")
+        if os.path.isfile(llvm_cxxfilt):
+            candidates.append(llvm_cxxfilt)
+    candidates.append("c++filt")
+
+    for demangler in candidates:
+        try:
+            result = subprocess.run(
+                [demangler],
+                input="\n".join(names),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                demangled = result.stdout.strip().split("\n")
+                if len(demangled) == len(names):
+                    return dict(zip(names, demangled))
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+
+    print("warning: no demangler found, using mangled names", file=sys.stderr)
+    return {n: n for n in names}
+
+
+def apply_demangling(report: CoverageReport, toolchain_bin: str | None):
+    """Demangle all function names in the report in-place."""
+    all_names: set[str] = set()
+    for fc in report.files:
+        for func in fc.functions:
+            all_names.add(func.name)
+
+    name_map = demangle_names(list(all_names), toolchain_bin)
+
+    for fc in report.files:
+        for func in fc.functions:
+            func.name = name_map.get(func.name, func.name)
+
+
+# ---------------------------------------------------------------------------
+# Scope inference
+# ---------------------------------------------------------------------------
+
+
+def infer_scope(target: str) -> str:
+    """Infer a file path prefix from a Bazel target label.
+
+    Examples:
+        //src/v/cloud_topics/level_one/...        → src/v/cloud_topics/level_one/
+        //src/v/bytes/tests:iobuf_test            → src/v/bytes/
+        //src/v/cloud_io/tests:remote_test        → src/v/cloud_io/
+    """
+    path = target.lstrip("/")
+    if ":" in path:
+        path = path[: path.index(":")]
+    path = path.rstrip("/").removesuffix("...")
+    path = path.rstrip("/")
+    if path.endswith("/tests") or path.endswith("/test"):
+        path = path.rsplit("/", 1)[0]
+    return path.rstrip("/") + "/"
+
+
+def apply_scope(files: list[FileCoverage], scope: str) -> list[FileCoverage]:
+    """Filter files to those matching the scope prefix."""
+    return [f for f in files if f.path.startswith(scope)]
+
+
+# ---------------------------------------------------------------------------
+# Diff parsing
+# ---------------------------------------------------------------------------
+
+_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def resolve_diff_ref(diff_arg: str) -> str:
+    """Resolve a --diff argument to unified diff text.
+
+    Accepts:
+      "pr"         — gh pr diff for the current branch
+      "pr:123"     — gh pr diff 123
+      "commit:abc" — git diff abc^..abc (changes introduced by a single commit)
+      "abc..def"   — git diff abc..def
+      any git ref  — git diff <ref>...HEAD
+    """
+    if diff_arg == "pr":
+        cmd = ["gh", "pr", "diff", "--color", "never"]
+    elif diff_arg.startswith("pr:"):
+        cmd = ["gh", "pr", "diff", diff_arg[3:], "--color", "never"]
+    elif diff_arg.startswith("commit:"):
+        ref = diff_arg[7:]
+        cmd = ["git", "diff", f"{ref}^..{ref}"]
+    elif ".." in diff_arg:
+        cmd = ["git", "diff", diff_arg]
+    else:
+        cmd = ["git", "diff", f"{diff_arg}...HEAD"]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(
+            f"error: {cmd[0]} failed: {result.stderr.strip()}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return result.stdout
+
+
+def parse_unified_diff(diff_text: str) -> DiffInfo:
+    """Parse unified diff output into a DiffInfo."""
+    info = DiffInfo()
+    current_file: str | None = None
+    current_line = 0
+
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:]
+            if current_file not in info.changed_lines:
+                info.changed_lines[current_file] = set()
+        elif line.startswith("+++ /dev/null"):
+            current_file = None
+        elif m := _HUNK_RE.match(line):
+            current_line = int(m.group(1))
+        elif current_file is not None:
+            if line.startswith("+"):
+                info.changed_lines[current_file].add(current_line)
+                current_line += 1
+            elif line.startswith("-"):
+                pass  # deleted line — don't advance new-file counter
+            else:
+                current_line += 1  # context line
+
+    return info
+
+
+def classify_diff_lines(
+    diff_info: DiffInfo, report: CoverageReport
+) -> dict[str, tuple[list[int], list[int], list[int]]]:
+    """Classify changed lines against coverage data.
+
+    Returns {file_path: (covered, uncovered, uninstrumented)} where each
+    value is a sorted list of line numbers.
+    """
+    cov_by_file: dict[str, dict[int, int]] = {}
+    for fc in report.files:
+        cov_by_file[fc.path] = {lc.line: lc.hit_count for lc in fc.lines}
+
+    result: dict[str, tuple[list[int], list[int], list[int]]] = {}
+    for filepath, changed in diff_info.changed_lines.items():
+        line_hits = cov_by_file.get(filepath, {})
+        covered: list[int] = []
+        uncovered: list[int] = []
+        uninstrumented: list[int] = []
+        for ln in sorted(changed):
+            if ln in line_hits:
+                if line_hits[ln] > 0:
+                    covered.append(ln)
+                else:
+                    uncovered.append(ln)
+            else:
+                uninstrumented.append(ln)
+        result[filepath] = (covered, uncovered, uninstrumented)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Toolchain and workspace resolution
+# ---------------------------------------------------------------------------
+
+
+def find_workspace_root() -> str | None:
+    """Find the Bazel workspace root by walking up from this script."""
+    path = os.path.dirname(os.path.abspath(__file__))
+    while path != "/":
+        if os.path.isfile(os.path.join(path, "MODULE.bazel")):
+            return path
+        path = os.path.dirname(path)
+    return None
+
+
+def find_toolchain_bin() -> str | None:
+    """Resolve the LLVM toolchain bin directory for the demangler.
+
+    Coverage tools (llvm-cov, llvm-profdata) are configured by the
+    toolchains_llvm cc_toolchain via tool_paths and don't need to be
+    resolved here — Bazel finds them automatically.  This function is
+    only used to locate llvm-cxxfilt for demangling function names.
+    """
+    try:
+        output_base = subprocess.check_output(
+            ["bazel", "info", "output_base"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+    bin_dir = os.path.join(
+        output_base, "external", "current_llvm_toolchain_llvm", "bin"
+    )
+    return bin_dir if os.path.isdir(bin_dir) else None
+
+
+# ---------------------------------------------------------------------------
+# Bazel invocation
+# ---------------------------------------------------------------------------
+
+
+def run_bazel_coverage(target: str, extra_args: list[str]) -> str:
+    """Run bazel coverage and return the path to the LCOV report.
+
+    Coverage tools (llvm-cov, llvm-profdata) are resolved by Bazel from
+    the registered cc_toolchain's tool_paths — no explicit paths needed.
+    """
+    cmd = ["bazel", "coverage", target] + extra_args
+
+    print(f"Running: {' '.join(cmd)}", file=sys.stderr)
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+    output_path = subprocess.check_output(
+        ["bazel", "info", "output_path"], text=True
+    ).strip()
+    lcov_path = os.path.join(output_path, "_coverage", "_coverage_report.dat")
+
+    if not os.path.isfile(lcov_path):
+        print(f"error: coverage report not found at {lcov_path}", file=sys.stderr)
+        sys.exit(1)
+
+    return lcov_path
+
+
+def find_existing_lcov() -> str | None:
+    """Find LCOV data from a previous bazel coverage run."""
+    try:
+        output_path = subprocess.check_output(
+            ["bazel", "info", "output_path"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+    lcov_path = os.path.join(output_path, "_coverage", "_coverage_report.dat")
+    return lcov_path if os.path.isfile(lcov_path) else None
+
+
+# ---------------------------------------------------------------------------
+# Terminal colors
+# ---------------------------------------------------------------------------
+
+
+class _Colors:
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    DIM = "\033[2m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+
+class _NoColors:
+    RED = ""
+    GREEN = ""
+    YELLOW = ""
+    DIM = ""
+    BOLD = ""
+    RESET = ""
+
+
+def pct_color(pct: float, c) -> str:
+    if pct >= 80:
+        return c.GREEN
+    if pct >= 50:
+        return c.YELLOW
+    return c.RED
+
+
+# ---------------------------------------------------------------------------
+# Terminal report
+# ---------------------------------------------------------------------------
+
+
+def fmt_count(count: int) -> str:
+    """Format a hit count to fit in ~6 chars."""
+    if count >= 1_000_000:
+        return f"{count // 1_000_000}M"
+    if count >= 10_000:
+        return f"{count // 1_000}k"
+    return str(count)
+
+
+def pct_str(hit: int, found: int) -> str:
+    if found == 0:
+        return "    - "
+    return f"{100.0 * hit / found:5.1f}%"
+
+
+def report_terminal_summary(
+    report: CoverageReport,
+    target: str,
+    sort_by: str,
+    top_n: int,
+    scope: str | None,
+    c,
+):
+    """Print a coverage summary table to stdout."""
+    print()
+    print(f"{c.BOLD}Coverage: {target}{c.RESET}")
+    print()
+
+    def total_fmt(hit, found):
+        p = f"{100.0 * hit / found:.1f}%" if found else "-"
+        return f"{hit}/{found} ({p})"
+
+    print(
+        f"  Totals:  "
+        f"Lines: {total_fmt(report.total_lines_hit, report.total_lines_found)}  "
+        f"Functions: {total_fmt(report.total_functions_hit, report.total_functions_found)}  "
+        f"Branches: {total_fmt(report.total_branches_hit, report.total_branches_found)}"
+    )
+    print()
+
+    active = [f for f in report.files if f.lines_found > 0]
+    if scope:
+        active = apply_scope(active, scope)
+    if not active:
+        if scope:
+            print(f"  No instrumented files matching scope: {scope}")
+        else:
+            print("  No instrumented files found.")
+        return
+
+    if sort_by == "uncovered":
+        active.sort(key=lambda f: -(f.lines_found - f.lines_hit))
+    elif sort_by == "coverage":
+        active.sort(key=lambda f: f.lines_hit / f.lines_found if f.lines_found else 0)
+    elif sort_by == "name":
+        active.sort(key=lambda f: f.path)
+
+    total_files = len(active)
+    shown = active[:top_n] if top_n > 0 else active
+
+    max_path = min(max(len(f.path) for f in shown), 55)
+
+    # Header
+    if scope:
+        print(f"  Scope: {scope}")
+        print()
+    print(f"  {'File':<{max_path}}  {'Lines':>13}  {'Functions':>13}  {'Branches':>13}")
+    print(f"  {'─' * (max_path + 46)}")
+
+    for fc in shown:
+        path = fc.path
+        if len(path) > max_path:
+            path = "..." + path[-(max_path - 3) :]
+
+        cols = []
+        for hit, found in [
+            (fc.lines_hit, fc.lines_found),
+            (fc.functions_hit, fc.functions_found),
+            (fc.branches_hit, fc.branches_found),
+        ]:
+            ratio = f"{hit}/{found}"
+            pct = pct_str(hit, found)
+            color = pct_color(100.0 * hit / found if found else 0, c)
+            cols.append(f"{ratio:>7} {color}{pct}{c.RESET}")
+
+        print(f"  {path:<{max_path}}  {'  '.join(cols)}")
+
+    print(f"  {'─' * (max_path + 46)}")
+
+    if top_n > 0 and total_files > top_n:
+        print(f"  Showing {len(shown)} of {total_files} files (sorted by {sort_by})")
+
+    zero_cov = sum(1 for f in active if f.lines_hit == 0)
+    if zero_cov:
+        print(f"  {zero_cov} files with 0% coverage (use -f <pattern> to inspect)")
+
+    if scope:
+        out_of_scope = sum(
+            1
+            for f in report.files
+            if f.lines_found > 0 and not f.path.startswith(scope)
+        )
+        if out_of_scope:
+            print(
+                f"  {out_of_scope} out-of-scope files hidden (use --all-files to show)"
+            )
+
+    print()
+
+
+def report_terminal_annotated(
+    report: CoverageReport,
+    file_patterns: list[str],
+    workspace_root: str,
+    c,
+):
+    """Print annotated source for files matching the given patterns."""
+    matched = []
+    for fc in report.files:
+        for pattern in file_patterns:
+            if pattern in fc.path or fnmatch.fnmatch(
+                os.path.basename(fc.path), pattern
+            ):
+                matched.append(fc)
+                break
+
+    if not matched:
+        print(
+            f"No files matched: {', '.join(file_patterns)}",
+            file=sys.stderr,
+        )
+        print("Available files:", file=sys.stderr)
+        for fc in sorted(report.files, key=lambda f: f.path)[:20]:
+            print(f"  {fc.path}", file=sys.stderr)
+        if len(report.files) > 20:
+            print(f"  ... and {len(report.files) - 20} more", file=sys.stderr)
+        return
+
+    for fc in matched:
+        line_hits: dict[int, int] = {lc.line: lc.hit_count for lc in fc.lines}
+
+        source_path = os.path.join(workspace_root, fc.path)
+        if not os.path.isfile(source_path):
+            print(f"  (source not found: {source_path})", file=sys.stderr)
+            continue
+
+        pct = 100.0 * fc.lines_hit / fc.lines_found if fc.lines_found else 0
+        print()
+        print(
+            f"{c.BOLD}{fc.path}{c.RESET} — "
+            f"Lines: {fc.lines_hit}/{fc.lines_found} ({pct:.1f}%)"
+        )
+        print()
+
+        with open(source_path) as sf:
+            for line_no, source_line in enumerate(sf, 1):
+                source_line = source_line.rstrip("\n")
+
+                if line_no in line_hits:
+                    count = line_hits[line_no]
+                    if count == 0:
+                        marker = f"{c.RED}{'0':>6}{c.RESET}"
+                        text = f"{c.RED}{source_line}{c.RESET}"
+                    else:
+                        marker = f"{c.GREEN}{fmt_count(count):>6}{c.RESET}"
+                        text = source_line
+                else:
+                    marker = "      "
+                    text = f"{c.DIM}{source_line}{c.RESET}"
+
+                print(f"  {line_no:>5} |{marker}| {text}")
+
+        print()
+
+
+# ---------------------------------------------------------------------------
+# Diff coverage reports
+# ---------------------------------------------------------------------------
+
+
+def report_terminal_diff(
+    report: CoverageReport,
+    diff_info: DiffInfo,
+    target: str,
+    workspace_root: str | None,
+    c,
+):
+    """Print a diff coverage summary table to stdout."""
+    classified = classify_diff_lines(diff_info, report)
+
+    print()
+    print(f"{c.BOLD}Diff Coverage: {target}{c.RESET}")
+    print()
+
+    rows = []
+    total_covered = total_uncovered = 0
+    for filepath in sorted(classified):
+        covered, uncovered, uninstrumented = classified[filepath]
+        n_covered = len(covered)
+        n_uncovered = len(uncovered)
+        n_instr = n_covered + n_uncovered
+        total_covered += n_covered
+        total_uncovered += n_uncovered
+        if n_instr > 0:
+            n_changed = n_covered + n_uncovered + len(uninstrumented)
+            rows.append((filepath, n_changed, n_covered, n_uncovered, n_instr))
+
+    total_instr = total_covered + total_uncovered
+    if not rows:
+        print("  No instrumented changed lines found in diff.")
+        print()
+        return
+
+    pct = 100.0 * total_covered / total_instr if total_instr else 0
+    color = pct_color(pct, c)
+    print(
+        f"  Instrumented changed lines: {total_instr}  "
+        f"Covered: {color}{total_covered}/{total_instr}"
+        f" ({pct:.1f}%){c.RESET}"
+    )
+    print()
+
+    max_path = min(max(len(r[0]) for r in rows), 55)
+
+    print(
+        f"  {'File':<{max_path}}"
+        f"  {'Changed':>7}  {'Covered':>7}  {'Uncov':>7}  {'Diff%':>7}"
+    )
+    print(f"  {'─' * (max_path + 36)}")
+
+    for filepath, n_changed, n_covered, n_uncovered, n_instr in rows:
+        path = filepath
+        if len(path) > max_path:
+            path = "..." + path[-(max_path - 3) :]
+        p = 100.0 * n_covered / n_instr if n_instr else 0
+        color = pct_color(p, c)
+        print(
+            f"  {path:<{max_path}}"
+            f"  {n_changed:>7}  {n_covered:>7}  {n_uncovered:>7}"
+            f"  {color}{p:>6.1f}%{c.RESET}"
+        )
+
+    print(f"  {'─' * (max_path + 36)}")
+    print()
+
+
+def report_llm_diff(
+    report: CoverageReport,
+    diff_info: DiffInfo,
+    target: str,
+    workspace_root: str | None,
+    output,
+):
+    """Generate an LLM-optimized diff coverage report in markdown."""
+    w = output.write
+    classified = classify_diff_lines(diff_info, report)
+
+    fc_by_path: dict[str, FileCoverage] = {fc.path: fc for fc in report.files}
+
+    total_covered = sum(len(c) for c, u, _ in classified.values())
+    total_uncovered = sum(len(u) for _, u, _ in classified.values())
+    total_instr = total_covered + total_uncovered
+
+    def pct(hit, found):
+        return f"{100.0 * hit / found:.1f}%" if found else "N/A"
+
+    w(f"# Diff Coverage Report: {target}\n\n")
+    w("## Summary\n\n")
+    w(f"- Instrumented changed lines: {total_instr}\n")
+    w(f"- Covered: {total_covered} ({pct(total_covered, total_instr)})\n")
+    w(f"- Uncovered: {total_uncovered} ({pct(total_uncovered, total_instr)})\n\n")
+
+    w("## Per-File Summary\n\n")
+    w("| File | Instrumented | Covered | Uncovered | Diff% |\n")
+    w("|------|-------------|---------|-----------|-------|\n")
+    for filepath in sorted(classified):
+        covered, uncovered, _ = classified[filepath]
+        n_instr = len(covered) + len(uncovered)
+        if n_instr == 0:
+            continue
+        w(
+            f"| `{filepath}` | {n_instr} | {len(covered)}"
+            f" | {len(uncovered)} | {pct(len(covered), n_instr)} |\n"
+        )
+    w("\n")
+
+    has_uncovered = any(len(u) > 0 for _, u, _ in classified.values())
+    if not has_uncovered:
+        w("All changed instrumented lines are covered.\n")
+        return
+
+    w("## Uncovered Changed Lines\n\n")
+    w("Lines added or modified in this diff that are not covered by tests.\n\n")
+
+    for filepath in sorted(classified):
+        _, uncovered, _ = classified[filepath]
+        if not uncovered:
+            continue
+
+        fc = fc_by_path.get(filepath)
+        sorted_funcs = sorted(fc.functions, key=lambda f: f.line) if fc else []
+
+        w(f"### `{filepath}`\n\n")
+
+        source_lines: dict[int, str] = {}
+        if workspace_root:
+            source_path = os.path.join(workspace_root, filepath)
+            if os.path.isfile(source_path):
+                with open(source_path) as sf:
+                    uncov_set = set(uncovered)
+                    for line_no, text in enumerate(sf, 1):
+                        if line_no in uncov_set:
+                            source_lines[line_no] = text.rstrip("\n")
+
+        ranges = merge_line_ranges(uncovered)
+        for start, end in ranges:
+            func = find_enclosing_function(sorted_funcs, start)
+            note = f" in `{func.name}`" if func else ""
+            if start == end:
+                w(f"**Line {start}**{note}\n")
+            else:
+                w(f"**Lines {start}-{end}**{note}\n")
+            if source_lines:
+                w("```cpp\n")
+                for ln in range(start, end + 1):
+                    if ln in source_lines:
+                        w(f"{ln}: {source_lines[ln]}\n")
+                w("```\n")
+            w("\n")
+
+
+# ---------------------------------------------------------------------------
+# HTML report
+# ---------------------------------------------------------------------------
+
+
+def report_html(lcov_path: str, output_dir: str, target: str):
+    """Generate an HTML coverage report using genhtml."""
+    if not shutil.which("genhtml"):
+        print(
+            "error: genhtml not found. Install lcov: apt install lcov",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    html_dir = os.path.join(output_dir, "html")
+    os.makedirs(html_dir, exist_ok=True)
+
+    cmd = [
+        "genhtml",
+        "--branch-coverage",
+        "--ignore-errors",
+        "unmapped,source",
+        "--synthesize-missing",
+        "--output-directory",
+        html_dir,
+        "--title",
+        f"Coverage: {target}",
+        "--demangle-cpp",
+        "--legend",
+        lcov_path,
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"error: genhtml failed:\n{result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"HTML report: {os.path.join(html_dir, 'index.html')}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# LLM report
+# ---------------------------------------------------------------------------
+
+
+def find_uncovered_ranges(file_cov: FileCoverage) -> list[tuple[int, int]]:
+    """Find contiguous ranges of uncovered lines."""
+    uncovered = sorted(lc.line for lc in file_cov.lines if lc.hit_count == 0)
+    if not uncovered:
+        return []
+
+    ranges = []
+    start = end = uncovered[0]
+    for line in uncovered[1:]:
+        if line == end + 1:
+            end = line
+        else:
+            ranges.append((start, end))
+            start = end = line
+    ranges.append((start, end))
+    return ranges
+
+
+def find_enclosing_function(
+    sorted_functions: list[FunctionCoverage], line: int
+) -> FunctionCoverage | None:
+    """Find the function whose start line is closest to and <= the given line."""
+    best = None
+    for func in sorted_functions:
+        if func.line <= line:
+            if best is None or func.line > best.line:
+                best = func
+    return best
+
+
+def get_function_spans(
+    file_cov: FileCoverage,
+) -> list[tuple[int, int, FunctionCoverage]]:
+    """Return (start, end, func) for each function in a file.
+
+    A function's span extends from its start line to the line before the
+    next function starts (or the last instrumented line in the file).
+    """
+    sorted_funcs = sorted(file_cov.functions, key=lambda f: f.line)
+    if not sorted_funcs:
+        return []
+
+    max_line = max(lc.line for lc in file_cov.lines) if file_cov.lines else 0
+
+    spans = []
+    for i, func in enumerate(sorted_funcs):
+        end = sorted_funcs[i + 1].line - 1 if i + 1 < len(sorted_funcs) else max_line
+        spans.append((func.line, end, func))
+    return spans
+
+
+def merge_line_ranges(lines: list[int]) -> list[tuple[int, int]]:
+    """Merge a sorted list of line numbers into contiguous (start, end) ranges."""
+    if not lines:
+        return []
+    ranges = []
+    start = end = lines[0]
+    for ln in lines[1:]:
+        if ln == end + 1:
+            end = ln
+        else:
+            ranges.append((start, end))
+            start = end = ln
+    ranges.append((start, end))
+    return ranges
+
+
+def report_llm(report: CoverageReport, target: str, scope: str | None, output):
+    """Generate an LLM-optimized coverage report in markdown."""
+    w = output.write
+
+    def pct(hit, found):
+        return f"{100.0 * hit / found:.1f}%" if found else "N/A"
+
+    w(f"# Coverage Report: {target}\n\n")
+    w("## Summary\n\n")
+    w(
+        f"- Lines: {report.total_lines_hit}/{report.total_lines_found}"
+        f" ({pct(report.total_lines_hit, report.total_lines_found)})\n"
+    )
+    w(
+        f"- Functions: {report.total_functions_hit}/{report.total_functions_found}"
+        f" ({pct(report.total_functions_hit, report.total_functions_found)})\n"
+    )
+    w(
+        f"- Branches: {report.total_branches_hit}/{report.total_branches_found}"
+        f" ({pct(report.total_branches_hit, report.total_branches_found)})\n\n"
+    )
+
+    all_covered = [f for f in report.files if f.lines_found > 0]
+    covered_files = sorted(
+        apply_scope(all_covered, scope) if scope else all_covered,
+        key=lambda f: f.path,
+    )
+
+    # --- Uncovered Functions ---
+    section_started = False
+    for fc in covered_files:
+        uncovered = [f for f in fc.functions if f.hit_count == 0]
+        if not uncovered:
+            continue
+        if not section_started:
+            w("## Uncovered Functions\n\n")
+            w("Functions never called during the test.\n\n")
+            section_started = True
+        w(f"### {fc.path}\n\n")
+        w("| Function | Line |\n")
+        w("|----------|------|\n")
+        for func in sorted(uncovered, key=lambda f: f.line):
+            w(f"| `{func.name}` | {func.line} |\n")
+        w("\n")
+
+    # --- Partially Covered Functions ---
+    section_started = False
+    for fc in covered_files:
+        spans = get_function_spans(fc)
+        line_hits = {lc.line: lc.hit_count for lc in fc.lines}
+        branch_by_line: dict[int, list[BranchCoverage]] = {}
+        for br in fc.branches:
+            branch_by_line.setdefault(br.line, []).append(br)
+
+        partial_funcs = []
+        for start, end, func in spans:
+            if func.hit_count == 0:
+                continue
+
+            uncov_lines = sorted(
+                ln
+                for ln in range(start, end + 1)
+                if ln in line_hits and line_hits[ln] == 0
+            )
+
+            uncov_branches = []
+            for ln in range(start, end + 1):
+                for br in branch_by_line.get(ln, []):
+                    if br.hit_count == 0:
+                        uncov_branches.append(br)
+
+            if uncov_lines or uncov_branches:
+                partial_funcs.append((func, uncov_lines, uncov_branches))
+
+        if not partial_funcs:
+            continue
+        if not section_started:
+            w("## Partially Covered Functions\n\n")
+            w("Functions called but with uncovered lines or branches.\n\n")
+            section_started = True
+
+        w(f"### {fc.path}\n\n")
+        for func, uncov_lines, uncov_branches in partial_funcs:
+            w(f"#### `{func.name}` (line {func.line}, hit {func.hit_count}x)\n\n")
+            if uncov_lines:
+                ranges = merge_line_ranges(uncov_lines)
+                range_strs = [f"{s}-{e}" if s != e else str(s) for s, e in ranges]
+                w(f"- Uncovered lines: {', '.join(range_strs)}\n")
+            if uncov_branches:
+                by_line: dict[int, list[BranchCoverage]] = {}
+                for br in uncov_branches:
+                    by_line.setdefault(br.line, []).append(br)
+                for ln in sorted(by_line):
+                    br_nums = ", ".join(f"branch {b.branch}" for b in by_line[ln])
+                    w(f"- Uncovered branches at line {ln}: {br_nums}\n")
+            w("\n")
+
+    # --- Uncovered Line Ranges ---
+    section_started = False
+    for fc in covered_files:
+        ranges = find_uncovered_ranges(fc)
+        if not ranges:
+            continue
+        if not section_started:
+            w("## Uncovered Line Ranges\n\n")
+            w("Contiguous uncovered blocks, grouped by file.\n\n")
+            section_started = True
+
+        w(f"### {fc.path}\n\n")
+        sorted_funcs = sorted(fc.functions, key=lambda f: f.line)
+        for start, end in ranges:
+            func = find_enclosing_function(sorted_funcs, start)
+            note = f" in `{func.name}`" if func else ""
+            if start == end:
+                w(f"- Line {start}{note}\n")
+            else:
+                w(f"- Lines {start}-{end}{note}\n")
+        w("\n")
+
+    # --- Zero Coverage Files ---
+    zero_candidates = [
+        f for f in report.files if f.lines_found > 0 and f.lines_hit == 0
+    ]
+    zero_files = apply_scope(zero_candidates, scope) if scope else zero_candidates
+    if zero_files:
+        w("## Files With Zero Coverage\n\n")
+        by_dir: dict[str, list[str]] = {}
+        for fc in sorted(zero_files, key=lambda f: f.path):
+            by_dir.setdefault(os.path.dirname(fc.path), []).append(
+                os.path.basename(fc.path)
+            )
+        for dirname in sorted(by_dir):
+            files = by_dir[dirname]
+            w(f"- `{dirname}/`: {', '.join(f'`{f}`' for f in files)}\n")
+        w("\n")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main():
+    argv = sys.argv[1:]
+    extra_bazel_args: list[str] = []
+    if "--" in argv:
+        idx = argv.index("--")
+        extra_bazel_args = argv[idx + 1 :]
+        argv = argv[:idx]
+
+    parser = argparse.ArgumentParser(
+        description="Run a Bazel C++ test with coverage and generate reports.",
+        usage="%(prog)s [OPTIONS] <target> [-- <bazel_args>...]",
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help="Bazel test target (e.g. //src/v/bytes/tests:iobuf_test)",
+    )
+    parser.add_argument(
+        "-r",
+        "--report",
+        default="terminal",
+        choices=["terminal", "html", "llm", "all"],
+        help="Report mode (default: terminal)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        default="./coverage-out",
+        help="Output directory for HTML and LLM reports (default: ./coverage-out)",
+    )
+    parser.add_argument(
+        "-f",
+        "--file",
+        action="append",
+        dest="files",
+        default=[],
+        help="Show annotated source for matching file(s). Repeatable.",
+    )
+    parser.add_argument(
+        "--sort",
+        default="uncovered",
+        choices=["uncovered", "coverage", "name"],
+        help="Sort order for file summary (default: uncovered)",
+    )
+    parser.add_argument(
+        "-n",
+        "--top",
+        type=int,
+        default=20,
+        help="Show top N files in summary, 0 for all (default: 20)",
+    )
+    parser.add_argument(
+        "--scope",
+        help="Filter reports to files under this path prefix"
+        " (default: inferred from target)",
+    )
+    parser.add_argument(
+        "--all-files",
+        action="store_true",
+        help="Show all instrumented files, not just those matching the target scope",
+    )
+    parser.add_argument(
+        "--reuse",
+        action="store_true",
+        help="Skip bazel coverage; reuse LCOV data from a previous run",
+    )
+    parser.add_argument(
+        "--lcov",
+        help="Path to LCOV .dat file (implies --reuse)",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable ANSI color output",
+    )
+    parser.add_argument(
+        "--diff",
+        metavar="REF",
+        help="Show coverage of changed lines only. Accepts: a git ref"
+        " (e.g. dev, HEAD~5) for <ref>...HEAD, a commit range (abc..def),"
+        " 'commit:SHA' for a single commit's changes,"
+        " 'pr' (current branch PR), or 'pr:NUMBER'",
+    )
+    parser.add_argument(
+        "--diff-file",
+        help=argparse.SUPPRESS,
+    )
+
+    args = parser.parse_args(argv)
+
+    if args.lcov:
+        args.reuse = True
+
+    if not args.reuse and not args.target:
+        parser.error("target is required unless --reuse is used")
+
+    target_display = args.target or "(cached)"
+
+    use_color = not args.no_color and sys.stdout.isatty()
+    colors = _Colors if use_color else _NoColors
+
+    workspace_root = find_workspace_root()
+    if workspace_root:
+        os.chdir(workspace_root)
+    # When running inside a Bazel test action (sandboxed), calling `bazel`
+    # subprocesses can hang trying to connect back to the parent Bazel server.
+    # With --reuse we only need the demangler for real coverage data, not
+    # fixture tests, so skip the nested `bazel info` call entirely.
+    toolchain_bin = None if args.reuse else find_toolchain_bin()
+
+    # Get LCOV data
+    if not args.reuse:
+        if not workspace_root:
+            print("error: could not find workspace root", file=sys.stderr)
+            sys.exit(1)
+        lcov_path = run_bazel_coverage(args.target, extra_bazel_args)
+    elif args.lcov:
+        lcov_path = os.path.abspath(args.lcov)
+        if not os.path.isfile(lcov_path):
+            print(f"error: LCOV file not found: {lcov_path}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        lcov_path = find_existing_lcov()
+        if not lcov_path:
+            print(
+                "error: no existing coverage data found. Run without --reuse first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    report = parse_lcov(lcov_path)
+
+    if report.total_lines_found == 0:
+        print(
+            "warning: no instrumented lines in coverage data",
+            file=sys.stderr,
+        )
+
+    apply_demangling(report, toolchain_bin)
+
+    # Determine scope for filtering reports
+    if args.all_files:
+        scope = None
+    elif args.scope:
+        scope = args.scope.rstrip("/") + "/"
+    elif args.target:
+        scope = infer_scope(args.target)
+    else:
+        scope = None
+
+    # Resolve diff if requested
+    diff_info: DiffInfo | None = None
+    if args.diff_file:
+        with open(args.diff_file) as f:
+            diff_info = parse_unified_diff(f.read())
+    elif args.diff:
+        diff_text = resolve_diff_ref(args.diff)
+        diff_info = parse_unified_diff(diff_text)
+        if not diff_info.changed_lines:
+            print("warning: diff produced no changed files", file=sys.stderr)
+
+    modes = ["terminal", "html", "llm"] if args.report == "all" else [args.report]
+
+    if "terminal" in modes or args.files:
+        if diff_info:
+            report_terminal_diff(
+                report, diff_info, target_display, workspace_root, colors
+            )
+        else:
+            report_terminal_summary(
+                report, target_display, args.sort, args.top, scope, colors
+            )
+        if args.files and not diff_info:
+            if not workspace_root:
+                print(
+                    "warning: cannot show annotated source (workspace root not found)",
+                    file=sys.stderr,
+                )
+            else:
+                report_terminal_annotated(report, args.files, workspace_root, colors)
+
+    if "html" in modes:
+        report_html(lcov_path, args.output_dir, target_display)
+
+    if "llm" in modes:
+        if diff_info:
+            if args.report == "llm" and "html" not in modes:
+                report_llm_diff(
+                    report,
+                    diff_info,
+                    target_display,
+                    workspace_root,
+                    sys.stdout,
+                )
+            else:
+                os.makedirs(args.output_dir, exist_ok=True)
+                llm_path = os.path.join(args.output_dir, "llm-diff-report.md")
+                with open(llm_path, "w") as f:
+                    report_llm_diff(
+                        report, diff_info, target_display, workspace_root, f
+                    )
+                print(f"LLM diff report: {llm_path}", file=sys.stderr)
+        else:
+            if args.report == "llm" and "html" not in modes:
+                report_llm(report, target_display, scope, sys.stdout)
+            else:
+                os.makedirs(args.output_dir, exist_ok=True)
+                llm_path = os.path.join(args.output_dir, "llm-report.md")
+                with open(llm_path, "w") as f:
+                    report_llm(report, target_display, scope, f)
+                print(f"LLM report: {llm_path}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

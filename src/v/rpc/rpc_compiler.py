@@ -49,6 +49,9 @@ RPC_TEMPLATE = """
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/scheduling.hh>
+{%- if run_handlers_in_scheduling_group %}
+#include <seastar/core/with_scheduling_group.hh>
+{%- endif %}
 
 #include <array>
 #include <functional>
@@ -127,7 +130,13 @@ private:
                               Codec>::exec(in, ctx, {{method.name}}_method,
       [this](
           {{method.input_type}} t, ::rpc::streaming_context& ctx) -> ss::future<{{method.output_type}}> {
+          {%- if run_handlers_in_scheduling_group %}
+          return ss::with_scheduling_group(_sc, [this, t = std::move(t), &ctx]() mutable {
+              return {{method.name}}(std::move(t), ctx);
+          });
+          {%- else %}
           return {{method.name}}(std::move(t), ctx);
+          {%- endif %}
       });
     }
     {%- endfor %}
@@ -221,7 +230,7 @@ private:
 """
 
 # default values applied to service definition
-SERVICE_DEFAULTS = {"final_protocol": True}
+SERVICE_DEFAULTS = {"final_protocol": True, "run_handlers_in_scheduling_group": False}
 
 
 def _read_file(name: str):
@@ -236,7 +245,16 @@ def _enrich_methods(service: Any):
         bytes("%s:%s" % (service["namespace"], service["service_name"]), "utf-8")
     )
 
+    # Method IDs are derived from the method name and the input/output type
+    # names, so renaming any of them changes the wire-level dispatch ID. To
+    # let a method be renamed (or its types renamed) without breaking older
+    # peers that still use the previous identifiers, an entry may set
+    # `legacy_id` to the prior name/types. The hash is then computed from
+    # those, and the generated method ID matches what the old codegen would
+    # have produced. This is safe only when the underlying serde payload is
+    # field-for-field compatible across the rename.
     def _xor_id(m):
+        m = m.get("legacy_id", m)
         mid = ("%s:" % service["namespace"]).join(
             [m["name"], m["input_type"], m["output_type"]]
         )

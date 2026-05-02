@@ -84,6 +84,172 @@ void remove_extents_below_start_offset_for_tp(
     }
 }
 
+// Validates the basic shape of new_objects against the state:
+// - non-empty
+// - every object is pre-registered and not yet finalized
+// - extents are not inverted (base <= last)
+// - extents form contiguous intervals per partition
+// - each interval aligns with existing partition extents at the right offsets
+//
+// Returns the populated extent map on success so callers can drive
+// subsequent per-partition work (epoch checks, cleaned-range validation,
+// etc.) without recomputing it.
+std::expected<sorted_extents_by_tidp_t, stm_update_error>
+validate_new_objects_layout(
+  const state& state, const chunked_vector<new_object>& new_objects) {
+    if (new_objects.empty()) {
+        return std::unexpected(stm_update_error{"No objects requested"});
+    }
+    sorted_extents_by_tidp_t new_extents_by_tp;
+    for (const auto& o : new_objects) {
+        auto it = state.objects.find(o.oid);
+        if (it == state.objects.end()) {
+            return std::unexpected(
+              stm_update_error{
+                fmt::format("Object {} not pre-registered", o.oid)});
+        }
+        if (!it->second.is_preregistration) {
+            return std::unexpected(
+              stm_update_error{fmt::format("Object {} already exists", o.oid)});
+        }
+        o.collect_extents_by_tidp(&new_extents_by_tp);
+    }
+    for (const auto& [tidp, extents] : new_extents_by_tp) {
+        for (const auto& extent : extents) {
+            if (extent.base_offset > extent.last_offset) {
+                return std::unexpected(stm_update_error(
+                  fmt::format(
+                    "Input object has inverted extent for partition {}: "
+                    "base_offset {} > last_offset {}",
+                    tidp,
+                    extent.base_offset,
+                    extent.last_offset)));
+            }
+        }
+    }
+
+    auto contiguous_intervals_by_tp = contiguous_intervals_for_extents(
+      new_extents_by_tp);
+    if (!contiguous_intervals_by_tp.has_value()) {
+        return std::unexpected(
+          stm_update_error(contiguous_intervals_by_tp.error()));
+    }
+
+    for (const auto& [tidp, intervals] : contiguous_intervals_by_tp.value()) {
+        for (const auto& interval : intervals) {
+            auto req_base = interval.base_offset;
+            auto req_last = interval.last_offset;
+
+            auto p_state = state.partition_state(tidp);
+            if (!p_state) {
+                return std::unexpected(stm_update_error(
+                  fmt::format("Partition {} not tracked by state", tidp)));
+            }
+
+            // Check that the new range's offset aligns with existing extents
+            // above the log's start offset.
+            const auto& prt = p_state->get();
+            auto iters = get_range(
+              prt.extents, req_base, req_last, prt.start_offset);
+            if (!iters.has_value()) {
+                return std::unexpected(stm_update_error(
+                  fmt::format(
+                    "Partition {} doesn't contain extents that span exactly "
+                    "[{}, {}]",
+                    tidp,
+                    req_base,
+                    req_last)));
+            }
+        }
+    }
+    return new_extents_by_tp;
+}
+
+// Applies the extent-replacement portion shared by compact_objects_update
+// and replace_objects_update: marks new_objects as finalized in
+// state.objects, removes the old extents the new ones replace, inserts
+// the new extents, and prunes anything below the partition's start
+// offset.
+//
+// Returns the populated extent map for callers that need it.
+sorted_extents_by_tidp_t apply_new_objects_replacement(
+  state& state, const chunked_vector<new_object>& new_objects) {
+    sorted_extents_by_tidp_t new_extents_by_tp;
+    for (const auto& o : new_objects) {
+        o.collect_extents_by_tidp(&new_extents_by_tp);
+        state.objects[o.oid] = object_entry{
+          .total_data_size = 0,
+          .removed_data_size = 0,
+          .footer_pos = o.footer_pos,
+          .object_size = o.object_size,
+          .last_updated = model::timestamp::now(),
+          .is_preregistration = false,
+        };
+    }
+
+    auto contiguous_intervals_by_tp
+      = contiguous_intervals_for_extents(new_extents_by_tp).value();
+
+    for (const auto& [tidp, intervals] : contiguous_intervals_by_tp) {
+        auto& p_state
+          = state.topic_to_state[tidp.topic_id].pid_to_state[tidp.partition];
+        for (const auto& interval : intervals) {
+            auto requested_base = interval.base_offset;
+            auto requested_last = interval.last_offset;
+            auto iters = get_range(
+              p_state.extents,
+              requested_base,
+              requested_last,
+              p_state.start_offset);
+            auto [base_it, last_it] = *iters;
+            auto end_it = std::next(last_it);
+            for (auto iter = base_it; iter != end_it; ++iter) {
+                auto& old_extent = *iter;
+                state.objects[old_extent.oid].removed_data_size
+                  += old_extent.len;
+                vlog(
+                  cd_log.debug,
+                  "Removing extent of {} in {} [{}, {}]",
+                  tidp,
+                  old_extent.oid,
+                  old_extent.base_offset,
+                  old_extent.last_offset);
+            }
+
+            p_state.extents.erase(base_it, end_it);
+        }
+    }
+
+    for (const auto& [tidp, new_extents] : new_extents_by_tp) {
+        auto& p_state
+          = state.topic_to_state[tidp.topic_id].pid_to_state[tidp.partition];
+        // NOTE: we don't need to update the start or next offsets since we've
+        // validated that the new extents replace exact ranges.
+
+        for (const auto& e : new_extents) {
+            p_state.extents.emplace(e);
+            vlog(
+              cd_log.debug,
+              "Adding replacement extent of {} in {} [{}, {}]",
+              tidp,
+              e.oid,
+              e.base_offset,
+              e.last_offset);
+        }
+
+        for (const auto& extent : new_extents) {
+            state.objects[extent.oid].total_data_size += extent.len;
+        }
+    }
+
+    for (const auto& [tidp, _] : new_extents_by_tp) {
+        remove_extents_below_start_offset_for_tp(
+          state, tidp, "Added replacement below start offset");
+    }
+
+    return new_extents_by_tp;
+}
+
 } // namespace
 
 size_t
@@ -371,74 +537,102 @@ add_objects_update::apply(state& state) {
 
 std::expected<std::monostate, stm_update_error>
 replace_objects_update::can_apply(const state& state) {
-    if (new_objects.empty()) {
-        return std::unexpected(stm_update_error{"No objects requested"});
+    auto layout_res = validate_new_objects_layout(state, new_objects);
+    if (!layout_res.has_value()) {
+        return std::unexpected(layout_res.error());
     }
-    sorted_extents_by_tidp_t new_extents_by_tp;
-    for (const auto& o : new_objects) {
-        auto it = state.objects.find(o.oid);
-        if (it == state.objects.end()) {
-            return std::unexpected(
-              stm_update_error{
-                fmt::format("Object {} not pre-registered", o.oid)});
-        }
-        if (!it->second.is_preregistration) {
-            return std::unexpected(
-              stm_update_error{fmt::format("Object {} already exists", o.oid)});
-        }
-        o.collect_extents_by_tidp(&new_extents_by_tp);
-    }
-    for (const auto& [tidp, extents] : new_extents_by_tp) {
-        for (const auto& extent : extents) {
-            if (extent.base_offset > extent.last_offset) {
+    const auto& new_extents_by_tp = layout_res.value();
+
+    // Bidirectional invariant: expected_epochs entries must match new extents.
+    for (const auto& [t, p_epochs] : expected_epochs) {
+        for (const auto& [p, _] : p_epochs) {
+            model::topic_id_partition tidp{t, p};
+            if (!new_extents_by_tp.contains(tidp)) {
                 return std::unexpected(stm_update_error(
                   fmt::format(
-                    "Input object has inverted extent for partition {}: "
-                    "base_offset {} > last_offset {}",
-                    tidp,
-                    extent.base_offset,
-                    extent.last_offset)));
+                    "expected_epochs entry for {} does not refer to a "
+                    "partition with new extents",
+                    tidp)));
             }
         }
     }
-
-    auto contiguous_intervals_by_tp = contiguous_intervals_for_extents(
-      new_extents_by_tp);
-    if (!contiguous_intervals_by_tp.has_value()) {
-        return std::unexpected(
-          stm_update_error(contiguous_intervals_by_tp.error()));
-    }
-
-    for (const auto& [tidp, intervals] : contiguous_intervals_by_tp.value()) {
-        for (const auto& interval : intervals) {
-            auto req_base = interval.base_offset;
-            auto req_last = interval.last_offset;
-
-            auto p_state = state.partition_state(tidp);
-            if (!p_state) {
-                return std::unexpected(stm_update_error(
-                  fmt::format("Partition {} not tracked by state", tidp)));
-            }
-
-            // Check that the new range's offset aligns with existing extents
-            // above the log's start offset.
-            const auto& prt = p_state->get();
-            auto iters = get_range(
-              prt.extents, req_base, req_last, prt.start_offset);
-            if (!iters.has_value()) {
-                return std::unexpected(stm_update_error(
-                  fmt::format(
-                    "Partition {} doesn't contain extents that span exactly "
-                    "[{}, {}]",
-                    tidp,
-                    req_base,
-                    req_last)));
-            }
+    for (const auto& [tidp, _] : new_extents_by_tp) {
+        const auto& t = tidp.topic_id;
+        const auto& p = tidp.partition;
+        auto t_it = expected_epochs.find(t);
+        if (t_it == expected_epochs.end() || !t_it->second.contains(p)) {
+            return std::unexpected(stm_update_error(
+              fmt::format(
+                "Partition {} has new extents but no expected_epochs entry",
+                tidp)));
+        }
+        // Validate epoch.
+        auto p_state = state.partition_state(tidp);
+        if (!p_state) {
+            return std::unexpected(stm_update_error(
+              fmt::format("Partition {} not tracked by state", tidp)));
+        }
+        auto expected_epoch = t_it->second.at(p);
+        const auto& current_epoch = p_state->get().compaction_epoch;
+        if (expected_epoch != current_epoch) {
+            return std::unexpected(stm_update_error(
+              fmt::format(
+                "Expected compaction epoch {} does not match the current "
+                "compaction epoch {} for {}",
+                expected_epoch,
+                current_epoch,
+                tidp)));
         }
     }
-    if (compaction_updates.empty()) {
-        return std::monostate{};
+
+    return std::monostate{};
+}
+
+std::expected<std::monostate, stm_update_error>
+replace_objects_update::apply(state& state) {
+    auto allowed = can_apply(state);
+    if (!allowed.has_value()) {
+        return std::unexpected(allowed.error());
     }
+    apply_new_objects_replacement(state, new_objects);
+
+    return std::monostate{};
+}
+
+std::expected<replace_objects_update, stm_update_error>
+replace_objects_update::build(
+  const state& state,
+  chunked_vector<new_object> objects,
+  chunked_hash_map<
+    model::topic_id_partition,
+    partition_state::compaction_epoch_t> flat_expected_epochs) {
+    chunked_hash_map<
+      model::topic_id,
+      chunked_hash_map<
+        model::partition_id,
+        partition_state::compaction_epoch_t>>
+      expected_epochs;
+    for (auto& [tp, epoch] : flat_expected_epochs) {
+        expected_epochs[tp.topic_id][tp.partition] = epoch;
+    }
+    replace_objects_update update{
+      .new_objects = std::move(objects),
+      .expected_epochs = std::move(expected_epochs),
+    };
+    auto allowed = update.can_apply(state);
+    if (!allowed.has_value()) {
+        return std::unexpected(allowed.error());
+    }
+    return update;
+}
+
+std::expected<std::monostate, stm_update_error>
+compact_objects_update::can_apply(const state& state) {
+    auto layout_res = validate_new_objects_layout(state, new_objects);
+    if (!layout_res.has_value()) {
+        return std::unexpected(layout_res.error());
+    }
+    const auto& new_extents_by_tp = layout_res.value();
 
     for (const auto& [t, t_req] : compaction_updates) {
         for (const auto& [p, compaction_update] : t_req) {
@@ -558,87 +752,32 @@ replace_objects_update::can_apply(const state& state) {
             }
         }
     }
+
+    // Every partition with new extents must have a compaction_update entry
+    // so its expected_compaction_epoch can be validated. Without this,
+    // callers could silently bump epochs without OCC.
+    for (const auto& [tidp, _] : new_extents_by_tp) {
+        auto t_it = compaction_updates.find(tidp.topic_id);
+        if (
+          t_it == compaction_updates.end()
+          || !t_it->second.contains(tidp.partition)) {
+            return std::unexpected(stm_update_error(
+              fmt::format(
+                "Partition {} has new extents but no compaction_update entry",
+                tidp)));
+        }
+    }
+
     return std::monostate{};
 }
 
 std::expected<std::monostate, stm_update_error>
-replace_objects_update::apply(state& state) {
+compact_objects_update::apply(state& state) {
     auto allowed = can_apply(state);
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
     }
-    sorted_extents_by_tidp_t new_extents_by_tp;
-    for (const auto& o : new_objects) {
-        o.collect_extents_by_tidp(&new_extents_by_tp);
-        state.objects[o.oid] = object_entry{
-          .total_data_size = 0,
-          .removed_data_size = 0,
-          .footer_pos = o.footer_pos,
-          .object_size = o.object_size,
-          .last_updated = model::timestamp::now(),
-          .is_preregistration = false,
-        };
-    }
-
-    auto contiguous_intervals_by_tp
-      = contiguous_intervals_for_extents(new_extents_by_tp).value();
-
-    for (const auto& [tidp, intervals] : contiguous_intervals_by_tp) {
-        auto& p_state
-          = state.topic_to_state[tidp.topic_id].pid_to_state[tidp.partition];
-        for (const auto& interval : intervals) {
-            auto requested_base = interval.base_offset;
-            auto requested_last = interval.last_offset;
-            auto iters = get_range(
-              p_state.extents,
-              requested_base,
-              requested_last,
-              p_state.start_offset);
-            auto [base_it, last_it] = *iters;
-            auto end_it = std::next(last_it);
-            for (auto iter = base_it; iter != end_it; ++iter) {
-                auto& old_extent = *iter;
-                state.objects[old_extent.oid].removed_data_size
-                  += old_extent.len;
-                vlog(
-                  cd_log.debug,
-                  "Removing extent of {} in {} [{}, {}]",
-                  tidp,
-                  old_extent.oid,
-                  old_extent.base_offset,
-                  old_extent.last_offset);
-            }
-
-            p_state.extents.erase(base_it, end_it);
-        }
-    }
-
-    for (const auto& [tidp, new_extents] : new_extents_by_tp) {
-        auto& p_state
-          = state.topic_to_state[tidp.topic_id].pid_to_state[tidp.partition];
-        // NOTE: we don't need to update the start or next offsets since we've
-        // validated that the new extents replace exact ranges.
-
-        for (const auto& e : new_extents) {
-            p_state.extents.emplace(e);
-            vlog(
-              cd_log.debug,
-              "Adding replacement extent of {} in {} [{}, {}]",
-              tidp,
-              e.oid,
-              e.base_offset,
-              e.last_offset);
-        }
-
-        for (const auto& extent : new_extents) {
-            state.objects[extent.oid].total_data_size += extent.len;
-        }
-    }
-
-    for (const auto& [tidp, _] : new_extents_by_tp) {
-        remove_extents_below_start_offset_for_tp(
-          state, tidp, "Added replacement below start offset");
-    }
+    auto new_extents_by_tp = apply_new_objects_replacement(state, new_objects);
 
     for (const auto& [t, t_req] : compaction_updates) {
         for (const auto& [p, compaction_update] : t_req) {
@@ -698,11 +837,12 @@ replace_objects_update::apply(state& state) {
             ++p_state.compaction_epoch;
         }
     }
+
     return std::monostate{};
 }
 
-std::expected<replace_objects_update, stm_update_error>
-replace_objects_update::build(
+std::expected<compact_objects_update, stm_update_error>
+compact_objects_update::build(
   const state& state,
   chunked_vector<new_object> objects,
   chunked_hash_map<model::topic_id_partition, compaction_state_update>
@@ -714,7 +854,7 @@ replace_objects_update::build(
     for (auto& [tp, update] : compaction_updates) {
         cmp_state_updates[tp.topic_id][tp.partition] = std::move(update);
     }
-    replace_objects_update update{
+    compact_objects_update update{
       .new_objects = std::move(objects),
       .compaction_updates = std::move(cmp_state_updates),
     };

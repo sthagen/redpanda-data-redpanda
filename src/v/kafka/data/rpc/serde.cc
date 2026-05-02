@@ -57,7 +57,13 @@ fmt::iterator produce_request::format_to(fmt::iterator it) const {
 }
 
 fmt::iterator kafka_topic_data_result::format_to(fmt::iterator it) const {
-    return fmt::format_to(it, "{{ tp: {}, err: {} }}", tp, err);
+    return fmt::format_to(
+      it,
+      "{{ tp: {}, err: {}, base_offset: {}, last_offset: {} }}",
+      tp,
+      err,
+      base_offset,
+      last_offset);
 }
 
 fmt::iterator produce_reply::format_to(fmt::iterator it) const {

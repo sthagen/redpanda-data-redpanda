@@ -12,6 +12,7 @@
 #include "cloud_storage/types.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
+#include "cloud_topics/level_one/frontend_reader/l1_reader_cache.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
@@ -287,8 +288,7 @@ frontend::make_reader(cloud_topic_log_reader_config cfg) {
         if (!tidp) {
             throw topic_config_not_found_exception(ntp());
         }
-        co_return storage::translating_reader{
-          model::record_batch_reader(make_l1_reader(cfg, *tidp))};
+        co_return storage::translating_reader{make_l1_reader(cfg, *tidp)};
     }
     co_return storage::translating_reader{
       model::record_batch_reader(make_l0_reader(cfg)),
@@ -387,23 +387,28 @@ ss::future<size_t> frontend::size_bytes() {
     co_return l0_size + l1_size_res.value().size;
 }
 
-std::unique_ptr<model::record_batch_reader::impl> frontend::make_l1_reader(
+model::record_batch_reader frontend::make_l1_reader(
   const cloud_topic_log_reader_config& cfg,
   model::topic_id_partition tidp) const {
     auto ct_state = _partition->get_cloud_topics_state();
+    auto* cache = ct_state->local().get_l1_reader_cache();
+    if (cache) {
+        if (auto hit = cache->get_reader(tidp, cfg); hit) {
+            return std::move(*hit);
+        }
+    }
+
     auto l1_metastore = ct_state->local().get_l1_metastore();
     auto l1_io = ct_state->local().get_l1_io();
     auto l1_reader_probe = ct_state->local().get_l1_reader_probe();
-    auto l1_cache = ct_state->local().get_l1_reader_cache();
 
-    return std::make_unique<level_one_log_reader_impl>(
-      cfg,
-      _partition->ntp(),
-      tidp,
-      l1_metastore,
-      l1_io,
-      l1_reader_probe,
-      l1_cache);
+    auto reader = std::make_unique<level_one_log_reader_impl>(
+      cfg, _partition->ntp(), tidp, l1_metastore, l1_io, l1_reader_probe);
+
+    if (cache) {
+        return cache->put(std::move(reader));
+    }
+    return model::record_batch_reader(std::move(reader));
 }
 
 ss::future<std::optional<storage::timequery_result>>
@@ -1331,6 +1336,20 @@ ss::future<result<raft::replicate_result>> frontend::replicate_at_offset(
       timeout,
       as);
 
+    auto enqueued_fut = co_await ss::coroutine::as_future(
+      std::move(stages.request_enqueued));
+    if (enqueued_fut.failed()) {
+        auto ex = enqueued_fut.get_exception();
+        vlogl(
+          cd_log,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                         : ss::log_level::warn,
+          "Failed to enqueue replicate request for ntp {}: {}",
+          ntp(),
+          ex);
+        // fallthrough - we expect the finish command to throw if this one did
+        // and we don't want to abandon the replicate_finished future
+    }
     co_return co_await std::move(stages.replicate_finished);
 }
 

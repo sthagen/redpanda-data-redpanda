@@ -104,4 +104,19 @@ private:
     cmap_t out;
 };
 
+/// Returns a replace_epoch_map_t covering every partition in `objects` at
+/// the given epoch (default 0). Used to satisfy the replace_objects() API
+/// in tests that don't exercise epoch validation.
+inline metastore::replace_epoch_map_t make_epoch_map(
+  const om_list_t& objects,
+  metastore::compaction_epoch epoch = metastore::compaction_epoch{0}) {
+    metastore::replace_epoch_map_t out;
+    for (const auto& obj : objects) {
+        for (const auto& ntp : obj.ntp_metas) {
+            out.try_emplace(ntp.tidp, epoch);
+        }
+    }
+    return out;
+}
+
 } // namespace cloud_topics::l1::test_utils

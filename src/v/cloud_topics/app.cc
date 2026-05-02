@@ -14,7 +14,7 @@
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/data_plane_impl.h"
 #include "cloud_topics/housekeeper/manager.h"
-#include "cloud_topics/level_one/compaction/scheduler.h"
+#include "cloud_topics/level_one/maintenance/scheduler.h"
 #include "cloud_topics/level_one/metastore/flush_loop.h"
 #include "cloud_topics/level_one/metastore/topic_purger.h"
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
@@ -26,6 +26,7 @@
 #include "cloud_topics/topic_manifest_upload_manager.h"
 #include "cluster/controller.h"
 #include "cluster/utils/partition_change_notifier_impl.h"
+#include "config/configuration.h"
 #include "config/node_config.h"
 #include "resource_mgmt/cpu_scheduling.h"
 #include "ssx/future-util.h"
@@ -71,6 +72,17 @@ ss::future<> app::construct(
     co_await construct_service(_l1_reader_probe);
 
     co_await construct_service(
+      _l1_reader_cache,
+      ss::sharded_parameter([] {
+          return config::shard_local_cfg()
+            .cloud_topics_l1_reader_cache_eviction_timeout_ms.bind();
+      }),
+      ss::sharded_parameter([] {
+          return config::shard_local_cfg()
+            .cloud_topics_l1_reader_cache_max_size.bind();
+      }));
+
+    co_await construct_service(
       l1_io,
       config::node().l1_staging_path(),
       ss::sharded_parameter([&remote] { return &remote->local(); }),
@@ -102,8 +114,6 @@ ss::future<> app::construct(
       ss::sharded_parameter([&remote] { return std::ref(remote->local()); }),
       bucket);
 
-    co_await construct_service(l1_reader_cache_);
-
     co_await construct_service(
       rr_snapshot_manager_,
       config::node().l1_staging_path(),
@@ -131,7 +141,7 @@ ss::future<> app::construct(
       ss::sharded_parameter(
         [&metadata_cache] { return &metadata_cache->local(); }),
       ss::sharded_parameter([this] { return &_l1_reader_probe.local(); }),
-      ss::sharded_parameter([this] { return &l1_reader_cache_.local(); }),
+      ss::sharded_parameter([this] { return &_l1_reader_cache.local(); }),
       ss::sharded_parameter([this] { return &rr_metadata_manager_.local(); }),
       ss::sharded_parameter([this] { return &rr_snapshot_manager_.local(); }));
 

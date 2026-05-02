@@ -343,6 +343,296 @@ build_object_removal_entries(
     co_return updated_old_objects;
 }
 
+// Validates that extents provided in new objects are non-empty, are
+// non-inverted, and form contiguous intervals per partition. Returns a map of
+// partitions to sorted extents on success and an error otherwise.
+std::expected<sorted_extents_by_tidp_t, db_update_error>
+validate_new_objects_extent_layout(
+  const chunked_vector<new_object>& new_objects) {
+    if (new_objects.empty()) {
+        return std::unexpected(
+          db_update_error(invalid_input, "No objects requested"));
+    }
+
+    sorted_extents_by_tidp_t new_extents_by_tp;
+    for (const auto& o : new_objects) {
+        o.collect_extents_by_tidp(&new_extents_by_tp);
+    }
+    for (const auto& [tidp, extents] : new_extents_by_tp) {
+        for (const auto& extent : extents) {
+            if (extent.base_offset > extent.last_offset) {
+                return std::unexpected(db_update_error(
+                  invalid_input,
+                  fmt::format(
+                    "Input object has inverted extent for partition {}: "
+                    "base_offset {} > last_offset {}",
+                    tidp,
+                    extent.base_offset,
+                    extent.last_offset)));
+            }
+        }
+    }
+
+    auto contiguous_intervals = contiguous_intervals_for_extents(
+      new_extents_by_tp);
+    if (!contiguous_intervals.has_value()) {
+        return std::unexpected(
+          db_update_error(invalid_input, contiguous_intervals.error()));
+    }
+
+    return new_extents_by_tp;
+}
+
+// Walks the partition-level extent ranges that intersect the requested
+// new_objects' offsets and collects the object_ids of the existing extents
+// being replaced. Used by compact_objects_db_update and
+// replace_objects_db_update to acquire object locks before staging rows.
+ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
+discover_replaced_object_ids_for_extents(
+  state_reader& state, const chunked_vector<new_object>& new_objects) {
+    sorted_extents_by_tidp_t new_extents_by_tp;
+    for (const auto& o : new_objects) {
+        o.collect_extents_by_tidp(&new_extents_by_tp);
+    }
+
+    auto contiguous_intervals_res = contiguous_intervals_for_extents(
+      new_extents_by_tp);
+    if (!contiguous_intervals_res.has_value()) {
+        co_return std::unexpected(db_update_error(
+          invalid_input, std::move(contiguous_intervals_res.error())));
+    }
+
+    // For each partition's replacement intervals, scan existing extents
+    // in that range and collect their object IDs. We use get_inclusive_extents
+    // rather than get_extent_range — discovery only needs OIDs, not exact
+    // alignment validation (build_rows handles that).
+    absl::btree_set<object_id> discovered_oids;
+    for (const auto& [tidp, intervals] : contiguous_intervals_res.value()) {
+        for (const auto& interval : intervals) {
+            auto extents_res = co_await state.get_inclusive_extents(
+              tidp, interval.base_offset, interval.last_offset);
+            if (!extents_res.has_value()) {
+                co_return std::unexpected(wrap_read_err(
+                  std::move(extents_res.error()),
+                  "Error getting {} extents for discovery in [{}, {}]",
+                  tidp,
+                  interval.base_offset,
+                  interval.last_offset));
+            }
+            if (!extents_res->has_value()) {
+                continue;
+            }
+            auto gen = (*extents_res)->get_rows();
+            while (auto row_res = co_await gen()) {
+                const auto& row = row_res->get();
+                if (!row.has_value()) {
+                    co_return std::unexpected(wrap_read_err(
+                      row.error(),
+                      "Error iterating {} extents during discovery",
+                      tidp));
+                }
+                discovered_oids.insert(row->val.oid);
+            }
+        }
+    }
+    co_return discovered_oids;
+}
+
+// State produced by validate_replacement and consumed by
+// build_replacement_rows. Holds everything an "extent replacement"
+// build_rows needs between phases. Compact-path callers also read
+// new_extents_by_tp during their compaction-state work.
+struct validated_object_replacements {
+    sorted_extents_by_tidp_t new_extents_by_tp;
+    chunked_hash_map<object_id, object_entry> new_objects_map;
+    chunked_hash_map<model::topic_id_partition, kafka::offset>
+      start_offsets_by_tp;
+    chunked_hash_map<object_id, size_t> old_extent_sizes_by_oid;
+    chunked_hash_map<model::topic_id_partition, chunked_vector<ss::sstring>>
+      extent_keys_to_delete;
+    chunked_hash_map<object_id, object_entry> updated_old_objects;
+};
+
+// Checks that the input objects are valid replacements for objects that
+// currently exist in a partition's state.
+ss::future<std::expected<validated_object_replacements, db_update_error>>
+validate_replacement(
+  state_reader& state,
+  const chunked_vector<new_object>& new_objects,
+  chunked_hash_map<model::topic_id_partition, metadata_row_value>&
+    updated_metadata) {
+    validated_object_replacements replacements;
+    auto new_extents_res = co_await validate_preregistered_and_collect(
+      new_objects,
+      state,
+      replacements.new_extents_by_tp,
+      replacements.new_objects_map);
+    if (!new_extents_res.has_value()) {
+        co_return std::unexpected(std::move(new_extents_res.error()));
+    }
+
+    // Calculate contiguous intervals and validate that they align with
+    // appropriate extents.
+    auto contiguous_intervals_res = contiguous_intervals_for_extents(
+      replacements.new_extents_by_tp);
+    if (!contiguous_intervals_res.has_value()) {
+        co_return std::unexpected(db_update_error(
+          invalid_input, std::move(contiguous_intervals_res.error())));
+    }
+    const auto& contiguous_intervals_by_tp = contiguous_intervals_res.value();
+
+    for (const auto& [tidp, intervals] : contiguous_intervals_by_tp) {
+        auto meta_res = co_await get_metadata_for_update(
+          state, updated_metadata, tidp, "contiguous interval processing");
+        if (!meta_res.has_value()) {
+            co_return std::unexpected(std::move(meta_res.error()));
+        }
+        replacements.start_offsets_by_tp[tidp] = meta_res.value()->start_offset;
+        // Track removed sizes for this partition specifically.
+        chunked_hash_map<object_id, size_t> tidp_removed_sizes;
+        auto exact_intervals_res = co_await collect_exact_intervals(
+          tidp,
+          intervals,
+          meta_res.value()->start_offset,
+          state,
+          replacements.extent_keys_to_delete[tidp],
+          tidp_removed_sizes);
+        if (!exact_intervals_res.has_value()) {
+            co_return std::unexpected(std::move(exact_intervals_res.error()));
+        }
+        // Accumulate total removed size for this partition, and then fold the
+        // updates for this partition back into old_extent_sizes_by_oid which
+        // tracks per object instead of per partition. The total is then
+        // subtracted off of the metadata which will later be updated in the db.
+        ssize_t removed_for_tidp = 0;
+        for (const auto& [oid, sz] : tidp_removed_sizes) {
+            removed_for_tidp += sz;
+            replacements.old_extent_sizes_by_oid[oid] += sz;
+        }
+        auto prev_size = static_cast<ssize_t>(meta_res.value()->size);
+        meta_res.value()->size = std::max(
+          ssize_t(0), prev_size - removed_for_tidp);
+        meta_res.value()->num_extents -= std::min(
+          meta_res.value()->num_extents,
+          replacements.extent_keys_to_delete[tidp].size());
+    }
+
+    // Update existing object entries to indicate the removal of data from
+    // replaced extents.
+    auto updated_old_objects_res = co_await build_object_removal_entries(
+      state, replacements.old_extent_sizes_by_oid);
+    if (!updated_old_objects_res.has_value()) {
+        co_return std::unexpected(updated_old_objects_res.error());
+    }
+    replacements.updated_old_objects = std::move(
+      updated_old_objects_res.value());
+
+    co_return replacements;
+}
+
+// Phase 2 of extent replacement, shared by both build_rows. Builds extent
+// rows for the new extents, and builds all the row writes that are shared
+// between object compaction and replacement: extent deletions, updated and new
+// object entries, and metadata.
+//
+// Caller must build any path-specific rows (e.g. compact_objects_db_update
+// builds compaction_row writes for partitions with cleaned-range or
+// tombstone work) before calling this, since this writes metadata rows
+// last.
+ss::future<std::expected<void, db_update_error>> build_replacement_rows(
+  state_reader& state,
+  validated_object_replacements replacements,
+  chunked_hash_map<model::topic_id_partition, metadata_row_value>&
+    updated_metadata,
+  chunked_vector<write_batch_row>& out) {
+    chunked_hash_set<ss::sstring> added_extent_keys;
+    for (const auto& [tidp, extents] : replacements.new_extents_by_tp) {
+        auto start_it = replacements.start_offsets_by_tp.find(tidp);
+        auto start_offset = start_it != replacements.start_offsets_by_tp.end()
+                              ? start_it->second
+                              : kafka::offset{0};
+        size_t added_for_tidp = 0;
+        size_t added_extents_for_tidp = 0;
+        for (const auto& extent : extents) {
+            // Skip extents fully below start_offset. These are stale
+            // replacements for extents that have been truncated.
+            if (extent.last_offset < start_offset) {
+                replacements.new_objects_map[extent.oid].removed_data_size
+                  += extent.len;
+                continue;
+            }
+            auto key = extent_row_key::encode(tidp, extent.base_offset);
+            added_extent_keys.emplace(key);
+            added_for_tidp += extent.len;
+            ++added_extents_for_tidp;
+            out.emplace_back(
+              write_batch_row{
+                .key = extent_row_key::encode(tidp, extent.base_offset),
+                .value = serde::to_iobuf(
+                  extent_row_value{
+                    .last_offset = extent.last_offset,
+                    .max_timestamp = extent.max_timestamp,
+                    .filepos = extent.filepos,
+                    .len = extent.len,
+                    .oid = extent.oid,
+                  }),
+              });
+        }
+
+        auto meta_res = co_await get_metadata_for_update(
+          state, updated_metadata, tidp, "new extents");
+        if (!meta_res.has_value()) {
+            co_return std::unexpected(std::move(meta_res.error()));
+        }
+        meta_res.value()->size += added_for_tidp;
+        meta_res.value()->num_extents += added_extents_for_tidp;
+    }
+    if (added_extent_keys.empty()) {
+        // No extents, e.g. because all replacements are below the current
+        // start offsets.
+        co_return std::unexpected(db_update_error(
+          invalid_update, "Replacement extents all filtered out"));
+    }
+
+    for (const auto& [tidp, keys] : replacements.extent_keys_to_delete) {
+        for (const auto& key : keys) {
+            if (added_extent_keys.contains(key)) {
+                // Don't delete keys that are also being added.
+                continue;
+            }
+            out.emplace_back(
+              write_batch_row{
+                .key = key,
+                .value = iobuf{},
+              });
+        }
+    }
+    for (const auto& [oid, entry] : replacements.updated_old_objects) {
+        out.emplace_back(
+          write_batch_row{
+            .key = object_row_key::encode(oid),
+            .value = serde::to_iobuf(object_row_value{.object = entry}),
+          });
+    }
+    for (const auto& [oid, entry] : replacements.new_objects_map) {
+        out.emplace_back(
+          write_batch_row{
+            .key = object_row_key::encode(oid),
+            .value = serde::to_iobuf(object_row_value{.object = entry}),
+          });
+    }
+
+    for (auto& [tidp, meta] : updated_metadata) {
+        out.emplace_back(
+          write_batch_row{
+            .key = metadata_row_key::encode(tidp),
+            .value = serde::to_iobuf(meta),
+          });
+    }
+
+    co_return std::expected<void, db_update_error>{};
+}
+
 } // namespace
 
 ss::future<std::expected<void, db_update_error>>
@@ -617,34 +907,12 @@ add_objects_db_update::validate_inputs() const {
 }
 
 ss::future<std::expected<void, db_update_error>>
-replace_objects_db_update::build_rows(
+compact_objects_db_update::build_rows(
   state_reader& state, chunked_vector<write_batch_row>& out) const {
     auto validate_res = validate_inputs();
     if (!validate_res.has_value()) {
         co_return std::unexpected(std::move(validate_res.error()));
     }
-    sorted_extents_by_tidp_t new_extents_by_tp;
-    chunked_hash_map<object_id, object_entry> new_objects_map;
-    auto new_extents_res = co_await validate_preregistered_and_collect(
-      new_objects, state, new_extents_by_tp, new_objects_map);
-    if (!new_extents_res.has_value()) {
-        co_return std::unexpected(std::move(new_extents_res.error()));
-    }
-
-    // Calculate contiguous intervals and validate that they align with
-    // appropriate extents.
-    auto contiguous_intervals_res = contiguous_intervals_for_extents(
-      new_extents_by_tp);
-    if (!contiguous_intervals_res.has_value()) {
-        co_return std::unexpected(db_update_error(
-          invalid_input, std::move(contiguous_intervals_res.error())));
-    }
-    const auto& contiguous_intervals_by_tp = contiguous_intervals_res.value();
-    chunked_hash_map<object_id, size_t> old_extent_sizes_by_oid;
-    chunked_hash_map<model::topic_id_partition, chunked_vector<ss::sstring>>
-      extent_keys_to_delete;
-    chunked_hash_map<model::topic_id_partition, kafka::offset>
-      start_offsets_by_tp;
 
     /*
      * The `updated_metadata` map tracks metadata that needs to be updated. Use
@@ -654,53 +922,17 @@ replace_objects_db_update::build_rows(
     chunked_hash_map<model::topic_id_partition, metadata_row_value>
       updated_metadata;
 
-    for (const auto& [tidp, intervals] : contiguous_intervals_by_tp) {
-        auto meta_res = co_await get_metadata_for_update(
-          state, updated_metadata, tidp, "contiguous interval processing");
-        if (!meta_res.has_value()) {
-            co_return std::unexpected(std::move(meta_res.error()));
-        }
-        start_offsets_by_tp[tidp] = meta_res.value()->start_offset;
-        // Track removed sizes for this partition specifically.
-        chunked_hash_map<object_id, size_t> tidp_removed_sizes;
-        auto exact_intervals_res = co_await collect_exact_intervals(
-          tidp,
-          intervals,
-          meta_res.value()->start_offset,
-          state,
-          extent_keys_to_delete[tidp],
-          tidp_removed_sizes);
-        if (!exact_intervals_res.has_value()) {
-            co_return std::unexpected(std::move(exact_intervals_res.error()));
-        }
-        // Accumulate total removed size for this partition, and then fold the
-        // updates for this partition back into old_extent_sizes_by_oid which
-        // tracks per object instead of per partition. The total is then
-        // subtracted off of the metadata which will later be updated in the db.
-        ssize_t removed_for_tidp = 0;
-        for (const auto& [oid, sz] : tidp_removed_sizes) {
-            removed_for_tidp += sz;
-            old_extent_sizes_by_oid[oid] += sz;
-        }
-        auto prev_size = static_cast<ssize_t>(meta_res.value()->size);
-        meta_res.value()->size = std::max(
-          ssize_t(0), prev_size - removed_for_tidp);
-        meta_res.value()->num_extents -= std::min(
-          meta_res.value()->num_extents, extent_keys_to_delete[tidp].size());
+    auto replacements_res = co_await validate_replacement(
+      state, new_objects, updated_metadata);
+    if (!replacements_res.has_value()) {
+        co_return std::unexpected(std::move(replacements_res.error()));
     }
 
-    // Update existing object entries to indicate the removal of data from
-    // replaced extents.
-    auto updated_old_objects_res = co_await build_object_removal_entries(
-      state, old_extent_sizes_by_oid);
-    if (!updated_old_objects_res.has_value()) {
-        co_return std::unexpected(updated_old_objects_res.error());
-    }
-    auto& updated_old_objects = updated_old_objects_res.value();
+    auto& replacements = replacements_res.value();
 
+    // Process compaction state mutations and build compaction rows.
     chunked_hash_map<model::topic_id_partition, compaction_state>
       merged_compaction_states;
-
     for (const auto& [t, p_updates] : compaction_updates) {
         for (const auto& [p, comp_update] : p_updates) {
             model::topic_id_partition tidp{t, p};
@@ -723,8 +955,9 @@ replace_objects_db_update::build_rows(
             // down to the start of the log. By definition, this is a
             // requirement of cleaning the log.
             if (!comp_update.new_cleaned_ranges.empty()) {
-                auto new_extent_iter = new_extents_by_tp.find(tidp);
-                if (new_extent_iter != new_extents_by_tp.end()) {
+                auto new_extent_iter = replacements.new_extents_by_tp.find(
+                  tidp);
+                if (new_extent_iter != replacements.new_extents_by_tp.end()) {
                     auto req_extents_base
                       = new_extent_iter->second.begin()->base_offset;
                     auto start_offset = updated_metadata[tidp].start_offset;
@@ -743,81 +976,6 @@ replace_objects_db_update::build_rows(
         }
     }
 
-    // Generate the rows.
-    chunked_hash_set<ss::sstring> added_extent_keys;
-    for (const auto& [tidp, extents] : new_extents_by_tp) {
-        auto start_it = start_offsets_by_tp.find(tidp);
-        auto start_offset = start_it != start_offsets_by_tp.end()
-                              ? start_it->second
-                              : kafka::offset{0};
-        size_t added_for_tidp = 0;
-        size_t added_extents_for_tidp = 0;
-        for (const auto& extent : extents) {
-            // Skip extents fully below start_offset. These are stale
-            // replacements for extents that have been truncated.
-            if (extent.last_offset < start_offset) {
-                new_objects_map[extent.oid].removed_data_size += extent.len;
-                continue;
-            }
-            auto key = extent_row_key::encode(tidp, extent.base_offset);
-            added_extent_keys.emplace(key);
-            added_for_tidp += extent.len;
-            ++added_extents_for_tidp;
-            out.emplace_back(
-              write_batch_row{
-                .key = extent_row_key::encode(tidp, extent.base_offset),
-                .value = serde::to_iobuf(
-                  extent_row_value{
-                    .last_offset = extent.last_offset,
-                    .max_timestamp = extent.max_timestamp,
-                    .filepos = extent.filepos,
-                    .len = extent.len,
-                    .oid = extent.oid,
-                  }),
-              });
-        }
-
-        auto meta_res = co_await get_metadata_for_update(
-          state, updated_metadata, tidp, "new extents");
-        if (!meta_res.has_value()) {
-            co_return std::unexpected(std::move(meta_res.error()));
-        }
-        meta_res.value()->size += added_for_tidp;
-        meta_res.value()->num_extents += added_extents_for_tidp;
-    }
-    if (added_extent_keys.empty()) {
-        // No extents, e.g. because all replacements are below the current
-        // start offsets.
-        co_return std::unexpected(db_update_error(
-          invalid_update, "Replacement extents all filtered out"));
-    }
-    for (const auto& [tidp, keys] : extent_keys_to_delete) {
-        for (const auto& key : keys) {
-            if (added_extent_keys.contains(key)) {
-                // Don't delete keys that are also being added.
-                continue;
-            }
-            out.emplace_back(
-              write_batch_row{
-                .key = key,
-                .value = iobuf{},
-              });
-        }
-    }
-    for (const auto& [oid, entry] : updated_old_objects) {
-        out.emplace_back(
-          write_batch_row{
-            .key = object_row_key::encode(oid),
-            .value = serde::to_iobuf(object_row_value{.object = entry}),
-          });
-    }
-    for (const auto& [oid, entry] : new_objects_map) {
-        out.emplace_back(
-          write_batch_row{
-            .key = object_row_key::encode(oid),
-            .value = serde::to_iobuf(object_row_value{.object = entry}),
-          });
-    }
     for (const auto& [tidp, comp_state] : merged_compaction_states) {
         out.emplace_back(
           write_batch_row{
@@ -826,109 +984,29 @@ replace_objects_db_update::build_rows(
           });
     }
 
-    for (auto& [tidp, meta] : updated_metadata) {
-        out.emplace_back(
-          write_batch_row{
-            .key = metadata_row_key::encode(tidp),
-            .value = serde::to_iobuf(meta),
-          });
-    }
-
-    co_return std::expected<void, db_update_error>{};
+    co_return co_await build_replacement_rows(
+      state, std::move(replacements), updated_metadata, out);
 }
 
 ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
-replace_objects_db_update::discover_replaced_object_ids(
+compact_objects_db_update::discover_replaced_object_ids(
   state_reader& state) const {
     auto validate_res = validate_inputs();
     if (!validate_res.has_value()) {
         co_return std::unexpected(std::move(validate_res.error()));
     }
-    sorted_extents_by_tidp_t new_extents_by_tp;
-    for (const auto& o : new_objects) {
-        o.collect_extents_by_tidp(&new_extents_by_tp);
-    }
-
-    auto contiguous_intervals_res = contiguous_intervals_for_extents(
-      new_extents_by_tp);
-    if (!contiguous_intervals_res.has_value()) {
-        co_return std::unexpected(db_update_error(
-          invalid_input, std::move(contiguous_intervals_res.error())));
-    }
-
-    // For each partition's replacement intervals, scan existing extents
-    // in that range and collect their object IDs. We use get_inclusive_extents
-    // rather than get_extent_range — discovery only needs OIDs, not exact
-    // alignment validation (build_rows handles that).
-    absl::btree_set<object_id> discovered_oids;
-    for (const auto& [tidp, intervals] : contiguous_intervals_res.value()) {
-        for (const auto& interval : intervals) {
-            auto extents_res = co_await state.get_inclusive_extents(
-              tidp, interval.base_offset, interval.last_offset);
-            if (!extents_res.has_value()) {
-                co_return std::unexpected(wrap_read_err(
-                  std::move(extents_res.error()),
-                  "Error getting {} extents for discovery in [{}, {}]",
-                  tidp,
-                  interval.base_offset,
-                  interval.last_offset));
-            }
-            if (!extents_res->has_value()) {
-                continue;
-            }
-            auto gen = (*extents_res)->get_rows();
-            while (auto row_res = co_await gen()) {
-                const auto& row = row_res->get();
-                if (!row.has_value()) {
-                    co_return std::unexpected(wrap_read_err(
-                      row.error(),
-                      "Error iterating {} extents during discovery",
-                      tidp));
-                }
-                discovered_oids.insert(row->val.oid);
-            }
-        }
-    }
-    co_return discovered_oids;
+    co_return co_await discover_replaced_object_ids_for_extents(
+      state, new_objects);
 }
 
 std::expected<void, db_update_error>
-replace_objects_db_update::validate_inputs() const {
-    if (new_objects.empty()) {
-        return std::unexpected(
-          db_update_error(invalid_input, "No objects requested"));
+compact_objects_db_update::validate_inputs() const {
+    auto layout_res = validate_new_objects_extent_layout(new_objects);
+    if (!layout_res.has_value()) {
+        return std::unexpected(layout_res.error());
     }
+    const auto& new_extents_by_tp = layout_res.value();
 
-    sorted_extents_by_tidp_t new_extents_by_tp;
-    for (const auto& o : new_objects) {
-        o.collect_extents_by_tidp(&new_extents_by_tp);
-    }
-    for (const auto& [tidp, extents] : new_extents_by_tp) {
-        for (const auto& extent : extents) {
-            if (extent.base_offset > extent.last_offset) {
-                return std::unexpected(db_update_error(
-                  invalid_input,
-                  fmt::format(
-                    "Input object has inverted extent for partition {}: "
-                    "base_offset {} > last_offset {}",
-                    tidp,
-                    extent.base_offset,
-                    extent.last_offset)));
-            }
-        }
-    }
-
-    auto contiguous_intervals = contiguous_intervals_for_extents(
-      new_extents_by_tp);
-    if (!contiguous_intervals.has_value()) {
-        return std::unexpected(
-          db_update_error(invalid_input, contiguous_intervals.error()));
-    }
-
-    // Validate compaction updates align with extents
-    if (compaction_updates.empty()) {
-        return std::expected<void, db_update_error>{};
-    }
     for (const auto& [t, t_req] : compaction_updates) {
         for (const auto& [p, compaction_update] : t_req) {
             model::topic_id_partition tidp{t, p};
@@ -979,7 +1057,119 @@ replace_objects_db_update::validate_inputs() const {
         }
     }
 
+    // Every partition with new extents must have a compaction_update entry
+    // so its expected_compaction_epoch can be validated. Without this,
+    // callers could silently bump epochs without OCC.
+    for (const auto& [tidp, _] : new_extents_by_tp) {
+        auto t_it = compaction_updates.find(tidp.topic_id);
+        if (
+          t_it == compaction_updates.end()
+          || !t_it->second.contains(tidp.partition)) {
+            return std::unexpected(db_update_error(
+              invalid_input,
+              fmt::format(
+                "Partition {} has new extents but no compaction_update entry",
+                tidp)));
+        }
+    }
+
     return std::expected<void, db_update_error>{};
+}
+
+std::expected<void, db_update_error>
+replace_objects_db_update::validate_inputs() const {
+    auto layout_res = validate_new_objects_extent_layout(new_objects);
+    if (!layout_res.has_value()) {
+        return std::unexpected(layout_res.error());
+    }
+    const auto& new_extents_by_tp = layout_res.value();
+
+    // Bidirectional invariant between expected_epochs and new_extents.
+    for (const auto& [t, p_epochs] : expected_epochs) {
+        for (const auto& [p, _] : p_epochs) {
+            model::topic_id_partition tidp{t, p};
+            if (!new_extents_by_tp.contains(tidp)) {
+                return std::unexpected(db_update_error(
+                  invalid_input,
+                  fmt::format(
+                    "expected_epochs entry for {} does not refer to a "
+                    "partition with new extents",
+                    tidp)));
+            }
+        }
+    }
+    for (const auto& [tidp, _] : new_extents_by_tp) {
+        auto t_it = expected_epochs.find(tidp.topic_id);
+        if (
+          t_it == expected_epochs.end()
+          || !t_it->second.contains(tidp.partition)) {
+            return std::unexpected(db_update_error(
+              invalid_input,
+              fmt::format(
+                "Partition {} has new extents but no expected_epochs entry",
+                tidp)));
+        }
+    }
+
+    return std::expected<void, db_update_error>{};
+}
+
+ss::future<std::expected<absl::btree_set<object_id>, db_update_error>>
+replace_objects_db_update::discover_replaced_object_ids(
+  state_reader& state) const {
+    auto validate_res = validate_inputs();
+    if (!validate_res.has_value()) {
+        co_return std::unexpected(std::move(validate_res.error()));
+    }
+    co_return co_await discover_replaced_object_ids_for_extents(
+      state, new_objects);
+}
+
+ss::future<std::expected<void, db_update_error>>
+replace_objects_db_update::build_rows(
+  state_reader& state, chunked_vector<write_batch_row>& out) const {
+    auto validate_res = validate_inputs();
+    if (!validate_res.has_value()) {
+        co_return std::unexpected(std::move(validate_res.error()));
+    }
+
+    /*
+     * The `updated_metadata` map tracks metadata that needs to be updated. Use
+     * the `get_metadata_for_update` helper to index into `updated_metadata`
+     * which will fetch the current metadata state if necessary.
+     */
+    chunked_hash_map<model::topic_id_partition, metadata_row_value>
+      updated_metadata;
+
+    // Per-partition expected compaction epoch validation.
+    for (const auto& [t, p_epochs] : expected_epochs) {
+        for (const auto& [p, expected_epoch] : p_epochs) {
+            model::topic_id_partition tidp{t, p};
+            auto meta = co_await get_metadata_for_update(
+              state, updated_metadata, tidp, "epoch validation");
+            if (!meta.has_value()) {
+                co_return std::unexpected(std::move(meta.error()));
+            }
+            if (meta.value()->compaction_epoch != expected_epoch) {
+                co_return std::unexpected(db_update_error(
+                  invalid_update,
+                  fmt::format(
+                    "Compaction epoch mismatch for {}: expected {}, got {}",
+                    tidp,
+                    expected_epoch,
+                    meta.value()->compaction_epoch)));
+            }
+        }
+    }
+
+    auto replacements_res = co_await validate_replacement(
+      state, new_objects, updated_metadata);
+    if (!replacements_res.has_value()) {
+        co_return std::unexpected(std::move(replacements_res.error()));
+    }
+
+    co_return co_await build_replacement_rows(
+      state, std::move(replacements_res).value(), updated_metadata, out);
 }
 
 ss::future<std::expected<void, db_update_error>>

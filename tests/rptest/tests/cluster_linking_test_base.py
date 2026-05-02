@@ -116,9 +116,6 @@ CLOUD_TOPICS_SHADOW_LINK_LOG_ALLOW_LIST = [
     # The cloud-topics STM may time out during epoch fencing under load
     # or immediately after leadership changes.
     re.compile(r".*ctp_stm\.cc.*Sync timeout"),
-    # Exceptional futures from abort_requested during graceful shutdown
-    # of cloud-topics coroutines.
-    re.compile(r".*Exceptional future ignored.*abort_requested_exception"),
 ]
 
 

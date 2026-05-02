@@ -57,10 +57,12 @@ redpanda_cc_library(
     srcs = [
         "reconciler.cc",
         "reconciliation_source.cc",
+        "source_probe.cc",
     ],
     hdrs = [
         "reconciler.h",
         "reconciliation_source.h",
+        "source_probe.h",
     ],
     implementation_deps = [
         "//src/v/cloud_topics:logger",
@@ -70,6 +72,7 @@ redpanda_cc_library(
         "//src/v/cluster:fwd",
         "//src/v/config",
         "//src/v/kafka/utils:txn_reader",
+        "//src/v/metrics",
         "//src/v/utils:retry_chain_node",
     ],
     visibility = ["//visibility:public"],

@@ -148,8 +148,8 @@ make_add_objects_update(const term_specs& terms, Objects... objects) {
 }
 
 template<typename... Objects>
-replace_objects_db_update
-make_replace_objects_update(const compact_specs& cs, Objects... objects) {
+compact_objects_db_update
+make_compact_objects_update(const compact_specs& cs, Objects... objects) {
     chunked_hash_map<
       model::topic_id,
       chunked_hash_map<model::partition_id, compaction_state_update>>
@@ -174,9 +174,36 @@ make_replace_objects_update(const compact_specs& cs, Objects... objects) {
     }
 
     auto new_objects = make_new_objects(objects...);
-    return replace_objects_db_update{
+    return compact_objects_db_update{
       .new_objects = std::move(new_objects),
       .compaction_updates = std::move(compaction_updates),
+    };
+}
+
+struct replace_spec {
+    model::topic_id_partition tidp;
+    int64_t epoch{0};
+};
+using replace_specs = std::vector<replace_spec>;
+
+template<typename... Objects>
+replace_objects_db_update
+make_replace_objects_update(const replace_specs& rs, Objects... objects) {
+    chunked_hash_map<
+      model::topic_id,
+      chunked_hash_map<
+        model::partition_id,
+        partition_state::compaction_epoch_t>>
+      expected_epochs;
+    for (const auto& r : rs) {
+        expected_epochs[r.tidp.topic_id][r.tidp.partition]
+          = partition_state::compaction_epoch_t(r.epoch);
+    }
+
+    auto new_objects = make_new_objects(objects...);
+    return replace_objects_db_update{
+      .new_objects = std::move(new_objects),
+      .expected_epochs = std::move(expected_epochs),
     };
 }
 
@@ -243,7 +270,26 @@ protected:
         db_->apply(std::move(wb)).get();
     }
 
-    void apply_replace_update(replace_objects_db_update& update) {
+    void apply_compact_update(compact_objects_db_update& update) {
+        preregister_new_objects(update.new_objects);
+        auto reader = make_reader();
+        chunked_vector<write_batch_row> rows;
+        auto result = update.build_rows(reader, rows).get();
+        ASSERT_TRUE(result.has_value());
+
+        auto seqno = next_seqno();
+        auto wb = db_->create_write_batch();
+        for (const auto& row : rows) {
+            if (row.value.empty()) {
+                wb.remove(row.key, seqno);
+            } else {
+                wb.put(row.key, row.value.copy(), seqno);
+            }
+        }
+        db_->apply(std::move(wb)).get();
+    }
+
+    void apply_replace_no_compact_update(replace_objects_db_update& update) {
         preregister_new_objects(update.new_objects);
         auto reader = make_reader();
         chunked_vector<write_batch_row> rows;
@@ -392,9 +438,15 @@ protected:
     }
 
     template<typename... Objects>
-    void replace_objects(compact_specs cs, Objects... objects) {
-        auto db_update = make_replace_objects_update(std::move(cs), objects...);
-        apply_replace_update(db_update);
+    void compact_objects(compact_specs cs, Objects... objects) {
+        auto db_update = make_compact_objects_update(std::move(cs), objects...);
+        apply_compact_update(db_update);
+    }
+
+    template<typename... Objects>
+    void replace_objects(replace_specs rs, Objects... objects) {
+        auto db_update = make_replace_objects_update(std::move(rs), objects...);
+        apply_replace_no_compact_update(db_update);
     }
 
     void apply_set_start_offset_update(set_start_offset_db_update& update) {
@@ -798,7 +850,8 @@ TEST_F(StateUpdateTest, TestReplaceObjectsBasic) {
     // Create a new object that replaces the first two extents [0-199].
     auto new_oid = make_oid();
     replace_objects(
-      compact_specs{}, make_object(new_oid, tp(tidp0, 0, 199).pos(0, 2047)));
+      replace_specs{{.tidp = tidp0, .epoch = 0}},
+      make_object(new_oid, tp(tidp0, 0, 199).pos(0, 2047)));
 
     // Metadata should be unchanged.
     verify_metadata(tidp0, kafka::offset(0), kafka::offset(300));
@@ -820,7 +873,8 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsMissingPartition) {
     preregister_objects(std::move(prereg_oids), model::timestamp(1000));
 
     auto db_update = make_replace_objects_update(
-      compact_specs{}, make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
+      replace_specs{{.tidp = tidp0, .epoch = 0}},
+      make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
     auto reader = make_reader();
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
@@ -833,7 +887,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsMissingPartition) {
 TEST_F(StateUpdateTest, TestReplaceObjectsRejectsEmptyObjects) {
     replace_objects_db_update update{
       .new_objects = {},
-      .compaction_updates = {},
+      .expected_epochs = {},
     };
     auto validate_res = update.validate_inputs();
     ASSERT_FALSE(validate_res.has_value());
@@ -844,11 +898,11 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsEmptyObjects) {
 }
 
 TEST_F(
-  StateUpdateTest, TestReplaceObjectsRejectsCompactionUpdateWithoutExtents) {
+  StateUpdateTest, TestCompactObjectsRejectsCompactionUpdateWithoutExtents) {
     auto tidp1 = make_tidp(1);
 
     // Compaction update for tidp1, but extents only for tidp0.
-    auto db_update = make_replace_objects_update(
+    auto db_update = make_compact_objects_update(
       {{compact_spec{
         .tidp = tidp1,
         .cleaned = {{0, 99, false}},
@@ -864,9 +918,9 @@ TEST_F(
 }
 
 TEST_F(
-  StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeExceedsExtentsEnd) {
+  StateUpdateTest, TestCompactObjectsRejectsCleanedRangeExceedsExtentsEnd) {
     // Cleaned range [0-299], but extents only [0-199].
-    auto db_update = make_replace_objects_update(
+    auto db_update = make_compact_objects_update(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{0, 299, false}},
@@ -882,9 +936,9 @@ TEST_F(
 }
 
 TEST_F(
-  StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeStartsBeforeExtents) {
+  StateUpdateTest, TestCompactObjectsRejectsCleanedRangeStartsBeforeExtents) {
     // Extents start at 100, but cleaned range starts at 50.
-    auto db_update = make_replace_objects_update(
+    auto db_update = make_compact_objects_update(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{50, 199, false}},
@@ -907,7 +961,8 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsDuplicateObject) {
 
     // Try to replace using an object ID that already exists.
     auto db_update = make_replace_objects_update(
-      compact_specs{}, make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
+      replace_specs{{.tidp = tidp0, .epoch = 0}},
+      make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
     auto reader = make_reader();
     chunked_vector<write_batch_row> rows;
     auto result = db_update.build_rows(reader, rows).get();
@@ -917,14 +972,14 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsDuplicateObject) {
       fmt::format("{}", result.error()), HasSubstr("not pre-registered"));
 }
 
-TEST_F(StateUpdateTest, TestReplaceObjectsRejectsOverlappingCleanedRanges) {
+TEST_F(StateUpdateTest, TestCompactObjectsRejectsOverlappingCleanedRanges) {
     // Set up partition with existing cleaned range with tombstones.
     add_objects(
       {terms(tidp0, {{0, 1}})},
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
 
     // Add a cleaned range [0-49].
-    replace_objects(
+    compact_objects(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{0, 49, true}},
@@ -942,7 +997,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsOverlappingCleanedRanges) {
     prereg_oids.push_back(overlap_oid);
     preregister_objects(std::move(prereg_oids), model::timestamp(1000));
 
-    auto db_update = make_replace_objects_update(
+    auto db_update = make_compact_objects_update(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned_at = 2000,
@@ -961,7 +1016,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsOverlappingCleanedRanges) {
       HasSubstr("overlaps with an existing cleaned range"));
 }
 
-TEST_F(StateUpdateTest, TestReplaceObjectsRejectsRemovingUntrackedTombstones) {
+TEST_F(StateUpdateTest, TestCompactObjectsRejectsRemovingUntrackedTombstones) {
     // Set up partition without any tombstone tracking.
     add_objects(
       {terms(tidp0, {{0, 1}})},
@@ -973,7 +1028,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsRemovingUntrackedTombstones) {
     prereg_oids.push_back(tomb_oid);
     preregister_objects(std::move(prereg_oids), model::timestamp(1000));
 
-    auto db_update = make_replace_objects_update(
+    auto db_update = make_compact_objects_update(
       {{compact_spec{
         .tidp = tidp0,
         .rm_tombstones = {{0, 49}},
@@ -990,16 +1045,16 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsRemovingUntrackedTombstones) {
       HasSubstr("is not tracked as having tombstones"));
 }
 
-TEST_F(StateUpdateTest, TestReplaceObjectsWithCompactionAndTombstones) {
+TEST_F(StateUpdateTest, TestCompactObjectsWithCompactionAndTombstones) {
     // Set up initial partition.
     add_objects(
       {terms(tidp0, {{0, 1}})},
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 2047)),
       make_object(make_oid(), tp(tidp0, 100, 199).pos(0, 2047)));
 
-    // First replace with cleaned range with tombstones [0-99].
+    // First compact with cleaned range with tombstones [0-99].
     auto new_oid1 = make_oid();
-    replace_objects(
+    compact_objects(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned_at = 1000,
@@ -1016,11 +1071,11 @@ TEST_F(StateUpdateTest, TestReplaceObjectsWithCompactionAndTombstones) {
       /*expected_cleaned_ranges=*/{{0, 99}},
       /*expected_tombstone_ranges=*/{{0, 99, 1000}});
 
-    // Second replace: add non-overlapping cleaned range with tombstones
+    // Second compact: add non-overlapping cleaned range with tombstones
     // [150-199], and remove tombstones from [0-49].
     // epoch=1 because the first compaction incremented it from 0 to 1.
     auto new_oid2 = make_oid();
-    replace_objects(
+    compact_objects(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned_at = 2000,
@@ -1040,7 +1095,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsWithCompactionAndTombstones) {
       /*expected_tombstone_ranges=*/{{50, 99, 1000}, {150, 199, 2000}});
 }
 
-TEST_F(StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeNotAtLogStart) {
+TEST_F(StateUpdateTest, TestCompactObjectsRejectsCleanedRangeNotAtLogStart) {
     add_objects(
       {terms(tidp0, {{0, 1}})},
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)),
@@ -1048,7 +1103,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeNotAtLogStart) {
 
     verify_metadata(tidp0, kafka::offset(0), kafka::offset(200));
 
-    // Try to replace with cleaned range [100-199], but without replacing down
+    // Try to compact with cleaned range [100-199], but without replacing down
     // to offset 0. This should be rejected because cleaning requires
     // replacing from the start of the log.
     auto partial_oid = make_oid();
@@ -1056,7 +1111,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeNotAtLogStart) {
     prereg_oids.push_back(partial_oid);
     preregister_objects(std::move(prereg_oids), model::timestamp(1000));
 
-    auto db_update = make_replace_objects_update(
+    auto db_update = make_compact_objects_update(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{100, 199, false}},
@@ -1072,8 +1127,8 @@ TEST_F(StateUpdateTest, TestReplaceObjectsRejectsCleanedRangeNotAtLogStart) {
       fmt::format("{}", result.error()),
       HasSubstr("does not replace to the beginning of the log"));
 
-    // Now validate that replacing down to 0 works.
-    replace_objects(
+    // Now validate that compacting down to 0 works.
+    compact_objects(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{100, 199, false}},
@@ -1251,7 +1306,7 @@ TEST_F(StateUpdateTest, TestSetStartOffsetTruncatesCompactionState) {
       {terms(tidp0, {{0, 1}})},
       make_object(oid1, tp(tidp0, 0, 99).pos(0, 1023)));
 
-    replace_objects(
+    compact_objects(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{20, 80, true}},
@@ -1340,7 +1395,7 @@ TEST_F(StateUpdateTest, TestRemoveTopicsWithCompaction) {
       make_object(oid, tp(tidp0, 0, 99).pos(0, 1023)));
 
     // Add a cleaned range.
-    replace_objects(
+    compact_objects(
       {{compact_spec{
         .tidp = tidp0,
         .cleaned = {{0, 49, true}},
@@ -1518,7 +1573,8 @@ TEST_F(StateUpdateTest, TestReplaceObjectsTracksSize) {
     // Replace both extents with a single smaller extent.
     auto new_oid = make_oid();
     replace_objects(
-      compact_specs{}, make_object(new_oid, tp(tidp0, 0, 199).pos(0, 511)));
+      replace_specs{{.tidp = tidp0, .epoch = 0}},
+      make_object(new_oid, tp(tidp0, 0, 199).pos(0, 511)));
 
     // Size should be updated to the new extent size (512).
     verify_metadata_size(tidp0, 512);
@@ -1540,7 +1596,7 @@ TEST_F(StateUpdateTest, TestReplaceObjectsTracksSizeMultiplePartitions) {
 
     // Replace only tidp0's extent with a smaller one.
     replace_objects(
-      compact_specs{},
+      replace_specs{{.tidp = tidp0, .epoch = 0}},
       make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 199))); // size = 200
 
     // tidp0 should have updated size, tidp1 should be unchanged.
@@ -1780,7 +1836,8 @@ TEST_F(StateUpdateTest, TestDiscoverReplacedObjectIds) {
     // should find old_oid1 and old_oid2 but not old_oid3.
     auto new_oid = make_oid();
     auto db_update = make_replace_objects_update(
-      compact_specs{}, make_object(new_oid, tp(tidp0, 0, 199).pos(0, 2047)));
+      replace_specs{{.tidp = tidp0, .epoch = 0}},
+      make_object(new_oid, tp(tidp0, 0, 199).pos(0, 2047)));
 
     // Preregister the new object so validate_inputs passes.
     preregister_new_objects(db_update.new_objects);
@@ -1824,4 +1881,100 @@ TEST_F(StateUpdateTest, TestDiscoverRemoveTopicsObjectIds) {
     EXPECT_TRUE(result.value().contains(oid1));
     EXPECT_TRUE(result.value().contains(oid2));
     EXPECT_FALSE(result.value().contains(oid3));
+}
+
+TEST_F(StateUpdateTest, TestReplaceObjectsEpochMismatchRejectedAtBuildRows) {
+    // Set up a partition at epoch 0.
+    add_objects(
+      {terms(tidp0, {{0, 1}})},
+      make_object(make_oid(), tp(tidp0, 0, 99).pos(0, 1023)));
+
+    verify_metadata(tidp0, kafka::offset(0), kafka::offset(100));
+
+    // Build a replace_objects_db_update with expected_epoch = 1, but
+    // the actual epoch is still 0.
+    auto new_oid = make_oid();
+    chunked_vector<object_id> prereg_oids;
+    prereg_oids.push_back(new_oid);
+    preregister_objects(std::move(prereg_oids), model::timestamp(1000));
+
+    chunked_hash_map<
+      model::topic_id,
+      chunked_hash_map<
+        model::partition_id,
+        partition_state::compaction_epoch_t>>
+      expected_epochs;
+    expected_epochs[tidp0.topic_id][tidp0.partition]
+      = partition_state::compaction_epoch_t{1};
+
+    replace_objects_db_update db_update{
+      .new_objects = make_new_objects(
+        make_object(new_oid, tp(tidp0, 0, 99).pos(0, 1023))),
+      .expected_epochs = std::move(expected_epochs),
+    };
+
+    auto reader = make_reader();
+    chunked_vector<write_batch_row> rows;
+    auto result = db_update.build_rows(reader, rows).get();
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_update);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()),
+      HasSubstr("Compaction epoch mismatch"));
+}
+
+TEST_F(StateUpdateTest, TestReplaceObjectsRejectsExtentsWithoutEpochEntry) {
+    // Build a replace_objects_db_update with new_objects but empty
+    // expected_epochs. validate_inputs should reject it because the
+    // bidirectional invariant requires an expected_epochs entry for every
+    // partition that has new extents.
+    auto oid = make_oid();
+    replace_objects_db_update db_update{
+      .new_objects = make_new_objects(
+        make_object(oid, tp(tidp0, 0, 99).pos(0, 1023))),
+      .expected_epochs = {},
+    };
+    auto result = db_update.validate_inputs();
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()), HasSubstr("no expected_epochs entry"));
+}
+
+TEST_F(StateUpdateTest, TestReplaceObjectsRejectsEpochEntryWithoutExtents) {
+    // Build a replace_objects_db_update where expected_epochs
+    // contains an entry for a partition that has no corresponding new extents.
+    // validate_inputs should reject it (bidirectional invariant).
+    auto oid = make_oid();
+
+    chunked_hash_map<
+      model::topic_id,
+      chunked_hash_map<
+        model::partition_id,
+        partition_state::compaction_epoch_t>>
+      expected_epochs;
+
+    // tidp0 has extents.
+    expected_epochs[tidp0.topic_id][tidp0.partition]
+      = partition_state::compaction_epoch_t{0};
+
+    // Add an entry for a different partition that has no extents.
+    auto other_tidp = model::topic_id_partition(
+      model::topic_id(
+        uuid_t::from_string("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+      model::partition_id(0));
+    expected_epochs[other_tidp.topic_id][other_tidp.partition]
+      = partition_state::compaction_epoch_t{0};
+
+    replace_objects_db_update db_update{
+      .new_objects = make_new_objects(
+        make_object(oid, tp(tidp0, 0, 99).pos(0, 1023))),
+      .expected_epochs = std::move(expected_epochs),
+    };
+    auto result = db_update.validate_inputs();
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().e, db_update_errc::invalid_input);
+    EXPECT_THAT(
+      fmt::format("{}", result.error()),
+      HasSubstr("expected_epochs entry for"));
 }

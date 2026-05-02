@@ -62,6 +62,31 @@ struct add_objects_request
     term_state_update_t new_terms;
 };
 
+struct compact_objects_reply
+  : serde::envelope<
+      compact_objects_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec); }
+
+    errc ec;
+};
+struct compact_objects_request
+  : serde::envelope<
+      compact_objects_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = compact_objects_reply;
+    auto serde_fields() {
+        return std::tie(metastore_partition, new_objects, compaction_updates);
+    }
+
+    model::partition_id metastore_partition;
+    chunked_vector<new_object> new_objects;
+    chunked_hash_map<model::topic_id_partition, compaction_state_update>
+      compaction_updates;
+};
+
 struct replace_objects_reply
   : serde::envelope<
       replace_objects_reply,
@@ -78,13 +103,15 @@ struct replace_objects_request
       serde::compat_version<0>> {
     using resp_t = replace_objects_reply;
     auto serde_fields() {
-        return std::tie(metastore_partition, new_objects, compaction_updates);
+        return std::tie(metastore_partition, new_objects, expected_epochs);
     }
 
     model::partition_id metastore_partition;
     chunked_vector<new_object> new_objects;
-    chunked_hash_map<model::topic_id_partition, compaction_state_update>
-      compaction_updates;
+    chunked_hash_map<
+      model::topic_id_partition,
+      partition_state::compaction_epoch_t>
+      expected_epochs;
 };
 
 struct object_metadata

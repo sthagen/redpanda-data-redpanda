@@ -221,3 +221,18 @@ struct echo_resp
 };
 
 } // namespace echo_v2
+
+namespace sg_probe {
+
+struct probe_req
+  : serde::envelope<probe_req, serde::version<0>, serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(); }
+};
+
+struct probe_resp
+  : serde::envelope<probe_resp, serde::version<0>, serde::compat_version<0>> {
+    ss::sstring scheduling_group_name;
+    auto serde_fields() { return std::tie(scheduling_group_name); }
+};
+
+} // namespace sg_probe

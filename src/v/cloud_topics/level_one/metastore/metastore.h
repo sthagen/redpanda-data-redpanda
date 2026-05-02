@@ -207,17 +207,6 @@ public:
     virtual ss::future<std::expected<add_response, errc>>
     add_objects(const object_metadata_builder&, const term_offset_map_t&) = 0;
 
-    // Adds the given objects to the metastore, expecting that the new extents
-    // replace an extent or set of extents covering the same range.
-    // It is expected that the set of new extents per partition covers a
-    // contiguous range of that partition's offset space.
-    //
-    // While these constraints aren't the only way we could ensure
-    // correctness, these simplify accounting and makes it easier to validate
-    // that we haven't lost data.
-    virtual ss::future<std::expected<void, errc>>
-    replace_objects(const object_metadata_builder&) = 0;
-
     // Moves the start offset of the given partition's log to the given offset.
     virtual ss::future<std::expected<void, errc>>
     set_start_offset(const model::topic_id_partition&, kafka::offset) = 0;
@@ -333,6 +322,24 @@ public:
     };
     using compaction_map_t
       = chunked_hash_map<model::topic_id_partition, compaction_update>;
+    using replace_epoch_map_t
+      = chunked_hash_map<model::topic_id_partition, compaction_epoch>;
+
+    // Adds the given objects to the metastore, expecting that the new
+    // extents replace an extent or set of extents covering the same range.
+    // It is expected that the set of new extents per partition covers a
+    // contiguous range of that partition's offset space.
+    //
+    // While these constraints aren't the only way we could ensure
+    // correctness, these simplify accounting and makes it easier to validate
+    // that we haven't lost data.
+    //
+    // The caller must supply expected_epochs: a map from each partition
+    // that has extents being replaced to the epoch value expected at time
+    // of application. Each successful call increments the stored epoch,
+    // enabling optimistic-concurrency detection by the next caller.
+    virtual ss::future<std::expected<void, errc>> replace_objects(
+      const object_metadata_builder&, const replace_epoch_map_t&) = 0;
 
     struct compaction_offsets_response {
         // Offset ranges whose keys have not been fully deduplicated from the

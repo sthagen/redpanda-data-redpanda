@@ -1180,6 +1180,99 @@ TEST_P(ReplicatedMetastoreTest, TestRestoreCreatesCorrectPartitionCount) {
     ASSERT_EQ(cfg->partition_count, expected_partitions);
 }
 
+TEST_P(ReplicatedMetastoreTest, TestReplaceObjectsRejectsEpoch) {
+    auto& app = get_ct_app(model::node_id{0});
+    auto& meta = app.get_sharded_replicated_metastore()->local();
+
+    // Add initial objects for one partition.
+    ASSERT_NO_FATAL_FAILURE(add_initial_objects(meta, 1, 99).get());
+
+    auto tp = make_tp(0);
+
+    // Read the current compaction epoch - should be 0.
+    auto spec = metastore::compaction_info_spec{
+      .tidp = tp, .tombstone_removal_upper_bound_ts = model::timestamp::min()};
+    auto info = meta.get_compaction_info(spec).get();
+    ASSERT_TRUE(info.has_value()) << fmt::to_string(info.error());
+    EXPECT_EQ(info->compaction_epoch, metastore::compaction_epoch{0});
+
+    // Replace with correct epoch (0). Should succeed.
+    std::unique_ptr<metastore::object_metadata_builder> new_objs;
+    ASSERT_NO_FATAL_FAILURE(create_initial_objects(meta, 1, 99, &new_objs));
+    metastore::replace_epoch_map_t epoch_map;
+    epoch_map[tp] = metastore::compaction_epoch{0};
+    auto replace_res = meta.replace_objects(*new_objs, epoch_map).get();
+    ASSERT_TRUE(replace_res.has_value()) << fmt::to_string(replace_res.error());
+
+    // Epoch should still be 0, since replace_objects() does not bump the epoch.
+    info = meta.get_compaction_info(spec).get();
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->compaction_epoch, metastore::compaction_epoch{0});
+
+    // Replace again with incorrect epoch (1). Should fail.
+    std::unique_ptr<metastore::object_metadata_builder> incorrect_objs;
+    ASSERT_NO_FATAL_FAILURE(
+      create_initial_objects(meta, 1, 99, &incorrect_objs));
+    metastore::replace_epoch_map_t incorrect_map;
+    incorrect_map[tp] = metastore::compaction_epoch{1};
+    auto incorrect_res
+      = meta.replace_objects(*incorrect_objs, incorrect_map).get();
+    ASSERT_FALSE(incorrect_res.has_value());
+    EXPECT_EQ(incorrect_res.error(), metastore::errc::invalid_request);
+}
+
+TEST_P(ReplicatedMetastoreTest, TestCompactObjectsBumpsEpochAndRejectsStale) {
+    auto& app = get_ct_app(model::node_id{0});
+    auto& meta = app.get_sharded_replicated_metastore()->local();
+
+    // Add initial objects for one partition.
+    ASSERT_NO_FATAL_FAILURE(add_initial_objects(meta, 1, 99).get());
+
+    auto tp = make_tp(0);
+
+    // Read the current compaction epoch - should be 0.
+    auto spec = metastore::compaction_info_spec{
+      .tidp = tp, .tombstone_removal_upper_bound_ts = model::timestamp::min()};
+    auto info = meta.get_compaction_info(spec).get();
+    ASSERT_TRUE(info.has_value()) << fmt::to_string(info.error());
+    EXPECT_EQ(info->compaction_epoch, metastore::compaction_epoch{0});
+
+    // First compact with correct epoch (0). Should succeed.
+    std::unique_ptr<metastore::object_metadata_builder> new_objs;
+    ASSERT_NO_FATAL_FAILURE(create_initial_objects(meta, 1, 99, &new_objs));
+    metastore::compaction_map_t cmap;
+    metastore::compaction_update update;
+    update.cleaned_at = model::timestamp(3000);
+    update.new_cleaned_ranges.push_back(
+      metastore::compaction_update::cleaned_range{
+        .base_offset = o{0}, .last_offset = o{99}});
+    update.expected_compaction_epoch = metastore::compaction_epoch{0};
+    cmap[tp] = std::move(update);
+    auto compact_res = meta.compact_objects(*new_objs, cmap).get();
+    ASSERT_TRUE(compact_res.has_value()) << fmt::to_string(compact_res.error());
+
+    // Epoch should now be 1.
+    info = meta.get_compaction_info(spec).get();
+    ASSERT_TRUE(info.has_value());
+    EXPECT_EQ(info->compaction_epoch, metastore::compaction_epoch{1});
+
+    // Second compact with stale epoch (0). Should fail.
+    std::unique_ptr<metastore::object_metadata_builder> stale_objs;
+    ASSERT_NO_FATAL_FAILURE(create_initial_objects(meta, 1, 99, &stale_objs));
+    metastore::compaction_map_t stale_cmap;
+    metastore::compaction_update stale_update;
+    stale_update.cleaned_at = model::timestamp(3000);
+    stale_update.new_cleaned_ranges.push_back(
+      metastore::compaction_update::cleaned_range{
+        .base_offset = o{0}, .last_offset = o{99}});
+    stale_update.expected_compaction_epoch = metastore::compaction_epoch{
+      0}; // stale
+    stale_cmap[tp] = std::move(stale_update);
+    auto stale_res = meta.compact_objects(*stale_objs, stale_cmap).get();
+    ASSERT_FALSE(stale_res.has_value());
+    EXPECT_EQ(stale_res.error(), metastore::errc::invalid_request);
+}
+
 INSTANTIATE_TEST_SUITE_P(
   MetastoreBackends,
   ReplicatedMetastoreTest,

@@ -47,6 +47,8 @@ public:
         return reader_->do_load_slice(deadline);
     }
 
+    ss::future<> finally() noexcept override { return reader_->finally(); }
+
     fmt::iterator format_to(fmt::iterator it) const override {
         return reader_->format_to(it);
     }
@@ -78,8 +80,7 @@ partition_proxy::partition_proxy(
   , stm_(std::move(stm))
   , metadata_provider_(state->get_rr_metadata_provider())
   , snapshot_provider_(state->get_rr_snapshot_provider())
-  , l1_reader_probe_(state->get_l1_reader_probe())
-  , l1_reader_cache_(state->get_l1_reader_cache()) {}
+  , l1_reader_probe_(state->get_l1_reader_probe()) {}
 
 const model::ntp& partition_proxy::ntp() const { return partition_->ntp(); }
 
@@ -182,8 +183,7 @@ ss::future<storage::translating_reader> partition_proxy::make_reader(
       snap.metadata.tidp,
       snap.metastore.get(),
       snap.io,
-      l1_reader_probe_,
-      l1_reader_cache_);
+      l1_reader_probe_);
 
     // Create an owning reader that keeps metastore alive for the reader
     // lifetime.
@@ -219,16 +219,27 @@ partition_proxy::timequery(storage::timequery_config cfg) {
       extent.last_offset, model::offset_cast(cfg.max_offset));
     kafka::log_reader_config reader_cfg(read_start, read_end, cfg.abort_source);
     auto reader = co_await make_reader(std::move(snap_res.value()), reader_cfg);
-    auto generator = std::move(reader.reader).generator(model::no_timeout);
-    while (auto batch_opt = co_await generator()) {
-        auto& batch = batch_opt->get();
-        if (cfg.time > batch.header().max_timestamp) {
-            continue;
+
+    struct timequery_consumer {
+        storage::timequery_config& cfg;
+        std::optional<storage::timequery_result>& result;
+
+        ss::future<ss::stop_iteration> operator()(model::record_batch batch) {
+            if (cfg.time > batch.header().max_timestamp) {
+                co_return ss::stop_iteration::no;
+            }
+            result = co_await storage::batch_timequery(
+              std::move(batch), cfg.min_offset, cfg.time, cfg.max_offset);
+            co_return ss::stop_iteration::yes;
         }
-        co_return co_await storage::batch_timequery(
-          std::move(batch), cfg.min_offset, cfg.time, cfg.max_offset);
-    }
-    co_return std::nullopt;
+
+        void end_of_stream() {}
+    };
+
+    std::optional<storage::timequery_result> result;
+    co_await std::move(reader.reader)
+      .consume(timequery_consumer{cfg, result}, model::no_timeout);
+    co_return result;
 }
 
 ss::future<std::vector<model::tx_range>> partition_proxy::aborted_transactions(

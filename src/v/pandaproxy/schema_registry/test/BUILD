@@ -201,6 +201,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/pandaproxy/schema_registry:core",
+        "//src/v/pandaproxy/schema_registry:transport",
     ],
 )
 
@@ -345,6 +346,21 @@ redpanda_cc_gtest(
         "//src/v/pandaproxy/schema_registry:types",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "context_router_test",
+    timeout = "short",
+    srcs = [
+        "context_router.cc",
+    ],
+    deps = [
+        "//src/v/pandaproxy/schema_registry:core",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
     ],
 )
 

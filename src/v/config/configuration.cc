@@ -4842,6 +4842,21 @@ configuration::configuration()
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       32,
       {.min = 1})
+  , cloud_topics_l1_reader_cache_eviction_timeout_ms(
+      *this,
+      "cloud_topics_l1_reader_cache_eviction_timeout_ms",
+      "Time after which idle L1 readers are evicted from the per-shard "
+      "reader cache.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      60'000ms)
+  , cloud_topics_l1_reader_cache_max_size(
+      *this,
+      "cloud_topics_l1_reader_cache_max_size",
+      "Maximum number of L1 readers cached per shard. When the cache exceeds "
+      "this limit, the oldest idle reader is evicted.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      128,
+      {.min = 0, .max = 10000})
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",

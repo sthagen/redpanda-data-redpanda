@@ -9,14 +9,11 @@
 
 #pragma once
 
-#include "compaction/types.h"
-#include "model/compression.h"
 #include "model/record.h"
 
 #include <seastar/core/loop.hh>
 
 #include <memory>
-#include <ostream>
 #include <utility>
 
 namespace compaction {
@@ -59,7 +56,7 @@ public:
     // skip compaction. `finalize()` will still be called regardless of the
     // return value here.
     // 2. `operator()(record_batch)`: This operator accepts a record batch
-    // (which has already been determined to be written by a
+    // (which has already been filtered and recompressed by a
     // `compaction::filter`) and is responsible for writing its contents to
     // whichever data format/store this `sink` represents.
     // 3. `finalize(success)`: perform any final steps required in the `sink`
@@ -79,7 +76,7 @@ public:
     public:
         virtual ss::future<bool> initialize(source&) = 0;
         virtual ss::future<ss::stop_iteration>
-        operator()(model::record_batch, model::compression) = 0;
+        operator()(model::record_batch) = 0;
         virtual ss::future<> finalize(bool) = 0;
         virtual ss::future<> prepare_iteration(kafka::offset) = 0;
         virtual ss::future<> finish_iteration(kafka::offset, kafka::offset) = 0;

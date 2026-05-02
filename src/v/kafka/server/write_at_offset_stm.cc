@@ -18,6 +18,7 @@
 #include <seastar/coroutine/as_future.hh>
 
 #include <algorithm>
+#include <exception>
 
 namespace kafka {
 
@@ -177,9 +178,9 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
   model::timeout_clock::duration timeout,
   std::optional<std::reference_wrapper<ss::abort_source>> as,
   ss::promise<> enqueued_promise) {
+    auto enqueue_guard = ss::defer([&]() { enqueued_promise.set_value(); });
     if (batches.empty() || expected_base_offsets.size() != batches.size())
       [[unlikely]] {
-        enqueued_promise.set_value();
         co_return make_error_code(errc::invalid_input);
     }
     // offset translated batches are not supported by write at offset state
@@ -189,7 +190,6 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
           return is_offset_translated_batch(batch);
       });
     if (any_offset_translated) [[unlikely]] {
-        enqueued_promise.set_value();
         co_return make_error_code(errc::invalid_batch_type);
     }
 
@@ -204,7 +204,6 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
     auto sync_result = co_await sync(timeout);
     if (!sync_result) {
         _inflight_last_offset.reset();
-        enqueued_promise.set_value();
         co_return raft::errc::not_leader;
     }
     const auto current_insync_term = _insync_term;
@@ -234,7 +233,6 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
      * stm_last_offset.
      */
     if (effective_prev_log_offset != stm_last_offset) {
-        enqueued_promise.set_value();
         vlog(
           _log.debug,
           "Expected last log offset: {} does not match with last stm"
@@ -252,7 +250,6 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
     for (auto&& [expected_offset, batch] :
          std::ranges::zip_view(expected_base_offsets, batches)) {
         if (expected_offset < last_seen_offset) [[unlikely]] {
-            enqueued_promise.set_value();
             vlog(
               _log.warn,
               "Expected batch offsets are not monotonically increasing: {} "
@@ -303,6 +300,7 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
     });
 
     std::move(enq).forward_to(std::move(enqueued_promise));
+    enqueue_guard.cancel();
 
     auto r_fut = co_await ss::coroutine::as_future(
       std::move(stages.replicate_finished));

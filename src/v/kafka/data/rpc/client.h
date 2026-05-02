@@ -22,6 +22,16 @@
 
 namespace kafka::data::rpc {
 
+/// Result of a produce operation that includes both base and last offset.
+///
+/// base_offset and last_offset are nullopt if @p ec != success or if the
+/// request contained zero records.
+struct produce_result {
+    cluster::errc ec{cluster::errc::success};
+    std::optional<model::offset> base_offset;
+    std::optional<model::offset> last_offset;
+};
+
 /**
  * A client for kafka data plane rpcs.
  *
@@ -59,6 +69,11 @@ public:
     ss::future<cluster::errc>
       produce(model::topic_partition, model::record_batch);
 
+    /// Produce a single batch and return a produce_result containing both
+    /// base_offset and last_offset on success.
+    ss::future<produce_result> produce_with_leader_mitigation(
+      model::topic_partition, model::record_batch);
+
     ss::future<cluster::errc> create_topic(
       model::topic_namespace_view,
       cluster::topic_properties,
@@ -79,6 +94,12 @@ public:
     ss::future<result<partition_offsets_map, cluster::errc>>
       get_partition_offsets(chunked_vector<topic_partitions>);
 
+    /// Get offsets for a single partition. Retries with leadership
+    /// mitigation — suitable for latency-sensitive callers like schema
+    /// registry that always target a single known partition.
+    ss::future<result<partition_offsets, cluster::errc>>
+      get_single_partition_offsets(model::topic_partition);
+
     ss::future<result<consume_reply, cluster::errc>> consume(
       model::topic_partition,
       kafka::offset start_offset,
@@ -88,17 +109,31 @@ public:
       model::timeout_clock::duration timeout);
 
 private:
-    ss::future<cluster::errc> do_produce_once(produce_request);
+    ss::future<produce_result> do_produce_once(produce_request);
     ss::future<produce_reply> do_local_produce(produce_request);
     ss::future<produce_reply>
       do_remote_produce(model::node_id, produce_request);
+
+    ss::future<result<partition_offsets, cluster::errc>>
+      do_get_single_partition_offsets_once(model::topic_partition);
 
     ss::future<result<partition_offsets_map, cluster::errc>>
     get_remote_partition_offsets(
       model::node_id, chunked_vector<topic_partitions> topics);
 
+    ss::future<result<consume_reply, cluster::errc>> do_consume_once(
+      model::topic_partition,
+      kafka::offset start_offset,
+      kafka::offset max_offset,
+      size_t min_bytes,
+      size_t max_bytes,
+      model::timeout_clock::duration timeout);
+
     template<typename Func>
     std::invoke_result_t<Func> retry(Func&&);
+
+    template<typename Func>
+    std::invoke_result_t<Func> retry_with_leader_mitigation(Func&&);
 
     model::node_id _self;
     std::unique_ptr<kafka::data::rpc::partition_leader_cache> _leaders;

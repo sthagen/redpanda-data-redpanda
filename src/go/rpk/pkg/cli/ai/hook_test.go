@@ -89,6 +89,11 @@ func TestTopLevelHasSubcommand(t *testing.T) {
 		{"subcommand", []string{"llm"}, true},
 		{"nested subcommand", []string{"llm", "list"}, true},
 		{"flag then subcommand", []string{"--format", "json", "llm"}, true},
+		// rpk has a few hyphen-containing subcommands (e.g. `rpk cluster
+		// self-test`). HasPrefix(arg, "-") is a leading-dash check, not a
+		// "contains a dash" check, so hyphenated commands route correctly.
+		{"hyphenated subcommand", []string{"self-test"}, true},
+		{"hyphenated nested subcommand", []string{"foo", "bar-baz"}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -102,8 +107,8 @@ func TestTopLevelHasSubcommand(t *testing.T) {
 // `list` leaf with args=nil. The leaf-side call site must still inject
 // RPAI_TOKEN and RPAI_ENDPOINT even though the args are empty.
 func TestResolveAndInjectEnv_LeafDispatchHappy(t *testing.T) {
-	t.Setenv(envRpaiToken, "")
-	t.Setenv(envRpaiEndpoint, "")
+	t.Setenv(envAuthToken, "")
+	t.Setenv(envEndpoint, "")
 
 	cluster := &controlplanev1.Cluster{
 		Id: "clu-1",
@@ -133,24 +138,24 @@ profiles:
 
 	// args=nil simulates leaf dispatch: cobra consumed the path tokens.
 	require.NoError(t, resolveAndInjectEnv(t.Context(), fs, new(config.Params), nil))
-	require.Equal(t, "test-token", os.Getenv(envRpaiToken), "RPAI_TOKEN must be set from dev override")
-	require.Equal(t, "https://aigw.example.com", os.Getenv(envRpaiEndpoint), "RPAI_ENDPOINT must be set from aigw v2 url")
+	require.Equal(t, "test-token", os.Getenv(envAuthToken), "RPAI_TOKEN must be set from dev override")
+	require.Equal(t, "https://aigw.example.com", os.Getenv(envEndpoint), "RPAI_ENDPOINT must be set from aigw v2 url")
 }
 
 // TestResolveAndInjectEnv_SkipsWhenEndpointFlagPresent confirms that passing
 // --rpai-endpoint on the command line suppresses the cluster lookup (and
 // therefore works even with no aigw-attached cluster).
 func TestResolveAndInjectEnv_SkipsWhenEndpointFlagPresent(t *testing.T) {
-	t.Setenv(envRpaiToken, "already-set")
-	t.Setenv(envRpaiEndpoint, "")
+	t.Setenv(envAuthToken, "already-set")
+	t.Setenv(envEndpoint, "")
 
 	fs := afero.NewMemMapFs()
 	pluginArgs := []string{"--rpai-endpoint=https://custom.example.com", "llm", "list"}
 	require.NoError(t, resolveAndInjectEnv(t.Context(), fs, new(config.Params), pluginArgs))
-	require.Empty(t, os.Getenv(envRpaiEndpoint), "RPAI_ENDPOINT must stay unset when flag is present")
+	require.Empty(t, os.Getenv(envEndpoint), "RPAI_ENDPOINT must stay unset when flag is present")
 }
 
-func TestHasRpaiEndpointFlag(t *testing.T) {
+func TestHasEndpointFlag(t *testing.T) {
 	cases := []struct {
 		args []string
 		want bool
@@ -165,7 +170,7 @@ func TestHasRpaiEndpointFlag(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(strings.Join(c.args, " "), func(t *testing.T) {
-			require.Equal(t, c.want, hasRpaiEndpointFlag(c.args))
+			require.Equal(t, c.want, hasEndpointFlag(c.args))
 		})
 	}
 }
@@ -242,6 +247,27 @@ func TestResolveAigwEndpoint_Happy(t *testing.T) {
 	endpoint, err := resolveAigwEndpoint(t.Context(), cfg)
 	require.NoError(t, err)
 	require.Equal(t, "https://aigw.example.com", endpoint)
+}
+
+// TestResolveAigwEndpoint_UsesCachedURL verifies that when the profile already
+// carries an AIGatewayURL (populated at profile creation), we skip the
+// publicapi lookup entirely. The httptest server below has no handler — if
+// resolveAigwEndpoint touched the network, the test would fail.
+func TestResolveAigwEndpoint_UsesCachedURL(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Fatalf("unexpected publicapi call: cached AIGatewayURL should short-circuit")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	cfg := loadCloudProfile(t, ts.URL, "clu-1")
+	prof := cfg.VirtualProfile()
+	require.NotNil(t, prof)
+	prof.CloudCluster.AIGatewayURL = "https://cached-aigw.example.com"
+
+	endpoint, err := resolveAigwEndpoint(t.Context(), cfg)
+	require.NoError(t, err)
+	require.Equal(t, "https://cached-aigw.example.com", endpoint)
 }
 
 // loadCloudProfile builds a *config.Config with a cloud profile selecting the

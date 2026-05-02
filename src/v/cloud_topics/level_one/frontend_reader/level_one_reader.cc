@@ -39,8 +39,7 @@ level_one_log_reader_impl::level_one_log_reader_impl(
   model::topic_id_partition tidp,
   l1::metastore* metastore,
   l1::io* io_interface,
-  level_one_reader_probe* probe,
-  l1_reader_cache* cache)
+  level_one_reader_probe* probe)
   : _config(cfg)
   , _ntp(std::move(ntp))
   , _tidp(tidp)
@@ -48,7 +47,6 @@ level_one_log_reader_impl::level_one_log_reader_impl(
   , _metastore(metastore)
   , _io(io_interface)
   , _probe(probe)
-  , _cache(cache)
   , _log(cd_log, fmt::format("[{}/{}/{}]", fmt::ptr(this), _ntp, _tidp)) {
     vlog(_log.debug, "New reader created {}", _config);
 }
@@ -74,7 +72,7 @@ level_one_log_reader_impl::do_load_slice(
     }
 }
 
-ss::future<std::expected<cached_l1_reader, l1::io::errc>>
+ss::future<std::expected<std::monostate, l1::io::errc>>
 level_one_log_reader_impl::open_reader_at(
   l1::object_id oid,
   kafka::offset last_object_offset,
@@ -101,12 +99,12 @@ level_one_log_reader_impl::open_reader_at(
     if (!stream_result.has_value()) {
         co_return std::unexpected(stream_result.error());
     }
-    co_return cached_l1_reader{
+    _current_stream = open_stream{
       .oid = oid,
       .last_object_offset = last_object_offset,
-      .next_offset = _next_offset,
       .reader = l1::object_reader::create(std::move(stream_result).value()),
     };
+    co_return std::monostate{};
 }
 
 ss::future<model::record_batch_reader::storage_t>
@@ -114,6 +112,7 @@ level_one_log_reader_impl::read_some(
   model::timeout_clock::time_point deadline) {
     if (_config.strict_max_bytes && _config.max_bytes == 0) {
         set_end_of_stream();
+        co_await close_current_stream();
         co_return model::record_batch_reader::storage_t{};
     }
     while (true) {
@@ -128,34 +127,27 @@ level_one_log_reader_impl::read_some(
             co_return model::record_batch_reader::storage_t{};
         }
 
-        std::optional<cached_l1_reader> local_reader;
         chunked_circular_buffer<model::record_batch> batches;
 
-        // Try to reuse a cached reader from a previous fetch. The cached
-        // entry holds a live reader with its I/O stream, preserving
-        // readahead buffers.
-        if (_cache) {
-            local_reader = _cache->take_reader(_tidp, _next_offset);
-            if (local_reader) {
-                vlog(
-                  _log.debug,
-                  "Took cached reader for offset {} (object {})",
-                  _next_offset,
-                  local_reader->oid);
-            }
-        }
+        if (_current_stream) {
+            // Reuse the inline stream from a previous read_some iteration
+            // or from a prior materialize call.
+            vlog(
+              _log.debug,
+              "Reusing open stream for offset {} (object {})",
+              _next_offset,
+              _current_stream->oid);
 
-        if (local_reader) {
             auto read_fut = co_await ss::coroutine::as_future(
-              read_batches(*local_reader->reader));
+              read_batches(*_current_stream->reader));
             if (read_fut.failed()) {
                 auto ex = read_fut.get_exception();
                 vlog(
                   _log.error,
-                  "Exception reading from cached reader (object {}): {}",
-                  local_reader->oid,
+                  "Exception reading from open stream (object {}): {}",
+                  _current_stream->oid,
                   ex);
-                co_await close_reader_safe(*local_reader->reader);
+                co_await close_current_stream();
                 std::rethrow_exception(ex);
             }
             batches = read_fut.get();
@@ -170,11 +162,10 @@ level_one_log_reader_impl::read_some(
             auto mat = co_await materialize_batches_from_object_offset(
               object.value(), _next_offset, deadline);
             batches = std::move(mat.batches);
-            local_reader = std::move(mat.reader);
 
             // When materialize found no data (npos), advance past the
             // object so the loop doesn't spin.
-            if (batches.empty() && !local_reader) {
+            if (batches.empty() && !_current_stream) {
                 _next_offset = kafka::next_offset(mat.last_object_offset);
                 continue;
             }
@@ -184,29 +175,22 @@ level_one_log_reader_impl::read_some(
             if (!batches.empty()) {
                 _next_offset = kafka::next_offset(
                   model::offset_cast(batches.back().last_offset()));
-                if (local_reader) {
-                    local_reader->next_offset = _next_offset;
-                }
             }
-            co_await return_or_close(std::move(local_reader));
             co_return batches;
         }
 
         if (batches.empty()) {
-            if (local_reader) {
+            if (_current_stream) {
                 _next_offset = kafka::next_offset(
-                  local_reader->last_object_offset);
-                co_await close_reader_safe(*local_reader->reader);
+                  _current_stream->last_object_offset);
+                co_await close_current_stream();
             }
             continue;
         }
 
         _next_offset = kafka::next_offset(
           model::offset_cast(batches.back().last_offset()));
-        if (local_reader) {
-            local_reader->next_offset = _next_offset;
-        }
-        co_await return_or_close(std::move(local_reader));
+
         co_return batches;
     }
 }
@@ -477,14 +461,13 @@ level_one_log_reader_impl::materialize_batches_from_object_offset(
           reader_result.error()));
     }
 
-    auto reader = std::move(reader_result).value();
-
+    // _current_stream is now populated by open_reader_at.
     auto read_fut = co_await ss::coroutine::as_future(
-      read_batches(*reader.reader));
+      read_batches(*_current_stream->reader));
     if (read_fut.failed()) {
         auto ex = read_fut.get_exception();
         vlog(_log.error, "Exception reading L1 object {}: {}", object.oid, ex);
-        co_await close_reader_safe(*reader.reader);
+        co_await close_current_stream();
         std::rethrow_exception(ex);
     }
 
@@ -498,21 +481,16 @@ level_one_log_reader_impl::materialize_batches_from_object_offset(
 
     co_return materialize_result{
       .batches = std::move(batches),
-      .reader = std::move(reader),
       .last_object_offset = object.last_offset,
     };
 }
 
-ss::future<>
-level_one_log_reader_impl::return_or_close(std::optional<cached_l1_reader> r) {
-    if (!r) {
+ss::future<> level_one_log_reader_impl::close_current_stream() {
+    if (!_current_stream) {
         co_return;
     }
-    if (_cache) {
-        co_await _cache->return_reader(_tidp, std::move(*r));
-    } else {
-        co_await close_reader_safe(*r->reader);
-    }
+    co_await close_reader_safe(*_current_stream->reader);
+    _current_stream.reset();
 }
 
 fmt::iterator level_one_log_reader_impl::format_to(fmt::iterator it) const {
@@ -525,9 +503,41 @@ bool level_one_log_reader_impl::is_end_of_stream() const {
     return _end_of_stream;
 }
 
+ss::future<> level_one_log_reader_impl::finally() noexcept {
+    return close_current_stream();
+}
+
+std::optional<level_one_log_reader_impl::private_flags>
+level_one_log_reader_impl::get_flags() const {
+    return private_flags{
+      .is_reusable = is_reusable(),
+      .was_cached = _was_cached,
+    };
+}
+
+void level_one_log_reader_impl::reset_config(
+  const cloud_topic_log_reader_config& cfg) {
+    vassert(
+      cfg.start_offset == _next_offset,
+      "reset_config: start_offset {} != next_offset {}",
+      cfg.start_offset,
+      _next_offset);
+    _config = cfg;
+    _end_of_stream = false;
+    _bytes_consumed = 0;
+    _was_cached = true;
+}
+
+bool level_one_log_reader_impl::is_reusable() const {
+    return _current_stream.has_value() || !_lookahead_buffer.empty();
+}
+
 bool level_one_log_reader_impl::is_over_limit_with_bytes(size_t size) const {
-    return (_config.strict_max_bytes || _bytes_consumed > 0)
-           && (_bytes_consumed + size) > _config.max_bytes;
+    // Always accept the first batch to guarantee progress.
+    if (_bytes_consumed == 0) {
+        return false;
+    }
+    return (_bytes_consumed + size) > _config.max_bytes;
 }
 
 } // namespace cloud_topics

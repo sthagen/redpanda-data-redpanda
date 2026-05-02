@@ -1,0 +1,15 @@
+diff --git a/src/v/utils/example.cc b/src/v/utils/example.cc
+index abcdef1..abcdef2 100644
+--- a/src/v/utils/example.cc
++++ b/src/v/utils/example.cc
+@@ -10,6 +10,8 @@
+ existing line
+ existing line
++new covered line at 12
++new covered line at 13
+ existing line
+ existing line
+-old line
++new uncovered line at 15
++new uncovered line at 16
+ existing line

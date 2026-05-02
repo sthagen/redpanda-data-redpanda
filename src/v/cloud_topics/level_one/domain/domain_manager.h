@@ -62,6 +62,9 @@ public:
     virtual ss::future<rpc::replace_objects_reply>
       replace_objects(rpc::replace_objects_request) = 0;
 
+    virtual ss::future<rpc::compact_objects_reply>
+      compact_objects(rpc::compact_objects_request) = 0;
+
     virtual ss::future<rpc::get_first_offset_ge_reply>
       get_first_offset_ge(rpc::get_first_offset_ge_request) = 0;
 

@@ -50,6 +50,7 @@ redpanda_cc_library(
         "//src/v/kafka/data:partition_proxy",
         "//src/v/model",
         "//src/v/raft",
+        "//src/v/random:time_jitter",
         "//src/v/rpc",
         "//src/v/serde",
         "//src/v/serde:map",

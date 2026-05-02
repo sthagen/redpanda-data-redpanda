@@ -249,9 +249,36 @@ local_service::consume(
 ss::future<kafka_topic_data_result> local_service::produce(
   kafka_topic_data data, model::timeout_clock::duration timeout) {
     auto ktp = model::ktp(data.tp.topic, data.tp.partition);
+    // Count records before moving batches — needed to convert the
+    // last_offset returned by replicate() into a base_offset.
+    // Same arithmetic as kafka/server/handlers/produce.cc. Int64
+    // accumulator because record_count() returns int32_t per batch and
+    // a produce request may include many batches.
+    int64_t total_records = 0;
+    for (const auto& b : data.batches) {
+        total_records += b.record_count();
+    }
     auto result = co_await produce(ktp, std::move(data.batches), timeout);
-    auto ec = result.has_error() ? result.error() : cluster::errc::success;
-    co_return kafka_topic_data_result(data.tp, ec);
+    if (result.has_error()) {
+        co_return kafka_topic_data_result(std::move(data.tp), result.error());
+    }
+    if (total_records == 0) {
+        co_return kafka_topic_data_result(
+          std::move(data.tp), cluster::errc::success);
+    }
+    auto last_offset = result.value();
+    // The raft replicate batcher assigns contiguous offsets to all records
+    // in a single replicate() call (see replicate_batcher::propagate_result).
+    auto base_offset = model::offset{last_offset() - (total_records - 1)};
+    vassert(
+      base_offset >= model::offset{0},
+      "derived base_offset {} underflowed from last_offset {} and "
+      "total_records {}",
+      base_offset,
+      last_offset,
+      total_records);
+    co_return kafka_topic_data_result(
+      std::move(data.tp), cluster::errc::success, base_offset, last_offset);
 }
 
 ss::future<result<model::offset, cluster::errc>> local_service::produce(
