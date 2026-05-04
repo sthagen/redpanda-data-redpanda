@@ -12,6 +12,7 @@ import io
 import json
 import random
 import socket
+import sys
 import time
 import zipfile
 from typing import Optional
@@ -26,6 +27,7 @@ from ducktape.utils.util import wait_until
 from keycloak import KeycloakOpenID
 
 from rptest.clients.rpk import RpkTool
+from rptest.services.rpk_producer import RpkProducer
 from rptest.services.admin import (
     Admin,
     DebugBundleLabelSelection,
@@ -602,6 +604,90 @@ class DebugBundleTest(DebugBundleTestBase):
         assert self.redpanda.search_log_node(node, search_str), (
             f"Failed to find {search_str}"
         )
+
+    @cluster(num_nodes=2)
+    def test_proc_file_sampling(self):
+        """
+        Verify that /proc/interrupts, /proc/softirqs, and /proc/diskstats
+        are captured as N-sample snapshots under proc/<name>/t{N}.txt.
+        Other /proc files stay at their flat legacy paths, and metrics
+        samples appear at the same cadence.
+        """
+        node = random.choice(self.redpanda.started_nodes())
+        samples = 2
+
+        # /proc/diskstats only ticks when a block device sees I/O. Run
+        # a kafka producer against redpanda for the whole bundle
+        # duration so that redpanda keeps writing to its data dir, which
+        # guarantees diskstats activity in the t0/t1 sampling window.
+        probe_topic = "rptest_diskstats_probe"
+        RpkTool(self.redpanda).create_topic(probe_topic, partitions=1, replicas=1)
+        producer = RpkProducer(
+            self.test_context,
+            self.redpanda,
+            probe_topic,
+            msg_size=1024,
+            msg_count=sys.maxsize,
+            acks=-1,
+        )
+        producer.start()
+
+        try:
+            job_id = uuid4()
+            self._run_debug_bundle(
+                job_id=job_id,
+                node=node,
+                config=DebugBundleStartConfigParams(
+                    metrics_samples=samples,
+                    metrics_interval_seconds=1,
+                ),
+            )
+            zip_bytes = self._retrieve_file(node=node)
+        finally:
+            producer.stop()
+            producer.wait()
+            producer.free()
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+            names = zf.namelist()
+            self.logger.debug(f"zip entries: {names}")
+
+            # Strip the single top-level bundle-root directory from each entry.
+            entries = {n.split("/", 1)[1]: n for n in names if "/" in n}
+
+            # All three must change between t0 and t1:
+            #   - interrupts: timer IRQs tick continuously
+            #   - softirqs:   TIMER softirqs tick continuously
+            #   - diskstats:  guaranteed by the producer running above
+            for proc_name in ("interrupts", "softirqs", "diskstats"):
+                contents = []
+                for n in range(samples):
+                    path = f"proc/{proc_name}/t{n}.txt"
+                    assert path in entries, (
+                        f"Expected {path} in bundle; got {sorted(entries)}"
+                    )
+                    with zf.open(entries[path]) as f:
+                        data = f.read()
+                    assert data, f"Expected {path} to be non-empty"
+                    contents.append(data)
+                assert contents[0] != contents[-1], (
+                    f"Expected proc/{proc_name} to change between t0 and "
+                    f"t{samples - 1}; content was identical"
+                )
+
+            for flat in ("proc/cpuinfo", "proc/cmdline", "proc/mounts"):
+                assert flat in entries, (
+                    f"Expected legacy flat path {flat}; got {sorted(entries)}"
+                )
+
+            for n in range(samples):
+                metric_samples = [
+                    e for e in entries if e.startswith("metrics/") and f"/t{n}_" in e
+                ]
+                assert len(metric_samples) >= 2, (
+                    f"Expected t{n} samples for both metrics and public_metrics; "
+                    f"got {sorted(metric_samples)}"
+                )
 
 
 class DebugBundleSCRAMAuthn(DebugBundleTestBase):

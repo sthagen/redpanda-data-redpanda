@@ -279,8 +279,9 @@ build:release --host_cxxopt=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE
 
 
 # Instrumentation/training step
-# Empty arg is intentional, we provide the path via env var at run time
-build:pgo-instrument --config=lto --fdo_instrument=
+# /tmp is a dummy path as bazel expects an arg, we provide the actual path via
+# env var at run time
+build:pgo-instrument --config=lto --fdo_instrument=/tmp
 
 # Final/Optimization build step
 

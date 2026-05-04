@@ -143,11 +143,12 @@ func executeBundle(ctx context.Context, bp bundleParams) error {
 		saveDataDirStructure(ps, bp.y),
 		saveDf(ctx, ps),
 		saveDiskUsage(ctx, ps, bp.y),
+		saveProcFileSampled(ctx, ps, "/proc/diskstats", "diskstats", bp.metricsInterval, bp.metricsSampleCount),
 		saveDmidecode(ctx, ps),
 		saveFree(ctx, ps),
 		saveIP(ctx, ps),
 		saveEthtool(ctx, ps),
-		saveInterrupts(ps),
+		saveProcFileSampled(ctx, ps, "/proc/interrupts", "interrupts", bp.metricsInterval, bp.metricsSampleCount),
 		saveKafkaMetadata(ctx, ps, bp.cl),
 		saveKernelSymbols(ps),
 		saveLogs(ctx, ps, bp.logsSince, bp.logsUntil, bp.logsLimitBytes),
@@ -162,7 +163,7 @@ func executeBundle(ctx context.Context, bp bundleParams) error {
 		saveStartupLog(ps, bp.y),
 		saveSlabInfo(ps),
 		saveSocketData(ctx, ps),
-		saveSoftwareInterrupts(ps),
+		saveProcFileSampled(ctx, ps, "/proc/softirqs", "softirqs", bp.metricsInterval, bp.metricsSampleCount),
 		saveSysctl(ctx, ps),
 		saveSyslog(ps),
 		saveTopOutput(ctx, ps),
@@ -671,27 +672,40 @@ func saveCPUInfo(ps *stepParams) step {
 	}
 }
 
-// Saves the contents of '/proc/interrupts'.
-func saveInterrupts(ps *stepParams) step {
+// saveProcFileSampled takes sampleCount snapshots of procPath at `interval`
+// apart, writing each to proc/<zipName>/t<N>.txt (t0, t1, …). Used for
+// volatile counter files where deltas between samples are the diagnostic
+// signal; each sample lives under its own directory so consumers can
+// enumerate samples without pattern-matching filenames.
+func saveProcFileSampled(ctx context.Context, ps *stepParams, procPath, zipName string, interval time.Duration, sampleCount int) step {
 	return func() error {
-		f, err := ps.fs.Open("/proc/interrupts")
-		if err != nil {
+		sample := func(n int) error {
+			f, err := ps.fs.Open(procPath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			return writeStreamToZip(ps, fmt.Sprintf("proc/%s/t%d.txt", zipName, n), f)
+		}
+		if err := sample(0); err != nil {
 			return err
 		}
-		defer f.Close()
-		return writeStreamToZip(ps, "proc/interrupts", f)
-	}
-}
-
-// Saves the contents of '/proc/softirqs/'.
-func saveSoftwareInterrupts(ps *stepParams) step {
-	return func() error {
-		f, err := ps.fs.Open("/proc/softirqs")
-		if err != nil {
-			return err
+		if sampleCount <= 1 {
+			return nil
 		}
-		defer f.Close()
-		return writeStreamToZip(ps, "proc/softirqs", f)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for n := 1; n < sampleCount; n++ {
+			select {
+			case <-ticker.C:
+				if err := sample(n); err != nil {
+					return err
+				}
+			case <-ctx.Done():
+				return sample(n)
+			}
+		}
+		return nil
 	}
 }
 

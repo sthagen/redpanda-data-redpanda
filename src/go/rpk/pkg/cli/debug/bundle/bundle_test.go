@@ -12,6 +12,9 @@
 package bundle
 
 import (
+	"archive/zip"
+	"bytes"
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -343,4 +346,93 @@ func TestSliceControllerDir(t *testing.T) {
 			require.Equal(t, test.exp, slice)
 		})
 	}
+}
+
+func TestSaveProcFileSampled(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	content := []byte("counter-snapshot")
+	require.NoError(t, afero.WriteFile(fs, "/proc/test", content, 0o644))
+
+	newPS := func(zw *zip.Writer) *stepParams {
+		return &stepParams{
+			fs:        fs,
+			w:         zw,
+			timeout:   time.Second,
+			fileRoot:  "bundle",
+			sharedBuf: make([]byte, 1024),
+		}
+	}
+
+	readZip := func(buf *bytes.Buffer) map[string][]byte {
+		zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+		require.NoError(t, err)
+		got := map[string][]byte{}
+		for _, f := range zr.File {
+			func(f *zip.File) {
+				rc, err := f.Open()
+				require.NoError(t, err)
+				defer func() {
+					require.NoError(t, rc.Close())
+				}()
+
+				data, err := io.ReadAll(rc)
+				require.NoError(t, err)
+				got[f.Name] = data
+			}(f)
+		}
+		return got
+	}
+
+	t.Run("each sample written to proc/<name>/tN.txt", func(t *testing.T) {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		step := saveProcFileSampled(context.Background(), newPS(zw), "/proc/test", "test", time.Millisecond, 3)
+		require.NoError(t, step())
+		require.NoError(t, zw.Close())
+
+		got := readZip(&buf)
+		require.Len(t, got, 3)
+		for _, n := range []string{
+			"bundle/proc/test/t0.txt",
+			"bundle/proc/test/t1.txt",
+			"bundle/proc/test/t2.txt",
+		} {
+			require.Contains(t, got, n)
+			require.Equal(t, content, got[n])
+		}
+	})
+
+	t.Run("ctx cancel captures final sample and returns", func(t *testing.T) {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		step := saveProcFileSampled(ctx, newPS(zw), "/proc/test", "test", time.Hour, 5)
+		require.NoError(t, step())
+		require.NoError(t, zw.Close())
+
+		got := readZip(&buf)
+		require.Len(t, got, 2)
+		require.Contains(t, got, "bundle/proc/test/t0.txt")
+		require.Contains(t, got, "bundle/proc/test/t1.txt")
+	})
+
+	t.Run("sampleCount of 1 writes only t0", func(t *testing.T) {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		step := saveProcFileSampled(context.Background(), newPS(zw), "/proc/test", "test", time.Hour, 1)
+		require.NoError(t, step())
+		require.NoError(t, zw.Close())
+
+		got := readZip(&buf)
+		require.Len(t, got, 1)
+		require.Contains(t, got, "bundle/proc/test/t0.txt")
+	})
+
+	t.Run("missing source file surfaces error", func(t *testing.T) {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		step := saveProcFileSampled(context.Background(), newPS(zw), "/proc/does-not-exist", "nope", time.Millisecond, 2)
+		require.Error(t, step())
+	})
 }

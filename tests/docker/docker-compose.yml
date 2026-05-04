@@ -67,7 +67,7 @@ services:
     networks:
     - redpanda-test
   rp:
-    image: vectorized/redpanda-test-node
+    image: ${RP_TEST_NODE_IMAGE:-vectorized/redpanda-test-node}
     privileged: true
     pids_limit: 32768
     ulimits:

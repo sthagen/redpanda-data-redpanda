@@ -1,0 +1,18 @@
+# Layered ducktape test-node image for the prebuilt-image flow.
+#
+# Combines three pieces:
+#   1. BASE_IMAGE  - a published redpanda-test-node image (java, kafka tools,
+#                    kgo-verifier, ssh, ducktape python, etc.)
+#   2. RP_IMAGE    - a published redpanda image; provides /opt/redpanda
+#   3. ./rpk       - a locally cross-compiled rpk (matching the host arch)
+#                    that overlays /opt/redpanda/bin/rpk
+
+ARG BASE_IMAGE=docker.io/redpandadata/redpanda-test-node:dev-amd64-cache
+ARG RP_IMAGE=docker.redpanda.com/redpandadata/redpanda-nightly:latest
+
+FROM ${RP_IMAGE} AS rp
+
+FROM ${BASE_IMAGE}
+COPY --from=rp /opt/redpanda /opt/redpanda
+COPY rpk /opt/redpanda/bin/rpk
+RUN chmod 0755 /opt/redpanda/bin/rpk

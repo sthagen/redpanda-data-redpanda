@@ -8,27 +8,39 @@
 """
 Redpanda Ducktape Test Runner
 
-This script runs Redpanda ducktape integration tests by:
-1. Building the bazel ducktape package
-2. Linking bazel artifacts to the expected locations
-3. Starting docker compose cluster with test nodes
-4. Generating ducktape cluster configuration
-5. Running ducktape tests in a docker container
+This script runs Redpanda ducktape integration tests in 2 modes:
+
+A. Local-build (default):
+    1. Building the bazel ducktape package
+    2. Linking bazel artifacts to the expected locations
+    3. Starting docker compose cluster with test nodes
+    4. Generating ducktape cluster configuration
+    5. Running ducktape tests in a docker container
+
+B. Prebuilt-image: pass --rp-image and --test-node-image to layer a published
+   Redpanda image on top of a published test-node image instead. Skips the
+   bazel build entirely. Works on macOS (any Docker provider) and Linux.
 
 Usage:
-    ./run_ducktape.py [OPTIONS] [DUCKTAPE_ARGS...]
+    ./tools/dt run [OPTIONS] [DUCKTAPE_ARGS...]
 
 Examples:
-    # Run quick test suite (default)
+    # Default: bazel-build redpanda, run quick suite
     ./tools/dt run
 
-    # Run specific test
+    # Specific test
     ./tools/dt run tests/rptest/tests/test_partition_movement.py
 
-    # Run with specific parameters
+    # Tuning
     ./tools/dt run --max-parallel 4 --node-count 8 tests/rptest/test_suite_quick.yml
 
-    # Manually manage the lifecycle of the compose cluster
+    # Prebuilt-image mode (no local Redpanda build)
+    ./tools/dt run \\
+      --rp-image=docker.redpanda.com/redpandadata/redpanda-nightly:latest \\
+      --test-node-image=docker.io/redpandadata/redpanda-test-node:dev-arm64-cache \\
+      tests/rptest/tests/rpk_profile_test.py
+
+    # Manage cluster lifecycle manually
     ./tools/dt start --node-count 8
     ./tools/dt exec tests/rptest/tests/test_partition_movement.py
     ./tools/dt stop
@@ -39,9 +51,11 @@ import json
 import multiprocessing
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Dict, List, Optional
 
 from jinja2 import Template
@@ -89,6 +103,15 @@ class DucktapeRunner:
         self.test_timeout = (
             args.test_timeout if hasattr(args, "test_timeout") else 1800000
         )
+
+        # Prebuilt-image mode: Both flags are required together.
+        self.rp_image = getattr(args, "rp_image", None)
+        self.test_node_image = getattr(args, "test_node_image", None)
+        if (self.rp_image is None) != (self.test_node_image is None):
+            raise SystemExit(
+                "--rp-image and --test-node-image must be used together"
+            )
+        self.prebuilt = bool(self.rp_image and self.test_node_image)
 
     def log(self, msg: str):
         """Print a log message."""
@@ -285,6 +308,79 @@ class DucktapeRunner:
             if dockerignore_dst.exists():
                 dockerignore_dst.unlink()
 
+    @staticmethod
+    def _linux_arch() -> str:
+        return (
+            "arm64"
+            if platform.machine().lower() in ("arm64", "aarch64")
+            else "amd64"
+        )
+
+    def _prebuilt_test_node_image_tag(self) -> str:
+        """Tag for the layered test-node image. Distinct from the local-build
+        flow's tag. Override with DT_LAYERED_TEST_NODE_IMAGE."""
+        return os.environ.get(
+            "DT_LAYERED_TEST_NODE_IMAGE",
+            f"{self.ducktape_test_node_image}-prebuilt",
+        )
+
+    def build_layered_image(self):
+        """Cross-compile rpk and layer it + a published Redpanda image on top
+        of a published test-node base image. Tagged distinctly from the
+        local-build image; start_compose_cluster forwards the tag to compose
+        via RP_TEST_NODE_IMAGE."""
+        arch = self._linux_arch()
+        self.log(f"Cross-compiling rpk for linux/{arch}...")
+        # Direct go build, not `task rpk:build`. Task's CLI var override
+        # doesn't reliably propagate through the nested `:goreleaser:build`
+        # invocation in vtools/taskfiles/rpk.yml.
+        rpk_path = self.build_root / "dt-prebuilt" / "rpk"
+        rpk_path.parent.mkdir(parents=True, exist_ok=True)
+        env = {
+            **os.environ,
+            "GOOS": "linux",
+            "GOARCH": arch,
+            "CGO_ENABLED": "0",
+        }
+        self.run_cmd(
+            ["go", "build", "-trimpath", "-o", str(rpk_path), "./cmd/rpk"],
+            cwd=self.src_dir / "src" / "go" / "rpk",
+            env=env,
+        )
+
+        layered_tag = self._prebuilt_test_node_image_tag()
+        self.log(f"Building layered image {layered_tag}...")
+        with tempfile.TemporaryDirectory(prefix="dt-layer-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            shutil.copy2(rpk_path, tmpdir / "rpk")
+            shutil.copy2(
+                self.src_dir / "tests" / "docker" / "Dockerfile.layer-image",
+                tmpdir / "Dockerfile",
+            )
+            self.run_cmd(
+                [
+                    "docker", "build",
+                    "--build-arg", f"BASE_IMAGE={self.test_node_image}",
+                    "--build-arg", f"RP_IMAGE={self.rp_image}",
+                    "--tag", layered_tag,
+                    str(tmpdir),
+                ]
+            )
+
+    def setup_prebuilt_install_link(self):
+        """Create ${BUILD_ROOT}/redpanda_installs/redpanda → /opt/redpanda.
+        Dangling on the host; resolves in-container once the redpanda_installs
+        bind mount exposes the symlink at /opt/redpanda_installs/redpanda."""
+        self.rp_installs_dir.mkdir(parents=True, exist_ok=True)
+        link = self.rp_installs_dir / "redpanda"
+        if link.is_symlink():
+            link.unlink()
+        elif link.is_dir():
+            shutil.rmtree(link)
+        elif link.exists():
+            link.unlink()
+        link.symlink_to("/opt/redpanda")
+
     def start_compose_cluster(self):
         """Start the docker compose cluster."""
         self.log(f"Starting docker compose cluster with {self.node_count} nodes...")
@@ -297,6 +393,8 @@ class DucktapeRunner:
         env["BUILD_ROOT"] = str(self.build_root)
         env["DOCKER_CLIENT_TIMEOUT"] = "120"
         env["COMPOSE_HTTP_TIMEOUT"] = "120"
+        if self.prebuilt:
+            env["RP_TEST_NODE_IMAGE"] = self._prebuilt_test_node_image_tag()
 
         # Run docker compose
         compose_dir = self.src_dir / "tests" / "docker"
@@ -354,8 +452,23 @@ class DucktapeRunner:
 
     def build_ducktape_globals(self) -> str:
         """Build the globals JSON for ducktape."""
+        # In prebuilt mode, redpanda lives at /opt/redpanda inside the
+        # container; the redpanda_installs bind mount exposes a symlink at
+        # /opt/redpanda_installs/redpanda → /opt/redpanda (set up in
+        # setup_prebuilt_install_link).
+        rp_install_path_root = (
+            "/opt/redpanda_installs/redpanda"
+            if self.prebuilt
+            else str(self.rp_install_dir)
+        )
+        if self.prebuilt:
+            self.log(
+                "NOTE: prebuilt mode does not bundle direct_consumer_verifier "
+                "or controller_forced_reconfiguration; tests that depend on "
+                "those will fail. Use the local-build flow for them."
+            )
         globals_dict = {
-            "rp_install_path_root": str(self.rp_install_dir),
+            "rp_install_path_root": rp_install_path_root,
             "direct_consumer_verifier_root": str(self.dcv_install_dir),
             "redpanda_log_level": self.args.log_level,
             "scale": "local",
@@ -439,7 +552,12 @@ class DucktapeRunner:
             docker_cmd.extend(["--env", f"REDPANDA_FIPS_PERMISSIVE=1"])
 
         # Add the image
-        docker_cmd.append(self.ducktape_test_node_image)
+        runner_image = (
+            self._prebuilt_test_node_image_tag()
+            if self.prebuilt
+            else self.ducktape_test_node_image
+        )
+        docker_cmd.append(runner_image)
 
         # Add ducktape arguments
         docker_cmd.extend(
@@ -496,6 +614,8 @@ class DucktapeRunner:
 
         env = os.environ.copy()
         env["BUILD_ROOT"] = str(self.build_root)
+        if self.prebuilt:
+            env["RP_TEST_NODE_IMAGE"] = self._prebuilt_test_node_image_tag()
 
         compose_dir = self.src_dir / "tests" / "docker"
 
@@ -548,16 +668,19 @@ class DucktapeRunner:
     def cmd_run(self) -> int:
         """Run the full ducktape test pipeline."""
         try:
-            # Build docker image
             if not self.args.skip_docker_build:
-                self.build_test_docker_image()
+                if self.prebuilt:
+                    self.build_layered_image()
+                else:
+                    self.build_test_docker_image()
 
-            # Start cluster
+            if self.prebuilt:
+                self.setup_prebuilt_install_link()
+
             self.start_compose_cluster()
             self.generate_cluster_config()
 
-            # Build and link artifacts, then run tests
-            if not self.args.skip_bazel_build:
+            if not self.prebuilt and not self.args.skip_bazel_build:
                 self.build_ducktape_package()
                 self.link_bazel_artifacts()
 
@@ -571,11 +694,15 @@ class DucktapeRunner:
 
     def cmd_start(self) -> int:
         """Start the docker-compose cluster."""
-        # Build docker image
         if not self.args.skip_docker_build:
-            self.build_test_docker_image()
+            if self.prebuilt:
+                self.build_layered_image()
+            else:
+                self.build_test_docker_image()
 
-        # Start cluster
+        if self.prebuilt:
+            self.setup_prebuilt_install_link()
+
         self.start_compose_cluster()
         self.generate_cluster_config()
 
@@ -593,8 +720,7 @@ class DucktapeRunner:
             self.log("ERROR: Cluster config not found. Did you run 'start' first?")
             return 1
 
-        # Build and link artifacts
-        if not self.args.skip_bazel_build:
+        if not self.prebuilt and not self.args.skip_bazel_build:
             self.build_ducktape_package()
             self.link_bazel_artifacts()
 
@@ -681,11 +807,15 @@ class DucktapeRunner:
                     return None
 
         try:
-            # Build docker image
             if not self.args.skip_docker_build:
-                self.build_test_docker_image()
+                if self.prebuilt:
+                    self.build_layered_image()
+                else:
+                    self.build_test_docker_image()
 
-            # Start cluster
+            if self.prebuilt:
+                self.setup_prebuilt_install_link()
+
             self.start_compose_cluster()
             self.generate_cluster_config()
 
@@ -735,9 +865,13 @@ class DucktapeRunner:
                         print("")
                         continue
                     elif user_input in ["rebuild", "rb"]:
-                        self.log("Rebuilding bazel artifacts...")
-                        self.build_ducktape_package()
-                        self.link_bazel_artifacts()
+                        if self.prebuilt:
+                            self.log("Rebuilding layered image...")
+                            self.build_layered_image()
+                        else:
+                            self.log("Rebuilding bazel artifacts...")
+                            self.build_ducktape_package()
+                            self.link_bazel_artifacts()
                         self.log("Rebuild complete")
                         continue
                     elif user_input == "status":
@@ -772,6 +906,26 @@ class DucktapeRunner:
 
         finally:
             self.stop_compose_cluster()
+
+
+def _add_prebuilt_image_args(p: argparse.ArgumentParser):
+    """Add the `prebuilt-image` flags. Use both flags together to skip the
+    bazel build and the heavy test-node Dockerfile and instead layer a
+    published Redpanda image on top of a published test-node image."""
+    p.add_argument(
+        "--rp-image",
+        default=None,
+        help="Published Redpanda image providing /opt/redpanda "
+             "(e.g. docker.redpanda.com/redpandadata/redpanda-nightly:latest). "
+             "Requires --test-node-image.",
+    )
+    p.add_argument(
+        "--test-node-image",
+        default=None,
+        help="Published redpanda-test-node base image "
+             "(e.g. docker.io/redpandadata/redpanda-test-node:dev-arm64-cache). "
+             "Requires --rp-image.",
+    )
 
 
 def main():
@@ -871,6 +1025,7 @@ def main():
         default="info",
         help="Set the Redpanda log level",
     )
+    _add_prebuilt_image_args(run_parser)
 
 
     # 'start' subcommand
@@ -886,6 +1041,7 @@ def main():
     start_parser.add_argument(
         "--node-count", type=int, help="Number of test nodes (default: CPU count)"
     )
+    _add_prebuilt_image_args(start_parser)
 
     # 'exec' subcommand
     test_parser = subparsers.add_parser(
@@ -956,6 +1112,7 @@ def main():
         default="info",
         help="Set the Redpanda log level",
     )
+    _add_prebuilt_image_args(test_parser)
 
     # 'stop' subcommand
     _ = subparsers.add_parser(
@@ -1035,6 +1192,7 @@ def main():
         default="info",
         help="Set the Redpanda log level",
     )
+    _add_prebuilt_image_args(repl_parser)
 
     args = parser.parse_args()
 

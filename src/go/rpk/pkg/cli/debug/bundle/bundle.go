@@ -80,6 +80,10 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				out.Die("--metrics-samples must be 2 or higher")
 			}
 
+			if opts.MetricsInterval <= 0 {
+				out.Die("--metrics-interval must be positive")
+			}
+
 			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
