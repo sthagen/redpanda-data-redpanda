@@ -86,21 +86,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "scattered_message",
-    srcs = [
-        "scattered_message.cc",
-    ],
-    hdrs = [
-        "scattered_message.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":iobuf",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_library(
     name = "iobuf_parser",
     hdrs = [
         "iobuf_parser.h",

@@ -14,7 +14,6 @@
 #include "ssx/semaphore.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/scattered_message.hh>
 
 namespace net {
 
@@ -29,22 +28,22 @@ batched_output_stream::batched_output_stream(
 }
 
 [[gnu::cold]] static ss::future<bool>
-already_closed_error(ss::scattered_message<char>& msg) {
+already_closed_error(scattered_buffer& bufs) {
     return ss::make_exception_future<bool>(
-      batched_output_stream_closed(msg.size()));
+      batched_output_stream_closed(iobuf::scattered_size(bufs)));
 }
 
-ss::future<bool> batched_output_stream::write(ss::scattered_message<char> msg) {
+ss::future<bool> batched_output_stream::write(scattered_buffer bufs) {
     if (unlikely(_closed)) {
-        return already_closed_error(msg);
+        return already_closed_error(bufs);
     }
     return ss::with_semaphore(
-      *_write_sem, 1, [this, v = std::move(msg)]() mutable {
+      *_write_sem, 1, [this, v = std::move(bufs)]() mutable {
           if (unlikely(_closed)) {
               return already_closed_error(v);
           }
-          const size_t vbytes = v.size();
-          return _out.write(std::move(v)).then([this, vbytes] {
+          const size_t vbytes = iobuf::scattered_size(v);
+          return _out.write(std::span{v}).then([this, vbytes] {
               _unflushed_bytes += vbytes;
               if (
                 _write_sem->waiters() == 0 || _unflushed_bytes >= _cache_size) {

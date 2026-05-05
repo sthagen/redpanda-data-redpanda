@@ -367,7 +367,7 @@ class netbuf {
 public:
     /// \brief used to send the bytes down the wire
     /// we re-compute the header-checksum on every call
-    ss::future<ss::scattered_message<char>> as_scattered() &&;
+    ss::future<scattered_buffer> as_scattered() &&;
 
     void set_status(rpc::status);
     void set_correlation_id(uint32_t);

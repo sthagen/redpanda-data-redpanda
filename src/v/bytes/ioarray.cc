@@ -299,8 +299,7 @@ void ioarray::trim_back(size_t n) {
     new (buffers_ptr) absl::FixedArray(std::move(replacement));
 }
 
-ioarray
-ioarray::from_sized_buffers(std::span<ss::temporary_buffer<char>> bufs) {
+ioarray ioarray::from_sized_buffers(scattered_buffer_view bufs) {
     if (bufs.empty()) {
         return {};
     }

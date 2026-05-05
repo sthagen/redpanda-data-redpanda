@@ -77,7 +77,7 @@ public:
     }
 
     // destructive move. most of the time share() will suffice.
-    ss::temporary_buffer<char> unoptimized_release() && {
+    ss::temporary_buffer<char> unoptimized_release() && noexcept {
         _buf.trim(_used_bytes);
         return std::move(_buf);
     }

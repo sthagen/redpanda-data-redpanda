@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/redpanda/admin/partitions",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/go/rpk/pkg/cobraext",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/kafka",
         "//src/go/rpk/pkg/out",

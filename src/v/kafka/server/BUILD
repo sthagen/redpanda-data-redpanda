@@ -276,7 +276,6 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
-        "//src/v/bytes:scattered_message",
         "//src/v/cloud_storage",
         "//src/v/cluster",
         "//src/v/cluster:client_quota_backend",

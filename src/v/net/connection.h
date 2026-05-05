@@ -55,7 +55,7 @@ public:
 
     const ss::sstring& name() const { return _name; }
     ss::input_stream<char>& input() { return _in; }
-    ss::future<> write(ss::scattered_message<char> msg);
+    ss::future<> write(scattered_buffer bufs);
     ss::future<> shutdown();
     void shutdown_input();
     const ss::socket_address& local_address() const noexcept {

@@ -15,7 +15,6 @@
 #include "base/vlog.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "bytes/scattered_message.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
 #include "container/chunked_hash_map.h"
@@ -609,7 +608,7 @@ ss::future<> connection_context::handle_auth_v0(const size_t size) {
     iobuf data;
     protocol::encoder writer(data);
     writer.write(response.data.auth_bytes);
-    auto msg = iobuf_as_scattered(std::move(data));
+    auto msg = std::move(data).as_scattered();
     co_await conn->write(std::move(msg));
 }
 
@@ -1176,12 +1175,13 @@ connection_context::client_protocol_state::do_process_responses(
     }
 
     auto msg = response_as_scattered(std::move(resp_and_res.response));
+    auto response_size = iobuf::scattered_size(msg);
     if (resp_and_res.resources->request_data.request_key == fetch_api::key) {
         const auto principal = connection_ctx->get_principal();
         co_await connection_ctx->_server.quota_mgr().record_fetch_tp(
           principal.name_view(),
           resp_and_res.resources->request_data.client_id,
-          msg.size(),
+          response_size,
           quota_manager::clock::now());
     }
     // Respose sizes only take effect on throttling at the next
@@ -1192,7 +1192,6 @@ connection_context::client_protocol_state::do_process_responses(
     // serialized long ago already. With the current approach,
     // egress token bucket level will always be an extra burst into
     // the negative while under pressure.
-    auto response_size = msg.size();
     auto request_key = resp_and_res.resources->request_data.request_key;
     if (
       connection_ctx->_kafka_throughput_controlled_api_keys().at(request_key)) {

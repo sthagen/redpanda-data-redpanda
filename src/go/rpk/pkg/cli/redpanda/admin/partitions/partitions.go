@@ -17,6 +17,7 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cobraext"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/kafka"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
@@ -34,12 +35,13 @@ type partitionResponse struct {
 // NewCommand returns the partitions admin command.
 func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "partitions",
-		Short: "View and configure Redpanda partitions through the admin listener",
-		Args:  cobra.ExactArgs(0),
+		Use:    "partitions",
+		Short:  "View and configure Redpanda partitions through the admin listener",
+		Args:   cobra.ExactArgs(0),
+		Hidden: true,
 	}
 	cmd.AddCommand(
-		newListCommand(fs, p),
+		cobraext.DeprecateCmd(newListCommand(fs, p), "rpk cluster partitions list --node-ids <ID>"),
 	)
 	return cmd
 }

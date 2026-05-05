@@ -16,8 +16,29 @@
 #include <algorithm>
 #include <compare>
 #include <cstddef>
-#include <iostream>
+#include <sstream>
 #include <string_view>
+
+scattered_buffer iobuf::as_scattered() && {
+    scattered_buffer bufs;
+    bufs.reserve(std::distance(begin(), end()));
+    while (!_frags.empty()) {
+        // This ordering is to preserve weak exception safety
+        auto front_buf = std::move(_frags.front()).unoptimized_release();
+        // _size is wrong here (still counts bytes in front_buf)
+        pop_front(); // fixes up size
+        bufs.emplace_back(std::move(front_buf));
+    }
+    return bufs;
+}
+
+size_t iobuf::scattered_size(const scattered_buffer& bufs) {
+    size_t total = 0;
+    for (const auto& buf : bufs) {
+        total += buf.size();
+    }
+    return total;
+}
 
 iobuf iobuf::copy() const {
     auto in = iobuf::iterator_consumer(cbegin(), cend());

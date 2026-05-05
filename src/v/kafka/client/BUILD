@@ -144,8 +144,8 @@ redpanda_cc_library(
     deps = [
         ":logger",
         "//src/v/base",
+        "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
-        "//src/v/bytes:scattered_message",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:api_versions",
         "//src/v/kafka/protocol:create_topics",
@@ -339,7 +339,6 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
-        "//src/v/bytes:scattered_message",
         "//src/v/config",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/container:chunked_hash_map",

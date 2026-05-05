@@ -35,6 +35,20 @@ build --@rules_go//go/config:pure
 build:gofips --//bazel:gofips=True --@rules_go//go/toolchain:sdk_name=go_sdk_with_systemcrypto
 build:gofips --@rules_go//go/config:pure=false
 
+#################
+# Rust settings #
+#################
+
+# Use rules_rust's Rust-side allocator_library that defines the
+# mangled `__rustc::*` allocator shim symbols (rust_alloc,
+# rust_dealloc, etc.). The default cc_allocator_library predates the
+# allocator-symbol mangling in rustc 1.87+ and leaves those symbols
+# undefined when a Rust staticlib is linked into a cc_binary via
+# cc_common.link. See bazelbuild/rules_rust#3459.
+build --@rules_rust//rust/settings:experimental_use_allocator_libraries_with_mangled_symbols=True
+
+# end of rust settings #
+
 # Improve caching and readability of filepaths that the compiler uses by not using
 # absolute paths, and instead use paths that are relative to the redpanda repo.
 # https://github.com/bazel-contrib/toolchains_llvm/pull/445#issuecomment-2605443516

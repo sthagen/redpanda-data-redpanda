@@ -312,7 +312,7 @@ private:
     /// Receive bytes from the remote endpoint
     ss::future<ss::temporary_buffer<char>> receive();
     /// Send bytes to the remote endpoint
-    ss::future<> send(ss::scattered_message<char> msg);
+    ss::future<> send(scattered_buffer bufs);
 
     /// Throw exception if _as is aborted
     void check() const;
@@ -340,8 +340,8 @@ client::request_header redacted_header(client::request_header original);
 
 template<class BufferSeq>
 inline ss::future<> client::forward(client* client, BufferSeq&& seq) {
-    auto scattered = iobuf_as_scattered(std::forward<BufferSeq>(seq));
-    return client->send(std::move(scattered));
+    auto bufs = std::forward<BufferSeq>(seq).as_scattered();
+    return client->send(std::move(bufs));
 }
 
 /// Helper to close an http client after a function has been called on it.

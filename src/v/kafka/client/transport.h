@@ -13,7 +13,7 @@
 
 #include "base/outcome.h"
 #include "base/seastarx.h"
-#include "bytes/scattered_message.h"
+#include "bytes/iobuf.h"
 #include "kafka/protocol/api_versions.h"
 #include "kafka/protocol/flex_versions.h"
 #include "kafka/protocol/fwd.h"
@@ -249,7 +249,7 @@ private:
           std::make_unique<request_entry>(
             this, correlation, is_flexible, timeout));
         auto response_future = it->second->response_promise.get_future();
-        co_await out().write(iobuf_as_scattered(std::move(buf)));
+        co_await out().write(std::move(buf).as_scattered());
         // return all units to the semaphore before flushing the output
         u.return_all();
         co_await out().flush();

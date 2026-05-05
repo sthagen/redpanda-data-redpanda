@@ -10,6 +10,7 @@
 #include "net/connection.h"
 
 #include "base/seastarx.h"
+#include "bytes/iobuf.h"
 #include "net/exceptions.h"
 #include "net/types.h"
 #include "ssx/abort_source.h"
@@ -199,9 +200,9 @@ ss::future<> connection::shutdown() {
     return _out.stop();
 }
 
-ss::future<> connection::write(ss::scattered_message<char> msg) {
-    _probe.add_bytes_sent(msg.size());
-    return _out.write(std::move(msg)).discard_result();
+ss::future<> connection::write(scattered_buffer bufs) {
+    _probe.add_bytes_sent(iobuf::scattered_size(bufs));
+    return _out.write(std::move(bufs)).discard_result();
 }
 
 } // namespace net

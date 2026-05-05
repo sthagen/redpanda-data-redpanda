@@ -12,6 +12,7 @@
 package brokers
 
 import (
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cobraext"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -20,12 +21,13 @@ import (
 // NewCommand returns the brokers admin command.
 func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "brokers",
-		Short: "View and configure Redpanda brokers through the admin listener",
-		Args:  cobra.ExactArgs(0),
+		Use:    "brokers",
+		Short:  "View and configure Redpanda brokers through the admin listener",
+		Args:   cobra.ExactArgs(0),
+		Hidden: true,
 	}
 	cmd.AddCommand(
-		newListCommand(fs, p),
+		cobraext.DeprecateCmd(newListCommand(fs, p), "rpk cluster info -b --detailed"),
 		newDecommissionBroker(fs, p),
 		newDecommissionBrokerStatus(fs, p),
 		newRecommissionBroker(fs, p),

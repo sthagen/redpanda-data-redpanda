@@ -1,4 +1,13 @@
-package config
+// Copyright 2026 Redpanda Data, Inc.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.md
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0
+
+package loggers
 
 import (
 	"encoding/json"
@@ -117,8 +126,8 @@ func TestDiscoverLoggers_APISuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	// Binary discovery fails (MemMapFs has no redpanda binary), so
-	// discoverLoggers falls through to the Admin API, which succeeds.
-	got := discoverLoggers(t.Context(), cl, afero.NewMemMapFs())
+	// DiscoverLoggers falls through to the Admin API, which succeeds.
+	got := DiscoverLoggers(t.Context(), cl, afero.NewMemMapFs())
 	require.Equal(t, []string{"abs", "raft", "storage"}, got)
 }
 
@@ -131,7 +140,7 @@ func TestDiscoverLoggers_APIFailsFallsBackToDefault(t *testing.T) {
 	cl, err := rpadmin.NewClient([]string{ts.URL}, nil, new(rpadmin.NopAuth), false)
 	require.NoError(t, err)
 
-	got := discoverLoggers(t.Context(), cl, afero.NewMemMapFs())
+	got := DiscoverLoggers(t.Context(), cl, afero.NewMemMapFs())
 	require.Equal(t, defaultLoggers, got)
 }
 

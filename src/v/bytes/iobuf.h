@@ -25,8 +25,21 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <span>
 #include <string_view>
 #include <type_traits>
+#include <vector>
+
+class iobuf;
+
+/// \brief a vector of temporary buffers, typically used to represent an
+/// iobuf's fragment structure for zero-copy output operations.
+using scattered_buffer = std::vector<ss::temporary_buffer<char>>;
+
+/// \brief non-owning view over a scattered_buffer, used as the parameter
+/// type for data_sink_impl::put overrides (the seastar API takes a span of
+/// temporary_buffer<char>).
+using scattered_buffer_view = std::span<ss::temporary_buffer<char>>;
 
 /*
  * Our iobuf is a fragmented buffer modeled after
@@ -111,6 +124,21 @@ public:
             append(std::move(buf));
         }
     }
+
+    /// \brief converts this iobuf into a scattered_buffer of
+    /// temporary_buffer<char>. No byte copying occurs, temporary buffers
+    /// reflect the iobuf's fragment structure and take ownership of their
+    /// underlying buffers (using the usual temporary buffer reference
+    /// counting).
+    ///
+    /// After this call returns the iobuf is in an unspecified-but-valid
+    /// state: it may be (and currently is) moved-from, with no fragments
+    /// and zero size. Callers must not rely on the iobuf retaining its
+    /// contents.
+    scattered_buffer as_scattered() &&;
+
+    /// \brief returns the total size in bytes of a scattered_buffer
+    static size_t scattered_size(const scattered_buffer& bufs);
 
     /**
      * Returns a new iobuf of length len with the contents of this iobuf

@@ -15,20 +15,7 @@
 
 namespace utils {
 
-ss::future<> null_data_sink::put(ss::net::packet data) {
-    return put(data.release());
-}
-
-ss::future<> null_data_sink::put(std::vector<ss::temporary_buffer<char>> all) {
-    return ss::do_with(
-      std::move(all), [this](std::vector<ss::temporary_buffer<char>>& all) {
-          return ss::do_for_each(all, [this](ss::temporary_buffer<char>& buf) {
-              return put(std::move(buf));
-          });
-      });
-}
-
-ss::future<> null_data_sink::put(ss::temporary_buffer<char>) {
+ss::future<> null_data_sink::put(std::span<ss::temporary_buffer<char>>) {
     return ss::now();
 }
 

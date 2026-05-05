@@ -79,7 +79,7 @@ public:
     // a new ioarray.
     //
     // REQUIRES: All but the last buffer must be `max_chunk_size` in length.
-    static ioarray from_sized_buffers(std::span<ss::temporary_buffer<char>>);
+    static ioarray from_sized_buffers(scattered_buffer_view);
 
     // Create an uninitialized ioarray where all the chunks are aligned.
     // It's assumed that the alignment is a power of two less than

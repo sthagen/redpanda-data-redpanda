@@ -31,7 +31,10 @@ import (
 )
 
 func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	var filter string
+	var (
+		filter string
+		nodeID int
+	)
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -41,7 +44,11 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 This command lists all available cluster configuration properties. Use the 'get'
 command to retrieve specific property values, or 'edit' for interactive editing.
 
-Use the --filter flag with a regular expression to filter configuration keys.`,
+Use the --filter flag with a regular expression to filter configuration keys.
+
+By default the request is routed to any broker. Use --node-id to route it to
+a specific broker, which is useful when you suspect a broker is out of sync
+with the controller. --node-id is not supported for cloud clusters.`,
 		Example: `
 List all cluster configuration properties:
   rpk cluster config list
@@ -53,7 +60,10 @@ List configuration properties in JSON format:
   rpk cluster config list --format=json
 
 List configuration properties in YAML format:
-  rpk cluster config list --format=yaml`,
+  rpk cluster config list --format=yaml
+
+Query broker 1 for its view of the cluster configuration:
+  rpk cluster config list --node-id 1`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
 			f := p.Formatter
@@ -66,8 +76,12 @@ List configuration properties in YAML format:
 			p := cfg.VirtualProfile()
 
 			var configMap map[string]any
+			perNode := cmd.Flags().Changed("node-id")
 
 			if p.CheckFromCloud() {
+				if perNode {
+					out.Die("--node-id is not supported for cloud clusters")
+				}
 				if p.CloudCluster.IsServerless() {
 					out.Die("rpk cluster config list is not supported for serverless clusters")
 				}
@@ -77,6 +91,10 @@ List configuration properties in YAML format:
 				client, err := adminapi.NewClient(cmd.Context(), fs, p)
 				out.MaybeDie(err, "unable to initialize admin client: %v", err)
 
+				if perNode {
+					client, err = client.ForBroker(cmd.Context(), nodeID)
+					out.MaybeDie(err, "unable to resolve broker %d: %v", nodeID, err)
+				}
 				currentConfig, err := client.Config(cmd.Context(), true)
 				out.MaybeDie(err, "unable to query current config: %v", err)
 
@@ -121,6 +139,7 @@ List configuration properties in YAML format:
 	}
 
 	cmd.Flags().StringVar(&filter, "filter", "", "Filter configuration keys using regular expression")
+	cmd.Flags().IntVar(&nodeID, "node-id", 0, "If set, route the cluster configuration request to the given broker instead of any broker")
 	p.InstallFormatFlag(cmd)
 	return cmd
 }

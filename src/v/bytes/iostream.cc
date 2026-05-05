@@ -38,21 +38,10 @@ ss::output_stream<char> make_iobuf_ref_output_stream(iobuf& io) {
     struct iobuf_output_stream final : ss::data_sink_impl {
         explicit iobuf_output_stream(iobuf& i)
           : io(i) {}
-        ss::future<> put(ss::net::packet data) final {
-            auto all = data.release();
-            for (auto& b : all) {
+        ss::future<> put(scattered_buffer_view data) final {
+            for (auto& b : data) {
                 io.append(std::move(b));
             }
-            return ss::make_ready_future<>();
-        }
-        ss::future<> put(std::vector<ss::temporary_buffer<char>> all) final {
-            for (auto& b : all) {
-                io.append(std::move(b));
-            }
-            return ss::make_ready_future<>();
-        }
-        ss::future<> put(ss::temporary_buffer<char> buf) final {
-            io.append(std::move(buf));
             return ss::make_ready_future<>();
         }
         ss::future<> flush() final { return ss::make_ready_future<>(); }

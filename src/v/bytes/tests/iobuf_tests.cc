@@ -13,7 +13,6 @@
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
-#include "bytes/scattered_message.h"
 #include "bytes/streambuf.h"
 #include "test_utils/random_bytes.h"
 #include "utils.h"
@@ -400,13 +399,16 @@ SEASTAR_THREAD_TEST_CASE(iobuf_as_scattered_message) {
     for (size_t size = 0; size < b.size(); size++) {
         iobuf buf;
         buf.append(b.data(), size);
-        auto msg = iobuf_as_scattered(std::move(buf));
-        auto packet = std::move(msg).release();
-        packet.linearize();
-        BOOST_TEST(packet.nr_frags() == 1);
-        auto& frag = packet.frag(0);
-        BOOST_TEST(frag.size == size);
-        BOOST_TEST(std::memcmp(frag.base, b.data(), size) == 0);
+        auto bufs = std::move(buf).as_scattered();
+        // linearize by copying into a single buffer
+        ss::temporary_buffer<char> linear(size);
+        size_t off = 0;
+        for (auto& tb : bufs) {
+            std::memcpy(linear.get_write() + off, tb.get(), tb.size());
+            off += tb.size();
+        }
+        BOOST_TEST(off == size);
+        BOOST_TEST(std::memcmp(linear.get(), b.data(), size) == 0);
     }
 }
 SEASTAR_THREAD_TEST_CASE(iobuf_as_ostream_basic) {
@@ -481,8 +483,8 @@ SEASTAR_THREAD_TEST_CASE(test_next_chunk_allocation_append_temp_buf) {
     auto distance = std::distance(buf.begin(), buf.end());
     BOOST_REQUIRE_EQUAL(distance, 323);
     constexpr size_t sz = 40000 * 1024;
-    auto msg = iobuf_as_scattered(std::move(buf));
-    BOOST_REQUIRE_EQUAL(msg.size(), sz);
+    auto msg = std::move(buf).as_scattered();
+    BOOST_REQUIRE_EQUAL(iobuf::scattered_size(msg), sz);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_next_chunk_allocation_append_iobuf) {
@@ -497,8 +499,102 @@ SEASTAR_THREAD_TEST_CASE(test_next_chunk_allocation_append_iobuf) {
     auto distance = std::distance(buf.begin(), buf.end());
     BOOST_REQUIRE_EQUAL(distance, 322);
     constexpr size_t sz = 40000 * 1024;
-    auto msg = iobuf_as_scattered(std::move(buf));
-    BOOST_REQUIRE_EQUAL(msg.size(), sz);
+    auto msg = std::move(buf).as_scattered();
+    BOOST_REQUIRE_EQUAL(iobuf::scattered_size(msg), sz);
+}
+
+SEASTAR_THREAD_TEST_CASE(test_as_scattered_empty) {
+    iobuf buf;
+    auto bufs = std::move(buf).as_scattered();
+    BOOST_CHECK(bufs.empty());
+    BOOST_CHECK_EQUAL(iobuf::scattered_size(bufs), 0);
+}
+
+SEASTAR_THREAD_TEST_CASE(test_as_scattered_multi_fragment) {
+    // Build an iobuf with two distinct fragments using append_fragments
+    iobuf a;
+    a.append("hello", 5);
+    iobuf b;
+    b.append(" world", 6);
+    a.append_fragments(std::move(b));
+
+    auto bufs = std::move(a).as_scattered();
+    BOOST_CHECK_GE(bufs.size(), 2);
+    BOOST_CHECK_EQUAL(iobuf::scattered_size(bufs), 11);
+
+    // Linearize and check content
+    std::string linear;
+    for (auto& tb : bufs) {
+        linear.append(tb.get(), tb.size());
+    }
+    BOOST_CHECK_EQUAL(linear, "hello world");
+}
+
+SEASTAR_THREAD_TEST_CASE(test_as_scattered_leaves_iobuf_empty) {
+    // Build a multi-fragment iobuf
+    iobuf buf;
+    iobuf a;
+    a.append("hello", 5);
+    iobuf b;
+    b.append(" world", 6);
+    iobuf c;
+    c.append("!", 1);
+    buf.append_fragments(std::move(a));
+    buf.append_fragments(std::move(b));
+    buf.append_fragments(std::move(c));
+    BOOST_REQUIRE_EQUAL(buf.size_bytes(), 12);
+
+    auto bufs = std::move(buf).as_scattered();
+    BOOST_CHECK_EQUAL(iobuf::scattered_size(bufs), 12);
+
+    // The source iobuf should now be logically empty.
+    // NOLINTBEGIN(bugprone-use-after-move)
+    BOOST_CHECK(buf.empty());
+    BOOST_CHECK_EQUAL(buf.size_bytes(), 0);
+    BOOST_CHECK(buf.begin() == buf.end());
+    BOOST_CHECK_EQUAL(std::distance(buf.begin(), buf.end()), 0);
+    BOOST_CHECK_EQUAL(buf, iobuf{});
+    // The empty iobuf should still be usable: re-populate it.
+    buf.append("again", 5);
+    BOOST_CHECK_EQUAL(buf.size_bytes(), 5);
+    // NOLINTEND(bugprone-use-after-move)
+}
+
+SEASTAR_THREAD_TEST_CASE(test_iobuf_from_scattered_empty) {
+    scattered_buffer bufs;
+    auto result = iobuf(std::move(bufs));
+    BOOST_CHECK_EQUAL(result.size_bytes(), 0);
+}
+
+SEASTAR_THREAD_TEST_CASE(test_iobuf_from_scattered_roundtrip) {
+    // Create an iobuf, convert to buffer vector and back, check equality
+    const auto s = random_generators::gen_alphanum_string(1024);
+    iobuf original;
+    original.append(s.data(), s.size());
+    auto expected = original.copy();
+
+    auto bufs = std::move(original).as_scattered();
+    auto restored = iobuf(std::move(bufs));
+    BOOST_CHECK_EQUAL(restored, expected);
+}
+
+SEASTAR_THREAD_TEST_CASE(test_iobuf_from_scattered_multi_fragment) {
+    scattered_buffer bufs;
+    bufs.emplace_back("abc", 3);
+    bufs.emplace_back("defgh", 5);
+    bufs.emplace_back("i", 1);
+    auto result = iobuf(std::move(bufs));
+    BOOST_CHECK_EQUAL(result.size_bytes(), 9);
+
+    iobuf expected;
+    expected.append("abcdefghi", 9);
+    BOOST_CHECK_EQUAL(result, expected);
+}
+
+SEASTAR_THREAD_TEST_CASE(test_scattered_size_single_buffer) {
+    scattered_buffer bufs;
+    bufs.emplace_back("hello", 5);
+    BOOST_CHECK_EQUAL(iobuf::scattered_size(bufs), 5);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_appending_frament_takes_ownership) {

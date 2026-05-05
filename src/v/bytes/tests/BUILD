@@ -13,7 +13,6 @@ redpanda_cc_btest(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
-        "//src/v/bytes:scattered_message",
         "//src/v/bytes:streambuf",
         "//src/v/random:generators",
         "//src/v/test_utils:random_bytes",
@@ -107,7 +106,6 @@ redpanda_cc_fuzz_test(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/bytes:scattered_message",
         "@fmt",
     ],
 )

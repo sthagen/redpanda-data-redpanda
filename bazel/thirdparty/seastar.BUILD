@@ -68,7 +68,7 @@ bool_flag(
 
 int_flag(
     name = "api_level",
-    build_setting_default = 7,
+    build_setting_default = 9,
     make_variable = "API_LEVEL",
 )
 
@@ -168,24 +168,24 @@ genrule(
     name = "http_request_parser",
     srcs = ["src/http/request_parser.rl"],
     outs = ["include/seastar/http/request_parser.hh"],
-    cmd = "$(location @ragel//:ragel_bin) -G2 -o $@ $(SRCS)",
-    tools = ["@ragel//:ragel_bin"],
+    cmd = "$(location @ragel//:ragel) -G2 -o $@ $(SRCS)",
+    tools = ["@ragel"],
 )
 
 genrule(
     name = "http_response_parser",
     srcs = ["src/http/response_parser.rl"],
     outs = ["include/seastar/http/response_parser.hh"],
-    cmd = "$(location @ragel//:ragel_bin) -G2 -o $@ $(SRCS)",
-    tools = ["@ragel//:ragel_bin"],
+    cmd = "$(location @ragel//:ragel) -G2 -o $@ $(SRCS)",
+    tools = ["@ragel"],
 )
 
 genrule(
     name = "http_chunk_parsers",
     srcs = ["src/http/chunk_parsers.rl"],
     outs = ["include/seastar/http/chunk_parsers.hh"],
-    cmd = "$(location @ragel//:ragel_bin) -G2 -o $@ $(SRCS)",
-    tools = ["@ragel//:ragel_bin"],
+    cmd = "$(location @ragel//:ragel) -G2 -o $@ $(SRCS)",
+    tools = ["@ragel"],
 )
 
 proto_library(

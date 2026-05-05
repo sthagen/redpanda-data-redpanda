@@ -20,9 +20,7 @@ namespace utils {
 // Data sink for noop output_stream instance
 // needed to implement scanning
 struct null_data_sink final : ss::data_sink_impl {
-    ss::future<> put(ss::net::packet data) final;
-    ss::future<> put(std::vector<ss::temporary_buffer<char>> all) final;
-    ss::future<> put(ss::temporary_buffer<char>) final;
+    ss::future<> put(std::span<ss::temporary_buffer<char>>) final;
     ss::future<> flush() final;
     ss::future<> close() final;
 };

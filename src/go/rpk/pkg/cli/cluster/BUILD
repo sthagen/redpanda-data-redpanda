@@ -12,9 +12,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/go/rpk/pkg/adminapi",
+        "//src/go/rpk/pkg/cli/cluster/brokers",
         "//src/go/rpk/pkg/cli/cluster/config",
         "//src/go/rpk/pkg/cli/cluster/connections",
         "//src/go/rpk/pkg/cli/cluster/license",
+        "//src/go/rpk/pkg/cli/cluster/loggers",
         "//src/go/rpk/pkg/cli/cluster/maintenance",
         "//src/go/rpk/pkg/cli/cluster/partitions",
         "//src/go/rpk/pkg/cli/cluster/quotas",
@@ -25,6 +27,7 @@ go_library(
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/kafka",
         "//src/go/rpk/pkg/out",
+        "//src/go/rpk/pkg/redpanda",
         "@com_github_docker_go_units//:go-units",
         "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_spf13_afero//:afero",
@@ -37,11 +40,16 @@ go_library(
 
 go_test(
     name = "cluster_test",
-    srcs = ["logdirs_test.go"],
+    srcs = [
+        "info_test.go",
+        "logdirs_test.go",
+    ],
     embed = [":cluster"],
     deps = [
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/out",
+        "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_stretchr_testify//require",
+        "@com_github_twmb_franz_go_pkg_kadm//:kadm",
     ],
 )

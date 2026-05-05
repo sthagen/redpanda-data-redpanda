@@ -10,10 +10,14 @@
 #include "kafka/server/protocol_utils.h"
 
 #include "bytes/iobuf.h"
+#include "bytes/iobuf_parser.h"
 #include "kafka/protocol/flex_versions.h"
 #include "strings/utf8.h"
 
 #include <seastar/core/temporary_buffer.hh>
+
+#include <stdexcept>
+#include <vector>
 
 namespace kafka {
 
@@ -112,7 +116,7 @@ parse_header(ss::input_stream<char>& src, size_t request_size) {
     co_return header;
 }
 
-ss::scattered_message<char> response_as_scattered(response_ptr response) {
+scattered_buffer response_as_scattered(response_ptr response) {
     /*
      * response header:
      *   - int32_t: size (correlation + response size)
@@ -136,25 +140,8 @@ ss::scattered_message<char> response_as_scattered(response_ptr response) {
 
     auto& buf = response->buf();
     buf.prepend(std::move(header));
-    ss::scattered_message<char> msg;
-    auto in = iobuf::iterator_consumer(buf.cbegin(), buf.cend());
-    int32_t chunk_no = 0;
-    in.consume(
-      buf.size_bytes(), [&msg, &chunk_no, &buf](const char* src, size_t sz) {
-          ++chunk_no;
-          vassert(
-            chunk_no <= std::numeric_limits<int16_t>::max(),
-            "Invalid construction of scattered_message. max count:{}. Usually "
-            "a bug with small append() to iobuf. {}",
-            chunk_no,
-            buf);
-          msg.append_static(src, sz);
-          return ss::stop_iteration::no;
-      });
-    // The response must outlive the scattered message since the message
-    // references the iobuf fragments directly via append_static.
-    msg.on_delete([response = std::move(response)] {});
-    return msg;
+
+    return std::move(buf).as_scattered();
 }
 
 } // namespace kafka

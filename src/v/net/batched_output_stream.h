@@ -12,6 +12,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "bytes/iobuf.h"
 #include "ssx/semaphore.h"
 
 #include <seastar/core/iostream.hh>
@@ -76,16 +77,16 @@ public:
     /**
      * @brief Write the given payload to the underlying stream and maybe flush.
      *
-     * Writes the scattered message to the underlying output stream, flushing if
+     * Writes the buffers to the underlying output stream, flushing if
      * this is the only (last) writer trying to write to this stream or if the
      * _cache_size has been reached.
      *
-     * @param msg the message to write to the underlying stream
+     * @param bufs the buffers to write to the underlying stream
      * @return ss::future<bool> a future which resolves when the flush, if any,
      * completes with the wrapped value indicating wheter a flush occurred on
      * this write (true) or not (false)
      */
-    ss::future<bool> write(ss::scattered_message<char> msg);
+    ss::future<bool> write(scattered_buffer bufs);
     ss::future<> flush();
 
     /// \brief calls output_stream<char>::close()

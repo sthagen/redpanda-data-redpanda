@@ -206,7 +206,7 @@ public:
 private:
     using sequence_t = named_type<uint64_t, struct sequence_tag>;
     struct entry {
-        ss::scattered_message<char> scattered_message;
+        scattered_buffer bufs;
         uint32_t correlation_id;
     };
     using requests_queue_t

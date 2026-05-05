@@ -14,7 +14,6 @@
 #include "base/vlog.h"
 #include "bytes/details/io_iterator_consumer.h"
 #include "bytes/iobuf.h"
-#include "bytes/scattered_message.h"
 #include "config/base_property.h"
 #include "http/logger.h"
 #include "ssx/sformat.h"
@@ -319,13 +318,13 @@ ss::future<ss::temporary_buffer<char>> client::receive() {
       });
 }
 
-ss::future<> client::send(ss::scattered_message<char> msg) {
-    _probe->add_outbound_bytes(msg.size());
+ss::future<> client::send(scattered_buffer bufs) {
+    _probe->add_outbound_bytes(iobuf::scattered_size(bufs));
     // Protect the send operation with the dispatch gate to prevent
     // the output stream from being invalidated while writes are in flight
     auto holder = _dispatch_gate.hold();
     try {
-        co_await out().write(std::move(msg));
+        co_await out().write(std::move(bufs));
     } catch (...) {
         _probe->register_transport_error();
         throw;
@@ -607,7 +606,7 @@ ss::future<> client::request_stream::send_some(iobuf&& seq) {
         boost::system::system_error except(error_code);
         return ss::make_exception_future<>(except);
     }
-    auto scattered = iobuf_as_scattered(std::move(outbuf));
+    auto scattered = std::move(outbuf).as_scattered();
     return ss::with_gate(
       _gate,
       [this, seq = std::move(seq), scattered = std::move(scattered)]() mutable {
@@ -705,18 +704,10 @@ struct response_data_source final : ss::data_source_impl {
 struct request_data_sink final : ss::data_sink_impl {
     explicit request_data_sink(client::request_stream_ref req)
       : _io(std::move(req)) {}
-    ss::future<> put(ss::net::packet data) final { return put(data.release()); }
-    ss::future<> put(std::vector<ss::temporary_buffer<char>> all) final {
-        return ss::do_with(
-          std::move(all), [this](std::vector<ss::temporary_buffer<char>>& all) {
-              return ss::do_for_each(
-                all, [this](ss::temporary_buffer<char>& buf) {
-                    return put(std::move(buf));
-                });
-          });
-    }
-    ss::future<> put(ss::temporary_buffer<char> buf) final {
-        return _io->send_some(std::move(buf));
+    ss::future<> put(scattered_buffer_view data) final {
+        for (auto& buf : data) {
+            co_await _io->send_some(std::move(buf));
+        }
     }
     ss::future<> flush() final { return ss::now(); }
     ss::future<> close() final { return _io->send_eof(); }
