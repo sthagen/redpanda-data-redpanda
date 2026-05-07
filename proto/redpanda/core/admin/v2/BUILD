@@ -68,6 +68,25 @@ redpanda_proto_library(
 )
 
 proto_library(
+    name = "features_proto",
+    srcs = ["features.proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/redpanda/core/pbgen:options_proto",
+        "//proto/redpanda/core/pbgen:rpc_proto",
+    ],
+)
+
+redpanda_proto_library(
+    name = "features_redpanda_proto",
+    protos = [
+        ":features_proto",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+proto_library(
     name = "shadow_link_proto",
     srcs = ["shadow_link.proto"],
     visibility = ["//visibility:public"],

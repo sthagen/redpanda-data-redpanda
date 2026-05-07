@@ -101,6 +101,31 @@ public:
 
     ss::future<std::error_code> update_license(security::license&& license);
 
+    /// Outcome of \ref submit_manual_finalize_request.
+    enum class finalize_status {
+        /// Request accepted; the background loop will get one shot at
+        /// advancing the active version on its next tick. Whether the
+        /// advance actually lands depends on cluster preconditions
+        /// (member-version uniformity, node liveness) which are checked
+        /// in the existing loop body. Operators should poll
+        /// `cluster_version` to confirm.
+        ok,
+        /// This node is not the controller leader; the request cannot
+        /// proceed here. The admin layer should map this to UNAVAILABLE.
+        not_leader,
+    };
+
+    /// Arm the in-memory pending flag so the next tick of the background
+    /// loop attempts to replicate a \c feature_update_cmd that advances
+    /// \c active_version. Performs a leadership check only — cluster
+    /// preconditions are validated by the loop body, not here. Caller is
+    /// responsible for confirming the cluster is in a safe-to-finalize
+    /// state before invoking. The pending flag is not persisted; a
+    /// leader change or process crash before the advance lands loses the
+    /// request and the operator must re-issue. Must be invoked on
+    /// \c backend_shard.
+    ss::future<finalize_status> submit_manual_finalize_request();
+
     features::enterprise_feature_report report_enterprise_features() const;
 
     /**
@@ -134,12 +159,16 @@ private:
 
     /// Whether there is work to do in maybe_update_feature_table
     bool updates_pending() {
-        return (!_updates.empty()
-                || !auto_activate_features(
-                      _feature_table.local().get_original_version(),
-                      _feature_table.local().get_active_version())
-                      .empty())
-               && _am_controller_leader;
+        if (!_am_controller_leader) {
+            return false;
+        }
+        if (!_updates.empty() || _manual_finalize_pending) {
+            return true;
+        }
+        return !auto_activate_features(
+                  _feature_table.local().get_original_version(),
+                  _feature_table.local().get_active_version())
+                  .empty();
     }
 
     ss::future<> maybe_log_periodic_reminders();
@@ -191,6 +220,13 @@ private:
     // Keep track of whether this node is the controller leader
     // via leadership notifications
     bool _am_controller_leader{false};
+
+    // Whether an operator has issued a manual finalization request that
+    // has not yet been honored by the background loop. In-memory only:
+    // not persisted to the controller log, so a leader change or crash
+    // before the loop replicates the advance loses the request. Cleared
+    // on leadership change and consumed (one-shot) by the loop body.
+    bool _manual_finalize_pending{false};
 
     // Blocks cluster upgrades until the enterprise license has been verified
     ssx::semaphore _verified_enterprise_license{

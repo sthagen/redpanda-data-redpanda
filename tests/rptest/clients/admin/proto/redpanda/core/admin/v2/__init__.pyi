@@ -1,5 +1,6 @@
 from . import broker_pb2
 from . import cluster_pb2
+from . import features_pb2
 from . import internal
 from . import kafka_connections_pb2
 from . import security_pb2

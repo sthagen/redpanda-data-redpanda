@@ -25,13 +25,17 @@ type ProtobufSerializer struct {
 }
 
 func NewProtobufSerializer(srClient *schemaregistry.Client) (s *ProtobufSerializer, err error) {
-	ser, err := protobuf.NewSerializer(*srClient, serde.ValueSerde, protobuf.NewSerializerConfig())
+	serConf := protobuf.NewSerializerConfig()
+	serConf.SubjectNameStrategyType = serde.TopicNameStrategyType
+	ser, err := protobuf.NewSerializer(*srClient, serde.ValueSerde, serConf)
 
 	if err != nil {
 		return nil, err
 	}
 
-	deser, err := protobuf.NewDeserializer(*srClient, serde.ValueSerde, protobuf.NewDeserializerConfig())
+	deserConf := protobuf.NewDeserializerConfig()
+	deserConf.SubjectNameStrategyType = serde.TopicNameStrategyType
+	deser, err := protobuf.NewDeserializer(*srClient, serde.ValueSerde, deserConf)
 
 	if err != nil {
 		return nil, err

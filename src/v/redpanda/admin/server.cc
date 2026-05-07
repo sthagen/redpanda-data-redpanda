@@ -2068,6 +2068,12 @@ void config_multi_property_validation(
         errors[ss::sstring{updated_config.default_redpanda_storage_mode.name()}]
           = storage_mode_err.value();
     }
+
+    auto oidc_proxy_err = config::validate_oidc_http_proxy_url(updated_config);
+    if (oidc_proxy_err.has_value()) {
+        errors[ss::sstring{updated_config.oidc_http_proxy_url.name()}]
+          = oidc_proxy_err.value();
+    }
 }
 } // namespace
 
@@ -3421,7 +3427,7 @@ admin_server::self_test_start_handler(std::unique_ptr<ss::http::request> req) {
               return self_test_frontend.start_test(r, ids);
           });
         vlog(adminlog.info, "Request to start self test succeeded: {}", tid);
-        co_return ss::json::json_return_type(tid);
+        co_return ss::json::json_return_type(ss::sstring(tid));
     } catch (const std::exception& ex) {
         throw ss::httpd::base_exception(
           fmt::format("Failed to start self test, reason: {}", ex),

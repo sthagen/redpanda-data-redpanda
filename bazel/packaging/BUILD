@@ -1,6 +1,6 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
-load(":packaging.bzl", "native_package", "redpanda_deb_package", "redpanda_package", "script_package")
+load(":packaging.bzl", "redpanda_deb_package", "redpanda_package", "script_package")
 
 # this is the real binary. the rpk alias at the root //:rpk is a wrapper.
 alias(
@@ -116,30 +116,12 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-native_package(
-    name = "direct_consumer_verifier_ducktape",
-    out = "direct_consumer_verifier_ducktape",
-    cc_binaries = [
-        "//src/v/kafka/client/direct_consumer/verifier:direct_consumer_verifier",
-    ],
-    install_path = "/opt/redpanda_installs/direct_consumer_verifier",
-)
-
 script_package(
     name = "controller_forced_reconfiguration_ducktape",
     out = "controller_forced_reconfiguration_ducktape",
     scripts = {
         "//tools/controller_forced_reconfiguration:invoke_controller_reconfiguration.py": "invoke_controller_reconfiguration",
     },
-)
-
-native_package(
-    name = "direct_consumer_verifier_tar",
-    out = "direct_consumer_verifier.tar.gz",
-    cc_binaries = [
-        "//src/v/kafka/client/direct_consumer/verifier:direct_consumer_verifier",
-    ],
-    install_path = "/opt/redpanda_installs/direct_consumer_verifier",
 )
 
 # NOTE: this image is currently experimental, don't use this for production.

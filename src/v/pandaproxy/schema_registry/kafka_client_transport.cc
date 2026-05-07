@@ -18,6 +18,7 @@
 #include "cluster/security_frontend.h"
 #include "config/broker_authn_endpoint.h"
 #include "config/configuration.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/client.h"
 #include "kafka/client/client_fetch_batch_reader.h"
 #include "kafka/client/config_utils.h"
@@ -44,7 +45,7 @@ namespace pandaproxy::schema_registry {
 namespace {
 
 ss::future<> create_acls(cluster::security_frontend& security_fe) {
-    std::vector<security::acl_binding> principal_acl_binding{
+    static const chunked_vector<security::acl_binding> principal_acl_binding{
       security::acl_binding{
         security::resource_pattern{
           security::resource_type::topic,
@@ -56,7 +57,8 @@ ss::future<> create_acls(cluster::security_frontend& security_fe) {
           security::acl_operation::all,
           security::acl_permission::allow}}};
 
-    auto err_vec = co_await security_fe.create_acls(principal_acl_binding, 5s);
+    auto err_vec = co_await security_fe.create_acls(
+      principal_acl_binding.copy(), 5s);
     auto it = std::find_if(err_vec.begin(), err_vec.end(), [](const auto& err) {
         return err != cluster::errc::success;
     });

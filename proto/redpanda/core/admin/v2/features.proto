@@ -1,0 +1,61 @@
+// Copyright 2026 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.v2;
+
+import "proto/redpanda/core/pbgen/options.proto";
+import "proto/redpanda/core/pbgen/rpc.proto";
+
+option (pbgen.cpp_namespace) = "proto::admin";
+
+// The FeaturesService manages Redpanda's feature-flag and cluster-version
+// lifecycle.
+service FeaturesService {
+    // FinalizeUpgrade
+    //
+    // Requests that the controller commit the cluster to the latest
+    // logical version reported uniformly by all members, activating
+    // version-gated features and making the prior version unavailable
+    // for downgrade. Valid only when the cluster configuration
+    // `features_auto_finalization` is disabled. The target version is
+    // determined from current cluster state — there is no version
+    // parameter.
+    //
+    // The request returns success once accepted by the controller
+    // leader; the actual advance happens asynchronously and depends on
+    // cluster preconditions (member-version uniformity, node liveness)
+    // observed by the controller's background loop. If those
+    // preconditions are not met, the advance is silently skipped and
+    // the operator must re-issue once the cluster is in a safe state.
+    // Operators should poll `cluster_version` (via `GET /v1/features`)
+    // to confirm.
+    rpc FinalizeUpgrade(FinalizeUpgradeRequest)
+        returns (FinalizeUpgradeResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
+}
+
+// FinalizeUpgradeRequest takes no parameters: the target version is
+// determined from current cluster state.
+message FinalizeUpgradeRequest {}
+
+// FinalizeUpgradeResponse is returned on successful submission. The
+// actual version advance happens asynchronously on the controller
+// leader's background loop; poll the cluster's active version (via
+// `GET /v1/features`) to confirm.
+message FinalizeUpgradeResponse {}

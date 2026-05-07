@@ -140,6 +140,11 @@ feature_manager::start(std::vector<model::node_id>&& cluster_founder_nodes) {
             // see a health report from each node.
             _node_versions.clear();
 
+            // Manual finalization requests are term-scoped: a stale value
+            // carried across leadership changes would be misleading on
+            // re-election. Operators must re-issue against the new leader.
+            _manual_finalize_pending = false;
+
             vlog(
               clusterlog.debug, "Controller leader notification term {}", term);
             _am_controller_leader = leader_id == *config::node().node_id();
@@ -543,6 +548,14 @@ void feature_manager::update_node_version(
 ss::future<> feature_manager::do_maybe_update_active_version() {
     vassert(ss::this_shard_id() == backend_shard, "Wrong shard!");
 
+    // One-shot consume of the manual-finalization request: every
+    // invocation clears the flag and decides what to do based on the
+    // captured value. Any early return or throw below leaves the flag
+    // cleared, so the next loop tick will defer (until the operator
+    // re-issues) when auto-finalization is disabled.
+    const bool was_manual_finalize_pending = std::exchange(
+      _manual_finalize_pending, false);
+
     // Consume any accumulated updates.  Important to do this even if
     // not leader, so that we drain it and allow maybe_update_active_version
     // to sleep on _update_wait.
@@ -571,6 +584,21 @@ ss::future<> feature_manager::do_maybe_update_active_version() {
           "No update, max version {} not ahead of {}",
           max_version,
           active_version);
+        co_return;
+    }
+
+    // When auto-finalization is disabled and no manual request was
+    // captured this tick, defer the advance until the operator
+    // explicitly requests it via the admin API.
+    if (
+      !config::shard_local_cfg().features_auto_finalization()
+      && !was_manual_finalize_pending) {
+        vlog(
+          clusterlog.debug,
+          "Deferring cluster active version advance to {}: "
+          "features_auto_finalization is disabled and no manual request "
+          "is pending",
+          max_version);
         co_return;
     }
 
@@ -648,6 +676,23 @@ ss::future<> feature_manager::do_maybe_update_active_version() {
     co_await replicate_feature_update_cmd(std::move(data));
 
     vlog(clusterlog.info, "Updated cluster (logical version {})", max_version);
+}
+
+ss::future<feature_manager::finalize_status>
+feature_manager::submit_manual_finalize_request() {
+    vassert(ss::this_shard_id() == backend_shard, "Wrong shard!");
+
+    if (!_am_controller_leader) {
+        co_return finalize_status::not_leader;
+    }
+
+    // Arm the flag and wake the loop. The loop body validates cluster
+    // preconditions on its next tick; if they fail, the existing throw
+    // path triggers retry, but the flag is cleared at the start of the
+    // attempt so the retry will defer until the operator re-issues.
+    _manual_finalize_pending = true;
+    _update_wait.signal();
+    co_return finalize_status::ok;
 }
 
 ss::future<> feature_manager::do_maybe_activate_features() {

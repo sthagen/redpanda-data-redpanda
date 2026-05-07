@@ -182,6 +182,10 @@ ss::future<> metadata_dissemination_service::apply_leadership_notification(
               return leaders.update_partition_leader(ntp, revision, term, lid);
           });
           if (lid == _self.id()) {
+              // only count leadership changes on the node becoming the leader
+              _topics.local().increment_leadership_changes(
+                model::topic_namespace_view(ntp));
+
               // only disseminate from current leader
               f = f.then(
                 [this, ntp = std::move(ntp), term, lid, revision]() mutable {

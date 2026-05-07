@@ -14,6 +14,7 @@
 #include "redpanda/admin/server.h"
 #include "redpanda/admin/services/cluster.h"
 #include "redpanda/admin/services/datalake/datalake.h"
+#include "redpanda/admin/services/features.h"
 #include "redpanda/admin/services/internal/breakglass.h"
 #include "redpanda/admin/services/internal/debug.h"
 #include "redpanda/admin/services/internal/level_zero.h"
@@ -94,6 +95,9 @@ void application::configure_admin_server(model::node_id node_id) {
               create_client(),
               std::ref(_kafka_connections_service),
               controller->get_feature_table()));
+          s.add_service(
+            std::make_unique<admin::features_service_impl>(
+              create_client(), controller.get(), std::ref(metadata_cache)));
           s.add_service(
             std::make_unique<admin::internal::breakglass_service_impl>(
               controller.get()));

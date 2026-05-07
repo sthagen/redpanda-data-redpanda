@@ -125,9 +125,9 @@ SEASTAR_THREAD_TEST_CASE(quota_manager_fetch_throttling) {
     {
         auto wait_until_throttle = [now, &qm, &delay] {
             return tests::cooperative_spin_wait_with_timeout(
-              5s, [now, &qm, &delay] {
-                  delay = qm.throttle_fetch_tp(user, cid, now).get();
-                  return delay > 0ms;
+              5s, [now, &qm, &delay](this auto) -> ss::future<bool> {
+                  delay = co_await qm.throttle_fetch_tp(user, cid, now);
+                  co_return delay > 0ms;
               });
         };
         wait_until_throttle().get();
@@ -286,12 +286,12 @@ SEASTAR_THREAD_TEST_CASE(update_test) {
         {
             auto wait_until_throttle = [now, &f, &delay, client_id] {
                 return tests::cooperative_spin_wait_with_timeout(
-                  5s, [now, &f, &delay, client_id] {
-                      delay = f.sqm.local()
-                                .record_produce_tp_and_throttle(
-                                  user, client_id, 0, now)
-                                .get();
-                      return delay > 0ms;
+                  5s,
+                  [now, &f, &delay, client_id](this auto) -> ss::future<bool> {
+                      delay
+                        = co_await f.sqm.local().record_produce_tp_and_throttle(
+                          user, client_id, 0, now);
+                      co_return delay > 0ms;
                   });
             };
             wait_until_throttle().get();
@@ -330,11 +330,11 @@ SEASTAR_THREAD_TEST_CASE(update_test) {
         {
             auto wait_until_throttle = [now, &f, &delay, client_id] {
                 return tests::cooperative_spin_wait_with_timeout(
-                  5s, [now, &f, &delay, client_id] {
-                      delay = f.sqm.local()
-                                .throttle_fetch_tp(user, client_id, now)
-                                .get();
-                      return delay > 0ms;
+                  5s,
+                  [now, &f, &delay, client_id](this auto) -> ss::future<bool> {
+                      delay = co_await f.sqm.local().throttle_fetch_tp(
+                        user, client_id, now);
+                      co_return delay > 0ms;
                   });
             };
             wait_until_throttle().get();
@@ -413,29 +413,28 @@ SEASTAR_THREAD_TEST_CASE(test_increasing_specificity) {
     };
 
     const auto make_records = [&f] [[nodiscard]] (
-                                const quota_manager::clock::time_point& now,
-                                request_size r = {}) {
-        auto produce_delay = f.sqm.local()
-                               .record_produce_tp_and_throttle(
-                                 user, cid, r.produce_bytes, now)
-                               .get();
+                                this auto,
+                                quota_manager::clock::time_point now,
+                                request_size r = {}) -> ss::future<delays> {
+        auto produce_delay
+          = co_await f.sqm.local().record_produce_tp_and_throttle(
+            user, cid, r.produce_bytes, now);
 
-        f.sqm.local().record_fetch_tp(user, cid, r.consume_bytes, now).get();
-        auto consume_delay
-          = f.sqm.local().throttle_fetch_tp(user, cid, now).get();
+        co_await f.sqm.local().record_fetch_tp(user, cid, r.consume_bytes, now);
+        auto consume_delay = co_await f.sqm.local().throttle_fetch_tp(
+          user, cid, now);
 
         // partition mutations throttles after we have exceeded the capacity.
         // Add a dummy second call to simplify testing code below
-        f.sqm.local()
-          .record_partition_mutations(user, cid, r.n_mutations, now)
-          .get();
-        auto pm_delay
-          = f.sqm.local().record_partition_mutations(user, cid, 0, now).get();
-        return delays{produce_delay, consume_delay, pm_delay};
+        co_await f.sqm.local().record_partition_mutations(
+          user, cid, r.n_mutations, now);
+        auto pm_delay = co_await f.sqm.local().record_partition_mutations(
+          user, cid, 0, now);
+        co_return delays{produce_delay, consume_delay, pm_delay};
     };
 
     // Sanity: no quotas
-    const delays d = make_records(now);
+    const delays d = make_records(now).get();
     BOOST_REQUIRE(buckets_map->empty());
     BOOST_REQUIRE_EQUAL(d, no_delay);
 
@@ -518,7 +517,7 @@ SEASTAR_THREAD_TEST_CASE(test_increasing_specificity) {
             f.quota_store.local().set_quota(tc.ekey, quota);
 
             // Record zero bytes to update the global map to new rates
-            delays d = make_records(now, zero_bytes);
+            delays d = make_records(now, zero_bytes).get();
 
             // Spin until the correct throttling is returned. The token buckets
             // are updated through a relaxed memory model. There is some
@@ -526,9 +525,10 @@ SEASTAR_THREAD_TEST_CASE(test_increasing_specificity) {
             {
                 auto wait_until_throttle = [now, &make_records, &d] {
                     return tests::cooperative_spin_wait_with_timeout(
-                      5s, [now, &make_records, &d] {
-                          d = make_records(now, zero_bytes);
-                          return d == no_delay;
+                      5s,
+                      [now, &make_records, &d](this auto) -> ss::future<bool> {
+                          d = co_await make_records(now, zero_bytes);
+                          co_return d == no_delay;
                       });
                 };
                 wait_until_throttle().get();
@@ -552,20 +552,23 @@ SEASTAR_THREAD_TEST_CASE(test_increasing_specificity) {
 
             // Requesting double the quota should end up with 1s throttling time
             delays throttle = make_records(
-              now,
-              {2 * max_rate.produce_bytes,
-               2 * max_rate.consume_bytes,
-               2 * max_rate.n_mutations});
+                                now,
+                                {2 * max_rate.produce_bytes,
+                                 2 * max_rate.consume_bytes,
+                                 2 * max_rate.n_mutations})
+                                .get();
 
             // Spin until the correct throttling is returned.
             {
                 auto wait_until_throttle = [now, &make_records, &throttle] {
                     return tests::cooperative_spin_wait_with_timeout(
-                      5s, [now, &make_records, &throttle] {
-                          throttle = make_records(now, zero_bytes);
-                          return throttle.produce_delay > 0s
-                                 && throttle.consume_delay > 0s
-                                 && throttle.pm_delay > 0s;
+                      5s,
+                      [now, &make_records, &throttle](
+                        this auto) -> ss::future<bool> {
+                          throttle = co_await make_records(now, zero_bytes);
+                          co_return throttle.produce_delay > 0s
+                            && throttle.consume_delay > 0s
+                            && throttle.pm_delay > 0s;
                       });
                 };
                 wait_until_throttle().get();

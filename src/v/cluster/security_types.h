@@ -13,6 +13,7 @@
 
 #include "base/format_to.h"
 #include "cluster/errc.h"
+#include "container/chunked_vector.h"
 #include "model/timeout_clock.h"
 #include "security/acl.h"
 #include "security/role.h"
@@ -33,7 +34,13 @@ struct create_acls_cmd_data
       serde::version<0>,
       serde::compat_version<0>> {
     static constexpr int8_t current_version = 1;
-    std::vector<security::acl_binding> bindings;
+    chunked_vector<security::acl_binding> bindings;
+
+    create_acls_cmd_data copy() const {
+        return create_acls_cmd_data{
+          .bindings = bindings.copy(),
+        };
+    }
 
     friend bool operator==(
       const create_acls_cmd_data&, const create_acls_cmd_data&) = default;
@@ -58,6 +65,10 @@ struct create_acls_request
       : data(std::move(data))
       , timeout(timeout) {}
 
+    create_acls_request copy() const {
+        return create_acls_request{data.copy(), timeout};
+    }
+
     friend bool operator==(
       const create_acls_request&, const create_acls_request&) = default;
     fmt::iterator format_to(fmt::iterator it) const {
@@ -71,7 +82,11 @@ struct create_acls_request
 struct create_acls_reply
   : serde::
       envelope<create_acls_reply, serde::version<0>, serde::compat_version<0>> {
-    std::vector<errc> results;
+    chunked_vector<errc> results;
+
+    create_acls_reply copy() const {
+        return create_acls_reply{.results = results.copy()};
+    }
 
     friend bool
     operator==(const create_acls_reply&, const create_acls_reply&) = default;
@@ -88,7 +103,13 @@ struct delete_acls_cmd_data
       serde::version<0>,
       serde::compat_version<0>> {
     static constexpr int8_t current_version = 1;
-    std::vector<security::acl_binding_filter> filters;
+    chunked_vector<security::acl_binding_filter> filters;
+
+    delete_acls_cmd_data copy() const {
+        return delete_acls_cmd_data{
+          .filters = filters.copy(),
+        };
+    }
 
     friend bool operator==(
       const delete_acls_cmd_data&, const delete_acls_cmd_data&) = default;
@@ -106,7 +127,14 @@ struct delete_acls_result
       serde::version<0>,
       serde::compat_version<0>> {
     errc error;
-    std::vector<security::acl_binding> bindings;
+    chunked_vector<security::acl_binding> bindings;
+
+    delete_acls_result copy() const {
+        return delete_acls_result{
+          .error = error,
+          .bindings = bindings.copy(),
+        };
+    }
 
     friend bool
     operator==(const delete_acls_result&, const delete_acls_result&) = default;
@@ -132,6 +160,10 @@ struct delete_acls_request
       : data(std::move(data))
       , timeout(timeout) {}
 
+    delete_acls_request copy() const {
+        return delete_acls_request{data.copy(), timeout};
+    }
+
     friend bool operator==(
       const delete_acls_request&, const delete_acls_request&) = default;
     fmt::iterator format_to(fmt::iterator it) const {
@@ -144,7 +176,16 @@ struct delete_acls_request
 struct delete_acls_reply
   : serde::
       envelope<delete_acls_reply, serde::version<0>, serde::compat_version<0>> {
-    std::vector<delete_acls_result> results;
+    chunked_vector<delete_acls_result> results;
+
+    delete_acls_reply copy() const {
+        chunked_vector<delete_acls_result> results_copy;
+        results_copy.reserve(results.size());
+        for (const auto& r : results) {
+            results_copy.push_back(r.copy());
+        }
+        return delete_acls_reply{.results = std::move(results_copy)};
+    }
 
     friend bool
     operator==(const delete_acls_reply&, const delete_acls_reply&) = default;

@@ -10,6 +10,7 @@
 #include "cluster/topic_table_probe.h"
 
 #include "cluster/cluster_utils.h"
+#include "cluster/logger.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
@@ -130,11 +131,17 @@ void topic_table_probe::handle_update_cancel_finish(
 
 void topic_table_probe::handle_topic_creation(
   create_topic_cmd::key_t topic_namespace) {
-    if (
-      config::shard_local_cfg().disable_public_metrics()
-      || ss::this_shard_id() != 0) {
+    bool public_disabled = config::shard_local_cfg().disable_public_metrics();
+    bool internal_disabled = config::shard_local_cfg().disable_metrics();
+
+    if (ss::this_shard_id() != 0 || (public_disabled && internal_disabled)) {
         return;
     }
+
+    auto [it, inserted] = _per_topic.insert(
+      {topic_namespace, std::make_unique<per_topic_state>()});
+    vassert(inserted, "Topic should not exist already");
+    auto& state = *it->second;
 
     const auto labels = {
       metrics::make_namespaced_label("namespace")(topic_namespace.ns()),
@@ -142,48 +149,72 @@ void topic_table_probe::handle_topic_creation(
 
     namespace sm = ss::metrics;
 
-    auto [it, inserted] = _topics_metrics.emplace(
-      topic_namespace, metrics::public_metrics_handle);
+    if (!public_disabled) {
+        state.public_metrics.add_group(
+          prometheus_sanitize::metrics_name("kafka"),
+          {sm::make_gauge(
+             "replicas",
+             [this, topic_namespace] {
+                 auto md = _topic_table.get_topic_metadata_ref(topic_namespace);
+                 if (md) {
+                     return md.value().get().get_replication_factor();
+                 }
 
-    it->second.add_group(
-      prometheus_sanitize::metrics_name("kafka"),
-      {sm::make_gauge(
-         "replicas",
-         [this, topic_namespace] {
-             auto md = _topic_table.get_topic_metadata_ref(topic_namespace);
-             if (md) {
-                 return md.value().get().get_replication_factor();
-             }
+                 return cluster::replication_factor{0};
+             },
+             sm::description("Configured number of replicas for the topic"),
+             labels)
+             .aggregate({sm::shard_label}),
+           sm::make_gauge(
+             "partitions",
+             [this, topic_namespace] {
+                 auto md = _topic_table.get_topic_metadata_ref(topic_namespace);
+                 if (md) {
+                     return md.value()
+                       .get()
+                       .get_configuration()
+                       .partition_count;
+                 }
 
-             return cluster::replication_factor{0};
-         },
-         sm::description("Configured number of replicas for the topic"),
-         labels)
-         .aggregate({sm::shard_label}),
-       sm::make_gauge(
-         "partitions",
-         [this, topic_namespace] {
-             auto md = _topic_table.get_topic_metadata_ref(topic_namespace);
-             if (md) {
-                 return md.value().get().get_configuration().partition_count;
-             }
+                 return int32_t{0};
+             },
+             sm::description("Configured number of partitions for the topic"),
+             labels)
+             .aggregate({sm::shard_label})});
+    }
 
-             return int32_t{0};
-         },
-         sm::description("Configured number of partitions for the topic"),
-         labels)
-         .aggregate({sm::shard_label})});
+    if (!internal_disabled) {
+        state.internal_metrics.add_group(
+          prometheus_sanitize::metrics_name("kafka"),
+          {sm::make_gauge(
+             "leadership_changes",
+             [&counter = state.leadership_changes] { return counter; },
+             sm::description(
+               "Number of leadership changes for partitions of this topic"),
+             labels)
+             .aggregate({sm::shard_label})});
+    }
 }
 
 void topic_table_probe::handle_topic_deletion(
   const delete_topic_cmd::key_t& topic_namespace) {
-    if (
-      config::shard_local_cfg().disable_public_metrics()
-      || ss::this_shard_id() != 0) {
+    if (ss::this_shard_id() != 0 || (config::shard_local_cfg().disable_metrics() && config::shard_local_cfg().disable_public_metrics())) {
         return;
     }
 
-    _topics_metrics.erase(topic_namespace);
+    _per_topic.erase(topic_namespace);
+}
+
+void topic_table_probe::increment_leadership_changes(
+  model::topic_namespace_view tp_ns) {
+    if (config::shard_local_cfg().disable_metrics()) {
+        return;
+    }
+    if (auto it = _per_topic.find(tp_ns); it != _per_topic.end()) {
+        ++it->second->leadership_changes;
+    } else {
+        vlog(clusterlog.warn, "leadership change for unknown topic {}", tp_ns);
+    }
 }
 
 } // namespace cluster

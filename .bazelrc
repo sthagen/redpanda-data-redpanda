@@ -5,6 +5,10 @@ common --extra_toolchains=@current_llvm_toolchain//:all
 # flakiness due to Github
 startup --experimental_remote_repo_contents_cache
 
+# Triple repo downloader retries to try working around github flakiness.
+common --experimental_repository_downloader_retries=15
+common --http_connector_attempts=24
+
 # Bazel 9 removes native C++ rule symbols. Autoload them for external rulesets
 # that have not migrated all generated BUILD/Starlark files to explicit loads.
 common --incompatible_autoload_externally=+@rules_cc
@@ -163,7 +167,22 @@ build:san-all  --linkopt=-fsanitize=address,undefined,vptr,function,alignment
 # PGO + release, but should work with any.
 build:lto --copt -flto=thin
 build:lto --linkopt -flto=thin
-build:lto --@rules_rust//rust/settings:lto=fat
+# Use thin LTO for Rust to match the C++ side. With fat LTO, rustc's
+# LLVM Internalize pass downgrades the auto-injected `__rustc::*`
+# allocator shim symbols from GLOBAL to LOCAL binding when emitting the
+# empty staticlib provided by rules_rust's
+# `experimental_use_allocator_libraries_with_mangled_symbols`. Nothing
+# inside the empty crate references those symbols, so LTO assumes
+# they're internal. The rust stdlib rlibs still emit GLOBAL undefined
+# refs to them, and ELF won't bind a GLOBAL ref to a LOCAL def across
+# object files, so the cc_binary link fails with:
+#   ld.lld: error: undefined symbol: __rustc::__rust_no_alloc_shim_is_unstable_v2
+# Thin LTO doesn't run Internalize across the crate the way fat LTO
+# does, so the symbols stay GLOBAL and the link succeeds. We don't
+# lose any wasm performance: every wasmtime crate is an rlib (rules_rust
+# emits `-Clinker-plugin-lto` regardless of -Clto mode) and the actual
+# cross-language LTO happens at the C++ link step, which is thin too.
+build:lto --@rules_rust//rust/settings:lto=thin
 build:lto --@rules_rust//rust/settings:extra_rustc_flag=-Ccodegen-units=1
 # I've seen others claim these flags help with LTO and the final binary, but these also
 # require a specific version of clang and I don't really want to tie rustc version with

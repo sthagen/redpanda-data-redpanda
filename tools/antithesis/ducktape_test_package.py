@@ -99,7 +99,6 @@ def generate_globals_json(log_level: str) -> str:
     return json.dumps(
         {
             "rp_install_path_root": f"{INSTALL_ROOT}/redpanda",
-            "direct_consumer_verifier_root": f"{INSTALL_ROOT}/direct_consumer_verifier",
             "redpanda_log_level": log_level,
             "scale": "local",
             "enable_cov": "OFF",
@@ -140,7 +139,6 @@ def build_redpanda(instrumented: bool, extra_bazel_args: list[str]) -> None:
         "bazel",
         "build",
         "//bazel/packaging:ducktape",
-        "//bazel/packaging:direct_consumer_verifier_ducktape",
     ]
     if instrumented:
         cmd.append("--config=antithesis")
@@ -196,7 +194,7 @@ def build_node_image(
         build_ctx_args: list[str] = []
         if not rp_image:
             pkg_root = REPO_ROOT / "bazel-bin" / "bazel" / "packaging"
-            for pkg in ("redpanda_ducktape", "direct_consumer_verifier_ducktape"):
+            for pkg in ("redpanda_ducktape",):
                 if not (pkg_root / pkg).exists():
                     sys.exit(
                         f"Error: {pkg_root / pkg} not found. "

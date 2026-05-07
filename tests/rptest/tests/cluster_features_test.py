@@ -10,10 +10,14 @@
 import json
 import time
 
+from connectrpc.errors import ConnectError, ConnectErrorCode
 from ducktape.errors import TimeoutError as DucktapeTimeoutError
 from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until
+from requests.exceptions import HTTPError
 
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import features_pb2
+from rptest.clients.admin.v2 import Admin as AdminV2
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST
@@ -419,8 +423,10 @@ class FeaturesSingleNodeUpgradeTest(FeaturesTestBase):
         self.installer.install([self.redpanda.nodes[0]], RedpandaInstaller.HEAD)
         self.redpanda.restart_nodes([self.redpanda.nodes[0]])
         wait_until(
-            lambda: self.head_latest_logical_version
-            == self.admin.get_features()["cluster_version"],
+            lambda: (
+                self.head_latest_logical_version
+                == self.admin.get_features()["cluster_version"]
+            ),
             timeout_sec=10,
             backoff_sec=1,
         )
@@ -643,8 +649,9 @@ class FeaturesUpgradeActivationTest(FeaturesTestBase):
             )
             self.redpanda.restart_nodes(self.redpanda.nodes)
             self.redpanda.wait_until(
-                lambda: self._get_features_map()[FEATURE_ALPHA_NAME]["state"]
-                == "available",
+                lambda: (
+                    self._get_features_map()[FEATURE_ALPHA_NAME]["state"] == "available"
+                ),
                 timeout_sec=30,
                 backoff_sec=1,
             )
@@ -719,4 +726,302 @@ class FeaturesUpgradeActivationTest(FeaturesTestBase):
             # Now that the feature's policy is to auto-activate, it should activate
             self._wait_for_feature_everywhere(
                 lambda fm: fm[FEATURE_BRAVO_NAME]["state"] == "active"
+            )
+
+
+# Synthetic logical versions used by ManualFinalizationTest to simulate an
+# upgrade scenario without requiring real binary versioning.
+MANUAL_FINALIZE_OLD_VERSION = 2000
+MANUAL_FINALIZE_NEW_VERSION = 2001
+
+
+class ManualFinalizationTest(FeaturesTestBase):
+    """
+    Tests for the manual upgrade finalization flow controlled by
+    `features_auto_finalization`.
+
+    Uses synthetic logical versions (via `__REDPANDA_LATEST_LOGICAL_VERSION`)
+    to simulate an upgrade without an actual binary install/upgrade. The
+    cluster boots at MANUAL_FINALIZE_OLD_VERSION, and individual nodes are
+    "upgraded" by restarting them with the env var bumped to
+    MANUAL_FINALIZE_NEW_VERSION.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, num_brokers=3, **kwargs)
+        self.admin_v2 = AdminV2(self.redpanda)
+
+    def setUp(self):
+        # Defer cluster start to test bodies so each test can choose its own
+        # initial logical version.
+        pass
+
+    def _start_at_old(self):
+        """Start the cluster with all nodes reporting the old logical version."""
+        self.redpanda.set_environment(
+            {
+                "__REDPANDA_LATEST_LOGICAL_VERSION": str(MANUAL_FINALIZE_OLD_VERSION),
+            }
+        )
+        self.redpanda.start()
+        wait_until(
+            lambda: (
+                self.admin.get_features()["cluster_version"]
+                == MANUAL_FINALIZE_OLD_VERSION
+            ),
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+
+    def _restart_at_new(self, nodes):
+        """Restart the given nodes with the new logical version env var."""
+        self.redpanda.set_environment(
+            {
+                "__REDPANDA_LATEST_LOGICAL_VERSION": str(MANUAL_FINALIZE_NEW_VERSION),
+            }
+        )
+        self.redpanda.restart_nodes(nodes)
+
+    def _disable_auto_finalization(self):
+        self.redpanda.set_cluster_config({"features_auto_finalization": False})
+
+    def _finalize(self):
+        return self.admin_v2.features().finalize_upgrade(
+            features_pb2.FinalizeUpgradeRequest()
+        )
+
+    @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_auto_finalization_disabled_blocks_advance(self):
+        """
+        With `features_auto_finalization=false` and a completed rolling
+        upgrade, `cluster_version` must not auto-advance. The controller
+        leader logs a rate-limited "deferring advance" message.
+        """
+        self._start_at_old()
+        self._disable_auto_finalization()
+
+        self._restart_at_new(self.redpanda.nodes)
+
+        # Give the controller leader plenty of time to observe all nodes at
+        # the new version. cluster_version must not advance because
+        # auto-finalization is off and no manual request has been issued.
+        time.sleep(15)
+        assert (
+            self.admin.get_features()["cluster_version"] == MANUAL_FINALIZE_OLD_VERSION
+        )
+
+    @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_manual_request_triggers_advance(self):
+        """
+        With `features_auto_finalization=false`, an explicit FinalizeUpgrade
+        RPC drives `cluster_version` forward to the version reported uniformly
+        by all members.
+        """
+        self._start_at_old()
+        self._disable_auto_finalization()
+
+        self._restart_at_new(self.redpanda.nodes)
+
+        # Confirm the cluster is in the deferred state before triggering.
+        time.sleep(5)
+        assert (
+            self.admin.get_features()["cluster_version"] == MANUAL_FINALIZE_OLD_VERSION
+        )
+
+        self._finalize()
+
+        self._wait_for_version_everywhere(MANUAL_FINALIZE_NEW_VERSION)
+
+    @cluster(num_nodes=3)
+    def test_manual_request_rejected_when_auto_enabled(self):
+        """
+        FinalizeUpgrade is only meaningful when auto-finalization is disabled.
+        With the default `features_auto_finalization=true`, the RPC must
+        return FAILED_PRECONDITION.
+        """
+        self.redpanda.start()
+
+        with expect_exception(
+            ConnectError,
+            lambda e: e.code == ConnectErrorCode.FAILED_PRECONDITION,
+        ):
+            self._finalize()
+
+    @cluster(num_nodes=3)
+    def test_manual_request_idempotent_when_no_advance_pending(self):
+        """
+        FinalizeUpgrade is a no-op (success) when the cluster is already at
+        the latest reported version.
+        """
+        self.redpanda.start()
+        self._disable_auto_finalization()
+
+        # Cluster is already at the binary's latest version: nothing pending.
+        # The RPC should return success without changing state.
+        version_before = self.admin.get_features()["cluster_version"]
+
+        self._finalize()
+        # Repeated calls should also succeed.
+        self._finalize()
+
+        time.sleep(2)
+        assert self.admin.get_features()["cluster_version"] == version_before
+
+    @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_manual_request_does_not_advance_on_mixed_version(self):
+        """
+        With nodes reporting different logical versions (a partial
+        upgrade), the request is accepted but the background loop's
+        precondition check rejects the advance. The cluster stays at
+        the old version.
+        """
+        self._start_at_old()
+        self._disable_auto_finalization()
+
+        # Upgrade only two of three nodes — leave the third at OLD_VERSION.
+        self._restart_at_new(self.redpanda.nodes[:2])
+
+        # Wait long enough for health reports to propagate so the controller
+        # leader's view of node versions is up to date.
+        time.sleep(15)
+
+        self._finalize()
+
+        # Give the loop time to attempt and back off.
+        time.sleep(15)
+        assert (
+            self.admin.get_features()["cluster_version"] == MANUAL_FINALIZE_OLD_VERSION
+        )
+
+    @cluster(
+        num_nodes=3,
+        log_allow_list=RESTART_LOG_ALLOW_LIST + ["node_status_backend.*Failed to send"],
+    )
+    def test_manual_request_does_not_advance_with_dead_node(self):
+        """
+        With a member node forcibly stopped, the request is accepted but
+        the background loop's liveness check rejects the advance. The
+        cluster stays at the old version.
+        """
+        self._start_at_old()
+        self._disable_auto_finalization()
+
+        self._restart_at_new(self.redpanda.nodes)
+        time.sleep(5)
+
+        # Pick a node that isn't the controller leader so the controller
+        # itself stays available to serve the RPC.
+        leader_id = self.admin.await_stable_leader(
+            namespace="redpanda", topic="controller", partition=0
+        )
+        victim = next(
+            n for n in self.redpanda.nodes if self.redpanda.node_id(n) != leader_id
+        )
+        self.redpanda.stop_node(victim, forced=True)
+
+        # Wait for the controller's health monitor to mark the victim
+        # not-alive (alive_timeout_ms default is 5s). Without this wait
+        # the loop's first attempt could land before the liveness check
+        # turns negative, and the advance would proceed.
+        time.sleep(15)
+
+        self._finalize()
+
+        # Give the loop time to attempt and back off.
+        time.sleep(15)
+        assert (
+            self.admin.get_features()["cluster_version"] == MANUAL_FINALIZE_OLD_VERSION
+        )
+
+    @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_manual_request_lost_on_leader_failover(self):
+        """
+        The pending request is held only in memory on the controller leader.
+        A leader change before the loop tick replicates the advance loses the
+        request, and the operator must re-issue against the new leader.
+        """
+        self._start_at_old()
+        self._disable_auto_finalization()
+
+        self._restart_at_new(self.redpanda.nodes)
+        time.sleep(5)
+        assert (
+            self.admin.get_features()["cluster_version"] == MANUAL_FINALIZE_OLD_VERSION
+        )
+
+        old_leader = self.admin.await_stable_leader(
+            namespace="redpanda", topic="controller", partition=0
+        )
+        target = next(
+            self.redpanda.node_id(n)
+            for n in self.redpanda.nodes
+            if self.redpanda.node_id(n) != old_leader
+        )
+
+        # Issue the RPC and immediately move controller leadership. There is
+        # a small window in which the original leader's loop may have
+        # replicated the advance before the transfer — if so, the test still
+        # passes (the RPC was honored), and the re-issue below is just an
+        # idempotent no-op.
+        self._finalize()
+        self.admin.transfer_leadership_to(
+            namespace="redpanda",
+            topic="controller",
+            partition=0,
+            target_id=target,
+        )
+
+        new_leader = self.admin.await_stable_leader(
+            namespace="redpanda", topic="controller", partition=0
+        )
+        assert new_leader == target, f"expected leader {target}, got {new_leader}"
+
+        # Give the new leader time to repopulate `_node_versions` from
+        # health reports (they were cleared on the leadership change).
+        # Without this wait the re-issued RPC could see an empty version map
+        # and return `ok` as a no-op without advancing.
+        time.sleep(15)
+
+        # Re-issue against the new leader: idempotent if the advance already
+        # landed; otherwise this is the call that drives the advance.
+        self._finalize()
+        self._wait_for_version_everywhere(MANUAL_FINALIZE_NEW_VERSION)
+
+
+class ManualFinalizationLicenseTest(RedpandaTest):
+    """
+    Verifies that disabling `features_auto_finalization` is rejected by the
+    cluster config validator when no Enterprise license is in effect.
+    """
+
+    def __init__(self, test_context):
+        super().__init__(
+            test_context=test_context,
+            num_brokers=3,
+            environment={"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": "1"},
+        )
+        self.admin = Admin(self.redpanda)
+
+    @cluster(num_nodes=3)
+    def test_finalization_requires_enterprise_license(self):
+        try:
+            self.admin.patch_cluster_config(
+                upsert={"features_auto_finalization": False}
+            )
+        except HTTPError as e:
+            # Enterprise restrictions are rejected as 400 with the property
+            # name in the response body (validator path), or 403 if the
+            # license/auth path catches it first. Accept either.
+            assert e.response.status_code in (400, 403), (
+                f"Expected 400 or 403, got {e.response.status_code}"
+            )
+            if e.response.status_code == 400:
+                body = e.response.json()
+                assert "features_auto_finalization" in body, (
+                    f"Expected validator to reject features_auto_finalization, "
+                    f"got: {body}"
+                )
+        else:
+            raise RuntimeError(
+                "Expected patch_cluster_config to fail without an enterprise license"
             )

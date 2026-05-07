@@ -94,6 +94,7 @@ redpanda_cc_library(
         "//src/v/cluster:ephemeral_credential_frontend",
         "//src/v/cluster:members_table",
         "//src/v/config",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client:config_utils",
         "//src/v/kafka/client:exceptions",
         "//src/v/kafka/data/rpc",

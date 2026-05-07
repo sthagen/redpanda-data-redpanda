@@ -12,7 +12,6 @@ quick:
   - tests/
   - transactions/
   - cfr_tests/
-  - direct_consumer_tests/
 
   excluded:
   - tests/rpk_tuner_test.py

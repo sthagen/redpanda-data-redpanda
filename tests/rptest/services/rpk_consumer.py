@@ -42,6 +42,7 @@ class RpkConsumer(BackgroundThreadService):
         mechanism=None,
         tls_cert: Optional[tls.Certificate] = None,
         tls_enabled: Optional[bool] = None,
+        clean_shutdown: bool = False,
     ):
         super(RpkConsumer, self).__init__(context, num_nodes=1)
         self._redpanda = redpanda
@@ -66,6 +67,7 @@ class RpkConsumer(BackgroundThreadService):
         self._pass = password
         self._tls_cert = tls_cert
         self._tls_enabled = False if tls_enabled is None else tls_enabled
+        self._clean_shutdown = clean_shutdown
 
         if self._tls_cert is not None:
             node = self.nodes[0]
@@ -129,7 +131,7 @@ class RpkConsumer(BackgroundThreadService):
         self._redpanda.logger.info(f"Stopping RpkConsumer on ({node.account.hostname})")
         self._stopping.set()
         try:
-            node.account.kill_process("rpk", clean_shutdown=False)
+            node.account.kill_process("rpk", clean_shutdown=self._clean_shutdown)
         except RemoteCommandError as e:
             if b"No such process" in e.msg:
                 pass

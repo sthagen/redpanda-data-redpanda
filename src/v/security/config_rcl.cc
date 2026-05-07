@@ -134,6 +134,10 @@ result<parsed_url> parse_url(std::string_view url_view) {
     if (!url) {
         return make_error_code(std::errc::invalid_argument);
     }
+    // Reject URLs carrying a `user:pass@host` authority
+    if (url->has_credentials()) {
+        return make_error_code(std::errc::invalid_argument);
+    }
     auto proto = url->get_protocol();
     result.scheme = ss::sstring{proto.substr(0, proto.length() - 1)};
     if (result.scheme.empty()) {
@@ -151,7 +155,7 @@ result<parsed_url> parse_url(std::string_view url_view) {
         auto e = b + port_str.length();
         auto res = std::from_chars(b, e, result.port);
         if (res.ec != std::errc{} || res.ptr != e) {
-            throw std::runtime_error("invalid url");
+            return make_error_code(std::errc::invalid_argument);
         }
     } else {
         result.port = url->scheme_default_port();

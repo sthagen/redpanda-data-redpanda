@@ -54,6 +54,25 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "features",
+    srcs = ["features.cc"],
+    hdrs = ["features.h"],
+    implementation_deps = [
+        ":utils",
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/config",
+    ],
+    deps = [
+        "//proto/redpanda/core/admin/v2:features_redpanda_proto",
+        "//src/v/cluster:fwd",
+        "//src/v/redpanda/admin/proxy:client",
+        "//src/v/serde/protobuf:rpc",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "security",
     srcs = ["security.cc"],
     hdrs = ["security.h"],

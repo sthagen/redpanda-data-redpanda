@@ -7,7 +7,6 @@ COPY --from=rp /opt/redpanda/ /opt/redpanda/
 RUN mkdir -p {{ install_root }} && ln -sf /opt/redpanda {{ install_root }}/redpanda
 {% else %}
 COPY --from=packages redpanda_ducktape/ {{ install_root }}/redpanda/
-COPY --from=packages direct_consumer_verifier_ducktape/ {{ install_root }}/direct_consumer_verifier/
 {% endif %}
 RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/id_rsa \
     && mkdir -p /symbols \

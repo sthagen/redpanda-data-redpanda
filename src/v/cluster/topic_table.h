@@ -863,6 +863,10 @@ public:
         return _topics.get_name(tp_id);
     }
 
+    void increment_leadership_changes(model::topic_namespace_view tp_ns) {
+        _probe.increment_leadership_changes(tp_ns);
+    }
+
 private:
     friend topic_table_probe;
 

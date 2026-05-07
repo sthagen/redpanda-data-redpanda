@@ -380,6 +380,7 @@ redpanda_cc_btest(
         "//src/v/cluster:node_status_backend",
         "//src/v/cluster:self_test",
         "//src/v/cluster:topic_metrics_watcher",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",

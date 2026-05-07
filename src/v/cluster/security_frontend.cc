@@ -73,6 +73,25 @@ static inline cluster::errc map_errc(std::error_code ec) {
     return errc::replication_error;
 }
 
+static chunked_vector<delete_acls_result>
+make_delete_acls_error_results(size_t n, errc err) {
+    chunked_vector<delete_acls_result> results;
+    results.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        results.emplace_back(delete_acls_result{.error = err});
+    }
+    return results;
+}
+
+static chunked_vector<errc> make_create_acls_error_results(size_t n, errc err) {
+    chunked_vector<errc> results;
+    results.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        results.push_back(err);
+    }
+    return results;
+}
+
 security_frontend::security_frontend(
   model::node_id self,
   controller* controller,
@@ -156,17 +175,17 @@ ss::future<std::error_code> security_frontend::update_role(
     co_return co_await replicate_and_wait(_stm, _as, std::move(cmd), tout);
 }
 
-ss::future<std::vector<errc>> security_frontend::create_acls(
-  std::vector<security::acl_binding> bindings,
+ss::future<chunked_vector<errc>> security_frontend::create_acls(
+  chunked_vector<security::acl_binding> bindings,
   model::timeout_clock::duration timeout) {
     if (unlikely(bindings.empty())) {
-        co_return std::vector<errc>{};
+        co_return chunked_vector<errc>{};
     }
 
     auto leader = _leaders.local().get_leader(model::controller_ntp);
 
     if (!leader) {
-        co_return std::vector<errc>(
+        co_return make_create_acls_error_results(
           bindings.size(), errc::no_leader_controller);
     }
 
@@ -178,9 +197,10 @@ ss::future<std::vector<errc>> security_frontend::create_acls(
       leader.value(), std::move(bindings), timeout);
 }
 
-ss::future<std::vector<errc>> security_frontend::dispatch_create_acls_to_leader(
+ss::future<chunked_vector<errc>>
+security_frontend::dispatch_create_acls_to_leader(
   model::node_id leader,
-  std::vector<security::acl_binding> bindings,
+  chunked_vector<security::acl_binding> bindings,
   model::timeout_clock::duration timeout) {
     auto num_bindings = bindings.size();
     return _connections.local()
@@ -199,14 +219,15 @@ ss::future<std::vector<errc>> security_frontend::dispatch_create_acls_to_leader(
       .then(&rpc::get_ctx_data<create_acls_reply>)
       .then([num_bindings](result<create_acls_reply> r) {
           if (r.has_error()) {
-              return std::vector<errc>(num_bindings, map_errc(r.error()));
+              return make_create_acls_error_results(
+                num_bindings, map_errc(r.error()));
           }
           return std::move(r.value().results);
       });
 }
 
-ss::future<std::vector<errc>> security_frontend::do_create_acls(
-  std::vector<security::acl_binding> bindings,
+ss::future<chunked_vector<errc>> security_frontend::do_create_acls(
+  chunked_vector<security::acl_binding> bindings,
   model::timeout_clock::duration timeout) {
     const auto num_bindings = bindings.size();
 
@@ -264,13 +285,12 @@ ss::future<std::vector<errc>> security_frontend::do_create_acls(
         }
     }
 
-    std::vector<errc> result;
-    result.assign(num_bindings, err);
-    co_return result;
+    co_return make_create_acls_error_results(num_bindings, err);
 }
 
-ss::future<std::vector<delete_acls_result>> security_frontend::do_delete_acls(
-  std::vector<security::acl_binding_filter> filters,
+ss::future<chunked_vector<delete_acls_result>>
+security_frontend::do_delete_acls(
+  chunked_vector<security::acl_binding_filter> filters,
   model::timeout_clock::duration timeout) {
     /*
      * The removal is performed as a dry run to create the set of binding that
@@ -302,7 +322,7 @@ ss::future<std::vector<delete_acls_result>> security_frontend::do_delete_acls(
         err = errc::replication_error;
     }
 
-    std::vector<delete_acls_result> res;
+    chunked_vector<delete_acls_result> res;
 
     if (err == errc::success) {
         res.reserve(removed_bindings.size());
@@ -316,30 +336,23 @@ ss::future<std::vector<delete_acls_result>> security_frontend::do_delete_acls(
         co_return res;
     }
 
-    res.assign(
-      removed_bindings.size(),
-      delete_acls_result{
-        .error = err,
-      });
+    res = make_delete_acls_error_results(removed_bindings.size(), err);
 
     co_return res;
 }
 
-ss::future<std::vector<delete_acls_result>> security_frontend::delete_acls(
-  std::vector<security::acl_binding_filter> filters,
+ss::future<chunked_vector<delete_acls_result>> security_frontend::delete_acls(
+  chunked_vector<security::acl_binding_filter> filters,
   model::timeout_clock::duration timeout) {
     if (unlikely(filters.empty())) {
-        co_return std::vector<delete_acls_result>{};
+        co_return chunked_vector<delete_acls_result>{};
     }
 
     auto leader = _leaders.local().get_leader(model::controller_ntp);
 
     if (!leader) {
-        co_return std::vector<delete_acls_result>(
-          filters.size(),
-          delete_acls_result{
-            .error = errc::no_leader_controller,
-          });
+        co_return make_delete_acls_error_results(
+          filters.size(), errc::no_leader_controller);
     }
 
     if (leader == _self) {
@@ -350,10 +363,10 @@ ss::future<std::vector<delete_acls_result>> security_frontend::delete_acls(
       leader.value(), std::move(filters), timeout);
 }
 
-ss::future<std::vector<delete_acls_result>>
+ss::future<chunked_vector<delete_acls_result>>
 security_frontend::dispatch_delete_acls_to_leader(
   model::node_id leader,
-  std::vector<security::acl_binding_filter> filters,
+  chunked_vector<security::acl_binding_filter> filters,
   model::timeout_clock::duration timeout) {
     const auto num_filters = filters.size();
     return _connections.local()
@@ -372,11 +385,8 @@ security_frontend::dispatch_delete_acls_to_leader(
       .then(&rpc::get_ctx_data<delete_acls_reply>)
       .then([num_filters](result<delete_acls_reply> r) {
           if (r.has_error()) {
-              return std::vector<delete_acls_result>(
-                num_filters,
-                delete_acls_result{
-                  .error = map_errc(r.error()),
-                });
+              return make_delete_acls_error_results(
+                num_filters, map_errc(r.error()));
           }
           return std::move(r.value().results);
       });
