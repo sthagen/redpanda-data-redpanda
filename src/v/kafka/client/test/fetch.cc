@@ -52,7 +52,7 @@ FIXTURE_TEST(fetch, kafka_client_fixture) {
     auto ntp = model::ntp(tp_ns.ns, tp_ns.tp, model::partition_id{0});
 
     info("Waiting for topic data");
-    wait_for_partition_offset(ntp, model::offset{1}).get();
+    wait_for_lso(ntp, model::offset{1}).get();
 
     {
         info("Fetching from nonempty known topic");

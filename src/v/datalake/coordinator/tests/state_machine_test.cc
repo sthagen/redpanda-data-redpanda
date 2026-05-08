@@ -16,6 +16,7 @@
 #include "datalake/coordinator/tests/state_test_utils.h"
 #include "datalake/record_schema_resolver.h"
 #include "raft/tests/stm_test_fixture.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 
 using coordinator = std::unique_ptr<datalake::coordinator::coordinator>;
 using stm = datalake::coordinator::coordinator_stm;

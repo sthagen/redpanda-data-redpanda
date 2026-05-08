@@ -135,6 +135,7 @@ redpanda_cc_btest(
     cpu = 1,
     deps = [
         "//src/v/config",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:unresolved_address",
         "@seastar",

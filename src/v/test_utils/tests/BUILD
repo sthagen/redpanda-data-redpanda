@@ -65,3 +65,16 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "container_ostream_test",
+    timeout = "short",
+    srcs = [
+        "container_ostream_test.cc",
+    ],
+    deps = [
+        "//src/v/test_utils:container_ostream",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

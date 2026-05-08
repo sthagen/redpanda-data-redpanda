@@ -948,6 +948,7 @@ redpanda_cc_gtest(
         "//src/v/redpanda/tests:fixture",
         "//src/v/storage",
         "//src/v/storage/tests:manual_mixin",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:scoped_config",
         "//src/v/utils:adjustable_semaphore",

@@ -18,6 +18,7 @@
 #include "raft/group_configuration.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "test_utils/randoms.h"
 
 #include <seastar/testing/thread_test_case.hh>

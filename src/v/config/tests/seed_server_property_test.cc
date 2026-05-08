@@ -9,6 +9,7 @@
 
 #include "config/node_config.h"
 #include "config/seed_server.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "utils/unresolved_address.h"
 
 #include <seastar/testing/thread_test_case.hh>

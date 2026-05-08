@@ -13,6 +13,7 @@
 #include "cluster/health_monitor_types.h"
 #include "cluster/tests/partition_balancer_planner_fixture.h"
 #include "test_utils/boost_fixture.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 
 #include <seastar/util/defer.hh>
 

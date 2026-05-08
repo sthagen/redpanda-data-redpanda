@@ -16,6 +16,7 @@
 #include "raft/types.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "test_utils/rpc.h"
 
 #include <seastar/core/future.hh>

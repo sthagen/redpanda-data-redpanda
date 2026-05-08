@@ -18,8 +18,6 @@
 
 #include <seastar/core/iostream.hh>
 
-#include <zlib.h>
-
 namespace cloud_storage::inventory {
 
 using is_gzip_compressed = ss::bool_class<struct gzip_compressed_tag>;

@@ -123,6 +123,7 @@ redpanda_cc_btest(
         "//src/v/kafka/server",
         "//src/v/kafka/server:topic_config_utils",
         "//src/v/model",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar//:testing",

@@ -30,6 +30,7 @@ redpanda_cc_btest(
         "//src/v/pandaproxy:parsing",
         "//src/v/reflection:type_traits",
         "//src/v/strings:utf8",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@boost//:tuple",

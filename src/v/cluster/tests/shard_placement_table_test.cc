@@ -18,6 +18,7 @@
 #include "ssx/future-util.h"
 #include "storage/kvstore.h"
 #include "storage/storage_resources.h"
+#include "test_utils/container_ostream.h"
 #include "test_utils/test.h"
 #include "utils/prefix_logger.h"
 

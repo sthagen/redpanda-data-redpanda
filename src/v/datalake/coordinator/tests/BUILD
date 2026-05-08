@@ -154,6 +154,7 @@ redpanda_cc_gtest(
         "//src/v/datalake/coordinator:stm",
         "//src/v/raft/tests:stm_test_fixture",
         "//src/v/storage",
+        "//src/v/test_utils:container_ostream",
         "@googletest//:gtest",
         "@seastar",
     ],

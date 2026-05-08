@@ -573,7 +573,6 @@ cc_library(
         "SEASTAR_HAS_MEMBARRIER",
         "SEASTAR_SCHEDULING_GROUPS_COUNT=$(SCHEDULING_GROUPS)",
         "SEASTAR_USE_OPENSSL",
-        "SEASTAR_DEPRECATED_OSTREAM_FORMATTERS",
     ] + select({
         ":use_task_backtrace": ["SEASTAR_TASK_BACKTRACE"],
         "//conditions:default": [],

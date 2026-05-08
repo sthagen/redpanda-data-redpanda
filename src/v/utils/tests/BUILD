@@ -101,6 +101,7 @@ redpanda_cc_btest(
         "//src/v/serde:optional",
         "//src/v/serde:uuid",
         "//src/v/serde:vector",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:named_type",
         "//src/v/utils:uuid",

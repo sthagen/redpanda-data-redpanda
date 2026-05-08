@@ -35,7 +35,7 @@ public:
         ss::parallel_for_each(
           boost::irange(0, partitions),
           [this, tp_ns](int i) {
-              return wait_for_partition_offset(
+              return wait_for_committed_offset(
                 model::ntp(tp_ns.ns, tp_ns.tp, model::partition_id(i)),
                 model::offset(0));
           })

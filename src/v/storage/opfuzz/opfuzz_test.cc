@@ -12,6 +12,7 @@
 #include "storage/opfuzz/opfuzz.h"
 #include "storage/tests/storage_test_fixture.h"
 #include "storage/types.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 
 #include <seastar/util/defer.hh>
 

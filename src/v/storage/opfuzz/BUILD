@@ -38,6 +38,7 @@ redpanda_cc_gtest(
         "//src/v/random:generators",
         "//src/v/storage",
         "//src/v/storage/tests:storage_test_fixture",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:gtest",
         "@boost//:range",
         "@googletest//:gtest",

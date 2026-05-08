@@ -30,6 +30,7 @@
 #include "reflection/async_adl.h"
 #include "security/tests/randoms.h"
 #include "storage/types.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "test_utils/rpc.h"

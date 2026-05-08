@@ -436,7 +436,7 @@ FIXTURE_TEST(fetch_empty, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
     add_topic(model::topic_namespace_view(ntp)).get();
 
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     kafka::fetch_request no_topics;
     no_topics.data.max_bytes = std::numeric_limits<int32_t>::max();
@@ -475,7 +475,7 @@ FIXTURE_TEST(fetch_leader_epoch, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
     add_topic(model::topic_namespace_view(ntp)).get();
 
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     const auto shard = app.shard_table.local().shard_for(ntp);
     app.partition_manager
@@ -683,7 +683,7 @@ FIXTURE_TEST(fetch_multi_partitions_debounce, redpanda_thread_fixture) {
 
     for (int i = 0; i < 6; ++i) {
         auto ntp = make_default_ntp(topic, model::partition_id(i));
-        wait_for_partition_offset(ntp, model::offset(0)).get();
+        wait_for_lso(ntp, model::offset(0)).get();
     }
 
     kafka::fetch_request req;
@@ -763,7 +763,7 @@ FIXTURE_TEST(fetch_leader_ack, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
 
     add_topic(model::topic_namespace_view(ntp)).get();
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     kafka::fetch_request req;
     req.data.max_bytes = std::numeric_limits<int32_t>::max();
@@ -825,7 +825,7 @@ FIXTURE_TEST(fetch_one_debounce, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
 
     add_topic(model::topic_namespace_view(ntp)).get();
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     kafka::fetch_request req;
     req.data.max_bytes = std::numeric_limits<int32_t>::max();
@@ -892,11 +892,11 @@ FIXTURE_TEST(fetch_multi_topics, redpanda_thread_fixture) {
     // topic 1
     for (int i = 0; i < 6; ++i) {
         ntps.push_back(make_default_ntp(topic_1, model::partition_id(i)));
-        wait_for_partition_offset(ntps.back(), model::offset(0)).get();
+        wait_for_lso(ntps.back(), model::offset(0)).get();
     }
     // topic 2
     ntps.push_back(make_default_ntp(topic_2, model::partition_id(0)));
-    wait_for_partition_offset(ntps.back(), model::offset(0)).get();
+    wait_for_lso(ntps.back(), model::offset(0)).get();
 
     // request
     kafka::fetch_request req;
@@ -981,7 +981,7 @@ FIXTURE_TEST(fetch_request_max_bytes, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
 
     add_topic(model::topic_namespace_view(ntp)).get();
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
     // append some data
     auto shard = app.shard_table.local().shard_for(ntp);
     app.partition_manager
@@ -1049,7 +1049,7 @@ FIXTURE_TEST(fetch_offset_out_of_range, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
 
     add_topic(model::topic_namespace_view(ntp)).get();
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
     // append some data
     auto shard = app.shard_table.local().shard_for(ntp);
     app.partition_manager
@@ -1141,7 +1141,7 @@ FIXTURE_TEST(fetch_response_bytes_eq_units, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();
     add_topic(model::topic_namespace_view(ntp)).get();
 
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     // append some data
     auto shard = app.shard_table.local().shard_for(ntp);
@@ -1161,7 +1161,7 @@ FIXTURE_TEST(fetch_response_bytes_eq_units, redpanda_thread_fixture) {
               });
         })
       .get();
-    wait_for_partition_offset(ntp, model::offset(20)).get();
+    wait_for_lso(ntp, model::offset(20)).get();
 
     auto conn_context = make_connection_context();
     conn_context->start().get();
@@ -1220,7 +1220,7 @@ FIXTURE_TEST(
 
     wait_for_controller_leadership().get();
     add_topic(model::topic_namespace_view(ntp)).get();
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     // Produce some data
     auto shard = app.shard_table.local().shard_for(ntp);
@@ -1336,7 +1336,7 @@ FIXTURE_TEST(
 
     for (int i = 0; i < num_partitions; ++i) {
         auto ntp = make_default_ntp(topic, model::partition_id(i));
-        wait_for_partition_offset(ntp, model::offset(0)).get();
+        wait_for_lso(ntp, model::offset(0)).get();
     }
 
     // Write data to all partitions.

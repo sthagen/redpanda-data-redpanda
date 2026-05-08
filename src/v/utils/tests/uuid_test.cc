@@ -14,6 +14,7 @@
 #include "serde/rw/rw.h"
 #include "serde/rw/uuid.h"
 #include "serde/rw/vector.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "utils/named_type.h"
 #include "utils/uuid.h"
 

@@ -21,6 +21,7 @@
 #include "random/generators.h"
 #include "resource_mgmt/memory_groups.h"
 #include "test_utils/boost_fixture.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 
 #include <seastar/core/sharded.hh>
 

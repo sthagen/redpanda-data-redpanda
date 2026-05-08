@@ -30,6 +30,7 @@
 #include "storage/tests/manual_mixin.h"
 #include "storage/types.h"
 #include "test_utils/async.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "test_utils/scoped_config.h"
 #include "test_utils/test.h"
 #include "utils/adjustable_semaphore.h"

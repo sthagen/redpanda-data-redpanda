@@ -58,6 +58,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/kafka/protocol",
         "//src/v/random:generators",
+        "//src/v/test_utils:container_ostream",
         "//src/v/test_utils:random_bytes",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:base64",

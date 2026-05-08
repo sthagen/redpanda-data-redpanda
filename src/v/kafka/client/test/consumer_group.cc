@@ -82,7 +82,7 @@ FIXTURE_TEST(consumer_group, kafka_client_fixture) {
     for (int t = 0; t < topic_count; ++t) {
         for (int p = 0; p < partition_count; ++p) {
             const auto& tp_ns = topics_namespaces[t];
-            wait_for_partition_offset(
+            wait_for_lso(
               model::ntp(tp_ns.ns, tp_ns.tp, model::partition_id{p}),
               model::offset{0})
               .get();

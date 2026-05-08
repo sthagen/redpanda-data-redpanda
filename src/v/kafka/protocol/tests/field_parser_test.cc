@@ -12,6 +12,7 @@
 #include "kafka/protocol/types.h"
 #include "kafka/protocol/wire.h"
 #include "random/generators.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 #include "test_utils/random_bytes.h"
 
 #include <seastar/testing/thread_test_case.hh>

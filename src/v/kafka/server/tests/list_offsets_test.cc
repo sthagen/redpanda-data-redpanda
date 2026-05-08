@@ -211,7 +211,7 @@ FIXTURE_TEST(list_offsets_by_time, redpanda_thread_fixture) {
       model::partition_id(0));
 
     add_topic(model::topic_namespace_view{ntp}, 1).get();
-    wait_for_partition_offset(ntp, model::offset(0)).get();
+    wait_for_lso(ntp, model::offset(0)).get();
 
     auto client = make_kafka_client().get();
     client.connect().get();

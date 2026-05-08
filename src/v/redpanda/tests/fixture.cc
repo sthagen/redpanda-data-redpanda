@@ -648,20 +648,42 @@ redpanda_thread_fixture::delete_topic(model::topic_namespace tp_ns) {
       });
 }
 
-ss::future<> redpanda_thread_fixture::wait_for_partition_offset(
-  model::ntp ntp, model::offset o, model::timeout_clock::duration tout) {
+namespace {
+ss::future<> do_wait_for_partition_offset(
+  application& app,
+  model::ntp ntp,
+  model::offset o,
+  model::timeout_clock::duration tout,
+  bool wait_lso) {
     RPTEST_REQUIRE_EVENTUALLY_CORO(
-      tout, [this, ntp = std::move(ntp), o]() mutable {
+      tout, [&app, ntp = std::move(ntp), o, wait_lso]() mutable {
           auto shard = app.shard_table.local().shard_for(ntp);
           if (!shard) {
               return ss::make_ready_future<bool>(false);
           }
           return app.partition_manager.invoke_on(
-            *shard, [ntp, o](cluster::partition_manager& mgr) {
+            *shard, [ntp, o, wait_lso](cluster::partition_manager& mgr) {
                 auto partition = mgr.get(ntp);
-                return partition && partition->committed_offset() >= o;
+                if (!partition) {
+                    return false;
+                }
+                return wait_lso ? partition->last_stable_offset() >= o
+                                : partition->committed_offset() >= o;
             });
       });
+}
+} // namespace
+
+ss::future<> redpanda_thread_fixture::wait_for_committed_offset(
+  model::ntp ntp, model::offset o, model::timeout_clock::duration tout) {
+    return do_wait_for_partition_offset(
+      app, std::move(ntp), o, tout, /*wait_lso=*/false);
+}
+
+ss::future<> redpanda_thread_fixture::wait_for_lso(
+  model::ntp ntp, model::offset o, model::timeout_clock::duration tout) {
+    return do_wait_for_partition_offset(
+      app, std::move(ntp), o, tout, /*wait_lso=*/true);
 }
 
 ss::future<model::offset>

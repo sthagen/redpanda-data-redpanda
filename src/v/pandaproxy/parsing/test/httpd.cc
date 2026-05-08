@@ -12,6 +12,7 @@
 #include "pandaproxy/parsing/httpd.h"
 
 #include "pandaproxy/json/types.h"
+#include "test_utils/container_ostream.h" // IWYU pragma: keep
 
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
