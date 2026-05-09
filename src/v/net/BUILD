@@ -55,6 +55,7 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/bytes:iobuf",
         "//src/v/strings:utf8",
+        "@openssl",
     ],
     visibility = ["//visibility:public"],
     deps = [

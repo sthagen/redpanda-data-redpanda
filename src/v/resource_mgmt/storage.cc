@@ -28,7 +28,6 @@ namespace storage {
 
 disk_space_manager::disk_space_manager(
   config::binding<bool> enabled,
-  config::binding<bool> enabled_override,
   config::binding<std::optional<uint64_t>> retention_target_capacity_bytes,
   config::binding<std::optional<double>> retention_target_capacity_pct,
   config::binding<double> disk_reservation_percent,
@@ -38,7 +37,6 @@ disk_space_manager::disk_space_manager(
   ss::sharded<cloud_io::cache>* cache,
   ss::sharded<cluster::partition_manager>* pm)
   : _enabled(std::move(enabled))
-  , _enabled_override(std::move(enabled_override))
   , _local_monitor(local_monitor)
   , _storage(storage)
   , _storage_node(storage_node)

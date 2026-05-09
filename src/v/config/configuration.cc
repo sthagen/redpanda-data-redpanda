@@ -2873,13 +2873,7 @@ configuration::configuration()
       "disabled following an upgrade.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       true)
-  , space_management_enable_override(
-      *this,
-      "space_management_enable_override",
-      "Enable automatic space management. This option is ignored and "
-      "deprecated in versions >= v23.3.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::user},
-      false)
+  , space_management_enable_override(*this, "space_management_enable_override")
   , disk_reservation_percent(
       *this,
       "disk_reservation_percent",

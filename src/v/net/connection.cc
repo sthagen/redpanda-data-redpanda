@@ -19,11 +19,24 @@
 #include <seastar/core/future.hh>
 #include <seastar/net/tls.hh>
 
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+
 #include <algorithm>
 #include <exception>
 #include <system_error>
 
 namespace net {
+
+// OpenSSL handshake-time reason codes that the TLS backend surfaces as the
+// raw packed value of std::error_code. Declared locally because seastar's
+// ss::tls::ERROR_* aliases for these reasons are not available on every
+// supported seastar branch.
+constexpr int err_wrong_version_number = ERR_PACK(
+  ERR_LIB_SSL, 0, SSL_R_WRONG_VERSION_NUMBER);
+constexpr int err_http_request = ERR_PACK(ERR_LIB_SSL, 0, SSL_R_HTTP_REQUEST);
+constexpr int err_https_proxy_request = ERR_PACK(
+  ERR_LIB_SSL, 0, SSL_R_HTTPS_PROXY_REQUEST);
 
 /**
  * Identify error cases that should be quickly retried, e.g.
@@ -42,9 +55,9 @@ bool is_reconnect_error(const std::system_error& e) {
       ss::tls::ERROR_PREMATURE_TERMINATION,
       ss::tls::ERROR_DECRYPTION_FAILED,
       ss::tls::ERROR_MAC_VERIFY_FAILED,
-      ss::tls::ERROR_WRONG_VERSION_NUMBER,
-      ss::tls::ERROR_HTTP_REQUEST,
-      ss::tls::ERROR_HTTPS_PROXY_REQUEST};
+      err_wrong_version_number,
+      err_http_request,
+      err_https_proxy_request};
 
     if (e.code().category() == ss::tls::error_category()) {
         return std::ranges::any_of(
