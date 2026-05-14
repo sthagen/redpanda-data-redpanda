@@ -25,40 +25,22 @@ std::string stream(const T& v) {
     return std::move(os).str();
 }
 
-} // namespace
-
-// An element type that has operator<< but no fmt formatter, to verify the
-// header does not require fmt-formattability.  Defined at file scope so the
-// streaming operator below can be a non-friend free function reachable via
-// ADL from the test below.
-struct only_stream {
-    int x;
-};
-inline std::ostream& operator<<(std::ostream& os, const only_stream& v) {
-    return os << "x=" << v.x;
-}
-
-namespace {
-
-TEST(ContainerOstream, ElementOnlyHasOperatorStream) {
-    EXPECT_EQ(stream(std::vector<only_stream>{{1}, {2}}), "{x=1, x=2}");
-}
-
 TEST(ContainerOstream, EmptyVector) {
-    EXPECT_EQ(stream(std::vector<int>{}), "{}");
+    EXPECT_EQ(stream(std::vector<int>{}), "[]");
 }
 
 TEST(ContainerOstream, VectorOfInts) {
-    EXPECT_EQ(stream(std::vector<int>{1, 2, 3}), "{1, 2, 3}");
+    EXPECT_EQ(stream(std::vector<int>{1, 2, 3}), "[1, 2, 3]");
 }
 
 TEST(ContainerOstream, VectorOfStrings) {
-    EXPECT_EQ(stream(std::vector<std::string>{"a", "b"}), "{a, b}");
+    // fmt's range formatter wraps strings in quotes by default.
+    EXPECT_EQ(stream(std::vector<std::string>{"a", "b"}), "[\"a\", \"b\"]");
 }
 
 TEST(ContainerOstream, NestedVector) {
     EXPECT_EQ(
-      stream(std::vector<std::vector<int>>{{1, 2}, {3}}), "{{1, 2}, {3}}");
+      stream(std::vector<std::vector<int>>{{1, 2}, {3}}), "[[1, 2], [3]]");
 }
 
 TEST(ContainerOstream, EmptyUnorderedMap) {
@@ -69,7 +51,7 @@ TEST(ContainerOstream, UnorderedMapSingleEntry) {
     // Unordered iteration order is implementation-defined; pin the test to
     // one entry so it stays deterministic.
     EXPECT_EQ(
-      stream(std::unordered_map<int, std::string>{{1, "one"}}), "{{1 -> one}}");
+      stream(std::unordered_map<int, std::string>{{1, "one"}}), "{1: \"one\"}");
 }
 
 TEST(ContainerOstream, GTestStreamingMessage) {
@@ -77,7 +59,7 @@ TEST(ContainerOstream, GTestStreamingMessage) {
     // container into a googletest assertion message.
     std::vector<int> v{42};
     testing::AssertionResult r = testing::AssertionFailure() << v;
-    EXPECT_EQ(std::string{r.message()}, "{42}");
+    EXPECT_EQ(std::string{r.message()}, "[42]");
 }
 
 } // namespace

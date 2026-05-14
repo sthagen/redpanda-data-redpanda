@@ -397,7 +397,6 @@ public:
               std::current_exception());
             rep = serde::pb::rpc::internal_exception().handle(std::move(rep));
         }
-        rep->done();
         co_return rep;
     }
 

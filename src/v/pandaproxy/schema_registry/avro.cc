@@ -547,16 +547,22 @@ result<void> sanitize(json::Value::Array& a, sanitize_context& ctx) {
 
 } // namespace
 
+struct avro_schema_definition::impl {
+    explicit impl(avro::ValidSchema schema)
+      : schema(std::move(schema)) {}
+    avro::ValidSchema schema;
+};
+
 avro_schema_definition::avro_schema_definition(
   avro::ValidSchema vs,
   schema_definition::references refs,
   std::optional<schema_metadata> meta)
-  : _impl(std::move(vs))
+  : _impl(ss::make_shared<const impl>(std::move(vs)))
   , _refs(std::move(refs))
   , _meta(std::move(meta)) {}
 
 const avro::ValidSchema& avro_schema_definition::operator()() const {
-    return _impl;
+    return _impl->schema;
 }
 
 bool operator==(
@@ -576,12 +582,12 @@ fmt::iterator avro_schema_definition::format_to(fmt::iterator it) const {
 
 schema_definition::raw_string avro_schema_definition::raw() const {
     iobuf_ostream os;
-    _impl.toJson(os.ostream());
+    _impl->schema.toJson(os.ostream());
     return schema_definition::raw_string{json::minify(std::move(os).buf())};
 }
 
 ss::sstring avro_schema_definition::name() const {
-    return _impl.root()->name().fullname();
+    return _impl->schema.root()->name().fullname();
 };
 
 class collected_schema {

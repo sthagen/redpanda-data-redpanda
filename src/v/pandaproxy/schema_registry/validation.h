@@ -14,7 +14,7 @@
 #include "cluster/topic_properties.h"
 #include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
-#include "pandaproxy/schema_registry/api.h"
+#include "pandaproxy/schema_registry/fwd.h"
 #include "pandaproxy/schema_registry/schema_id_validation.h"
 
 #include <seastar/core/future.hh>

@@ -96,7 +96,7 @@ See `.bazelrc` for more details on build settings and config modes
 
 ### Protobuf Coding Guidelines
 
-Follow the guidelines provided in `proto/redpanda/README.md` for basic Protobuf standards.
+Follow the guidelines provided in `proto/redpanda/README.md` for basic Protobuf standards. For admin v2 ConnectRPC endpoints (proto → C++ service impl → registration → ducktape Python bindings), use the `add-admin-v2-endpoint` skill.
 
 ### Protobuf Build & Environment
 - **Primary Protobuf code lives in `proto/`.**

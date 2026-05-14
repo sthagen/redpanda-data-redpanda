@@ -113,6 +113,18 @@ build --per_file_copt=.*\\.pb\\.cc@-Wno-deprecated-declarations
 build --per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
 build --host_per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
 
+# Suppress -Wunused-variable in all external modules: we don't control their
+# sources, and the noise crowds out warnings from our own code. host_per_file_copt
+# covers exec-config (tool) builds like ragel.
+build --per_file_copt=external/.*@-Wno-unused-variable
+build --host_per_file_copt=external/.*@-Wno-unused-variable
+build --per_file_copt=external/.*@-Wno-unused-but-set-variable
+build --host_per_file_copt=external/.*@-Wno-unused-but-set-variable
+
+# ragel/colm: assert(false) at end of non-void function (e.g. lookup.cc:50) — UB under NDEBUG but unreachable in practice; unfixed upstream
+build --per_file_copt=external/ragel.*@-Wno-return-type
+build --host_per_file_copt=external/ragel.*@-Wno-return-type
+
 # -base configs generally aren't meant to be used directly but are
 # helpers to DRY later user-facing configs
 

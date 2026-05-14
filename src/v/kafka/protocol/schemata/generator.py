@@ -995,7 +995,7 @@ class StructType(FieldType):
             h = h.get(which, ())
             yield from maybe_strings(h)
 
-        return set(h for t in types for h in type_headers(t))
+        return sorted({h for t in types for h in type_headers(t)})
 
     @property
     def is_default_comparable(self):
@@ -2171,7 +2171,7 @@ if __name__ == "__main__":
 
     src = jinja2.Template(COMBINED_SOURCE_TEMPLATE).render(
         schema_headers=map(lambda p: p.name, headers),
-        extra_headers=extra_schema_headers,
+        extra_headers=sorted(extra_schema_headers),
         sources=sources,
     )
 

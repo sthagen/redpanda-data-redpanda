@@ -185,6 +185,9 @@ redpanda_test_cc_library(
         "container_ostream.h",
     ],
     visibility = ["//visibility:public"],
+    deps = [
+        "@fmt",
+    ],
 )
 
 redpanda_test_cc_library(

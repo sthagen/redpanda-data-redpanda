@@ -12,12 +12,16 @@
 #include "cluster/cluster_link/frontend.h"
 #include "cluster/controller.h"
 #include "config/configuration.h"
+#include "features/feature_table.h"
 #include "kafka/client/configuration.h"
+#include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/deps.h"
 #include "pandaproxy/logger.h"
 #include "pandaproxy/schema_registry/configuration.h"
 #include "pandaproxy/schema_registry/kafka_client_transport.h"
+#include "pandaproxy/schema_registry/rpc_transport.h"
 #include "pandaproxy/schema_registry/schema_id_cache.h"
+#include "pandaproxy/schema_registry/seq_writer.h"
 #include "pandaproxy/schema_registry/service.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
@@ -28,8 +32,121 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <variant>
 
 namespace pandaproxy::schema_registry {
+
+struct api::transport_impl {
+    transport_impl(
+      ss::sharded<kafka::data::rpc::client>* rpc_client,
+      kafka::client::configuration& client_cfg,
+      cluster::controller& controller)
+      : _rpc_client(rpc_client)
+      , _client_cfg(client_cfg)
+      , _controller(controller) {
+        if (!should_use_rpc(rpc_client, controller)) {
+            _v.emplace<ss::sharded<kafka_client_transport>>();
+        }
+        // else: _v default-constructs to sharded<rpc_transport>.
+        vlog(
+          srlog.info,
+          "Schema registry in {} mode",
+          std::holds_alternative<ss::sharded<rpc_transport>>(_v)
+            ? "RPC"
+            : "Kafka client");
+    }
+
+    /// Decide whether to use the RPC transport at startup. Falls back to
+    /// the kafka::client transport (with a warning) if the config asks for
+    /// RPC but preconditions aren't met.
+    static bool should_use_rpc(
+      const ss::sharded<kafka::data::rpc::client>* rpc_client,
+      cluster::controller& controller) {
+        if (!config::shard_local_cfg().schema_registry_use_rpc()) {
+            return false;
+        }
+        if (!rpc_client) {
+            vlog(
+              srlog.info,
+              "schema_registry_use_rpc enabled but RPC client not available. "
+              "Falling back to Kafka client.");
+            return false;
+        }
+        const bool rpc_available
+          = controller.get_feature_table().local().get_active_version()
+            >= features::to_cluster_version(features::release_version::v26_2_1);
+        if (!rpc_available) {
+            vlog(
+              srlog.info,
+              "schema_registry_use_rpc enabled but cluster version too old. "
+              "Falling back to Kafka client. RPC mode will be available "
+              "on the next restart after all brokers are upgraded.");
+            return false;
+        }
+        return true;
+    }
+
+    ss::future<> start() {
+        return ss::visit(
+          _v,
+          [this](ss::sharded<rpc_transport>& t) {
+              return t.start(ss::sharded_parameter([this] {
+                  return std::ref(_rpc_client->local());
+              }));
+          },
+          [this](ss::sharded<kafka_client_transport>& t) {
+              return t.start(
+                std::ref(_client_cfg),
+                std::ref(_controller),
+                ss::sharded_parameter([this] {
+                    return kafka::data::rpc::topic_creator::make_default(
+                      &_controller);
+                }));
+          });
+    }
+
+    /// Only kafka_client_transport has per-shard credentials to load; the
+    /// RPC path needs no configuration.
+    ss::future<> configure() {
+        return ss::visit(
+          _v,
+          [](ss::sharded<rpc_transport>&) { return ss::now(); },
+          [](ss::sharded<kafka_client_transport>& t) {
+              return t.invoke_on_all(&kafka_client_transport::configure);
+          });
+    }
+
+    ss::future<> invoke_stop_on_all() {
+        return ss::visit(_v, [](auto& t) {
+            return t.invoke_on_all([](auto& local) { return local.stop(); });
+        });
+    }
+
+    ss::future<> stop() {
+        return ss::visit(_v, [](auto& t) { return t.stop(); });
+    }
+
+    transport& local() {
+        return ss::visit(_v, [](auto& t) -> transport& { return t.local(); });
+    }
+
+    bool has_ephemeral_credentials() const {
+        return ss::visit(
+          _v,
+          [](const ss::sharded<rpc_transport>&) { return false; },
+          [](const ss::sharded<kafka_client_transport>& t) {
+              return t.local().has_ephemeral_credentials();
+          });
+    }
+
+private:
+    std::
+      variant<ss::sharded<rpc_transport>, ss::sharded<kafka_client_transport>>
+        _v;
+    ss::sharded<kafka::data::rpc::client>* _rpc_client;
+    kafka::client::configuration& _client_cfg;
+    cluster::controller& _controller;
+};
 
 class sequence_state_checker_impl : public sequence_state_checker {
 public:
@@ -55,7 +172,8 @@ api::api(
   configuration& cfg,
   ss::sharded<cluster::metadata_cache>* metadata_cache,
   std::unique_ptr<cluster::controller>& c,
-  ss::sharded<security::audit::audit_log_manager>& audit_mgr) noexcept
+  ss::sharded<security::audit::audit_log_manager>& audit_mgr,
+  ss::sharded<kafka::data::rpc::client>* rpc_client) noexcept
   : _node_id{node_id}
   , _sg{sg}
   , _max_memory{max_memory}
@@ -63,17 +181,16 @@ api::api(
   , _cfg{cfg}
   , _metadata_cache(metadata_cache)
   , _controller(c)
-  , _audit_mgr(audit_mgr) {}
+  , _audit_mgr(audit_mgr)
+  , _rpc_client(rpc_client) {}
 
 api::~api() noexcept = default;
 
 ss::future<> api::start() {
-    co_await enable_qualified_subjects::initialize(
-      config::shard_local_cfg().schema_registry_enable_qualified_subjects());
     vlog(
       srlog.info,
       "Qualified subject parsing enabled: {}",
-      enable_qualified_subjects::get());
+      config::shard_local_cfg().schema_registry_enable_qualified_subjects());
 
     _store = std::make_unique<sharded_store>();
     co_await _store->start(is_mutable(_cfg.mode_mutability), _sg);
@@ -84,17 +201,18 @@ ss::future<> api::start() {
         return config::shard_local_cfg()
           .kafka_schema_id_validation_cache_capacity.bind();
     }));
-    co_await _transport.start(
-      std::ref(_client_cfg),
-      std::ref(*_controller),
-      ss::sharded_parameter([this]() {
-          return kafka::data::rpc::topic_creator::make_default(
-            _controller.get());
-      }));
+    // Build the transport locally and only install it into _transport
+    // on successful start. If start() throws, the local impl unwinds and
+    // the partially-initialized sharded<> goes with it.
+    auto impl = std::make_unique<transport_impl>(
+      _rpc_client, _client_cfg, *_controller);
+    co_await impl->start();
+    _transport = std::move(impl);
+
     co_await _sequencer.start(
       _node_id,
       _sg,
-      ss::sharded_parameter([this] { return std::ref(_transport.local()); }),
+      ss::sharded_parameter([this] { return std::ref(_transport->local()); }),
       std::ref(*_store),
       ss::sharded_parameter([this] {
           return std::make_unique<sequence_state_checker_impl>(_controller);
@@ -103,7 +221,7 @@ ss::future<> api::start() {
       config::to_yaml(_cfg, config::redact_secrets::no),
       _sg,
       _max_memory,
-      ss::sharded_parameter([this] { return std::ref(_transport.local()); }),
+      ss::sharded_parameter([this] { return std::ref(_transport->local()); }),
       std::ref(*_store),
       std::ref(_sequencer),
       ss::sharded_parameter([this]() {
@@ -113,7 +231,7 @@ ss::future<> api::start() {
       std::ref(_controller),
       std::ref(_audit_mgr));
 
-    co_await _transport.invoke_on_all(&kafka_client_transport::configure);
+    co_await _transport->configure();
     co_await _service.invoke_on_all(&service::start);
 
     if (ss::this_shard_id() == 0) {
@@ -142,17 +260,20 @@ ss::future<> api::stop() {
         // Reset gate to support api restart
         _metrics_gate = ss::gate{};
     }
-    co_await _transport.invoke_on_all(&kafka_client_transport::stop);
+    if (_transport) {
+        co_await _transport->invoke_stop_on_all();
+    }
     co_await _service.stop();
     co_await _sequencer.stop();
-    co_await _transport.stop();
+    if (_transport) {
+        co_await _transport->stop();
+        _transport.reset();
+    }
+
     co_await _schema_id_cache.stop();
     co_await _schema_id_validation_probe.stop();
     if (_store) {
         co_await _store->stop();
-    }
-    if (enable_qualified_subjects::is_initialized()) {
-        co_await enable_qualified_subjects::reset();
     }
     vlog(srlog.debug, "Stopped schema registry API...");
 }
@@ -170,7 +291,7 @@ const kafka::client::configuration& api::get_client_config() const {
 }
 
 bool api::has_ephemeral_credentials() const {
-    return _transport.local().has_ephemeral_credentials();
+    return _transport && _transport->has_ephemeral_credentials();
 }
 
 ss::future<> api::contribute_metrics(

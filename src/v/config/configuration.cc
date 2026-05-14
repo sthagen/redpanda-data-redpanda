@@ -2000,6 +2000,14 @@ configuration::configuration()
       "produce audit log messages using a Kafka client instead.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       true)
+  , schema_registry_use_rpc(
+      *this,
+      "schema_registry_use_rpc",
+      "Use internal Redpanda RPCs for schema registry internal topic I/O. "
+      "When disabled, use a Kafka client for schema registry internal topic "
+      "I/O instead.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      true)
   , cloud_storage_enabled(
       *this,
       true,
@@ -3841,11 +3849,11 @@ configuration::configuration()
       *this,
       "schema_registry_enable_qualified_subjects",
       "Enable parsing of qualified subject syntax (:.context:subject). "
+      "When true, qualified syntax is parsed to extract context and subject. "
       "When false, subjects are treated literally, as subjects in the default "
-      "context. When true, qualified syntax is parsed to extract context and "
-      "subject.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
-      false)
+      "context.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      true)
   , pp_sr_smp_max_non_local_requests(
       *this,
       "pp_sr_smp_max_non_local_requests",
@@ -4348,6 +4356,18 @@ configuration::configuration()
       "iceberg_rest_catalog_gcp_user_project",
       "The GCP project that is billed for charges associated with Iceberg REST "
       "Catalog requests.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      std::nullopt,
+      &validate_non_empty_string_opt)
+  , iceberg_rest_catalog_credentials_host(
+      *this,
+      "iceberg_rest_catalog_credentials_host",
+      "The hostname to connect to for retrieving role based credentials for "
+      "the Iceberg REST catalog. Derived from "
+      "iceberg_rest_catalog_credentials_source if not set. Only required "
+      "when using IAM role based access on AWS; does not apply to "
+      "OAuth-based authentication schemes. Independent of "
+      "cloud_storage_credentials_host.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::user},
       std::nullopt,
       &validate_non_empty_string_opt)
@@ -4892,6 +4912,12 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       128,
       {.min = 0, .max = 10000})
+  , code_hugepages_enabled(
+      *this,
+      "code_hugepages_enabled",
+      "Map the binary into hugepages",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",

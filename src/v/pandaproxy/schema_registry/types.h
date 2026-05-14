@@ -15,9 +15,7 @@
 #include "base/format_to.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
-#include "config/startup_config.h"
 #include "container/chunked_vector.h"
-#include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
 #include "strings/string_switch.h"
 #include "utils/named_type.h"
@@ -25,10 +23,12 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/bool_class.hh>
 
-#include <avro/ValidSchema.hh>
-
 #include <iosfwd>
 #include <type_traits>
+
+namespace avro {
+class ValidSchema;
+} // namespace avro
 
 namespace pandaproxy::schema_registry {
 
@@ -171,10 +171,6 @@ using subject = named_type<ss::sstring, struct subject_tag>;
 using context = named_type<ss::sstring, struct context_tag>;
 inline const context default_context{"."};
 inline const context global_context{".__GLOBAL"};
-
-/// Whether qualified subject parsing is enabled. Captured at SR startup.
-using enable_qualified_subjects
-  = config::startup_config<bool, struct enable_qualified_subjects_tag>;
 
 // A subject bound to a context
 struct context_subject {
@@ -399,6 +395,9 @@ private:
 ///\brief The definition of an avro schema.
 class avro_schema_definition {
 public:
+    struct impl;
+    using pimpl = ss::shared_ptr<const impl>;
+
     explicit avro_schema_definition(
       avro::ValidSchema vs,
       schema_definition::references refs,
@@ -424,7 +423,7 @@ public:
     ss::sstring name() const;
 
 private:
-    avro::ValidSchema _impl;
+    pimpl _impl;
     schema_definition::references _refs;
     std::optional<schema_metadata> _meta;
 };
@@ -461,8 +460,7 @@ public:
         return protobuf_schema_definition{_impl, _refs.copy(), _meta};
     }
 
-    ::result<ss::sstring, kafka::error_code>
-    name(const std::vector<int>& fields) const;
+    std::optional<ss::sstring> name(const std::vector<int>& fields) const;
 
 private:
     pimpl _impl;

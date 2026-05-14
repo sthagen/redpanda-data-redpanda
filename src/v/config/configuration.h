@@ -370,6 +370,7 @@ struct configuration final : public config_store {
     property<std::vector<ss::sstring>> audit_excluded_principals;
     enum_property<audit_failure_policy> audit_failure_policy;
     property<bool> audit_use_rpc;
+    property<bool> schema_registry_use_rpc;
 
     // Archival storage
     enterprise<property<bool>> cloud_storage_enabled;
@@ -745,6 +746,7 @@ struct configuration final : public config_store {
     enum_property<std::optional<model::cloud_credentials_source>>
       iceberg_rest_catalog_aws_credentials_source;
     property<std::optional<ss::sstring>> iceberg_rest_catalog_gcp_user_project;
+    property<std::optional<ss::sstring>> iceberg_rest_catalog_credentials_host;
     property<double> iceberg_backlog_controller_p_coeff;
     property<double> iceberg_backlog_controller_i_coeff;
     bounded_property<uint32_t> iceberg_target_backlog_size;
@@ -843,6 +845,7 @@ public:
     property<std::chrono::milliseconds>
       cloud_topics_l1_reader_cache_eviction_timeout_ms;
     bounded_property<size_t> cloud_topics_l1_reader_cache_max_size;
+    property<bool> code_hugepages_enabled;
 
     development_feature_property<int> development_feature_property_testing_only;
 

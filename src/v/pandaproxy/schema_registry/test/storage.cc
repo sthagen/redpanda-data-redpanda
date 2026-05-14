@@ -154,11 +154,7 @@ const auto expected_context_value = context_value{
 
 } // namespace
 
-class StorageTest : public ::testing::Test {
-protected:
-    void SetUp() override { enable_qualified_subjects::set_local(true); }
-    void TearDown() override { enable_qualified_subjects::reset_local(); }
-};
+class StorageTest : public ::testing::Test {};
 
 TEST_F(StorageTest, Serde) {
     {

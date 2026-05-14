@@ -16,6 +16,7 @@
 #include "model/batch_compression.h"
 #include "model/record.h"
 #include "pandaproxy/logger.h"
+#include "pandaproxy/schema_registry/api.h"
 #include "pandaproxy/schema_registry/avro.h"
 #include "pandaproxy/schema_registry/json.h"
 #include "pandaproxy/schema_registry/protobuf.h"
@@ -31,6 +32,8 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/coroutine/exception.hh>
+
+#include <avro/ValidSchema.hh>
 
 #include <optional>
 
@@ -115,11 +118,7 @@ ss::future<std::optional<ss::sstring>> get_record_name(
         }
         auto s = co_await make_protobuf_schema_definition(
           store, std::move(sub_schema));
-        auto r = s.name(*offsets);
-        if (!r) {
-            co_return std::nullopt;
-        }
-        co_return std::move(r).assume_value();
+        co_return s.name(*offsets);
     } break;
     case schema_type::json: {
         auto s = co_await make_json_schema_definition(

@@ -15,6 +15,8 @@
 
 #include <seastar/core/reactor.hh>
 
+#include <algorithm>
+
 namespace lsm::io {
 
 disk_file_reader::disk_file_reader(std::filesystem::path path, ss::file file)
@@ -24,10 +26,13 @@ disk_file_reader::disk_file_reader(std::filesystem::path path, ss::file file)
 ss::future<ioarray> disk_file_reader::read(size_t offset, size_t n) {
     size_t memory_alignment = _file.memory_dma_alignment();
     size_t disk_alignment = _file.disk_read_dma_alignment();
+    // ioarray requires its size to be a multiple of its alignment, so use the
+    // max of the two seastar alignments.
+    size_t max_alignment = std::max(memory_alignment, disk_alignment);
     size_t adjusted_offset = ss::align_down(offset, disk_alignment);
     size_t offset_delta = offset - adjusted_offset;
     auto array = ioarray::aligned(
-      memory_alignment, ss::align_up(n + offset_delta, disk_alignment));
+      memory_alignment, ss::align_up(n + offset_delta, max_alignment));
     try {
         size_t amt = co_await _file.dma_read(adjusted_offset, array.as_iovec());
         if (amt < offset_delta + n) {

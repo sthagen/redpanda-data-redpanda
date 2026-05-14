@@ -56,6 +56,7 @@ redpanda_cc_btest(
         "field_parser_test.cc",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/kafka/protocol",
         "//src/v/random:generators",
         "//src/v/test_utils:container_ostream",
@@ -63,6 +64,7 @@ redpanda_cc_btest(
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:base64",
         "@boost//:iterator",
+        "@fmt",
         "@seastar",
         "@seastar//:testing",
     ],

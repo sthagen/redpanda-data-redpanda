@@ -16,7 +16,7 @@ setup(
         "prometheus-client==0.9.0",
         "kafka-python==2.0.6",
         "crc32c==2.2",
-        "confluent-kafka==2.6.1",
+        "confluent-kafka[avro,json,protobuf]==2.14.0",
         "types-confluent-kafka==1.4.0",
         "zstandard==0.23.0",
         "xxhash==3.5.0",
@@ -43,7 +43,7 @@ setup(
         "python-keycloak==5.8.1",
         "z3-solver==4.12.6",
         "hypothesis==6.82",
-        "jsonschema==4.10.0",
+        "jsonschema==4.26.0",
         "redpanda-polaris-catalog-python==1.0.0.post3",  # See: .github/workflows/publish-apache-polaris-python-client.yml
         # PyIceberg: Use an official release once the next major (1.0) is out.
         #   Using a hash to unreleased version because we depend on new

@@ -24,6 +24,7 @@
 #include <avro/Encoder.hh>
 #include <avro/Specific.hh>
 #include <avro/Stream.hh>
+#include <avro/ValidSchema.hh>
 #include <google/protobuf/descriptor.h>
 #include <rapidjson/error/en.h>
 
@@ -130,7 +131,7 @@ record_generator::add_random_protobuf_record(
                           .value();
     auto md_res = pandaproxy::schema_registry::descriptor(
       protobuf_def, message_index);
-    if (md_res.has_error()) {
+    if (!md_res.has_value()) {
         co_return error{fmt::format(
           "Wasn't able to get descriptor for protobuf def with id: {}",
           ctx_schema_id.id)};

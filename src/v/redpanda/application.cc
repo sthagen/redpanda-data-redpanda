@@ -45,6 +45,7 @@
 #include "security/audit/audit_log_manager.h"
 #include "storage/api.h"
 #include "storage/directories.h"
+#include "syschecks/hugepages.h"
 #include "syschecks/syschecks.h"
 #include "utils/file_io.h"
 #include "utils/human.h"
@@ -800,6 +801,18 @@ void application::check_environment() {
     syschecks::systemd_message("checking environment (CPU, Mem)").get();
     syschecks::cpu();
     syschecks::memory(config::node().developer_mode());
+    if (config::shard_local_cfg().code_hugepages_enabled()) {
+        syschecks::promote_code_to_hugepages();
+    }
+    _code_hugepages_binding.emplace(
+      config::shard_local_cfg().code_hugepages_enabled.bind());
+    _code_hugepages_binding->watch([this] {
+        if ((*_code_hugepages_binding)()) {
+            syschecks::promote_code_to_hugepages();
+        } else {
+            syschecks::demote_code_from_hugepages();
+        }
+    });
     memory_groups().log_memory_group_allocations(_log);
     storage::directories::initialize(
       config::node().data_directory().as_sstring())

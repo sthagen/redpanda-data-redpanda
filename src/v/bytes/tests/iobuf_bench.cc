@@ -202,7 +202,14 @@ namespace {
 // (fragment disposal, underlying-buffer frees) is included in the
 // measurement, regardless of whether the as_scattered() implementation
 // performs that work eagerly or defers it to ~iobuf / ~temporary_buffer.
-size_t as_scattered_bench(const iobuf& source, size_t n) {
+//
+// The batch size scales inversely with input size to cap upfront allocation
+// at ~100 MiB (10% of the 1 GiB budget allocated to the test).
+size_t as_scattered_bench(const iobuf& source) {
+    constexpr size_t budget = 100_MiB;
+    const size_t per_input = std::max<size_t>(source.size_bytes(), 1);
+    const size_t n = std::clamp<size_t>(budget / per_input, 1, inner_iters);
+
     std::vector<iobuf> inputs;
     inputs.reserve(n);
     for (size_t i = 0; i < n; i++) {
@@ -225,15 +232,15 @@ size_t as_scattered_bench(const iobuf& source, size_t n) {
 } // namespace
 
 PERF_TEST(iobuf, as_scattered_small) {
-    return as_scattered_bench(make_iobuf(71), inner_iters);
+    return as_scattered_bench(make_iobuf(71));
 }
 
 PERF_TEST(iobuf, as_scattered_large) {
-    return as_scattered_bench(make_iobuf(965_KiB), inner_iters);
+    return as_scattered_bench(make_iobuf(965_KiB));
 }
 
 PERF_TEST(iobuf, as_scattered_many_frags) {
-    return as_scattered_bench(make_fragmented_iobuf(1000, 10), 100);
+    return as_scattered_bench(make_fragmented_iobuf(1000, 10));
 }
 
 // iobuf vs string_view comparisons

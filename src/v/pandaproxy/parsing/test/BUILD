@@ -26,6 +26,7 @@ redpanda_cc_btest(
         "httpd.cc",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/pandaproxy:json",
         "//src/v/pandaproxy:parsing",
         "//src/v/reflection:type_traits",
@@ -35,6 +36,7 @@ redpanda_cc_btest(
         "@boost//:test",
         "@boost//:tuple",
         "@boost//:utility",
+        "@fmt",
         "@seastar",
         "@seastar//:testing",
     ],

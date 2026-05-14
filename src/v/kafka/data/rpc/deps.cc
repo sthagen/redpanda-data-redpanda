@@ -13,7 +13,6 @@
 
 #include "cluster/cluster_link/frontend.h"
 #include "cluster/controller.h"
-#include "cluster/fwd.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"

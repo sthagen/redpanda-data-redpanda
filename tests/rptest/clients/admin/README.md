@@ -1,7 +1,9 @@
 ## Redpanda Admin API Client
 
-This is where our admin V2 API client lives, you can generate new protos and files here using:
+Python ConnectRPC client for the admin v2 API, used by ducktape tests. The proto bindings are generated and committed; regenerate them after any change under `proto/redpanda/core/admin/**`:
 
 ```
 ./tools/regenerate_ducktape_protos.sh
 ```
+
+For the end-to-end process of adding a new admin v2 endpoint (proto authoring, C++ service impl, Bazel wiring, and the regen step above), use the `add-admin-v2-endpoint` skill.

@@ -46,10 +46,16 @@ from rptest.services.redpanda import (
     LoggingConfig,
     MetricsEndpoint,
     PandaproxyConfig,
+    PREV_VERSION_LOG_ALLOW_LIST,
+    RESTART_LOG_ALLOW_LIST,
     RedpandaService,
     ResourceSettings,
     SchemaRegistryConfig,
     SecurityConfig,
+)
+from rptest.services.redpanda_installer import (
+    RedpandaInstaller,
+    wait_for_num_versions,
 )
 from rptest.services.redpanda_types import SaslCredentials
 from rptest.services.serde_client import SerdeClient
@@ -62,7 +68,7 @@ from rptest.util import (
     wait_until_result,
 )
 from rptest.utils.log_utils import wait_until_nag_is_set
-from rptest.utils.mode_checks import skip_fips_mode
+from rptest.utils.mode_checks import skip_debug_mode, skip_fips_mode
 
 Headers: TypeAlias = dict[str, str] | None
 
@@ -1400,6 +1406,9 @@ class SchemaRegistryEndpoints(RedpandaTest):
         merged_rp_conf = {"auto_create_topics_enabled": False}
         if extra_rp_conf:
             merged_rp_conf.update(extra_rp_conf)
+        assert "schema_registry_use_rpc" in merged_rp_conf, (
+            "schema_registry_use_rpc must be explicitly set by each test class"
+        )
         super(SchemaRegistryEndpoints, self).__init__(
             context,
             extra_rp_conf=merged_rp_conf,
@@ -1562,6 +1571,25 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         assert result_raw.status_code == requests.codes.ok
         result = result_raw.json()
         assert set(result) == {"JSON", "PROTOBUF", "AVRO"}
+
+    @cluster(num_nodes=3)
+    def test_unmatched_route_404_shape(self):
+        """
+        Unmatched routes on schema registry must return the standard
+        {"error_code": <int>, "message": "..."} JSON envelope, not Seastar's
+        fallback {"message": "Not found", "code": 404}. SR clients parse
+        `error_code`; without this shape, fallback paths that inspect 404
+        bodies produce a 0-coded error.
+        """
+        result_raw = self.sr_client.request("GET", "_no_such_path")
+        assert result_raw.status_code == requests.codes.not_found, (
+            f"expected 404, got {result_raw.status_code}: {result_raw.text}"
+        )
+
+        body = result_raw.json()
+        assert "error_code" in body, f"expected error_code field, got body={body}"
+        assert body["error_code"] == 404, f"expected error_code=404, got body={body}"
+        assert "message" in body, f"expected message field, got body={body}"
 
     @cluster(num_nodes=3)
     def test_get_schema_id_versions(self):
@@ -3921,9 +3949,12 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
     @cluster(num_nodes=1)
     def test_qualified_subjects_flag_off(self):
         """
-        With enable_qualified_subjects off (default), the qualified syntax is not parsed, and all
+        With enable_qualified_subjects off, the qualified syntax is not parsed, and all
         subjects are treated as if they are in the default context.
         """
+        self.redpanda.set_cluster_config(
+            {"schema_registry_enable_qualified_subjects": False}, expect_restart=True
+        )
 
         # Register a schema with qualified-looking subject name
         # Flag OFF: treated as literal subject name in default context
@@ -3950,7 +3981,10 @@ class SchemaRegistryModeNotMutableTest(SchemaRegistryEndpoints):
         self.schema_registry_config.mode_mutability = False
 
         super(SchemaRegistryModeNotMutableTest, self).__init__(
-            context, schema_registry_config=self.schema_registry_config, **kwargs
+            context,
+            schema_registry_config=self.schema_registry_config,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
         )
 
     @cluster(num_nodes=3)
@@ -3998,7 +4032,10 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
         self.schema_registry_config = SchemaRegistryConfig()
         self.schema_registry_config.mode_mutability = True
         super(SchemaRegistryModeMutableTest, self).__init__(
-            context, schema_registry_config=self.schema_registry_config, **kwargs
+            context,
+            schema_registry_config=self.schema_registry_config,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
         )
 
     @cluster(num_nodes=3)
@@ -5159,21 +5196,27 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
         self.assert_equal(result_raw.json()["id"], 2)
 
 
-class SchemaRegistryContextTest(SchemaRegistryEndpoints):
+class SchemaRegistryContextTestBase(SchemaRegistryEndpoints):
     """
     Tests for context-qualified subject functionality.
 
     These tests verify that Schema Registry correctly handles context-qualified
     subjects (e.g., ":.ctx:subject") for isolation, references, config, and mode.
+
+    Base class. Use SchemaRegistryContextTest (kafka client)
+    or SchemaRegistryContextRpcTransportTest (RPC).
     """
 
     def __init__(self, context: TestContext, **kwargs: Any):
         schema_registry_config = SchemaRegistryConfig()
         schema_registry_config.mode_mutability = True
+        extra_rp_conf = {}
+        if "extra_rp_conf" in kwargs:
+            extra_rp_conf.update(kwargs.pop("extra_rp_conf"))
         super().__init__(
             context,
             schema_registry_config=schema_registry_config,
-            extra_rp_conf={"schema_registry_enable_qualified_subjects": True},
+            extra_rp_conf=extra_rp_conf,
             **kwargs,
         )
 
@@ -7299,12 +7342,37 @@ class SchemaRegistryContextTest(SchemaRegistryEndpoints):
         )
 
 
-class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
+class SchemaRegistryContextTest(SchemaRegistryContextTestBase):
+    """Kafka client transport variant of the context tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+            **kwargs,
+        )
+
+
+class SchemaRegistryContextRpcTransportTest(SchemaRegistryContextTestBase):
+    """RPC transport variant of the context tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
+        )
+
+
+class SchemaRegistryBasicAuthTestBase(SchemaRegistryEndpoints):
     """
     Test schema registry against a redpanda cluster with HTTP Basic Auth enabled.
+
+    Base class. Use SchemaRegistryBasicAuthTest (kafka client)
+    or SchemaRegistryBasicAuthRpcTransportTest (RPC).
     """
 
-    def __init__(self, context):
+    def __init__(self, context, **kwargs):
         security = SecurityConfig()
         security.enable_sasl = True
         security.endpoint_authn_method = "sasl"
@@ -7313,8 +7381,16 @@ class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
         schema_registry_config.authn_method = "http_basic"
         schema_registry_config.mode_mutability = True
 
-        super(SchemaRegistryBasicAuthTest, self).__init__(
-            context, security=security, schema_registry_config=schema_registry_config
+        extra_rp_conf = {}
+        if "extra_rp_conf" in kwargs:
+            extra_rp_conf.update(kwargs.pop("extra_rp_conf"))
+
+        super(SchemaRegistryBasicAuthTestBase, self).__init__(
+            context,
+            security=security,
+            schema_registry_config=schema_registry_config,
+            extra_rp_conf=extra_rp_conf,
+            **kwargs,
         )
 
         superuser = self.redpanda.SUPERUSER_CREDENTIALS
@@ -8094,15 +8170,40 @@ class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):
         )
 
 
+class SchemaRegistryBasicAuthTest(SchemaRegistryBasicAuthTestBase):
+    """Kafka client transport variant of the basic auth tests."""
+
+    def __init__(self, context, **kwargs):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+            **kwargs,
+        )
+
+
+class SchemaRegistryBasicAuthRpcTransportTest(SchemaRegistryBasicAuthTestBase):
+    """RPC transport variant of the basic auth tests."""
+
+    def __init__(self, context, **kwargs):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
+        )
+
+
 class SchemaRegistryTest(SchemaRegistryTestMethods):
     """
     Test schema registry against a redpanda cluster without auth.
 
-    This derived class inherits all the tests from SchemaRegistryTestMethods.
+    Uses the Kafka client transport. The RPC transport variant is
+    SchemaRegistryRpcTransportTest.
     """
 
     def __init__(self, context):
-        super(SchemaRegistryTest, self).__init__(context)
+        super(SchemaRegistryTest, self).__init__(
+            context, extra_rp_conf={"schema_registry_use_rpc": False}
+        )
 
     @cluster(num_nodes=3)
     def test_nodejs_serde_client(self):
@@ -8118,11 +8219,27 @@ class SchemaRegistryTest(SchemaRegistryTestMethods):
         )
 
 
+class SchemaRegistryRpcTransportTest(SchemaRegistryTestMethods):
+    """
+    Test schema registry using the internal RPC transport instead of the
+    Kafka client transport.
+
+    This derived class inherits all the tests from SchemaRegistryTestMethods.
+    """
+
+    def __init__(self, context):
+        super(SchemaRegistryRpcTransportTest, self).__init__(
+            context, extra_rp_conf={"schema_registry_use_rpc": True}
+        )
+
+
 class SchemaRegistryAutoAuthTest(SchemaRegistryTestMethods):
     """
     Test schema registry against a redpanda cluster with Auto Auth enabled.
 
     This derived class inherits all the tests from SchemaRegistryTestMethods.
+
+    No RPC variant in this case. RPC transport doesn't require auth at all..
     """
 
     def __init__(self, context):
@@ -8131,7 +8248,11 @@ class SchemaRegistryAutoAuthTest(SchemaRegistryTestMethods):
         security.endpoint_authn_method = "sasl"
         security.auto_auth = True
 
-        super(SchemaRegistryAutoAuthTest, self).__init__(context, security=security)
+        super(SchemaRegistryAutoAuthTest, self).__init__(
+            context,
+            security=security,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+        )
 
 
 class SchemaRegistryMTLSBase(SchemaRegistryEndpoints):
@@ -8140,7 +8261,9 @@ class SchemaRegistryMTLSBase(SchemaRegistryEndpoints):
     ]
 
     def __init__(self, *args, **kwargs):
-        super(SchemaRegistryMTLSBase, self).__init__(*args, **kwargs)
+        super(SchemaRegistryMTLSBase, self).__init__(
+            *args, extra_rp_conf={"schema_registry_use_rpc": False}, **kwargs
+        )
 
         self.security = SecurityConfig()
 
@@ -8566,11 +8689,18 @@ class SchemaRegistryConfluentClient(SchemaRegistryEndpoints):
     """
 
     def __init__(self, context, **kwargs):
-        super(SchemaRegistryConfluentClient, self).__init__(context, **kwargs)
+        super(SchemaRegistryConfluentClient, self).__init__(
+            context, extra_rp_conf={"schema_registry_use_rpc": True}, **kwargs
+        )
 
         # Replace the Redpanda SR client.
         self._base_uri = self.sr_client.base_uri()
-        self.sr_client = SchemaRegistryClient({"url": self._base_uri})
+        # cache.latest.ttl.sec=0 disables confluent-kafka 2.14's get_latest_version
+        # cache, which is not invalidated on register_schema and would otherwise
+        # return stale results in tests that register multiple versions back-to-back.
+        self.sr_client = SchemaRegistryClient(
+            {"url": self._base_uri, "cache.latest.ttl.sec": 0}
+        )
 
     @cluster(num_nodes=3)
     @matrix(normalize_schemas=[True, False])
@@ -8642,7 +8772,9 @@ class SchemaRegistryConfluentClient(SchemaRegistryEndpoints):
         assert result == [1], f"Result: {result}"
 
         # reinitialize client to drop the cache
-        self.sr_client = SchemaRegistryClient({"url": self._base_uri})
+        self.sr_client = SchemaRegistryClient(
+            {"url": self._base_uri, "cache.latest.ttl.sec": 0}
+        )
         with expect_exception(SchemaRegistryError, lambda e: True):
             self.sr_client.get_version(test_subject, 2)
 
@@ -8697,6 +8829,11 @@ class SchemaRegistryConfluentClient(SchemaRegistryEndpoints):
         result = self.sr_client.get_schema(1)
         assert result == schema1, f"Result: {result}"
 
+        if permanent:
+            # confluent-kafka 2.14's delete_subject(permanent=True) only issues the
+            # hard-delete request; the server requires a prior soft delete.
+            soft_result = self.sr_client.delete_subject(test_subject)
+            assert soft_result == [1], f"Result: {soft_result}"
         result = self.sr_client.delete_subject(test_subject, permanent=permanent)
         assert result == [1], f"Result: {result}"
 
@@ -8757,17 +8894,20 @@ class SchemaRegistryConfluentClient(SchemaRegistryEndpoints):
         result = self.sr_client.register_schema(validate_subject, validate_schema)
         assert result == 4, f"Result: {result}"
 
-        result = self.sr_client.get_schema(1)
-        assert result == simple_schema, f"Result: {result}"
+        # The schema registry canonicalizes the proto source on parse — it
+        # adjusts whitespace, prefixes referenced types with `.` to make them
+        # fully qualified, and so on — so Schema dataclass `==` fails on
+        # schema_str even though the schemas are semantically identical. This
+        # test is about reference round-tripping; assert on schema_type and
+        # references and leave schema_str equivalence to tests focused on it.
+        def _assert_schema_round_trip(actual: Schema, expected: Schema) -> None:
+            assert actual.schema_type == expected.schema_type, f"Result: {actual}"
+            assert actual.references == expected.references, f"Result: {actual}"
 
-        result = self.sr_client.get_schema(2)
-        assert result == imported_schema, f"Result: {result}"
-
-        result = self.sr_client.get_schema(3)
-        assert result == well_known_schema, f"Result: {result}"
-
-        result = self.sr_client.get_schema(4)
-        assert result == validate_schema, f"Result: {result}"
+        _assert_schema_round_trip(self.sr_client.get_schema(1), simple_schema)
+        _assert_schema_round_trip(self.sr_client.get_schema(2), imported_schema)
+        _assert_schema_round_trip(self.sr_client.get_schema(3), well_known_schema)
+        _assert_schema_round_trip(self.sr_client.get_schema(4), validate_schema)
 
 
 # dataset for SchemaRegistryCompatibilityModes: schemas is a list of 3 schemas compatible for `mode`, `antimode` is a suitable mode that will make the compat check for schemas fail
@@ -8778,7 +8918,12 @@ CompatDataset = NamedTuple(
 
 class SchemaRegistryCompatibilityModes(SchemaRegistryEndpoints):
     def __init__(self, test_context, **kwargs):
-        super().__init__(test_context, num_brokers=1, **kwargs)
+        super().__init__(
+            test_context,
+            num_brokers=1,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
+        )
         self._csr_client = SchemaRegistryClient({"url": self.sr_client.base_uri()})
         self._topic = "test-topic"
 
@@ -9027,7 +9172,9 @@ class SchemaRegistryACLTest(SchemaRegistryEndpoints):
     VALID_PATTERN_TYPES = ["LITERAL", "PREFIXED"]
 
     def __init__(self, context, **kwargs):
-        super(SchemaRegistryACLTest, self).__init__(context, **kwargs)
+        super(SchemaRegistryACLTest, self).__init__(
+            context, extra_rp_conf={"schema_registry_use_rpc": True}, **kwargs
+        )
 
     def _create_test_acl(
         self,
@@ -10327,12 +10474,16 @@ class SchemaRegistryAclAuthzTestBase(SchemaRegistryEndpoints):
         schema_registry_config.authn_method = "http_basic"
         schema_registry_config.mode_mutability = True
 
+        merged_rp_conf = {"schema_registry_use_rpc": False}
+        if extra_rp_conf:
+            merged_rp_conf.update(extra_rp_conf)
+
         super().__init__(
             context,
             security=security,
             num_brokers=1,
             schema_registry_config=schema_registry_config,
-            extra_rp_conf=extra_rp_conf,
+            extra_rp_conf=merged_rp_conf,
             **kwargs,
         )
 
@@ -10900,18 +11051,24 @@ class SchemaRegistryAclAuthzTest(SchemaRegistryAclAuthzTestBase):
             )
 
 
-class SchemaRegistryContextAuthzTest(SchemaRegistryAclAuthzTestBase):
+class SchemaRegistryContextAuthzTestBase(SchemaRegistryAclAuthzTestBase):
     """
     Authorization tests for context-qualified subject functionality.
 
     These tests verify that Schema Registry correctly enforces ACL authorization
     when using context-qualified subjects and the subject query parameter.
+
+    Base class. Use SchemaRegistryContextAuthzTest (kafka client)
+    or SchemaRegistryContextAuthzRpcTransportTest (RPC).
     """
 
     def __init__(self, context: TestContext, **kwargs: Any):
+        extra_rp_conf = {}
+        if "extra_rp_conf" in kwargs:
+            extra_rp_conf.update(kwargs.pop("extra_rp_conf"))
         super().__init__(
             context,
-            extra_rp_conf={"schema_registry_enable_qualified_subjects": True},
+            extra_rp_conf=extra_rp_conf,
             **kwargs,
         )
 
@@ -11263,3 +11420,530 @@ class SchemaRegistryContextAuthzTest(SchemaRegistryAclAuthzTestBase):
             403,
             f"GET schemas/ids/{sid}/schema should be 403, got {result.status_code}",
         )
+
+
+class SchemaRegistryContextAuthzTest(SchemaRegistryContextAuthzTestBase):
+    """Kafka client transport variant of the context authz tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+            **kwargs,
+        )
+
+
+class SchemaRegistryContextAuthzRpcTransportTest(SchemaRegistryContextAuthzTestBase):
+    """RPC transport variant of the context authz tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
+        )
+
+
+class SchemaRegistryTransportStressTest(SchemaRegistryEndpoints):
+    """
+    Stress test for schema registry transport resilience. Performs
+    concurrent SR read/write operations while transferring leadership of
+    the _schemas topic. 500 errors should be infrequent and SR should
+    stay queryable.
+    """
+
+    def __init__(self, context: TestContext, **kwargs):
+        super().__init__(
+            context,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=3)
+    @skip_debug_mode
+    def test_no_errors_during_leadership_transfers(self):
+        import threading
+
+        admin = Admin(self.redpanda)
+
+        # --- Setup: register initial schemas so reads have data ---
+        num_subjects = 3
+        schema_ids = []
+        subjects = []
+        for i in range(num_subjects):
+            subject = f"stress-test-subject-{i}"
+            subjects.append(subject)
+            data = json.dumps(
+                {
+                    "schema": json.dumps(
+                        {
+                            "type": "record",
+                            "name": f"rec{i}",
+                            "fields": [{"name": "f1", "type": "string"}],
+                        }
+                    ),
+                }
+            )
+            result = self.sr_client.post_subjects_subject_versions(
+                subject=subject, data=data
+            )
+            assert result.status_code == 200, (
+                f"Setup: failed to register schema: {result.status_code} {result.text}"
+            )
+            schema_ids.append(result.json()["id"])
+
+        self.logger.info(
+            f"Setup complete: {num_subjects} subjects, schema_ids={schema_ids}"
+        )
+
+        # --- Background workers ---
+        request_counter = 0
+        request_counter_lock = threading.Lock()
+        errors: list[str] = []
+        stop_event = threading.Event()
+
+        def count_request():
+            nonlocal request_counter
+            with request_counter_lock:
+                request_counter += 1
+
+        # Short timeout so threads don't block teardown.
+        req_timeout = 10
+
+        def reader_worker():
+            """Continuously read subjects and schemas from random nodes."""
+            while not stop_event.is_set():
+                for node in self.redpanda.nodes:
+                    if stop_event.is_set():
+                        break
+                    hostname = node.account.hostname
+                    try:
+                        count_request()
+                        r = self.sr_client.get_subjects(
+                            hostname=hostname, timeout=req_timeout
+                        )
+                        if r.status_code == 500:
+                            errors.append(f"GET /subjects on {hostname}: 500 {r.text}")
+                        for sid in schema_ids:
+                            if stop_event.is_set():
+                                break
+                            count_request()
+                            r = self.sr_client.request(
+                                "GET",
+                                f"schemas/ids/{sid}",
+                                hostname=hostname,
+                                headers=HTTP_GET_HEADERS,
+                                timeout=req_timeout,
+                            )
+                            if r.status_code == 500:
+                                errors.append(
+                                    f"GET /schemas/ids/{sid} on {hostname}: "
+                                    f"500 {r.text}"
+                                )
+                    except Exception as e:
+                        self.logger.warn(f"Reader exception on {hostname}: {e}")
+
+        def writer_worker():
+            """Continuously register new schema versions."""
+            seq = 0
+            while not stop_event.is_set():
+                seq += 1
+                subject = subjects[seq % num_subjects]
+                data = json.dumps(
+                    {
+                        "schema": json.dumps(
+                            {
+                                "type": "record",
+                                "name": f"rec{seq % num_subjects}",
+                                "fields": [
+                                    {"name": "f1", "type": ["null", "string"]},
+                                    {
+                                        "name": f"f_write_{seq}",
+                                        "type": "string",
+                                        "default": "x",
+                                    },
+                                ],
+                            }
+                        ),
+                    }
+                )
+                try:
+                    count_request()
+                    r = self.sr_client.post_subjects_subject_versions(
+                        subject=subject,
+                        data=data,
+                        timeout=req_timeout,
+                    )
+                    if r.status_code == 500:
+                        errors.append(
+                            f"POST /subjects/{subject}/versions: 500 {r.text}"
+                        )
+                except Exception as e:
+                    self.logger.warn(f"Writer exception: {e}")
+
+                # Pace writes to avoid overwhelming the cluster. Using
+                # stop_event.wait lets teardown cancel the pause instead of
+                # running out a full 0.5s of sleep.
+                if stop_event.wait(0.5):
+                    break
+
+        # Start 2 reader threads and 1 writer thread
+        threads = []
+        for _ in range(2):
+            t = threading.Thread(target=reader_worker)
+            t.start()
+            threads.append(t)
+        t = threading.Thread(target=writer_worker)
+        t.start()
+        threads.append(t)
+
+        # --- Perturbation: leadership transfers ---
+        num_transfers = 20
+        node_ids = [self.redpanda.node_id(n) for n in self.redpanda.nodes]
+        for i in range(num_transfers):
+            leader = admin.get_partition_leader(
+                namespace="kafka", topic="_schemas", partition=0
+            )
+            # Pick a specific target so the same node doesn't re-elect itself.
+            targets = [n for n in node_ids if n != leader]
+            target = targets[i % len(targets)]
+            self.logger.info(
+                f"Transfer {i + 1}/{num_transfers}: moving leadership "
+                f"from node {leader} to node {target}"
+            )
+            admin.partition_transfer_leadership(
+                namespace="kafka",
+                topic="_schemas",
+                partition=0,
+                target_id=target,
+            )
+
+            # Wait for the specific target to become leader, not just "any
+            # leader other than the old one".
+            wait_until(
+                lambda: admin.get_partition_leader(
+                    namespace="kafka", topic="_schemas", partition=0
+                )
+                == target,
+                timeout_sec=10,
+                backoff_sec=1,
+                err_msg=f"Leadership did not transfer to node {target}",
+            )
+
+        # --- Teardown ---
+        stop_event.set()
+        for t in threads:
+            t.join(timeout=req_timeout + 5)
+        alive = [t for t in threads if t.is_alive()]
+        assert not alive, f"{len(alive)} worker thread(s) still alive after join"
+
+        total_requests = request_counter
+        error_rate = len(errors) / total_requests if total_requests else 0
+        self.logger.info(
+            f"Stress test complete: {num_transfers} leadership transfers, "
+            f"{total_requests} requests, {len(errors)} errors "
+            f"({error_rate:.2%})"
+        )
+
+        # A small number of transient 500s during rapid leadership
+        # transfers is acceptable. The internal retry budget can be
+        # exhausted if a transfer is slow to propagate. The important
+        # thing is that the error rate is low: the system recovers
+        # quickly and subsequent requests succeed. A real retry-path
+        # regression spikes well above 1%, so this catches meaningful
+        # breakage without too much CI noise.
+        assert error_rate < 0.01, (
+            f"Error rate {error_rate:.2%} exceeds 1% threshold "
+            f"({len(errors)} errors in {total_requests} requests):\n"
+            + "\n".join(errors[:20])
+        )
+
+        # Verify the system recovers after transfers complete: every
+        # node must be able to serve a basic read within a reasonable
+        # window. wait_until absorbs transient CI slowness while still
+        # catching real breakage.
+        def all_nodes_healthy():
+            for node in self.redpanda.nodes:
+                r = self.sr_client.get_subjects(
+                    hostname=node.account.hostname, timeout=req_timeout
+                )
+                if r.status_code != 200:
+                    return False
+            return True
+
+        wait_until(
+            all_nodes_healthy,
+            timeout_sec=30,
+            backoff_sec=2,
+            err_msg="Schema registry did not recover on all nodes "
+            "after leadership transfers",
+        )
+
+
+class SchemaRegistryRpcTransportStressTest(SchemaRegistryTransportStressTest):
+    """
+    RPC transport variant of the leadership transfer stress test.
+    """
+
+    def __init__(self, context: TestContext):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+        )
+
+
+class SchemaRegistryKafkaClientTransportStressTest(SchemaRegistryTransportStressTest):
+    """
+    Kafka client transport variant of the leadership transfer stress test.
+    """
+
+    def __init__(self, context: TestContext):
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+        )
+
+
+class SchemaRegistryTransportCompatTest(RedpandaTest):
+    """
+    Cross-transport correctness for the _schemas topic.
+
+    General idea is to verify that RPC and kafka produce agree
+    on offset assignment.
+    """
+
+    # Last release line before the v26.2.1 SR rpc_transport gate.
+    INITIAL_LINE: tuple[int, int] = (26, 1)
+
+    def __init__(self, test_context: TestContext):
+        super().__init__(
+            test_context=test_context,
+            num_brokers=3,
+            extra_rp_conf={"auto_create_topics_enabled": False},
+            resource_settings=ResourceSettings(num_cpus=1),
+            log_config=log_config,
+            pandaproxy_config=PandaproxyConfig(),
+            schema_registry_config=SchemaRegistryConfig(),
+        )
+        self.sr_client = SchemaRegistryRedpandaClient(redpanda=self.redpanda)
+        self.installer = self.redpanda._installer
+
+    def setUp(self):
+        if self.test_context.function_name == "test_upgrade_kafka_to_rpc":
+            # released_versions is descending; first hit on INITIAL_LINE
+            # is the latest patch. We walk the list directly because dev
+            # builds report v0.0.0-dev, which makes the feature-line
+            # install path silently no-op.
+            candidates = [
+                v
+                for v in self.installer.released_versions
+                if v[:2] == self.INITIAL_LINE
+            ]
+            assert candidates, (
+                f"no v{self.INITIAL_LINE[0]}.{self.INITIAL_LINE[1]}.x in "
+                f"{self.installer.released_versions[:5]}"
+            )
+            self.initial_version: tuple[int, int, int] = candidates[0]
+            self.installer.install(self.redpanda.nodes, self.initial_version)
+        super().setUp()
+
+    def _register_schema(self, subject: str, record_name: str) -> int:
+        schema = json.dumps(
+            {
+                "schema": json.dumps(
+                    {
+                        "type": "record",
+                        "name": record_name,
+                        "fields": [{"name": "f1", "type": "string"}],
+                    }
+                )
+            }
+        )
+        r = self.sr_client.post_subjects_subject_versions(subject=subject, data=schema)
+        assert r.status_code == 200, f"register {subject}: {r.status_code} {r.text}"
+        return r.json()["id"]
+
+    def _read_schema(self, sid: int, hostname: str) -> str:
+        r = self.sr_client.get_schemas_ids_id(id=sid, hostname=hostname)
+        assert r.status_code == 200, (
+            f"read schemas/ids/{sid} on {hostname}: {r.status_code} {r.text}"
+        )
+        return r.json()["schema"]
+
+    def _wait_for_sr_responsive(self, hostname: str) -> None:
+        def ok():
+            try:
+                return (
+                    self.sr_client.get_subjects(
+                        hostname=hostname, timeout=10
+                    ).status_code
+                    == 200
+                )
+            except Exception:
+                return False
+
+        wait_until(
+            ok,
+            timeout_sec=60,
+            backoff_sec=2,
+            err_msg=f"SR not responsive on {hostname}",
+        )
+
+    def _flip_transport(self, *, use_rpc: bool) -> None:
+        mode_log = (
+            "Schema registry in RPC mode"
+            if use_rpc
+            else "Schema registry in Kafka client mode"
+        )
+        # Snapshot per-node counts; require a strict increase after
+        # restart so a flip-back can't match an earlier boot's line.
+        pre_counts = {
+            node.name: self.redpanda.count_log_node(node, mode_log)
+            for node in self.redpanda.nodes
+        }
+        # needs_restart=yes; the rolling restart re-runs api::start.
+        self.redpanda.set_cluster_config(
+            {"schema_registry_use_rpc": use_rpc},
+            expect_restart=True,
+        )
+        self.redpanda.rolling_restart_nodes(self.redpanda.nodes)
+        for node in self.redpanda.nodes:
+            wait_until(
+                lambda n=node: self.redpanda.count_log_node(n, mode_log)
+                > pre_counts[n.name],
+                timeout_sec=30,
+                backoff_sec=2,
+                err_msg=f"{node.name} did not log a new {mode_log!r}",
+            )
+            self._wait_for_sr_responsive(node.account.hostname)
+
+    def _verify_phase(
+        self,
+        prior: list[tuple[int, str]],
+        prefix: str,
+        record_name: str,
+        n: int,
+    ) -> list[tuple[int, str]]:
+        """
+        Read every `prior` schema on every node (cross-transport
+        replay), write `n` new schemas with strictly greater ids,
+        then read the new ones on every node. Return prior + new.
+        """
+        for node in self.redpanda.nodes:
+            for sid, payload in prior:
+                got = self._read_schema(sid, node.account.hostname)
+                assert got == payload, (
+                    f"id {sid} on {node.name}: payload mismatch "
+                    f"(expected={payload!r}, got={got!r})"
+                )
+
+        max_prior = max((sid for sid, _ in prior), default=0)
+        host = self.redpanda.nodes[0].account.hostname
+        new_writes: list[tuple[int, str]] = []
+        for i in range(n):
+            sid = self._register_schema(f"sr-{prefix}-{i}", f"{record_name}{i}")
+            assert sid > max_prior, (
+                f"new id {sid} <= max prior {max_prior}; "
+                f"loaded_offset reconstruction regressed"
+            )
+            new_writes.append((sid, self._read_schema(sid, host)))
+
+        for node in self.redpanda.nodes:
+            for sid, payload in new_writes:
+                got = self._read_schema(sid, node.account.hostname)
+                assert got == payload, (
+                    f"new id {sid} on {node.name}: payload mismatch "
+                    f"(expected={payload!r}, got={got!r})"
+                )
+
+        return prior + new_writes
+
+    @cluster(
+        num_nodes=3,
+        log_allow_list=RESTART_LOG_ALLOW_LIST + PREV_VERSION_LOG_ALLOW_LIST,
+    )
+    @skip_fips_mode
+    def test_upgrade_kafka_to_rpc(self):
+        """
+        kafka-client writes from a prior version survive a rolling upgrade and
+        replay correctly under the post-upgrade rpc transport; new
+        rpc-transport writes propagate to every node.
+        """
+        initial_version_str = "v{}.{}.{}".format(*self.initial_version)
+
+        # install() silently falls back to HEAD on dev builds; verify
+        # the cluster is actually on the prior version before writing.
+        unique_versions = wait_for_num_versions(self.redpanda, 1)
+        assert initial_version_str in unique_versions, (
+            f"expected {initial_version_str}, got {unique_versions}"
+        )
+
+        for node in self.redpanda.nodes:
+            self._wait_for_sr_responsive(node.account.hostname)
+
+        num_subjects = 4
+        pre_ids = [
+            self._register_schema(f"sr-upgrade-pre-{i}", f"PreRec{i}")
+            for i in range(num_subjects)
+        ]
+
+        self.installer.install(self.redpanda.nodes, RedpandaInstaller.HEAD)
+        self.redpanda.rolling_restart_nodes(self.redpanda.nodes)
+        wait_for_num_versions(self.redpanda, 1)
+
+        # api::start picks the transport once at process start; rolling-
+        # restart re-runs it now that the active version is past the
+        # v26.2.1 gate.
+        self.redpanda.rolling_restart_nodes(self.redpanda.nodes)
+
+        for node in self.redpanda.nodes:
+            wait_until(
+                lambda n=node: self.redpanda.search_log_node(
+                    n, "Schema registry in RPC mode"
+                ),
+                timeout_sec=30,
+                backoff_sec=2,
+                err_msg=f"{node.name} did not log RPC transport mode",
+            )
+
+        for node in self.redpanda.nodes:
+            self._wait_for_sr_responsive(node.account.hostname)
+            for sid in pre_ids:
+                self._read_schema(sid, node.account.hostname)
+
+        post_ids = [
+            self._register_schema(f"sr-upgrade-post-{i}", f"PostRec{i}")
+            for i in range(num_subjects)
+        ]
+
+        # Schema ids are monotonic; collisions would mean state was lost.
+        max_pre = max(pre_ids)
+        for new_id in post_ids:
+            assert new_id > max_pre, (
+                f"post id {new_id} <= max pre {max_pre} (pre={pre_ids} post={post_ids})"
+            )
+
+        for node in self.redpanda.nodes:
+            for sid in post_ids:
+                self._read_schema(sid, node.account.hostname)
+
+    @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    def test_transport_compatibility(self):
+        """
+        runtime flips between rpc and kafka client transports preserve _schemas
+        content. Cycles RPC -> kafka -> RPC -> kafka, exercising both directions
+        of cross-transport replay with writes under each transport.
+        """
+        for node in self.redpanda.nodes:
+            self._wait_for_sr_responsive(node.account.hostname)
+
+        n = 4
+        after_rpc1 = self._verify_phase([], "rpc1", "Rpc1Rec", n)
+
+        self._flip_transport(use_rpc=False)
+        after_kafka1 = self._verify_phase(after_rpc1, "kafka1", "Kafka1Rec", n)
+
+        self._flip_transport(use_rpc=True)
+        after_rpc2 = self._verify_phase(after_kafka1, "rpc2", "Rpc2Rec", n)
+
+        self._flip_transport(use_rpc=False)
+        self._verify_phase(after_rpc2, "kafka2", "Kafka2Rec", n)

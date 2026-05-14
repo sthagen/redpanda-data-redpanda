@@ -16,7 +16,6 @@
 #include "kafka/data/partition_proxy.h"
 #include "logger.h"
 #include "model/ktp.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/timeout_clock.h"

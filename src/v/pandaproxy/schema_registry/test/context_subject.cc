@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "config/configuration.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/exceptions.h"
 #include "pandaproxy/schema_registry/types.h"
@@ -17,8 +18,10 @@ namespace pandaproxy::schema_registry {
 
 class ContextSubjectTest : public ::testing::Test {
 protected:
-    void SetUp() override { enable_qualified_subjects::set_local(true); }
-    void TearDown() override { enable_qualified_subjects::reset_local(); }
+    void TearDown() override {
+        config::shard_local_cfg()
+          .schema_registry_enable_qualified_subjects.reset();
+    }
 };
 
 TEST_F(ContextSubjectTest, FromString) {
@@ -77,8 +80,8 @@ TEST_F(ContextSubjectTest, ToStringAndRoundTrip) {
 }
 
 TEST_F(ContextSubjectTest, FlagOffTreatsQualifiedAsLiteral) {
-    enable_qualified_subjects::reset_local();
-    enable_qualified_subjects::set_local(false);
+    config::shard_local_cfg()
+      .schema_registry_enable_qualified_subjects.set_value(false);
 
     auto ctx_sub = context_subject::from_string(":.myctx:my-topic");
 
@@ -103,8 +106,8 @@ TEST_F(ContextSubjectTest, FlagOnUnqualifiedUsesDefaultContext) {
 }
 
 TEST_F(ContextSubjectTest, FlagOffUnqualifiedUsesDefaultContext) {
-    enable_qualified_subjects::reset_local();
-    enable_qualified_subjects::set_local(false);
+    config::shard_local_cfg()
+      .schema_registry_enable_qualified_subjects.set_value(false);
 
     auto ctx_sub = context_subject::from_string("plain-topic");
 
@@ -208,11 +211,7 @@ TEST_F(ContextSubjectTest, ValidateSubjectConfigModeFlag) {
       exception);
 }
 
-class ContextSubjectReferenceTest : public ::testing::Test {
-protected:
-    void SetUp() override { enable_qualified_subjects::set_local(true); }
-    void TearDown() override { enable_qualified_subjects::reset_local(); }
-};
+class ContextSubjectReferenceTest : public ::testing::Test {};
 
 TEST_F(ContextSubjectReferenceTest, FromString) {
     // Unqualified subjects: qualified=false

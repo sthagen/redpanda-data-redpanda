@@ -79,3 +79,19 @@ redpanda_cc_btest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_btest(
+    name = "default_404_handler_test",
+    timeout = "short",
+    srcs = [
+        "default_404_handler.cc",
+    ],
+    deps = [
+        "//src/v/json",
+        "//src/v/pandaproxy:default_404_handler",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)

@@ -114,6 +114,24 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "default_404_handler",
+    srcs = [
+        "default_404_handler.cc",
+    ],
+    hdrs = [
+        "default_404_handler.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":error",
+        ":error_reply",
+        ":json",
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "core",
     srcs = [
         "kafka_client_cache.cc",
@@ -131,6 +149,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":default_404_handler",
         ":error",
         ":error_reply",
         ":json",

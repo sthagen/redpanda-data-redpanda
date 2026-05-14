@@ -26,6 +26,7 @@ redpanda_cc_btest(
         "//src/v/base",
         "//src/v/pandaproxy:json",
         "//src/v/pandaproxy/schema_registry:server",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/test_utils:seastar_boost",
         "@fmt",
         "@seastar",

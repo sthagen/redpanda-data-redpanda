@@ -136,6 +136,7 @@ public:
     ss::future<> stop();
 
 private:
+    std::unique_ptr<ss::httpd::handler_base> _default_handler;
     ss::httpd::http_server _server;
     ss::sstring _public_metrics_group_name;
     ss::gate _pending_reqs;

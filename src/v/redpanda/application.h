@@ -293,6 +293,7 @@ private:
     ss::sharded<scheduling_groups_probe> _scheduling_groups_probe;
 
     std::optional<config::binding<bool>> _abort_on_oom;
+    std::optional<config::binding<bool>> _code_hugepages_binding;
 
     ss::sharded<memory_sampling> _memory_sampling;
     ss::sharded<rpc::rpc_server> _rpc;

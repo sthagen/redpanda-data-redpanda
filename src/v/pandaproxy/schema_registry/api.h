@@ -13,13 +13,15 @@
 
 #include "base/seastarx.h"
 #include "cluster/metrics_reporter.h"
-#include "kafka/client/configuration.h"
+#include "kafka/data/rpc/fwd.h"
 #include "model/metadata.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "security/fwd.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
+
+#include <memory>
 
 namespace YAML {
 class Node;
@@ -29,6 +31,10 @@ namespace cluster {
 class controller;
 class metadata_cache;
 } // namespace cluster
+
+namespace kafka::client {
+struct configuration;
+} // namespace kafka::client
 
 namespace schema {
 class registry;
@@ -46,7 +52,8 @@ public:
       configuration& cfg,
       ss::sharded<cluster::metadata_cache>* metadata_cache,
       std::unique_ptr<cluster::controller>&,
-      ss::sharded<security::audit::audit_log_manager>&) noexcept;
+      ss::sharded<security::audit::audit_log_manager>&,
+      ss::sharded<kafka::data::rpc::client>* rpc_client) noexcept;
     ~api() noexcept;
 
     ss::future<> start();
@@ -63,6 +70,8 @@ public:
     contribute_metrics(cluster::metrics_reporter::metrics_snapshot&) const;
 
 private:
+    struct transport_impl;
+
     friend class schema_id_validator;
     friend class schema::registry;
     model::node_id _node_id;
@@ -73,13 +82,14 @@ private:
     ss::sharded<cluster::metadata_cache>* _metadata_cache;
     std::unique_ptr<cluster::controller>& _controller;
 
-    ss::sharded<kafka_client_transport> _transport;
+    std::unique_ptr<transport_impl> _transport;
     std::unique_ptr<pandaproxy::schema_registry::sharded_store> _store;
     ss::sharded<schema_id_validation_probe> _schema_id_validation_probe;
     ss::sharded<schema_id_cache> _schema_id_cache;
     ss::sharded<pandaproxy::schema_registry::service> _service;
     ss::sharded<pandaproxy::schema_registry::seq_writer> _sequencer;
     ss::sharded<security::audit::audit_log_manager>& _audit_mgr;
+    ss::sharded<kafka::data::rpc::client>* _rpc_client;
 
     // Metrics telemetry support - only used on shard 0
     ss::gate _metrics_gate{};

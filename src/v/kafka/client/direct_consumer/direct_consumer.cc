@@ -212,9 +212,16 @@ bool direct_consumer::update_and_filter_offsets(
     if (
       subscription.last_known_source_offsets.last_stable_offset
       > spo.last_stable_offset) {
+        // A source broker may transiently advertise an LSO below the
+        // high watermark (and below the previously observed LSO) just
+        // after a restart: the fetch handler can run before the
+        // partition's rm_stm has replayed up to HWM, so LSO is reported
+        // from cold rm_stm state while HWM already reflects recovered
+        // storage. This self-corrects on the next poll once rm_stm
+        // catches up, so treat it as noise rather than an error.
         vlog(
-          _cluster->logger().error,
-          "{}/{} last known stable should never move backward, "
+          _cluster->logger().warn,
+          "{}/{} last known stable should not normally move backward, "
           "current: {}, found: {}",
           topic_name,
           partition_data.partition_id,

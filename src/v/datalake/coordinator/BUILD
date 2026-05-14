@@ -112,6 +112,7 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/net",
         "//src/v/net:tls",
+        "//src/v/pandaproxy/schema_registry:fwd",
         "//src/v/raft",
         "@seastar",
     ],

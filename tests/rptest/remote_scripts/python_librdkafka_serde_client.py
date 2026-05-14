@@ -268,10 +268,15 @@ class SerdeClient:
         }
 
     def produce(self, count: int):
+        delivery_error_code: int | None = None
+
         def increment(err: KafkaError | None, msg: Message | None):
+            nonlocal delivery_error_code
             if err is not None:
                 self.logger.error(f"Produce err: {err}")
-                sys.exit(err.code())
+                if delivery_error_code is None:
+                    delivery_error_code = err.code()
+                return
             assert msg is not None
             if self.first_ack is None:
                 self.first_ack = msg.offset()
@@ -319,6 +324,13 @@ class SerdeClient:
 
         self.logger.info("Flushing records...")
         producer.flush()
+        # confluent-kafka 2.13+ strictly propagates exceptions raised inside C
+        # callbacks, which turns a `sys.exit(int)` from on_delivery
+        # into a `SystemError: ... <class 'int'> is not a BaseException
+        # subclass`. Stash the error code in the callback and exit here, after
+        # flush() has returned control to Python.
+        if delivery_error_code is not None:
+            sys.exit(delivery_error_code)  # pyright: ignore[reportUnreachable]
         self.logger.info("Records flushed: %d", self.produced)
         while self.acked < count:
             producer.poll(0.01)

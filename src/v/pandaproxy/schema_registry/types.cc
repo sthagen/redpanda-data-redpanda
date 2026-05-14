@@ -11,6 +11,7 @@
 
 #include "types.h"
 
+#include "config/configuration.h"
 #include "errors.h"
 #include "util.h"
 #include "utils/to_string.h"
@@ -68,7 +69,8 @@ fmt::iterator schema_metadata::format_to(fmt::iterator it) const {
 namespace {
 std::pair<context_subject, is_qualified> parse_subject(std::string_view input) {
     // If qualified subject parsing is disabled, treat everything as literal
-    if (!enable_qualified_subjects::get()) {
+    if (!config::shard_local_cfg()
+           .schema_registry_enable_qualified_subjects()) {
         return {
           context_subject{default_context, subject{input}}, is_qualified::no};
     }

@@ -18,6 +18,7 @@
 #include <seastar/testing/thread_test_case.hh>
 
 #include <avro/Compiler.hh>
+#include <avro/ValidSchema.hh>
 #include <boost/test/tools/old/interface.hpp>
 
 #include <algorithm>

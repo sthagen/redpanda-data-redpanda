@@ -13,9 +13,7 @@
 
 #include "base/seastarx.h"
 #include "pandaproxy/schema_registry/configuration.h"
-#include "pandaproxy/schema_registry/seq_writer.h"
-#include "pandaproxy/schema_registry/sharded_store.h"
-#include "pandaproxy/schema_registry/transport.h"
+#include "pandaproxy/schema_registry/fwd.h"
 #include "pandaproxy/server.h"
 #include "pandaproxy/util.h"
 #include "security/fwd.h"

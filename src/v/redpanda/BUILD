@@ -99,6 +99,9 @@ redpanda_cc_library(
         "//src/v/net:tls",
         "//src/v/pandaproxy:core",
         "//src/v/pandaproxy/rest:server",
+        "//src/v/pandaproxy/schema_registry:api",
+        "//src/v/pandaproxy/schema_registry:configuration",
+        "//src/v/pandaproxy/schema_registry:fwd",
         "//src/v/pandaproxy/schema_registry:server",
         "//src/v/raft",
         "//src/v/redpanda/admin",
@@ -170,14 +173,20 @@ redpanda_cc_binary(
     srcs = [
         "main.cc",
     ],
-    linkopts =
-        select({
-            ":use_emit_relocs": [
-                "-Wl,--emit-relocs",
-            ],
-            "//conditions:default": [
-            ],
-        }),
+    linkopts = [
+        # Align loadable segments to 2 MB so the text segment is eligible for
+        # transparent huge pages (PMD-mapped). separate-loadable-segments
+        # ensures each PT_LOAD gets its own mmap at a 2 MB boundary rather
+        # than packing segments into a single mapping.
+        "-Wl,-z,max-page-size=2097152",
+        "-Wl,-z,separate-loadable-segments",
+    ] + select({
+        ":use_emit_relocs": [
+            "-Wl,--emit-relocs",
+        ],
+        "//conditions:default": [
+        ],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":application",

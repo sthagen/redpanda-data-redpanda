@@ -30,6 +30,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
 
+#include <avro/ValidSchema.hh>
 #include <google/protobuf/descriptor.h>
 
 #include <algorithm>
@@ -76,11 +77,10 @@ checked<resolved_type, type_resolver::errc> translate_protobuf_schema(
   schema_identifier&& id,
   shared_schema_t schema) {
     auto d_res = descriptor(pb_def, id.protobuf_offsets.value());
-    if (d_res.has_error()) {
+    if (!d_res.has_value()) {
         vlog(
           datalake_log.error,
-          "Failed to resolve Protobuf descriptor (missing offsets?): {}",
-          d_res.error());
+          "Failed to resolve Protobuf descriptor (missing offsets?)");
         return type_resolver::errc::bad_input;
     }
     const auto* d = &d_res.value().get();
@@ -470,7 +470,7 @@ checked<std::vector<int32_t>, type_resolver::errc> compute_message_offsets(
   const ppsr::protobuf_schema_definition& pb_def,
   std::string_view message_full_name) {
     auto d_res = ppsr::descriptor(pb_def, message_full_name);
-    if (d_res.has_error()) {
+    if (!d_res.has_value()) {
         return type_resolver::errc::invalid_config;
     }
     // Build up the offsets by walking the descriptor tree

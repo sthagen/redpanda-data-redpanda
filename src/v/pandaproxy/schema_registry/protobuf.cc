@@ -14,11 +14,10 @@
 #include "absl/container/flat_hash_set.h"
 #include "base/vlog.h"
 #include "bytes/streambuf.h"
-#include "kafka/protocol/errors.h"
 #include "pandaproxy/logger.h"
 #include "pandaproxy/schema_registry/compatibility.h"
 #include "pandaproxy/schema_registry/errors.h"
-#include "pandaproxy/schema_registry/sharded_store.h"
+#include "pandaproxy/schema_registry/schema_getter.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "ssx/sformat.h"
 #include "utils/base64.h"
@@ -564,51 +563,47 @@ protobuf_schema_definition::raw(output_format format) const {
     return _impl->raw(format);
 }
 
-::result<ss::sstring, kafka::error_code>
+std::optional<ss::sstring>
 protobuf_schema_definition::name(const std::vector<int>& fields) const {
     auto d = descriptor(*this, fields);
-    if (d.has_error()) {
-        return d.error();
+    if (!d.has_value()) {
+        return std::nullopt;
     }
     return ss::sstring(d.value().get().full_name());
 }
 
-::result<
-  std::reference_wrapper<const google::protobuf::Descriptor>,
-  kafka::error_code>
+std::optional<std::reference_wrapper<const google::protobuf::Descriptor>>
 descriptor(
   const protobuf_schema_definition& def, const std::vector<int>& fields) {
     if (fields.empty()) {
-        return kafka::error_code::invalid_record;
+        return std::nullopt;
     }
     auto f = fields.begin();
     if (def().fd->message_type_count() <= *f) {
-        return kafka::error_code::invalid_record;
+        return std::nullopt;
     }
     auto d = def().fd->message_type(*f++);
     while (fields.end() != f && d) {
         if (d->nested_type_count() <= *f) {
-            return kafka::error_code::invalid_record;
+            return std::nullopt;
         }
         d = d->nested_type(*f++);
     }
     if (!d) {
-        return kafka::error_code::invalid_record;
+        return std::nullopt;
     }
     return *d;
 }
 
-::result<
-  std::reference_wrapper<const google::protobuf::Descriptor>,
-  kafka::error_code>
+std::optional<std::reference_wrapper<const google::protobuf::Descriptor>>
 descriptor(const protobuf_schema_definition& def, std::string_view full_name) {
     if (full_name.empty()) {
-        return kafka::error_code::invalid_record;
+        return std::nullopt;
     }
     const google::protobuf::Descriptor* d = def()._dp.FindMessageTypeByName(
       full_name);
     if (!d) {
-        return kafka::error_code::invalid_record;
+        return std::nullopt;
     }
     return *d;
 }
@@ -648,7 +643,7 @@ ss::future<protobuf_schema_definition> make_protobuf_schema_definition(
 }
 
 ss::future<schema_definition> validate_protobuf_schema(
-  sharded_store& store,
+  schema_getter& store,
   subject_schema schema,
   normalize norm,
   output_format format) {
@@ -659,7 +654,7 @@ ss::future<schema_definition> validate_protobuf_schema(
 }
 
 ss::future<subject_schema> make_canonical_protobuf_schema(
-  sharded_store& store,
+  schema_getter& store,
   subject_schema schema,
   normalize norm,
   output_format format) {
@@ -671,7 +666,7 @@ ss::future<subject_schema> make_canonical_protobuf_schema(
 }
 
 ss::future<schema_definition> format_protobuf_schema_definition(
-  sharded_store& store, schema_definition schema, output_format format) {
+  schema_getter& store, schema_definition schema, output_format format) {
     switch (format) {
     case output_format::ignore_extensions:
         throw as_exception(format_not_supported(format));
@@ -771,6 +766,9 @@ struct compatibility_checker {
 
         for (int i = 0; i < writer->nested_type_count(); ++i) {
             auto w = writer->nested_type(i);
+            if (w->options().has_map_entry()) {
+                continue;
+            }
             auto r = reader->FindNestedTypeByName(w->name());
             if (!r) {
                 compat_result.emplace<proto_incompatibility>(

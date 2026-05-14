@@ -536,7 +536,6 @@ class TransactionsTest(RedpandaTest, TransactionsMixin):
                 "test-post-expire",
                 "test-post-expire",
                 partition=0,
-                on_delivery=self.on_delivery,
             )
             producer.flush()
             assert False, "tx is expected to be expired"

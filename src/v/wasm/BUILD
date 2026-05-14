@@ -73,7 +73,7 @@ redpanda_cc_library(
     deps = [
         ":ffi",
         "//src/v/base",
-        "//src/v/pandaproxy/schema_registry:registry",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/schema:registry",
         "@seastar",
     ],
@@ -273,6 +273,7 @@ redpanda_cc_library(
     deps = [
         ":api",
         "//src/v/base",
+        "//src/v/pandaproxy/schema_registry:fwd",
         "//src/v/pandaproxy/schema_registry:types",
         "@seastar",
     ],

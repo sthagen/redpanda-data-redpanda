@@ -125,7 +125,7 @@ struct db_s3_imposter_fixture::handler : ss::httpd::handler_base {
             rep->set_status(ss::http::reply::status_type::bad_request);
         }
 
-        rep->done("xml");
+        rep->set_content_type("xml");
         co_return std::move(rep);
     }
 

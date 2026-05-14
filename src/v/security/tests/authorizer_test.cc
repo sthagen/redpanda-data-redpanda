@@ -1916,10 +1916,6 @@ TEST(AUTHORIZER_TEST, role_authz_remove_binding_multiple_match) {
 
 TEST(AUTHORIZER_TEST, authz_filter_out_non_kafka_resources) {
     namespace ppsr = pandaproxy::schema_registry;
-    ppsr::enable_qualified_subjects::set_local(true);
-    auto reset_flag = ss::defer(
-      [] { ppsr::enable_qualified_subjects::reset_local(); });
-
     acl_principal user(principal_type::user, "alice");
     acl_host host("192.168.2.1");
 
@@ -3135,10 +3131,6 @@ TEST(AUTHORIZER_TEST, group_role_authz_implied_operations) {
 // Test ACL pattern types (prefix, literal, wildcard) for context subjects.
 TEST(AUTHORIZER_TEST, authz_sr_context_subject_patterns) {
     namespace ppsr = pandaproxy::schema_registry;
-    ppsr::enable_qualified_subjects::set_local(true);
-    auto reset_flag = ss::defer(
-      [] { ppsr::enable_qualified_subjects::reset_local(); });
-
     auto user = acl_principal{principal_type::user, "user"};
     auto host = acl_host{"192.168.2.1"};
 

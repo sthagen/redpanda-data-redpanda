@@ -10,6 +10,7 @@
 import time
 
 import requests
+from confluent_kafka import KafkaException
 from ducktape.utils.util import wait_until
 from requests.exceptions import ConnectionError
 
@@ -82,9 +83,22 @@ class DataMigrationTestMixin(RedpandaTest):
             redpanda = self.redpanda
         client = DefaultClient(redpanda)
 
-        # we may be unlucky to query a slow node
+        def all_partitions_gone():
+            # The failure injector thread used by some tests may terminate
+            # a broker mid-poll; the admin client can land on it and raise
+            # KafkaException(_TIMED_OUT) from list_topics. Treat transient
+            # client errors as "not yet" and let wait_until keep retrying
+            # within its budget.
+            try:
+                return all(client.describe_topic(t).partitions == [] for t in topics)
+            except KafkaException as e:
+                redpanda.logger.debug(
+                    f"describe_topic transient error, will retry: {e}"
+                )
+                return False
+
         wait_until(
-            lambda: all(client.describe_topic(t).partitions == [] for t in topics),
+            all_partitions_gone,
             timeout_sec=90,
             backoff_sec=1,
             err_msg="Failed waiting for partitions to disappear",

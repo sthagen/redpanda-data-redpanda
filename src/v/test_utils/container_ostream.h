@@ -23,10 +23,15 @@
 /// rely on streaming containers, which is why the set is limited to those
 /// two types rather than every standard container.
 ///
-/// The overloads stream each element via operator<< so they work for any
-/// element type that has streaming, regardless of whether it has a fmt
-/// formatter.  Include this only in test translation units to avoid
-/// pulling a std-namespace overload into production code.
+/// The overloads delegate to fmt's range formatter, so the element type
+/// must be fmt-formattable (has a fmt::formatter specialization or a
+/// format_to method/free function).  Include this only in test
+/// translation units to avoid pulling a std-namespace overload into
+/// production code.
+
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
 
 #include <ostream>
 #include <unordered_map>
@@ -37,32 +42,16 @@ namespace std {
 template<typename T, typename Alloc>
 // NOLINTNEXTLINE(cert-dcl58-cpp): test-only operator<< overload for std types
 ostream& operator<<(ostream& os, const vector<T, Alloc>& v) {
-    os << "{";
-    bool first = true;
-    for (const auto& e : v) {
-        if (!first) {
-            os << ", ";
-        }
-        first = false;
-        os << e;
-    }
-    return os << "}";
+    fmt::print(os, "{}", v);
+    return os;
 }
 
 template<typename K, typename V, typename Hash, typename Eq, typename Alloc>
 // NOLINTNEXTLINE(cert-dcl58-cpp): test-only operator<< overload for std types
 ostream&
 operator<<(ostream& os, const unordered_map<K, V, Hash, Eq, Alloc>& m) {
-    os << "{";
-    bool first = true;
-    for (const auto& [k, v] : m) {
-        if (!first) {
-            os << ", ";
-        }
-        first = false;
-        os << "{" << k << " -> " << v << "}";
-    }
-    return os << "}";
+    fmt::print(os, "{}", m);
+    return os;
 }
 
 } // namespace std

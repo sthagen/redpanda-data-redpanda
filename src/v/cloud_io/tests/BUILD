@@ -146,6 +146,21 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "io_resources_test",
+    timeout = "short",
+    srcs = [
+        "io_resources_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/cloud_io:io_resources",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_btest(
     name = "directory_walker_test",
     timeout = "short",

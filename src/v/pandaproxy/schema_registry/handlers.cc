@@ -32,6 +32,8 @@
 #include "pandaproxy/schema_registry/requests/get_subject_versions_version.h"
 #include "pandaproxy/schema_registry/requests/mode.h"
 #include "pandaproxy/schema_registry/requests/post_subject_versions.h"
+#include "pandaproxy/schema_registry/seq_writer.h"
+#include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/server.h"
 #include "security/acl.h"
