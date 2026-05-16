@@ -37,7 +37,7 @@ ss::shard_id shard_for(const read_request<ss::lowres_clock>& req) {
     // The placeholder batch can't span multiple objects so it's safe
     // to check only the first extent.
     auto h = hasher(req.query.meta.front().id.name);
-    auto shard = h % ss::smp::count;
+    auto shard = h % ss::this_smp_shard_count();
     return static_cast<ss::shard_id>(shard);
 }
 

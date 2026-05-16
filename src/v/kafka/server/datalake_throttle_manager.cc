@@ -157,7 +157,7 @@ ss::future<> datalake_throttle_manager::gc_and_update_global_producers_map() {
      * total backlog
      */
     auto shard_local_maps = co_await ssx::parallel_transform(
-      boost::irange(ss::smp::count), [this](auto shard_id) {
+      boost::irange(ss::this_smp_shard_count()), [this](auto shard_id) {
           return container().invoke_on(
             shard_id,
             [status = _translation_status, disk_space_info = _disk_space_info](

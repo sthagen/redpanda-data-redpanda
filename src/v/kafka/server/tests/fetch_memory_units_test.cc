@@ -105,7 +105,7 @@ private:
 };
 
 TEST_F_CORO(fetch_memory_units_test_fixture, test_cross_shard_free) {
-    EXPECT_GE(ss::smp::count, 2);
+    EXPECT_GE(ss::this_smp_shard_count(), 2);
 
     const auto max_release_size
       = kafka::fetch_memory_units_manager::max_release_size;
@@ -115,7 +115,8 @@ TEST_F_CORO(fetch_memory_units_test_fixture, test_cross_shard_free) {
     co_await set_kafka_units(max_release_size);
     co_await set_fetch_units(max_release_size);
 
-    auto other_shard_id = (ss::this_shard_id() + 1) % ss::smp::count;
+    auto other_shard_id = (ss::this_shard_id() + 1)
+                          % ss::this_smp_shard_count();
 
     auto other_kafka_sem_avail = [&] {
         return sharded_kafka_sem().invoke_on(other_shard_id, [](auto& sem_sev) {

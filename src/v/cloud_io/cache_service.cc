@@ -1764,7 +1764,7 @@ ss::future<> cache::do_reserve_space(
 
         auto short_term_hydrations_estimate
           = config::shard_local_cfg().cloud_storage_max_connections()
-            * ss::smp::count;
+            * ss::this_smp_shard_count();
 
         // Here we're trying to estimate how much space do we need to
         // free to allow all TS resources to be used again to download

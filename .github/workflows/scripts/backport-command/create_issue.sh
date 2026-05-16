@@ -49,5 +49,6 @@ if [[ -z $backport_issue_url ]]; then
     --body "Backport $ORIG_ISSUE_URL to branch $BACKPORT_BRANCH. $additional_body"
 else
   msg="Backport issue already exists: $backport_issue_url"
+  echo "$msg"
   echo "BACKPORT_ERROR=$msg" >>"$GITHUB_ENV"
 fi

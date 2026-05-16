@@ -1,0 +1,36 @@
+Pin LIBDIR / INCLUDEDIR / LOCALEDIR in make 4.4.1's Makefile.in so the
+built `make` binary is byte-reproducible across sandbox directories.
+
+rules_foreign_cc already does this for make 4.3 via
+toolchains/patches/make-reproducible-bootstrap.patch, but no equivalent
+patch is wired in for the 4.4 / 4.4.1 versions and the current default
+(4.4.1) leaks the sandbox-derived $$INSTALLDIR$$ value into the make ELF
+through autoconf's -DLIBDIR / -DINCLUDEDIR / -DLOCALEDIR macros.
+
+That non-determinism cascades to every foreign_cc-built dependency
+(openssl, krb5, hwloc, libxml2, ...) because the make binary appears as
+an input to those rules. See CORE-16315.
+
+The fix here uses http_archive's patch_cmds (rather than adding a
+separate .patch file inside rules_foreign_cc) to keep the override to a
+single-file diff against built_toolchains.bzl.
+
+diff --git a/toolchains/built_toolchains.bzl b/toolchains/built_toolchains.bzl
+--- a/toolchains/built_toolchains.bzl
++++ b/toolchains/built_toolchains.bzl
+@@ -85,7 +85,15 @@ def _make_toolchain(version, register_toolchains):
+     if version == "4.4.1":
+         maybe(
+             http_archive,
+             name = "gnumake_src",
++            patch_cmds = [
++                # Pin LIBDIR / INCLUDEDIR / LOCALEDIR so the built make
++                # binary is byte-reproducible across sandbox dirs.
++                # Mirrors toolchains/patches/make-reproducible-bootstrap.patch
++                # (which only applies to make 4.3). See CORE-16315.
++                r"""sed -i 's|-DINCLUDEDIR=\\"$(includedir)\\"|-DINCLUDEDIR=\\".\\"|' Makefile.in""",
++                r"""sed -i 's|-DLIBDIR=\\"$(libdir)\\" -DLOCALEDIR=\\"$(localedir)\\"|-DLIBDIR=\\".\\" -DLOCALEDIR=\\".\\"|' Makefile.in""",
++            ],
+             build_file_content = _ALL_CONTENT,
+             sha256 = "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3",
+             strip_prefix = "make-4.4.1",

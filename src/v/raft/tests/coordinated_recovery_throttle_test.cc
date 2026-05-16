@@ -31,14 +31,15 @@ struct test_fixture {
     static constexpr std::chrono::seconds timeout{5};
 
     test_fixture() {
-        BOOST_REQUIRE_GT(ss::smp::count, 1);
+        BOOST_REQUIRE_GT(ss::this_smp_shard_count(), 1);
         BOOST_REQUIRE_EQUAL(ss::this_shard_id(), 0);
-        vlog(logger.info, "using smp count: {}", ss::smp::count);
+        vlog(logger.info, "using smp count: {}", ss::this_smp_shard_count());
         _as.start().get();
         // Here we don't trigger the coordinator timer intentionally so that
         // the test can step thru the ticks manually as needed using
         // coordinator_tick(). That gives more control over the test state.
-        _config_rate.start(ss::smp::count * initial_rate_per_shard).get();
+        _config_rate.start(ss::this_smp_shard_count() * initial_rate_per_shard)
+          .get();
         _config_use_static.start(false).get();
         _throttler
           .start(
@@ -186,7 +187,8 @@ FIXTURE_TEST(throttler_test_simple, test_fixture) {
 }
 
 FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
-    for (auto i : std::views::iota(ss::shard_id{1}, ss::smp::count)) {
+    for (auto i :
+         std::views::iota(ss::shard_id{1}, ss::this_smp_shard_count())) {
         vlog(logger.info, "Running iteration: {}", i);
 
         // Each iteration of this loop consumes the entirety of bandwidth
@@ -194,7 +196,7 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
         // bandwidth should be shared among [0, i) resulting in progress.
 
         // step 1: Consume all rate on [0, i)
-        auto total_rate = local().available() * ss::smp::count;
+        auto total_rate = local().available() * ss::this_smp_shard_count();
         auto throttle_per_shard = total_rate / i;
         std::vector<ss::future<>> throttled;
         for (auto j : boost::irange(i)) {
@@ -235,14 +237,15 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
         // bandwidth after rebalancing.
         ssize_t total_available = 0;
         for (auto current : all_available().get()) {
-            BOOST_REQUIRE(std::abs(current) < ss::smp::count);
+            BOOST_REQUIRE(std::abs(current) < ss::this_smp_shard_count());
             total_available += current;
         }
-        BOOST_REQUIRE(std::abs(total_available) < ss::smp::count);
+        BOOST_REQUIRE(std::abs(total_available) < ss::this_smp_shard_count());
 
         // Nothing waiting
         BOOST_REQUIRE_EQUAL(
-          std::ranges::count(all_waiting().get(), 0), ss::smp::count);
+          std::ranges::count(all_waiting().get(), 0),
+          ss::this_smp_shard_count());
         // All admitted bytes accounted for.
         wait_until([this, throttle_per_shard, i] {
             return all_admitted().then([throttle_per_shard,
@@ -251,7 +254,7 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
                          admitted | std::views::take(i), throttle_per_shard - 1)
                          == i
                        && std::ranges::count(admitted | std::views::drop(i), 0)
-                            == ss::smp::count - i;
+                            == ss::this_smp_shard_count() - i;
             });
         });
 
@@ -261,13 +264,14 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
         ss::shard_id shard_id = 0;
         for (auto current : all_available().get()) {
             if (shard_id < i) {
-                BOOST_REQUIRE(current > throttle_per_shard - ss::smp::count);
+                BOOST_REQUIRE(
+                  current > throttle_per_shard - ss::this_smp_shard_count());
             } else {
-                BOOST_REQUIRE(current < ss::smp::count);
+                BOOST_REQUIRE(current < ss::this_smp_shard_count());
             }
             ++shard_id;
         }
-        BOOST_REQUIRE(std::abs(total_available) < ss::smp::count);
+        BOOST_REQUIRE(std::abs(total_available) < ss::this_smp_shard_count());
 
         // Step 5: In a few ticks, all shards should be back to fair rate.
         wait_until([this] {
@@ -275,7 +279,7 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
               .then([this] { return all_available(); })
               .then([](std::vector<ssize_t> available) {
                   return std::ranges::count(available, initial_rate_per_shard)
-                         == ss::smp::count;
+                         == ss::this_smp_shard_count();
               });
         });
     }
@@ -284,7 +288,7 @@ FIXTURE_TEST(throttler_test_rebalancing, test_fixture) {
 FIXTURE_TEST(throttler_rate_update, test_fixture) {
     auto current_shard_rate = local().available();
     for (auto curr : {current_shard_rate / 2, current_shard_rate * 2}) {
-        auto new_rate = curr * ss::smp::count;
+        auto new_rate = curr * ss::this_smp_shard_count();
         update_rate(new_rate);
         tests::cooperative_spin_wait_with_timeout(timeout, [this, curr] {
             return coordinator_tick().then(
@@ -298,7 +302,8 @@ FIXTURE_TEST(overusing, test_fixture) {
     throttle_on_shard(0, 1).get();
 
     check_available(0, initial_rate_per_shard - 1);
-    for (auto shard_id : std::views::iota(ss::shard_id{1}, ss::smp::count)) {
+    for (auto shard_id :
+         std::views::iota(ss::shard_id{1}, ss::this_smp_shard_count())) {
         check_available(shard_id, initial_rate_per_shard);
     }
 
@@ -309,7 +314,8 @@ FIXTURE_TEST(overusing, test_fixture) {
     // Ensure the throttling is registered but not satisfied.
     ss::yield().get();
     check_waiting(0, oversized_req);
-    for (auto shard_id : std::views::iota(ss::shard_id{1}, ss::smp::count)) {
+    for (auto shard_id :
+         std::views::iota(ss::shard_id{1}, ss::this_smp_shard_count())) {
         check_waiting(shard_id, 0);
     }
     BOOST_REQUIRE(!f.available());
@@ -318,12 +324,14 @@ FIXTURE_TEST(overusing, test_fixture) {
     _as.invoke_on(0, std::mem_fn(&ss::abort_source::request_abort)).get();
     f.wait();
     f.get_exception();
-    BOOST_REQUIRE(std::ranges::count(all_waiting().get(), 0) == ss::smp::count);
+    BOOST_REQUIRE(
+      std::ranges::count(all_waiting().get(), 0) == ss::this_smp_shard_count());
 
     // Trigger a tick to refill the buckets.
     coordinator_tick().get();
     check_available(0, initial_rate_per_shard);
-    for (auto shard_id : std::views::iota(ss::shard_id{1}, ss::smp::count)) {
+    for (auto shard_id :
+         std::views::iota(ss::shard_id{1}, ss::this_smp_shard_count())) {
         check_available(shard_id, initial_rate_per_shard);
     }
 
@@ -332,13 +340,15 @@ FIXTURE_TEST(overusing, test_fixture) {
 
     // Check that the admitted bytes include the borrowed amount.
     check_admitted(0, oversized_req);
-    for (auto shard_id : std::views::iota(ss::shard_id{1}, ss::smp::count)) {
+    for (auto shard_id :
+         std::views::iota(ss::shard_id{1}, ss::this_smp_shard_count())) {
         check_admitted(shard_id, 0);
     }
 
     // Check that available capacity is negative
     check_available(0, -initial_rate_per_shard);
-    for (auto shard_id : std::views::iota(ss::shard_id{1}, ss::smp::count)) {
+    for (auto shard_id :
+         std::views::iota(ss::shard_id{1}, ss::this_smp_shard_count())) {
         check_available(shard_id, initial_rate_per_shard);
     }
 
@@ -353,9 +363,9 @@ FIXTURE_TEST(overusing, test_fixture) {
     }));
     auto sum = std::ranges::fold_left(available, ssize_t{0}, std::plus{});
     auto deviation_from_full = std::abs(
-      sum - ss::smp::count * initial_rate_per_shard);
+      sum - ss::this_smp_shard_count() * initial_rate_per_shard);
     // allow for rounding errors
-    BOOST_REQUIRE(deviation_from_full <= ss::smp::count);
+    BOOST_REQUIRE(deviation_from_full <= ss::this_smp_shard_count());
 }
 
 FIXTURE_TEST(overusing_a_lot, test_fixture) {
@@ -369,14 +379,17 @@ FIXTURE_TEST(overusing_a_lot, test_fixture) {
             | std::views::transform([this, shard_id, size_multiplier](int) {
                   return throttle_on_shard(
                     shard_id,
-                    initial_rate_per_shard * ss::smp::count * size_multiplier);
+                    initial_rate_per_shard * ss::this_smp_shard_count()
+                      * size_multiplier);
               }));
       };
     auto all_throttle_f = ssx::when_all_succeed(
-      std::views::iota(ss::shard_id{0}, ss::smp::count)
+      std::views::iota(ss::shard_id{0}, ss::this_smp_shard_count())
       | std::views::transform(request_on_shard));
 
-    auto ticks = size_multiplier * requests_per_shard * ss::smp::count + 1;
+    auto ticks = size_multiplier * requests_per_shard
+                   * ss::this_smp_shard_count()
+                 + 1;
     for (size_t i = 0; i <= ticks; ++i) {
         coordinator_tick().get();
     }
@@ -404,15 +417,15 @@ FIXTURE_TEST(overusing_on_zero_rate, test_fixture) {
     check_waiting(0, 1);
     BOOST_ASSERT(!f.available());
 
-    update_rate(ss::smp::count);
+    update_rate(ss::this_smp_shard_count());
     coordinator_tick().get();
     f.get();
 }
 
 FIXTURE_TEST(allowance_staying_negative, test_fixture) {
-    ssize_t original_rate = 100 * ss::smp::count;
-    ssize_t reduced_rate = 10 * ss::smp::count;
-    ssize_t oversized_request = 10000 * ss::smp::count;
+    ssize_t original_rate = 100 * ss::this_smp_shard_count();
+    ssize_t reduced_rate = 10 * ss::this_smp_shard_count();
+    ssize_t oversized_request = 10000 * ss::this_smp_shard_count();
 
     update_rate(original_rate);
     coordinator_tick().get();
@@ -431,5 +444,5 @@ FIXTURE_TEST(allowance_staying_negative, test_fixture) {
 
     auto deviation = std::abs(sum - expected_sum);
     // allow for rounding errors
-    BOOST_REQUIRE(deviation <= ss::smp::count);
+    BOOST_REQUIRE(deviation <= ss::this_smp_shard_count());
 }

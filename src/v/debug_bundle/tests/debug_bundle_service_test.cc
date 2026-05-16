@@ -421,7 +421,7 @@ TEST_F_CORO(debug_bundle_service_started_fixture, try_running_multiple) {
     ASSERT_TRUE_CORO(res.has_value()) << res.assume_error().message();
 
     auto res2 = co_await _service.invoke_on(
-      (debug_bundle::service_shard + 1) % ss::smp::count,
+      (debug_bundle::service_shard + 1) % ss::this_smp_shard_count(),
       [](debug_bundle::service& s) {
           return s.initiate_rpk_debug_bundle_collection(
             debug_bundle::job_id_t(uuid_t::create()), {});

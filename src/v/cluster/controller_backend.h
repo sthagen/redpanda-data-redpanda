@@ -242,8 +242,8 @@ public:
     void notify_reconciliation(const model::ntp&);
 
     /// Copy partition kvstore data from an extra shard (i.e. kvstore shard that
-    /// is >= ss::smp::count). This method is expected to be called *before*
-    /// start().
+    /// is >= ss::this_smp_shard_count()). This method is expected to be called
+    /// *before* start().
     ss::future<> transfer_partitions_from_extra_shard(
       storage::kvstore&, shard_placement_table&);
 

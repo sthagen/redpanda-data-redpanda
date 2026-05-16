@@ -168,7 +168,7 @@ public:
 class mt_node_info : public l0::gc::node_info {
 public:
     size_t shard_index() const override { return ss::this_shard_id(); }
-    size_t total_shards() const override { return ss::smp::count; }
+    size_t total_shards() const override { return ss::this_smp_shard_count(); }
 };
 
 class safety_monitor_test_impl : public cloud_topics::l0::gc::safety_monitor {
@@ -184,7 +184,7 @@ public:
 struct level_zero_gc_mt_test : public seastar_test {
     ss::future<> SetUpAsync() override {
         vassert(ss::this_shard_id() == ss::shard_id{0}, "Setup on not shard 0");
-        vassert(ss::smp::count > 1, "Too few shards");
+        vassert(ss::this_smp_shard_count() > 1, "Too few shards");
         // Create shared state on shard 0
         g_bucket_state = std::make_unique<shared_bucket_state>();
 
@@ -274,8 +274,8 @@ TEST_F_CORO(level_zero_gc_mt_test, objects_deleted_across_shards) {
     RPTEST_REQUIRE_EVENTUALLY_CORO(
       5s, [this] { return get_total_deleted() == num_objects; });
 
-    EXPECT_EQ(get_shards_that_deleted(), ss::smp::count);
-    EXPECT_EQ(get_shards_that_listed(), ss::smp::count);
+    EXPECT_EQ(get_shards_that_deleted(), ss::this_smp_shard_count());
+    EXPECT_EQ(get_shards_that_listed(), ss::this_smp_shard_count());
 }
 
 /*
@@ -291,7 +291,7 @@ TEST_F_CORO(level_zero_gc_mt_test, no_objects_no_crash) {
     co_await ss::sleep(500ms);
 
     // Should complete without crashing or trying to delete anything
-    EXPECT_EQ(get_shards_that_listed(), ss::smp::count)
+    EXPECT_EQ(get_shards_that_listed(), ss::this_smp_shard_count())
       << "No shards attempted to list";
     EXPECT_EQ(get_shards_that_deleted(), 0);
     EXPECT_EQ(get_total_deleted(), 0);
@@ -311,7 +311,7 @@ TEST_F_CORO(level_zero_gc_mt_test, no_eligible_epoch) {
     co_await ss::sleep(500ms);
 
     // Objects should not be deleted since there's no eligible epoch
-    EXPECT_EQ(get_shards_that_listed(), ss::smp::count)
+    EXPECT_EQ(get_shards_that_listed(), ss::this_smp_shard_count())
       << "No shards attempted to list";
     EXPECT_EQ(get_shards_that_deleted(), 0);
     EXPECT_EQ(get_total_deleted(), 0);

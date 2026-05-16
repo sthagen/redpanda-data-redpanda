@@ -893,7 +893,7 @@ private:
 class nonpolling_fetch_plan_executor final : public fetch_plan_executor::impl {
 public:
     nonpolling_fetch_plan_executor()
-      : _last_result_size(ss::smp::count, 0)
+      : _last_result_size(ss::this_smp_shard_count(), 0)
       , _fetch_timeout{[this] { _has_progress.signal(); }} {}
 
     /**
@@ -948,9 +948,9 @@ private:
         // start fetching from a random shard to make sure that we fetch data
         // from all the partitions even if we reach fetch message size limit
         const ss::shard_id start_shard_idx = random_generators::get_int(
-          ss::smp::count - 1);
-        for (size_t i = 0; i < ss::smp::count; ++i) {
-            auto shard = (start_shard_idx + i) % ss::smp::count;
+          ss::this_smp_shard_count() - 1);
+        for (size_t i = 0; i < ss::this_smp_shard_count(); ++i) {
+            auto shard = (start_shard_idx + i) % ss::this_smp_shard_count();
 
             ssx::spawn_with_gate(_workers_gate, [&]() mutable {
                 return handle_exceptions(start_shard_fetch_worker(
@@ -1228,7 +1228,7 @@ void for_each_fetch_partition(const op_context& octx, const Func& f) {
 
 class simple_fetch_planner final : public fetch_planner::impl {
     fetch_plan create_plan(op_context& octx) final {
-        fetch_plan plan(ss::smp::count);
+        fetch_plan plan(ss::this_smp_shard_count());
         auto resp_it = octx.response_begin();
         auto bytes_left_in_plan = octx.bytes_left;
 

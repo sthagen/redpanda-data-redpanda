@@ -64,7 +64,8 @@ TEST_F(SchedulerTestFixture, TestSchedulerMultithread) {
         scheduler->unmanage_partition(ntp_to_remove, "unmanage_partition_func");
     };
     auto pause_random_worker_func = [this, &paused_workers]() {
-        auto random_shard = random_generators::get_int(ss::smp::count - 1);
+        auto random_shard = random_generators::get_int(
+          ss::this_smp_shard_count() - 1);
         // Inserting _before_ the pause_worker() future resolves can help expose
         // deadlocks.
         paused_workers.insert(random_shard);

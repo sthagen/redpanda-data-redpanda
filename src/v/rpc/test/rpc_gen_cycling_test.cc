@@ -284,7 +284,7 @@ FIXTURE_TEST(basic_cache_ops, rpc_integration_fixture) {
       .get();
 
     absl::flat_hash_map<ss::shard_id, size_t> shards_with_con;
-    for (auto shard : ss::smp::all_cpus()) {
+    for (auto shard : ss::this_smp_all_shards()) {
         auto con_shard = cc.invoke_on(
                              shard,
                              [](auto& c) {

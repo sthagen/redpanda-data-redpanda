@@ -37,6 +37,8 @@ ss::sstring to_string(ss::fs_type fs) {
         return "hfs";
     case ss::fs_type::tmpfs:
         return "tmpfs";
+    case ss::fs_type::hugetlbfs:
+        return "hugetlbfs";
     };
     return "bad_enum";
 }

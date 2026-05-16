@@ -118,7 +118,7 @@ void set_auditing_kafka_client_defaults(
 void log_system_resources(
   ss::logger& log, const boost::program_options::variables_map& cfg) {
     const auto shard_mem = ss::memory::stats();
-    auto total_mem = shard_mem.total_memory() * ss::smp::count;
+    auto total_mem = shard_mem.total_memory() * ss::this_smp_shard_count();
     /**
      * IMPORTANT: copied out of seastar `resources.cc`, if logic in seastar will
      * change we have to change our logic in here.
@@ -133,7 +133,7 @@ void log_system_resources(
       log.info,
       "System resources: {{ cpus: {}, available memory: {}, reserved memory: "
       "{}}}",
-      ss::smp::count,
+      ss::this_smp_shard_count(),
       human::bytes(total_mem),
       human::bytes(reserve));
 
@@ -218,7 +218,9 @@ compaction_controller_config(ss::scheduling_group sg, uint64_t fs_avail) {
         static const int64_t backlog_avail_percents = 10;
         return config::shard_local_cfg()
           .compaction_ctrl_backlog_size()
-          .value_or((fs_avail / 100) * backlog_avail_percents / ss::smp::count);
+          .value_or(
+            (fs_avail / 100) * backlog_avail_percents
+            / ss::this_smp_shard_count());
     };
 
     /**
@@ -238,7 +240,7 @@ compaction_controller_config(ss::scheduling_group sg, uint64_t fs_avail) {
      *  k_p = 1000 / 80 = 12.5
      *
      */
-    auto normalization = fs_avail / (1000 * ss::smp::count);
+    auto normalization = fs_avail / (1000 * ss::this_smp_shard_count());
 
     return storage::backlog_controller_config(
       config::shard_local_cfg().compaction_ctrl_p_coeff.bind(),
@@ -268,7 +270,7 @@ make_upload_controller_config(ss::scheduling_group sg, uint64_t fs_avail) {
 
     auto setpoint_function = []() { return 0; };
     int64_t normalization = static_cast<int64_t>(fs_avail)
-                            / (1000 * ss::smp::count);
+                            / (1000 * ss::this_smp_shard_count());
     return {
       config::shard_local_cfg().cloud_storage_upload_ctrl_p_coeff.bind(),
       config::mock_binding(0.0),

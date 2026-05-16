@@ -24,7 +24,7 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_ptr_basic_ops) {
     BOOST_REQUIRE_EQUAL(p0.shard_id(), ss::this_shard_id());
 
     // Test operator bool (before reset)
-    for (auto i : std::views::iota(0u, ss::smp::count)) {
+    for (auto i : std::views::iota(0u, ss::this_smp_shard_count())) {
         ss::smp::submit_to(i, [&]() { BOOST_REQUIRE(!p0); }).get();
     }
 
@@ -33,7 +33,7 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_ptr_basic_ops) {
     p0.reset(43).get();
 
     // Test operator bool and deref (after reset)
-    for (auto i : std::views::iota(0u, ss::smp::count)) {
+    for (auto i : std::views::iota(0u, ss::this_smp_shard_count())) {
         ss::smp::submit_to(i, [&]() {
             BOOST_REQUIRE(p0 && p0.operator*() == 43);
             BOOST_REQUIRE(p0 && *p0.operator->() == 43);
@@ -42,7 +42,7 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_ptr_basic_ops) {
 
     // Test operator bool (after stop)
     p0.stop().get();
-    for (auto i : std::views::iota(0u, ss::smp::count)) {
+    for (auto i : std::views::iota(0u, ss::this_smp_shard_count())) {
         ss::smp::submit_to(i, [&]() { BOOST_REQUIRE(!p0); }).get();
     }
 

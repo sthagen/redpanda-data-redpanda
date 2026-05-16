@@ -21,7 +21,7 @@
 
 namespace {
 uint64_t per_shard_target_replay_bytes(uint64_t global_target_replay_bytes) {
-    return global_target_replay_bytes / ss::smp::count;
+    return global_target_replay_bytes / ss::this_smp_shard_count();
 }
 } // namespace
 
@@ -38,15 +38,17 @@ storage_resources::storage_resources(
   , _compaction_index_mem_limit(compaction_index_memory)
   , _append_chunk_size(internal::chunks().chunk_size())
   , _offset_translator_dirty_bytes(
-      _global_target_replay_bytes() / ss::smp::count)
+      _global_target_replay_bytes() / ss::this_smp_shard_count())
   , _configuration_manager_dirty_bytes(
-      _global_target_replay_bytes() / ss::smp::count)
-  , _stm_dirty_bytes(_global_target_replay_bytes() / ss::smp::count)
+      _global_target_replay_bytes() / ss::this_smp_shard_count())
+  , _stm_dirty_bytes(_global_target_replay_bytes() / ss::this_smp_shard_count())
   , _compaction_index_bytes(_compaction_index_mem_limit())
   , _inflight_recovery(
-      std::max(_max_concurrent_replay() / ss::smp::count, uint64_t{1}))
+      std::max(
+        _max_concurrent_replay() / ss::this_smp_shard_count(), uint64_t{1}))
   , _inflight_close_flush(
-      std::max(_max_concurrent_replay() / ss::smp::count, uint64_t{1})) {
+      std::max(
+        _max_concurrent_replay() / ss::this_smp_shard_count(), uint64_t{1})) {
     // Register notifications on configuration changes
     _global_target_replay_bytes.watch([this]() {
         auto v = per_shard_target_replay_bytes(_global_target_replay_bytes());
@@ -58,7 +60,7 @@ storage_resources::storage_resources(
     });
 
     _max_concurrent_replay.watch([this]() {
-        auto v = _max_concurrent_replay() / ss::smp::count;
+        auto v = _max_concurrent_replay() / ss::this_smp_shard_count();
 
         // Guard against case where core count is higher than
         // total concurrent replay count.
@@ -140,7 +142,8 @@ size_t storage_resources::calc_falloc_step() {
     // is uneven, this may lead to us underestimasting how much space
     // is available, which is safe.
 
-    uint64_t space_free_this_shard = _space_allowance_free / ss::smp::count;
+    uint64_t space_free_this_shard = _space_allowance_free
+                                     / ss::this_smp_shard_count();
 
     // Only use up to half the available space for fallocs.
     uint64_t space_per_partition = (space_free_this_shard / 2)

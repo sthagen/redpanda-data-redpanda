@@ -81,7 +81,7 @@ ss::future<size_t> gather_all_shards(
   connection_collector& global_collector) {
     size_t total_matching_connections = 0;
 
-    for (ss::shard_id shard = 0; shard < ss::smp::count; ++shard) {
+    for (ss::shard_id shard = 0; shard < ss::this_smp_shard_count(); ++shard) {
         auto accumulated_count = global_collector.size();
         auto shard_result = co_await kafka_server.invoke_on(
           shard,

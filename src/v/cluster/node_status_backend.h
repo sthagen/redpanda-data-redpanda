@@ -94,7 +94,7 @@ private:
 
 private:
     ss::shard_id connection_source_shard(model::node_id target) const {
-        return target % ss::smp::count;
+        return target % ss::this_smp_shard_count();
     }
 
     backoff_policy create_backoff_policy() const {

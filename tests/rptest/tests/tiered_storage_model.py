@@ -981,75 +981,33 @@ class TopicCompactionEnabled(Expression):
                 "TopicCompactionEnable_producer_config",
                 {"key_set_cardinality": 250, "msg_count": 200000},
             ),
-            ClusterConfigInput(
-                "TopicCompactionEnabled_rp_config",
-                dict(max_compacted_log_segment_size=LOG_SEGMENT_SIZE),
-            ),
         ]
 
 
-class RemoteWriteTopicConfig(Expression):
+class StorageModeTiered(Expression):
+    """Tiered storage is enabled on the topic via the unified
+    `redpanda.storage.mode=tiered` property, which atomically turns on both
+    archival (remote write) and remote fetch (remote read).
+
+    This replaces the legacy four-way split across topic-level
+    `redpanda.remote.read` / `redpanda.remote.write` and cluster-level
+    `cloud_storage_enable_remote_read` / `cloud_storage_enable_remote_write` —
+    once `storage.mode` is set non-`unset`, those legacy paths are bypassed
+    entirely (see `topic_properties::is_archival_enabled` /
+    `is_remote_fetch_enabled` in cluster/topic_properties.cc).
+    """
+
     def __init__(self, model: Model = Model.default()):
         super().__init__(
             model,
-            "RemoteWriteTopicConfig",
+            "StorageModeTiered",
             ExpressionType.Bool,
-            "redpanda.remote.write topic property is set",
+            "redpanda.storage.mode=tiered topic property is set",
         )
 
     def make_inputs(self) -> List[TestInput]:
         return [
-            TopicConfigInput("RemoteWriteTopicConfig", "redpanda.remote.write", "true")
-        ]
-
-
-class RemoteReadTopicConfig(Expression):
-    def __init__(self, model: Model = Model.default()):
-        super().__init__(
-            model,
-            "RemoteReadTopicConfig",
-            ExpressionType.Bool,
-            "redpanda.remote.read topic property is set",
-        )
-
-    def make_inputs(self) -> List[TestInput]:
-        return [
-            TopicConfigInput("RemoteReadTopicConfig", "redpanda.remote.read", "true")
-        ]
-
-
-class RemoteWriteClusterConfig(Expression):
-    def __init__(self, model: Model = Model.default()):
-        super().__init__(
-            model,
-            "RemoteWriteClusterConfig",
-            ExpressionType.Bool,
-            "cloud_storage_enable_remote_write config is set",
-        )
-
-    def make_inputs(self) -> List[TestInput]:
-        return [
-            ClusterConfigInput(
-                "RemoteWriteClusterConfig",
-                {"cloud_storage_enable_remote_write": "true"},
-            )
-        ]
-
-
-class RemoteReadClusterConfig(Expression):
-    def __init__(self, model: Model = Model.default()):
-        super().__init__(
-            model,
-            "RemoteReadClusterConfig",
-            ExpressionType.Bool,
-            "cloud_storage_enable_remote_read config is set",
-        )
-
-    def make_inputs(self) -> List[TestInput]:
-        return [
-            ClusterConfigInput(
-                "RemoteReadClusterConfig", {"cloud_storage_enable_remote_read": "true"}
-            )
+            TopicConfigInput("StorageModeTiered", "redpanda.storage.mode", "tiered")
         ]
 
 
@@ -1624,17 +1582,6 @@ class EnableSegmentMs(Expression):
                 str(1024 * 1024 * 128),
                 stage=TestRunStage.Startup,
             ),
-            # The 'segment.ms' is applied during the local storage housekeeping
-            # so the actual segments won't be rolled as frequently as 'segment.ms'
-            # suggests.
-            ClusterConfigInput(
-                "SetLowCompactionInterval_rp_conf",
-                {"log_compaction_interval_ms": "1000"},
-            ),
-            # Update lower clamp applied to segment.ms for testing
-            ClusterConfigInput(
-                "SetLogSegmentMsMin_rp_conf", {"log_segment_ms_min": "60000"}
-            ),
         ]
 
 
@@ -1699,10 +1646,7 @@ def get_tiered_storage_test_cases(fast_run=False):
     segments_removed = SegmentsRemoved()
     local_housekeeping = LocalStorageHousekeeping()
     short_local_retention = ShortLocalRetentionTopicConfig()
-    topic_remote_read = RemoteReadTopicConfig()
-    topic_remote_write = RemoteWriteTopicConfig()
-    global_remote_read = RemoteReadClusterConfig()
-    global_remote_write = RemoteWriteClusterConfig()
+    storage_mode_tiered = StorageModeTiered()
     # Spillover
     spillover_enabled = EnableSpillover()
     spillover_manifest_uploaded = SpilloverManifestUploaded()
@@ -1743,16 +1687,11 @@ def get_tiered_storage_test_cases(fast_run=False):
     enable_segment_ms = EnableSegmentMs()
 
     model.add(ts_write.requires(segment_roll() == True))
-    model.add(
-        ts_write.requires(
-            z3.Or(topic_remote_write() == True, global_remote_write() == True)
-        )
-    )
-    model.add(
-        ts_read.requires(
-            z3.Or(topic_remote_read() == True, global_remote_read() == True)
-        )
-    )
+    # storage.mode=tiered atomically enables both archival (remote write) and
+    # remote fetch (remote read), so a single input gates both ts_write and
+    # ts_read instead of the legacy four-config combination.
+    model.add(ts_write.requires(storage_mode_tiered() == True))
+    model.add(ts_read.requires(storage_mode_tiered() == True))
     model.add(ts_manifest_uploaded() == ts_write())
     model.add(ts_read.requires(ts_write() == True))
     model.add(ts_read.requires(segments_removed() == True))
@@ -1911,24 +1850,6 @@ def get_tiered_storage_test_cases(fast_run=False):
         #     model.solve_for(ts_delete() == True,
         #                     adjacent_segment_compaction() == True))
     else:
-        # Check that we can enable uploads using both topic level config
-        # and cluster level config.
-        solutions += model.find_all_solutions(
-            [
-                [
-                    ts_read() == True,
-                ],
-                [
-                    topic_remote_read() == True,
-                    global_remote_read() == True,
-                ],
-                [
-                    topic_remote_write() == True,
-                    global_remote_write() == True,
-                ],
-            ]
-        )
-
         # Check all combinations without timequery. Also, use only one method
         # to enable tiered-storage to limit number of test cases.
         solutions += model.find_all_solutions(

@@ -586,7 +586,7 @@ void admin_server::register_debug_routes() {
 using admin::apply_validator;
 
 void check_shard_id(seastar::shard_id id) {
-    auto max_shard_id = ss::smp::count - 1;
+    auto max_shard_id = ss::this_smp_shard_count() - 1;
     if (id > max_shard_id) {
         throw ss::httpd::bad_param_exception(
           fmt::format("Shard id too high, max shard id is {}", max_shard_id));
@@ -1172,7 +1172,7 @@ ss::future<std::unique_ptr<ss::http::reply>> admin_server::put_ctracker_va(
           fmt::format("Invalid shard id: {}", req->get_path_param("shard")));
     }
 
-    if (shard >= ss::smp::count) {
+    if (shard >= ss::this_smp_shard_count()) {
         throw ss::httpd::bad_param_exception(
           fmt::format("Invalid shard id: {}", shard));
     }

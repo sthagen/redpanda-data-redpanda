@@ -91,7 +91,7 @@ private:
     using shard2count_t = std::vector<int32_t>;
     struct topic_data_t {
         explicit topic_data_t()
-          : shard2count(ss::smp::count, 0) {}
+          : shard2count(ss::this_smp_shard_count(), 0) {}
 
         int32_t total_count = 0;
         shard2count_t shard2count;

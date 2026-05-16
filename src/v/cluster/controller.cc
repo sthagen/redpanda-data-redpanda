@@ -668,12 +668,12 @@ ss::future<> controller::start(
           conf_invariants.core_count);
     }
 
-    if (conf_invariants.core_count > ss::smp::count) {
+    if (conf_invariants.core_count > ss::this_smp_shard_count()) {
         // Successfully starting shard_balancer with reduced core count means
         // that all partition info from extra kvstores has been copied and we
         // can finally update the configuration invariants.
         auto new_invariants = configuration_invariants(
-          *config::node().node_id(), ss::smp::count);
+          *config::node().node_id(), ss::this_smp_shard_count());
         co_await _storage.local().kvs().put(
           storage::kvstore::key_space::controller,
           invariants_key(),
@@ -1303,7 +1303,7 @@ controller::validate_configuration_invariants() {
       "Node id must be set before checking configuration invariants");
 
     auto current = configuration_invariants(
-      *config::node().node_id(), ss::smp::count);
+      *config::node().node_id(), ss::this_smp_shard_count());
 
     if (!invariants_buf) {
         // store configuration invariants

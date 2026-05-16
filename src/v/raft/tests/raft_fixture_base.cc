@@ -616,7 +616,7 @@ seastar::future<> raft_fixture_base::stop() {
 }
 
 seastar::future<> raft_fixture_base::start() {
-    for (auto cpu : ss::smp::all_cpus()) {
+    for (auto cpu : ss::this_smp_all_shards()) {
         co_await ss::smp::submit_to(cpu, [] {
             config::shard_local_cfg().disable_metrics.set_value(true);
             config::shard_local_cfg().disable_public_metrics.set_value(true);

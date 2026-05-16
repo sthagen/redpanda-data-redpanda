@@ -48,7 +48,8 @@ private:
     // held in a cache on single core is limitted by the memory usage.
     size_t max_sessions_per_core() {
         static const size_t v
-          = std::numeric_limits<fetch_session_id::type>::max() / ss::smp::count;
+          = std::numeric_limits<fetch_session_id::type>::max()
+            / ss::this_smp_shard_count();
         return v;
     }
 

@@ -42,7 +42,7 @@ model::broker make_self_broker(const config::node_config& node_cfg) {
 
     // Calculate memory size
     const auto shard_mem = ss::memory::stats();
-    uint64_t total_mem = shard_mem.total_memory() * ss::smp::count;
+    uint64_t total_mem = shard_mem.total_memory() * ss::this_smp_shard_count();
     // If memory is <1GB, we'll return zero.  That case is already
     // handled when reading this field (e.g. in
     // `partition_allocator::check_cluster_limits`) because earlier redpanda
@@ -69,7 +69,7 @@ model::broker make_self_broker(const config::node_config& node_cfg) {
       node_cfg.rack,
       model::broker_properties{
         // TODO: populate or remote etc_props, mount_paths
-        .cores = ss::smp::count,
+        .cores = ss::this_smp_shard_count(),
         .available_memory_gb = total_mem_gb,
         .available_disk_gb = disk_gb,
         .available_memory_bytes = total_mem,

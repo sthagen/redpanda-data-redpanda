@@ -136,7 +136,8 @@ connection_cache::connection_cache(
     if (ss::this_shard_id() == _coordinator_shard) {
         _coordinator_state = std::make_unique<coordinator_state>(
           ssx::mutex{"connection_cache"},
-          connection_allocation_strategy(connections_per_node, ss::smp::count));
+          connection_allocation_strategy(
+            connections_per_node, ss::this_smp_shard_count()));
     }
 }
 

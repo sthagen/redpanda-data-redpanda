@@ -32,7 +32,8 @@ TEST_CORO(iobuf_mt, test_cross_shard_shares) {
           boost::irange(0ul, parallel_shares),
           [b = buf.share(0, buf.size_bytes())](auto s) mutable {
               return ss::smp::submit_to(
-                s % ss::smp::count, [b = b.share(0, b.size_bytes())]() mutable {
+                s % ss::this_smp_shard_count(),
+                [b = b.share(0, b.size_bytes())]() mutable {
                     for (size_t i = 0; i < iterations; i++) {
                         b.share(0, b.size_bytes());
                     }

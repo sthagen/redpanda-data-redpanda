@@ -108,7 +108,7 @@ public:
         assert_shard();
         auto mu{co_await _mutex.get_units()};
         if (_state.empty()) {
-            _state.resize(ss::smp::count);
+            _state.resize(ss::this_smp_shard_count());
         }
 
         auto copy_to_deallocate_on_owner_shard = local();

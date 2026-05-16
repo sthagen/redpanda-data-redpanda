@@ -45,19 +45,19 @@ ss::shard_id shard_for(const context_subject& sub) {
     auto hasher = incremental_xxhash64{};
     hasher.update(sub.ctx());
     hasher.update(sub.sub());
-    return jump_consistent_hash(hasher.digest(), ss::smp::count);
+    return jump_consistent_hash(hasher.digest(), ss::this_smp_shard_count());
 }
 
 ss::shard_id shard_for(const context_schema_id& id) {
     auto hasher = incremental_xxhash64{};
     hasher.update(id.ctx());
     hasher.update(id.id());
-    return jump_consistent_hash(hasher.digest(), ss::smp::count);
+    return jump_consistent_hash(hasher.digest(), ss::this_smp_shard_count());
 }
 
 ss::shard_id shard_for(const context& ctx) {
     auto hash = xxhash_64(ctx().data(), ctx().length());
-    return jump_consistent_hash(hash, ss::smp::count);
+    return jump_consistent_hash(hash, ss::this_smp_shard_count());
 }
 
 compatibility_result check_compatible(

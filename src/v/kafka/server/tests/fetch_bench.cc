@@ -306,7 +306,7 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
     // Creates a topic with two partitions. One on shard 0 the other on
     // shard 1.
     ss::future<model::topic> initialize_multi_partition_topic() {
-        vassert(ss::smp::count >= 2, "requires at least 2 shards");
+        vassert(ss::this_smp_shard_count() >= 2, "requires at least 2 shards");
 
         auto t = co_await create_topic({
           model::broker_shard{this_node(), 0},

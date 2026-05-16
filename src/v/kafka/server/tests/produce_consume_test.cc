@@ -307,7 +307,7 @@ template<typename Mapper, typename Initial, typename Reduce>
 auto map_reduce_thread_per_core(
   Mapper&& mapper, Initial&& initial, Reduce&& reduce) {
     return ss::map_reduce(
-      boost::irange(0u, ss::smp::count),
+      boost::irange(0u, ss::this_smp_shard_count()),
       [&mapper](auto shard) {
           return async_submit_to(shard, std::forward<Mapper>(mapper));
       },
@@ -319,7 +319,7 @@ template<typename Mapper, typename Initial, typename Reduce>
 auto transform_reduce_thread_per_core(
   Mapper&& mapper, Initial&& initial, Reduce&& reduce) {
     return transform_reduce(
-      boost::irange(0u, ss::smp::count),
+      boost::irange(0u, ss::this_smp_shard_count()),
       [&mapper](auto shard) {
           return async_submit_to(shard, std::forward<Mapper>(mapper)).get();
       },
@@ -469,7 +469,7 @@ struct throughput_limits_fixure : prod_consume_fixture {
         constexpr auto min_rate = std::min(rate_limit_in, rate_limit_out);
         const double expected_max_throttle
           = (double(batch_size) / min_rate)
-            * (policy == execution::seq ? 1 : ss::smp::count)
+            * (policy == execution::seq ? 1 : ss::this_smp_shard_count())
             * (honour_throttle ? 1 : 2);
         const size_t tolerance_percent = 8;
         config_set(
@@ -482,7 +482,7 @@ struct throughput_limits_fixure : prod_consume_fixture {
         config_set("max_kafka_throttle_delay_ms", 30'000ms);
 
         wait_for_controller_leadership().get();
-        start(ss::smp::count);
+        start(ss::this_smp_shard_count());
 
         // PRODUCE smaller batches for 5s per client
         const auto batches_cnt = (5s).count() * rate_limit_in
@@ -536,7 +536,8 @@ struct throughput_limits_fixure : prod_consume_fixture {
             policy,
             [&](auto i) {
                 const model::partition_id p_id(i);
-                const auto data_cap = (kafka_in_data_len / ss::smp::count)
+                const auto data_cap = (kafka_in_data_len
+                                       / ss::this_smp_shard_count())
                                       - batch_size * 2;
                 return do_consume(i, data_cap, honour_throttle);
             },

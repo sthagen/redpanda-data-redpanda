@@ -196,7 +196,7 @@ public:
       model::node_id self,
       ss::shard_id src,
       model::node_id node,
-      ss::shard_id max_shards = ss::smp::count) const;
+      ss::shard_id max_shards = ss::this_smp_shard_count()) const;
 
 private:
     std::optional<connection_cache_label> _label;

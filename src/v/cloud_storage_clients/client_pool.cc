@@ -42,7 +42,7 @@ constexpr auto pool_ready_timeout = 15s;
 [[nodiscard]] std::pair<ss::shard_id, ss::shard_id> pick_two_random_shards() {
     using dist_t = std::uniform_int_distribution<ss::shard_id>;
 
-    const ss::shard_id n = ss::smp::count;
+    const ss::shard_id n = ss::this_smp_shard_count();
     const ss::shard_id self = ss::this_shard_id();
 
     vassert(n > 1, "At least two shards are required");
@@ -308,7 +308,7 @@ ss::future<client_pool::client_lease> client_pool::acquire(
             if (likely(!_idle_clients.empty())) {
                 client = pop_most_recently_used();
             } else if (
-              ss::smp::count == 1
+              ss::this_smp_shard_count() == 1
               || _policy == client_pool_overdraft_policy::wait_if_empty
               || _leased.size() >= _capacity * 2) {
                 // If borrowing is disabled or this shard borrowed '_capacity'

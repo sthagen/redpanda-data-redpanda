@@ -500,7 +500,8 @@ public:
     Value map_reduce(Mapper map, Value initial, Reduce reduce) {
         Value acc = initial;
         for (auto& [node_id, value] : apps) {
-            for (size_t cpu_id = 0; cpu_id < ss::smp::count; cpu_id++) {
+            for (size_t cpu_id = 0; cpu_id < ss::this_smp_shard_count();
+                 cpu_id++) {
                 auto res = ss::smp::submit_to(cpu_id, [node_id, &map] {
                                return map(node_id);
                            }).get();

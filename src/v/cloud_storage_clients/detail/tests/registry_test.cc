@@ -159,7 +159,7 @@ TEST(UpstreamRegistry, DelayedThrowingStartWithMultipleWaiters) {
 }
 
 TEST(UpstreamRegistry, CrossShardConcurrentGet) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
 
     ss::sharded<test_registry> registry;
     registry.start(std::ref(test_log), test_registry::no_entry_limit).get();
@@ -174,13 +174,13 @@ TEST(UpstreamRegistry, CrossShardConcurrentGet) {
           })
           .get();
 
-    for (ss::shard_id s{0}; s < ss::smp::count; ++s) {
+    for (ss::shard_id s{0}; s < ss::this_smp_shard_count(); ++s) {
         EXPECT_EQ(host_shards[s], s);
     }
 }
 
 TEST(UpstreamRegistry, CrossShardThrowingStart) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
 
     ss::sharded<throwing_registry> registry;
     registry.start(std::ref(test_log), test_registry::no_entry_limit).get();
@@ -294,7 +294,7 @@ TEST(UpstreamRegistry, EvictorLoopEvictsIdleEntries) {
 }
 
 TEST(UpstreamRegistry, EntryLimitEnforced) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
 
     constexpr size_t max_entries = 2;
     ss::sharded<test_registry> registry;
@@ -346,7 +346,7 @@ TEST(UpstreamRegistry, EntryLimitEnforced) {
 }
 
 TEST(UpstreamRegistry, CrossShardEviction) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
     constexpr auto evict_threshold = ss::lowres_clock::time_point::max();
 
     ss::sharded<test_registry> registry;
@@ -456,7 +456,7 @@ TEST(UpstreamRegistry, StressConcurrentGetAndEvict) {
 }
 
 TEST(UpstreamRegistry, StressCrossShardConcurrentCreateEvict) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
 
     ss::sharded<test_registry> registry;
     registry.start(std::ref(test_log), test_registry::no_entry_limit).get();
@@ -482,7 +482,7 @@ TEST(UpstreamRegistry, StressCrossShardConcurrentCreateEvict) {
     // Verify entries created - coordinator has all keys.
     auto counts
       = registry.map([](test_registry& r) { return r.entry_count(); }).get();
-    EXPECT_EQ(counts[0], keys_per_shard * ss::smp::count);
+    EXPECT_EQ(counts[0], keys_per_shard * ss::this_smp_shard_count());
 
     // Evict on peers first (releases coordinator's semaphore units).
     registry
@@ -512,7 +512,7 @@ TEST(UpstreamRegistry, StressCrossShardConcurrentCreateEvict) {
 }
 
 TEST(UpstreamRegistry, StressConcurrentGetAndEvictWorkers) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
 
     ss::sharded<test_registry> registry;
     registry.start(std::ref(test_log), test_registry::no_entry_limit).get();
@@ -579,7 +579,7 @@ TEST(UpstreamRegistry, StressConcurrentGetAndEvictWorkers) {
 }
 
 TEST(UpstreamRegistry, PrepareStopCallsServicePrepareStop) {
-    ASSERT_GE(ss::smp::count, 2);
+    ASSERT_GE(ss::this_smp_shard_count(), 2);
 
     ss::sharded<test_registry> registry;
     registry.start(std::ref(test_log), test_registry::no_entry_limit).get();

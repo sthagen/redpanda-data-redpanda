@@ -64,7 +64,7 @@ smp_groups::default_raft_non_local_requests(uint32_t max_partitions_per_core) {
 
     return max_partitions_per_core
            * (max_append_requests_per_follower + additional_requests_per_follower)
-           * (ss::smp::count - 1);
+           * (ss::this_smp_shard_count() - 1);
 }
 
 ss::future<std::unique_ptr<ss::smp_service_group>>

@@ -69,6 +69,17 @@ class TieredStorageTest(TieredStorageEndToEndTest, RedpandaTest):
         self.extra_rp_conf["compaction_ctrl_min_shares"] = 300
         self.extra_rp_conf["cloud_storage_disable_chunk_reads"] = True
         self.extra_rp_conf["cloud_storage_spillover_manifest_size"] = None
+        # Test-environment tuning that used to be applied per-case by
+        # TopicCompactionEnabled / EnableSegmentMs. Pulled up to the cluster
+        # bootstrap so those inputs are purely topic-config.
+        # Cap compacted segment size so compaction-related effects roll
+        # observable segments inside the test budget.
+        self.extra_rp_conf["max_compacted_log_segment_size"] = 1024 * 1024  # 1MB
+        # Run the housekeeping/compaction loop often enough that segment.ms
+        # rolls fire within test duration.
+        self.extra_rp_conf["log_compaction_interval_ms"] = 1000
+        # Default is too high for the test; clamp segment.ms floor to 1 min.
+        self.extra_rp_conf["log_segment_ms_min"] = 60000
 
         super(TieredStorageTest, self).__init__(
             test_context=test_context,

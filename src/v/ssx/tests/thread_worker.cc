@@ -28,12 +28,13 @@ struct move_only {
 
 template<size_t tries, size_t stop_at>
 auto thread_worker_test() {
-    BOOST_REQUIRE_GT(ss::smp::count, 1);
+    BOOST_REQUIRE_GT(ss::this_smp_shard_count(), 1);
 
     auto w = ssx::singleton_thread_worker{};
     w.start({}).get();
 
-    std::vector<std::vector<ss::future<move_only>>> all_results(ss::smp::count);
+    std::vector<std::vector<ss::future<move_only>>> all_results(
+      ss::this_smp_shard_count());
 
     ss::smp::invoke_on_all([&w, &all_results]() {
         auto& results = all_results[ss::this_shard_id()];

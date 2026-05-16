@@ -528,7 +528,7 @@ ss::future<> db_s3_imposter_fixture::start() {
     _handlers.push_back(std::move(real));
 
     std::vector<forwarding_handler*> fwd_ptrs;
-    for (unsigned i = 1; i < ss::smp::count; ++i) {
+    for (unsigned i = 1; i < ss::this_smp_shard_count(); ++i) {
         auto fwd = std::make_unique<forwarding_handler>(*real_ptr);
         fwd_ptrs.push_back(fwd.get());
         _handlers.push_back(std::move(fwd));

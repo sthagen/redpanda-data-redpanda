@@ -88,7 +88,8 @@ struct throughput_test_case {
 };
 
 future<size_t> run_tc(throughput_test_case tc) {
-    co_await test_quota_manager(total_requests / ss::smp::count, tc.use_unique);
+    co_await test_quota_manager(
+      total_requests / ss::this_smp_shard_count(), tc.use_unique);
     co_return total_requests;
 }
 
@@ -163,7 +164,8 @@ future<size_t> run_latency_test(latency_test_case tc) {
 
     unsigned shard = tc.on_shard_0 ? 0 : 1;
     BOOST_ASSERT_MSG(
-      shard < ss::smp::count, "Not enough cores available for the benchmark");
+      shard < ss::this_smp_shard_count(),
+      "Not enough cores available for the benchmark");
 
     co_await ss::smp::submit_to(
       shard, [&sqm, &quota_store, tc](this auto) -> ss::future<> {

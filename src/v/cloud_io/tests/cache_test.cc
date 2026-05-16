@@ -514,7 +514,7 @@ FIXTURE_TEST(test_clean_up_on_stream_exception, cache_test_fixture) {
  */
 FIXTURE_TEST(test_put_enospc_on_non_zero_shard, cache_test_fixture) {
     vassert(
-      ss::smp::count >= 2,
+      ss::this_smp_shard_count() >= 2,
       "Test requires at least 2 shards to exercise non-shard-0 put path");
 
     BOOST_CHECK_EXCEPTION(
@@ -539,7 +539,7 @@ FIXTURE_TEST(test_put_enospc_on_non_zero_shard, cache_test_fixture) {
 
     // After ENOSPC, all shards must observe the block-puts flag, otherwise
     // concurrent puts on other shards would keep racing into a full disk.
-    for (ss::shard_id s = 0; s < ss::smp::count; ++s) {
+    for (ss::shard_id s = 0; s < ss::this_smp_shard_count(); ++s) {
         BOOST_CHECK(get_block_puts(s));
     }
 }

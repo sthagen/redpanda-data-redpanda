@@ -162,11 +162,11 @@ FIXTURE_TEST(sharing_one_reader, foreign_entry_fixture) {
     std::vector<model::record_batch_reader> copies =
       // clang-format off
       raft::details::foreign_share_n(gen_config_record_batch_reader(3),
-        ss::smp::count).get();
+        ss::this_smp_shard_count()).get();
     // clang-format on
 
-    BOOST_REQUIRE_EQUAL(copies.size(), ss::smp::count);
-    for (ss::shard_id shard = 0; shard < ss::smp::count; ++shard) {
+    BOOST_REQUIRE_EQUAL(copies.size(), ss::this_smp_shard_count());
+    for (ss::shard_id shard = 0; shard < ss::this_smp_shard_count(); ++shard) {
         info("Submitting shared reader to shard:{}", shard);
         auto cfg =
           // MUST return the config; otherwise thread exception
@@ -191,14 +191,14 @@ FIXTURE_TEST(sharing_correcteness_test, foreign_entry_fixture) {
     auto rdr = model::make_memory_record_batch_reader(std::move(batches));
     auto refs = raft::details::share_n(std::move(rdr), 2).get();
     auto shared = raft::details::foreign_share_n(
-                    std::move(refs.back()), ss::smp::count)
+                    std::move(refs.back()), ss::this_smp_shard_count())
                     .get();
     refs.pop_back();
     auto reference_batches = model::consume_reader_to_memory(
                                std::move(refs.back()), model::no_timeout)
                                .get();
 
-    BOOST_REQUIRE_EQUAL(shared.size(), ss::smp::count);
+    BOOST_REQUIRE_EQUAL(shared.size(), ss::this_smp_shard_count());
     for (auto& copy : shared) {
         auto shared = model::consume_reader_to_memory(
                         std::move(copy), model::no_timeout)
@@ -214,12 +214,12 @@ FIXTURE_TEST(copy_lots_of_readers, foreign_entry_fixture) {
     {
         auto rdr = gen_config_record_batch_reader(1);
         share_copies = raft::details::foreign_share_n(
-                         std::move(rdr), ss::smp::count)
+                         std::move(rdr), ss::this_smp_shard_count())
                          .get();
     }
-    BOOST_REQUIRE_EQUAL(share_copies.size(), ss::smp::count);
+    BOOST_REQUIRE_EQUAL(share_copies.size(), ss::this_smp_shard_count());
 
-    for (ss::shard_id shard = 0; shard < ss::smp::count; ++shard) {
+    for (ss::shard_id shard = 0; shard < ss::this_smp_shard_count(); ++shard) {
         info("Submitting shared raft::entry to shard:{}", shard);
         auto cfg = ss::smp::submit_to(
                      shard,

@@ -169,9 +169,9 @@ ss::future<std::error_code> security_manager::dispatch_updates_to_cores(
     using ret_t = std::vector<std::error_code>;
     return ss::do_with(
       ret_t{}, [cmd = std::move(cmd), &service](ret_t& ret) mutable {
-          ret.reserve(ss::smp::count);
+          ret.reserve(ss::this_smp_shard_count());
           return ss::parallel_for_each(
-                   boost::irange(0, (int)ss::smp::count),
+                   boost::irange(0, (int)ss::this_smp_shard_count()),
                    [&ret, &cmd, &service](int shard) {
                        return do_apply(shard, copy_cmd(cmd), service)
                          .then([&ret](std::error_code r) { ret.push_back(r); });

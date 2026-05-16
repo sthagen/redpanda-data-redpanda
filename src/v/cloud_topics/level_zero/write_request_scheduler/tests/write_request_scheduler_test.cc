@@ -240,7 +240,7 @@ static auto make_random_batches(size_t num_batches, size_t batch_size) {
 TEST_F_CORO(write_request_balancer_fixture, time_deadline_test) {
     // This test produces some batches and expects the time deadline
     // to trigger the upload.
-    ASSERT_TRUE_CORO(ss::smp::count > 1);
+    ASSERT_TRUE_CORO(ss::this_smp_shard_count() > 1);
 
     co_await start(false);
 
@@ -265,7 +265,7 @@ TEST_F_CORO(write_request_balancer_fixture, test_core_affinity) {
     // the unified scheduling policy to trigger the upload. It expects
     // that write requests to land on one shard using round-robin scheduling.
     // With round-robin, shard 0 will handle the first upload (ix=0).
-    ASSERT_TRUE_CORO(ss::smp::count > 1);
+    ASSERT_TRUE_CORO(ss::this_smp_shard_count() > 1);
 
     co_await start(false);
 
@@ -306,7 +306,7 @@ TEST_F_CORO(write_request_balancer_fixture, test_core_affinity) {
 
 TEST_F_CORO(write_request_balancer_fixture, data_threshold_test) {
     // Single shard produces enough data to trigger L0 upload
-    ASSERT_TRUE_CORO(ss::smp::count > 1);
+    ASSERT_TRUE_CORO(ss::this_smp_shard_count() > 1);
     auto size_threshold
       = config::shard_local_cfg()
           .cloud_topics_produce_batching_size_threshold.value();
@@ -333,7 +333,7 @@ TEST_F_CORO(write_request_balancer_fixture, test_data_threshold_with_failover) {
     // alternates between shards. This test verifies that all requests are
     // eventually acknowledged regardless of which shard handles the upload.
 
-    ASSERT_TRUE_CORO(ss::smp::count > 1);
+    ASSERT_TRUE_CORO(ss::this_smp_shard_count() > 1);
     auto size_threshold
       = config::shard_local_cfg()
           .cloud_topics_produce_batching_size_threshold.value();
@@ -373,7 +373,7 @@ TEST_F_CORO(
     // uploads. With round-robin scheduling, the target shard is selected based
     // on the ix counter, not on data volume. The test verifies that failures
     // are correctly propagated regardless of which shard handles the upload.
-    ASSERT_TRUE_CORO(ss::smp::count > 1);
+    ASSERT_TRUE_CORO(ss::this_smp_shard_count() > 1);
     static constexpr size_t batch_size = 0x1000;
 
     co_await start(false);

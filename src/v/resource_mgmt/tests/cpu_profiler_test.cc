@@ -138,9 +138,10 @@ SEASTAR_THREAD_TEST_CASE(test_cpu_profiler_enable_override) {
                        })
                        .get();
 
-    BOOST_REQUIRE_EQUAL(ss::smp::count, results.size());
+    BOOST_REQUIRE_EQUAL(ss::this_smp_shard_count(), results.size());
 
-    for (ss::shard_id shard_id = 0; shard_id < ss::smp::count; ++shard_id) {
+    for (ss::shard_id shard_id = 0; shard_id < ss::this_smp_shard_count();
+         ++shard_id) {
         auto& shard_results = results[shard_id];
         BOOST_TEST(shard_results.samples.size() >= 1);
         BOOST_REQUIRE_EQUAL(shard_id, shard_results.shard);

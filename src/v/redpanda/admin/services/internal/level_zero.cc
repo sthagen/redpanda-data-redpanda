@@ -97,7 +97,7 @@ level_zero_service_impl::get_status(
     if (local == apply_local::yes) {
         auto gc_states = co_await _gc->map(
           [](const cloud_topics::level_zero_gc& gc) { return gc.get_state(); });
-        if (gc_states.size() != ss::smp::count) {
+        if (gc_states.size() != ss::this_smp_shard_count()) {
             throw serde::pb::rpc::internal_exception(
               "Status collection failed");
         }

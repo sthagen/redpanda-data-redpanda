@@ -139,7 +139,8 @@ struct append_op_foreign final : opfuzz::op {
     ~append_op_foreign() noexcept override = default;
     const char* name() const final { return "append_op_foreign"; }
     ss::future<> invoke(opfuzz::op_context ctx) final {
-        auto source_core = random_generators::get_int(ss::smp::count - 1);
+        auto source_core = random_generators::get_int(
+          ss::this_smp_shard_count() - 1);
         return ss::smp::submit_to(
                  source_core,
                  [ctx] {

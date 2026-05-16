@@ -35,7 +35,7 @@ gh_issue_url() {
   done
   shift $((OPTIND - 1))
 
-  search=${search-"[$BACKPORT_BRANCH] $ORIG_TITLE in:title"}
+  search=${search-"\"[$BACKPORT_BRANCH] $ORIG_TITLE\" in:title"}
   milestone=${milestone-$TARGET_MILESTONE}
   repo=${repo-$TARGET_ORG/$TARGET_REPO}
 

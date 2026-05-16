@@ -58,7 +58,7 @@ TEST_F(WorkerManagerTestFixture, PauseAndResumeWorkers) {
     start_workers(manager).get();
     auto stop_manager = ss::defer([&manager] { manager.stop().get(); });
     using worker_state = l1::compaction_worker::worker_state;
-    for (ss::shard_id i = 0; i < ss::smp::count; ++i) {
+    for (ss::shard_id i = 0; i < ss::this_smp_shard_count(); ++i) {
         // Workers start in active state
         ASSERT_EQ(get_worker_state(manager, i).get(), worker_state::active);
         ASSERT_TRUE(work_fut_has_value(manager, i).get());

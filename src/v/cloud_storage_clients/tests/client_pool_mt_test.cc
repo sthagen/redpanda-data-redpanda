@@ -57,7 +57,7 @@ static cloud_storage_clients::s3_configuration client_configuration() {
 static const client_pool_builder test_pool_builder{client_configuration()};
 
 SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_blocked_on_another_shard) {
-    BOOST_REQUIRE(ss::smp::count == 2);
+    BOOST_REQUIRE(ss::this_smp_shard_count() == 2);
 
     constexpr size_t num_connections_per_shard = 4;
 
@@ -137,7 +137,7 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_blocked_on_another_shard) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_blocked_on_this_shard) {
-    BOOST_REQUIRE(ss::smp::count == 2);
+    BOOST_REQUIRE(ss::this_smp_shard_count() == 2);
 
     constexpr size_t num_connections_per_shard = 4;
 
@@ -190,7 +190,7 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_blocked_on_this_shard) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_after_leasing_all) {
-    BOOST_REQUIRE(ss::smp::count == 2);
+    BOOST_REQUIRE(ss::this_smp_shard_count() == 2);
     constexpr size_t num_connections_per_shard = 4;
 
     ss::sharded<cloud_storage_clients::client_pool> pool;
@@ -223,7 +223,9 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_after_leasing_all) {
     auto leases_stop = ss::defer([&leases] { leases.stop().get(); });
 
     // Lease all connections from all the shards.
-    for (size_t i = 0; i < ss::smp::count * num_connections_per_shard; i++) {
+    for (size_t i = 0;
+         i < ss::this_smp_shard_count() * num_connections_per_shard;
+         i++) {
         leases.local().leases.push_back(
           pool.local().acquire(test_bucket, leases.local().as).get());
     }
@@ -291,7 +293,7 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_after_leasing_all) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_client_pool_concurrent_acquire_release) {
-    BOOST_REQUIRE(ss::smp::count == 2);
+    BOOST_REQUIRE(ss::this_smp_shard_count() == 2);
 
     constexpr size_t num_connections_per_shard = 4;
     constexpr size_t num_workers_per_shard = 3;

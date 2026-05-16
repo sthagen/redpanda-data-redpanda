@@ -50,7 +50,7 @@ metadata_dissemination_handler::do_update_leadership(
              std::move(leaders),
              [this](const chunked_vector<ntp_leader_revision>& leaders) {
                  return ss::parallel_for_each(
-                   boost::irange<ss::shard_id>(0, ss::smp::count),
+                   boost::irange<ss::shard_id>(0, ss::this_smp_shard_count()),
                    [this, &leaders](ss::shard_id shard) {
                        return ss::smp::submit_to(shard, [this, &leaders] {
                            return ss::do_for_each(

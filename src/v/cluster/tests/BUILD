@@ -311,7 +311,7 @@ redpanda_cc_btest(
 
 redpanda_cc_gtest(
     name = "leader_balancer_simulation_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "leader_balancer_simulation_test.cc",
     ],

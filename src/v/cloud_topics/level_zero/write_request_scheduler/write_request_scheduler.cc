@@ -368,13 +368,13 @@ ss::future<> write_request_scheduler<Clock>::start() {
         // Create scheduler context on shard 0.
         // The context is shared between all shards.
         // FixedArrays are sized at construction time.
-        _shard_zero_context.emplace(ss::smp::count);
+        _shard_zero_context.emplace(ss::this_smp_shard_count());
 
         // Initialize shards with their backlog size references.
         // shard_to_group and groups are already default-initialized by
         // the FixedArray constructor (padded_atomic_group_id defaults to
         // group_id{0}, shard_group default-constructs with current time).
-        for (unsigned ix = 0; ix < ss::smp::count; ix++) {
+        for (unsigned ix = 0; ix < ss::this_smp_shard_count(); ix++) {
             for (const counter_shard& sc : shard_bytes) {
                 if (sc.shard == ix) {
                     _shard_zero_context->shards[ix] = shard_state<Clock>(
@@ -438,7 +438,7 @@ write_request_scheduler<Clock>::run_once() {
     case schedule_action::upload: {
         // Collect shard info for shards in this group
         std::vector<shard_info> shard_bytes;
-        shard_bytes.resize(ss::smp::count);
+        shard_bytes.resize(ss::this_smp_shard_count());
         _context->get_shard_bytes_vec(shard_bytes, result.gid);
 
         // Only shutdown exceptions are expected here

@@ -193,7 +193,7 @@ TEST_F(L0ObjectSizeDistFixture, ThreeToOne) {
      * cores and then expects that these are eventually grouped together and
      * uploaded as a single object by the scheduler/batcher.
      */
-    ASSERT_EQ(seastar::smp::count, 3);
+    ASSERT_EQ(seastar::this_smp_shard_count(), 3);
     start(false).get();
 
     const auto timeout = 1s;
@@ -202,7 +202,7 @@ TEST_F(L0ObjectSizeDistFixture, ThreeToOne) {
     // build batches to upload to each core
     size_t total_size{0};
     std::vector<chunked_vector<model::record_batch>> batches;
-    for (unsigned i = 0; i < seastar::smp::count; ++i) {
+    for (unsigned i = 0; i < seastar::this_smp_shard_count(); ++i) {
         batches.emplace_back();
         auto buf = model::test::make_random_batches().get();
         for (auto& b : buf) {

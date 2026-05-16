@@ -19,9 +19,14 @@ azure_vm_refresh_impl::azure_vm_refresh_impl(
   aws_service_name, // Ignored for Azure VM
   aws_region_name region,
   ss::abort_source& as,
-  retry_params retry_params)
+  retry_params retry_params,
+  ss::sstring metrics_tag)
   : refresh_credentials::impl(
-      std::move(address), std::move(region), as, retry_params) {}
+      std::move(address),
+      std::move(region),
+      as,
+      retry_params,
+      std::move(metrics_tag)) {}
 
 fmt::iterator azure_vm_refresh_impl::format_to(fmt::iterator it) const {
     return fmt::format_to(it, "azure_vm_refresh_impl{{address:{}}}", address());

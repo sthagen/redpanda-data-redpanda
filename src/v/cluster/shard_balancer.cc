@@ -69,7 +69,7 @@ shard_balancer::shard_balancer(
   , _partitions_per_shard(std::move(partitions_per_shard))
   , _partitions_reserve_shard0(std::move(partitions_reserve_shard0))
   , _balance_timer([this] { balance_timer_callback(); })
-  , _total_counts(ss::smp::count, 0) {
+  , _total_counts(ss::this_smp_shard_count(), 0) {
     _total_counts.at(0) += 1; // controller partition
 
     _debounce_timeout.watch([this] {
@@ -123,7 +123,7 @@ ss::future<> shard_balancer::start(size_t kvstore_shard_count) {
           });
     }
 
-    if (kvstore_shard_count > ss::smp::count) {
+    if (kvstore_shard_count > ss::this_smp_shard_count()) {
         // Check that we can decrease shard count
 
         ss::sstring reject_reason;
@@ -135,7 +135,8 @@ ss::future<> shard_balancer::start(size_t kvstore_shard_count) {
         if (!_balancing_on_core_count_change()) {
             reject_reason = "balancing on core count change is disabled";
         }
-        size_t max_capacity = ss::smp::count * _partitions_per_shard();
+        size_t max_capacity = ss::this_smp_shard_count()
+                              * _partitions_per_shard();
         max_capacity -= std::min(
           max_capacity, static_cast<size_t>(_partitions_reserve_shard0()));
         if (local_group2ntp.size() > max_capacity) {
@@ -152,13 +153,14 @@ ss::future<> shard_balancer::start(size_t kvstore_shard_count) {
               "Detected decrease in number of cores dedicated to run Redpanda "
               "from {} to {}, but it is impossible because {}.",
               kvstore_shard_count,
-              ss::smp::count,
+              ss::this_smp_shard_count(),
               reject_reason));
         }
     }
 
     std::vector<std::unique_ptr<storage::kvstore>> extra_kvstores;
-    for (ss::shard_id s = ss::smp::count; s < kvstore_shard_count; ++s) {
+    for (ss::shard_id s = ss::this_smp_shard_count(); s < kvstore_shard_count;
+         ++s) {
         extra_kvstores.push_back(co_await _storage.make_extra_kvstore(s));
     }
 
@@ -169,7 +171,7 @@ ss::future<> shard_balancer::start(size_t kvstore_shard_count) {
             extra_kvstores, [](auto& kvs) { return kvs->stop(); });
       });
 
-    if (kvstore_shard_count > ss::smp::count) {
+    if (kvstore_shard_count > ss::this_smp_shard_count()) {
         // Now that all partition info is copied from extra kvstores, we can
         // remove them.
         co_await _storage.log_mgr().remove_orphan_files(
@@ -177,7 +179,8 @@ ss::future<> shard_balancer::start(size_t kvstore_shard_count) {
           {model::redpanda_ns},
           [](model::ntp ntp, storage::partition_path::metadata) {
               return ntp.tp.topic == model::kvstore_topic
-                     && ntp.tp.partition() >= static_cast<int>(ss::smp::count);
+                     && ntp.tp.partition()
+                          >= static_cast<int>(ss::this_smp_shard_count());
           });
     }
 
@@ -278,7 +281,7 @@ ss::future<> shard_balancer::init_shard_placement(
       _balancing_on_core_count_change()
       && _features.is_active(features::feature::node_local_core_assignment)) {
         co_await balance_on_core_count_change(
-          lock, ss::smp::count + extra_kvstores.size());
+          lock, ss::this_smp_shard_count() + extra_kvstores.size());
     }
 
     // 4. Move partition info from extra kvstores
@@ -328,7 +331,7 @@ shard_balancer::reassign_shard(model::ntp ntp, ss::shard_id shard) {
 
     auto lock = co_await _mtx.get_units();
 
-    if (shard >= ss::smp::count) {
+    if (shard >= ss::this_smp_shard_count()) {
         co_return errc::invalid_request;
     }
     auto replicas_view = _topics.local().get_replicas_view(ntp);
@@ -530,8 +533,8 @@ ss::future<> shard_balancer::balance_on_core_count_change(
     // the first time, and this is a good time to rebalance as well.
 
     if (
-      last_rebalance_core_count == ss::smp::count
-      && kvstore_shard_count == ss::smp::count) {
+      last_rebalance_core_count == ss::this_smp_shard_count()
+      && kvstore_shard_count == ss::this_smp_shard_count()) {
         co_return;
     }
 
@@ -601,7 +604,7 @@ ss::future<> shard_balancer::do_balance(ssx::mutex::units& lock) {
       state_kvstore_key(),
       serde::to_iobuf(
         persisted_state{
-          .last_rebalance_core_count = ss::smp::count,
+          .last_rebalance_core_count = ss::this_smp_shard_count(),
         }));
 }
 
@@ -673,7 +676,8 @@ ss::shard_id shard_balancer::choose_shard(
         return score;
     };
     optimize_level(
-      std::views::iota(ss::shard_id(0), ss::shard_id(ss::smp::count)),
+      std::views::iota(
+        ss::shard_id(0), ss::shard_id(ss::this_smp_shard_count())),
       topic_count_score);
 
     auto total_count_score = [&](ss::shard_id shard) {
@@ -702,18 +706,18 @@ void shard_balancer::update_counts(
   topic_data_t& topic_data,
   const std::optional<shard_placement_target>& prev,
   const std::optional<shard_placement_target>& next) {
-    // Shard values that are >= ss::smp::count are possible when initializing
-    // shard placement after a core count decrease. We ignore them because
-    // partition counts on extra shards are not needed for balancing.
+    // Shard values that are >= ss::this_smp_shard_count() are possible when
+    // initializing shard placement after a core count decrease. We ignore them
+    // because partition counts on extra shards are not needed for balancing.
 
-    if (prev && prev->shard < ss::smp::count) {
+    if (prev && prev->shard < ss::this_smp_shard_count()) {
         topic_data.shard2count.at(prev->shard) -= 1;
         topic_data.total_count -= 1;
         // TODO: check negative values
         _total_counts.at(prev->shard) -= 1;
     }
 
-    if (next && next->shard < ss::smp::count) {
+    if (next && next->shard < ss::this_smp_shard_count()) {
         topic_data.shard2count.at(next->shard) += 1;
         topic_data.total_count += 1;
         _total_counts.at(next->shard) += 1;

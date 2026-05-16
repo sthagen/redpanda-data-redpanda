@@ -110,7 +110,7 @@ throughput_limit get_hard_throughput_limit() {
     auto hard_limit = config::shard_local_cfg()
                         .cloud_storage_max_throughput_per_shard()
                         .value_or(0)
-                      * ss::smp::count;
+                      * ss::this_smp_shard_count();
 
     if (hard_limit == 0) {
         // Run tiered-storage without throttling by setting
@@ -120,7 +120,8 @@ throughput_limit get_hard_throughput_limit() {
 
     return {
       .disk_node_throughput_limit = hard_limit,
-      .download_shard_throughput_limit = hard_limit / ss::smp::count,
+      .download_shard_throughput_limit = hard_limit
+                                         / ss::this_smp_shard_count(),
     };
 }
 
@@ -128,7 +129,7 @@ throughput_limit get_throughput_limit(std::optional<size_t> device_throughput) {
     auto hard_limit = config::shard_local_cfg()
                         .cloud_storage_max_throughput_per_shard()
                         .value_or(0)
-                      * ss::smp::count;
+                      * ss::this_smp_shard_count();
     auto percent = config::shard_local_cfg()
                      .cloud_storage_throughput_limit_percent()
                      .value_or(0);
@@ -147,7 +148,8 @@ throughput_limit get_throughput_limit(std::optional<size_t> device_throughput) {
         // is set we still need to limit network bandwidth even though
         // the limit is overly high.
         return throughput_limit{
-          .download_shard_throughput_limit = hard_limit / ss::smp::count,
+          .download_shard_throughput_limit = hard_limit
+                                             / ss::this_smp_shard_count(),
         };
     }
 
@@ -156,7 +158,7 @@ throughput_limit get_throughput_limit(std::optional<size_t> device_throughput) {
     auto tp = std::min(hard_limit, scaled_device_throughput);
     return {
       .disk_node_throughput_limit = tp,
-      .download_shard_throughput_limit = tp / ss::smp::count,
+      .download_shard_throughput_limit = tp / ss::this_smp_shard_count(),
     };
 }
 

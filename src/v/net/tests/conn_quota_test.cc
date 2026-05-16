@@ -79,7 +79,7 @@ struct conn_quota_fixture {
     }
 
     void drop_shard_units() {
-        for (ss::shard_id i = 0; i < ss::smp::count; ++i) {
+        for (ss::shard_id i = 0; i < ss::this_smp_shard_count(); ++i) {
             scq.invoke_on(i, [i, this](conn_quota&) { shard_units.erase(i); })
               .get();
         }
@@ -131,7 +131,7 @@ struct conn_quota_fixture {
      * Helper for acquiring units on all the shards at once.
      */
     void take_on_all(uint32_t take_units, ss::net::inet_address addr = addr1) {
-        for (ss::shard_id i = 0; i < ss::smp::count; ++i) {
+        for (ss::shard_id i = 0; i < ss::this_smp_shard_count(); ++i) {
             take_on_shard(i, addr, take_units);
         }
     }
@@ -290,7 +290,7 @@ void conn_quota_fixture::test_borrows(
 }
 
 FIXTURE_TEST(test_total_borrows, conn_quota_fixture) {
-    auto core_count = ss::smp::count;
+    auto core_count = ss::this_smp_shard_count();
 
     // This test needs at least a few cores.  If you run it with -c 1 it
     // won't work.  We're testing sharded logic so we really do need multiple
@@ -304,13 +304,13 @@ FIXTURE_TEST(test_total_borrows, conn_quota_fixture) {
  * Variant of test_total_borrows that stresses the per-IP limit instead
  */
 FIXTURE_TEST(test_per_ip_borrows, conn_quota_fixture) {
-    auto core_count = ss::smp::count;
+    auto core_count = ss::this_smp_shard_count();
     BOOST_REQUIRE(core_count >= 4);
     test_borrows(core_count, 2, std::nullopt, core_count * 2);
 }
 
 FIXTURE_TEST(test_change_limits, conn_quota_fixture) {
-    auto core_count = ss::smp::count;
+    auto core_count = ss::this_smp_shard_count();
     uint32_t initial_limit = core_count * 3;
     start(initial_limit, std::nullopt);
 
@@ -364,7 +364,7 @@ FIXTURE_TEST(test_change_limits, conn_quota_fixture) {
 }
 
 FIXTURE_TEST(test_decrease_limit, conn_quota_fixture) {
-    auto core_count = ss::smp::count;
+    auto core_count = ss::this_smp_shard_count();
     uint32_t initial_limit = core_count * 3;
     start(initial_limit, std::nullopt);
 
@@ -397,7 +397,7 @@ FIXTURE_TEST(test_decrease_limit, conn_quota_fixture) {
 }
 
 FIXTURE_TEST(test_change_limits_per_ip, conn_quota_fixture) {
-    auto core_count = ss::smp::count;
+    auto core_count = ss::this_smp_shard_count();
     uint32_t initial_limit = core_count * 3;
     start(std::nullopt, initial_limit);
 
@@ -437,7 +437,7 @@ FIXTURE_TEST(test_change_limits_per_ip, conn_quota_fixture) {
  * limit for a particular IP vs. the general per-IP limit
  */
 FIXTURE_TEST(test_overrides, conn_quota_fixture) {
-    auto core_count = ss::smp::count;
+    auto core_count = ss::this_smp_shard_count();
 
     uint32_t general_limit = core_count * 2;
     vlog(logger.info, "Constructing with overrides");

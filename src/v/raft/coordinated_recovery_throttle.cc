@@ -86,7 +86,7 @@ coordinated_recovery_throttle::coordinated_recovery_throttle(
   config::binding<size_t> rate_binding, config::binding<bool> use_static)
   : _rate_binding(std::move(rate_binding))
   , _use_static_allocation(std::move(use_static))
-  , _throttler(_rate_binding() / ss::smp::count) {
+  , _throttler(_rate_binding() / ss::this_smp_shard_count()) {
     if (ss::this_shard_id() == _coordinator_shard) {
         _coordinator.set_callback([this] {
             ssx::spawn_with_gate(_gate, [this] {
@@ -223,7 +223,7 @@ ss::future<> coordinated_recovery_throttle::do_coordinate_tick() {
     ssize_t total_rate = _rate_binding()
                            ? std::clamp(
                                _rate_binding(),
-                               size_t{ss::smp::count},
+                               size_t{ss::this_smp_shard_count()},
                                std::numeric_limits<size_t>::max() / 4)
                            : 0;
 
@@ -250,14 +250,15 @@ ss::future<> coordinated_recovery_throttle::do_coordinate_tick() {
 
     if (unlikely(_use_static_allocation())) {
         // Don't take individual shard requests into account, distribute equally
-        auto fair_shard_rate = to_add / ss::smp::count;
+        auto fair_shard_rate = to_add / ss::this_smp_shard_count();
         co_return co_await renew_capacity_all_shards(fair_shard_rate);
     }
 
     // Surplus after we satisfy hard requirements (that is, bring all shard
     // rates to 0 assuming they stay as they are while we're calculating).
     // Negative means net overuse.
-    ssize_t avg_surplus = (to_add + total_remaining_units) / ss::smp::count;
+    ssize_t avg_surplus = (to_add + total_remaining_units)
+                          / ss::this_smp_shard_count();
     vlog(
       raftlog.trace,
       "Coordinated recovery throttle tick: total_rate={}, "

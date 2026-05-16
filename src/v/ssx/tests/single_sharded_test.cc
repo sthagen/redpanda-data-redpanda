@@ -131,7 +131,7 @@ struct caller {
 };
 
 SEASTAR_THREAD_TEST_CASE(single_sharded) {
-    ss::shard_id the_shard = ss::smp::count - 1;
+    ss::shard_id the_shard = ss::this_smp_shard_count() - 1;
 
     ss::sharded<counter> counters;
     ssx::single_sharded<single_service> single;
@@ -163,7 +163,8 @@ SEASTAR_THREAD_TEST_CASE(single_sharded) {
           bool on_the_shard = the_shard == ss::this_shard_id();
           BOOST_REQUIRE_EQUAL(cntr.started, on_the_shard ? 1 : 0);
           BOOST_REQUIRE_EQUAL(
-            cntr.called_foo, on_the_shard ? ss::smp::count * 3 + 1 : 0);
+            cntr.called_foo,
+            on_the_shard ? ss::this_smp_shard_count() * 3 + 1 : 0);
           BOOST_REQUIRE_EQUAL(cntr.stopped, on_the_shard ? 1 : 0);
       })
       .get();
@@ -171,10 +172,10 @@ SEASTAR_THREAD_TEST_CASE(single_sharded) {
 }
 
 SEASTAR_THREAD_TEST_CASE(single_sharded_wrong_shard) {
-    BOOST_REQUIRE(ss::smp::count > 1);
+    BOOST_REQUIRE(ss::this_smp_shard_count() > 1);
 
-    ss::shard_id the_shard = ss::smp::count - 2;
-    ss::shard_id wrong_shard = ss::smp::count - 1;
+    ss::shard_id the_shard = ss::this_smp_shard_count() - 2;
+    ss::shard_id wrong_shard = ss::this_smp_shard_count() - 1;
 
     ss::sharded<counter> counters;
     ssx::single_sharded<single_service> single;

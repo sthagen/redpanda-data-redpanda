@@ -561,7 +561,7 @@ template<typename Cmd>
 ss::future<std::error_code>
 topic_updates_dispatcher::dispatch_updates_to_cores(Cmd cmd, model::offset o) {
     auto results = co_await ssx::parallel_transform(
-      boost::irange<ss::shard_id>(0, ss::smp::count),
+      boost::irange<ss::shard_id>(0, ss::this_smp_shard_count()),
       [this, cmd = std::move(cmd), o](ss::shard_id shard) mutable {
           return do_apply(shard, cmd, _topic_table, o);
       });

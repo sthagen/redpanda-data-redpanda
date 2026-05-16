@@ -48,7 +48,7 @@ public:
     ss::future<std::unique_ptr<storage::kvstore>>
     make_extra_kvstore(ss::shard_id s) {
         vassert(
-          s >= ss::smp::count,
+          s >= ss::this_smp_shard_count(),
           "can't make extra kvstore for existing shard {}",
           s);
         auto kvs = std::make_unique<kvstore>(

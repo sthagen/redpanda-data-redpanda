@@ -709,7 +709,7 @@ private:
 // Limit concurrency to 4 so that there are more interesting repeats in randomly
 // generated shard ids.
 ss::shard_id get_max_shard_id() {
-    return std::min(ss::smp::count - 1, ss::shard_id(3));
+    return std::min(ss::this_smp_shard_count() - 1, ss::shard_id(3));
 }
 
 /// Simplified version of shard_balancer that just assigns ntps to random

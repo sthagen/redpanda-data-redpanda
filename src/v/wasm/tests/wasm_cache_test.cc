@@ -133,7 +133,8 @@ private:
 class WasmCacheTest : public ::testing::Test {
 public:
     static void SetUpTestSuite() {
-        vassert(ss::smp::count > 1, "This test expects multiple shards");
+        vassert(
+          ss::this_smp_shard_count() > 1, "This test expects multiple shards");
     }
 
     void SetUp() override {
@@ -221,13 +222,13 @@ TEST_F(WasmCacheTest, CachesEngines) {
         EXPECT_EQ(engine, engine_two.get());
         live_engine = engine;
     });
-    EXPECT_EQ(state()->engines, ss::smp::count);
+    EXPECT_EQ(state()->engines, ss::this_smp_shard_count());
 
     // This engine doesn't actually create new instances under the hood.
     auto engine = factory->make_engine(std::make_unique<fake_logger>()).get();
-    EXPECT_EQ(state()->engines, ss::smp::count);
+    EXPECT_EQ(state()->engines, ss::this_smp_shard_count());
     engine = nullptr;
-    EXPECT_EQ(state()->engines, ss::smp::count);
+    EXPECT_EQ(state()->engines, ss::this_smp_shard_count());
 
     invoke_on_all([] { live_engine = nullptr; });
     EXPECT_EQ(state()->engines, 0);
@@ -300,7 +301,7 @@ TEST_F(WasmCacheTest, GC) {
     });
     EXPECT_EQ(state()->engines, 0);
     // We should GC each engine for each core
-    EXPECT_EQ(gc(), ss::smp::count);
+    EXPECT_EQ(gc(), ss::this_smp_shard_count());
     factory = nullptr;
     // Now we should GC the factory
     EXPECT_EQ(gc(), 1);

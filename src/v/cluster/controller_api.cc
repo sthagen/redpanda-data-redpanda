@@ -205,7 +205,8 @@ controller_api::get_reconciliation_state(model::ntp ntp) {
     }
     // query controller backends for in progress operations
     ss::chunked_fifo<backend_operation> ops;
-    const auto shards = boost::irange<ss::shard_id>(0, ss::smp::count);
+    const auto shards = boost::irange<ss::shard_id>(
+      0, ss::this_smp_shard_count());
     for (auto shard : shards) {
         auto shard_op = co_await get_current_op(ntp, shard);
         if (shard_op) {

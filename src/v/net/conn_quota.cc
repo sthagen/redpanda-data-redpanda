@@ -206,7 +206,7 @@ ss::shard_id conn_quota::addr_to_shard(ss::net::inet_address addr) const {
         return total_shard;
     } else {
         uint32_t hash = xxhash_32((char*)(addr.data()), addr.size());
-        return hash % ss::smp::count;
+        return hash % ss::this_smp_shard_count();
     }
 }
 
@@ -419,7 +419,7 @@ bool conn_quota::try_get_units(home_allowance& allowance) {
 bool conn_quota::should_leave_reclaim(home_allowance& allowance) {
     return allowance.reclaim
            // Must be enough tokens for it to be worth borrowing any
-           && allowance.max > ss::smp::count
+           && allowance.max > ss::this_smp_shard_count()
            // Must have at least half its tokens free
            && allowance.available > allowance.max / 2
            // Must not be in the middle of starting a reclaim

@@ -29,7 +29,7 @@ template<typename T>
 class sharded_value {
 public:
     explicit sharded_value(T value)
-      : _state(ss::smp::count, ssx::aligned<T>{value}) {}
+      : _state(ss::this_smp_shard_count(), ssx::aligned<T>{value}) {}
     ~sharded_value() noexcept = default;
 
     sharded_value(sharded_value&& other) noexcept = default;
