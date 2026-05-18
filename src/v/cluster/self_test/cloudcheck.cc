@@ -253,7 +253,7 @@ ss::future<std::vector<self_test_result>> cloudcheck::run_benchmarks() {
 
 iobuf cloudcheck::make_random_payload(size_t size) const {
     iobuf payload;
-    constexpr size_t chunk_size = 128_KiB;
+    constexpr size_t chunk_size = 64_KiB;
     for (size_t amt = 0; amt < size; amt += chunk_size) {
         size_t remaining = size - amt;
         const auto random_data = random_generators::gen_alphanum_string(
