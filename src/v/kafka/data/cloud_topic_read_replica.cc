@@ -24,6 +24,8 @@
 #include "storage/log_reader.h"
 #include "storage/translating_reader.h"
 
+#include <seastar/coroutine/exception.hh>
+
 namespace cloud_topics::read_replica {
 
 namespace {
@@ -157,8 +159,9 @@ ss::future<storage::translating_reader>
 partition_proxy::make_reader(kafka::log_reader_config cfg) {
     auto snap_res = co_await get_snapshot();
     if (!snap_res.has_value()) {
-        throw std::runtime_error(
-          fmt::format("make_reader failed: {}", snap_res.error()));
+        co_await ss::coroutine::return_exception(
+          std::runtime_error(
+            fmt::format("make_reader failed: {}", snap_res.error())));
     }
     co_return co_await make_reader(std::move(snap_res.value()), cfg);
 }

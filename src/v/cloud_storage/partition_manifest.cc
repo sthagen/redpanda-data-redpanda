@@ -1911,7 +1911,7 @@ ss::future<> partition_manifest::update(
     }
     co_await is.close();
     if (e_ptr) {
-        std::rethrow_exception(e_ptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(e_ptr));
     }
 
     switch (serialization_format) {

@@ -142,7 +142,7 @@ parse_tags(ss::input_stream<char>& src, size_t max_bytes) {
               fmt::format("duplicate tag id detected: {}", id));
         }
     }
-    co_return std::make_pair(std::move(tags), total_bytes_read);
+    co_return {{tagged_fields{std::move(tags)}}, total_bytes_read};
 }
 
 namespace {

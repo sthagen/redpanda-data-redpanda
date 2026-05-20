@@ -12,6 +12,7 @@
 #include "cluster/metadata_cache.h"
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"
+#include "config/configuration.h"
 #include "container/chunked_vector.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/protocol/errors.h"
@@ -22,6 +23,8 @@
 #include "model/namespace.h"
 #include "ssx/future-util.h"
 #include "ssx/when_all.h"
+
+#include <seastar/coroutine/exception.hh>
 
 namespace kafka {
 
@@ -61,12 +64,38 @@ struct list_offsets_ctx {
       , unauthorized_topics(std::move(unauthorized_topics)) {}
 };
 
+/// Compute the leader_epoch to put on a ListOffsets response.
+///
+/// CORE-12505: when `enable_listoffsets_historical_leader_epoch` is on
+/// (and the topic is not a read replica), return the record's leader
+/// epoch, to match Kafka and support KIP-320 truncation detection on
+/// consumers. Otherwise, return the partition's current leader epoch.
+///
+/// `historical_term` is the term of the matched record, or `nullopt`
+/// when no record was matched (e.g., timequery on an empty partition),
+/// in which case we return `kafka::invalid_leader_epoch`.
+///
+/// Read replicas are excluded pending separate analysis.
+static kafka::leader_epoch response_leader_epoch(
+  const partition_proxy& kafka_partition,
+  bool is_read_replica,
+  std::optional<model::term_id> historical_term) {
+    const bool correct_epoch_enabled
+      = config::shard_local_cfg().enable_listoffsets_historical_leader_epoch();
+    if (!correct_epoch_enabled || is_read_replica) {
+        return kafka_partition.leader_epoch();
+    }
+    return historical_term ? kafka::leader_epoch_from_term(*historical_term)
+                           : kafka::invalid_leader_epoch;
+}
+
 static ss::future<list_offset_partition_response> list_offsets_partition(
   list_offsets_ctx& octx,
   model::timestamp timestamp,
   model::ktp ktp,
   model::isolation_level isolation_lvl,
   kafka::leader_epoch current_leader_epoch,
+  bool is_read_replica,
   cluster::partition_manager& mgr) {
     auto kafka_partition = make_partition_proxy(ktp, mgr);
     if (!kafka_partition) {
@@ -116,6 +145,11 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
               ktp.get_partition(), maybe_start_ofs.error());
         }
 
+        // TODO(CORE-12505 follow-up): route through response_leader_epoch
+        // once partition_proxy exposes a term-for-offset lookup. When
+        // the property is true and the topic is not a read replica,
+        // this should return the historical term for
+        // maybe_start_ofs.value() instead of the current leader term.
         co_return list_offsets_response::make_partition(
           ktp.get_partition(),
           model::timestamp(-1),
@@ -138,7 +172,8 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
           ktp.get_partition(),
           model::timestamp(-1),
           model::offset(-1),
-          kafka_partition->leader_epoch());
+          response_leader_epoch(
+            *kafka_partition, is_read_replica, std::nullopt));
     }
 
     auto res_fut = co_await ss::coroutine::as_future(kafka_partition->timequery(
@@ -155,13 +190,16 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
               ktp.get_partition(), error_code::not_leader_for_partition);
         }
         // Not expecting any other kinds of exceptions -- just rethrow.
-        std::rethrow_exception(ex);
+        co_await ss::coroutine::return_exception_ptr(std::move(ex));
     }
     auto id = ktp.get_partition();
     auto res = res_fut.get();
     if (res) {
         co_return list_offsets_response::make_partition(
-          id, res->time, res->offset, kafka_partition->leader_epoch());
+          id,
+          res->time,
+          res->offset,
+          response_leader_epoch(*kafka_partition, is_read_replica, res->term));
     }
     co_return list_offsets_response::make_partition(id, error_code::none);
 }
@@ -170,7 +208,8 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
   list_offsets_ctx& octx,
   model::timestamp timestamp,
   list_offset_topic& topic,
-  list_offset_partition& part) {
+  list_offset_partition& part,
+  bool is_read_replica) {
     model::ktp ktp(topic.name, part.partition_index);
 
     auto shard = octx.rctx.shards().shard_for(ktp);
@@ -188,14 +227,15 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
        ntp = std::move(ktp),
        isolation_lvl = model::isolation_level(
          octx.request.data.isolation_level),
-       current_leader_epoch = part.current_leader_epoch](
-        cluster::partition_manager& mgr) mutable {
+       current_leader_epoch = part.current_leader_epoch,
+       is_read_replica](cluster::partition_manager& mgr) mutable {
           return list_offsets_partition(
             octx,
             timestamp,
             std::move(ntp),
             isolation_lvl,
             current_leader_epoch,
+            is_read_replica,
             mgr);
       });
 }
@@ -209,6 +249,9 @@ list_offsets_topic(list_offsets_ctx& octx, list_offset_topic& topic) {
       = octx.rctx.metadata_cache().get_topic_disabled_set(
         model::topic_namespace_view{model::kafka_namespace, topic.name});
 
+    const auto topic_cfg = octx.rctx.metadata_cache().get_topic_cfg(
+      model::topic_namespace_view{model::kafka_namespace, topic.name});
+
     for (auto& part : topic.partitions) {
         if (octx.request.duplicate_tp(topic.name, part.partition_index)) {
             partitions.push_back(
@@ -218,9 +261,11 @@ list_offsets_topic(list_offsets_ctx& octx, list_offset_topic& topic) {
             continue;
         }
 
-        if (!octx.rctx.metadata_cache().contains(
-              model::topic_namespace_view(model::kafka_namespace, topic.name),
-              part.partition_index)) {
+        if (
+          !octx.rctx.metadata_cache().contains(
+            model::topic_namespace_view(model::kafka_namespace, topic.name),
+            part.partition_index)
+          || !topic_cfg.has_value()) {
             partitions.push_back(
               ss::make_ready_future<list_offset_partition_response>(
                 list_offsets_response::make_partition(
@@ -237,7 +282,8 @@ list_offsets_topic(list_offsets_ctx& octx, list_offset_topic& topic) {
             continue;
         }
 
-        auto pr = list_offsets_partition(octx, part.timestamp, topic, part);
+        auto pr = list_offsets_partition(
+          octx, part.timestamp, topic, part, topic_cfg->is_read_replica());
         partitions.push_back(std::move(pr));
     }
 

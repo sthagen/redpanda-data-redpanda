@@ -23,6 +23,7 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <algorithm>
 #include <exception>
@@ -637,16 +638,16 @@ ss::future<bool> version_set::refresh() {
     }
 
     if (m->next_file_id < _next_file_id) {
-        throw corruption_exception(
+        co_await ss::coroutine::return_exception(corruption_exception(
           "manifest next_file_id {} is less than current {}",
           m->next_file_id(),
-          _next_file_id());
+          _next_file_id()));
     }
     if (_last_seqno.has_value() && m->last_seqno < _last_seqno.value()) {
-        throw corruption_exception(
+        co_await ss::coroutine::return_exception(corruption_exception(
           "manifest last_seqno {} is less than current {}",
           m->last_seqno(),
-          _last_seqno.value()());
+          _last_seqno.value()()));
     }
 
     if (m->next_file_id == _next_file_id && m->last_seqno == _last_seqno) {

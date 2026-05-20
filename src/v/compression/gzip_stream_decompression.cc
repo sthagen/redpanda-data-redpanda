@@ -11,6 +11,8 @@
 
 #include "compression/gzip_stream_decompression.h"
 
+#include <seastar/coroutine/exception.hh>
+
 namespace compression {
 
 gzip_stream_decompressor::gzip_stream_decompressor(
@@ -94,8 +96,8 @@ ss::future<std::optional<iobuf>> gzip_stream_decompressor::next() {
         if (
           auto code = inflate(&_zs, Z_NO_FLUSH);
           code != Z_OK && code != Z_STREAM_END) {
-            throw stream_decompression_error(
-              fmt::format("Failed to decompress chunk: {}", zError(code)));
+            co_await ss::coroutine::return_exception(stream_decompression_error(
+              fmt::format("Failed to decompress chunk: {}", zError(code))));
         }
 
         // It is possible for the avail_in field not to change, if the

@@ -20,6 +20,8 @@
 #include "lsm/proto/manifest.proto.h"
 #include "model/batch_builder.h"
 
+#include <seastar/coroutine/exception.hh>
+
 namespace cloud_topics::l1 {
 
 namespace {
@@ -43,33 +45,39 @@ public:
             using enum stm::errc;
             switch (term_result.error()) {
             case shutting_down:
-                throw lsm::abort_requested_exception(
-                  "shutting down while syncing STM when loading manifest");
+                co_await ss::coroutine::return_exception(
+                  lsm::abort_requested_exception(
+                    "shutting down while syncing STM when loading manifest"));
+                break;
             case not_leader:
             case raft_error:
-                throw lsm::io_error_exception(
-                  "failed to sync STM when loading manifest: {}",
-                  term_result.error());
+                co_await ss::coroutine::return_exception(
+                  lsm::io_error_exception(
+                    "failed to sync STM when loading manifest: {}",
+                    term_result.error()));
+                break;
             }
         }
         if (_stm->state().domain_uuid != _expected_domain_uuid) {
             // Caller needs to rebuild the metadata persistence with the
             // appropriate prefix.
-            throw lsm::io_error_exception(
-              "Domain UUID has changed, likely due to domain recovery, "
-              "expected {}, got {}",
-              _expected_domain_uuid,
-              _stm->state().domain_uuid);
+            co_await ss::coroutine::return_exception(
+              lsm::io_error_exception(
+                "Domain UUID has changed, likely due to domain recovery, "
+                "expected {}, got {}",
+                _expected_domain_uuid,
+                _stm->state().domain_uuid));
         }
         auto term = term_result.value();
         auto stm_epoch = _stm->state().to_epoch(term);
         if (stm_epoch > max_epoch) {
             // Callers are expected to have opened the database with an epoch
             // at or higher than what is in the STM.
-            throw lsm::io_error_exception(
-              "Can't load manifest above current epoch {}, STM epoch: {}",
-              max_epoch(),
-              stm_epoch);
+            co_await ss::coroutine::return_exception(
+              lsm::io_error_exception(
+                "Can't load manifest above current epoch {}, STM epoch: {}",
+                max_epoch(),
+                stm_epoch));
         }
         if (!_stm->state().persisted_manifest.has_value()) {
             // There is no persisted manifest.
@@ -96,8 +104,9 @@ public:
         auto update_res = persist_manifest_update::build(
           _stm->state(), _expected_domain_uuid, std::move(serialized_man));
         if (!update_res.has_value()) {
-            throw lsm::io_error_exception(
-              "Invalid persist_manifest update: {}", update_res.error());
+            co_await ss::coroutine::return_exception(
+              lsm::io_error_exception(
+                "Invalid persist_manifest update: {}", update_res.error()));
         }
         model::batch_builder builder;
         builder.set_batch_type(model::record_batch_type::l1_stm);

@@ -1833,24 +1833,6 @@ group::commit_tx(cluster::commit_group_tx_request r) {
     co_return co_await do_commit(r.group_id, r.pid, r.tx_seq);
 }
 
-cluster::begin_group_tx_reply make_begin_tx_reply(cluster::tx::errc ec) {
-    cluster::begin_group_tx_reply reply;
-    reply.ec = ec;
-    return reply;
-}
-
-cluster::commit_group_tx_reply make_commit_tx_reply(cluster::tx::errc ec) {
-    cluster::commit_group_tx_reply reply;
-    reply.ec = ec;
-    return reply;
-}
-
-cluster::abort_group_tx_reply make_abort_tx_reply(cluster::tx::errc ec) {
-    cluster::abort_group_tx_reply reply;
-    reply.ec = ec;
-    return reply;
-}
-
 ss::future<cluster::begin_group_tx_reply>
 group::begin_tx(cluster::begin_group_tx_request r) {
     vlog(_ctx_txlog.trace, "processing begin tx request: {}", r);
@@ -1862,7 +1844,7 @@ group::begin_tx(cluster::begin_group_tx_request r) {
           r,
           _term,
           _partition->term());
-        co_return make_begin_tx_reply(cluster::tx::errc::stale);
+        co_return cluster::begin_group_tx_reply(cluster::tx::errc::stale);
     }
 
     auto it = _producers.find(r.pid.get_id());
@@ -1876,7 +1858,7 @@ group::begin_tx(cluster::begin_group_tx_request r) {
               "current fence epoch: {}",
               r.pid,
               producer.epoch);
-            co_return make_begin_tx_reply(cluster::tx::errc::fenced);
+            co_return cluster::begin_group_tx_reply(cluster::tx::errc::fenced);
         } else if (r.pid.get_epoch() > producer.epoch) {
             // there is a fence, it might be that tm_stm failed, forget about
             // an ongoing transaction, assigned next pid for the same tx.id and
@@ -1898,7 +1880,8 @@ group::begin_tx(cluster::begin_group_tx_request r) {
                   r,
                   old_pid,
                   ar);
-                co_return make_begin_tx_reply(cluster::tx::errc::stale);
+                co_return cluster::begin_group_tx_reply(
+                  cluster::tx::errc::stale);
             }
         }
         if (producer.transaction) {
@@ -1910,7 +1893,7 @@ group::begin_tx(cluster::begin_group_tx_request r) {
                   "transaction with different sequence number: {}",
                   r,
                   producer_tx.tx_seq);
-                co_return make_begin_tx_reply(
+                co_return cluster::begin_group_tx_reply(
                   cluster::tx::errc::unknown_server_error);
             }
 
@@ -1920,7 +1903,7 @@ group::begin_tx(cluster::begin_group_tx_request r) {
                   "begin tx request {} failed - transaction is already ongoing "
                   "and accepted offset commits",
                   r);
-                co_return make_begin_tx_reply(
+                co_return cluster::begin_group_tx_reply(
                   cluster::tx::errc::unknown_server_error);
             }
             // begin_tx request is idempotent, return success
@@ -1953,7 +1936,8 @@ group::begin_tx(cluster::begin_group_tx_request r) {
           && _partition->raft()->term() == _term) {
             co_await _partition->raft()->step_down("group begin_tx failed");
         }
-        co_return map_tx_replication_error(result.error());
+        co_return cluster::begin_group_tx_reply(
+          map_tx_replication_error(result.error()));
     }
     auto [producer_it, _] = _producers.try_emplace(
       r.pid.get_id(), r.pid.get_epoch());
@@ -2320,7 +2304,7 @@ group::offset_commit_stages group::store_offsets(offset_commit_request&& r) {
 ss::future<cluster::commit_group_tx_reply>
 group::handle_commit_tx(cluster::commit_group_tx_request r) {
     if (in_state(group_state::dead)) {
-        co_return make_commit_tx_reply(
+        co_return cluster::commit_group_tx_reply(
           cluster::tx::errc::coordinator_not_available);
     } else if (
       in_state(group_state::empty) || in_state(group_state::stable)
@@ -2331,11 +2315,11 @@ group::handle_commit_tx(cluster::commit_group_tx_request r) {
               return commit_tx(std::move(r));
           });
     } else if (in_state(group_state::completing_rebalance)) {
-        co_return make_commit_tx_reply(
+        co_return cluster::commit_group_tx_reply(
           cluster::tx::errc::rebalance_in_progress);
     } else {
         vlog(_ctx_txlog.error, "Unexpected group state");
-        co_return make_commit_tx_reply(cluster::tx::errc::timeout);
+        co_return cluster::commit_group_tx_reply(cluster::tx::errc::timeout);
     }
 }
 
@@ -2404,9 +2388,8 @@ group::handle_txn_offset_commit(txn_offset_commit_request r) {
 ss::future<cluster::begin_group_tx_reply>
 group::handle_begin_tx(cluster::begin_group_tx_request r) {
     if (in_state(group_state::dead)) {
-        cluster::begin_group_tx_reply reply;
-        reply.ec = cluster::tx::errc::coordinator_not_available;
-        co_return reply;
+        co_return cluster::begin_group_tx_reply(
+          cluster::tx::errc::coordinator_not_available);
     } else if (
       in_state(group_state::empty) || in_state(group_state::stable)
       || in_state(group_state::preparing_rebalance)) {
@@ -2422,23 +2405,19 @@ group::handle_begin_tx(cluster::begin_group_tx_request r) {
          * generation change, in this case return an error instructing client to
          * retry.
          */
-        cluster::begin_group_tx_reply reply;
-        reply.ec = cluster::tx::errc::concurrent_transactions;
-        co_return reply;
+        co_return cluster::begin_group_tx_reply(
+          cluster::tx::errc::concurrent_transactions);
     } else {
         vlog(_ctx_txlog.error, "Unexpected group state");
-        cluster::begin_group_tx_reply reply;
-        reply.ec = cluster::tx::errc::timeout;
-        co_return reply;
+        co_return cluster::begin_group_tx_reply(cluster::tx::errc::timeout);
     }
 }
 
 ss::future<cluster::abort_group_tx_reply>
 group::handle_abort_tx(cluster::abort_group_tx_request r) {
     if (in_state(group_state::dead)) {
-        cluster::abort_group_tx_reply reply;
-        reply.ec = cluster::tx::errc::coordinator_not_available;
-        co_return reply;
+        co_return cluster::abort_group_tx_reply(
+          cluster::tx::errc::coordinator_not_available);
     } else if (
       in_state(group_state::stable) || in_state(group_state::empty)
       || in_state(group_state::preparing_rebalance)) {
@@ -2448,14 +2427,11 @@ group::handle_abort_tx(cluster::abort_group_tx_request r) {
               return abort_tx(std::move(r));
           });
     } else if (in_state(group_state::completing_rebalance)) {
-        cluster::abort_group_tx_reply reply;
-        reply.ec = cluster::tx::errc::concurrent_transactions;
-        co_return reply;
+        co_return cluster::abort_group_tx_reply(
+          cluster::tx::errc::concurrent_transactions);
     } else {
         vlog(_ctx_txlog.error, "Unexpected group state");
-        cluster::abort_group_tx_reply reply;
-        reply.ec = cluster::tx::errc::timeout;
-        co_return reply;
+        co_return cluster::abort_group_tx_reply(cluster::tx::errc::timeout);
     }
 }
 
@@ -2941,7 +2917,7 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           _partition->term(),
           pid,
           tx_seq);
-        co_return make_abort_tx_reply(cluster::tx::errc::stale);
+        co_return cluster::abort_group_tx_reply(cluster::tx::errc::stale);
     }
     auto it = _producers.find(pid.get_id());
     if (it == _producers.end() || it->second.transaction == nullptr) {
@@ -2957,7 +2933,7 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           "{}, assuming already aborted.",
           pid,
           tx_seq);
-        co_return make_abort_tx_reply(cluster::tx::errc::none);
+        co_return cluster::abort_group_tx_reply(cluster::tx::errc::none);
     }
     auto& producer = it->second;
     if (pid.get_epoch() != producer.epoch) {
@@ -2967,7 +2943,8 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           "{}",
           pid,
           producer.epoch);
-        co_return make_abort_tx_reply(cluster::tx::errc::request_rejected);
+        co_return cluster::abort_group_tx_reply(
+          cluster::tx::errc::request_rejected);
     }
 
     if (producer.transaction == nullptr) {
@@ -2975,7 +2952,7 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           _ctx_txlog.trace,
           "unable to find transaction for {}, probably already aborted",
           pid);
-        co_return make_abort_tx_reply(cluster::tx::errc::none);
+        co_return cluster::abort_group_tx_reply(cluster::tx::errc::none);
     }
     auto& producer_tx = *producer.transaction;
     if (producer_tx.tx_seq > tx_seq) {
@@ -2992,7 +2969,7 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           pid,
           producer_tx.tx_seq,
           tx_seq);
-        co_return make_abort_tx_reply(cluster::tx::errc::none);
+        co_return cluster::abort_group_tx_reply(cluster::tx::errc::none);
     }
 
     if (producer_tx.tx_seq != tx_seq) {
@@ -3003,7 +2980,8 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           pid,
           producer_tx.tx_seq,
           tx_seq);
-        co_return make_abort_tx_reply(cluster::tx::errc::request_rejected);
+        co_return cluster::abort_group_tx_reply(
+          cluster::tx::errc::request_rejected);
     }
     auto tx = group_tx::abort_metadata{.group_id = group_id, .tx_seq = tx_seq};
 
@@ -3028,13 +3006,14 @@ ss::future<cluster::abort_group_tx_reply> group::do_abort(
           && _partition->raft()->term() == _term) {
             co_await _partition->raft()->step_down("group do abort failed");
         }
-        co_return map_tx_replication_error(result.error());
+        co_return cluster::abort_group_tx_reply(
+          map_tx_replication_error(result.error()));
     }
     it = _producers.find(pid.get_id());
     if (it != _producers.end()) {
         it->second.transaction.reset();
     }
-    co_return make_abort_tx_reply(cluster::tx::errc::none);
+    co_return cluster::abort_group_tx_reply(cluster::tx::errc::none);
 }
 
 ss::future<cluster::commit_group_tx_reply> group::do_commit(
@@ -3055,7 +3034,7 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           pid,
           _term,
           _partition->term());
-        co_return make_commit_tx_reply(cluster::tx::errc::stale);
+        co_return cluster::commit_group_tx_reply(cluster::tx::errc::stale);
     }
     auto it = _producers.find(pid.get_id());
     if (it == _producers.end() || it->second.transaction == nullptr) {
@@ -3071,7 +3050,7 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           "{}, assuming already committed.",
           pid,
           sequence);
-        co_return make_commit_tx_reply(cluster::tx::errc::none);
+        co_return cluster::commit_group_tx_reply(cluster::tx::errc::none);
     }
     auto& producer = it->second;
     if (pid.get_epoch() != producer.epoch) {
@@ -3081,7 +3060,8 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           "producer epoch: {}",
           pid,
           producer.epoch);
-        co_return make_commit_tx_reply(cluster::tx::errc::request_rejected);
+        co_return cluster::commit_group_tx_reply(
+          cluster::tx::errc::request_rejected);
     }
 
     if (producer.transaction == nullptr) {
@@ -3091,7 +3071,7 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           "ongoing transaction, it was "
           "most likely already committed",
           pid);
-        co_return make_commit_tx_reply(cluster::tx::errc::none);
+        co_return cluster::commit_group_tx_reply(cluster::tx::errc::none);
     }
     auto& producer_tx = *producer.transaction;
     if (producer_tx.tx_seq > sequence) {
@@ -3108,7 +3088,7 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           pid,
           sequence,
           producer_tx.tx_seq);
-        co_return make_commit_tx_reply(cluster::tx::errc::none);
+        co_return cluster::commit_group_tx_reply(cluster::tx::errc::none);
     }
     if (producer_tx.tx_seq != sequence) {
         vlog(
@@ -3118,7 +3098,8 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           pid,
           sequence,
           producer_tx.tx_seq);
-        co_return make_commit_tx_reply(cluster::tx::errc::request_rejected);
+        co_return cluster::commit_group_tx_reply(
+          cluster::tx::errc::request_rejected);
     }
     auto& ongoing_tx = *it->second.transaction;
     // It is fix for https://github.com/redpanda-data/redpanda/issues/5163.
@@ -3180,7 +3161,8 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           && _partition->raft()->term() == _term) {
             co_await _partition->raft()->step_down("group tx commit failed");
         }
-        co_return map_tx_replication_error(result.error());
+        co_return cluster::commit_group_tx_reply(
+          map_tx_replication_error(result.error()));
     }
 
     it = _producers.find(pid.get_id());
@@ -3189,7 +3171,8 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
           _ctx_txlog.error,
           "unable to find ongoing transaction for producer: {}",
           pid);
-        co_return make_commit_tx_reply(cluster::tx::errc::unknown_server_error);
+        co_return cluster::commit_group_tx_reply(
+          cluster::tx::errc::unknown_server_error);
     }
 
     for (const auto& [tp, md] : it->second.transaction->offsets) {
@@ -3207,7 +3190,7 @@ ss::future<cluster::commit_group_tx_reply> group::do_commit(
 
     it->second.transaction.reset();
 
-    co_return make_commit_tx_reply(cluster::tx::errc::none);
+    co_return cluster::commit_group_tx_reply(cluster::tx::errc::none);
 }
 
 void group::abort_old_txes() {

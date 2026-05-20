@@ -46,6 +46,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <chrono>
 #include <expected>
@@ -872,7 +873,7 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
               ntp(),
               e);
         }
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
     auto fence = std::move(fence_fut.get());
     if (!fence.has_value()) {
@@ -903,11 +904,14 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
     if (!result) {
         co_return std::unexpected(result.error());
     }
-    auto ret_offset = model::offset(result.value().last_offset());
+    auto ret_offset = result.value().last_offset;
     if (!rb_copy.empty()) {
         auto tidp = topic_id_partition();
         if (tidp) {
-            update_batches(rb_copy, ret_offset, result.value().last_term);
+            update_batches(
+              rb_copy,
+              kafka::offset_cast(ret_offset),
+              result.value().last_term);
             _data_plane->cache_put_ordered(*tidp, std::move(rb_copy));
         }
     }
@@ -1000,7 +1004,8 @@ frontend::get_leader_epoch_last_offset(model::term_id term) const {
     if (term >= first_local_term) {
         auto last_offset = _partition->get_term_last_offset(term);
         if (last_offset) {
-            co_return ot_state->from_log_offset(*last_offset);
+            co_return model::offset_cast(
+              ot_state->from_log_offset(*last_offset));
         }
     }
 
@@ -1306,7 +1311,7 @@ ss::future<result<raft::replicate_result>> frontend::replicate_at_offset(
               ntp(),
               e);
         }
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
     auto fence = std::move(fence_fut.get());
     if (!fence.has_value()) {

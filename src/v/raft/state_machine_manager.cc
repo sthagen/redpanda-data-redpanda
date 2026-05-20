@@ -32,6 +32,7 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/core/with_scheduling_group.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/later.hh>
@@ -395,12 +396,12 @@ ss::future<> state_machine_manager::apply_raft_snapshot() {
     _next = std::max(max_next_offset(), _next);
     co_await snapshot->reader.close();
     if (fut.failed()) {
-        const auto e = fut.get_exception();
+        auto e = fut.get_exception();
         // do not log known shutdown exceptions as errors
         if (!ssx::is_shutdown_exception(e)) {
             vlog(_log.error, "error applying raft snapshot - {}", e);
         }
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
 }
 
@@ -828,7 +829,7 @@ state_machine_manager::read_initial_recovery_snapshot() {
           "failed to read initial recovery snapshot metadata: {}",
           e);
         co_await reader->close();
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
 
     auto snap_sz_f = co_await ss::coroutine::as_future(
@@ -838,7 +839,7 @@ state_machine_manager::read_initial_recovery_snapshot() {
         vlog(
           _log.error, "failed to read initial recovery snapshot size: {}", e);
         co_await reader->close();
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
     auto snapshot_content_f = co_await ss::coroutine::as_future(
       read_iobuf_exactly(reader->input(), snap_sz_f.get()));
@@ -847,7 +848,7 @@ state_machine_manager::read_initial_recovery_snapshot() {
         auto e = snapshot_content_f.get_exception();
         vlog(_log.error, "failed to read recovery snapshot: {}", e);
         co_await reader->close();
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
     co_await reader->close();
 

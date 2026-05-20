@@ -100,6 +100,9 @@ public:
     ss::future<rpc::get_compaction_infos_reply> get_compaction_infos(
       rpc::get_compaction_infos_request, local_only = local_only::no);
 
+    ss::future<rpc::get_leveling_infos_reply> get_leveling_infos(
+      rpc::get_leveling_infos_request, local_only = local_only::no);
+
     ss::future<rpc::get_extent_metadata_reply> get_extent_metadata(
       rpc::get_extent_metadata_request, local_only = local_only::no);
 
@@ -215,6 +218,11 @@ private:
 
     ss::future<rpc::get_compaction_infos_reply> get_compaction_infos_locally(
       rpc::get_compaction_infos_request,
+      const model::ntp& metastore_ntp,
+      ss::shard_id);
+
+    ss::future<rpc::get_leveling_infos_reply> get_leveling_infos_locally(
+      rpc::get_leveling_infos_request,
       const model::ntp& metastore_ntp,
       ss::shard_id);
 

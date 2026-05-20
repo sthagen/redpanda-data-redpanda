@@ -48,14 +48,21 @@ def seek_to_file(path, cfg, dry_run):
             if l == "":
                 continue
 
-            topic, partition, offset = tuple([p.strip() for p in l.split(",")])
+            topic, partition, offset, leader_epoch = tuple(
+                [p.strip() for p in l.split(",")]
+            )
             logger.debug(
-                f"group: {group} partition: {topic}/{partition} offset: {offset}"
+                f"group: {group} partition: {topic}/{partition} offset: {offset} leader_epoch: {leader_epoch}"
             )
             tp = TopicPartition(topic=topic, partition=int(partition))
 
-            offsets[tp] = OffsetAndMetadata(offset=int(offset), metadata="")
+            offsets[tp] = OffsetAndMetadata(
+                offset=int(offset),
+                metadata="",
+                leader_epoch=int(leader_epoch),
+            )
     if not dry_run:
+        assert consumer is not None
         consumer.commit(offsets=offsets)
 
 
@@ -82,8 +89,8 @@ def query_offsets(offsets_path, cfg):
             f.write(f"{group_id}\n")
             for tp, md in offsets.items():
                 topic, partition = tp
-                offset, _ = md
-                f.write(f"{topic},{partition},{offset}\n")
+                offset, _, leader_epoch = md
+                f.write(f"{topic},{partition},{offset},{leader_epoch}\n")
 
 
 def recreate_topic(partitions, replication_factor, cfg):

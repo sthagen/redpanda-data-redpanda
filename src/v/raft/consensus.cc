@@ -47,6 +47,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/semaphore.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/defer.hh>
 
@@ -2484,7 +2485,7 @@ consensus::read_snapshot_metadata() {
     }
     co_await snapshot_reader->close();
     if (eptr) {
-        std::rethrow_exception(eptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(eptr));
     }
     co_return metadata;
 }
@@ -3935,6 +3936,14 @@ void consensus::update_heartbeat_status(vnode id, bool success) {
             it->second.heartbeats_failed = 0;
         } else {
             it->second.heartbeats_failed++;
+        }
+    }
+}
+
+void consensus::reset_heartbeat_failures(model::node_id node) {
+    for (auto& [vn, fstate] : _fstates) {
+        if (vn.id() == node) {
+            fstate.heartbeats_failed = 0;
         }
     }
 }

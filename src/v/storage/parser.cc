@@ -22,6 +22,7 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/when_all.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <algorithm>
 #include <exception>
@@ -349,10 +350,10 @@ public:
             vlog(stlog.error, "Output stram close error: {}", ex);
         }
         if (fo.failed()) {
-            std::rethrow_exception(fo.get_exception());
+            co_await ss::coroutine::return_exception_ptr(fo.get_exception());
         }
         if (fi.failed()) {
-            std::rethrow_exception(fi.get_exception());
+            co_await ss::coroutine::return_exception_ptr(fi.get_exception());
         }
     }
 

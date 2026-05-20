@@ -16,6 +16,7 @@
 #include "ssx/future-util.h"
 
 #include <seastar/core/fstream.hh>
+#include <seastar/coroutine/exception.hh>
 
 namespace cloud_storage {
 
@@ -308,7 +309,8 @@ async_manifest_materializer::do_materialize_manifest(
             }
             co_await res->body.close();
             if (update_err) {
-                std::rethrow_exception(update_err);
+                co_await ss::coroutine::return_exception_ptr(
+                  std::move(update_err));
             }
         } break;
         }

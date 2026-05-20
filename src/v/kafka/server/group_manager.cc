@@ -1618,7 +1618,7 @@ group_manager::commit_tx(cluster::commit_group_tx_request&& r) {
     auto p = get_attached_partition(r.ntp);
     if (!p || !p->partition->is_leader()) {
         return ss::make_ready_future<cluster::commit_group_tx_reply>(
-          make_commit_tx_reply(cluster::tx::errc::not_coordinator));
+          cluster::commit_group_tx_reply(cluster::tx::errc::not_coordinator));
     }
     auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
@@ -1628,7 +1628,7 @@ group_manager::commit_tx(cluster::commit_group_tx_request&& r) {
           cluster::txlog.trace,
           "can't process a tx: coordinator_load_in_progress");
         return ss::make_ready_future<cluster::commit_group_tx_reply>(
-          make_commit_tx_reply(
+          cluster::commit_group_tx_reply(
             cluster::tx::errc::coordinator_load_in_progress));
     }
     auto error = validate_group_status(
@@ -1636,17 +1636,18 @@ group_manager::commit_tx(cluster::commit_group_tx_request&& r) {
     if (error != error_code::none) {
         if (error == error_code::not_coordinator) {
             return ss::make_ready_future<cluster::commit_group_tx_reply>(
-              make_commit_tx_reply(cluster::tx::errc::not_coordinator));
+              cluster::commit_group_tx_reply(
+                cluster::tx::errc::not_coordinator));
         } else {
             return ss::make_ready_future<cluster::commit_group_tx_reply>(
-              make_commit_tx_reply(cluster::tx::errc::timeout));
+              cluster::commit_group_tx_reply(cluster::tx::errc::timeout));
         }
     }
 
     auto group = get_group(r.group_id);
     if (!group) {
         return ss::make_ready_future<cluster::commit_group_tx_reply>(
-          make_commit_tx_reply(cluster::tx::errc::timeout));
+          cluster::commit_group_tx_reply(cluster::tx::errc::timeout));
     }
 
     return group->handle_commit_tx(std::move(r))
@@ -1658,7 +1659,7 @@ group_manager::begin_tx(cluster::begin_group_tx_request&& r) {
     auto p = get_attached_partition(r.ntp);
     if (!p || !p->partition->is_leader()) {
         return ss::make_ready_future<cluster::begin_group_tx_reply>(
-          make_begin_tx_reply(cluster::tx::errc::not_coordinator));
+          cluster::begin_group_tx_reply(cluster::tx::errc::not_coordinator));
     }
     auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
@@ -1668,7 +1669,8 @@ group_manager::begin_tx(cluster::begin_group_tx_request&& r) {
           cluster::txlog.trace,
           "can't process a tx: coordinator_load_in_progress");
         return ss::make_ready_future<cluster::begin_group_tx_reply>(
-          make_begin_tx_reply(cluster::tx::errc::coordinator_load_in_progress));
+          cluster::begin_group_tx_reply(
+            cluster::tx::errc::coordinator_load_in_progress));
     }
 
     auto error = validate_group_status(
@@ -1678,7 +1680,7 @@ group_manager::begin_tx(cluster::begin_group_tx_request&& r) {
                     ? cluster::tx::errc::not_coordinator
                     : cluster::tx::errc::timeout;
         return ss::make_ready_future<cluster::begin_group_tx_reply>(
-          make_begin_tx_reply(ec));
+          cluster::begin_group_tx_reply(ec));
     }
 
     auto group = get_group(r.group_id);
@@ -1705,7 +1707,7 @@ group_manager::abort_tx(cluster::abort_group_tx_request&& r) {
     auto p = get_attached_partition(r.ntp);
     if (!p || !p->partition->is_leader()) {
         return ss::make_ready_future<cluster::abort_group_tx_reply>(
-          make_abort_tx_reply(cluster::tx::errc::not_coordinator));
+          cluster::abort_group_tx_reply(cluster::tx::errc::not_coordinator));
     }
     auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
@@ -1715,7 +1717,8 @@ group_manager::abort_tx(cluster::abort_group_tx_request&& r) {
           cluster::txlog.trace,
           "can't process a tx: coordinator_load_in_progress");
         return ss::make_ready_future<cluster::abort_group_tx_reply>(
-          make_abort_tx_reply(cluster::tx::errc::coordinator_load_in_progress));
+          cluster::abort_group_tx_reply(
+            cluster::tx::errc::coordinator_load_in_progress));
     }
 
     auto error = validate_group_status(
@@ -1725,13 +1728,13 @@ group_manager::abort_tx(cluster::abort_group_tx_request&& r) {
                     ? cluster::tx::errc::not_coordinator
                     : cluster::tx::errc::timeout;
         return ss::make_ready_future<cluster::abort_group_tx_reply>(
-          make_abort_tx_reply(ec));
+          cluster::abort_group_tx_reply(ec));
     }
 
     auto group = get_group(r.group_id);
     if (!group) {
         return ss::make_ready_future<cluster::abort_group_tx_reply>(
-          make_abort_tx_reply(cluster::tx::errc::timeout));
+          cluster::abort_group_tx_reply(cluster::tx::errc::timeout));
     }
 
     return group->handle_abort_tx(std::move(r))

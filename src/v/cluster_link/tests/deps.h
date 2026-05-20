@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "cluster/cluster_link/errc.h"
 #include "cluster/cluster_link/table.h"
 #include "cluster/cluster_link/tests/utils.h"
 #include "cluster_link/manager.h"
@@ -82,8 +83,7 @@ public:
       model::metadata md, ::model::timeout_clock::time_point) override {
         auto batch = ::cluster::cluster_link::testing::create_upsert_command(
           _last_offset++, std::move(md));
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
     ss::future<::cluster::cluster_link::errc> delete_link(
@@ -92,8 +92,7 @@ public:
       ::model::timeout_clock::time_point) override {
         auto batch = ::cluster::cluster_link::testing::create_remove_command(
           std::move(name), force);
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
     model::metadata_ptr find_link_by_id(model::id_t id) const override {
@@ -130,9 +129,7 @@ public:
         auto batch
           = ::cluster::cluster_link::testing::create_add_mirror_topic_command(
             id, std::move(cmd));
-
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
@@ -145,9 +142,7 @@ public:
         }
         auto batch = ::cluster::cluster_link::testing::
           create_update_mirror_topic_status_command(id, std::move(cmd));
-
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
@@ -160,8 +155,7 @@ public:
         }
         auto batch = ::cluster::cluster_link::testing::
           create_update_mirror_topic_properties_command(id, std::move(cmd));
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
     std::optional<chunked_hash_map<
@@ -193,8 +187,7 @@ public:
         }
         auto batch = ::cluster::cluster_link::testing::
           create_update_cluster_link_configuration_command(id, std::move(cmd));
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
     ss::future<std::expected<
@@ -240,14 +233,23 @@ public:
         }
         auto batch = ::cluster::cluster_link::testing::
           create_delete_mirror_topic_command(id, std::move(cmd));
-        auto ec = co_await _table->apply_update(std::move(batch));
-        co_return ec.value();
+        co_return co_await apply_update(std::move(batch));
     }
 
 private:
+    ss::future<::cluster::cluster_link::errc>
+    apply_update(::model::record_batch&& batch) {
+        auto ec = co_await _table->apply_update(std::move(batch));
+        vassert(
+          ec.category() == cluster::cluster_link::error_category(),
+          "Unexpected error category");
+        co_return ::cluster::cluster_link::errc(ec.value());
+    }
+
     cluster::cluster_link::table* _table;
     ::model::offset _last_offset{0};
 };
+
 class fake_partition_manager_proxy {
 public:
     std::optional<ss::shard_id> shard_owner(const ::model::ktp& ktp) {

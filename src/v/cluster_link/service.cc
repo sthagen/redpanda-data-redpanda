@@ -38,6 +38,7 @@
 #include "kafka/data/partition_proxy.h"
 #include "kafka/server/group_router.h"
 #include "kafka/server/snc_quota_manager.h"
+#include "model/fundamental.h"
 
 #include <seastar/coroutine/switch_to.hh>
 
@@ -815,7 +816,7 @@ private:
               partition.error_code);
             co_return std::nullopt;
         }
-        co_return partition.offset;
+        co_return ::model::offset_cast(partition.offset);
     }
 
     ss::future<std::optional<kafka::offset>> fetch_offset_for_timestamp(

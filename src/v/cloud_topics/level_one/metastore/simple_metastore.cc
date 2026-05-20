@@ -10,6 +10,7 @@
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/leveling_range_builder.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "cloud_topics/level_one/metastore/state.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
@@ -792,6 +793,46 @@ simple_metastore::get_compaction_infos(
     compaction_info_map infos;
     for (const auto& log : logs) {
         infos.emplace(log.tidp, co_await get_compaction_info(log));
+    }
+    co_return infos;
+}
+
+std::expected<metastore::leveling_info_response, metastore::errc>
+simple_metastore::get_leveling_info(
+  const state& state, const leveling_info_spec& spec) {
+    auto prt_ref = state.partition_state(spec.tidp);
+    if (!prt_ref.has_value()) {
+        return std::unexpected(errc::missing_ntp);
+    }
+
+    const auto& prt = prt_ref->get();
+
+    leveling_info_response resp;
+    resp.epoch = compaction_epoch{prt.compaction_epoch()};
+
+    if (prt.start_offset >= prt.next_offset) {
+        // The log is empty, nothing to level.
+        return resp;
+    }
+
+    leveling_range_builder builder{spec.min_acceptable_extent_bytes};
+    for (const auto& ext : prt.extents) {
+        if (ext.base_offset < prt.start_offset) {
+            continue;
+        }
+        const auto base = std::max(ext.base_offset, prt.start_offset);
+        builder.process_extent(base, ext.last_offset, ext.len);
+    }
+    resp.ranges = std::move(builder).finalize();
+    return resp;
+}
+
+ss::future<std::expected<metastore::leveling_info_map, metastore::errc>>
+simple_metastore::get_leveling_infos(
+  const chunked_vector<leveling_info_spec>& specs) {
+    leveling_info_map infos;
+    for (const auto& spec : specs) {
+        infos.emplace(spec.tidp, get_leveling_info(state_, spec));
     }
     co_return infos;
 }

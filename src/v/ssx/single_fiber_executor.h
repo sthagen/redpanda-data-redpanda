@@ -201,7 +201,7 @@ private:
             } else {
                 if constexpr (std::is_same_v<ret_value_t, void>) {
                     std::move(f).get();
-                    p.set_value();
+                    p.emplace_value();
                 } else {
                     p.set_value(std::move(f).get());
                 }

@@ -430,6 +430,7 @@ class KafkaTestAdminClient:
         self._admin._wait_for_futures([f])
 
         response = f.value
+        assert response is not None
 
         error_type = kerr.for_code(response.error_code)
         if error_type is not kerr.NoError:

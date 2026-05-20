@@ -13,6 +13,8 @@
 
 #include "cloud_storage/remote_segment.h"
 
+#include <seastar/coroutine/exception.hh>
+
 namespace cloud_storage {
 
 chunk_data_source_impl::chunk_data_source_impl(
@@ -119,7 +121,7 @@ ss::future<> chunk_data_source_impl::load_stream_for_chunk(
           "Closed stream after error {} while hydrating chunk start {}",
           eptr,
           chunk_start);
-        std::rethrow_exception(eptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(eptr));
     }
 
     // Decrement the required_by_readers_in_future count by 1, we have acquired

@@ -27,6 +27,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/core/timed_out_error.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/net/api.hh>
 #include <seastar/net/tls.hh>
 #include <seastar/util/defer.hh>
@@ -225,7 +226,8 @@ ss::future<reconnect_result_t> client::get_connected(
     auto clear_shutdown_signal = ss::defer(
       [this]() noexcept { _shutdown_now = false; });
     if (unlikely(_stopped)) {
-        throw std::runtime_error("client is stopped");
+        co_await ss::coroutine::return_exception(
+          std::runtime_error("client is stopped"));
     }
     vlog(
       ctxlog.debug,

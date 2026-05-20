@@ -2797,3 +2797,152 @@ TEST(SimpleMetastoreTest, CompactObjectsBumpsEpochAndRejectsStale) {
     ASSERT_FALSE(compact2.has_value());
     EXPECT_EQ(compact2.error(), metastore::errc::invalid_request);
 }
+
+namespace {
+
+// A scenario for the leveling-range algorithm. Each entry in
+// `object_sizes` becomes one extent under `tid_a` covering 10 offsets
+// (so extent `i` covers offsets [i*10, i*10+9]) and `object_sizes[i]`
+// bytes, backed by a distinct object of size `object_sizes[i]`. The
+// algorithm runs against this layout and the response's `ranges` is
+// asserted to equal `expected_ranges`.
+struct leveling_case {
+    std::string name;
+    std::vector<size_t> object_sizes;
+    size_t min_acceptable;
+    std::vector<levelable_range> expected_ranges;
+};
+
+class SimpleMetastoreLevelingAlgoTest
+  : public ::testing::TestWithParam<leveling_case> {};
+
+} // namespace
+
+TEST_P(SimpleMetastoreLevelingAlgoTest, ComputesExpectedRanges) {
+    const auto& c = GetParam();
+    simple_metastore m;
+
+    om_list_t objects;
+    chunked_vector<object_id> oids;
+    for (size_t i = 0; i < c.object_sizes.size(); ++i) {
+        const auto oid = l1::create_object_id();
+        oids.push_back(oid);
+        const auto base = kafka::offset(static_cast<int64_t>(i * 10));
+        const auto last = kafka::offset(static_cast<int64_t>(i * 10 + 9));
+        const auto ts = model::timestamp(static_cast<int64_t>((i + 1) * 100));
+        objects.push_back(om_builder(oid, 0, c.object_sizes[i])
+                            .add(tid_a, base, last, ts, 0, c.object_sizes[i])
+                            .build());
+    }
+    m.preregister_objects(oids);
+    auto add_res = m.add_objects(
+                      objects, terms_builder().add(tid_a, 0_tm, 0_o).build())
+                     .get();
+    ASSERT_TRUE(add_res.has_value()) << int(add_res.error());
+
+    const auto tp = model::topic_id_partition::from(tid_a);
+    chunked_vector<metastore::leveling_info_spec> specs;
+    specs.push_back(
+      {.tidp = tp, .min_acceptable_extent_bytes = c.min_acceptable});
+    auto infos_res = m.get_leveling_infos(specs).get();
+    ASSERT_TRUE(infos_res.has_value()) << int(infos_res.error());
+    auto it = infos_res->find(tp);
+    ASSERT_NE(it, infos_res->end());
+    ASSERT_TRUE(it->second.has_value()) << int(it->second.error());
+    const auto& res = it->second.value();
+
+    EXPECT_THAT(res.ranges, ::testing::ElementsAreArray(c.expected_ranges));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  Cases,
+  SimpleMetastoreLevelingAlgoTest,
+  ::testing::Values(
+    // No undersized extents, nothing to level.
+    leveling_case{
+      .name = "NoUndersizedExtents",
+      .object_sizes = {100, 100, 100},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    },
+    // Small extents sandwiched between healthy ones.
+    // Two undersized runs, with a singleton at obj 1 (discarded, K=1) and
+    // an adjacent pair at objs 3->4 (committed, K=2). The healthy
+    // obj 2 closes the first run; the trailing healthy obj 5 closes
+    // the second.
+    leveling_case{
+      .name = "SmallSandwichedBetweenLarge",
+      .object_sizes = {100, 2, 100, 15, 2, 100},
+      .min_acceptable = 50,
+      .expected_ranges
+      = {{.base_offset = 30_o, .last_offset = 49_o, .size_bytes = 17}},
+    },
+    // A single isolated small surrounded by healthies, a K=1 singleton
+    // run that finalize() discards on close.
+    leveling_case{
+      .name = "IsolatedSmallSingleton",
+      .object_sizes = {100, 2, 100},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    },
+    // A small followed by a long healthy run. The first healthy closes
+    // the K=1 singleton run, which is discarded; the rest are no-ops.
+    leveling_case{
+      .name = "SmallFollowedByManyHealthy",
+      .object_sizes = {100, 2, 100, 100, 100, 100},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    },
+    // Two smalls separated by two healthies. Pure size-tier never
+    // bridges across a healthy, so each small is a K=1 singleton run
+    // and neither commits.
+    leveling_case{
+      .name = "TwoSmallsSeparatedByHealthies",
+      .object_sizes = {100, 2, 100, 100, 2, 100},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    },
+    // All extents undersized. Rewrites cleanly into a single 6-byte
+    // object, 3 extents become 1, saving 2.
+    leveling_case{
+      .name = "AllSmall",
+      .object_sizes = {2, 2, 2},
+      .min_acceptable = 50,
+      .expected_ranges
+      = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 6}},
+    },
+    // Leading healthies are no-ops (no active range to close). Range
+    // opens at obj 2, extends to obj 3, and closes on the trailing
+    // healthy at obj 4. K=2, commits objs 2->3 (4 bytes).
+    leveling_case{
+      .name = "LeadingHealthyExtentsUntouched",
+      .object_sizes = {100, 100, 2, 2, 100},
+      .min_acceptable = 50,
+      .expected_ranges
+      = {{.base_offset = 20_o, .last_offset = 39_o, .size_bytes = 4}},
+    },
+    // Smalls separated by a healthy: pure size-tier never bridges
+    // across a healthy, so each small is its own K=1 singleton run and
+    // neither commits.
+    leveling_case{
+      .name = "SmallsAcrossHealthyAreNotMerged",
+      .object_sizes = {100, 30, 100, 30, 100},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    },
+    // A single leading small followed by healthies. The first healthy
+    // closes the K=1 singleton run, which is then discarded.
+    leveling_case{
+      .name = "LeadingSmallSingleton",
+      .object_sizes = {2, 100, 100},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    },
+    // Threshold below ALL object sizes, nothing eligible.
+    leveling_case{
+      .name = "ThresholdBelowAllSizes",
+      .object_sizes = {200, 200, 200},
+      .min_acceptable = 50,
+      .expected_ranges = {},
+    }),
+  [](const auto& info) { return info.param.name; });

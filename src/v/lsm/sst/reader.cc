@@ -21,6 +21,7 @@
 #include "lsm/sst/footer.h"
 
 #include <seastar/core/coroutine.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <sys/uio.h>
 
@@ -50,12 +51,12 @@ read_block(io::random_access_file_reader* file, block::handle handle) {
         actual_crc.extend(static_cast<char*>(chunk.iov_base), chunk.iov_len);
     }
     if (expected_crc != actual_crc.value()) {
-        throw corruption_exception(
+        co_await ss::coroutine::return_exception(corruption_exception(
           "unexpected crc, got: {}, want: {} for handle {} and file {}",
           actual_crc.value(),
           expected_crc,
           handle,
-          *file);
+          *file));
     }
     data.trim_back(sizeof(compression_type));
     if (compression != compression_type::none) {

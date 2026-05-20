@@ -105,7 +105,8 @@ replicated_database::open(
               "Failed to replicate set_domain_uuid batch"));
         }
         if (s->state().domain_uuid().is_nil()) {
-            co_return std::unexpected(errc::replication_error);
+            co_return std::unexpected(
+              replicated_database::error{errc::replication_error});
         }
     }
     auto domain_uuid = s->state().domain_uuid;

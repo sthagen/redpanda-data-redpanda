@@ -2843,8 +2843,8 @@ ss::future<result<tx_metadata, tx::errc>> tx_gateway_frontend::describe_tx(
     auto term = sync_result.value();
     const auto timeout
       = config::shard_local_cfg().internal_rpc_request_timeout_ms();
-    co_return co_await find_and_try_progressing_transaction(
-      term, stm, tid, timeout);
+    co_return result<tx_metadata, tx::errc>(
+      co_await find_and_try_progressing_transaction(term, stm, tid, timeout));
 }
 
 ss::future<try_abort_reply>

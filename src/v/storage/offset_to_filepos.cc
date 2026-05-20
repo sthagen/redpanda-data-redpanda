@@ -19,6 +19,7 @@
 #include "utils/null_output_stream.h"
 
 #include <seastar/core/iostream.hh>
+#include <seastar/coroutine/exception.hh>
 
 namespace storage {
 
@@ -122,7 +123,8 @@ ss::future<result<offset_to_file_pos_result>> convert_begin_offset_to_file_pos(
 
     if (res.has_error()) {
         vlog(stlog.error, "Can't read segment file, error: {}", res.error());
-        throw std::system_error(res.error());
+        co_await ss::coroutine::return_exception(
+          std::system_error(res.error()));
     }
 
     if (!offset_found && fail_on_missing_offset) {
@@ -237,7 +239,8 @@ ss::future<result<offset_to_file_pos_result>> convert_end_offset_to_file_pos(
 
     if (res.has_error()) {
         vlog(stlog.error, "Can't read segment file, error: {}", res.error());
-        throw std::system_error(res.error());
+        co_await ss::coroutine::return_exception(
+          std::system_error(res.error()));
     }
 
     if (!offset_found && fail_on_missing_offset) {

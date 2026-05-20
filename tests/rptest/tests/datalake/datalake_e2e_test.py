@@ -11,8 +11,11 @@ import json
 import random
 import re
 import time
+from dataclasses import dataclass
+from decimal import Decimal
 from random import randint
 from typing import Any, Callable
+from uuid import UUID
 
 from confluent_kafka import Producer, avro
 from confluent_kafka.avro import AvroProducer
@@ -60,6 +63,20 @@ SPARK_RP_FIELD_TYPE: FieldTuple = (
     "struct<partition:int,offset:bigint,timestamp:timestamp,headers:array<struct<key:string,value:binary>>,key:binary,timestamp_type:int>",
     None,
 )
+
+
+def _engine_sql(default: str, **overrides: str) -> Callable[[QueryEngineType], str]:
+    """Build a per-engine SQL fragment.
+
+    ``default`` is used for any engine that lacks an override. Overrides
+    are keyed by the lowercase ``QueryEngineType`` value (e.g.
+    ``duckdb_py="..."``, ``spark="..."``).
+    """
+
+    def pick(engine: QueryEngineType) -> str:
+        return overrides.get(engine.value, default)
+
+    return pick
 
 
 class AvroSchema:
@@ -517,27 +534,176 @@ class DatalakeE2ETests(RedpandaTest):
                         spark_describe_out
                     )
 
-    @cluster(num_nodes=3)
-    @matrix(
-        cloud_storage_type=supported_storage_types(),
-        query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
-        catalog_type=[CatalogType.REST_JDBC],
-    )
-    def test_avro_map_values(self, cloud_storage_type, query_engine, catalog_type):
-        """Verify avro map<string, long> values round-trip end-to-end."""
-        count = 100
-        topic = "avro_map_test_case"
-        table = f"redpanda.{topic}"
-        schema_str = """
-        {
-            "type": "record",
-            "namespace": "com.redpanda.examples.avro",
-            "name": "MapTest",
-            "fields": [
-                {"name": "kv", "type": {"type": "map", "values": "long"}}
-            ]
-        }
+    def _run_avro_all_iceberg_types(self, query_engine, catalog_type):
+        """End-to-end coverage for every iceberg type reachable from avro.
+
+        One column per iceberg type. We produce a single record with known
+        values, then verify the data is correct from two perspectives:
+
+        - pyiceberg `scan().to_arrow()` — definitive per-column value check
+          against native Python types.
+        - A single SQL projection against the chosen query engine that
+          collapses each column into a boolean truth-check. Engines vary in
+          strictness when decoding parquet/iceberg data, so we want each
+          engine to actually read each column.
+
+        `time` is included only for the Trino variant — Spark SQL has no
+        TIME type and refuses to even load an iceberg table that exposes
+        one.
+
+        We cover only avro (any will do) as we are mostly interested here
+        for how we serialize internal redpanda parquet representation.
+        Kafka serdes (avro, json schema, proto) to internal redpanda
+        parquet representation has good unit test coverage.
         """
+
+        @dataclass
+        class Case:
+            name: str
+            avro_type: Any  # JSON-serializable field type
+            value: Any  # produced as the field's value
+            pyiceberg: Any  # expected pyiceberg readback
+            # SQL boolean expression. Either a single string (works on
+            # every engine) or a callable returning a per-engine string.
+            sql_check: str | Callable[[QueryEngineType], str]
+
+        ts = datetime.datetime(2026, 5, 13, 12, 34, 56, tzinfo=datetime.timezone.utc)
+        uuid_val = UUID("00112233-4455-6677-8899-aabbccddeeff")
+        cases: list[Case] = [
+            Case("c_bool", "boolean", True, True, "c_bool"),
+            Case("c_int", "int", 42, 42, "c_int = 42"),
+            Case("c_long", "long", 2**40, 2**40, f"c_long = {2**40}"),
+            Case("c_float", "float", 1.5, 1.5, "abs(c_float - 1.5) < 1e-6"),
+            Case("c_double", "double", 2.5, 2.5, "abs(c_double - 2.5) < 1e-12"),
+            Case("c_string", "string", "hello", "hello", "c_string = 'hello'"),
+            Case(
+                "c_bytes",
+                "bytes",
+                b"\x01\x02",
+                b"\x01\x02",
+                _engine_sql(
+                    default="c_bytes = X'0102'",
+                    duckdb_py="c_bytes = '\\x01\\x02'::BLOB",
+                ),
+            ),
+            Case(
+                "c_date",
+                {"type": "int", "logicalType": "date"},
+                ts.date(),
+                ts.date(),
+                f"year(c_date) = {ts.year}"
+                f" AND month(c_date) = {ts.month}"
+                f" AND day(c_date) = {ts.day}",
+            ),
+            Case(
+                "c_timestamptz",
+                {"type": "long", "logicalType": "timestamp-micros"},
+                ts,
+                ts,
+                f"year(c_timestamptz) = {ts.year}"
+                f" AND hour(c_timestamptz) = {ts.hour}"
+                f" AND second(c_timestamptz) = {ts.second}",
+            ),
+            Case(
+                "c_uuid",
+                {"type": "string", "logicalType": "uuid"},
+                str(uuid_val),
+                uuid_val,
+                # Spark iceberg maps UUID to StringType; Trino and DuckDB
+                # map it to a native UUID type. Cast syntax differs.
+                _engine_sql(
+                    default=f"c_uuid = UUID '{uuid_val}'",
+                    spark=f"c_uuid = '{uuid_val}'",
+                ),
+            ),
+            Case(
+                "c_decimal",
+                {
+                    "type": "bytes",
+                    "logicalType": "decimal",
+                    "precision": 9,
+                    "scale": 2,
+                },
+                Decimal("123.45"),
+                Decimal("123.45"),
+                "c_decimal = cast('123.45' as decimal(9,2))",
+            ),
+            Case(
+                "c_fixed",
+                {"type": "fixed", "name": "fix4", "size": 4},
+                b"\xde\xad\xbe\xef",
+                b"\xde\xad\xbe\xef",
+                _engine_sql(
+                    default="c_fixed = X'DEADBEEF'",
+                    duckdb_py="c_fixed = '\\xde\\xad\\xbe\\xef'::BLOB",
+                ),
+            ),
+            Case(
+                "c_struct",
+                {
+                    "type": "record",
+                    "name": "Sub",
+                    "fields": [{"name": "x", "type": "long"}],
+                },
+                {"x": 7},
+                {"x": 7},
+                "c_struct.x = 7",
+            ),
+            Case(
+                "c_list",
+                {"type": "array", "items": "long"},
+                [1, 2, 3],
+                [1, 2, 3],
+                _engine_sql(
+                    default="cardinality(c_list) = 3 AND element_at(c_list, 1) = 1",
+                    # DuckDB reserves `cardinality` for maps; arrays use
+                    # `len`. Indexing is 1-based.
+                    duckdb_py="len(c_list) = 3 AND c_list[1] = 1",
+                ),
+            ),
+            Case(
+                "c_map",
+                {"type": "map", "values": "long"},
+                {"k": 7},
+                {"k": 7},
+                _engine_sql(
+                    default="element_at(c_map, 'k') = 7",
+                    duckdb_py="c_map['k'] = 7",
+                ),
+            ),
+            Case(
+                "c_optional",
+                ["null", "long"],
+                9,
+                9,
+                "c_optional = 9",
+            ),
+        ]
+        if query_engine == QueryEngineType.TRINO:
+            cases.append(
+                Case(
+                    "c_time",
+                    {"type": "long", "logicalType": "time-micros"},
+                    ts.time(),
+                    ts.time(),
+                    f"hour(c_time) = {ts.hour}"
+                    f" AND minute(c_time) = {ts.minute}"
+                    f" AND second(c_time) = {ts.second}",
+                )
+            )
+
+        schema_str = json.dumps(
+            {
+                "type": "record",
+                "namespace": "com.redpanda.examples.avro",
+                "name": "AllTypes",
+                "fields": [{"name": c.name, "type": c.avro_type} for c in cases],
+            }
+        )
+        record = {c.name: c.value for c in cases}
+
+        topic = "all_iceberg_types"
+        table = f"redpanda.{topic}"
 
         with DatalakeServices(
             self.test_ctx,
@@ -555,25 +721,61 @@ class DatalakeE2ETests(RedpandaTest):
                 },
                 default_value_schema=avro.loads(schema_str),
             )
-            for i in range(count):
-                producer.produce(topic=topic, value={"kv": {"k": i}})
+            producer.produce(topic=topic, value=record)
             producer.flush()
-            dl.wait_for_translation(topic, msg_count=count)
+            dl.wait_for_translation(topic, msg_count=1)
 
-            expected = sum(range(count))
+            # pyiceberg readback — definitive per-column value check.
+            tbl = dl.catalog_client().load_table(("redpanda", topic))
+            pydict = tbl.scan().to_arrow().to_pydict()
+            for c in cases:
+                got = pydict[c.name][0]
+                # Iceberg maps come back from arrow as a list of (k, v) tuples.
+                if isinstance(c.pyiceberg, dict) and isinstance(got, list):
+                    got = dict(got)
+                assert got == c.pyiceberg, (
+                    f"pyiceberg {c.name}: expected={c.pyiceberg!r} got={got!r}"
+                )
 
-            engine = dl.trino() if query_engine == QueryEngineType.TRINO else dl.spark()
-            rows = engine.run_query_fetch_all(
-                f"select sum(element_at(kv, 'k')) from {table}"
+            # Engine readback — one SQL projection, each column is a bool
+            # check. All should be True.
+            def sql_check(c: Case) -> str:
+                return (
+                    c.sql_check(query_engine) if callable(c.sql_check) else c.sql_check
+                )
+
+            checked = [c for c in cases if c.sql_check is not None]
+            projection = ", ".join(
+                f"({sql_check(c)}) AS check_{c.name}" for c in checked
             )
-            assert rows[0][0] == expected, f"engine expected={expected}, got={rows}"
+            engine = dl.query_engine(query_engine)
+            rows = engine.run_query_fetch_all(f"SELECT {projection} FROM {table}")
+            assert len(rows) == 1, f"expected 1 row, got {rows}"
+            for c, got in zip(checked, rows[0]):
+                assert got is True, (
+                    f"engine {c.name} check failed ({sql_check(c)}): got={got!r}"
+                )
 
-            iceberg_tbl = dl.catalog_client().load_table(("redpanda", topic))
-            kv_col = iceberg_tbl.scan().to_arrow()["kv"].to_pylist()
-            pyiceberg_total = sum(dict(entry)["k"] for entry in kv_col)
-            assert pyiceberg_total == expected, (
-                f"pyiceberg expected={expected}, got={pyiceberg_total}"
-            )
+    @cluster(num_nodes=3)
+    @matrix(
+        cloud_storage_type=supported_storage_types(),
+        query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
+        catalog_type=[CatalogType.REST_JDBC],
+    )
+    def test_avro_all_iceberg_types(
+        self, cloud_storage_type, query_engine, catalog_type
+    ):
+        self._run_avro_all_iceberg_types(query_engine, catalog_type)
+
+    # DuckDB runs in-process so it consumes no extra cluster node; the
+    # split keeps `--fail-bad-cluster-utilization` happy.
+    @cluster(num_nodes=2)
+    @matrix(
+        cloud_storage_type=[CloudStorageType.S3],
+        catalog_type=[CatalogType.REST_JDBC],
+    )
+    def test_avro_all_iceberg_types_duckdb(self, cloud_storage_type, catalog_type):
+        self._run_avro_all_iceberg_types(QueryEngineType.DUCKDB_PY, catalog_type)
 
     # Note: nothing unique about this test so run it with single catalog/query engine.
     @cluster(num_nodes=3)

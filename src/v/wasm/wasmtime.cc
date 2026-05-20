@@ -42,6 +42,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/bool_class.hh>
 #include <seastar/util/defer.hh>
@@ -762,8 +763,8 @@ private:
           wasi::preview_1_start_function_name.size(),
           &start);
         if (!ok || start.kind != WASMTIME_EXTERN_FUNC) {
-            throw wasm_exception(
-              "Missing wasi _start function", errc::user_code_failure);
+            co_await ss::coroutine::return_exception(wasm_exception(
+              "Missing wasi _start function", errc::user_code_failure));
         }
         vlog(wasm_log.info, "starting wasm vm {}", _meta.name());
         std::exception_ptr ex;

@@ -50,6 +50,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/core/with_scheduling_group.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/file.hh>
 #include <seastar/util/later.hh>
@@ -899,8 +900,9 @@ ss::future<ss::shared_ptr<log>> log_manager::do_manage(
   raft::group_id group,
   std::vector<model::record_batch_type> translator_batch_types) {
     if (_config.base_dir.empty()) {
-        throw std::runtime_error(
-          "log_manager:: cannot have empty config.base_dir");
+        co_await ss::coroutine::return_exception(
+          std::runtime_error(
+            "log_manager:: cannot have empty config.base_dir"));
     }
 
     vassert(

@@ -25,6 +25,7 @@
 #include "storage/types.h"
 
 #include <seastar/core/metrics.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/log.hh>
 
@@ -454,7 +455,7 @@ ss::future<> kvstore::load_snapshot() {
 
     co_await reader->close();
     if (ex) {
-        std::rethrow_exception(ex);
+        co_await ss::coroutine::return_exception_ptr(std::move(ex));
     }
 
     co_await _snap.remove_partial_snapshots();

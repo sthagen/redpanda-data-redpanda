@@ -11,6 +11,7 @@
 
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/domain_uuid.h"
+#include "cloud_topics/level_one/metastore/leveling_range_builder.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "model/fundamental.h"
@@ -416,6 +417,53 @@ struct get_compaction_infos_request
 
     model::partition_id metastore_partition;
     chunked_vector<get_compaction_info_request> logs;
+};
+
+struct get_leveling_info_reply
+  : serde::envelope<
+      get_leveling_info_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, ranges, epoch); }
+
+    errc ec;
+    chunked_vector<levelable_range> ranges;
+    partition_state::compaction_epoch_t epoch{};
+};
+struct get_leveling_info_request
+  : serde::envelope<
+      get_leveling_info_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = get_leveling_info_reply;
+    auto serde_fields() { return std::tie(tp, min_acceptable_extent_bytes); }
+
+    model::topic_id_partition tp;
+    size_t min_acceptable_extent_bytes;
+};
+
+struct get_leveling_infos_reply
+  : serde::envelope<
+      get_leveling_infos_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, responses); }
+
+    errc ec;
+
+    chunked_hash_map<model::topic_id_partition, get_leveling_info_reply>
+      responses;
+};
+struct get_leveling_infos_request
+  : serde::envelope<
+      get_leveling_infos_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = get_leveling_infos_reply;
+    auto serde_fields() { return std::tie(metastore_partition, logs); }
+
+    model::partition_id metastore_partition;
+    chunked_vector<get_leveling_info_request> logs;
 };
 
 struct get_extent_metadata_reply

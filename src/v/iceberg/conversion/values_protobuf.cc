@@ -122,7 +122,7 @@ ss::future<value_outcome> convert_repeated_elements(
         }
         ret->elements.push_back(std::move(result.value()));
     };
-    co_return value_outcome{std::move(ret)};
+    co_return std::move(ret);
 }
 
 ss::future<optional_value_outcome> convert_repeated(
@@ -241,7 +241,7 @@ convert_timestamp(std::unique_ptr<parsed::message> message) {
     if (it != message->fields.end()) {
         ts += absl::Nanoseconds(std::get<int32_t>(std::move(it->second)));
     }
-    co_return value_outcome{iceberg::timestamptz_value{absl::ToUnixMicros(ts)}};
+    co_return iceberg::timestamptz_value{absl::ToUnixMicros(ts)};
 }
 
 // Forward declaration for recursive calls
@@ -361,7 +361,7 @@ ss::future<optional_value_outcome> convert_struct_to_json(
     if (result.has_error()) {
         co_return result.error();
     }
-    co_return value_outcome{iceberg::string_value{std::move(writer).finish()}};
+    co_return iceberg::string_value{std::move(writer).finish()};
 }
 
 ss::future<optional_value_outcome> convert_value_to_json(
@@ -377,7 +377,7 @@ ss::future<optional_value_outcome> convert_value_to_json(
     if (result.has_error()) {
         co_return result.error();
     }
-    co_return value_outcome{iceberg::string_value{std::move(writer).finish()}};
+    co_return iceberg::string_value{std::move(writer).finish()};
 }
 
 ss::future<optional_value_outcome> convert_list_value_to_json(
@@ -393,7 +393,7 @@ ss::future<optional_value_outcome> convert_list_value_to_json(
     if (result.has_error()) {
         co_return result.error();
     }
-    co_return value_outcome{iceberg::string_value{std::move(writer).finish()}};
+    co_return iceberg::string_value{std::move(writer).finish()};
 }
 ss::future<optional_value_outcome>
 convert_date(std::unique_ptr<parsed::message> message) {
@@ -409,7 +409,7 @@ convert_date(std::unique_ptr<parsed::message> message) {
     }
     int32_t date = std::get<int32_t>(std::move(it->second));
 
-    co_return value_outcome{iceberg::date_value{date}};
+    co_return iceberg::date_value{date};
 }
 
 ss::future<optional_value_outcome> message_field_to_value(
@@ -627,10 +627,10 @@ deserialize_protobuf(iobuf buffer, const pb::Descriptor& type_descriptor) {
         co_return co_await proto_parsed_message_to_value(
           std::move(msg_ptr), type_descriptor);
     } catch (...) {
-        co_return value_outcome(value_conversion_exception(
+        co_return value_conversion_exception(
           fmt::format(
             "exception thrown while parsing protobuf - {}",
-            std::current_exception())));
+            std::current_exception()));
     }
 }
 

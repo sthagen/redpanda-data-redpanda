@@ -202,9 +202,7 @@ class ClusterRateQuotaTest(RedpandaTest):
         )
 
     def check_producer_throttled(self, producer, ignore_max_throttle=False):
-        throttle_ms = producer.metrics()["producer-metrics"][
-            "produce-throttle-time-max"
-        ]
+        throttle_ms = producer.metrics()["producer-metrics"]["throttle-time-max"]
         assert throttle_ms > 0, f"Expected throttle > 0. Got {throttle_ms} ms"
         if not ignore_max_throttle:
             assert throttle_ms <= self.max_throttle_time, (
@@ -212,23 +210,17 @@ class ClusterRateQuotaTest(RedpandaTest):
             )
 
     def check_producer_not_throttled(self, producer):
-        throttle_ms = producer.metrics()["producer-metrics"][
-            "produce-throttle-time-max"
-        ]
+        throttle_ms = producer.metrics()["producer-metrics"]["throttle-time-max"]
         assert throttle_ms == 0, f"Expected 0 ms throttle. Got {throttle_ms} ms"
 
     def check_consumer_throttled(self, consumer):
-        throttle_ms = consumer.metrics()["consumer-fetch-manager-metrics"][
-            "fetch-throttle-time-max"
-        ]
+        throttle_ms = consumer.metrics()["consumer-metrics"]["throttle-time-max"]
         assert throttle_ms > 0 and throttle_ms <= self.max_throttle_time, (
             f"Expected throttle in range (0, {self.max_throttle_time}]. Got {throttle_ms}"
         )
 
     def check_consumer_not_throttled(self, consumer):
-        throttle_ms = consumer.metrics()["consumer-fetch-manager-metrics"][
-            "fetch-throttle-time-max"
-        ]
+        throttle_ms = consumer.metrics()["consumer-metrics"]["throttle-time-max"]
         assert throttle_ms == 0, f"Expected 0 ms throttle. Got {throttle_ms} ms"
 
     def produce(self, producer, amount, message=None, timeout_sec=10):
@@ -257,6 +249,15 @@ class ClusterRateQuotaTest(RedpandaTest):
             retries=2,
             request_timeout_ms=60000,
             client_id=client_id,
+            # kafka-python 2.3.1 enables KIP-219 client-side throttle
+            # enforcement when the broker advertises api_version >= 2.0,
+            # but its sender does not factor throttle_delay into the
+            # poll timeout — once a connection is throttled the sender
+            # stalls until the next external wakeup. Pin the api_version
+            # below 2.0 so the client treats throttle_time_ms as
+            # advisory and lets the broker enforce the quota
+            # server-side, which is what this test is exercising.
+            api_version=(1, 1),
             *args,
             **kwargs,
         )

@@ -1273,6 +1273,121 @@ TEST_P(ReplicatedMetastoreTest, TestCompactObjectsBumpsEpochAndRejectsStale) {
     EXPECT_EQ(stale_res.error(), metastore::errc::invalid_request);
 }
 
+namespace {
+
+struct leveling_case {
+    std::string name;
+    std::vector<size_t> object_sizes;
+    size_t min_acceptable;
+    std::vector<levelable_range> expected_ranges;
+};
+
+} // namespace
+
+TEST_P(ReplicatedMetastoreTest, TestGetLevelingInfo) {
+    auto& app = get_ct_app(model::node_id{0});
+    auto& meta = app.get_sharded_replicated_metastore()->local();
+
+    const std::vector<leveling_case> cases = {
+      {.name = "NoUndersizedExtents",
+       .object_sizes = {100, 100, 100},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+      {.name = "SmallSandwichedBetweenLarge",
+       .object_sizes = {100, 2, 100, 15, 2, 100},
+       .min_acceptable = 50,
+       .expected_ranges
+       = {{.base_offset = o{30}, .last_offset = o{49}, .size_bytes = 17}}},
+      {.name = "IsolatedSmallSingleton",
+       .object_sizes = {100, 2, 100},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+      {.name = "SmallFollowedByManyHealthy",
+       .object_sizes = {100, 2, 100, 100, 100, 100},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+      {.name = "TwoSmallsSeparatedByHealthies",
+       .object_sizes = {100, 2, 100, 100, 2, 100},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+      {.name = "AllSmall",
+       .object_sizes = {2, 2, 2},
+       .min_acceptable = 50,
+       .expected_ranges
+       = {{.base_offset = o{0}, .last_offset = o{29}, .size_bytes = 6}}},
+      {.name = "LeadingHealthyExtentsUntouched",
+       .object_sizes = {100, 100, 2, 2, 100},
+       .min_acceptable = 50,
+       .expected_ranges
+       = {{.base_offset = o{20}, .last_offset = o{39}, .size_bytes = 4}}},
+      {.name = "SmallsAcrossHealthyAreNotMerged",
+       .object_sizes = {100, 30, 100, 30, 100},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+      {.name = "LeadingSmallSingleton",
+       .object_sizes = {2, 100, 100},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+      {.name = "ThresholdBelowAllSizes",
+       .object_sizes = {200, 200, 200},
+       .min_acceptable = 50,
+       .expected_ranges = {}},
+    };
+
+    // Stage every case's objects in a single builder, then commit them
+    // all atomically via add_objects.
+    auto obj_builder = meta.object_builder().get().value();
+    metastore::term_offset_map_t terms;
+    for (size_t case_idx = 0; case_idx < cases.size(); ++case_idx) {
+        const auto& c = cases[case_idx];
+        auto tp = make_tp(static_cast<int>(case_idx));
+        for (size_t i = 0; i < c.object_sizes.size(); ++i) {
+            auto oid = obj_builder->get_or_create_object_for(tp).get().value();
+            auto add_res = obj_builder->add(
+              oid,
+              metastore::object_metadata::ntp_metadata{
+                .tidp = tp,
+                .base_offset = o{static_cast<int64_t>(i * 10)},
+                .last_offset = o{static_cast<int64_t>(i * 10 + 9)},
+                .max_timestamp = ts{static_cast<int64_t>((i + 1) * 1000)},
+                .pos = 0,
+                .size = c.object_sizes[i],
+              });
+            ASSERT_TRUE(add_res.has_value())
+              << c.name << ": " << add_res.error();
+            auto fin_res = obj_builder->finish(
+              oid, c.object_sizes[i], c.object_sizes[i]);
+            ASSERT_TRUE(fin_res.has_value())
+              << c.name << ": " << fin_res.error();
+        }
+        terms[tp].emplace_back(
+          metastore::term_offset{
+            .term = model::term_id{0}, .first_offset = o{0}});
+    }
+    auto add_res = meta.add_objects(*obj_builder, terms).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Query each partition's leveling info and verify the result.
+    for (size_t case_idx = 0; case_idx < cases.size(); ++case_idx) {
+        const auto& c = cases[case_idx];
+        auto tp = make_tp(static_cast<int>(case_idx));
+        chunked_vector<metastore::leveling_info_spec> specs;
+        specs.push_back(
+          {.tidp = tp, .min_acceptable_extent_bytes = c.min_acceptable});
+        auto infos_res = meta.get_leveling_infos(specs).get();
+        ASSERT_TRUE(infos_res.has_value())
+          << c.name << ": " << static_cast<int>(infos_res.error());
+        auto it = infos_res->find(tp);
+        ASSERT_NE(it, infos_res->end()) << c.name;
+        ASSERT_TRUE(it->second.has_value())
+          << c.name << ": " << static_cast<int>(it->second.error());
+        const auto& res = it->second.value();
+
+        EXPECT_THAT(res.ranges, ::testing::ElementsAreArray(c.expected_ranges))
+          << c.name;
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   MetastoreBackends,
   ReplicatedMetastoreTest,

@@ -706,6 +706,19 @@ configuration::configuration()
       "if it means returning less bytes in the fetch than are available.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       5s)
+  , enable_listoffsets_historical_leader_epoch(
+      *this,
+      "enable_listoffsets_historical_leader_epoch",
+      "When enabled, the Kafka ListOffsets API returns the historical "
+      "(record-time) leader epoch instead of the current leader epoch. "
+      "Intended as a one-way opt-in: disabling after it has been enabled "
+      "regresses to the original bug. "
+      "Gated as a development feature: not all response paths are fixed "
+      "yet (CORE-12505), so enabling this property produces internally "
+      "inconsistent epoch values across paths and must not be enabled in "
+      "production.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , fetch_read_strategy(
       *this,
       "fetch_read_strategy",
@@ -4091,12 +4104,10 @@ configuration::configuration()
       *this,
       true,
       "iceberg_enabled",
-      "Enables the translation of topic data into Iceberg tables. Setting "
-      "iceberg_enabled to true activates the feature at the cluster level, but "
-      "each topic must also set the redpanda.iceberg.enabled topic-level "
-      "property to true to use it. If iceberg_enabled is set to false, the "
-      "feature is disabled for all topics in the cluster, overriding any "
-      "topic-level settings.",
+      "Enables Apache Iceberg integration for storing topic data in the "
+      "Iceberg open table format. Setting iceberg_enabled to true activates "
+      "the feature at the cluster level, but each topic must also configure "
+      "the redpanda.iceberg.mode topic-level property to use it.",
       meta{
         .needs_restart = needs_restart::yes,
         .visibility = visibility::user,

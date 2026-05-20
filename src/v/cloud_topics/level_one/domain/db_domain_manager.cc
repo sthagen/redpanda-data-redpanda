@@ -11,6 +11,7 @@
 
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/domain_uuid.h"
+#include "cloud_topics/level_one/metastore/leveling_range_builder.h"
 #include "cloud_topics/level_one/metastore/lsm/garbage_collector.h"
 #include "cloud_topics/level_one/metastore/lsm/keys.h"
 #include "cloud_topics/level_one/metastore/lsm/state_reader.h"
@@ -1393,6 +1394,94 @@ db_domain_manager::get_compaction_infos(rpc::get_compaction_infos_request req) {
 
     co_return rpc::get_compaction_infos_reply{
       .responses = std::move(compaction_infos)};
+}
+
+ss::future<rpc::get_leveling_info_reply>
+db_domain_manager::do_get_leveling_info(
+  const gate_read_lock&,
+  state_reader& reader,
+  rpc::get_leveling_info_request req) {
+    auto metadata_res = co_await reader.get_metadata(req.tp);
+    if (!metadata_res.has_value()) {
+        co_return rpc::get_leveling_info_reply{
+          .ec = log_and_convert(
+            metadata_res.error(), "Error getting metadata: "),
+        };
+    }
+    if (!metadata_res.value().has_value()) {
+        co_return rpc::get_leveling_info_reply{
+          .ec = rpc::errc::missing_ntp,
+        };
+    }
+    const auto& metadata = **metadata_res;
+    const auto start_offset = metadata.start_offset;
+    const auto next_offset = metadata.next_offset;
+
+    // Check for empty log.
+    if (start_offset >= next_offset) {
+        co_return rpc::get_leveling_info_reply{
+          .ec = rpc::errc::ok,
+          .ranges = {},
+          .epoch = metadata.compaction_epoch,
+        };
+    }
+
+    auto extents_res = co_await reader.get_inclusive_extents(
+      req.tp, std::nullopt, std::nullopt);
+    if (!extents_res.has_value()) {
+        co_return rpc::get_leveling_info_reply{
+          .ec = log_and_convert(extents_res.error(), "Error getting extents: "),
+        };
+    }
+    leveling_range_builder builder{req.min_acceptable_extent_bytes};
+    if (extents_res.value().has_value()) {
+        auto gen = (*extents_res)->get_rows();
+        while (auto row_opt = co_await gen()) {
+            const auto& row = row_opt->get();
+            if (!row.has_value()) {
+                co_return rpc::get_leveling_info_reply{
+                  .ec = log_and_convert(
+                    row.error(), "Error iterating through extents: "),
+                };
+            }
+            const auto& extent = *row;
+            auto key = extent_row_key::decode(extent.key);
+            auto base = key->base_offset;
+            if (base < start_offset) {
+                // The extent is partially truncated.
+                base = start_offset;
+            }
+            builder.process_extent(
+              base, extent.val.last_offset, extent.val.len);
+        }
+    }
+    co_return rpc::get_leveling_info_reply{
+      .ec = rpc::errc::ok,
+      .ranges = std::move(builder).finalize(),
+      .epoch = metadata.compaction_epoch,
+    };
+}
+
+ss::future<rpc::get_leveling_infos_reply>
+db_domain_manager::get_leveling_infos(rpc::get_leveling_infos_request req) {
+    auto gl_res = co_await gate_and_open_reads();
+    if (!gl_res.has_value()) {
+        co_return rpc::get_leveling_infos_reply{
+          .ec = gl_res.error(),
+        };
+    }
+
+    auto reader = state_reader(db_->db().create_snapshot());
+    chunked_hash_map<model::topic_id_partition, rpc::get_leveling_info_reply>
+      leveling_infos;
+    for (auto& log_req : req.logs) {
+        auto log_info = co_await do_get_leveling_info(
+          gl_res.value(), reader, log_req);
+        leveling_infos.insert_or_assign(log_req.tp, std::move(log_info));
+    }
+
+    co_return rpc::get_leveling_infos_reply{
+      .responses = std::move(leveling_infos)};
 }
 
 ss::future<rpc::get_extent_metadata_reply>

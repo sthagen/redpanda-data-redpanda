@@ -195,7 +195,7 @@ class append_entries_request_serde_wrapper
       serde::version<0>,
       serde::compat_version<0>> {
 public:
-    explicit append_entries_request_serde_wrapper(append_entries_request req)
+    append_entries_request_serde_wrapper(append_entries_request req)
       : _request(std::move(req)) {}
 
     append_entries_request release() && { return std::move(_request); }

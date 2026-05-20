@@ -47,6 +47,20 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "leveling_range_builder_test",
+    timeout = "short",
+    srcs = [
+        "leveling_range_builder_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/metastore:leveling_range_builder",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "garbage_collector_test",
     timeout = "short",
     srcs = [

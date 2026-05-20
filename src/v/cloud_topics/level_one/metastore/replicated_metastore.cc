@@ -915,6 +915,76 @@ replicated_metastore::get_compaction_infos(
     co_return resp;
 }
 
+ss::future<std::expected<metastore::leveling_info_map, metastore::errc>>
+replicated_metastore::get_leveling_infos(
+  const chunked_vector<leveling_info_spec>& specs) {
+    chunked_hash_map<model::partition_id, rpc::get_leveling_infos_request>
+      partitioned_reqs;
+    metastore::leveling_info_map resp;
+    for (const auto& spec : specs) {
+        const auto& tp = spec.tidp;
+        auto metastore_partition = fe_.metastore_partition(tp);
+        if (!metastore_partition) {
+            vlog(cd_log.warn, "Unable to get metastore partition for {}", tp);
+            resp.insert_or_assign(tp, std::unexpected(errc::transport_error));
+            continue;
+        }
+        auto [it, inserted] = partitioned_reqs.try_emplace(
+          metastore_partition.value(),
+          rpc::get_leveling_infos_request{
+            .metastore_partition = metastore_partition.value()});
+        auto& req = it->second;
+
+        req.logs.push_back(
+          rpc::get_leveling_info_request{
+            .tp = tp,
+            .min_acceptable_extent_bytes = spec.min_acceptable_extent_bytes});
+    }
+
+    static constexpr auto max_rpc_concurrency = 10;
+    auto fut = co_await ss::coroutine::as_future(
+      ss::max_concurrent_for_each(
+        partitioned_reqs,
+        max_rpc_concurrency,
+        [this, &resp](auto& partition_and_request) {
+            auto& request = partition_and_request.second;
+            auto logs = request.logs.copy();
+            return fe_.get_leveling_infos(std::move(request))
+              .then([&resp, logs = std::move(logs)](
+                      rpc::get_leveling_infos_reply reply) {
+                  if (reply.ec != rpc::errc::ok) {
+                      for (const auto& l : logs) {
+                          resp[l.tp] = std::unexpected(
+                            rpc_to_meta_errc(reply.ec));
+                      }
+                      return;
+                  }
+
+                  for (auto& [log, log_reply] : reply.responses) {
+                      if (log_reply.ec == rpc::errc::ok) {
+                          metastore::leveling_info_response log_resp{
+                            .ranges = std::move(log_reply.ranges),
+                            .epoch = metastore::compaction_epoch{
+                              log_reply.epoch()}};
+                          resp.insert_or_assign(log, std::move(log_resp));
+                      } else {
+                          resp.insert_or_assign(
+                            log,
+                            std::unexpected(rpc_to_meta_errc(log_reply.ec)));
+                      }
+                  }
+              });
+        }));
+
+    if (fut.failed()) {
+        auto e = fut.get_exception();
+        vlog(cd_log.warn, "Error while sending leveling info requests: {}", e);
+        co_return std::unexpected(metastore::errc::transport_error);
+    }
+
+    co_return resp;
+}
+
 ss::future<std::expected<metastore::extent_metadata_response, metastore::errc>>
 replicated_metastore::get_extent_metadata_forwards(
   const model::topic_id_partition& tidp,

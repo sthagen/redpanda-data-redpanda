@@ -34,6 +34,7 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <boost/range/adaptor/reversed.hpp>
 
@@ -510,7 +511,8 @@ public:
             co_await set_end_of_stream();
         }
         if (unknown_exception_ptr) {
-            std::rethrow_exception(unknown_exception_ptr);
+            co_await ss::coroutine::return_exception_ptr(
+              std::move(unknown_exception_ptr));
         }
 
         vlog(
@@ -1043,10 +1045,10 @@ ss::future<std::optional<kafka::offset>>
 remote_partition::get_term_last_offset(model::term_id term) const {
     const auto res = co_await _manifest_view->get_term_last_offset(term);
     if (res.has_error()) {
-        throw std::system_error(res.error());
-    } else {
-        co_return res.value();
+        co_await ss::coroutine::return_exception(
+          std::system_error(res.error()));
     }
+    co_return res.value();
 }
 
 ss::future<std::vector<model::tx_range>>
@@ -1095,15 +1097,17 @@ remote_partition::aborted_transactions(offset_range offsets) {
         auto cur_res = co_await _manifest_view->get_cursor(offsets.begin);
         if (cur_res.has_failure()) {
             if (cur_res.error() == error_outcome::shutting_down) {
-                throw std::runtime_error("Async manifest view shutting down");
+                co_await ss::coroutine::return_exception(
+                  std::runtime_error("Async manifest view shutting down"));
             }
 
             vlog(
               _ctxlog.error,
               "Failed to traverse archive part of the log: {}",
               cur_res.error());
-            throw std::runtime_error(fmt_with_ctx(
-              fmt::format, "Failed to get the cursor {}", cur_res.error()));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(fmt_with_ctx(
+                fmt::format, "Failed to get the cursor {}", cur_res.error())));
         }
         auto cursor = std::move(cur_res.value());
         co_await for_each_manifest(

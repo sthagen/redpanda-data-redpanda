@@ -25,6 +25,7 @@
 
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/switch_to.hh>
 
 #include <chrono>
@@ -63,7 +64,7 @@ ss::future<std::unique_ptr<impl>> impl::open(
     if (fut.failed()) {
         auto ex = fut.get_exception();
         co_await db->close().handle_exception([](const std::exception_ptr&) {});
-        std::rethrow_exception(ex);
+        co_await ss::coroutine::return_exception_ptr(std::move(ex));
     }
     // If we're readonly, we don't need to start any compaction loop.
     if (db->_opts->readonly) {
@@ -78,8 +79,8 @@ ss::future<std::unique_ptr<impl>> impl::open(
 
 ss::future<> impl::apply(ss::lw_shared_ptr<memtable> batch) {
     if (_opts->readonly) [[unlikely]] {
-        throw invalid_argument_exception(
-          "attempted to write to a readonly database");
+        co_await ss::coroutine::return_exception(invalid_argument_exception(
+          "attempted to write to a readonly database"));
     }
     if (batch->empty()) {
         co_return;
@@ -218,17 +219,17 @@ impl::create_internal_iterator() {
 
 ss::future<> impl::flush(ssx::instant deadline) {
     if (_opts->readonly) [[unlikely]] {
-        throw invalid_argument_exception(
-          "attempted to flush a readonly database");
+        co_await ss::coroutine::return_exception(
+          invalid_argument_exception("attempted to flush a readonly database"));
     }
     auto applied_seqno = max_applied_seqno();
     while (applied_seqno > max_persisted_seqno()) {
         if (ssx::lowres_steady_clock().now() > deadline) {
-            throw io_error_exception(
+            co_await ss::coroutine::return_exception(io_error_exception(
               "failed to persist up to seqno {} in time: current persisted "
               "seqno {}",
               applied_seqno.value_or(internal::sequence_number(0)),
-              max_persisted_seqno().value_or(internal::sequence_number(0)));
+              max_persisted_seqno().value_or(internal::sequence_number(0))));
         }
         if (_imm) {
             co_await _background_work_finished_signal.wait(
@@ -246,8 +247,8 @@ ss::future<> impl::flush() {
 
 ss::future<bool> impl::refresh() {
     if (!_opts->readonly) {
-        throw invalid_argument_exception(
-          "refresh() can only be called on a read-only database");
+        co_await ss::coroutine::return_exception(invalid_argument_exception(
+          "refresh() can only be called on a read-only database"));
     }
     co_return co_await _versions->refresh();
 }
@@ -391,7 +392,7 @@ ss::future<> impl::apply_edits(ss::lw_shared_ptr<version_edit> edit) {
     if (fut.failed()) {
         auto ex = fut.get_exception();
         vlog(log.warn, "apply_edits_end error=\"{}\"", ex);
-        std::rethrow_exception(ex);
+        co_await ss::coroutine::return_exception_ptr(std::move(ex));
     }
     vlog(
       log.trace, "apply_edits_end seqno={}", _versions->last_seqno().value());

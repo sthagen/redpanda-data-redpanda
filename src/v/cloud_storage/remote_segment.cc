@@ -414,7 +414,7 @@ ss::future<uint64_t> remote_segment::put_segment_in_cache_and_create_index(
           _ctxlog.warn,
           "Failed to write a segment file to cache, error: {}",
           put_exception);
-        std::rethrow_exception(put_exception);
+        co_await ss::coroutine::return_exception_ptr(std::move(put_exception));
     }
     if (index_prepared) {
         auto index_reservation = co_await _cache.reserve_space(
@@ -495,7 +495,8 @@ ss::future<> remote_segment::do_hydrate_segment() {
           "invoked",
           _path,
           _wait_list.size());
-        throw download_exception(res, _path);
+        co_await ss::coroutine::return_exception(
+          download_exception(res, _path));
     }
 }
 
@@ -516,7 +517,8 @@ ss::future<> remote_segment::do_hydrate_index() {
       _bucket, remote_segment_path{_index_path}, ix, local_rtc);
 
     if (result != download_result::success) {
-        throw download_exception(result, _index_path);
+        co_await ss::coroutine::return_exception(
+          download_exception(result, _index_path));
     }
 
     _index = std::move(ix);
@@ -563,7 +565,8 @@ ss::future<> remote_segment::do_hydrate_txrange() {
 
         if (
           res != download_result::success && res != download_result::notfound) {
-            throw download_exception(res, _path);
+            co_await ss::coroutine::return_exception(
+              download_exception(res, _path));
         }
 
         auto [stream, size] = co_await manifest.serialize();

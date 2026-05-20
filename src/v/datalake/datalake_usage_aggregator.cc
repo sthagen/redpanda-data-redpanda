@@ -17,6 +17,7 @@
 #include "utils/retry_chain_node.h"
 
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <ranges>
 
@@ -166,7 +167,7 @@ default_datalake_usage_api_impl::compute_usage(ss::abort_source& as) {
     rcn.check_abort();
     if (last_exception) {
         // last retry resulted in an exception, let the caller handle it
-        std::rethrow_exception(last_exception);
+        co_await ss::coroutine::return_exception_ptr(std::move(last_exception));
     }
     usage_stats stats;
     stats.missing_reason

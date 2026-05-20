@@ -13,11 +13,7 @@ from contextlib import closing
 import random
 import threading
 import time
-from collections import namedtuple
-from dataclasses import dataclass
-from typing import Dict, List
 
-import kafka.protocol.types as types
 import pytest
 from confluent_kafka import (
     Consumer,
@@ -30,10 +26,7 @@ from confluent_kafka.admin import AdminClient
 from ducktape.mark import ignore, parametrize
 from ducktape.utils.util import wait_until
 from kafka import KafkaConsumer
-from kafka import errors as kerr
 from kafka.admin import KafkaAdminClient
-from kafka.protocol.api import Request, Response
-from kafka.protocol.commit import OffsetFetchRequest_v3
 
 from rptest.clients.default import DefaultClient
 from rptest.clients.kcl import RawKCL
@@ -48,7 +41,6 @@ from rptest.services.redpanda import (
     RESTART_LOG_ALLOW_LIST,
     LoggingConfig,
     MetricsEndpoint,
-    RedpandaService,
 )
 from rptest.services.rpk_producer import RpkProducer
 from rptest.services.verifiable_consumer import VerifiableConsumer
@@ -446,16 +438,16 @@ class ConsumerGroupTest(RedpandaTest):
         self.consumer.start()
         self.consumer.wait()
 
-        test_admin = KafkaTestAdminClient(self.redpanda)
-        offsets = test_admin.list_offsets(
-            group_id, [TopicPartition(self.topic_spec.name, 0)]
+        admin = KafkaAdminClient(bootstrap_servers=self.redpanda.brokers())
+        offsets = admin.list_consumer_group_offsets(
+            group_id, partitions=[(self.topic_spec.name, 0)]
         )
 
         # Test that the consumer committed what we expected.
         self.logger.info(f"Got offsets: {offsets}")
         assert len(offsets) == 1
-        assert offsets[TestTopicPartition(self.topic_spec.name, 0)].offset == 1000
-        assert offsets[TestTopicPartition(self.topic_spec.name, 0)].leader_epoch > 0
+        assert offsets[(self.topic_spec.name, 0)].offset == 1000
+        assert offsets[(self.topic_spec.name, 0)].leader_epoch > 0
 
         # Remember the old offsets to compare them after the restart.
         prev_offsets = offsets
@@ -467,9 +459,9 @@ class ConsumerGroupTest(RedpandaTest):
         # Validate that the group state is recovered.
         def try_list_offsets():
             try:
-                test_admin = KafkaTestAdminClient(self.redpanda)
-                return test_admin.list_offsets(
-                    group_id, [TopicPartition(self.topic_spec.name, 0)]
+                admin = KafkaAdminClient(bootstrap_servers=self.redpanda.brokers())
+                return admin.list_consumer_group_offsets(
+                    group_id, partitions=[(self.topic_spec.name, 0)]
                 )
             except Exception as e:
                 self.logger.debug(f"Failed to list offsets: {e}")
@@ -591,7 +583,10 @@ class ConsumerGroupTest(RedpandaTest):
                     )
                     try:
                         consumer.subscribe([self.topic_spec.name])
-                        consumer.poll(1)
+                        # poll() must run long enough for JoinGroup to
+                        # complete so the group is registered; kafka-python
+                        # 2.3.1's coordinator poll honors this timeout.
+                        consumer.poll(timeout_ms=5000)
                     finally:
                         consumer.close(autocommit=True)
                 except Exception as e:
@@ -970,10 +965,12 @@ class ConsumerGroupTest(RedpandaTest):
 
         self.logger.info("Waiting for group to become stable")
         wait_until(
-            lambda: self.admin_client.describe_consumer_groups(group_ids=[group])[group]
-            .result()
-            .state
-            == ConsumerGroupState.STABLE,
+            lambda: (
+                self.admin_client.describe_consumer_groups(group_ids=[group])[group]
+                .result()
+                .state
+                == ConsumerGroupState.STABLE
+            ),
             20,
             1,
             retry_on_exc=True,
@@ -1171,10 +1168,12 @@ class ConsumerGroupTest(RedpandaTest):
         moved = move_partition(topic="__consumer_offsets", partition=0)
         assert moved, "Failed to move coordinator"
         wait_until(
-            lambda: self.admin_client.describe_consumer_groups(group_ids=[group])[group]
-            .result()
-            .state
-            == ConsumerGroupState.STABLE,
+            lambda: (
+                self.admin_client.describe_consumer_groups(group_ids=[group])[group]
+                .result()
+                .state
+                == ConsumerGroupState.STABLE
+            ),
             20,
             1,
             retry_on_exc=True,
@@ -1196,93 +1195,6 @@ class ConsumerGroupTest(RedpandaTest):
 
         for consumer in consumers:
             consumer.close()
-
-
-@dataclass
-class OffsetAndMetadata:
-    offset: int
-    leader_epoch: int
-    metadata: str
-
-
-TestTopicPartition = namedtuple("TestTopicPartition", ["topic", "partition"])
-
-
-class KafkaTestAdminClient:
-    """
-    A wrapper around KafkaAdminClient with support for newer Kafka versions.
-    At the time of writing, KafkaAdminClient doesn't support KIP-320
-    (leader epoch) for consumer groups.
-    """
-
-    def __init__(self, redpanda: RedpandaService):
-        self._bootstrap_servers = redpanda.brokers()
-        self._admin = KafkaAdminClient(bootstrap_servers=self._bootstrap_servers)
-
-    def list_offsets(
-        self, group_id: str, partitions: List[TopicPartition]
-    ) -> Dict[TestTopicPartition, OffsetAndMetadata]:
-        coordinator = self._admin._find_coordinator_ids([group_id])[group_id]
-        future = self._list_offsets_send_request(group_id, coordinator, partitions)
-        self._admin._wait_for_futures([future])
-        response = future.value
-        return self._list_offsets_send_process_response(response)
-
-    def _list_offsets_send_request(
-        self, group_id: str, coordinator: int, partitions: List[TopicPartition]
-    ):
-        request = OffsetFetchRequest_v5(
-            consumer_group=group_id,
-            topics=[(p.topic, [p.partition]) for p in partitions],
-        )
-        return self._admin._send_request_to_node(coordinator, request)
-
-    def _list_offsets_send_process_response(self, response):
-        error_type = kerr.for_code(response.error_code)
-        if error_type is not kerr.NoError:
-            raise error_type("Error in list_offsets response")
-
-        offsets = {}
-        for topic, partitions in response.topics:
-            for partition, offset, leader_epoch, metadata, error_code in partitions:
-                if error_code != 0:
-                    raise Exception(f"Error code: {error_code}")
-                offsets[(topic, partition)] = OffsetAndMetadata(
-                    offset, leader_epoch, metadata
-                )
-        return offsets
-
-
-class OffsetFetchResponse_v5(Response):
-    API_KEY = 9
-    API_VERSION = 5
-    SCHEMA = types.Schema(
-        ("throttle_time_ms", types.Int32),
-        (
-            "topics",
-            types.Array(
-                ("topic", types.String("utf-8")),
-                (
-                    "partitions",
-                    types.Array(
-                        ("partition", types.Int32),
-                        ("offset", types.Int64),
-                        ("leader_epoch", types.Int32),
-                        ("metadata", types.String("utf-8")),
-                        ("error_code", types.Int16),
-                    ),
-                ),
-            ),
-        ),
-        ("error_code", types.Int16),
-    )
-
-
-class OffsetFetchRequest_v5(Request):
-    API_KEY = 9
-    API_VERSION = 5
-    RESPONSE_TYPE = OffsetFetchResponse_v5
-    SCHEMA = OffsetFetchRequest_v3.SCHEMA
 
 
 class TestConsumer:

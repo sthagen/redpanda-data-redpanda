@@ -32,12 +32,26 @@ WORKSPACE_DIR="${SCRIPT_DIR}/.."
 git_tag=$(git -C "$WORKSPACE_DIR" describe --tags --always --abbrev=0 --match='v*')
 echo "STABLE_GIT_LATEST_TAG ${git_tag}"
 
-# For CI builds we don't want to use the commit hash as that prevents caching of binaries,
-# ducktape generally only needs the tag anyways, so the hash we omit for everything except
-# full release builds.
+# Override Bazel's hardwired BUILD_HOST/BUILD_USER builtins with constants so
+# that stamped action keys are stable across different CI agents. Without this,
+# every agent's hostname and username leak into stable-status.txt, causing
+# cache misses for any stamped target (e.g. rpk GoLink) even when source is
+# identical — which cascades to cache misses for pgo_profile.
+echo "BUILD_HOST fixed-stamp-host"
+echo "BUILD_USER fixed-stamp-user"
+
 if [[ $1 != "full" ]]; then
+  # Non-full stamps, means add some stamp stuff that changes less frequently
+  # E.g. for most CI builds we don't want to use the commit hash as that prevents caching of binaries,
+  # ducktape generally only needs the tag anyways, so the hash we omit for everything except
+  # full release builds.
   echo "STABLE_GIT_COMMIT 000000"
   echo "STABLE_GIT_TREE_DIRTY "
+
+  # also omit the build timestamp and formatted date, which would otherwise force
+  # each rpk build to produce a unique output binary as it consumes FORMATTED_DATE
+  echo "BUILD_TIMESTAMP 0"
+  echo "FORMATTED_DATE 1970-01-01"
   exit 0
 fi
 

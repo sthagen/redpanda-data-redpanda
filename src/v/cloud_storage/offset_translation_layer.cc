@@ -15,6 +15,8 @@
 #include "storage/parser.h"
 #include "utils/retry_chain_node.h"
 
+#include <seastar/coroutine/exception.hh>
+
 namespace cloud_storage {
 
 ss::future<stream_stats> offset_translator::copy_stream(
@@ -39,7 +41,8 @@ ss::future<stream_stats> offset_translator::copy_stream(
     auto len = co_await storage::transform_stream(
       std::move(src), std::move(dst), pred, _as);
     if (len.has_error()) {
-        throw std::system_error(len.error());
+        co_await ss::coroutine::return_exception(
+          std::system_error(len.error()));
     }
     co_return stream_stats{
       .min_offset = min_offset,

@@ -693,6 +693,51 @@ simple_domain_manager::get_compaction_infos(
       .responses = std::move(compaction_infos)};
 }
 
+rpc::get_leveling_info_reply simple_domain_manager::do_get_leveling_info(
+  const state& stm_state, rpc::get_leveling_info_request req) {
+    auto get_res = simple_metastore::get_leveling_info(
+      stm_state,
+      metastore::leveling_info_spec{
+        .tidp = req.tp,
+        .min_acceptable_extent_bytes = req.min_acceptable_extent_bytes});
+    if (!get_res.has_value()) {
+        return rpc::get_leveling_info_reply{
+          .ec = convert_metastore_errc(get_res.error()),
+        };
+    }
+    return rpc::get_leveling_info_reply{
+      .ec = rpc::errc::ok,
+      .ranges = std::move(get_res->ranges),
+      .epoch = partition_state::compaction_epoch_t{get_res->epoch()},
+    };
+}
+
+ss::future<rpc::get_leveling_infos_reply>
+simple_domain_manager::get_leveling_infos(rpc::get_leveling_infos_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::get_leveling_infos_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::get_leveling_infos_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+    auto& stm_state = stm_->state();
+
+    chunked_hash_map<model::topic_id_partition, rpc::get_leveling_info_reply>
+      leveling_infos;
+    for (auto& log_req : req.logs) {
+        auto log_info = do_get_leveling_info(stm_state, log_req);
+        leveling_infos.insert_or_assign(log_req.tp, std::move(log_info));
+    }
+    co_return rpc::get_leveling_infos_reply{
+      .responses = std::move(leveling_infos)};
+}
+
 ss::future<rpc::get_extent_metadata_reply>
 simple_domain_manager::get_extent_metadata(
   rpc::get_extent_metadata_request req) {

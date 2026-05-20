@@ -21,6 +21,7 @@
 #include <seastar/core/fstream.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
 #include <fmt/format.h>
@@ -287,11 +288,12 @@ footer footer::copy() const {
 
 ss::future<std::variant<footer, size_t>> footer::read(iobuf buf) {
     if (buf.size_bytes() < sizeof(uint32_t)) {
-        throw std::runtime_error(
-          fmt::format(
-            "expected at least {} bytes in footer, got: {}",
-            sizeof(uint32_t),
-            buf.size_bytes()));
+        co_await ss::coroutine::return_exception(
+          std::runtime_error(
+            fmt::format(
+              "expected at least {} bytes in footer, got: {}",
+              sizeof(uint32_t),
+              buf.size_bytes())));
     }
     iobuf_const_parser parser(buf);
     auto footer_size
@@ -302,18 +304,21 @@ ss::future<std::variant<footer, size_t>> footer::read(iobuf buf) {
         auto dt = static_cast<data_type>(
           p.consume_type<std::underlying_type_t<data_type>>());
         if (dt != data_type::footer) {
-            throw std::runtime_error(
-              fmt::format(
-                "expected footer data type, got: {}", std::to_underlying(dt)));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(
+                fmt::format(
+                  "expected footer data type, got: {}",
+                  std::to_underlying(dt))));
         }
         auto size = p.consume_type<uint32_t>();
         if (size != p.bytes_left()) {
-            throw std::runtime_error(
-              fmt::format(
-                "expected footer size to match the remaining bytes, "
-                "got: {}, expected: {}",
-                p.bytes_left(),
-                size));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(
+                fmt::format(
+                  "expected footer size to match the remaining bytes, "
+                  "got: {}, expected: {}",
+                  p.bytes_left(),
+                  size)));
         }
         co_return co_await serde::read_async<footer>(p);
     }
@@ -489,11 +494,12 @@ public:
             co_return *_peeked;
         }
         if (dt_buf.size() != sizeof(data_type)) {
-            throw std::runtime_error(
-              fmt::format(
-                "expected {} bytes for data type, got: {}",
-                sizeof(data_type),
-                dt_buf.size()));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(
+                fmt::format(
+                  "expected {} bytes for data type, got: {}",
+                  sizeof(data_type),
+                  dt_buf.size())));
         }
         auto dt = from_bytes<data_type>(dt_buf.get());
         switch (dt) {
@@ -509,9 +515,10 @@ public:
             _peeked = footer_tag{};
             co_return *_peeked;
         }
-        throw std::runtime_error(
-          fmt::format(
-            "unknown data type in object: {}", std::to_underlying(dt)));
+        co_await ss::coroutine::return_exception(
+          std::runtime_error(
+            fmt::format(
+              "unknown data type in object: {}", std::to_underlying(dt))));
     }
 
     ss::future<result> read_next() final {
@@ -661,10 +668,13 @@ close_all_streams(combine_objects_parameters parameters, bool quiet) {
     if (fut.failed()) {
         ex = fut.get_exception();
     }
-    if (ex && !quiet) {
-        std::rethrow_exception(ex);
+    if (ex) {
+        if (quiet) {
+            std::ignore = ex;
+        } else {
+            co_await ss::coroutine::return_exception_ptr(std::move(ex));
+        }
     }
-    std::ignore = ex;
 }
 
 } // namespace
@@ -692,7 +702,7 @@ combine_objects(combine_objects_parameters parameters) {
             co_await close_all_streams(
               std::move(parameters),
               /*quiet=*/true);
-            std::rethrow_exception(ex);
+            co_return ss::coroutine::exception(std::move(ex));
         }
         written += n;
     }
@@ -703,7 +713,7 @@ combine_objects(combine_objects_parameters parameters) {
     if (footer_write_fut.failed()) {
         auto ex = footer_write_fut.get_exception();
         co_await close_all_streams(std::move(parameters), /*quiet=*/true);
-        std::rethrow_exception(ex);
+        co_return ss::coroutine::exception(std::move(ex));
     }
     auto footer_size = footer_write_fut.get();
     auto footer_size_data = as_bytes<uint32_t>(footer_size);
@@ -712,7 +722,7 @@ combine_objects(combine_objects_parameters parameters) {
     if (fut.failed()) {
         auto ex = fut.get_exception();
         co_await close_all_streams(std::move(parameters), /*quiet=*/true);
-        std::rethrow_exception(ex);
+        co_return ss::coroutine::exception(std::move(ex));
     }
     co_await close_all_streams(std::move(parameters), /*quiet=*/false);
     co_return object_builder::object_info{

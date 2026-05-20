@@ -19,6 +19,7 @@
 #include "serde/rw/vector.h"
 
 #include <seastar/core/future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
 namespace cloud_topics::l1 {
@@ -39,10 +40,11 @@ std::deque<volatile_row> share_rows(std::deque<volatile_row>& rows) {
 template<typename Vec>
 ss::future<> write_vector_async(iobuf& out, Vec t) {
     if (unlikely(t.size() > std::numeric_limits<serde::serde_size_t>::max())) {
-        throw serde::serde_exception(fmt_with_ctx(
-          ssx::sformat,
-          "serde: vector size {} exceeds serde_size_t",
-          t.size()));
+        co_await ss::coroutine::return_exception(
+          serde::serde_exception(fmt_with_ctx(
+            ssx::sformat,
+            "serde: vector size {} exceeds serde_size_t",
+            t.size())));
     }
     serde::write(out, static_cast<serde::serde_size_t>(t.size()));
     for (auto& el : t) {

@@ -48,6 +48,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/optimized_optional.hh>
 
@@ -79,10 +80,11 @@ public:
         auto ec = co_await _client->produce(
           {_topic, partition}, std::move(batches));
         if (ec != cluster::errc::success) {
-            throw std::runtime_error(
-              ss::format(
-                "failure to produce transform data: {}",
-                cluster::error_category().message(int(ec))));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(
+                ss::format(
+                  "failure to produce transform data: {}",
+                  cluster::error_category().message(int(ec)))));
         }
     }
 

@@ -11,6 +11,7 @@
 
 #include "base/seastarx.h"
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/leveling_range_builder.h"
 #include "cloud_topics/level_one/metastore/metastore_manifest.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
@@ -450,6 +451,35 @@ public:
     // Vectorized RPC for obtaining compaction state for a number of partitions.
     virtual ss::future<std::expected<compaction_info_map, errc>>
     get_compaction_infos(const chunked_vector<compaction_info_spec>&) = 0;
+
+    // Identifies offset ranges that should be rewritten because they contain
+    // runs of undersized extents whose length is below the threshold.
+    struct leveling_info_spec {
+        model::topic_id_partition tidp;
+        // An extent shorter than this is considered undersized and eligible
+        // for leveling.
+        size_t min_acceptable_extent_bytes;
+    };
+
+    struct leveling_info_response {
+        // Offset ranges that should be rewritten, with per-range stats the
+        // scheduler can use to plan work (e.g. pick a subset, cap per-job
+        // size). Ranges are disjoint and sorted by ascending offset.
+        chunked_vector<levelable_range> ranges;
+        // The partition's current compaction epoch at the time of the query.
+        compaction_epoch epoch;
+
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(it, "{{ranges:{}, epoch:{}}}", ranges, epoch);
+        }
+    };
+
+    using leveling_info_map = chunked_hash_map<
+      model::topic_id_partition,
+      std::expected<leveling_info_response, errc>>;
+
+    virtual ss::future<std::expected<leveling_info_map, errc>>
+    get_leveling_infos(const chunked_vector<leveling_info_spec>&) = 0;
 
     struct extent_object_info {
         object_id oid;

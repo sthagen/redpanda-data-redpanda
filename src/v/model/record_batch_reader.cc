@@ -17,6 +17,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <exception>
@@ -211,7 +212,8 @@ make_readahead_record_batch_reader(record_batch_reader&& reader) {
             if (fut.failed()) {
                 // Don't issue readahead if the future fails, this allows the
                 // caller to decide what should happen.
-                std::rethrow_exception(fut.get_exception());
+                co_await ss::coroutine::return_exception_ptr(
+                  fut.get_exception());
             }
             auto slice = std::move(fut.get());
             if (!_underlying->is_end_of_stream()) {

@@ -49,6 +49,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <fmt/core.h>
 #include <roaring/roaring.hh>
@@ -221,7 +222,7 @@ ss::future<size_t> copy_filtered_entries(
     co_await writer->close();
 
     if (eptr) {
-        std::rethrow_exception(eptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(eptr));
     }
 
     co_return writer->size_bytes();
@@ -264,7 +265,7 @@ ss::future<size_t> write_clean_compacted_index(
     }
 
     if (fut.failed()) {
-        std::rethrow_exception(fut.get_exception());
+        co_await ss::coroutine::return_exception_ptr(fut.get_exception());
     }
 
     co_return fut.get();
@@ -590,7 +591,7 @@ ss::future<compaction_result> do_self_compact_segment(
     auto segment_generation = s->get_generation_id();
 
     if (s->is_closed()) {
-        throw segment_closed_exception();
+        co_await ss::coroutine::return_exception(segment_closed_exception());
     }
 
     // broker_timestamp is used for retention.ms, but it's only in the index,
@@ -632,7 +633,7 @@ ss::future<compaction_result> do_self_compact_segment(
     }
 
     if (s->is_closed()) {
-        throw segment_closed_exception();
+        co_await ss::coroutine::return_exception(segment_closed_exception());
     }
 
     co_await s->index().drop_all_data();
@@ -713,7 +714,7 @@ ss::future<> rebuild_compaction_index(
     pb.corrupted_compaction_index();
     auto h = co_await s->read_lock();
     if (s->is_closed()) {
-        throw segment_closed_exception();
+        co_await ss::coroutine::return_exception(segment_closed_exception());
     }
     // TODO: Improve memory management here, eg: ton of aborted txs?
     auto aborted_txs = co_await stm_hookset->aborted_tx_ranges(
@@ -749,7 +750,8 @@ ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
               gclog.debug,
               "Stopping in maybe_rebuild_compaction_index, segment closed: {}",
               s->filename());
-            throw segment_closed_exception();
+            co_await ss::coroutine::return_exception(
+              segment_closed_exception());
         }
         // Check the index state while the read lock is held, preventing e.g.
         // concurrent truncations, which removes the index.
@@ -877,7 +879,8 @@ make_concatenated_segment(
     // happened to be racing with an operation like truncation or shutdown.
     for (const auto& segment : segments) {
         if (unlikely(segment->is_closed())) {
-            throw segment_closed_exception();
+            co_await ss::coroutine::return_exception(
+              segment_closed_exception());
         }
     }
 
@@ -1280,15 +1283,18 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
     for (const auto& segment : segments) {
         // check generation id under write lock
         if (unlikely(segment->get_generation_id() != *gen_it)) {
-            throw generation_id_mismatch_exception(
-              fmt::format(
-                "Aborting compaction of a segment: {}. Generation id mismatch, "
-                "previous generation: {}",
-                *segment,
-                *gen_it));
+            co_await ss::coroutine::return_exception(
+              generation_id_mismatch_exception(
+                fmt::format(
+                  "Aborting compaction of a segment: {}. Generation id "
+                  "mismatch, "
+                  "previous generation: {}",
+                  *segment,
+                  *gen_it)));
         }
         if (unlikely(segment->is_closed())) {
-            throw segment_closed_exception();
+            co_await ss::coroutine::return_exception(
+              segment_closed_exception());
         }
         ++gen_it;
     }

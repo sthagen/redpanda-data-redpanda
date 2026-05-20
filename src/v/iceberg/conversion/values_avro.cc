@@ -226,7 +226,8 @@ struct parsed_msg_visitor {
     }
     ss::future<optional_value_outcome>
     operator()(serde::avro::parsed::primitive v) {
-        co_return std::visit(primitive_visitor{node}, std::move(v));
+        co_return optional_value_outcome{
+          std::visit(primitive_visitor{node}, std::move(v))};
     }
     avro::NodePtr node;
 };

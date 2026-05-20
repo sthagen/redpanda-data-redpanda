@@ -51,6 +51,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/when_all.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 #include <seastar/util/defer.hh>
 
 #include <algorithm>
@@ -1394,7 +1395,7 @@ ss::future<> disk_log_impl::housekeeping(housekeeping_config cfg) {
             leftovers.erase(first_leftover);
         }
         if (fut.failed()) {
-            std::rethrow_exception(fut.get_exception());
+            co_await ss::coroutine::return_exception_ptr(fut.get_exception());
         }
     }
 }
@@ -1451,7 +1452,7 @@ ss::future<> disk_log_impl::do_compact(
               config().ntp());
             co_return;
         }
-        std::rethrow_exception(eptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(eptr));
     }
 }
 
@@ -1685,7 +1686,7 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
     co_await compacted_idx_writer->close();
     co_await appender->close();
     if (eptr) {
-        std::rethrow_exception(eptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(eptr));
     }
 
     vlog(

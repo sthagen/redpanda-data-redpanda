@@ -16,6 +16,7 @@
 #include "lsm/core/internal/files.h"
 
 #include <seastar/core/coroutine.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <map>
 #include <memory>
@@ -54,19 +55,20 @@ public:
 
     ss::future<ioarray> read(size_t offset, size_t n) override {
         if ((offset + n) > _state->data.size_bytes()) {
-            throw io_error_exception(
+            co_await ss::coroutine::return_exception(io_error_exception(
               "tried to read out of bounds of the file: "
               "{{offset:{},length:{},file_size:{}}}",
               offset,
               n,
-              _state->data.size_bytes());
+              _state->data.size_bytes()));
         }
         co_return ioarray::copy_from(_state->data.share(offset, n));
     }
 
     ss::future<> close() override {
         if (_closed) {
-            throw io_error_exception("double close of file");
+            co_await ss::coroutine::return_exception(
+              io_error_exception("double close of file"));
         }
         _closed = true;
         --_state->open_read_handles;
@@ -108,7 +110,8 @@ public:
     }
     ss::future<> close() override {
         if (_closed) {
-            throw io_error_exception("double close of file");
+            co_await ss::coroutine::return_exception(
+              io_error_exception("double close of file"));
         }
         _closed = true;
         --_state->open_write_handles;
@@ -132,7 +135,8 @@ public:
     ss::future<optional_pointer<random_access_file_reader>>
     open_random_access_reader(internal::file_handle h) override {
         if (_controller && _controller->should_fail) {
-            throw io_error_exception("injected error");
+            co_await ss::coroutine::return_exception(
+              io_error_exception("injected error"));
         }
         auto it = _data.find(h);
         std::unique_ptr<random_access_file_reader> ptr;
@@ -146,12 +150,14 @@ public:
     ss::future<std::unique_ptr<sequential_file_writer>>
     open_sequential_writer(internal::file_handle h) override {
         if (_controller && _controller->should_fail) {
-            throw io_error_exception("injected error");
+            co_await ss::coroutine::return_exception(
+              io_error_exception("injected error"));
         }
         auto [it, inserted] = _data.try_emplace(
           h, ss::make_lw_shared<memory_file_state>(h));
         if (!inserted) {
-            throw io_error_exception("file already exists: {}", h);
+            co_await ss::coroutine::return_exception(
+              io_error_exception("file already exists: {}", h));
         }
         co_return std::make_unique<memory_sequential_file_writer>(it->second);
     }

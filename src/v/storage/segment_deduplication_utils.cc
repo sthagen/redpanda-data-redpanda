@@ -29,6 +29,7 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <exception>
 #include <optional>
@@ -94,7 +95,7 @@ ss::future<bool> build_offset_map_for_segment(
           "Error building offset map for segment {}: {}",
           seg.path(),
           eptr);
-        std::rethrow_exception(eptr);
+        co_await ss::coroutine::return_exception_ptr(std::move(eptr));
     }
     bool fully_indexed = true;
     co_await rdr.for_each_async(

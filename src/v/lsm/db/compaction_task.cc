@@ -15,6 +15,7 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <exception>
 
@@ -59,7 +60,8 @@ struct compaction_state {
         uint64_t current_bytes = b->file_size();
         closes.emplace_back(std::move(*b));
         if (finish_fut.failed()) {
-            std::rethrow_exception(finish_fut.get_exception());
+            co_await ss::coroutine::return_exception_ptr(
+              finish_fut.get_exception());
         }
         current_output().file_size = current_bytes;
         total_bytes += current_bytes;
@@ -85,7 +87,7 @@ struct compaction_state {
             }
         }
         if (err) {
-            std::rethrow_exception(err);
+            co_await ss::coroutine::return_exception_ptr(std::move(err));
         }
     }
 

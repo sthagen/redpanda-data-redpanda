@@ -15,6 +15,7 @@
 #include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 namespace cloud_storage_clients {
 
@@ -140,7 +141,7 @@ ss::future<> multipart_upload::complete() {
               "Multipart upload final part failed, aborting: {}",
               ex);
             co_await abort_on_error();
-            std::rethrow_exception(ex);
+            co_await ss::coroutine::return_exception_ptr(std::move(ex));
         }
     }
     // Complete the multipart upload
@@ -159,7 +160,7 @@ ss::future<> multipart_upload::complete() {
           "Multipart upload completion failed, aborting: {}",
           ex);
         co_await abort_on_error();
-        std::rethrow_exception(ex);
+        co_await ss::coroutine::return_exception_ptr(std::move(ex));
     }
 }
 

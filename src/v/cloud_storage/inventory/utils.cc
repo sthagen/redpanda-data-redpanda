@@ -20,6 +20,7 @@
 #include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 namespace {
 
@@ -46,7 +47,7 @@ write_hashes_to_file(ss::file& f, chunked_vector<uint64_t> hashes) {
       write_hashes_to_file(stream, std::move(hashes)));
     co_await stream.close();
     if (res.failed()) {
-        std::rethrow_exception(res.get_exception());
+        co_await ss::coroutine::return_exception_ptr(res.get_exception());
     }
 }
 

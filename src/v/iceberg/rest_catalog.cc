@@ -13,6 +13,8 @@
 #include "iceberg/rest_client/catalog_client.h"
 #include "iceberg/rest_client/error.h"
 #include "iceberg/table_requests.h"
+
+#include <string>
 namespace iceberg {
 
 namespace {
@@ -81,6 +83,19 @@ table_update::update copy(const table_update::update& update) {
       update, [](const auto& u) { return table_update::update{u.copy()}; });
 }
 
+template<typename T, typename TransformFn>
+checked<table_metadata, catalog::errc> transform_to_metadata(
+  rest_client::expected<T>&& result,
+  TransformFn&& value_transform,
+  std::string_view error_context) {
+    return checked<table_metadata, catalog::errc>(
+      std::move(result)
+        .transform(std::forward<TransformFn>(value_transform))
+        .transform_error([error_context](const rest_client::domain_error& err) {
+            return map_error(error_context, err);
+        }));
+}
+
 } // namespace
 
 rest_catalog::rest_catalog(
@@ -109,11 +124,10 @@ rest_catalog::load_table(const table_identifier& t_id) {
     auto rtc = create_rtc();
     auto h = co_await lock_.get_units();
 
-    co_return (co_await client_->load_table(t_id.ns, t_id.table, rtc))
-      .transform(get_metadata)
-      .transform_error([](const rest_client::domain_error& err) {
-          return map_error("load_table", err);
-      });
+    co_return transform_to_metadata(
+      co_await client_->load_table(t_id.ns, t_id.table, rtc),
+      get_metadata,
+      "load_table");
 }
 
 ss::future<checked<table_metadata, catalog::errc>> rest_catalog::create_table(
@@ -167,12 +181,12 @@ ss::future<checked<table_metadata, catalog::errc>> rest_catalog::create_table(
     set_table_location_if_needed(retry_request, t_id);
 
     auto table_retry_rtc = retry_chain_node(&parent_rtc);
-    co_return (co_await client_->create_table(
-                 t_id.ns, std::move(retry_request), table_retry_rtc))
-      .transform(get_metadata)
-      .transform_error([](const rest_client::domain_error& err) {
-          return map_error("create_table_retry", err);
-      });
+
+    co_return transform_to_metadata(
+      co_await client_->create_table(
+        t_id.ns, std::move(retry_request), table_retry_rtc),
+      get_metadata,
+      "create_table_retry");
 }
 
 ss::future<checked<void, catalog::errc>>
@@ -218,13 +232,10 @@ rest_catalog::commit_txn(const table_identifier& t_id, transaction txn) {
         req.updates.push_back(copy(u));
     }
     auto h = co_await lock_.get_units();
-    co_return (co_await client_->commit_table_update(std::move(req), rtc))
-      .transform([](commit_table_response&& ctr) {
-          return std::move(ctr.table_metadata);
-      })
-      .transform_error([](const rest_client::domain_error& err) {
-          return map_error("commit_txn", err);
-      });
+    co_return transform_to_metadata(
+      co_await client_->commit_table_update(std::move(req), rtc),
+      [](commit_table_response&& ctr) { return std::move(ctr.table_metadata); },
+      "commit_txn");
 }
 
 ss::future<checked<void, catalog_describe_error>>

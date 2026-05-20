@@ -21,6 +21,7 @@
 #include "model/timeout_clock.h"
 #include "ssx/future-util.h"
 
+#include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
 #include <chrono>
@@ -171,12 +172,13 @@ level_zero_log_reader_impl::read_some(
             if (_bytes_consumed >= _config.min_bytes) {
                 co_return model::record_batch_reader::storage_t{};
             }
-            throw ss::timed_out_error();
+            co_await ss::coroutine::return_exception(ss::timed_out_error());
         }
-        throw std::runtime_error(fmt_with_ctx(
-          fmt::format,
-          "Reader experienced unhandled error: {}",
-          maybe_batches.error()));
+        co_await ss::coroutine::return_exception(
+          std::runtime_error(fmt_with_ctx(
+            fmt::format,
+            "Reader experienced unhandled error: {}",
+            maybe_batches.error())));
     }
 
     auto batches = std::move(maybe_batches).value();
@@ -404,27 +406,30 @@ level_zero_log_reader_impl::materialize_batches(
         if (!mat_res.has_value()) {
             if (mat_res.error() == errc::shutting_down) {
                 vlog(_log.debug, "Materialize aborted due to shutdown");
-                throw ss::abort_requested_exception();
+                co_await ss::coroutine::return_exception(
+                  ss::abort_requested_exception());
             }
             if (mat_res.error() == errc::timeout) {
                 vlog(_log.debug, "Materialize aborted due to timeout");
                 co_return std::unexpected(errc::timeout);
             }
-            throw std::runtime_error(fmt_with_ctx(
-              fmt::format,
-              "Failed to materialize batches from the cloud storage: {}",
-              mat_res.error().message()));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(fmt_with_ctx(
+                fmt::format,
+                "Failed to materialize batches from the cloud storage: {}",
+                mat_res.error().message())));
         }
         batches = std::move(mat_res.value());
         auto count_ok = bool(_config.allow_mat_failure)
                           ? batches.size() <= materialize_count
                           : batches.size() == materialize_count;
         if (!count_ok) {
-            throw std::runtime_error(fmt_with_ctx(
-              fmt::format,
-              "Materialized unexpected number of batches: {}, expected: {}",
-              batches.size(),
-              materialize_count));
+            co_await ss::coroutine::return_exception(
+              std::runtime_error(fmt_with_ctx(
+                fmt::format,
+                "Materialized unexpected number of batches: {}, expected: {}",
+                batches.size(),
+                materialize_count)));
         }
     }
     // Merge our selected subset of unhydrated batches with the materialized

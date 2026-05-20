@@ -12,7 +12,7 @@ from types import MethodType
 
 from ducktape.mark import matrix
 from kafka import KafkaClient, KafkaConsumer
-from kafka.protocol.admin import ApiVersionRequest
+from kafka.protocol.api_versions import ApiVersionsRequest
 from kafka.protocol.fetch import FetchRequest
 from kafka.protocol.produce import ProduceRequest
 from kafka.record.memory_records import MemoryRecordsBuilder
@@ -55,7 +55,7 @@ class MpxMockClient:
         return ready
 
     def _api_versions_request(self):
-        return ApiVersionRequest[1]()
+        return ApiVersionsRequest[1]()
 
     def _create_record_batch(self):
         # we do not need any special type of batch, using single record batch without compression

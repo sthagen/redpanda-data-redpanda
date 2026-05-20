@@ -190,7 +190,7 @@ static ss::future<read_result> read_from_partition(
     co_await std::move(rdr.reader).release()->finally();
 
     if (e) {
-        std::rethrow_exception(e);
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
 
     co_return read_result(

@@ -17,6 +17,7 @@
 #include "utils/retry_chain_node.h"
 
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <exception>
 #include <utility>
@@ -455,10 +456,11 @@ level_one_log_reader_impl::materialize_batches_from_object_offset(
           object.oid,
           offset,
           reader_result.error());
-        throw std::runtime_error(_log.format(
-          "Failed to open stream for L1 object {}: {}",
-          object.oid,
-          reader_result.error()));
+        co_await ss::coroutine::return_exception(
+          std::runtime_error(_log.format(
+            "Failed to open stream for L1 object {}: {}",
+            object.oid,
+            reader_result.error())));
     }
 
     // _current_stream is now populated by open_reader_at.
@@ -468,7 +470,7 @@ level_one_log_reader_impl::materialize_batches_from_object_offset(
         auto ex = read_fut.get_exception();
         vlog(_log.error, "Exception reading L1 object {}: {}", object.oid, ex);
         co_await close_current_stream();
-        std::rethrow_exception(ex);
+        co_await ss::coroutine::return_exception_ptr(std::move(ex));
     }
 
     auto batches = read_fut.get();
