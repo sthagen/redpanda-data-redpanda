@@ -15,7 +15,6 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     SchemaRegistryConfig,
     SecurityConfig,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import expect_exception
@@ -47,8 +46,7 @@ class Feature(IntEnum):
     gssapi_override = 11
     oidc_override = 12
     shadow_linking = 13
-    cloud_topics = 14
-    topic_deletion_disabled = 15
+    topic_deletion_disabled = 14
 
 
 def to_enterprise_feature(feature):
@@ -80,7 +78,6 @@ FEATURE_DEPENDENT_CONFIG = {
     Feature.gssapi_override: "sasl_mechanisms_overrides",
     Feature.oidc_override: "sasl_mechanisms_overrides",
     Feature.shadow_linking: "enable_shadow_linking",
-    Feature.cloud_topics: CLOUD_TOPICS_CONFIG_STR,
     Feature.topic_deletion_disabled: "delete_topic_enable",
 }
 
@@ -88,7 +85,6 @@ SKIP_FEATURES = [
     Feature.cloud_storage,  # TODO(oren): initially omitted because it's a bit complicated to initialize infra
     Feature.datalake_iceberg,  # TODO: also depends on cloud infra
     Feature.fips,  # NOTE(oren): omit because it's too much of a pain for CDT
-    Feature.cloud_topics,  # TODO: also depends on cloud infra
 ]
 
 
@@ -257,8 +253,6 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
             )
         elif feature == Feature.shadow_linking:
             self.redpanda.set_cluster_config({"enable_shadow_linking": "true"})
-        elif feature == Feature.cloud_topics:
-            self.redpanda.set_cluster_config({CLOUD_TOPICS_CONFIG_STR: "true"})
         elif feature == Feature.topic_deletion_disabled:
             self.redpanda.set_cluster_config({"delete_topic_enable": "false"})
         else:

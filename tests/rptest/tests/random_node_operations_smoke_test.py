@@ -44,7 +44,6 @@ from rptest.services.redpanda import (
     SISettings,
     SchemaRegistryConfig,
     get_cloud_storage_type,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.tests.datalake.utils import supported_storage_types
@@ -239,7 +238,6 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         if with_cloud_topics:
             self.redpanda.add_extra_rp_conf(
                 {
-                    CLOUD_TOPICS_CONFIG_STR: True,
                     # Set both compaction intervals for cloud topics compaction tests
                     "log_compaction_interval_ms": 5000,
                     "cloud_topics_compaction_interval_ms": 5000,

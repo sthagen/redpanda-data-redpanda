@@ -41,11 +41,13 @@ private:
           const log_compaction_meta_ptr& a,
           const log_compaction_meta_ptr& b) noexcept {
             vassert(
-              a->info_and_ts.has_value() && b->info_and_ts.has_value(),
-              "Sorting policy applied to logs without info_and_ts assigned- "
+              a->compaction_info_and_ts.has_value()
+                && b->compaction_info_and_ts.has_value(),
+              "Sorting policy applied to logs without compaction_info_and_ts "
+              "assigned- "
               "concurrency issue?");
-            return a->info_and_ts->info.dirty_ratio
-                   > b->info_and_ts->info.dirty_ratio;
+            return a->compaction_info_and_ts->info.dirty_ratio
+                   > b->compaction_info_and_ts->info.dirty_ratio;
         }
     };
 };
@@ -62,11 +64,13 @@ private:
           const log_compaction_meta_ptr& a,
           const log_compaction_meta_ptr& b) noexcept {
             vassert(
-              a->info_and_ts.has_value() && b->info_and_ts.has_value(),
-              "Sorting policy applied to logs without info_and_ts assigned- "
+              a->compaction_info_and_ts.has_value()
+                && b->compaction_info_and_ts.has_value(),
+              "Sorting policy applied to logs without compaction_info_and_ts "
+              "assigned- "
               "concurrency issue?");
-            return a->info_and_ts->info.earliest_dirty_ts
-                   < b->info_and_ts->info.earliest_dirty_ts;
+            return a->compaction_info_and_ts->info.earliest_dirty_ts
+                   < b->compaction_info_and_ts->info.earliest_dirty_ts;
         }
     };
 };

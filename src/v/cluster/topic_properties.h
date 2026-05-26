@@ -17,6 +17,7 @@
 #include "model/metadata.h"
 #include "model/timestamp.h"
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "reflection/adl.h"
 #include "serde/rw/chrono.h"
 #include "serde/rw/envelope.h"
@@ -34,7 +35,7 @@ namespace cluster {
  */
 struct topic_properties
   : serde::
-      envelope<topic_properties, serde::version<13>, serde::compat_version<0>> {
+      envelope<topic_properties, serde::version<14>, serde::compat_version<0>> {
     topic_properties() noexcept = default;
     topic_properties(
       std::optional<model::compression> compression,
@@ -175,6 +176,16 @@ struct topic_properties
     bool remote_delete{storage::ntp_config::default_remote_delete};
 
     tristate<std::chrono::milliseconds> segment_ms{std::nullopt};
+
+    // Schema Registry context — the namespace within which schema ids and
+    // subjects resolve for this topic. Contexts are a Schema Registry
+    // namespacing mechanism: schema ids are unique within a context but not
+    // across them. Consumed by the in-broker Iceberg translator (today) and
+    // intended to also cover record_{key,value}_schema_id_validation below
+    // in the future, since a given schema id on a given record can only
+    // resolve to one schema. std::nullopt means the SR default context (".");
+    // has_overrides/describe treat nullopt as unset.
+    std::optional<pandaproxy::schema_registry::context> schema_registry_context;
 
     std::optional<bool> record_key_schema_id_validation;
     std::optional<bool> record_key_schema_id_validation_compat;
@@ -317,7 +328,8 @@ struct topic_properties
           max_compaction_lag_ms,
           message_timestamp_before_max_ms,
           message_timestamp_after_max_ms,
-          storage_mode);
+          storage_mode,
+          schema_registry_context);
     }
 
     friend bool

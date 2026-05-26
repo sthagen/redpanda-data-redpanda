@@ -35,6 +35,7 @@
 #include "model/timeout_clock.h"
 #include "model/transform.h"
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "raft/errc.h"
 #include "raft/fwd.h"
 #include "raft/transfer_leadership.h"
@@ -591,7 +592,7 @@ struct property_update<tristate<T>>
 struct incremental_topic_updates
   : serde::envelope<
       incremental_topic_updates,
-      serde::version<10>,
+      serde::version<11>,
       serde::compat_version<0>> {
     static constexpr int8_t version_with_data_policy = -1;
     static constexpr int8_t version_with_shadow_indexing = -3;
@@ -683,6 +684,9 @@ struct incremental_topic_updates
       message_timestamp_after_max_ms;
     property_update<std::optional<model::redpanda_storage_mode>> storage_mode;
 
+    property_update<std::optional<pandaproxy::schema_registry::context>>
+      schema_registry_context;
+
     // Not a regular topic property. Used to assign topic UUIDs to pre-25-2
     // topics that were created without one.
     property_update<std::optional<model::topic_id>> topic_id;
@@ -745,7 +749,8 @@ struct incremental_topic_updates
           message_timestamp_before_max_ms,
           message_timestamp_after_max_ms,
           remote_label,
-          storage_mode);
+          storage_mode,
+          schema_registry_context);
     }
 
     fmt::iterator format_to(fmt::iterator it) const;

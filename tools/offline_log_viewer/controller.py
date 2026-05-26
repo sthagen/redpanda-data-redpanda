@@ -171,6 +171,11 @@ def read_topic_properties_serde(rdr: Reader, version):
             "storage_mode": rdr.read_serde_enum(),
         }
 
+    if version >= 14:
+        topic_properties |= {
+            "schema_registry_context": rdr.read_optional(Reader.read_string),
+        }
+
     return topic_properties
 
 
@@ -188,7 +193,7 @@ def read_topic_config(rdr: Reader, version):
         "topic": rdr.read_string(),
         "partitions": rdr.read_int32(),
         "replication_factor": rdr.read_int16(),
-        "properties": rdr.read_envelope(read_topic_properties_serde, reader_version=11),
+        "properties": rdr.read_envelope(read_topic_properties_serde, reader_version=14),
     }
     if version < 1:
         # see https://github.com/redpanda-data/redpanda/pull/6613
@@ -367,10 +372,40 @@ def read_incremental_topic_update_serde(rdr: Reader):
                     rdr, lambda r: r.read_optional(Reader.read_uuid)
                 ),
             }
+        if version >= 9:
+            incr_obj |= {
+                "message_timestamp_before_max_ms": read_property_update_serde(
+                    rdr, lambda r: r.read_optional(Reader.read_int64)
+                ),
+                "message_timestamp_after_max_ms": read_property_update_serde(
+                    rdr, lambda r: r.read_optional(Reader.read_int64)
+                ),
+            }
+        if version >= 10:
+            incr_obj |= {
+                "remote_label": read_property_update_serde(
+                    rdr,
+                    lambda r: r.read_optional(
+                        lambda r: r.read_envelope(
+                            lambda r, _: {"cluster_uuid": r.read_uuid()},
+                            reader_version=0,
+                        )
+                    ),
+                ),
+                "storage_mode": read_property_update_serde(
+                    rdr, lambda r: r.read_optional(Reader.read_serde_enum)
+                ),
+            }
+        if version >= 11:
+            incr_obj |= {
+                "schema_registry_context": read_property_update_serde(
+                    rdr, lambda r: r.read_optional(Reader.read_string)
+                ),
+            }
 
         return incr_obj
 
-    return rdr.read_envelope(incr_topic_upd, reader_version=8)
+    return rdr.read_envelope(incr_topic_upd, reader_version=11)
 
 
 def read_create_partitions_serde(rdr: Reader):

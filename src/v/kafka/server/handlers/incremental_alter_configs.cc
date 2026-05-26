@@ -24,6 +24,7 @@
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "storage/ntp_config.h"
 #include "strings/string_switch.h"
 
@@ -428,6 +429,30 @@ create_topic_properties_update(
                   cfg.value,
                   op,
                   iceberg_target_lag_ms_validator);
+                continue;
+            }
+            if (cfg.name == topic_property_schema_registry_context) {
+                if (
+                  topic_cfg
+                  && topic_cfg->properties.iceberg_mode
+                       != model::iceberg_mode::disabled) {
+                    return make_error_alter_config_resource_response<
+                      resp_resource_t>(
+                      resource,
+                      error_code::invalid_config,
+                      "Cannot change redpanda.schema.registry.context while "
+                      "Iceberg translation is enabled; set "
+                      "redpanda.iceberg.mode=disabled first");
+                }
+                parse_and_set_property(
+                  tp_ns,
+                  update.properties.schema_registry_context,
+                  cfg.value,
+                  op,
+                  schema_registry_context_validator{},
+                  [](const ss::sstring& s) {
+                      return pandaproxy::schema_registry::context{s};
+                  });
                 continue;
             }
 

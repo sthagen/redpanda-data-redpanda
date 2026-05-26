@@ -26,7 +26,7 @@ from rptest.clients.rpk import RPKACLInput, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
-from rptest.services.redpanda import SISettings, CLOUD_TOPICS_CONFIG_STR
+from rptest.services.redpanda import SISettings
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.clients.admin.v2 import Admin, metastore_pb, ntp_pb
 from connectrpc.errors import ConnectError, ConnectErrorCode
@@ -1000,8 +1000,6 @@ class CloudTopicsClusterRecoveryTest(RedpandaTest):
         )
 
         extra_rp_conf = {
-            # Enable cloud topics
-            CLOUD_TOPICS_CONFIG_STR: True,
             # Enable cluster metadata upload for recovery
             "enable_cluster_metadata_upload_loop": True,
             "cloud_storage_cluster_metadata_upload_interval_ms": 1000,

@@ -15,6 +15,7 @@ from typing import Any
 
 
 from rptest.clients.rpk import RpkTool
+from rptest.clients.types import TopicSpec
 from rptest.services.cluster import TestContext, cluster
 from rptest.services.multi_cluster_services import (
     Cluster,
@@ -27,8 +28,10 @@ from rptest.services.redpanda import (
     SchemaRegistryConfig,
 )
 from rptest.tests.cluster_linking_test_base import (
+    CLOUD_TOPICS_SHADOW_LINK_LOG_ALLOW_LIST,
     ClusterLinkingProgressVerifier,
     ShadowLinkTestBase,
+    StorageModeFlipper,
 )
 from rptest.tests.idempotency_stress_test import matrix
 from rptest.services.admin_ops_fuzzer import AdminOperationsFuzzer
@@ -61,6 +64,8 @@ class ClusterLinkingWorkloadSpec:
         validate_number_of_messages_on_target: bool = True,
         use_transactions: bool = False,
         use_compaction: bool = False,
+        flip_storage_modes: list[str] | None = None,
+        flip_interval_seconds: float = 3.0,
     ):
         self.topic = topic
         self.topic_properties = topic_properties
@@ -75,6 +80,8 @@ class ClusterLinkingWorkloadSpec:
         )
         self.use_transactions = use_transactions
         self.use_compaction = use_compaction
+        self.flip_storage_modes = flip_storage_modes
+        self.flip_interval_seconds = flip_interval_seconds
 
     def __str__(self) -> str:
         return (
@@ -140,6 +147,13 @@ class ClusterLinkingWorkloadWorker:
 
     def start_and_verify(self, progress_timeout: int = 60):
         self.logger.info(f"Starting workload: {self.spec}")
+        flipper = StorageModeFlipper(
+            rpk=self.source_rpk,
+            topic=self.spec.topic,
+            modes=self.spec.flip_storage_modes or [],
+            interval_seconds=self.spec.flip_interval_seconds,
+            logger=self.logger,
+        )
         try:
             self.source_rpk.create_topic(
                 self.spec.topic,
@@ -154,6 +168,7 @@ class ClusterLinkingWorkloadWorker:
                 err_msg=f"Topic {self.spec.topic} did not appear on target cluster within {progress_timeout} seconds",
             )
             self.verifier.start()
+            flipper.start()
             success, error = self.verifier.wait_and_verify(
                 progress_timeout=progress_timeout
             )
@@ -161,6 +176,8 @@ class ClusterLinkingWorkloadWorker:
             self.logger.error(f"Workload for topic: {self.spec.topic} failed: {e}")
             success = False
             error = str(e)
+        finally:
+            flipper.stop()
         return ClusterLinkingWorkloadResult(self.spec.topic, success, error)
 
 
@@ -247,7 +264,7 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
         super().__init__(
             test_ctx,
             num_brokers=5,
-            num_prealloc_nodes=3,
+            num_prealloc_nodes=5,
             secondary_cluster_args=SecondaryClusterArgs(
                 # TODO: enable when DR of schemas is supported
                 # schema_registry_config=SchemaRegistryConfig(),
@@ -312,10 +329,161 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
             self.total_node_ops = 5
             self.partition_count = 12
 
-    @cluster(num_nodes=11)
-    @matrix(failures=[False, True])
-    def test_node_operations(self, failures: bool):
+    def _basic_workload_specs(self) -> list[ClusterLinkingWorkloadSpec]:
+        return [
+            ClusterLinkingWorkloadSpec(
+                topic="si-topic",
+                topic_properties={
+                    "cleanup.policy": "delete",
+                    "retention.bytes": "1024000",
+                    "segment.bytes": f"{1024 * 1024}",
+                },
+                partition_count=self.partition_count,
+                msg_count=self.msg_count,
+                msg_size=self.msg_size,
+            ),
+            ClusterLinkingWorkloadSpec(
+                topic="compacted-topic",
+                topic_properties={
+                    "cleanup.policy": "compact",
+                    "segment.bytes": f"{1024 * 1024}",
+                },
+                partition_count=self.partition_count,
+                msg_count=self.msg_count,
+                msg_size=self.msg_size,
+                producer_properties={
+                    "key_set_cardinality": 600,
+                    "tombstone_probability": 0.4,
+                },
+                consumer_properties={
+                    "compacted": True,
+                },
+                use_compaction=True,
+            ),
+            ClusterLinkingWorkloadSpec(
+                topic="topic-txns",
+                # transactions, use a smaller topic to avoid long test times
+                msg_count=math.floor(self.msg_count / 10),
+                msg_size=self.msg_size,
+                partition_count=1,
+                use_transactions=True,
+                producer_properties={
+                    "transaction_abort_rate": 0.1,
+                    "msgs_per_transaction": 50,
+                    "debug_logs": True,
+                },
+                consumer_properties={},
+                validate_number_of_messages_on_target=True,
+            ),
+            ClusterLinkingWorkloadSpec(
+                topic="cloud-topic",
+                topic_properties={
+                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
+                    "segment.bytes": f"{1024 * 1024}",
+                },
+                partition_count=self.partition_count,
+                msg_count=self.msg_count,
+                msg_size=self.msg_size,
+            ),
+            ClusterLinkingWorkloadSpec(
+                topic="tiered-cloud-topic",
+                topic_properties={
+                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                    "segment.bytes": f"{1024 * 1024}",
+                },
+                partition_count=self.partition_count,
+                msg_count=self.msg_count,
+                msg_size=self.msg_size,
+            ),
+        ]
+
+    def _flipping_workload_specs(self) -> list[ClusterLinkingWorkloadSpec]:
+        return [
+            ClusterLinkingWorkloadSpec(
+                topic="flipping-storage-topic",
+                topic_properties={
+                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
+                    "segment.bytes": f"{1024 * 1024}",
+                },
+                partition_count=self.partition_count,
+                msg_count=self.msg_count,
+                msg_size=self.msg_size,
+                flip_storage_modes=[
+                    TopicSpec.STORAGE_MODE_CLOUD,
+                    TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                ],
+                flip_interval_seconds=3.0,
+            ),
+        ]
+
+    def _cloud_combo_workload_specs(self) -> list[ClusterLinkingWorkloadSpec]:
+        specs: list[ClusterLinkingWorkloadSpec] = []
+        for mode, mode_label in (
+            (TopicSpec.STORAGE_MODE_CLOUD, "cloud"),
+            (TopicSpec.STORAGE_MODE_TIERED_CLOUD, "tiered-cloud"),
+        ):
+            specs.append(
+                ClusterLinkingWorkloadSpec(
+                    topic=f"{mode_label}-compacted-topic",
+                    topic_properties={
+                        TopicSpec.PROPERTY_STORAGE_MODE: mode,
+                        "cleanup.policy": "compact",
+                        "segment.bytes": f"{1024 * 1024}",
+                    },
+                    partition_count=self.partition_count,
+                    msg_count=self.msg_count,
+                    msg_size=self.msg_size,
+                    producer_properties={
+                        "key_set_cardinality": 600,
+                        "tombstone_probability": 0.4,
+                    },
+                    consumer_properties={
+                        "compacted": True,
+                    },
+                    use_compaction=True,
+                )
+            )
+            specs.append(
+                ClusterLinkingWorkloadSpec(
+                    topic=f"{mode_label}-topic-txns",
+                    topic_properties={
+                        TopicSpec.PROPERTY_STORAGE_MODE: mode,
+                    },
+                    msg_count=math.floor(self.msg_count / 10),
+                    msg_size=self.msg_size,
+                    partition_count=1,
+                    use_transactions=True,
+                    producer_properties={
+                        "transaction_abort_rate": 0.1,
+                        "msgs_per_transaction": 50,
+                        "debug_logs": True,
+                    },
+                    consumer_properties={},
+                    validate_number_of_messages_on_target=True,
+                )
+            )
+        return specs
+
+    @cluster(
+        num_nodes=13,
+        log_allow_list=CLOUD_TOPICS_SHADOW_LINK_LOG_ALLOW_LIST,
+    )
+    @matrix(
+        failures=[False, True],
+        workload_set=["basic", "cloud_combos", "flipping"],
+    )
+    def test_node_operations(self, failures: bool, workload_set: str):
         self.setup_scale()
+
+        # tiered_cloud_topics is an explicit-only feature and must be
+        # enabled on both clusters before any tiered_cloud topic can be
+        # created.
+        self.source_cluster.service.set_feature_active(
+            "tiered_cloud_topics", True, timeout_sec=30
+        )
+        self.target_cluster.service.set_feature_active(
+            "tiered_cloud_topics", True, timeout_sec=30
+        )
 
         req = self.create_default_link_request("rnot-link")
         for prop in ALL_TOPIC_PROPERTIES:
@@ -336,56 +504,18 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
             )
             self.fi.start()
 
+        if workload_set == "basic":
+            workload_specs = self._basic_workload_specs()
+        elif workload_set == "cloud_combos":
+            workload_specs = self._cloud_combo_workload_specs()
+        else:
+            workload_specs = self._flipping_workload_specs()
+
         manager = ClusterLinkingWorkloadManager(
             self.test_context,
             self.source_cluster,
             self.target_cluster,
-            [
-                ClusterLinkingWorkloadSpec(
-                    topic="si-topic",
-                    topic_properties={
-                        "cleanup.policy": "delete",
-                        "retention.bytes": "1024000",
-                        "segment.bytes": f"{1024 * 1024}",
-                    },
-                    partition_count=self.partition_count,
-                    msg_count=self.msg_count,
-                    msg_size=self.msg_size,
-                ),
-                ClusterLinkingWorkloadSpec(
-                    topic="compacted-topic",
-                    topic_properties={
-                        "cleanup.policy": "compact",
-                        "segment.bytes": f"{1024 * 1024}",
-                    },
-                    partition_count=self.partition_count,
-                    msg_count=self.msg_count,
-                    msg_size=self.msg_size,
-                    producer_properties={
-                        "key_set_cardinality": 600,
-                        "tombstone_probability": 0.4,
-                    },
-                    consumer_properties={
-                        "compacted": True,
-                    },
-                    use_compaction=True,
-                ),
-                ClusterLinkingWorkloadSpec(
-                    topic="topic-txns",
-                    # transactions, use a smaller topic to avoid long test times
-                    msg_count=math.floor(self.msg_count / 10),
-                    msg_size=self.msg_size,
-                    partition_count=1,
-                    use_transactions=True,
-                    producer_properties={
-                        "transaction_abort_rate": 0.1,
-                        "msgs_per_transaction": 50,
-                        "debug_logs": True,
-                    },
-                    consumer_properties={},
-                    validate_number_of_messages_on_target=True,
-                ),
-            ],
+            workload_specs,
             self.preallocated_nodes,
             self.logger,
         )

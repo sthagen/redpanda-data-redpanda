@@ -415,6 +415,7 @@ TEST_F(RecordSchemaResolverTest, TestLatestSubjectSchema_Protobuf) {
 
     auto resolver = latest_subject_schema_resolver(
       *sr,
+      default_context,
       subject("latest-proto"),
       std::nullopt,
       config::mock_binding(std::chrono::milliseconds(0s)),
@@ -441,6 +442,7 @@ TEST_F(RecordSchemaResolverTest, TestLatestSubjectSchema_Protobuf_MessageName) {
 
     auto resolver = latest_subject_schema_resolver(
       *sr,
+      default_context,
       subject("latest-proto"),
       "datalake.proto.nested_message.inner_message_t1",
       config::mock_binding(std::chrono::milliseconds(0s)),
@@ -479,6 +481,7 @@ TEST_F(RecordSchemaResolverTest, TestLatestSubjectSchema_Avro) {
 
     auto resolver = latest_subject_schema_resolver(
       *sr,
+      default_context,
       subject("latest-avro"),
       std::nullopt,
       config::mock_binding(std::chrono::milliseconds(0s)),
@@ -510,6 +513,7 @@ TEST_F(RecordSchemaResolverTest, TestLatestSubjectSchema_Json) {
 
     auto resolver = latest_subject_schema_resolver(
       *sr,
+      default_context,
       subject("latest-json"),
       std::nullopt,
       config::mock_binding(std::chrono::milliseconds(0s)),
@@ -859,7 +863,9 @@ TEST(CachedRecordSchemaResolverTest, TestSchemaCacheEviction) {
 
     // Try to get schema from cache.
     auto cached_schema_opt = schema_cache.get_value(
-      pandaproxy::schema_registry::schema_id{2});
+      datalake::context_schema_cache_key{
+        .context = default_context,
+        .schema_id = pandaproxy::schema_registry::schema_id{2}});
     EXPECT_TRUE(cached_schema_opt);
     auto schema_buf = cached_schema_opt->get()->raw()().copy();
 
@@ -874,8 +880,10 @@ TEST(CachedRecordSchemaResolverTest, TestSchemaCacheEviction) {
     resolve_buffer_fn(true, 5, {0}, schema_3_expected_type);
 
     // Ensure schema 2 was evicted.
-    EXPECT_FALSE(
-      schema_cache.get_value(pandaproxy::schema_registry::schema_id{2}));
+    EXPECT_FALSE(schema_cache.get_value(
+      datalake::context_schema_cache_key{
+        .context = default_context,
+        .schema_id = pandaproxy::schema_registry::schema_id{2}}));
     // Ensure that the shared pointer to the evicted schema is still valid.
     EXPECT_EQ(cached_schema_opt->get()->raw()(), schema_buf);
 
@@ -883,4 +891,211 @@ TEST(CachedRecordSchemaResolverTest, TestSchemaCacheEviction) {
     resolve_buffer_fn(true, 2, {2, 0}, schema_2_expected_type);
     // Ensure that schema 2 is once again in the cache.
     resolve_buffer_fn(false, 2, {2, 0}, schema_2_expected_type);
+}
+
+namespace {
+
+// A distinct Avro schema so the fake registry assigns it a new id rather
+// than reusing one of the schemas created in the default context.
+constexpr std::string_view avro_prod_record_schema = R"({
+  "type": "record",
+  "name": "ProdRecord",
+  "fields" : [
+    {"name": "prod_value", "type": "long"}
+  ]
+})";
+
+const context prod_context{".prod"};
+
+} // namespace
+
+TEST(ContextAwareResolverTest, TestResolveSchemaInNonDefaultContext) {
+    auto sr = std::make_unique<schema::fake_registry>();
+    auto ctx_schema_id
+      = sr->create_schema(
+            subject_schema{
+              context_subject{prod_context, subject{"foo-value"}},
+              schema_definition{avro_prod_record_schema, schema_type::avro}})
+          .get();
+    ASSERT_EQ(1, ctx_schema_id.id());
+    ASSERT_EQ(prod_context, ctx_schema_id.ctx);
+
+    iobuf buf;
+    buf.append("\0\0\0\0\1", 5);
+    buf.append(generate_dummy_body());
+
+    auto resolver = record_schema_resolver(
+      *sr, std::nullopt, std::nullopt, prod_context);
+    auto res = resolver.resolve_buf_type(buf.copy()).get();
+    ASSERT_FALSE(res.has_error());
+    auto& resolved_buf = res.value();
+    ASSERT_TRUE(resolved_buf.type.has_value());
+    EXPECT_EQ(1, (*resolved_buf.type)->id.schema_id());
+}
+
+TEST(ContextAwareResolverTest, TestSchemaNotInConfiguredContextIsStrict) {
+    // A schema registered only in the default context should not be visible
+    // to a resolver bound to a different context: no cross-context fallback.
+    auto sr = std::make_unique<schema::fake_registry>();
+    auto default_id = sr->create_schema(
+                          subject_schema{
+                            context_subject::unqualified("foo-value"),
+                            schema_definition{
+                              avro_record_schema, schema_type::avro}})
+                        .get();
+    ASSERT_EQ(1, default_id.id());
+
+    iobuf buf;
+    buf.append("\0\0\0\0\1", 5);
+    buf.append(generate_dummy_body());
+
+    auto resolver = record_schema_resolver(
+      *sr, std::nullopt, std::nullopt, prod_context);
+    auto res = resolver.resolve_buf_type(buf.copy()).get();
+    ASSERT_TRUE(res.has_error());
+    EXPECT_EQ(res.error(), type_resolver::errc::bad_input);
+}
+
+TEST(ContextAwareResolverTest, TestLatestSubjectSchemaInNonDefaultContext) {
+    using namespace std::chrono_literals;
+    auto sr = std::make_unique<schema::fake_registry>();
+    sr->create_schema(
+        subject_schema{
+          context_subject{prod_context, subject{"prod-subject-value"}},
+          schema_definition{avro_prod_record_schema, schema_type::avro}})
+      .get();
+
+    iobuf buf;
+    buf.append(generate_dummy_body());
+
+    auto resolver = latest_subject_schema_resolver(
+      *sr,
+      prod_context,
+      subject("prod-subject-value"),
+      std::nullopt,
+      config::mock_binding(std::chrono::milliseconds(0s)),
+      std::nullopt,
+      std::nullopt);
+    auto res = resolver.resolve_buf_type(buf.copy()).get();
+    ASSERT_FALSE(res.has_error());
+    auto& resolved_buf = res.value();
+    ASSERT_TRUE(resolved_buf.type.has_value());
+    EXPECT_EQ(1, (*resolved_buf.type)->id.schema_id());
+}
+
+TEST(ContextAwareResolverTest, TestLatestSubjectSchemaStrictContext) {
+    // The configured subject exists in the default context but not in
+    // ".prod", so a ".prod"-bound latest_subject resolver must not fall back.
+    using namespace std::chrono_literals;
+    auto sr = std::make_unique<schema::fake_registry>();
+    sr->create_schema(
+        subject_schema{
+          context_subject::unqualified("subject-value"),
+          schema_definition{avro_record_schema, schema_type::avro}})
+      .get();
+    iobuf buf;
+    buf.append(generate_dummy_body());
+
+    auto resolver = latest_subject_schema_resolver(
+      *sr,
+      prod_context,
+      subject("subject-value"),
+      std::nullopt,
+      config::mock_binding(std::chrono::milliseconds(0s)),
+      std::nullopt,
+      std::nullopt);
+    auto res = resolver.resolve_buf_type(buf.copy()).get();
+    ASSERT_TRUE(res.has_error());
+    EXPECT_EQ(res.error(), type_resolver::errc::registry_error);
+}
+
+TEST(ContextAwareResolverTest, TestSchemaCacheIsolationAcrossContexts) {
+    // Share a single schema cache between two resolvers bound to different
+    // contexts. Verify the cache isolates entries by (context, schema_id)
+    // so topics in different contexts cannot poison each other's lookups.
+    auto sr = std::make_unique<schema::fake_registry>();
+    // Default-context schema → id=1.
+    auto default_id = sr->create_schema(
+                          subject_schema{
+                            context_subject::unqualified("foo-value"),
+                            schema_definition{
+                              avro_record_schema, schema_type::avro}})
+                        .get();
+    ASSERT_EQ(1, default_id.id());
+    ASSERT_EQ(default_context, default_id.ctx);
+    // ".prod" schema with different text → id=2.
+    auto prod_id = sr->create_schema(
+                       subject_schema{
+                         context_subject{prod_context, subject{"bar-value"}},
+                         schema_definition{
+                           avro_prod_record_schema, schema_type::avro}})
+                     .get();
+    ASSERT_EQ(2, prod_id.id());
+    ASSERT_EQ(prod_context, prod_id.ctx);
+
+    auto schema_cache = make_schema_cache();
+    auto default_resolver = record_schema_resolver(
+      *sr, schema_cache, std::nullopt, default_context);
+    auto prod_resolver = record_schema_resolver(
+      *sr, schema_cache, std::nullopt, prod_context);
+
+    // default_resolver successfully resolves id=1 from the default context.
+    {
+        iobuf buf;
+        buf.append("\0\0\0\0\1", 5);
+        buf.append(generate_dummy_body());
+        auto res = default_resolver.resolve_buf_type(buf.copy()).get();
+        ASSERT_FALSE(res.has_error());
+        EXPECT_EQ(1, (*res.value().type)->id.schema_id());
+    }
+    // prod_resolver successfully resolves id=2 from the ".prod" context.
+    {
+        iobuf buf;
+        buf.append("\0\0\0\0\2", 5);
+        buf.append(generate_dummy_body());
+        auto res = prod_resolver.resolve_buf_type(buf.copy()).get();
+        ASSERT_FALSE(res.has_error());
+        EXPECT_EQ(2, (*res.value().type)->id.schema_id());
+    }
+
+    // Both entries are cached under their context-qualified keys.
+    EXPECT_TRUE(schema_cache.get_value(
+      datalake::context_schema_cache_key{
+        .context = default_context,
+        .schema_id = pandaproxy::schema_registry::schema_id{1}}));
+    EXPECT_TRUE(schema_cache.get_value(
+      datalake::context_schema_cache_key{
+        .context = prod_context,
+        .schema_id = pandaproxy::schema_registry::schema_id{2}}));
+    // The "mirrored" keys in the other context must be absent: otherwise
+    // a cross-context poisoning could let one topic observe the other's
+    // schema.
+    EXPECT_FALSE(schema_cache.get_value(
+      datalake::context_schema_cache_key{
+        .context = default_context,
+        .schema_id = pandaproxy::schema_registry::schema_id{2}}));
+    EXPECT_FALSE(schema_cache.get_value(
+      datalake::context_schema_cache_key{
+        .context = prod_context,
+        .schema_id = pandaproxy::schema_registry::schema_id{1}}));
+
+    // A prod-bound resolver asking for id=1 must fail: id=1 lives only in
+    // the default context, and there is no fallback.
+    {
+        iobuf buf;
+        buf.append("\0\0\0\0\1", 5);
+        buf.append(generate_dummy_body());
+        auto res = prod_resolver.resolve_buf_type(buf.copy()).get();
+        ASSERT_TRUE(res.has_error());
+        EXPECT_EQ(res.error(), type_resolver::errc::bad_input);
+    }
+    // Likewise, the default resolver must not see the ".prod" schema.
+    {
+        iobuf buf;
+        buf.append("\0\0\0\0\2", 5);
+        buf.append(generate_dummy_body());
+        auto res = default_resolver.resolve_buf_type(buf.copy()).get();
+        ASSERT_TRUE(res.has_error());
+        EXPECT_EQ(res.error(), type_resolver::errc::bad_input);
+    }
 }

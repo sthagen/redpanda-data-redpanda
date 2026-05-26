@@ -17,7 +17,6 @@ from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.multi_cluster_services import SecondaryClusterArgs
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     LoggingConfig,
     SchemaRegistryConfig,
     SecurityConfig,
@@ -1641,13 +1640,11 @@ class ClusterLinkingCloudTopicSync(ShadowLinkTestBase):
             test_context,
             si_settings=si_settings,
             extra_rp_conf={
-                CLOUD_TOPICS_CONFIG_STR: True,
                 "enable_cluster_metadata_upload_loop": False,
             },
             secondary_cluster_args=SecondaryClusterArgs(
                 si_settings=si_settings,
                 extra_rp_conf={
-                    CLOUD_TOPICS_CONFIG_STR: True,
                     "enable_shadow_linking": True,
                     "enable_cluster_metadata_upload_loop": False,
                 },

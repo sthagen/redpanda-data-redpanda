@@ -17,6 +17,7 @@
 #include "config/sasl_mechanisms.h"
 #include "config/types.h"
 #include "datalake/partition_spec_parser.h"
+#include "datalake/validators.h"
 #include "model/namespace.h"
 #include "model/validation.h"
 #include "security/oidc_url_parser.h"
@@ -266,6 +267,19 @@ validate_iceberg_partition_spec(const ss::sstring& value) {
     return std::nullopt;
 }
 
+std::optional<ss::sstring> validate_iceberg_rest_catalog_endpoint(
+  const std::optional<ss::sstring>& endpoint) {
+    if (!endpoint.has_value()) {
+        return std::nullopt;
+    }
+    auto parsed = datalake::parse_iceberg_rest_catalog_endpoint(
+      endpoint.value());
+    if (!parsed.has_value()) {
+        return std::move(parsed).error();
+    }
+    return std::nullopt;
+}
+
 std::optional<ss::sstring> validate_iceberg_topic_name_dot_replacement(
   const std::optional<ss::sstring>& value) {
     if (value.has_value() && value->find('.') != ss::sstring::npos) {
@@ -472,18 +486,18 @@ validate_default_redpanda_storage_mode(const configuration& config) {
 
     if (
       mode == model::redpanda_storage_mode::cloud
-      && !config.cloud_topics_enabled()) {
+      && !config.cloud_storage_enabled()) {
         return fmt::format(
           "default_redpanda_storage_mode cannot be set to cloud when "
-          "cloud_topics_enabled is false");
+          "cloud_storage_enabled is false");
     }
 
     if (
       mode == model::redpanda_storage_mode::tiered_cloud
-      && !config.cloud_topics_enabled()) {
+      && !config.cloud_storage_enabled()) {
         return fmt::format(
           "default_redpanda_storage_mode cannot be set to tiered_cloud when "
-          "cloud_topics_enabled is false");
+          "cloud_storage_enabled is false");
     }
 
     return std::nullopt;

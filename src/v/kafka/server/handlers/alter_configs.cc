@@ -26,6 +26,7 @@
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "strings/string_switch.h"
 
 #include <seastar/core/coroutine.hh>
@@ -98,7 +99,7 @@ create_topic_properties_update(
     std::apply(apply_op(op_t::none), update.custom_properties.serde_fields());
 
     static_assert(
-      std::tuple_size_v<decltype(update.properties.serde_fields())> == 44,
+      std::tuple_size_v<decltype(update.properties.serde_fields())> == 45,
       "If you add a property, decide on its default alter config "
       "policy, and handle the update in the loop below");
     static_assert(
@@ -142,6 +143,7 @@ create_topic_properties_update(
     update.properties.delete_retention_ms.op = op_t::none;
 
     update.properties.storage_mode.op = op_t::none;
+    update.properties.schema_registry_context.op = op_t::none;
 
     // Now that the defaults are set, continue to set properties from the
     // request
@@ -447,6 +449,30 @@ create_topic_properties_update(
                         = boost::lexical_cast<std::chrono::milliseconds::rep>(
                           v);
                       return std::chrono::milliseconds{parsed};
+                  });
+                continue;
+            }
+            if (cfg.name == topic_property_schema_registry_context) {
+                if (
+                  topic_cfg
+                  && topic_cfg->properties.iceberg_mode
+                       != model::iceberg_mode::disabled) {
+                    return make_error_alter_config_resource_response<
+                      alter_configs_resource_response>(
+                      resource,
+                      error_code::invalid_config,
+                      "Cannot change redpanda.schema.registry.context while "
+                      "Iceberg translation is enabled; set "
+                      "redpanda.iceberg.mode=disabled first");
+                }
+                parse_and_set_property(
+                  tp_ns,
+                  update.properties.schema_registry_context,
+                  cfg.value,
+                  kafka::config_resource_operation::set,
+                  schema_registry_context_validator{},
+                  [](const ss::sstring& s) {
+                      return pandaproxy::schema_registry::context{s};
                   });
                 continue;
             }

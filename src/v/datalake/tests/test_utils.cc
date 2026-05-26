@@ -12,6 +12,7 @@
 
 #include "datalake/record_translator.h"
 #include "datalake/table_id_provider.h"
+#include "iceberg/field_name_comparison.h"
 
 #include <optional>
 
@@ -56,7 +57,8 @@ direct_table_creator::ensure_table(
     std::optional<shared_resolved_type_t> val_type;
     if (comps.val_identifier) {
         auto type_res = co_await type_resolver_.resolve_identifier(
-          comps.val_identifier.value());
+          comps.val_identifier.value(),
+          pandaproxy::schema_registry::default_context);
         if (type_res.has_error()) {
             co_return errc::failed;
         }
@@ -65,7 +67,10 @@ direct_table_creator::ensure_table(
 
     auto record_type = default_translator{}.build_type(std::move(val_type));
     auto ensure_res = co_await schema_mgr_.ensure_table_schema(
-      table_id, record_type.type, hour_partition_spec());
+      table_id,
+      record_type.type,
+      hour_partition_spec(),
+      iceberg::field_name_comparison::verbatim);
     if (ensure_res.has_error()) {
         switch (ensure_res.error()) {
         case schema_manager::errc::not_supported:
@@ -87,7 +92,10 @@ direct_table_creator::ensure_dlq_table(
 
     auto record_type = key_value_translator{}.build_type(std::nullopt);
     auto ensure_res = co_await schema_mgr_.ensure_table_schema(
-      table_id, record_type.type, hour_partition_spec());
+      table_id,
+      record_type.type,
+      hour_partition_spec(),
+      iceberg::field_name_comparison::verbatim);
     if (ensure_res.has_error()) {
         switch (ensure_res.error()) {
         case schema_manager::errc::not_supported:

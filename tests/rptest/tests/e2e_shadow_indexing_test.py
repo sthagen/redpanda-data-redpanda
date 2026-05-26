@@ -795,6 +795,15 @@ class EndToEndShadowIndexingTestCompactedTopic(EndToEndShadowIndexingBase):
         ),
     )
 
+    def __init__(self, test_context):
+        super().__init__(
+            test_context,
+            extra_rp_conf={
+                "enable_leader_balancer": False,
+                "partition_autobalancing_mode": "off",
+            },
+        )
+
     def _prime_compacted_topic(self, segment_count):
         # Set compaction interval high at first, so we can get enough segments in log
         rpk_client = RpkTool(self.redpanda)

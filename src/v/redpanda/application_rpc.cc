@@ -177,7 +177,7 @@ void application::add_runtime_rpc_services(
             smp_service_groups.datalake_sg(),
             &_datalake_coordinator_fe));
     }
-    if (config::shard_local_cfg().cloud_topics_enabled() && cloud_topics_app) {
+    if (config::shard_local_cfg().cloud_storage_enabled() && cloud_topics_app) {
         runtime_services.push_back(
           std::make_unique<cloud_topics::l1::rpc::service>(
             scheduling_groups::instance().cloud_topics_metastore_sg(),

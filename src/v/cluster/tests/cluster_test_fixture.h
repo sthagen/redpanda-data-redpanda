@@ -11,6 +11,7 @@
 
 #pragma once
 #include "absl/container/flat_hash_map.h"
+#include "cloud_topics/test_fixture_cfg.h"
 #include "cluster/fwd.h"
 #include "cluster/tests/utils.h"
 #include "cluster/types.h"
@@ -120,9 +121,9 @@ public:
       std::optional<cloud_storage::configuration> cloud_cfg = std::nullopt,
       bool enable_legacy_upload_mode = true,
       bool iceberg_enabled = false,
-      bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
-      cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
+      cloud_topics::test_fixture_cfg ct_test_cfg
+      = cloud_topics::disable_cloud_topics_test_cfg) {
         return std::make_unique<redpanda_thread_fixture>(
           node_id,
           kafka_port,
@@ -140,7 +141,6 @@ public:
           false,
           enable_legacy_upload_mode,
           iceberg_enabled,
-          cloud_topics_enabled,
           cluster_linking_enabled,
           ct_test_cfg);
     }
@@ -161,9 +161,9 @@ public:
       std::optional<cloud_storage::configuration> cloud_cfg = std::nullopt,
       bool enable_legacy_upload_mode = true,
       bool iceberg_enabled = false,
-      bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
-      cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
+      cloud_topics::test_fixture_cfg ct_test_cfg
+      = cloud_topics::disable_cloud_topics_test_cfg) {
         _instances.emplace(
           node_id,
           make_redpanda_fixture(
@@ -180,7 +180,6 @@ public:
             cloud_cfg,
             enable_legacy_upload_mode,
             iceberg_enabled,
-            cloud_topics_enabled,
             cluster_linking_enabled,
             ct_test_cfg));
     }
@@ -222,10 +221,10 @@ public:
       std::optional<cloud_storage::configuration> cloud_cfg = std::nullopt,
       bool legacy_upload_mode_enabled = true,
       bool iceberg_enabled = false,
-      bool cloud_topics_enabled = false,
       bool cluster_linking_enabled = false,
       model::node_id seed_node_id = model::node_id{0},
-      cloud_topics::test_fixture_cfg ct_test_cfg = {}) {
+      cloud_topics::test_fixture_cfg ct_test_cfg
+      = cloud_topics::disable_cloud_topics_test_cfg) {
         std::vector<config::seed_server> seeds = {};
         if (!empty_seed_starts_cluster_val || node_id != 0) {
             seeds.push_back(
@@ -248,7 +247,6 @@ public:
           cloud_cfg,
           legacy_upload_mode_enabled,
           iceberg_enabled,
-          cloud_topics_enabled,
           cluster_linking_enabled,
           ct_test_cfg);
         return get_node_application(node_id);

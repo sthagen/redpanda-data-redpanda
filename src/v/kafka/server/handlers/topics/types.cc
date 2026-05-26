@@ -18,6 +18,7 @@
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/timestamp.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "strings/string_switch.h"
 #include "utils/tristate.h"
 
@@ -316,6 +317,14 @@ cluster::topic_configuration to_topic_config(
     cfg.properties.iceberg_target_lag_ms
       = get_duration_value<std::chrono::milliseconds>(
         config_entries, topic_property_iceberg_target_lag_ms);
+
+    if (
+      auto s = get_string_value(
+        config_entries, topic_property_schema_registry_context);
+      s.has_value() && !s->empty()) {
+        cfg.properties.schema_registry_context
+          = pandaproxy::schema_registry::context{std::move(*s)};
+    }
 
     cfg.properties.min_cleanable_dirty_ratio = get_tristate_value<double>(
       config_entries, topic_property_min_cleanable_dirty_ratio);

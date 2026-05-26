@@ -17,6 +17,7 @@ go_library(
         "//src/go/rpk/pkg/cli/acl",
         "//src/go/rpk/pkg/cli/ai",
         "//src/go/rpk/pkg/cli/benchmark",
+        "//src/go/rpk/pkg/cli/check",
         "//src/go/rpk/pkg/cli/cloud",
         "//src/go/rpk/pkg/cli/cluster",
         "//src/go/rpk/pkg/cli/connect",

@@ -83,18 +83,26 @@ public:
       std::unique_ptr<topic_cfg_provider>,
       std::unique_ptr<max_compactible_offset_provider>);
 
-    // Populates `info_and_ts` within `log_compaction_meta`s from the provided
-    // `log_list_t` by collecting each log's compaction info from the metastore.
-    // It is not guaranteed that every log present in `log_list_t` will have its
-    // `info_and_ts` set e.g. due to concurrent removal or metastore errors.
-    // If a log already has `info_and_ts` set, it will not be collected again
-    // until an interval has elapsed and the current `info_and_ts` is determined
-    // stale. Additionally, logs that have an inflight compaction in process do
-    // not need to be collected. Logs that have their information collected and
-    // deemed eligible for compaction will also have their `lw_shared_ptr`
-    // copied into the `log_compaction_queue` for future compaction.
+    // Populates `compaction_info_and_ts` within `log_compaction_meta`s from
+    // the provided `log_list_t` by collecting each log's compaction info from
+    // the metastore. It is not guaranteed that every log present in
+    // `log_list_t` will have its `compaction_info_and_ts` set e.g. due to
+    // concurrent removal or metastore errors. If a log already has
+    // `compaction_info_and_ts` set, it will not be collected again until an
+    // interval has elapsed and the current `compaction_info_and_ts` is
+    // determined stale. Additionally, logs that have an inflight compaction in
+    // process do not need to be collected. Logs that have their information
+    // collected and deemed eligible for compaction will also have their
+    // `lw_shared_ptr` copied into the `log_compaction_queue` for future
+    // compaction.
     ss::future<>
     collect_info_for_logs(log_set_t&, log_list_t&, log_compaction_queue&) const;
+
+    // Issues a batched get_leveling_infos RPC for the provided logs and
+    // populates each log's leveling_info_and_ts field. Skips logs whose
+    // info cannot be obtained this round.
+    ss::future<>
+    collect_leveling_info(chunked_vector<log_compaction_meta_ptr> logs) const;
 
 private:
     // Returns a container of `compaction_info_spec` to sample the metastore

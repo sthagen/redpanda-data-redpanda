@@ -20,7 +20,6 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     SISettings,
     get_cloud_storage_type,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
 
@@ -43,7 +42,6 @@ class TxVerifierTest(RedpandaTest):
             "default_topic_partitions": 1,
             "enable_leader_balancer": False,
             "partition_autobalancing_mode": "off",
-            CLOUD_TOPICS_CONFIG_STR: True,
         }
 
         super(TxVerifierTest, self).__init__(

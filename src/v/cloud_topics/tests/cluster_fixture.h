@@ -58,7 +58,6 @@ public:
           cs_conf,
           /*legacy_upload_mode_enabled=*/true,
           /*iceberg_enabled=*/false,
-          /*cloud_topics_enabled=*/true,
           /*cluster_linking_enabled=*/false,
           /*seed_node_id=*/model::node_id{0},
           ct_test_cfg);

@@ -33,7 +33,6 @@ enum class license_required_feature {
     datalake_iceberg,
     leadership_pinning,
     shadow_linking,
-    cloud_topics,
     topic_deletion_disabled,
 };
 
@@ -63,8 +62,6 @@ inline fmt::iterator format_to(license_required_feature f, fmt::iterator out) {
         return fmt::format_to(out, "leadership_pinning");
     case license_required_feature::shadow_linking:
         return fmt::format_to(out, "shadow_linking");
-    case license_required_feature::cloud_topics:
-        return fmt::format_to(out, "cloud_topics");
     case license_required_feature::topic_deletion_disabled:
         return fmt::format_to(out, "topic_deletion_disabled");
     }
@@ -100,7 +97,6 @@ public:
     // | Cluster     | `enable_schema_id_validation`   | `compat`      |
     // | Cluster     | `iceberg_enabled`               | `true`        |
     // | Cluster     | `enable_shadow_linking`         | `true`        |
-    // | Cluster     | `cloud_topics_enabled`          | `true`        |
     // | Cluster     | `delete_topic_enable`           | `false`       |
     // | Node        | `fips_mode`                     | `enabled`     |
     // | Node        | `fips_mode`                     | `permissive`  |

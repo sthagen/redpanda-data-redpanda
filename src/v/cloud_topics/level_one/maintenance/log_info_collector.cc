@@ -39,9 +39,9 @@ inline bool needs_compaction(
           ? topic_mcl.value()
           : config::shard_local_cfg().max_compaction_lag_ms();
     return compaction::log_needs_compaction(
-      log.info_and_ts->info.dirty_ratio,
+      log.compaction_info_and_ts->info.dirty_ratio,
       min_cleanable_dirty_ratio,
-      log.info_and_ts->info.earliest_dirty_ts,
+      log.compaction_info_and_ts->info.earliest_dirty_ts,
       max_compaction_lag_ms);
 }
 
@@ -190,11 +190,12 @@ log_info_collector::get_logs_to_collect(
             continue;
         }
 
-        if (log.info_and_ts.has_value()) {
+        if (log.compaction_info_and_ts.has_value()) {
             auto sample_interval
               = config::shard_local_cfg().cloud_topics_compaction_interval_ms();
             auto delta = to_time_point(collection_timestamp)
-                         - to_time_point(log.info_and_ts->collected_at);
+                         - to_time_point(
+                           log.compaction_info_and_ts->collected_at);
             if (delta <= sample_interval) {
                 vlog(
                   compaction_log.debug,
@@ -305,7 +306,7 @@ void log_info_collector::populate_log_infos(
         auto max_compactible_offset = offset_it->second;
 
         log.has_seen_reconciled_data = true;
-        log.info_and_ts = compaction_info_and_timestamp{
+        log.compaction_info_and_ts = compaction_info_and_timestamp{
           .info = std::move(compaction_info).value(),
           .collected_at = collection_timestamp,
           .max_compactible_offset = max_compactible_offset};
@@ -315,7 +316,7 @@ void log_info_collector::populate_log_infos(
           "Compaction info for CTP {} returned {} with max_compactible_offset: "
           "{}",
           log.ntp,
-          log.info_and_ts->info,
+          log.compaction_info_and_ts->info,
           max_compactible_offset);
 
         if (log.state != log_compaction_meta::log_state::idle) {
@@ -339,6 +340,64 @@ void log_info_collector::populate_log_infos(
                 compaction_queue.push(*ptr_it);
             }
         }
+    }
+}
+
+ss::future<> log_info_collector::collect_leveling_info(
+  chunked_vector<log_compaction_meta_ptr> logs) const {
+    if (logs.empty()) {
+        co_return;
+    }
+
+    auto target_size
+      = config::shard_local_cfg().cloud_topics_reconciliation_max_object_size();
+    // TODO: Replace with cluster config.
+    constexpr double leveling_object_size_threshold = 0.5;
+    auto min_acceptable = static_cast<size_t>(
+      static_cast<double>(target_size) * leveling_object_size_threshold);
+
+    chunked_vector<metastore::leveling_info_spec> specs;
+    specs.reserve(logs.size());
+    for (const auto& log : logs) {
+        specs.emplace_back(
+          metastore::leveling_info_spec{log->tidp, min_acceptable});
+    }
+
+    auto leveling_infos_res = co_await _metastore->get_leveling_infos(specs);
+    if (!leveling_infos_res.has_value()) {
+        vlog(
+          compaction_log.warn,
+          "Failed to retrieve leveling info from metastore: {}",
+          leveling_infos_res.error());
+        co_return;
+    }
+
+    auto& leveling_infos = leveling_infos_res.value();
+    auto now = model::timestamp::now();
+    for (const auto& log : logs) {
+        auto it = leveling_infos.find(log->tidp);
+        if (it == leveling_infos.end()) {
+            continue;
+        }
+
+        auto& result = it->second;
+        if (!result.has_value()) {
+            vlog(
+              compaction_log.warn,
+              "Failed to collect leveling info for CTP {}: {}",
+              log->ntp,
+              result.error());
+            continue;
+        }
+
+        log->leveling_info_and_ts = leveling_info_and_timestamp{
+          .info = std::move(result).value(), .collected_at = now};
+
+        vlog(
+          compaction_log.debug,
+          "Leveling info for CTP {} returned {}",
+          log->ntp,
+          log->leveling_info_and_ts->info);
     }
 }
 

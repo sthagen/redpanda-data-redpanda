@@ -294,11 +294,21 @@ class TSWithAlreadyCompactedTopic(EndToEndTest):
         )
         self.producer.stop()
 
+        def topic_segments_size(stats):
+            return [
+                size
+                for path, size in stats
+                if path.suffix == ".log"
+                and len(path.parts) >= 2
+                and path.parts[0] == "kafka"
+                and path.parts[1] == topic_name
+            ]
+
         # Collect original file sizes
         original_per_node_stat = {}
         for node in self.redpanda.nodes:
             stats = self.redpanda.data_stat(node)
-            total = sum([size for path, size in stats if path.suffix == ".log"])
+            total = sum(topic_segments_size(stats))
             original_per_node_stat[node] = total
             self.logger.info(f"Size before compaction {total}")
             assert total > 0, "No data found in the data dir"
@@ -313,9 +323,7 @@ class TSWithAlreadyCompactedTopic(EndToEndTest):
             worst_ratio = 0.0
             for node in self.redpanda.nodes:
                 new_stats = self.redpanda.data_stat(node)
-                new_size = sum(
-                    [size for path, size in new_stats if path.suffix == ".log"]
-                )
+                new_size = sum(topic_segments_size(new_stats))
                 old_size = original_per_node_stat[node]
                 ratio = new_size / old_size
                 worst_ratio = max(worst_ratio, ratio)

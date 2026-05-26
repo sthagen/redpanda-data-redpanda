@@ -52,7 +52,6 @@ from rptest.services.multi_cluster_services import (
     Service as MultiService,
 )
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     RESTART_LOG_ALLOW_LIST,
     MetricSamples,
     MetricsEndpoint,
@@ -1775,12 +1774,18 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Topic {topic.name} not found in target cluster",
         )
 
+        cloud_backed = storage_mode in (
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+        )
+        progress_timeout = 120 if cloud_backed else 60
+
         with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000):
             with (
                 self.create_source_failure_injector(),
                 self.create_target_failure_injector(),
             ):
-                self.verify()
+                self.verify(progress_timeout=progress_timeout)
 
         self.logger.info("Starting cycle looking for shadow topic status")
         wait_until(
@@ -4519,13 +4524,11 @@ class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
             test_context,
             si_settings=si_settings,
             extra_rp_conf={
-                CLOUD_TOPICS_CONFIG_STR: True,
                 "enable_cluster_metadata_upload_loop": False,
             },
             secondary_cluster_args=SecondaryClusterArgs(
                 si_settings=si_settings,
                 extra_rp_conf={
-                    CLOUD_TOPICS_CONFIG_STR: True,
                     "enable_shadow_linking": True,
                     "enable_cluster_metadata_upload_loop": False,
                 },

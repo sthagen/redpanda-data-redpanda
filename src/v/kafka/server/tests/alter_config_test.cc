@@ -786,6 +786,7 @@ FIXTURE_TEST(
       "flush.bytes",
       "redpanda.iceberg.mode",
       "redpanda.leaders.preference",
+      "redpanda.schema.registry.context",
       "delete.retention.ms",
       "min.cleanable.dirty.ratio",
       "redpanda.remote.allowgaps",
@@ -1753,4 +1754,123 @@ FIXTURE_TEST(test_tristate_handling_alter_config, alter_config_test_fixture) {
         assert_property_value(
           test_tp, "min.cleanable.dirty.ratio", "-1", describe_resp);
     }
+}
+
+FIXTURE_TEST(
+  test_schema_registry_context_locked_while_translation_enabled,
+  alter_config_test_fixture) {
+    scoped_config config;
+    config.get("iceberg_enabled").set_value(true);
+
+    model::topic tp{"test-sr-ctx"};
+    BOOST_REQUIRE_EQUAL(
+      create_topic(tp, {{"redpanda.iceberg.mode", "value_schema_id_prefix"}})
+        .data.topics[0]
+        .error_code,
+      kafka::error_code::none);
+
+    // Changing schema_registry_context while translation is enabled must fail.
+    {
+        absl::flat_hash_map<ss::sstring, ss::sstring> props;
+        props.emplace("redpanda.schema.registry.context", ".mycontext");
+        auto resp = alter_configs(
+          make_alter_topic_config_resource_cv(tp, props));
+        BOOST_REQUIRE_EQUAL(resp.data.responses.size(), 1);
+        BOOST_REQUIRE_EQUAL(
+          resp.data.responses[0].error_code, kafka::error_code::invalid_config);
+    }
+    {
+        absl::flat_hash_map<
+          ss::sstring,
+          std::
+            pair<std::optional<ss::sstring>, kafka::config_resource_operation>>
+          props;
+        props.emplace(
+          "redpanda.schema.registry.context",
+          std::make_pair(".mycontext", kafka::config_resource_operation::set));
+        auto resp = incremental_alter_configs(
+          make_incremental_alter_topic_config_resource_cv(tp, props));
+        BOOST_REQUIRE_EQUAL(resp.data.responses.size(), 1);
+        BOOST_REQUIRE_EQUAL(
+          resp.data.responses[0].error_code, kafka::error_code::invalid_config);
+    }
+
+    // Disable translation, then changing the context must succeed.
+    {
+        absl::flat_hash_map<ss::sstring, ss::sstring> props;
+        props.emplace("redpanda.iceberg.mode", "disabled");
+        BOOST_REQUIRE_EQUAL(
+          alter_configs(make_alter_topic_config_resource_cv(tp, props))
+            .data.responses[0]
+            .error_code,
+          kafka::error_code::none);
+    }
+    {
+        absl::flat_hash_map<ss::sstring, ss::sstring> props;
+        props.emplace("redpanda.schema.registry.context", ".mycontext");
+        auto resp = alter_configs(
+          make_alter_topic_config_resource_cv(tp, props));
+        BOOST_REQUIRE_EQUAL(resp.data.responses.size(), 1);
+        BOOST_REQUIRE_EQUAL(
+          resp.data.responses[0].error_code, kafka::error_code::none);
+    }
+}
+
+FIXTURE_TEST(
+  test_schema_registry_context_and_iceberg_mode_at_creation,
+  alter_config_test_fixture) {
+    scoped_config config;
+    config.get("iceberg_enabled").set_value(true);
+
+    // Setting both iceberg_mode and schema_registry_context in a single
+    // CreateTopics request is valid: the two validators are independent and
+    // both properties are applied atomically.
+    model::topic tp{"test-sr-ctx-create"};
+    BOOST_REQUIRE_EQUAL(
+      create_topic(
+        tp,
+        {{"redpanda.iceberg.mode", "value_schema_id_prefix"},
+         {"redpanda.schema.registry.context", ".mycontext"}})
+        .data.topics[0]
+        .error_code,
+      kafka::error_code::none);
+
+    auto describe_resp = describe_configs(tp);
+    assert_property_value(
+      tp, "redpanda.iceberg.mode", "value_schema_id_prefix", describe_resp);
+    assert_property_value(
+      tp, "redpanda.schema.registry.context", ".mycontext", describe_resp);
+}
+
+FIXTURE_TEST(
+  test_schema_registry_context_sticky_in_alter_configs,
+  alter_config_test_fixture) {
+    scoped_config config;
+    config.get("iceberg_enabled").set_value(true);
+
+    model::topic tp{"test-sr-ctx-sticky"};
+    BOOST_REQUIRE_EQUAL(
+      create_topic(
+        tp,
+        {{"redpanda.iceberg.mode", "disabled"},
+         {"redpanda.schema.registry.context", ".mycontext"}})
+        .data.topics[0]
+        .error_code,
+      kafka::error_code::none);
+
+    // AlterConfigs is full-replace, but schema_registry_context is sticky:
+    // omitting it must not silently reset it to default.
+    {
+        absl::flat_hash_map<ss::sstring, ss::sstring> props;
+        props.emplace("retention.ms", "12345");
+        BOOST_REQUIRE_EQUAL(
+          alter_configs(make_alter_topic_config_resource_cv(tp, props))
+            .data.responses[0]
+            .error_code,
+          kafka::error_code::none);
+    }
+
+    auto describe_resp = describe_configs(tp);
+    assert_property_value(
+      tp, "redpanda.schema.registry.context", ".mycontext", describe_resp);
 }

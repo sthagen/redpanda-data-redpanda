@@ -23,6 +23,7 @@
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "storage/ntp_config.h"
 
 #include <seastar/coroutine/maybe_yield.hh>
@@ -1231,6 +1232,9 @@ topic_properties topic_table::update_topic_properties(
       updated_properties.storage_mode,
       overrides.storage_mode,
       storage::ntp_config::default_storage_mode);
+    incremental_update(
+      updated_properties.schema_registry_context,
+      overrides.schema_registry_context);
     return updated_properties;
 }
 

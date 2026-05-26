@@ -49,7 +49,6 @@ from rptest.services.multi_cluster_services import (
     SecondaryClusterSpec,
 )
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     LoggingConfig,
     SISettings,
     TLSProvider,
@@ -58,6 +57,8 @@ from rptest.services.tls import CertificateAuthority, Certificate, TLSCertManage
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.util import bg_thread_cm, wait_until_result
 from rptest.utils.node_operations import FailureInjectorBackgroundThread
+import threading
+from logging import Logger
 from threading import Lock
 from urllib3.exceptions import ProtocolError
 
@@ -117,6 +118,60 @@ CLOUD_TOPICS_SHADOW_LINK_LOG_ALLOW_LIST = [
     # or immediately after leadership changes.
     re.compile(r".*ctp_stm\.cc.*Sync timeout"),
 ]
+
+
+class StorageModeFlipper:
+    """Background thread that periodically rotates `redpanda.storage.mode` of
+    a topic between a list of modes. Useful for stress-testing transitions
+    between cloud / tiered_cloud / disk storage modes while a workload is
+    running. Transient errors during the alter call (e.g. leadership changes
+    or partition movement) are logged and retried on the next tick.
+    """
+
+    def __init__(
+        self,
+        rpk: RpkTool,
+        topic: str,
+        modes: list[str],
+        interval_seconds: float,
+        logger: Logger,
+    ):
+        self._rpk = rpk
+        self._topic = topic
+        self._modes = modes
+        self._interval = interval_seconds
+        self._logger = logger
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if not self._modes:
+            return
+        self._thread = threading.Thread(
+            target=self._run,
+            daemon=True,
+            name=f"flipper-{self._topic}",
+        )
+        self._thread.start()
+
+    def stop(self, timeout: float = 30) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+            self._thread = None
+
+    def _run(self) -> None:
+        idx = 0
+        while not self._stop.wait(self._interval):
+            mode = self._modes[idx % len(self._modes)]
+            idx += 1
+            try:
+                self._rpk.alter_topic_config(self._topic, "redpanda.storage.mode", mode)
+                self._logger.debug(f"Flipped storage mode of {self._topic} to {mode}")
+            except Exception as e:
+                self._logger.warning(
+                    f"Failed to flip storage mode of {self._topic} to {mode}: {e}"
+                )
 
 
 class ClusterLinkingTLSProvider(TLSProvider):
@@ -488,7 +543,6 @@ class ShadowLinkTestBase(PreallocNodesTest):
         if needs_cloud_topics:
             kwargs["extra_rp_conf"].update(
                 {
-                    CLOUD_TOPICS_CONFIG_STR: True,
                     "enable_cluster_metadata_upload_loop": False,
                 }
             )
@@ -504,7 +558,6 @@ class ShadowLinkTestBase(PreallocNodesTest):
                 sec_extra = dict(sec_kwargs.get("extra_rp_conf", {}))
                 sec_extra.update(
                     {
-                        CLOUD_TOPICS_CONFIG_STR: True,
                         "enable_cluster_metadata_upload_loop": False,
                     }
                 )
@@ -1111,7 +1164,9 @@ class ShadowLinkPreAllocTestBase(ShadowLinkTestBase):
         finally:
             self.verifier.stop_kgo_services()
 
-    def verify(self):
-        success, error = self.verifier.wait_and_verify()
+    def verify(self, progress_timeout: int = 60):
+        success, error = self.verifier.wait_and_verify(
+            progress_timeout=progress_timeout
+        )
 
         assert success, f"Verification failed: {error}"

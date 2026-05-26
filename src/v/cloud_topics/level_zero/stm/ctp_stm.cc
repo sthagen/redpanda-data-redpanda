@@ -115,12 +115,13 @@ ss::future<> ctp_stm::prefix_truncate_below_lro() {
     while (!_gate.is_closed()) {
         vlog(
           _log.trace,
-          "Waiting for LRO to advance past {}, current snapshot index: {}",
-          max_removable_local_log_offset(),
+          "Waiting for prefix-truncate target to advance past {}, current "
+          "snapshot index: {}",
+          prefix_truncate_target(),
           _raft->last_snapshot_index());
         try {
             if (
-              _raft->last_snapshot_index() >= max_removable_local_log_offset()
+              _raft->last_snapshot_index() >= prefix_truncate_target()
               && _active_readers.empty()) {
                 // Only wait without a timeout if there are no active readers
                 // that could be holding us back.
@@ -137,18 +138,19 @@ ss::future<> ctp_stm::prefix_truncate_below_lro() {
             }
             vlog(
               _log.error,
-              "error waiting for LRO to advance in ctp stm background loop: {}",
+              "error waiting for prefix-truncate target to advance in ctp stm "
+              "background loop: {}",
               std::current_exception());
         }
-        auto lro = max_removable_local_log_offset();
+        auto target = prefix_truncate_target();
         auto snapshot_index = _raft->last_snapshot_index();
         vlog(
           _log.trace,
           "Attempting to snapshot ctp at {}, last snapshot at {}",
-          max_removable_local_log_offset(),
+          prefix_truncate_target(),
           _raft->last_snapshot_index());
         try {
-            co_await _raft->snapshot_and_truncate_log(lro);
+            co_await _raft->snapshot_and_truncate_log(target);
         } catch (...) {
             auto ex = std::current_exception();
             vlogl(
@@ -305,6 +307,9 @@ ss::future<> ctp_stm::do_apply(const model::record_batch& batch) {
               case ctp_stm_key::reset_state:
                   apply_reset_state(std::move(r));
                   return ss::stop_iteration::no;
+              case ctp_stm_key::set_allowed_local_start_offset:
+                  apply_set_allowed_local_start_offset(std::move(r));
+                  return ss::stop_iteration::no;
               }
               throw std::runtime_error(fmt_with_ctx(
                 fmt::format, "Unknown ctp_stm_key({})", static_cast<int>(key)));
@@ -344,6 +349,14 @@ void ctp_stm::apply_reset_state(model::record record) {
     auto cmd = serde::from_iobuf<reset_state_cmd>(record.release_value());
     vlog(_log.info, "Resetting ctp_stm state: {}", cmd.state);
     _state = std::move(cmd.state);
+}
+
+void ctp_stm::apply_set_allowed_local_start_offset(model::record record) {
+    auto cmd = serde::from_iobuf<set_allowed_local_start_offset_cmd>(
+      record.release_value());
+    vlog(_log.debug, "Applying set_allowed_local_start_offset: {}", cmd.value);
+    _state.set_allowed_local_start_offset(cmd.value);
+    _lro_advanced.signal();
 }
 
 void ctp_stm::apply_placeholder(const model::record_batch& batch) {
@@ -509,6 +522,27 @@ model::offset ctp_stm::max_removable_local_log_offset() {
         return _active_readers.front().lrlo;
     }
     return _state.get_max_collectible_offset();
+}
+
+model::offset ctp_stm::prefix_truncate_target() {
+    // Base case: min(max_removable_local_log_offset, allowed_local_start).
+    // max_removable_local_log_offset already accounts for active readers
+    // and LRLO, so it's the upper bound. The hint, when set, pulls the
+    // target down so older data stays local.
+    auto cap = max_removable_local_log_offset();
+    auto hint = _state.get_allowed_local_start_offset();
+    auto target = cap;
+    if (hint.has_value()) {
+        // Translate the kafka::offset hint to a log offset. to_log_offset
+        // may return a sentinel for offsets outside the translator's known
+        // range (e.g. a stale hint from a previous epoch); fall back to the
+        // cap in that case rather than feeding garbage into std::min.
+        auto hint_log = _raft->log()->to_log_offset(kafka::offset_cast(*hint));
+        if (hint_log != model::offset{} && hint_log != model::offset::min()) {
+            target = std::min(cap, hint_log);
+        }
+    }
+    return target;
 }
 
 l0::producer_queue& ctp_stm::producer_queue() { return _producer_queue; }

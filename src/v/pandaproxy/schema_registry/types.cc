@@ -149,4 +149,18 @@ void validate_context_subject(
     }
 }
 
+void validate_context(const context& ctx) {
+    static constexpr std::string_view global_context_name = ".__GLOBAL";
+    const auto& v = ctx();
+    if (v.empty() || v.front() != '.') {
+        throw as_exception(subject_invalid(v));
+    }
+    if (v.contains(':')) {
+        throw as_exception(subject_invalid(v));
+    }
+    if (v == global_context_name) {
+        throw as_exception(subject_invalid(v));
+    }
+}
+
 } // namespace pandaproxy::schema_registry

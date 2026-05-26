@@ -365,7 +365,6 @@ application* consumer_fixture::create_node_application(model::node_id node_id) {
       std::nullopt,
       true,
       false,
-      false,
       /* cluster_linking_enabled */ true);
 }
 

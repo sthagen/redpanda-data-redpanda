@@ -204,6 +204,13 @@ class DescribeTopicsTest(RedpandaTest):
                 value="io.confluent.kafka.serializers.subject.TopicNameStrategy",
                 doc_string="The subject name strategy for values if confluent.value.schema.validation is enabled",
             ),
+            "redpanda.schema.registry.context": ConfigProperty(
+                config_type="STRING",
+                value=".",
+                doc_string="Schema Registry context used to look up schemas referenced by "
+                "records in this topic (e.g. by the in-broker Iceberg translator). "
+                "Defaults to the Schema Registry default context ('.').",
+            ),
             "initial.retention.local.target.bytes": ConfigProperty(
                 config_type="LONG",
                 value="-1",

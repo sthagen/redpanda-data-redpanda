@@ -1543,11 +1543,6 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         Verify that cloud topics cannot be unmounted. Cloud topics use a
         different storage backend and don't support mount/unmount operations.
         """
-        # Enable cloud topics feature
-        self.redpanda.set_cluster_config(
-            {"cloud_topics_enabled": True}, expect_restart=True
-        )
-
         # Create a cloud topic
         rpk = RpkTool(self.redpanda)
         topic_name = "cloud-topic-test-unmount"

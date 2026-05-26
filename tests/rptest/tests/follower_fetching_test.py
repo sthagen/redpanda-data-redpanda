@@ -20,7 +20,7 @@ from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.kafka_cli_consumer import KafkaCliConsumer
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
-from rptest.services.redpanda import SISettings, CLOUD_TOPICS_CONFIG_STR
+from rptest.services.redpanda import SISettings
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.util import wait_for_local_storage_truncate, wait_until_result
 from rptest.utils.mode_checks import skip_debug_mode
@@ -75,7 +75,6 @@ class FollowerFetchingTest(PreallocNodesTest):
                 "enable_rack_awareness": True,
                 # disable leader balancer to prevent leaders from moving and causing additional client retries
                 "enable_leader_balancer": False,
-                CLOUD_TOPICS_CONFIG_STR: True,
             },
             si_settings=si_settings,
         )

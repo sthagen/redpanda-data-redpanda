@@ -17,6 +17,10 @@ struct test_fixture_cfg {
     bool use_lsm_metastore{true};
     bool skip_flush_loop{false};
     bool skip_level_zero_gc{false};
+    bool disable_cloud_topics{false};
 };
+
+static constexpr test_fixture_cfg disable_cloud_topics_test_cfg{
+  .disable_cloud_topics = true};
 
 } // namespace cloud_topics

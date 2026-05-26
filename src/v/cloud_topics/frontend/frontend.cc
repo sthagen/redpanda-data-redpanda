@@ -1250,92 +1250,143 @@ ss::future<result<raft::replicate_result>> frontend::replicate_at_offset(
   model::timeout_clock::duration timeout,
   std::optional<std::reference_wrapper<ss::abort_source>> as,
   ss::shared_ptr<kafka::write_at_offset_stm> stm) {
-    chunked_vector<model::record_batch_header> headers;
-    headers.reserve(batches.size());
-    for (const auto& batch : batches) {
-        headers.push_back(batch.header());
-    }
-
-    auto min_epoch = cluster_epoch(_partition->get_topic_revision_id());
-
-    // Use the std::max trick from the normal produce path to reduce
-    // the likelihood of fencing errors when shards are on different
-    // epochs.
-    auto accepted_min = _ctp_stm_api->get_max_seen_epoch(_partition->term());
-    if (!accepted_min) {
-        accepted_min = _ctp_stm_api->get_max_epoch();
-    }
-    if (accepted_min) {
-        min_epoch = std::max(min_epoch, *accepted_min);
-    }
-
-    vassert(
-      min_epoch() > 0L,
-      "Unexpected invalid min epoch {} for {}",
-      min_epoch,
-      ntp());
-
-    auto staged = co_await _data_plane->stage_write(std::move(batches));
-    if (!staged.has_value()) {
-        co_return staged.error();
-    }
-
-    auto deadline = model::timeout_clock::now() + timeout;
-    auto res = co_await _data_plane->execute_write(
-      ntp(), min_epoch, std::move(staged.value()), deadline);
-
-    if (!res.has_value()) {
-        co_return res.error();
-    }
-
-    auto batch_epoch = res.value().extents.front().id.epoch;
-
-    auto fence_fut = co_await ss::coroutine::as_future(
-      _ctp_stm_api->fence_epoch(batch_epoch));
-    if (fence_fut.failed()) {
-        auto not_leader = !_partition->is_leader();
-        auto e = fence_fut.get_exception();
-        if (not_leader) {
-            vlog(
-              cd_log.debug,
-              "Failed to fence epoch {} for ntp {}, not a leader",
-              batch_epoch,
-              ntp());
+    // Only user data batches (raft_data with !is_control()) are uploaded
+    // to L0 and wrapped as ctp_placeholders. Transactional control batches
+    // (raft_data with is_control(), i.e. transaction commit/abort markers)
+    // carry their payload in the record key/value and must be passed
+    // through to the local raft log unchanged - otherwise the placeholder
+    // encoding strips the key and downstream consumers like rm_stm cannot
+    // parse them. No other batch types are expected on this path.
+    chunked_vector<model::record_batch_header> data_headers;
+    chunked_vector<model::record_batch> data_batches;
+    chunked_vector<model::record_batch> control_batches;
+    const size_t input_count = batches.size();
+    for (auto&& batch : batches) {
+        const auto& hdr = batch.header();
+        vassert(
+          hdr.type == model::record_batch_type::raft_data,
+          "Unexpected batch type {} for {} in replicate_at_offset; only "
+          "raft_data batches (data and transactional control) are supported",
+          hdr.type,
+          ntp());
+        const bool is_data = !hdr.attrs.is_control();
+        if (is_data) {
+            data_headers.push_back(hdr);
+            data_batches.push_back(std::move(batch));
         } else {
-            vlogl(
-              cd_log,
-              ssx::is_shutdown_exception(e) ? ss::log_level::debug
-                                            : ss::log_level::warn,
-              "Failed to fence epoch {} for ntp {}, error: {}",
-              batch_epoch,
-              ntp(),
-              e);
+            control_batches.push_back(std::move(batch));
         }
-        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
-    auto fence = std::move(fence_fut.get());
-    if (!fence.has_value()) {
-        vlog(
-          cd_log.warn,
-          "Failed to fence epoch {} for ntp {}, ctp latest seen epoch "
-          "is [{}, {}]",
-          batch_epoch,
-          ntp(),
-          fence.error().window_min,
-          fence.error().window_max);
-        co_return raft::errc::not_leader;
-    }
-
-    auto placeholders = co_await convert_to_placeholders(
-      res.value().extents, headers);
+    batches.clear();
 
     chunked_vector<model::record_batch> placeholder_batches;
-    for (auto&& batch : placeholders.batches) {
-        placeholder_batches.push_back(std::move(batch));
+
+    if (!data_batches.empty()) {
+        auto min_epoch = cluster_epoch(_partition->get_topic_revision_id());
+
+        // Use the std::max trick from the normal produce path to reduce
+        // the likelihood of fencing errors when shards are on different
+        // epochs.
+        auto accepted_min = _ctp_stm_api->get_max_seen_epoch(
+          _partition->term());
+        if (!accepted_min) {
+            accepted_min = _ctp_stm_api->get_max_epoch();
+        }
+        if (accepted_min) {
+            min_epoch = std::max(min_epoch, *accepted_min);
+        }
+
+        vassert(
+          min_epoch() > 0L,
+          "Unexpected invalid min epoch {} for {}",
+          min_epoch,
+          ntp());
+
+        auto staged = co_await _data_plane->stage_write(
+          std::move(data_batches));
+        if (!staged.has_value()) {
+            co_return staged.error();
+        }
+
+        auto deadline = model::timeout_clock::now() + timeout;
+        auto res = co_await _data_plane->execute_write(
+          ntp(), min_epoch, std::move(staged.value()), deadline);
+
+        if (!res.has_value()) {
+            co_return res.error();
+        }
+
+        auto batch_epoch = res.value().extents.front().id.epoch;
+
+        auto fence_fut = co_await ss::coroutine::as_future(
+          _ctp_stm_api->fence_epoch(batch_epoch));
+        if (fence_fut.failed()) {
+            auto not_leader = !_partition->is_leader();
+            auto e = fence_fut.get_exception();
+            if (not_leader) {
+                vlog(
+                  cd_log.debug,
+                  "Failed to fence epoch {} for ntp {}, not a leader",
+                  batch_epoch,
+                  ntp());
+            } else {
+                vlogl(
+                  cd_log,
+                  ssx::is_shutdown_exception(e) ? ss::log_level::debug
+                                                : ss::log_level::warn,
+                  "Failed to fence epoch {} for ntp {}, error: {}",
+                  batch_epoch,
+                  ntp(),
+                  e);
+            }
+            std::rethrow_exception(e);
+        }
+        auto fence = std::move(fence_fut.get());
+        if (!fence.has_value()) {
+            vlog(
+              cd_log.warn,
+              "Failed to fence epoch {} for ntp {}, ctp latest seen epoch "
+              "is [{}, {}]",
+              batch_epoch,
+              ntp(),
+              fence.error().window_min,
+              fence.error().window_max);
+            co_return raft::errc::not_leader;
+        }
+
+        auto placeholders = co_await convert_to_placeholders(
+          res.value().extents, data_headers);
+        placeholder_batches = chunked_vector<model::record_batch>(
+          std::make_move_iterator(placeholders.batches.begin()),
+          std::make_move_iterator(placeholders.batches.end()));
+    }
+
+    // Restore the original input order by 2-way merging placeholders and
+    // control batches on their base offsets. Both inputs preserve their
+    // relative order from `batches`, and each batch already has a unique
+    // base_offset assigned, so a merge on base_offset reproduces the
+    // original interleaving without an auxiliary order tracker.
+    chunked_vector<model::record_batch> final_batches;
+    final_batches.reserve(input_count);
+    auto ph_it = placeholder_batches.begin();
+    auto ctl_it = control_batches.begin();
+    while (ph_it != placeholder_batches.end()
+           && ctl_it != control_batches.end()) {
+        if (ph_it->base_offset() < ctl_it->base_offset()) {
+            final_batches.push_back(std::move(*ph_it++));
+        } else {
+            final_batches.push_back(std::move(*ctl_it++));
+        }
+    }
+    for (; ph_it != placeholder_batches.end(); ++ph_it) {
+        final_batches.push_back(std::move(*ph_it));
+    }
+    for (; ctl_it != control_batches.end(); ++ctl_it) {
+        final_batches.push_back(std::move(*ctl_it));
     }
 
     auto stages = stm->replicate(
-      std::move(placeholder_batches),
+      std::move(final_batches),
       std::move(expected_base_offsets),
       prev_log_offset,
       timeout,

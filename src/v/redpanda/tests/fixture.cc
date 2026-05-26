@@ -88,7 +88,6 @@ redpanda_thread_fixture::redpanda_thread_fixture(
   bool enable_data_transforms,
   bool enable_legacy_upload_mode,
   bool iceberg_enabled,
-  bool enable_cloud_topics,
   bool development_cluster_linking_enabled,
   cloud_topics::test_fixture_cfg ct_test_cfg)
   : app(ssx::sformat("redpanda-{}", node_id()))
@@ -112,7 +111,6 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       enable_data_transforms,
       enable_legacy_upload_mode,
       iceberg_enabled,
-      enable_cloud_topics,
       development_cluster_linking_enabled);
     try {
         app.initialize(
@@ -206,7 +204,8 @@ redpanda_thread_fixture::redpanda_thread_fixture(
   init_cloud_storage_tag,
   std::optional<uint16_t> port,
   cloud_storage_clients::s3_url_style url_style,
-  model::node_id node_id)
+  model::node_id node_id,
+  cloud_topics::test_fixture_cfg ct_test_cfg)
   : redpanda_thread_fixture(
       node_id,
       9092,
@@ -218,7 +217,14 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       true,
       get_s3_config(port, url_style),
       get_archival_config(),
-      get_cloud_config(port, url_style)) {}
+      get_cloud_config(port, url_style),
+      configure_node_id::yes,
+      empty_seed_starts_cluster::yes,
+      false,
+      true,
+      false,
+      false,
+      ct_test_cfg) {}
 
 // Start redpanda with shadow indexing enabled
 redpanda_thread_fixture::redpanda_thread_fixture(
@@ -244,14 +250,14 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       false,
       true,
       false,
-      true,
       false,
       ct_test_cfg) {}
 
 redpanda_thread_fixture::redpanda_thread_fixture(
   init_cloud_storage_no_archiver_tag,
   std::optional<uint16_t> port,
-  cloud_storage_clients::s3_url_style url_style)
+  cloud_storage_clients::s3_url_style url_style,
+  cloud_topics::test_fixture_cfg ct_test_cfg)
   : redpanda_thread_fixture(
       model::node_id(1),
       9092,
@@ -263,7 +269,14 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       true,
       get_s3_config(port, url_style),
       get_archival_config(),
-      std::nullopt) {}
+      std::nullopt,
+      configure_node_id::yes,
+      empty_seed_starts_cluster::yes,
+      false,
+      true,
+      false,
+      false,
+      ct_test_cfg) {}
 
 redpanda_thread_fixture::~redpanda_thread_fixture() {
     shutdown();
@@ -351,7 +364,6 @@ void redpanda_thread_fixture::configure(
   bool data_transforms_enabled,
   bool legacy_upload_mode_enabled,
   bool iceberg_enabled,
-  bool cloud_topics_enabled,
   bool development_cluster_linking_enabled) {
     auto base_path = std::filesystem::path(data_dir);
     ss::smp::invoke_on_all([=]() {
@@ -448,11 +460,6 @@ void redpanda_thread_fixture::configure(
         config.get("cloud_storage_disable_archiver_manager")
           .set_value(legacy_upload_mode_enabled);
         config.get("iceberg_enabled").set_value(iceberg_enabled);
-
-        if (cloud_topics_enabled) {
-            config.get(config::shard_local_cfg().cloud_topics_enabled.name())
-              .set_value(true);
-        }
 
         config.get("enable_shadow_linking")
           .set_value(development_cluster_linking_enabled);

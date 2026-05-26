@@ -85,6 +85,9 @@ get_enterprise_features(const cluster::topic_configuration& cfg) {
         if (cfg.is_read_replica()) {
             features.emplace_back("remote read replicas");
         }
+        if (cfg.is_cloud_topic()) {
+            features.emplace_back("cloud topics");
+        }
     }
 
     // Only enforce schema ID validation topic configs if Schema ID validation
@@ -107,11 +110,6 @@ get_enterprise_features(const cluster::topic_configuration& cfg) {
     if (config::shard_local_cfg().iceberg_enabled.is_restricted()) {
         if (cfg.properties.iceberg_mode != model::iceberg_mode::disabled) {
             features.emplace_back("iceberg");
-        }
-    }
-    if (config::shard_local_cfg().cloud_topics_enabled.is_restricted()) {
-        if (cfg.is_cloud_topic()) {
-            features.emplace_back("cloud topics");
         }
     }
     return features;
@@ -147,6 +145,9 @@ std::vector<std::string_view> get_enterprise_features(
           || (old_storage_mode != tiered && new_storage_mode == tiered)
           || (properties.remote_delete < updated_properties.remote_delete)) {
             features.emplace_back("tiered storage");
+        }
+        if (updated_properties.is_cloud_topic()) {
+            features.emplace_back("cloud topics");
         }
     }
 
@@ -219,11 +220,6 @@ std::vector<std::string_view> get_enterprise_features(
           properties.iceberg_mode == model::iceberg_mode::disabled
           && updated_properties.iceberg_mode != model::iceberg_mode::disabled) {
             features.emplace_back("iceberg");
-        }
-    }
-    if (config::shard_local_cfg().cloud_topics_enabled.is_restricted()) {
-        if (properties.is_cloud_topic()) {
-            features.emplace_back("cloud topics");
         }
     }
     return features;
@@ -650,15 +646,14 @@ topic_result topics_frontend::validate_topic_configuration(
           errc::topic_invalid_config, "Tiered storage is not enabled");
     }
 
-    // the only way that cloud topics can be enabled on a topic is if the cloud
-    // topics development feature is also enabled.
-    if (!config::shard_local_cfg().cloud_topics_enabled()) {
+    // the only way that cloud topics can be enabled on a topic is if cloud
+    // storage is also enabled.
+    if (!config::shard_local_cfg().cloud_storage_enabled()) {
         if (
           assignable_config.cfg.properties.storage_mode
           == model::redpanda_storage_mode::cloud) {
             auto msg = ssx::sformat(
-              "Cloud storage mode on {} is set but development feature is "
-              "disabled",
+              "Cloud storage mode on {} is set but cloud storage is disabled",
               assignable_config.cfg.tp_ns);
             vlog(clusterlog.error, "{}", msg);
             return make_result(errc::topic_invalid_config, std::move(msg));

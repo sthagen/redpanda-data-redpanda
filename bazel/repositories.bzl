@@ -3,6 +3,7 @@ This module contains the sources for all third party dependencies.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@toolchains_llvm//toolchain:sysroot.bzl", "sysroot")
 
 def data_dependency():
     """
@@ -80,7 +81,10 @@ def data_dependency():
         sha256 = "2157d92020d408ed63ebcd886a92d1346a1383b0f91123a0473b4f69b4a24861",
         strip_prefix = "krb5-krb5-1.21.3-final",
         url = "https://github.com/krb5/krb5/archive/refs/tags/krb5-1.21.3-final.tar.gz",
-        patches = ["//bazel/thirdparty:0001-Fix-two-unlikely-memory-leaks.patch"],
+        patches = [
+            "//bazel/thirdparty:0001-Fix-two-unlikely-memory-leaks.patch",
+            "//bazel/thirdparty:0002-Fix-two-NegoEx-parsing-vulnerabilities.patch",
+        ],
         patch_args = ["-p1"],
     )
 
@@ -160,9 +164,9 @@ def data_dependency():
     http_archive(
         name = "seastar",
         build_file = "//bazel/thirdparty:seastar.BUILD",
-        sha256 = "d4081a2cf5ecc2e92db827860d0a004f87ca09e8f2ba98256b540e9d0564e870",
-        strip_prefix = "seastar-b0a44a81fa8d1308fef28dd47ddccdb618755c53",
-        url = "https://github.com/redpanda-data/seastar/archive/b0a44a81fa8d1308fef28dd47ddccdb618755c53.tar.gz",
+        sha256 = "d2a4816aa75e1c8eacdd78265e7461bd2e3885f0daf30904e5d1fb638ceda37c",
+        strip_prefix = "seastar-9de2b0b3a75a78ace41d06ea8b24ad12bfbb0186",
+        url = "https://github.com/redpanda-data/seastar/archive/9de2b0b3a75a78ace41d06ea8b24ad12bfbb0186.tar.gz",
     )
 
     http_archive(
@@ -189,22 +193,31 @@ def data_dependency():
         url = "https://github.com/Cyan4973/xxHash/archive/bbb27a5efb85b92a0486cf361a8635715a53f6ba.tar.gz",
     )
 
-    sysroot_build_file = """
-filegroup(
-  name = "sysroot",
-  srcs = glob(["*/**"]),
-  visibility = ["//visibility:public"],
-)"""
-    http_archive(
-        name = "x86_64_sysroot",
-        build_file_content = sysroot_build_file,
-        sha256 = "282b7eb89ca45d2309217d5d2099cc087c1e7bd55f7891b9d2ddca648b6663b7",
-        urls = ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-x86_64-2025-02-24.tar.zst"],
-    )
-
-    http_archive(
-        name = "aarch64_sysroot",
-        build_file_content = sysroot_build_file,
-        sha256 = "39e3d368d57a40d36f6735dcfe3ed699c6a5962cd47c5b1f652254f077632688",
-        urls = ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-aarch64-2025-02-27.tar.zst"],
-    )
+    # The sysroot is consumed two ways. The upstream `sysroot` rule from
+    # toolchains_llvm exposes a single source-directory artifact that the
+    # cc_toolchain ingests as one input. The packaging rules in
+    # //bazel/packaging need individual file labels for the dynamic loader
+    # and versioned shared libraries to ship alongside the binary, so we
+    # also pull the same tarball via http_archive with a glob-based BUILD.
+    _SYSROOT_URL = "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-22.1.0/sysroot-ubuntu-22.04-{arch}-2026-05-05.tar.zst"
+    for arch, sha in [
+        ("x86_64", "0d85fc9e155e664403c1c3c40831d865796d36a91b78a2e6d8922aa6ad3f0375"),
+        ("aarch64", "1afc00adf978c90ad8ffd3b729180923c27d57a7702ea23ba35c714e11d0def2"),
+    ]:
+        url = _SYSROOT_URL.format(arch = arch)
+        sysroot(
+            name = arch + "_sysroot",
+            sha256 = sha,
+            urls = [url],
+        )
+        http_archive(
+            name = arch + "_sysroot_runtime",
+            build_file_content = """filegroup(
+    name = "runtime",
+    srcs = glob(["**/*.so.*"], allow_empty = False),
+    visibility = ["//visibility:public"],
+)
+""",
+            sha256 = sha,
+            urls = [url],
+        )

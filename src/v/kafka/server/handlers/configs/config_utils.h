@@ -20,12 +20,14 @@
 #include "datalake/partition_spec_parser.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fwd.h"
+#include "kafka/server/handlers/topics/sr_context_validator.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "pandaproxy/schema_registry/schema_id_validation.h"
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "security/acl.h"
 #include "serde/rw/chrono.h"
 
@@ -304,6 +306,18 @@ struct iceberg_partition_spec_validator {
               parsed.error());
         }
         return std::nullopt;
+    }
+};
+
+struct schema_registry_context_validator {
+    std::optional<ss::sstring> operator()(
+      model::topic_namespace_view /*tns*/,
+      const ss::sstring& raw,
+      const std::optional<pandaproxy::schema_registry::context>& value) {
+        if (!value) {
+            return std::nullopt;
+        }
+        return validate_sr_context(raw);
     }
 };
 

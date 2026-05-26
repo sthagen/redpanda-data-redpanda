@@ -13,6 +13,7 @@
 
 #include "base/type_traits.h"
 #include "kafka/server/handlers/configs/config_utils.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "reflection/type_traits.h"
 
 namespace {
@@ -288,6 +289,21 @@ bool maybe_append_update(
           config_value,
           topic_config.properties.iceberg_target_lag_ms,
           kafka::iceberg_target_lag_ms_validator);
+    }
+    if (config_name == kafka::topic_property_schema_registry_context) {
+        // context is named_type<ss::sstring>, not ss::sstring, so we need an
+        // explicit parse function.
+        kafka::parse_and_set_property(
+          topic_config.tp_ns,
+          update.properties.schema_registry_context,
+          config_value,
+          kafka::config_resource_operation::set,
+          kafka::schema_registry_context_validator{},
+          [](const ss::sstring& s) {
+              return pandaproxy::schema_registry::context{s};
+          });
+        return update.properties.schema_registry_context.value
+               != topic_config.properties.schema_registry_context;
     }
 
     if (config_name == kafka::topic_property_min_cleanable_dirty_ratio) {

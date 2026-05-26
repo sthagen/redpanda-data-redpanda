@@ -77,10 +77,10 @@ private:
 };
 
 using schema_cache = datalake_cache<
-  pandaproxy::schema_registry::schema_id,
+  context_schema_cache_key,
   pandaproxy::schema_registry::valid_schema>;
 using chunked_schema_cache = chunked_datalake_cache<
-  pandaproxy::schema_registry::schema_id,
+  context_schema_cache_key,
   pandaproxy::schema_registry::valid_schema>;
 
 using shared_schema_t
@@ -130,9 +130,12 @@ using shared_resolved_type_t = ss::shared_ptr<const resolved_type>;
 // Note that the resolved type cache needs to be keyed by the
 // `schema_identifier` which can only be fully determined once the schema is
 // known. Hence the resolved type can't be stored inline to the schema cache.
-using resolved_type_cache = datalake_cache<schema_identifier, resolved_type>;
+// The key is further qualified by the schema registry context to keep
+// resolutions from different contexts isolated.
+using resolved_type_cache
+  = datalake_cache<context_schema_identifier, resolved_type>;
 using chunked_resolved_type_cache
-  = chunked_datalake_cache<schema_identifier, resolved_type>;
+  = chunked_datalake_cache<context_schema_identifier, resolved_type>;
 
 struct type_and_buf {
     std::optional<shared_resolved_type_t> type;
@@ -168,11 +171,21 @@ public:
             return fmt::format_to(out, "type_resolver::errc::invalid_config");
         }
     }
+    // Used by the per-partition record translator. Implementations use a
+    // context baked in at construction time; the translator creates one
+    // resolver per partition with the topic's SR context.
     virtual ss::future<checked<type_and_buf, errc>>
     resolve_buf_type(std::optional<iobuf> b) const = 0;
-    // TODO(iceberg): This should be it's own interface.
+
+    // TODO(iceberg): resolve_identifier belongs on its own interface.
+    // Used by the coordinator, which holds one shared resolver for all topics
+    // and therefore cannot bake a context in at construction — it passes one
+    // per call. These two methods are used by disjoint callers and the context
+    // asymmetry is intentional. If that changes, both should take an explicit
+    // context parameter and the stored context_ field can be dropped.
     virtual ss::future<checked<shared_resolved_type_t, errc>>
-      resolve_identifier(schema_identifier) const = 0;
+      resolve_identifier(
+        schema_identifier, pandaproxy::schema_registry::context) const = 0;
     virtual ~type_resolver() = default;
 };
 
@@ -183,8 +196,8 @@ public:
     ss::future<checked<type_and_buf, type_resolver::errc>>
     resolve_buf_type(std::optional<iobuf> b) const override;
 
-    ss::future<checked<shared_resolved_type_t, errc>>
-      resolve_identifier(schema_identifier) const override;
+    ss::future<checked<shared_resolved_type_t, errc>> resolve_identifier(
+      schema_identifier, pandaproxy::schema_registry::context) const override;
     ~binary_type_resolver() override = default;
 };
 
@@ -193,8 +206,8 @@ public:
     ss::future<checked<type_and_buf, type_resolver::errc>>
     resolve_buf_type(std::optional<iobuf> b) const override;
 
-    ss::future<checked<shared_resolved_type_t, errc>>
-      resolve_identifier(schema_identifier) const override;
+    ss::future<checked<shared_resolved_type_t, errc>> resolve_identifier(
+      schema_identifier, pandaproxy::schema_registry::context) const override;
     ~test_binary_type_resolver() override = default;
     void set_fail_requests(type_resolver::errc e) { injected_error_ = e; }
 
@@ -210,16 +223,19 @@ public:
       schema::registry& sr,
       std::optional<std::reference_wrapper<schema_cache>> sc = std::nullopt,
       std::optional<std::reference_wrapper<resolved_type_cache>> rc
-      = std::nullopt)
+      = std::nullopt,
+      pandaproxy::schema_registry::context ctx
+      = pandaproxy::schema_registry::default_context)
       : sr_(sr)
       , cache_(sc)
-      , resolved_type_cache_(rc) {}
+      , resolved_type_cache_(rc)
+      , context_(std::move(ctx)) {}
 
     ss::future<checked<type_and_buf, type_resolver::errc>>
     resolve_buf_type(std::optional<iobuf> b) const override;
 
-    ss::future<checked<shared_resolved_type_t, errc>>
-      resolve_identifier(schema_identifier) const override;
+    ss::future<checked<shared_resolved_type_t, errc>> resolve_identifier(
+      schema_identifier, pandaproxy::schema_registry::context) const override;
     ~record_schema_resolver() override = default;
 
 private:
@@ -227,6 +243,7 @@ private:
     std::optional<std::reference_wrapper<schema_cache>> cache_;
     std::optional<std::reference_wrapper<resolved_type_cache>>
       resolved_type_cache_;
+    pandaproxy::schema_registry::context context_;
 };
 
 // latest_subject_schema_resolver is a schema resolver that uses the latest
@@ -239,6 +256,7 @@ class latest_subject_schema_resolver : public type_resolver {
 public:
     latest_subject_schema_resolver(
       schema::registry& sr,
+      pandaproxy::schema_registry::context context,
       pandaproxy::schema_registry::subject subject,
       std::optional<ss::sstring> protobuf_message_name,
       config::binding<std::chrono::milliseconds> cache_ttl,
@@ -256,11 +274,12 @@ public:
     ss::future<checked<type_and_buf, type_resolver::errc>>
     resolve_buf_type(std::optional<iobuf> b) const override;
 
-    ss::future<checked<shared_resolved_type_t, errc>>
-      resolve_identifier(schema_identifier) const override;
+    ss::future<checked<shared_resolved_type_t, errc>> resolve_identifier(
+      schema_identifier, pandaproxy::schema_registry::context) const override;
 
 private:
     schema::registry* sr_;
+    pandaproxy::schema_registry::context context_;
     pandaproxy::schema_registry::subject subject_;
     std::optional<ss::sstring> protobuf_message_name_;
     config::binding<std::chrono::milliseconds> cache_ttl_;

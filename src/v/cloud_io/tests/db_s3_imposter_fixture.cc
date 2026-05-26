@@ -18,6 +18,7 @@
 #include "http/utils.h"
 #include "lsm/io/disk_persistence.h"
 #include "lsm/lsm.h"
+#include "ssx/mutex.h"
 #include "utils/unresolved_address.h"
 
 #include <seastar/net/socket_defs.hh>
@@ -71,6 +72,10 @@ struct db_s3_imposter_fixture::handler : ss::httpd::handler_base {
     lsm::database& db;
     lsm::sequence_number& seqno;
     const cloud_storage_clients::bucket_name& bucket;
+    // Serializes the seqno-bump-then-apply critical section so that
+    // concurrent requests cannot interleave across a suspension in
+    // db.apply() and reach memtable::merge() out of seqno order.
+    ssx::mutex write_mu{"db_s3_imposter::handler::write_mu"};
 
     handler(
       lsm::database& db,
@@ -172,6 +177,7 @@ struct db_s3_imposter_fixture::handler : ss::httpd::handler_base {
     ss::future<>
     handle_put(const ss::http::request& req, ss::http::reply& repl) {
         vlog(dbfixt_log.trace, "PUT {}", req._url);
+        auto units = co_await write_mu.get_units();
         auto batch = db.create_write_batch();
 
         auto upload_id = req.get_query_param("uploadId");
@@ -194,6 +200,7 @@ struct db_s3_imposter_fixture::handler : ss::httpd::handler_base {
     ss::future<>
     handle_delete(const ss::http::request& req, ss::http::reply& repl) {
         vlog(dbfixt_log.trace, "DELETE {}", req._url);
+        auto units = co_await write_mu.get_units();
         auto batch = db.create_write_batch();
 
         // S3 AbortMultipartUpload: DELETE with ?uploadId removes
@@ -235,6 +242,7 @@ struct db_s3_imposter_fixture::handler : ss::httpd::handler_base {
 
     ss::future<>
     handle_post(const ss::http::request& req, ss::http::reply& repl) {
+        auto units = co_await write_mu.get_units();
         // S3 DeleteObjects: POST /<bucket>/?delete with XML body
         // listing <Key> elements to remove.
         if (req.has_query_param("delete")) {

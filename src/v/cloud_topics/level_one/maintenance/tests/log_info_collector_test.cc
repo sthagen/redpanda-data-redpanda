@@ -78,8 +78,55 @@ TEST_F(LogInfoCollectorTestFixture, TestInfoCollector) {
     while (!cached_metadata.empty()) {
         auto sample = cached_metadata.top();
         cached_metadata.pop();
-        ASSERT_TRUE(sample->info_and_ts.has_value());
-        ASSERT_FLOAT_EQ(sample->info_and_ts->info.dirty_ratio, 1.0);
-        ASSERT_TRUE(sample->info_and_ts->info.earliest_dirty_ts.has_value());
+        ASSERT_TRUE(sample->compaction_info_and_ts.has_value());
+        ASSERT_FLOAT_EQ(sample->compaction_info_and_ts->info.dirty_ratio, 1.0);
+        ASSERT_TRUE(
+          sample->compaction_info_and_ts->info.earliest_dirty_ts.has_value());
     }
+}
+
+TEST_F(LogInfoCollectorTestFixture, TestSampleLevelingInfo) {
+    auto cfg_provider = std::make_unique<fake_cfg_provider>();
+    auto offset_provider = std::make_unique<fake_offset_provider>();
+    l1::log_info_collector log_info_collector(
+      &_metastore, std::move(cfg_provider), std::move(offset_provider));
+
+    auto [ntp, tidp] = make_ntidp("leveling_topic");
+    auto log_ptr = ss::make_lw_shared<l1::log_compaction_meta>(tidp, ntp);
+
+    // Seed the metastore with two small objects for this partition. With the
+    // default config (max_object_size=80MiB, threshold=0.5 =>
+    // min_acceptable=40MiB), each object is undersized. The leveling range
+    // builder only emits a range when it sees a run of *two or more*
+    // consecutive undersized extents (singletons can't reduce extent count),
+    // so we need at least two objects to produce a non-empty range.
+    model::offset o{0};
+    {
+        auto batches = model::test::make_random_batches(o, 10).get();
+        o = model::next_offset(batches.back().last_offset());
+        std::vector<tidp_batches_t> bs;
+        bs.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(bs)).get();
+    }
+
+    {
+        auto batches = model::test::make_random_batches(o, 10).get();
+        std::vector<tidp_batches_t> bs;
+        bs.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(bs)).get();
+    }
+
+    chunked_vector<l1::log_compaction_meta_ptr> logs;
+    logs.push_back(log_ptr);
+
+    log_info_collector.collect_leveling_info(std::move(logs)).get();
+
+    ASSERT_TRUE(log_ptr->leveling_info_and_ts.has_value());
+    const auto& ranges = log_ptr->leveling_info_and_ts->info.ranges;
+    ASSERT_FALSE(ranges.empty());
+    size_t total_size_bytes = 0;
+    for (const auto& r : ranges) {
+        total_size_bytes += r.size_bytes;
+    }
+    ASSERT_GT(total_size_bytes, 0u);
 }

@@ -16,7 +16,6 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     SISettings,
     get_cloud_storage_type,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
 
@@ -31,17 +30,9 @@ class CloudTopicsTest(RedpandaTest):
 
     def __create_initial_topics(self, storage_mode):
         """
-        Create initial initial test topics with cloud topic enabled. This needs
-        to be done after development feature support has been enabled, and nodes
-        have been restarted so that development services start at bootup.
+        Create initial test topics. Cloud topics are gated by cloud storage,
+        which is already configured via SISettings.
         """
-        self.redpanda.set_cluster_config(
-            values={
-                CLOUD_TOPICS_CONFIG_STR: True,
-            },
-            expect_restart=True,
-        )
-        self.redpanda.restart_nodes(self.redpanda.nodes)
         if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
             self.redpanda.set_feature_active(
                 "tiered_cloud_topics", True, timeout_sec=30

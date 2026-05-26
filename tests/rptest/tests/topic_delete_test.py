@@ -73,6 +73,17 @@ def get_kvstore_topic_key_counts(redpanda):
         else:
             internal_group_ids.add(p["raft_group_id"])
 
+    # `kafka_internal/ct_l1_domain` is auto-created by the cloud_topics
+    # subsystem whenever cloud storage is enabled, with N partitions. Pull
+    # in every partition's raft group so its shard_placement kvstore keys
+    # are filtered out as internal.
+    try:
+        for p in admin.get_partitions(topic="ct_l1_domain", namespace="kafka_internal"):
+            internal_group_ids.add(p["raft_group_id"])
+    except HTTPError as e:
+        if e.response.status_code != 404:
+            raise
+
     result = {}
     for n in redpanda.nodes:
         kvstore_data = viewer.read_kvstore(node=n)

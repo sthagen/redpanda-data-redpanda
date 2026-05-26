@@ -20,7 +20,7 @@ from rptest.services.kgo_verifier_services import (
     KgoVerifierProducer,
     KgoVerifierSeqConsumer,
 )
-from rptest.services.redpanda import CLOUD_TOPICS_CONFIG_STR, SISettings
+from rptest.services.redpanda import SISettings
 from rptest.tests.cluster_config_test import wait_for_version_status_sync
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.util import expect_exception, wait_until_result
@@ -63,7 +63,7 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
     def test_cloud_topic_with_partial_restart(self):
         """
         If only the controller leader is restarted after enabling
-        cloud_topics_enabled (a needs_restart=yes property), the
+        cloud_storage_enabled (a needs_restart=yes property), the
         restarted node has the property in active but the other
         two nodes still have it pending. Creating a cloud topic
         via the restarted controller leader then validates against
@@ -77,6 +77,12 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
         and replicated through the traditional raft log.
         """
         all_nodes = self.redpanda.nodes
+        # Start with cloud_storage_enabled=False so the property is in its
+        # default state on every node. SISettings would otherwise turn it
+        # on at startup; override it back off here. The test will flip it
+        # on via patch_cluster_config to reproduce the partial-restart
+        # inconsistency.
+        self.redpanda.add_extra_rp_conf({"cloud_storage_enabled": False})
         self.redpanda.start(all_nodes)
         wait_until(
             lambda: len(self.admin.get_cluster_config_status()) == 3,
@@ -94,10 +100,10 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
         original_leader = self.redpanda.get_node(original_leader_id)
         other_nodes = [n for n in all_nodes if n is not original_leader]
 
-        # Enable cloud_topics_enabled cluster-wide. All three nodes
+        # Enable cloud_storage_enabled cluster-wide. All three nodes
         # should observe restart=true since this is a
         # needs_restart=yes property.
-        new_setting = (CLOUD_TOPICS_CONFIG_STR, True)
+        new_setting = ("cloud_storage_enabled", True)
         patch_result = self.admin.patch_cluster_config(upsert=dict([new_setting]))
         new_version = patch_result["config_version"]
         wait_for_version_status_sync(
@@ -110,7 +116,7 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
             )
 
         # Restart ONLY the original controller leader. The other
-        # two nodes intentionally stay with cloud_topics_enabled
+        # two nodes intentionally stay with cloud_storage_enabled
         # pending.
         self.redpanda.restart_nodes(original_leader)
         wait_until(
@@ -157,7 +163,7 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
             },
         )
 
-        # The restarted leader has cloud_topics_enabled in active,
+        # The restarted leader has cloud_storage_enabled in active,
         # so its replica should have ctp_stm registered.
         leader_stms = wait_until_result(
             lambda: self._local_replica_stms(original_leader, topic_name, 0),
@@ -171,7 +177,7 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
             f"{original_leader_id}; got stms {leader_stms}"
         )
 
-        # The unrestarted nodes still have cloud_topics_enabled
+        # The unrestarted nodes still have cloud_storage_enabled
         # only in pending, so partition_manager builds the
         # partition without ctp_stm. The stms set is fixed at
         # partition construction, so a single read after the
@@ -188,7 +194,7 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
             assert "ctp_stm" not in stm_names, (
                 f"ctp_stm unexpectedly present on unrestarted node "
                 f"{n_id}; got stms {stm_names}. The node should not "
-                f"have applied cloud_topics_enabled to active yet."
+                f"have applied cloud_storage_enabled to active yet."
             )
 
         broken_leader = other_nodes[0]
@@ -225,7 +231,7 @@ class CloudTopicsPartialRestartTest(PreallocNodesTest):
                 timeout_sec=15,
             )
 
-        # Complete the rolling restart. Once cloud_topics_enabled is in
+        # Complete the rolling restart. Once cloud_storage_enabled is in
         # active on every node, partition_manager rebuilds this
         # partition's replicas with ctp_stm and the cluster reaches a
         # consistent state.

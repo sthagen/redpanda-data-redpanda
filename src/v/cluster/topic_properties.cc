@@ -27,6 +27,7 @@ fmt::iterator topic_properties::format_to(fmt::iterator it) const {
       "remote_topic_allow_gaps: {}, "
       "batch_max_bytes: {}, retention_local_target_bytes: {}, "
       "retention_local_target_ms: {}, remote_delete: {}, segment_ms: {}, "
+      "schema_registry_context: {}, "
       "record_key_schema_id_validation: {}, "
       "record_key_schema_id_validation_compat: {}, "
       "record_key_subject_name_strategy: {}, "
@@ -73,6 +74,7 @@ fmt::iterator topic_properties::format_to(fmt::iterator it) const {
       retention_local_target_ms,
       remote_delete,
       segment_ms,
+      schema_registry_context,
       record_key_schema_id_validation,
       record_key_schema_id_validation_compat,
       record_key_subject_name_strategy,
@@ -165,7 +167,8 @@ bool topic_properties::has_overrides() const {
         || remote_topic_allow_gaps.has_value()
         || message_timestamp_before_max_ms.has_value()
         || message_timestamp_after_max_ms.has_value()
-        || storage_mode != storage::ntp_config::default_storage_mode;
+        || storage_mode != storage::ntp_config::default_storage_mode
+        || schema_registry_context.has_value();
 
     return overrides;
 }

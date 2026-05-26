@@ -93,7 +93,7 @@ void worker_manager::complete_work(log_compaction_meta* log) {
       "Expected log state to be inflight when completing work");
     log->state = log_compaction_meta::log_state::idle;
     log->inflight_shard.reset();
-    log->info_and_ts.reset();
+    log->compaction_info_and_ts.reset();
 
     _probe.log_compacted();
 }

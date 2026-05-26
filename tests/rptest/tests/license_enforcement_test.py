@@ -15,7 +15,7 @@ from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import LoggingConfig, SISettings, CLOUD_TOPICS_CONFIG_STR
+from rptest.services.redpanda import LoggingConfig, SISettings
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_fips_mode
@@ -347,34 +347,10 @@ class LicenseEnforcementPermittedTopicParams(RedpandaTest):
         assert cfgs["redpanda.iceberg.mode"][0] == "key_value", cfgs
 
     @cluster(num_nodes=1)
-    def test_cloud_topics_enabled_cluster_property(self):
-        si_settings = SISettings(self.test_context)
-        self.redpanda.set_si_settings(si_settings)
-        super().setUp()
-        self.redpanda.set_environment(
-            {"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": True}
-        )
-        self.redpanda.restart_nodes(self.redpanda.nodes)
-        self.redpanda.wait_until(
-            self.redpanda.healthy,
-            timeout_sec=60,
-            backoff_sec=1,
-            err_msg="The cluster hasn't stabilized",
-        )
-        # We shouldn't be able to set cloud_topics_enabled without a license.
-        try:
-            self.rpk.cluster_config_set(CLOUD_TOPICS_CONFIG_STR, "true")
-            assert False, "Enabling cloud_topics_enabled must fail without the license"
-        except RpkException:
-            pass
-
-    @cluster(num_nodes=1)
     def test_cloud_topics_topic_property(self):
         si_settings = SISettings(self.test_context)
         self.redpanda.set_si_settings(si_settings)
         super().setUp()
-
-        self.rpk.cluster_config_set(CLOUD_TOPICS_CONFIG_STR, "true")
 
         self.redpanda.set_environment(
             {"__REDPANDA_DISABLE_BUILTIN_TRIAL_LICENSE": True}

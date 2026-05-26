@@ -28,7 +28,6 @@ from rptest.services.redpanda import (
     SISettings,
     make_redpanda_service,
     MetricsEndpoint,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.end_to_end import EndToEndTest
 from rptest.util import Scale
@@ -62,7 +61,6 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         self.topic = self.s3_topic_name
 
         conf = {
-            CLOUD_TOPICS_CONFIG_STR: True,
             "enable_cluster_metadata_upload_loop": False,
         }
 

@@ -39,6 +39,7 @@ namespace {
 static std::unique_ptr<type_resolver> make_type_resolver(
   const model::iceberg_mode& mode,
   model::topic_view topic_name,
+  pandaproxy::schema_registry::context sr_context,
   schema::registry& sr,
   schema_cache& cache,
   resolved_type_cache& type_cache) {
@@ -50,7 +51,8 @@ static std::unique_ptr<type_resolver> make_type_resolver(
     case model::iceberg_mode::variant::key_value:
         return std::make_unique<binary_type_resolver>();
     case model::iceberg_mode::variant::value_schema_id_prefix:
-        return std::make_unique<record_schema_resolver>(sr, cache, type_cache);
+        return std::make_unique<record_schema_resolver>(
+          sr, cache, type_cache, std::move(sr_context));
     case model::iceberg_mode::variant::value_schema_latest:
         auto subject = pandaproxy::schema_registry::subject(
           fmt::format("{}-value", topic_name));
@@ -59,6 +61,7 @@ static std::unique_ptr<type_resolver> make_type_resolver(
         }
         return std::make_unique<latest_subject_schema_resolver>(
           sr,
+          std::move(sr_context),
           subject,
           mode.protobuf_full_name(),
           config::shard_local_cfg().iceberg_latest_schema_cache_ttl_ms.bind(),
@@ -633,6 +636,8 @@ ss::future<> datalake_manager::handle_translator_state_change(
     auto type_resolver = make_type_resolver(
       mode,
       ntp.tp.topic,
+      partition->topic_cfg->properties.schema_registry_context.value_or(
+        pandaproxy::schema_registry::default_context),
       *_schema_registry,
       *_schema_cache,
       *_resolved_type_cache);

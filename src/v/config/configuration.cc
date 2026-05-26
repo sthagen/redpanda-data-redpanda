@@ -1138,8 +1138,7 @@ configuration::configuration()
       "allows compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       true,
-      property<bool>::noop_validator,
-      legacy_default<bool>(false, legacy_version{17}))
+      property<bool>::noop_validator)
   , retention_bytes(
       *this,
       "retention_bytes",
@@ -4172,7 +4171,8 @@ configuration::configuration()
         .example = "http://hostname:8181",
         .visibility = visibility::user,
       },
-      std::nullopt)
+      std::nullopt,
+      &validate_iceberg_rest_catalog_endpoint)
   , iceberg_rest_catalog_client_id(
       *this,
       "iceberg_rest_catalog_client_id",
@@ -4446,6 +4446,22 @@ configuration::configuration()
         model::iceberg_invalid_record_action::drop,
         model::iceberg_invalid_record_action::dlq_table,
       })
+  , iceberg_schema_case_insensitive(
+      *this,
+      "iceberg_schema_case_insensitive",
+      "Schema field name comparison mode when matching Redpanda's "
+      "schema against the one returned by the Iceberg catalog. Some catalogs "
+      "(e.g. AWS Glue) return field names with inconsistent casing, requiring "
+      "case-insensitive comparison. \"auto\" enables case-insensitive "
+      "comparison when the catalog is AWS Glue, and exact comparison "
+      "otherwise.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      model::iceberg_schema_case_insensitive::auto_,
+      {
+        model::iceberg_schema_case_insensitive::auto_,
+        model::iceberg_schema_case_insensitive::no,
+        model::iceberg_schema_case_insensitive::yes,
+      })
   , iceberg_target_lag_ms(
       *this,
       "iceberg_target_lag_ms",
@@ -4630,13 +4646,7 @@ configuration::configuration()
       "Default timeout for RPC requests between Redpanda nodes.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       10s)
-  , cloud_topics_enabled(
-      *this,
-      true,
-      "cloud_topics_enabled",
-      "Enable cloud topics.",
-      meta{.needs_restart = needs_restart::yes, .visibility = visibility::user},
-      false)
+  , cloud_topics_enabled(*this, "cloud_topics_enabled")
   , cloud_topics_produce_batching_size_threshold(
       *this,
       "cloud_topics_produce_batching_size_threshold",

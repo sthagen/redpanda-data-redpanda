@@ -719,7 +719,6 @@ class CloudTopicsTimeQueryTest(RedpandaTest):
     def _set_up_cluster(self):
         self.redpanda.set_extra_rp_conf(
             {
-                "cloud_topics_enabled": True,
                 "enable_cluster_metadata_upload_loop": False,
                 "cloud_topics_long_term_flush_interval": 1000,
                 "cloud_topics_reconciliation_max_object_size": self.max_object_size,
@@ -887,10 +886,8 @@ class TestReadReplicaTimeQuery(RedpandaTest):
         test_context,
         mode: ReadReplicaSourceMode = ReadReplicaSourceMode.TIERED_STORAGE,
     ):
-        # Enable cloud_topics on both clusters regardless of mode
         extra_rp_conf = {
             "cloud_topics_long_term_flush_interval": 1000,
-            "cloud_topics_enabled": True,
         }
 
         super(TestReadReplicaTimeQuery, self).__init__(
@@ -911,7 +908,6 @@ class TestReadReplicaTimeQuery(RedpandaTest):
             "enable_cluster_metadata_upload_loop": False,
             "cloud_topics_disable_metastore_flush_loop_for_tests": True,
             "cloud_topics_disable_level_zero_gc_for_tests": True,
-            "cloud_topics_enabled": True,
         }
 
         self.rr_settings = SISettings(

@@ -729,12 +729,28 @@ class PathMatcher:
     def is_controller_snapshot(self, o: ObjectMetadata) -> bool:
         return o.key.endswith("/controller.snapshot")
 
+    def is_metastore_manifest(self, o: ObjectMetadata) -> bool:
+        return o.key.startswith("level_one/") and o.key.endswith("/manifest.bin")
+
+    def is_cloud_topics_object(self, o: ObjectMetadata) -> bool:
+        # Anything written by the cloud_topics subsystem. Includes L0 extents
+        # under `level_zero/`, L1 extents under `level_one/data/`, per-domain
+        # LSM state under `level_one/meta/domain/`, and the metastore
+        # manifest under `level_one/meta/metastore/`.
+        return o.key.startswith("level_zero/") or o.key.startswith("level_one/")
+
     def is_partition_manifest(self, o: ObjectMetadata) -> bool:
+        if self.is_metastore_manifest(o):
+            return False
+
         return (
             o.key.endswith("/manifest.json") or o.key.endswith("/manifest.bin")
         ) and self._match_partition_manifest(o.key)
 
     def is_spillover_manifest(self, o: ObjectMetadata) -> bool:
+        if self.is_metastore_manifest(o):
+            return False
+
         return "/manifest.bin." in o.key and self._match_partition_manifest(o.key)
 
     def is_topic_manifest(self, o: ObjectMetadata) -> bool:
@@ -1142,6 +1158,12 @@ class BucketView:
                 self._load_cluster_metadata_manifest(o.key)
             elif self.path_matcher.is_controller_snapshot(o):
                 self._load_controller_snapshot_size(o.key)
+            elif self.path_matcher.is_cloud_topics_object(o):
+                # cloud_topics infrastructure objects (level_one/ and
+                # level_zero/) live alongside tiered-storage objects in the
+                # bucket and are not surprising — don't count them as
+                # ignored.
+                pass
             else:
                 self._state.ignored_objects += 1
         if self._scan_segments:

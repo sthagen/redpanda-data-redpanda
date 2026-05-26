@@ -127,6 +127,7 @@ private:
     void apply_set_start_offset(model::record);
     void apply_advance_epoch(model::record, model::offset base_offset);
     void apply_reset_state(model::record);
+    void apply_set_allowed_local_start_offset(model::record);
 
     ss::future<raft::local_snapshot_applied>
     apply_local_snapshot(raft::stm_snapshot_header, iobuf&&) override;
@@ -137,6 +138,11 @@ private:
     ss::future<> apply_raft_snapshot(const iobuf&) override;
     ss::future<iobuf> take_raft_snapshot(model::offset) override;
     model::offset max_removable_local_log_offset() override;
+
+    /// Target log offset for the background prefix-truncate loop.
+    /// Returns LRLO when no hint is set; otherwise min(LRLO, log_offset(hint)).
+    /// Does NOT affect max_removable_local_log_offset().
+    model::offset prefix_truncate_target();
 
     // A function invoked in a background loop that attempts to truncate the log
     // below the current start offset.

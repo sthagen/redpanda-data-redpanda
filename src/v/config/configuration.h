@@ -758,6 +758,8 @@ struct configuration final : public config_store {
     property<ss::sstring> iceberg_default_partition_spec;
     enum_property<model::iceberg_invalid_record_action>
       iceberg_invalid_record_action;
+    enum_property<model::iceberg_schema_case_insensitive>
+      iceberg_schema_case_insensitive;
     bounded_property<std::chrono::milliseconds> iceberg_target_lag_ms;
     property<bool> iceberg_disable_snapshot_tagging;
     property<bool> iceberg_disable_automatic_snapshot_expiry;
@@ -789,7 +791,7 @@ struct configuration final : public config_store {
     error_map_t load(const YAML::Node& root_node);
 
 public:
-    enterprise<property<bool>> cloud_topics_enabled;
+    deprecated_property cloud_topics_enabled;
     property<size_t> cloud_topics_produce_batching_size_threshold;
     property<std::chrono::milliseconds> cloud_topics_produce_upload_interval;
     property<size_t> cloud_topics_produce_cardinality_threshold;

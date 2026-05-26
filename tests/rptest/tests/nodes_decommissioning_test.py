@@ -31,7 +31,6 @@ from rptest.services.redpanda import (
     RESTART_LOG_ALLOW_LIST,
     RedpandaService,
     SISettings,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.tests.prealloc_nodes import PreallocNodesTest
@@ -61,8 +60,6 @@ class NodesDecommissioningTest(PreallocNodesTest):
             enable_cluster_metadata_upload_loop=False,
             retention_local_trim_interval=5_000,
         )
-
-        extra_rp_conf[CLOUD_TOPICS_CONFIG_STR] = True
 
         super(NodesDecommissioningTest, self).__init__(
             test_context=test_context,

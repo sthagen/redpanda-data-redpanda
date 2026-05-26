@@ -18,6 +18,7 @@
 #include "kafka/protocol/timeout.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/connection_context.h"
+#include "kafka/server/handlers/topics/sr_context_validator.h"
 #include "kafka/server/handlers/topics/topic_utils.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/handlers/topics/validators.h"
@@ -78,6 +79,7 @@ bool is_supported(std::string_view name) {
        topic_property_iceberg_partition_spec,
        topic_property_iceberg_invalid_record_action,
        topic_property_iceberg_target_lag_ms,
+       topic_property_schema_registry_context,
        topic_property_min_cleanable_dirty_ratio,
        topic_property_min_compaction_lag_ms,
        topic_property_max_compaction_lag_ms,
@@ -118,6 +120,7 @@ using validators = make_validator_types<
   iceberg_config_validator,
   iceberg_invalid_record_action_validator,
   iceberg_target_lag_ms_validator,
+  schema_registry_context_create_validator,
   min_max_compaction_lag_ms_validator,
   storage_mode_config_validator>;
 

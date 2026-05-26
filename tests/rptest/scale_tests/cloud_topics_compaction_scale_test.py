@@ -23,7 +23,6 @@ from rptest.services.kgo_verifier_services import (
 )
 from rptest.services.admin import Admin
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     MetricsEndpoint,
     SISettings,
 )
@@ -73,7 +72,6 @@ class CloudTopicsCompactionScaleTest(PreallocNodesTest):
         )
 
         extra_rp_conf = {
-            CLOUD_TOPICS_CONFIG_STR: True,
             "enable_cluster_metadata_upload_loop": False,
             "cloud_topics_compaction_interval_ms": self.COMPACTION_INTERVAL_MS,
             "cloud_topics_compaction_key_map_memory": self.KEY_MAP_MEMORY,

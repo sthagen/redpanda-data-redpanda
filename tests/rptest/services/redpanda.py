@@ -338,8 +338,6 @@ OIDC_ALLOW_LIST = [
     re.compile("security - .* - Error updating"),
 ]
 
-CLOUD_TOPICS_CONFIG_STR = "cloud_topics_enabled"
-
 
 class RemoteClusterNode(Protocol):
     account: RemoteAccount
@@ -6093,7 +6091,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         if not self.started_nodes():
             return
 
-        admin = AdminV2(self)
+        admin = AdminV2(self, auth=(self._superuser.username, self._superuser.password))
         all_anomalies: list[str] = []
         max_retries = 5
 

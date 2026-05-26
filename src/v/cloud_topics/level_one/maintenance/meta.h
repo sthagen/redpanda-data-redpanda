@@ -33,6 +33,13 @@ struct compaction_info_and_timestamp {
     kafka::offset max_compactible_offset;
 };
 
+// Contains leveling information collected from the metastore and the time at
+// which it was obtained.
+struct leveling_info_and_timestamp {
+    metastore::leveling_info_response info;
+    model::timestamp collected_at;
+};
+
 struct log_compaction_meta {
     log_compaction_meta(model::topic_id_partition tidp, model::ntp ntp)
       : tidp(std::move(tidp))
@@ -48,7 +55,13 @@ struct log_compaction_meta {
     // If set, this is cached compaction metadata obtained from the metastore at
     // the `collected_at` time. Guaranteed to have a value if `state == queued`
     // or `state == inflight`.
-    std::optional<compaction_info_and_timestamp> info_and_ts{std::nullopt};
+    std::optional<compaction_info_and_timestamp> compaction_info_and_ts{
+      std::nullopt};
+    // If set, leveling metadata for this log obtained from the metastore at
+    // `collected_at` time. Guaranteed to have a value if this log is queued
+    // or inflight as a leveling job.
+    std::optional<leveling_info_and_timestamp> leveling_info_and_ts{
+      std::nullopt};
     // If set, this is the shard on which the log is currently undergoing an
     // inflight compaction. Guaranteed to have a value if `state == inflight`.
     std::optional<ss::shard_id> inflight_shard{std::nullopt};

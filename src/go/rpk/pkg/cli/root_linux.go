@@ -28,17 +28,12 @@ func addPlatformDependentCmds(fs afero.Fs, p *config.Params, cmd *cobra.Command)
 
 	// deprecated
 	cmd.AddCommand(
-		newCheckCommand(fs, p),
 		newConfigCommand(fs, p),
 		newModeCommand(fs, p),
 		newStartCommand(fs, p, rp.NewLauncher()),
 		newStopCommand(fs, p),
 		newTuneCommand(fs, p),
 	)
-}
-
-func newCheckCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	return cobraext.DeprecateCmd(redpanda.NewCheckCommand(fs, p), "rpk redpanda check")
 }
 
 func newConfigCommand(fs afero.Fs, p *config.Params) *cobra.Command {

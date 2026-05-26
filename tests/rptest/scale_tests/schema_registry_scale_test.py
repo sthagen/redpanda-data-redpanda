@@ -24,13 +24,16 @@ from rptest.utils.mode_checks import skip_debug_mode
 from typing import Any
 
 
-class SchemaRegistryScaleTest(SchemaRegistryEndpoints):
+class SchemaRegistryScaleTestBase(SchemaRegistryEndpoints):
     """
     Test class for schema registry scaling tests.
+
+    Base class. Use SchemaRegistryScaleTest (Kafka client)
+    or SchemaRegistryScaleRpcTransportTest (RPC).
     """
 
     def __init__(self, context: TestContext, **kwargs: Any) -> None:
-        super(SchemaRegistryScaleTest, self).__init__(context, **kwargs)
+        super(SchemaRegistryScaleTestBase, self).__init__(context, **kwargs)
 
     @cluster(num_nodes=1)
     @skip_debug_mode
@@ -175,15 +178,40 @@ class SchemaRegistryScaleTest(SchemaRegistryEndpoints):
         assert len(result_raw.json()) == iterations
 
 
-class SchemaRegistryModeMutableScaleTest(SchemaRegistryEndpoints):
+class SchemaRegistryScaleTest(SchemaRegistryScaleTestBase):
+    """Kafka client transport variant of the schema registry scale tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any) -> None:
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+            **kwargs,
+        )
+
+
+class SchemaRegistryScaleRpcTransportTest(SchemaRegistryScaleTestBase):
+    """RPC transport variant of the schema registry scale tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any) -> None:
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
+        )
+
+
+class SchemaRegistryModeMutableScaleTestBase(SchemaRegistryEndpoints):
     """
     Test class for schema registry subject mode scaling tests.
+
+    Base class. Use SchemaRegistryModeMutableScaleTest (Kafka client)
+    or SchemaRegistryModeMutableScaleRpcTransportTest (RPC).
     """
 
     def __init__(self, context: TestContext, **kwargs: Any) -> None:
         self.schema_registry_config = SchemaRegistryConfig()
         self.schema_registry_config.mode_mutability = True
-        super(SchemaRegistryModeMutableScaleTest, self).__init__(
+        super(SchemaRegistryModeMutableScaleTestBase, self).__init__(
             context, schema_registry_config=self.schema_registry_config, **kwargs
         )
 
@@ -214,3 +242,27 @@ class SchemaRegistryModeMutableScaleTest(SchemaRegistryEndpoints):
         result_raw = self.sr_client.delete_mode_subject(subject=subject)
         assert result_raw.status_code == requests.codes.ok
         assert result_raw.json()["mode"] == mode
+
+
+class SchemaRegistryModeMutableScaleTest(SchemaRegistryModeMutableScaleTestBase):
+    """Kafka client transport variant of the mode-mutable scale tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any) -> None:
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": False},
+            **kwargs,
+        )
+
+
+class SchemaRegistryModeMutableScaleRpcTransportTest(
+    SchemaRegistryModeMutableScaleTestBase
+):
+    """RPC transport variant of the mode-mutable scale tests."""
+
+    def __init__(self, context: TestContext, **kwargs: Any) -> None:
+        super().__init__(
+            context,
+            extra_rp_conf={"schema_registry_use_rpc": True},
+            **kwargs,
+        )

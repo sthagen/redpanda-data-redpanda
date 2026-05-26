@@ -32,7 +32,6 @@ from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.openmessaging_benchmark_configs import OMBSampleConfigurations
 from rptest.clients.types import TopicSpec
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     RESTART_LOG_ALLOW_LIST,
     LoggingConfig,
     SISettings,
@@ -1020,9 +1019,6 @@ class ManyPartitionsTest(PreallocNodesTest):
                 "topic_partitions_memory_allocation_percent": DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
             }
         )
-
-        if cloud_topics_enabled:
-            self.redpanda.add_extra_rp_conf({CLOUD_TOPICS_CONFIG_STR: True})
 
         self.redpanda.start()
 

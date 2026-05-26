@@ -15,7 +15,6 @@ from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     PREV_VERSION_LOG_ALLOW_LIST,
     RESTART_LOG_ALLOW_LIST,
     SISettings,
@@ -41,7 +40,6 @@ class CloudTopicsUpgradeTest(RedpandaTest):
         )
 
         extra_rp_conf = {
-            CLOUD_TOPICS_CONFIG_STR: True,
             "enable_cluster_metadata_upload_loop": False,
         }
 
@@ -140,13 +138,12 @@ class CloudTopicsUpgradeTest(RedpandaTest):
         # Wait for the cloud_topics feature to become active.
         self._wait_for_feature_active("cloud_topics")
 
-        # The cloud_topics_enabled config was set in extra_rp_conf, but
-        # v25.3.x doesn't know this property so it was never propagated to
-        # the cluster config store. Explicitly set it now that all nodes
-        # are on a version that recognizes the property. This is a
-        # restart-required property, so restart after setting it.
+        # The NEW_VERSION binary still gates cloud-mode topic creation on the
+        # `cloud_topics_enabled` cluster property. For redpanda v26.2 and beyond,
+        # this property is deprecated and ignored, but the upgrade target here is
+        # the latest release in the v26.1 line.
         self.redpanda.set_cluster_config(
-            {CLOUD_TOPICS_CONFIG_STR: True}, expect_restart=True
+            {"cloud_topics_enabled": True}, expect_restart=True
         )
         self.redpanda.restart_nodes(self.redpanda.nodes)
 

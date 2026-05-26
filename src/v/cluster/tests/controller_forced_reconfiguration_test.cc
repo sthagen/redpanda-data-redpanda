@@ -81,7 +81,6 @@ public:
           std::nullopt,
           true,
           false,
-          false,
           true,
           survivor);
     }

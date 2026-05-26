@@ -128,7 +128,7 @@ private:
 
     // Container of pointers to logs in `_logs/_logs_list` which have sampled
     // metadata available and are available for compaction- i.e
-    // `log->info_and_ts` is guaranteed to have a value.
+    // `log->compaction_info_and_ts` is guaranteed to have a value.
     log_compaction_queue _compaction_queue;
 
     // TODO: remove this once more cluster objects speak `topic_id_partition`.

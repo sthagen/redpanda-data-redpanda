@@ -241,6 +241,19 @@ void validate_context_subject(
   const context_subject& ctx_sub,
   is_config_or_mode is_config_or_mode = is_config_or_mode::no);
 
+/// Validate that a context is well-formed. Enforces the minimum set of rules
+/// required for the context to round-trip through the qualified-subject wire
+/// format (`:.context:subject`, see parse_subject in types.cc):
+///   - must start with '.'
+///   - must not contain ':'
+///   - must not be the reserved '.__GLOBAL' context
+/// Other characters (including `/`, NUL, and whitespace) are intentionally
+/// permitted: the format is implicitly constrained by the tooling that
+/// consumes these strings, and policing "bananas but valid" context names is
+/// out of scope for this check. Throws exception with
+/// error_code::subject_invalid if invalid.
+void validate_context(const context& ctx);
+
 /// A reference subject that may be qualified or unqualified.
 /// Unqualified references are resolved relative to a parent schema's context.
 struct context_subject_reference {

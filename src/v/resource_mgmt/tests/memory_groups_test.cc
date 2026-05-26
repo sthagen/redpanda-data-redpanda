@@ -19,7 +19,7 @@
 static constexpr size_t total_shares_without_optionals = 87;
 static constexpr size_t total_wasm_shares = 10;
 static constexpr size_t total_datalake_shares = 10;
-static constexpr size_t total_cloud_topic_shares = 10;
+static constexpr size_t total_cloud_storage_shares = 10;
 
 // It's not really useful to know the exact byte values for each of these
 // numbers so we just make sure we're within a MB
@@ -43,7 +43,7 @@ public:
     bool compaction_enabled() const { return std::get<0>(GetParam()); }
     bool wasm_enabled() const { return std::get<1>(GetParam()); }
     bool datalake_enabled() const { return std::get<2>(GetParam()); }
-    bool cloud_topics_enabled() const { return std::get<3>(GetParam()); }
+    bool cloud_storage_enabled() const { return std::get<3>(GetParam()); }
 };
 
 TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
@@ -73,7 +73,7 @@ TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
       /*cloud_topics_reconciler_memory_reservation=*/{},
       wasm_enabled(),
       datalake_enabled(),
-      cloud_topics_enabled(),
+      cloud_storage_enabled(),
       partitions);
     auto total_shares = total_shares_without_optionals;
     if (wasm_enabled()) {
@@ -82,8 +82,8 @@ TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
     if (datalake_enabled()) {
         total_shares += total_datalake_shares;
     }
-    if (cloud_topics_enabled()) {
-        total_shares += total_cloud_topic_shares;
+    if (cloud_storage_enabled()) {
+        total_shares += total_cloud_storage_shares;
     }
     EXPECT_THAT(
       groups.chunk_cache_min_memory(),
@@ -155,7 +155,7 @@ TEST(MemoryGroups, CompactionMemoryBytes) {
           /*cloud_topics_reconciler_memory_reservation=*/{},
           /*wasm_enabled=*/false,
           /*datalake_enabled=*/false,
-          /*cloud_topics_enabled=*/false,
+          /*cloud_storage_enabled=*/false,
           {
             .max_limit_pct = 20,
           });
@@ -174,7 +174,7 @@ TEST(MemoryGroups, CompactionMemoryBytes) {
           /*cloud_topics_reconciler_memory_reservation=*/{},
           /*wasm_enabled=*/false,
           /*datalake_enabled=*/false,
-          /*cloud_topics_enabled=*/false,
+          /*cloud_storage_enabled=*/false,
           {
             .max_limit_pct = 20,
           });

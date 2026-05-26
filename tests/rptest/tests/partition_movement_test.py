@@ -26,7 +26,6 @@ from rptest.services.cluster import cluster
 from rptest.services.honey_badger import HoneyBadger
 from rptest.services.kaf_producer import KafProducer
 from rptest.services.redpanda import (
-    CLOUD_TOPICS_CONFIG_STR,
     PREV_VERSION_LOG_ALLOW_LIST,
     RESTART_LOG_ALLOW_LIST,
     SISettings,
@@ -1019,8 +1018,6 @@ class SIPartitionMovementTest(PartitionMovementMixin, EndToEndTest):
             self.test_context.cluster.alloc(ClusterSpec.simple_linux(5))
             return
         extra_rp_conf: dict = {}
-        if with_cloud_topics:
-            extra_rp_conf = {CLOUD_TOPICS_CONFIG_STR: True}
 
         throughput, records, moves, partitions = self._get_scale_params()
         install_opts = InstallOptions(install_previous_version=test_mixed_versions)
@@ -1087,8 +1084,6 @@ class SIPartitionMovementTest(PartitionMovementMixin, EndToEndTest):
             self.test_context.cluster.alloc(ClusterSpec.simple_linux(5))
             return
         extra_rp_conf: dict = {}
-        if with_cloud_topics:
-            extra_rp_conf = {CLOUD_TOPICS_CONFIG_STR: True}
 
         throughput, records, moves, partitions = self._get_scale_params()
 

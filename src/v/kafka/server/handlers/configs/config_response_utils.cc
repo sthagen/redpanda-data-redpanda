@@ -18,6 +18,7 @@
 #include "config/node_config.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "model/metadata.h"
+#include "pandaproxy/schema_registry/types.h"
 
 #include <chrono>
 
@@ -181,6 +182,7 @@ consteval describe_configs_type property_config_type() {
         std::is_same_v<T, model::timestamp_type> ||
         std::is_same_v<T, config::data_directory_path> ||
         std::is_same_v<T, pandaproxy::schema_registry::subject_name_strategy> ||
+        std::is_same_v<T, pandaproxy::schema_registry::context> ||
         std::is_same_v<T, model::vcluster_id> ||
         std::is_same_v<T, model::write_caching_mode> ||
         std::is_same_v<T, config::leaders_preference> || std::is_same_v<T, model::iceberg_mode> ||
@@ -1107,6 +1109,22 @@ config_response_container_t make_topic_configs(
             "topic, in milliseconds."),
           describe_as_string<std::chrono::milliseconds>);
     }
+
+    add_topic_config_if_requested(
+      config_keys,
+      result,
+      topic_property_schema_registry_context,
+      pandaproxy::schema_registry::default_context,
+      topic_property_schema_registry_context,
+      topic_properties.schema_registry_context,
+      include_synonyms,
+      maybe_make_documentation(
+        include_documentation,
+        "Schema Registry context used to look up schemas referenced by "
+        "records in this topic (e.g. by the in-broker Iceberg translator). "
+        "Defaults to the Schema Registry default context ('.')."),
+      &describe_as_string<pandaproxy::schema_registry::context>,
+      /*hide_default_override=*/true);
 
     add_topic_config_if_requested(
       config_keys,

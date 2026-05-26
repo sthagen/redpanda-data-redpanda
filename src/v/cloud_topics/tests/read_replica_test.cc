@@ -114,7 +114,6 @@ public:
           false, // enable_data_transforms
           true,  // enable_legacy_upload_mode
           false, // iceberg_enabled
-          true,  // enable_cloud_topics
           false, // development_cluster_linking_enabled
           ct_cfg);
         replica->wait_for_controller_leadership().get();

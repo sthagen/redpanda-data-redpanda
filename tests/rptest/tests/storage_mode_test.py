@@ -15,7 +15,6 @@ from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     RESTART_LOG_ALLOW_LIST,
-    CLOUD_TOPICS_CONFIG_STR,
     SISettings,
 )
 from rptest.services.redpanda_installer import (
@@ -428,7 +427,7 @@ class StorageModeTransitionTest(StorageModeTestBase):
         - local -> tiered_cloud
 
         Note: cloud <-> tiered_cloud transitions are tested in
-        StorageModeCloudTransitionTest (requires cloud_topics_enabled).
+        StorageModeCloudTransitionTest (requires cloud_storage_enabled).
         """
         rpk = RpkTool(self.redpanda)
 
@@ -615,8 +614,7 @@ class StorageModeTransitionTest(StorageModeTestBase):
 class StorageModeValidationTest(RedpandaTest):
     """
     Test that the default_redpanda_storage_mode cluster config validation
-    correctly enforces dependencies on cloud_storage_enabled and
-    cloud_topics_enabled.
+    correctly enforces dependencies on cloud_storage_enabled.
     """
 
     def __init__(self, test_context: TestContext):
@@ -631,7 +629,8 @@ class StorageModeValidationTest(RedpandaTest):
         """
         Test that default_redpanda_storage_mode validation enforces:
         - 'tiered' requires cloud_storage_enabled=true
-        - 'cloud' requires cloud_topics_enabled=true
+        - 'cloud' requires cloud_storage_enabled=true
+        - 'tiered_cloud' requires cloud_storage_enabled=true
         """
         admin = Admin(self.redpanda)
 
@@ -639,9 +638,6 @@ class StorageModeValidationTest(RedpandaTest):
         config = admin.get_cluster_config()
         assert config["cloud_storage_enabled"] is False, (
             "cloud_storage_enabled should be false for this test"
-        )
-        assert config["cloud_topics_enabled"] is False, (
-            "cloud_topics_enabled should be false for this test"
         )
 
         # Test: setting 'tiered' should fail without cloud_storage_enabled
@@ -654,7 +650,7 @@ class StorageModeValidationTest(RedpandaTest):
             "default_redpanda_storage_mode should not be tiered"
         )
 
-        # Test: setting 'cloud' should fail without cloud_topics_enabled
+        # Test: setting 'cloud' should fail without cloud_storage_enabled
         with expect_http_error(400):
             admin.patch_cluster_config(
                 upsert={"default_redpanda_storage_mode": "cloud"}
@@ -664,7 +660,7 @@ class StorageModeValidationTest(RedpandaTest):
             "default_redpanda_storage_mode should not be cloud"
         )
 
-        # Test: setting 'tiered_cloud' should fail without cloud_topics_enabled
+        # Test: setting 'tiered_cloud' should fail without cloud_storage_enabled
         with expect_http_error(400):
             admin.patch_cluster_config(
                 upsert={"default_redpanda_storage_mode": "tiered_cloud"}
@@ -692,9 +688,6 @@ class StorageModeCloudTransitionTest(StorageModeTestBase):
             test_context=test_context,
             num_brokers=3,
             si_settings=si_settings,
-            extra_rp_conf={
-                CLOUD_TOPICS_CONFIG_STR: True,
-            },
         )
 
     def setUp(self):

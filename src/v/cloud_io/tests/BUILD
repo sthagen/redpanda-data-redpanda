@@ -55,6 +55,7 @@ redpanda_test_cc_library(
     implementation_deps = [
         "//src/v/http:utils",
         "//src/v/lsm/io:disk_persistence",
+        "//src/v/ssx:mutex",
         "//src/v/utils:unresolved_address",
         "@abseil-cpp//absl/container:btree",
     ],

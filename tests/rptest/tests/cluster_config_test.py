@@ -37,7 +37,6 @@ from rptest.services.redpanda import (
     RedpandaService,
     SISettings,
     get_cloud_storage_type,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.services.redpanda_installer import (
     RedpandaInstaller,
@@ -714,10 +713,9 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 "iceberg_rest_catalog_crl_file",
             ]
         )
-        # Cloud storage, cloud topics, and iceberg depend on properly
-        # configured cloud IO. Skip them to avoid breaking the test.
+        # Cloud storage and iceberg depend on properly configured cloud IO.
+        # Skip them to avoid breaking the test.
         exclude_settings.add("cloud_storage_enabled")
-        exclude_settings.add(CLOUD_TOPICS_CONFIG_STR)
         exclude_settings.add("iceberg_enabled")
         exclude_settings.add("default_redpanda_storage_mode")
 
@@ -2117,6 +2115,40 @@ class ClusterConfigIcebergTest(RedpandaTest):
             },
             expect_restart=True,
         )
+
+    @cluster(num_nodes=1)
+    def test_iceberg_rest_catalog_endpoint_url_validation(self):
+        """
+        Verifies that malformed `iceberg_rest_catalog_endpoint` values are
+        rejected, while well-formed URLs are accepted.
+        """
+        malformed_values = [
+            "not a url",
+            "://missing-scheme",
+            "http://host:not-a-port",
+            "http://host:99999",
+        ]
+        for value in malformed_values:
+            with expect_exception(
+                requests.exceptions.HTTPError,
+                lambda e: e.response.status_code == 400,
+            ):
+                self.redpanda.set_cluster_config(
+                    {"iceberg_rest_catalog_endpoint": value},
+                    expect_restart=True,
+                )
+
+        # Well-formed values should be accepted.
+        valid_values = [
+            "http://localhost:8181",
+            "https://catalog.example.com",
+            "https://catalog.example.com:443/path",
+        ]
+        for value in valid_values:
+            self.redpanda.set_cluster_config(
+                {"iceberg_rest_catalog_endpoint": value},
+                expect_restart=True,
+            )
 
 
 class PropertyAliasData(NamedTuple):

@@ -34,7 +34,6 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
     SISettings,
     get_cloud_storage_type,
-    CLOUD_TOPICS_CONFIG_STR,
 )
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import expect_exception, wait_until_with_progress_check
@@ -60,7 +59,6 @@ class CloudTopicsL0GCTestBase(RedpandaTest):
             fast_uploads=True,
         )
         extra_rp_conf = {
-            CLOUD_TOPICS_CONFIG_STR: True,
             "cloud_topics_reconciliation_min_interval": 2000,
             "cloud_topics_reconciliation_max_interval": 2000,
             "cloud_topics_epoch_service_epoch_increment_interval": 5000,

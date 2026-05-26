@@ -30,6 +30,24 @@ struct schema_identifier
     bool operator==(const schema_identifier&) const = default;
 };
 
+// In-memory cache key combining a schema registry context with a schema id.
+// Used to keep per-shard schema caches correct when multiple topics look up
+// schemas in different contexts (schema ids are unique within a context, not
+// across).
+struct context_schema_cache_key {
+    pandaproxy::schema_registry::context context;
+    pandaproxy::schema_registry::schema_id schema_id;
+    bool operator==(const context_schema_cache_key&) const = default;
+};
+
+// In-memory cache key wrapping a schema_identifier with its schema registry
+// context. Not persisted: only used for the resolved type cache.
+struct context_schema_identifier {
+    pandaproxy::schema_registry::context context;
+    schema_identifier identifier;
+    bool operator==(const context_schema_identifier&) const = default;
+};
+
 // The components required to build the Iceberg schema of a record.
 struct record_schema_components
   : serde::envelope<
@@ -72,6 +90,27 @@ struct hash<datalake::record_schema_components> {
             boost::hash_combine(
               h, hash<datalake::schema_identifier>()(*c.val_identifier));
         }
+        return h;
+    }
+};
+template<>
+struct hash<datalake::context_schema_cache_key> {
+    size_t operator()(const datalake::context_schema_cache_key& k) const {
+        namespace ppsr = pandaproxy::schema_registry;
+        size_t h = 0;
+        boost::hash_combine(h, hash<ppsr::context>()(k.context));
+        boost::hash_combine(h, hash<ppsr::schema_id>()(k.schema_id));
+        return h;
+    }
+};
+template<>
+struct hash<datalake::context_schema_identifier> {
+    size_t operator()(const datalake::context_schema_identifier& k) const {
+        namespace ppsr = pandaproxy::schema_registry;
+        size_t h = 0;
+        boost::hash_combine(h, hash<ppsr::context>()(k.context));
+        boost::hash_combine(
+          h, hash<datalake::schema_identifier>()(k.identifier));
         return h;
     }
 };

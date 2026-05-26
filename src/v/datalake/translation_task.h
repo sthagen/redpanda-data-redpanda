@@ -18,6 +18,7 @@
 #include "datalake/location.h"
 #include "datalake/record_multiplexer.h"
 #include "datalake/translation/translation_probe.h"
+#include "iceberg/field_name_comparison.h"
 #include "model/metadata.h"
 #include "model/record_batch_reader.h"
 #include "utils/retry_chain_node.h"
@@ -44,6 +45,7 @@ public:
       record_translator& record_translator,
       table_creator&,
       model::iceberg_invalid_record_action,
+      iceberg::field_name_comparison norm,
       location_provider,
       translation_probe&);
     enum class errc {

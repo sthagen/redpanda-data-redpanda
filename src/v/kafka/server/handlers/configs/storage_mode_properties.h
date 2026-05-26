@@ -90,6 +90,7 @@ inline constexpr auto storage_mode_properties
      storage_mode_mask::all},
     {topic_property_record_value_subject_name_strategy_compat,
      storage_mode_mask::all},
+    {topic_property_schema_registry_context, storage_mode_mask::all},
 
     // Properties valid for local, tiered, and tiered_cloud (NOT cloud).
     // In tiered_cloud mode data goes through raft and local storage,

@@ -56,6 +56,13 @@ inline constexpr std::string_view topic_property_write_caching
 inline constexpr std::string_view topic_property_flush_ms = "flush.ms";
 inline constexpr std::string_view topic_property_flush_bytes = "flush.bytes";
 
+// Server side schema registry context. Binds a topic to a specific Schema
+// Registry context; schema IDs are unique within a context but not across
+// contexts, so any per-topic resolution of schema ids (Iceberg translator
+// today, schema id validation in the future) must look schemas up here.
+inline constexpr std::string_view topic_property_schema_registry_context
+  = "redpanda.schema.registry.context";
+
 // Server side schema id validation
 inline constexpr std::string_view topic_property_record_key_schema_id_validation
   = "redpanda.key.schema.id.validation";
