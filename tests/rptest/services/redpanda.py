@@ -4411,6 +4411,9 @@ class RedpandaService(Service, RedpandaServiceABC):
             # not-running processes
             def check_pid(node: ClusterNode) -> tuple[ClusterNode, str] | None:
                 if not self.redpanda_pid(node):
+                    dmesg = self._capture_dmesg(node)
+                    if dmesg:
+                        self._save_dmesg_artifact(node, dmesg)
                     return (node, "Redpanda process unexpectedly stopped")
                 return None
 
@@ -4424,6 +4427,43 @@ class RedpandaService(Service, RedpandaServiceABC):
                 )
             else:
                 raise NodeCrash(crashes)
+
+    def _capture_dmesg(self, node: ClusterNode) -> str | None:
+        """Capture recent dmesg output from ``node`` for crash diagnostics."""
+        try:
+            slack_secs = 300
+            seconds_ago = int(time.time() - self._start_time) + slack_secs
+            lines: list[str] = []
+            max_lines = 1000
+            cmd = (
+                f"sudo dmesg -T --since '{seconds_ago} seconds ago' | tail -{max_lines}"
+            )
+            for line in node.account.ssh_capture(cmd, timeout_sec=10):
+                line = line.strip()
+                if line:
+                    lines.append(line)
+            return "\n".join(lines) if lines else None
+        except Exception as e:
+            self.logger.debug(
+                f"Failed to collect dmesg from {node.account.hostname}: {e}"
+            )
+            return None
+
+    def _save_dmesg_artifact(self, node: ClusterNode, dmesg: str) -> None:
+        node_dir = os.path.join(
+            TestContext.results_dir(self._context, self._context.test_index),
+            self.service_id,
+            node.account.hostname,
+        )
+        artifact_path = os.path.join(node_dir, "dmesg.txt")
+        try:
+            if not os.path.isdir(node_dir):
+                mkdir_p(node_dir)
+            self.logger.info(f"writing dmesg output to {artifact_path}")
+            with open(artifact_path, "w") as f:
+                f.write(dmesg)
+        except Exception as e:
+            self.logger.debug(f"Failed to write dmesg to {artifact_path}: {e}")
 
     def raw_metrics(
         self,
@@ -6081,66 +6121,83 @@ class RedpandaService(Service, RedpandaServiceABC):
         check_object_metadata: bool = True,
         check_object_storage: bool = True,
         max_extents_per_call: int = 1000,
+        max_concurrent_partitions: int = 16,
     ):
         """
         Validate metastore state for all cloud topic partitions.
 
         Discovers cloud topics and calls ValidatePartition for each cloud topic
-        partition, paginating to bound the work per call.
+        partition, paginating to bound the work per call. Partitions are
+        validated concurrently (bounded by `max_concurrent_partitions`) so the
+        wall-clock cost scales with the slowest partition rather than the sum
+        across partitions; at fleet scale (thousands of partitions) the
+        sequential variant overran ducktape timeouts.
         """
         if not self.started_nodes():
             return
 
         admin = AdminV2(self, auth=(self._superuser.username, self._superuser.password))
         all_anomalies: list[str] = []
+        anomalies_lock = threading.Lock()
         max_retries = 5
 
-        def validate_topic(topic: metastore_pb.CloudTopicInfo):
-            for pid in range(topic.partition_count):
-                resume: int | None = None
-                total_extents = 0
-                retries = 0
-                while True:
-                    req = metastore_pb.ValidatePartitionRequest(
-                        topic_id=topic.topic_id,
-                        partition_id=pid,
-                        check_object_metadata=check_object_metadata,
-                        check_object_storage=check_object_storage,
-                        max_extents=max_extents_per_call,
-                    )
-                    if resume is not None:
-                        req.resume_at_offset = resume
-                    try:
-                        resp = admin.metastore().validate_partition(req=req)
-                        retries = 0
-                    except ConnectError as e:
-                        if (
-                            e.code == ConnectErrorCode.UNAVAILABLE
-                            and retries < max_retries
-                        ):
-                            retries += 1
-                            self.logger.warning(
-                                f"validate_partition unavailable for "
-                                f"{topic.topic_name}/{pid}, "
-                                f"retry {retries}/{max_retries}..."
-                            )
-                            time.sleep(1)
-                            continue
-                        raise
-                    total_extents += resp.extents_validated
-                    for a in resp.anomalies:
-                        all_anomalies.append(
-                            f"{topic.topic_name}/{pid}: "
-                            f"[{metastore_pb.AnomalyType.Name(a.anomaly_type)}]"
-                            f" {a.description}"
-                        )
-                    if not resp.HasField("resume_at_offset"):
-                        break
-                    resume = resp.resume_at_offset
-
-                self.logger.debug(
-                    f"Validated {total_extents} extents for {topic.topic_name}/{pid}"
+        def validate_partition(topic: metastore_pb.CloudTopicInfo, pid: int) -> None:
+            resume: int | None = None
+            total_extents = 0
+            retries = 0
+            while True:
+                req = metastore_pb.ValidatePartitionRequest(
+                    topic_id=topic.topic_id,
+                    partition_id=pid,
+                    check_object_metadata=check_object_metadata,
+                    check_object_storage=check_object_storage,
+                    max_extents=max_extents_per_call,
                 )
+                if resume is not None:
+                    req.resume_at_offset = resume
+                try:
+                    resp = admin.metastore().validate_partition(req=req)
+                    retries = 0
+                except ConnectError as e:
+                    if e.code == ConnectErrorCode.UNAVAILABLE and retries < max_retries:
+                        retries += 1
+                        self.logger.warning(
+                            f"validate_partition unavailable for "
+                            f"{topic.topic_name}/{pid}, "
+                            f"retry {retries}/{max_retries}..."
+                        )
+                        time.sleep(1)
+                        continue
+                    raise
+                total_extents += resp.extents_validated
+                if resp.anomalies:
+                    formatted = [
+                        f"{topic.topic_name}/{pid}: "
+                        f"[{metastore_pb.AnomalyType.Name(a.anomaly_type)}]"
+                        f" {a.description}"
+                        for a in resp.anomalies
+                    ]
+                    with anomalies_lock:
+                        all_anomalies.extend(formatted)
+                if not resp.HasField("resume_at_offset"):
+                    break
+                resume = resp.resume_at_offset
+
+            self.logger.debug(
+                f"Validated {total_extents} extents for {topic.topic_name}/{pid}"
+            )
+
+        def validate_topic(topic: metastore_pb.CloudTopicInfo):
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_concurrent_partitions
+            ) as executor:
+                futures = [
+                    executor.submit(validate_partition, topic, pid)
+                    for pid in range(topic.partition_count)
+                ]
+                # Surface the first exception (if any) once all have settled.
+                for f in concurrent.futures.as_completed(futures):
+                    f.result()
 
         after_name = ""
         while True:

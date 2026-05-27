@@ -842,6 +842,22 @@ class RedpandaServiceSelfTest(RedpandaTest):
     def test_start(self) -> None:
         pass
 
+    @cluster(num_nodes=1)
+    def test_capture_dmesg(self) -> None:
+        """
+        Inject a synthetic line into the kernel ring buffer and verify
+        ``_capture_dmesg`` returns it.
+        """
+        rp = self.redpanda
+        node = rp.nodes[0]
+        marker = f"selftest-marker-{int(time.time())}"
+        msg = f"selftest synthetic kernel line {marker}"
+        node.account.ssh(f"cat > /dev/kmsg <<'EOF'\n{msg}\nEOF")
+
+        result = rp._capture_dmesg(node)
+        assert result is not None, "expected non-empty dmesg capture"
+        assert marker in result, f"marker missing from captured dmesg: {result}"
+
 
 class RedpandaClusteredServiceSelfTest(RedpandaTest):
     """Same as RedpandaServiceSelfTest but uses a 3-broker cluster.

@@ -22,6 +22,10 @@ namespace iceberg {
 /// (UTF8PROC_CASEFOLD | COMPOSE) before comparison. This handles all Unicode
 /// case mappings including 1:many (e.g. İ U+0130 → i + U+0307 COMBINING DOT
 /// ABOVE) and is fully deterministic regardless of system locale.
+///
+/// In lower_case mode, throws std::runtime_error if \p a or \p b is not valid
+/// UTF-8, or std::bad_alloc if utf8proc fails to allocate. The verbatim mode
+/// is a pure byte comparison and does not throw.
 bool names_equal(
   std::string_view a, std::string_view b, field_name_comparison norm);
 

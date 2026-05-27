@@ -13,6 +13,7 @@
 #include "cloud_topics/level_zero/common/producer_queue.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "cloud_topics/level_zero/stm/types.h"
+#include "model/timeout_clock.h"
 #include "raft/persisted_stm.h"
 #include "ssx/mutex.h"
 
@@ -58,6 +59,8 @@ class ctp_stm final : public raft::persisted_stm<> {
     friend class ctp_stm_api;
     friend struct ctp_stm_accessor; // for tests
 
+    static constexpr auto sync_timeout = std::chrono::seconds(10);
+
 public:
     static constexpr const char* name = "ctp_stm";
 
@@ -80,7 +83,8 @@ public:
     }
 
     ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
-    fence_epoch(cluster_epoch e);
+    fence_epoch(
+      cluster_epoch e, model::timeout_clock::duration timeout = sync_timeout);
 
     /// Return inactive epoch of the CTP
     ///

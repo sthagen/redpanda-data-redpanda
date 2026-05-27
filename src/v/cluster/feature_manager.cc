@@ -147,7 +147,14 @@ feature_manager::start(std::vector<model::node_id>&& cluster_founder_nodes) {
 
             vlog(
               clusterlog.debug, "Controller leader notification term {}", term);
-            _am_controller_leader = leader_id == *config::node().node_id();
+            const bool am_leader = leader_id == *config::node().node_id();
+            _is_leader_of = am_leader ? std::optional{term} : std::nullopt;
+            // Force the background loop to re-establish a linearizable
+            // barrier on every leadership transition: cluster-config
+            // values it consults must not be read until we have applied
+            // every controller log entry committed at the time we took
+            // leadership.
+            _caught_up_for_term.reset();
 
             // This hook avoids the need for the controller leader to receive
             // its own health report to generate a call to update_node_version.
@@ -157,7 +164,7 @@ feature_manager::start(std::vector<model::node_id>&& cluster_founder_nodes) {
             if (
               _feature_table.local().get_active_version()
                 != features::feature_table::get_latest_logical_version()
-              && _am_controller_leader) {
+              && am_leader) {
                 // When I become leader for first time (i.e. when active
                 // version is not known yet, proactively persist it)
                 vlog(
@@ -168,7 +175,7 @@ feature_manager::start(std::vector<model::node_id>&& cluster_founder_nodes) {
                 update_node_version(
                   *config::node().node_id(),
                   features::feature_table::get_latest_logical_version());
-            } else if (_am_controller_leader) {
+            } else if (am_leader) {
                 // In any case, kick the background update loop when
                 // we gain leadership, in case there is work to do like
                 // auto-activating some features.
@@ -422,8 +429,9 @@ ss::future<> feature_manager::maybe_update_feature_table() {
 
     vlog(clusterlog.debug, "Checking for active version update...");
     bool failed = false;
+    bool failed_barrier = false;
     try {
-        co_await do_maybe_update_active_version();
+        co_await do_maybe_update_active_version(failed_barrier);
     } catch (...) {
         // This is fine: exceptions can result from unavailability of
         // raft0 for writes, or unavailability of health monitor
@@ -438,8 +446,14 @@ ss::future<> feature_manager::maybe_update_feature_table() {
     try {
         // Even if we didn't advance our logical version, we might have some
         // features to activate due to policy changes across different redpanda
-        // binaries with the same logical version
-        co_await do_maybe_activate_features();
+        // binaries with the same logical version.
+        //
+        // since do_maybe_activate_features also controls feature activation
+        // based on configuration options, we skip it if the step above failed
+        // to enforce a lineariable barrier.
+        if (!failed_barrier) {
+            co_await do_maybe_activate_features();
+        }
     } catch (...) {
         vlog(
           clusterlog.debug,
@@ -499,8 +513,8 @@ feature_manager::auto_activate_features(
     return result;
 }
 
-ss::future<>
-feature_manager::replicate_feature_update_cmd(feature_update_cmd_data data) {
+ss::future<> feature_manager::replicate_feature_update_cmd(
+  feature_update_cmd_data data, std::optional<model::term_id> term) {
     auto new_version = data.logical_version;
     auto cmd = feature_update_cmd(
       std::move(data),
@@ -508,7 +522,8 @@ feature_manager::replicate_feature_update_cmd(feature_update_cmd_data data) {
     );
 
     auto timeout = model::timeout_clock::now() + status_retry;
-    auto err = co_await replicate_and_wait(_stm, _as, std::move(cmd), timeout);
+    auto err = co_await replicate_and_wait(
+      _stm, _as, std::move(cmd), timeout, term);
     if (err == errc::not_leader) {
         // Harmless, we lost leadership so the new controller
         // leader is responsible for picking up where we left off.
@@ -542,7 +557,8 @@ void feature_manager::update_node_version(
  * This function is allowed to throw: throwing an exception indicates
  * a transient error that the caller should retry after a backoff.
  */
-ss::future<> feature_manager::do_maybe_update_active_version() {
+ss::future<>
+feature_manager::do_maybe_update_active_version(bool& failed_barrier) {
     vassert(ss::this_shard_id() == backend_shard, "Wrong shard!");
 
     // One-shot consume of the manual-finalization request: every
@@ -553,14 +569,80 @@ ss::future<> feature_manager::do_maybe_update_active_version() {
     const bool was_manual_finalize_pending = std::exchange(
       _manual_finalize_pending, false);
 
-    // Consume any accumulated updates.  Important to do this even if
-    // not leader, so that we drain it and allow maybe_update_active_version
-    // to sleep on _update_wait.
-    auto updates = std::exchange(_updates, {});
-
-    if (!_am_controller_leader) {
+    if (!_is_leader_of.has_value()) {
+        // Drop accumulated updates to bound memory while we're not
+        // the leader; updates_pending() already short-circuits when
+        // not leader, so this isn't load-bearing for the loop's
+        // sleep on _update_wait.
+        _updates.clear();
         co_return;
     }
+
+    // The controller replays committed entries through the muxed
+    // config_manager concurrently with this loop, so without a barrier
+    // we can observe intermediate cluster-config states mid-replay —
+    // for example a transient value of features_auto_finalization
+    // before the operator's override has been applied. Wait once per
+    // term for the STM to apply through a linearizable barrier offset;
+    // while leadership is held, subsequent committed entries replicate
+    // through us, so per-tick barriers aren't needed. On transient
+    // barrier failure we throw rather than return so the outer loop
+    // sleeps status_retry before retrying (avoiding a tight spin when
+    // the barrier fails synchronously), and so that _updates is
+    // preserved for the next attempt.
+    // Need a fresh barrier when we have no record of one, or when the
+    // recorded barrier was for a different term than the one we now
+    // hold leadership for.
+    const bool need_barrier = !_caught_up_for_term.has_value()
+                              || *_caught_up_for_term != *_is_leader_of;
+    const auto target_term = *_is_leader_of;
+    if (need_barrier) {
+        auto deadline = model::timeout_clock::now() + status_retry;
+        auto barrier = co_await _stm.local().insert_linearizable_barrier(
+          deadline);
+        if (!barrier) {
+            failed_barrier = true;
+            throw std::runtime_error(
+              fmt::format("Linearizable barrier failed: {}", barrier.error()));
+        }
+        // Leadership may have changed during the co_await above:
+        // either we lost it (no longer leader) or it bounced to a
+        // newer term.
+        const bool leadership_changed = !_is_leader_of.has_value()
+                                        || *_is_leader_of != target_term;
+        if (leadership_changed) {
+            // Leadership changed mid-barrier. Don't throw — this isn't
+            // a transient error to retry against, it's a state change.
+            // The next loop iteration handles it cleanly: if we're no
+            // longer leader, the !_is_leader_of branch above drains
+            // _updates and returns; if we're leader in a fresh term,
+            // the leadership notification handler already reset
+            // _caught_up_for_term, so we re-run the barrier for the
+            // new term before draining and applying updates. We
+            // deliberately do not set _caught_up_for_term here: the
+            // offset we observed was acknowledged under the old term
+            // and is not safe to treat as caught-up for the new one.
+            vlog(
+              clusterlog.debug,
+              "Deferring active version update: leadership changed "
+              "during barrier (was term {}, now {})",
+              target_term,
+              _is_leader_of);
+            failed_barrier = true;
+            co_return;
+        }
+        _caught_up_for_term = target_term;
+        vlog(
+          clusterlog.debug,
+          "Controller STM caught up to barrier offset {} in term {}",
+          barrier.value().first,
+          target_term);
+    }
+
+    // Consume accumulated updates now that the barrier has confirmed
+    // we are caught up. Deferring the drain until here means a
+    // transient barrier failure doesn't discard pending updates.
+    auto updates = std::exchange(_updates, {});
 
     // Apply updates into _node_versions
     for (const auto& i : updates) {
@@ -670,7 +752,7 @@ ss::future<> feature_manager::do_maybe_update_active_version() {
             .action = feature_update_action::action_t::activate});
     }
 
-    co_await replicate_feature_update_cmd(std::move(data));
+    co_await replicate_feature_update_cmd(std::move(data), target_term);
 
     vlog(clusterlog.info, "Updated cluster (logical version {})", max_version);
 }
@@ -679,7 +761,7 @@ ss::future<feature_manager::finalize_status>
 feature_manager::submit_manual_finalize_request() {
     vassert(ss::this_shard_id() == backend_shard, "Wrong shard!");
 
-    if (!_am_controller_leader) {
+    if (!_is_leader_of.has_value()) {
         co_return finalize_status::not_leader;
     }
 
@@ -693,7 +775,7 @@ feature_manager::submit_manual_finalize_request() {
 }
 
 ss::future<> feature_manager::do_maybe_activate_features() {
-    if (!_am_controller_leader) {
+    if (!_is_leader_of.has_value()) {
         co_return;
     }
 

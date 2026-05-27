@@ -135,6 +135,7 @@ redpanda_cc_library(
         ":ctp_stm_state",
         ":types",
         "//src/v/cloud_topics/level_zero/common:producer_queue",
+        "//src/v/model",
         "//src/v/raft",
         "//src/v/ssx:mutex",
         "@seastar",

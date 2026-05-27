@@ -187,6 +187,31 @@ class RedpandaOIDCTestBase(Test):
             tls_enabled=use_ssl,
         )
 
+    def _wait_for_acl_on_all_nodes(self, principal, timeout_sec=10, backoff_sec=1):
+        """Wait until the given principal appears in the ACL list on all nodes."""
+        self.logger.debug(f"Waiting for ACL '{principal}' to propagate to all nodes...")
+
+        def propagated():
+            for node in self.redpanda.nodes:
+                acls = self.rpk.acl_list(node=node, format="json")
+                principals = {m["principal"] for m in acls.get("matches", [])}
+                if principal not in principals:
+                    self.logger.debug(
+                        f"ACL '{principal}' not yet on {node.account.hostname}, "
+                        f"found: {principals}"
+                    )
+                    return False
+            self.logger.debug(f"ACL '{principal}' propagated to all nodes")
+            return True
+
+        wait_until(
+            propagated,
+            timeout_sec=timeout_sec,
+            backoff_sec=backoff_sec,
+            retry_on_exc=True,
+            err_msg=f"Timeout waiting for ACL '{principal}' to propagate to all nodes",
+        )
+
     def setUp(self):
         self.redpanda.logger.info("Starting Redpanda")
         self.redpanda.start()
@@ -1963,6 +1988,116 @@ class RedpandaOIDCTestMethods(RedpandaOIDCTestBase):
         )
         self.logger.info(
             f"Read from denied subject denied: {res.status_code} {res.text}"
+        )
+
+    @cluster(num_nodes=4)
+    def test_nested_group_behavior_none_requires_full_path(self):
+        """
+        GBAC-NEST-NONE-020: With nested_group_behavior=none, Redpanda uses the
+        full group path from the token verbatim. An ACL for only the leaf group
+        name (e.g. Group:child) must NOT match a token that contains the full
+        path (e.g. /parent/child).
+
+        Setup: Keycloak group mapper with use_full_path=True, so the token
+        contains the full group path including leading slash
+        (e.g. "/nested-none-parent/nested-none-child").
+
+        Test flow:
+        1. Create a nested group hierarchy in Keycloak (parent -> child)
+        2. Configure the group mapper with use_full_path=True
+        3. Set nested_group_behavior=none
+        4. Grant ACL for Group:nested-none-child (leaf only) — verify access
+           is DENIED (token has full path, leaf ACL does not match)
+        5. Grant ACL for Group:/nested-none-parent/nested-none-child (full path)
+           — verify access is GRANTED
+        """
+        kc_node = self.keycloak.nodes[0]
+        client_id = CLIENT_ID
+
+        parent_group = "nested-none-parent"
+        child_group = "nested-none-child"
+        topic_name = "nested-none-topic"
+        full_path = f"/{parent_group}/{child_group}"
+
+        self.redpanda.set_cluster_config(
+            {"nested_group_behavior": NestedGroupType.NONE.value}
+        )
+
+        self.create_service_user()
+
+        # use_full_path=True: token contains the full path, e.g. "/nested-none-parent/nested-none-child"
+        self.keycloak.admin.create_group_mapper(client_id, use_full_path=True)
+
+        parent_id = self.keycloak.admin.create_group(parent_group)
+        child_id = self.keycloak.admin.create_group(child_group, parent=parent_id)
+        self.keycloak.admin.add_service_user_to_group_by_id(client_id, child_id)
+
+        self.rpk.create_topic(topic_name)
+
+        cfg = self.keycloak.generate_oauth_config(kc_node, client_id)
+
+        def get_visible_topics() -> set[str]:
+            k_client = PythonLibrdkafka(
+                self.redpanda,
+                algorithm="OAUTHBEARER",
+                oauth_config=cfg,
+                tls_cert=self.client_cert,
+            )
+            producer = k_client.get_producer()
+            producer.poll(0.0)
+            return set(producer.list_topics(timeout=5).topics.keys())
+
+        # ACL for leaf name only — token has full path, so this must NOT match
+        leaf_principal = f"Group:{child_group}"
+        self.rpk.sasl_allow_principal(
+            leaf_principal,
+            ["all"],
+            "topic",
+            topic_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+
+        # Wait for leaf ACL to propagate before asserting denial
+        self._wait_for_acl_on_all_nodes(leaf_principal)
+        assert topic_name not in get_visible_topics(), (
+            f"Expected topic '{topic_name}' to NOT be visible: "
+            f"leaf ACL '{leaf_principal}' should not match full path '{full_path}' "
+            f"when nested_group_behavior=none"
+        )
+        self.logger.info(
+            f"Verified: leaf ACL '{leaf_principal}' does not match full group "
+            f"path '{full_path}' with nested_group_behavior=none"
+        )
+
+        # ACL for full path — this must match
+        full_path_principal = f"Group:{full_path}"
+        self.rpk.sasl_allow_principal(
+            full_path_principal,
+            ["all"],
+            "topic",
+            topic_name,
+            self.su_username,
+            self.su_password,
+            self.su_algorithm,
+        )
+
+        # Wait for full path ACL to propagate before asserting access
+        self._wait_for_acl_on_all_nodes(full_path_principal)
+
+        wait_until(
+            lambda: topic_name in get_visible_topics(),
+            timeout_sec=10,
+            backoff_sec=1,
+            err_msg=(
+                f"Expected topic '{topic_name}' to be visible via full path "
+                f"ACL '{full_path_principal}' with nested_group_behavior=none"
+            ),
+        )
+        self.logger.info(
+            f"Verified: full path ACL '{full_path_principal}' grants access "
+            f"when nested_group_behavior=none"
         )
 
 

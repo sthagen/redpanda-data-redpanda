@@ -561,6 +561,16 @@ frontend::refine_timequery_result(
 
 namespace {
 
+bool is_timed_out_error(const std::exception_ptr& e) {
+    try {
+        std::rethrow_exception(e);
+    } catch (const ss::timed_out_error&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 raft::replicate_options update_replicate_options(
   raft::replicate_options opts, model::term_id expected_term) {
     // We overwrite the consistency level in cloud topics. Since you're already
@@ -682,14 +692,22 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
     // (because it needs to drain current requests as the epoch is being
     // bumped).
     auto fence_fut = co_await ss::coroutine::as_future(
-      ctp_stm_api->fence_epoch(batch_epoch));
+      ctp_stm_api->fence_epoch(batch_epoch, timeout));
     if (fence_fut.failed()) {
         auto not_leader = !partition->is_leader();
         auto e = fence_fut.get_exception();
+        // See replicate_at_offset for rationale.
+        auto is_timeout = is_timed_out_error(e);
         if (not_leader) {
             vlog(
               cd_log.debug,
               "Failed to fence epoch {} for ntp {}, not a leader",
+              batch_epoch,
+              ntp);
+        } else if (is_timeout) {
+            vlog(
+              cd_log.info,
+              "Failed to fence epoch {} for ntp {}, timed out",
               batch_epoch,
               ntp);
         } else {
@@ -853,14 +871,23 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
     auto batch_epoch = res.value().extents.front().id.epoch;
 
     auto fence_fut = co_await ss::coroutine::as_future(
-      _ctp_stm_api->fence_epoch(batch_epoch));
+      _ctp_stm_api->fence_epoch(
+        batch_epoch, opts.timeout.value_or(L0_replicate_default_timeout)));
     if (fence_fut.failed()) {
         auto not_leader = !_partition->is_leader();
         auto e = fence_fut.get_exception();
+        // See replicate_at_offset for rationale.
+        auto is_timeout = is_timed_out_error(e);
         if (not_leader) {
             vlog(
               cd_log.debug,
               "Failed to fence epoch {} for ntp {}, not a leader",
+              batch_epoch,
+              ntp());
+        } else if (is_timeout) {
+            vlog(
+              cd_log.info,
+              "Failed to fence epoch {} for ntp {}, timed out",
               batch_epoch,
               ntp());
         } else {
@@ -872,6 +899,10 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
               batch_epoch,
               ntp(),
               e);
+        }
+        if (is_timeout) {
+            co_return std::unexpected(
+              kafka::make_error_code(kafka::error_code::request_timed_out));
         }
         co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
@@ -1319,14 +1350,25 @@ ss::future<result<raft::replicate_result>> frontend::replicate_at_offset(
         auto batch_epoch = res.value().extents.front().id.epoch;
 
         auto fence_fut = co_await ss::coroutine::as_future(
-          _ctp_stm_api->fence_epoch(batch_epoch));
+          _ctp_stm_api->fence_epoch(batch_epoch, timeout));
         if (fence_fut.failed()) {
             auto not_leader = !_partition->is_leader();
             auto e = fence_fut.get_exception();
+            // A ctp_stm sync timeout is transient backpressure (reactor
+            // saturation vs. raft apply). Surface it as a typed errc so the
+            // cluster-link replicator handles it through its result-error
+            // branch instead of the catch-all ERROR log.
+            auto is_timeout = is_timed_out_error(e);
             if (not_leader) {
                 vlog(
                   cd_log.debug,
                   "Failed to fence epoch {} for ntp {}, not a leader",
+                  batch_epoch,
+                  ntp());
+            } else if (is_timeout) {
+                vlog(
+                  cd_log.info,
+                  "Failed to fence epoch {} for ntp {}, timed out",
                   batch_epoch,
                   ntp());
             } else {
@@ -1339,7 +1381,10 @@ ss::future<result<raft::replicate_result>> frontend::replicate_at_offset(
                   ntp(),
                   e);
             }
-            std::rethrow_exception(e);
+            if (is_timeout) {
+                co_return raft::errc::timeout;
+            }
+            co_await ss::coroutine::return_exception_ptr(std::move(e));
         }
         auto fence = std::move(fence_fut.get());
         if (!fence.has_value()) {

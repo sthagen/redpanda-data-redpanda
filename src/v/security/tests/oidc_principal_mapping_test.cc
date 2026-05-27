@@ -445,3 +445,205 @@ BOOST_AUTO_TEST_CASE(test_apply_nested_group_policy_suffix_empty) {
     BOOST_CHECK_EQUAL(principal.type(), security::principal_type::group);
     BOOST_CHECK_EQUAL(principal.name(), "");
 }
+
+// Claim resolves to JSON object
+BOOST_AUTO_TEST_CASE(test_get_group_claim_object_type) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": {"team": "admin", "dept": "engineering"}
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(!result.has_value());
+    BOOST_CHECK_EQUAL(
+      result.error(), security::oidc::errc::group_claim_not_found);
+}
+
+// Groups as arbitrary non-comma-delimited string
+BOOST_AUTO_TEST_CASE(test_get_group_claim_semicolon_delimited) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": "eng;fin"
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    // Semicolons are not a delimiter — treated as single group name
+    BOOST_REQUIRE_EQUAL(groups.size(), 1);
+    BOOST_CHECK_EQUAL(groups[0], "eng;fin");
+}
+
+// CSV with empty entries between commas
+BOOST_AUTO_TEST_CASE(test_get_group_claim_csv_empty_entries) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": "admin,,users"
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    // absl::StrSplit keeps empty entries — "admin,,users" produces
+    // ["admin", "", "users"]. Empty group names are not filtered.
+    BOOST_REQUIRE_EQUAL(groups.size(), 3);
+    BOOST_CHECK_EQUAL(groups[0], "admin");
+    BOOST_CHECK_EQUAL(groups[1], "");
+    BOOST_CHECK_EQUAL(groups[2], "users");
+}
+
+// Unicode group names
+BOOST_AUTO_TEST_CASE(test_get_group_claim_unicode) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": ["équipe", "中文组", "グループ"]
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    BOOST_REQUIRE_EQUAL(groups.size(), 3);
+    BOOST_CHECK_EQUAL(groups[0], "équipe");
+    BOOST_CHECK_EQUAL(groups[1], "中文组");
+    BOOST_CHECK_EQUAL(groups[2], "グループ");
+}
+
+// Special characters in group names
+BOOST_AUTO_TEST_CASE(test_get_group_claim_special_chars) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": ["admin@corp.com", "dev.team", "my group", "role=admin"]
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    BOOST_REQUIRE_EQUAL(groups.size(), 4);
+    BOOST_CHECK_EQUAL(groups[0], "admin@corp.com");
+    BOOST_CHECK_EQUAL(groups[1], "dev.team");
+    BOOST_CHECK_EQUAL(groups[2], "my group");
+    BOOST_CHECK_EQUAL(groups[3], "role=admin");
+}
+
+// Group name containing comma in JSON array form
+BOOST_AUTO_TEST_CASE(test_get_group_claim_comma_in_array_element) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": ["admin,role", "users"]
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    // Array path: comma is part of the name, not a delimiter
+    BOOST_REQUIRE_EQUAL(groups.size(), 2);
+    BOOST_CHECK_EQUAL(groups[0], "admin,role");
+    BOOST_CHECK_EQUAL(groups[1], "users");
+}
+
+// Group name containing comma in CSV form
+BOOST_AUTO_TEST_CASE(test_get_group_claim_comma_in_csv_is_split) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": "admin,role,users"
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    // CSV form: commas always split — cannot embed commas in names
+    BOOST_REQUIRE_EQUAL(groups.size(), 3);
+    BOOST_CHECK_EQUAL(groups[0], "admin");
+    BOOST_CHECK_EQUAL(groups[1], "role");
+    BOOST_CHECK_EQUAL(groups[2], "users");
+}
+
+// Duplicate group names in array
+BOOST_AUTO_TEST_CASE(test_get_group_claim_duplicates) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": ["admin", "admin", "users"]
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    // Implementation does not deduplicate
+    BOOST_REQUIRE_EQUAL(groups.size(), 3);
+    BOOST_CHECK_EQUAL(groups[0], "admin");
+    BOOST_CHECK_EQUAL(groups[1], "admin");
+    BOOST_CHECK_EQUAL(groups[2], "users");
+}
+
+// Group names with newline/tab characters.
+BOOST_AUTO_TEST_CASE(test_get_group_claim_whitespace_chars) {
+    auto jwt = make_test_jwt(R"({
+        "iss": "http://example.com",
+        "sub": "user123",
+        "groups": ["group\twith\ttabs", "group\nwith\nnewlines"]
+    })");
+    BOOST_REQUIRE(jwt.has_value());
+
+    json::Pointer group_pointer("/groups");
+    auto result = security::oidc::detail::get_group_claim(
+      group_pointer, jwt.assume_value());
+
+    BOOST_REQUIRE(result.has_value());
+    auto groups = std::move(result).value();
+    BOOST_REQUIRE_EQUAL(groups.size(), 2);
+    BOOST_CHECK_EQUAL(groups[0], "group\twith\ttabs");
+    BOOST_CHECK_EQUAL(groups[1], "group\nwith\nnewlines");
+}
+
+// Multiple nested groups collide to same suffix
+BOOST_AUTO_TEST_CASE(test_apply_nested_group_policy_suffix_collision) {
+    auto p1 = security::oidc::detail::apply_nested_group_policy(
+      "deptA/admin", security::oidc::nested_group_behavior::suffix);
+    auto p2 = security::oidc::detail::apply_nested_group_policy(
+      "deptB/admin", security::oidc::nested_group_behavior::suffix);
+
+    // Both resolve to "admin"
+    BOOST_CHECK_EQUAL(p1.name(), "admin");
+    BOOST_CHECK_EQUAL(p2.name(), "admin");
+    BOOST_CHECK_EQUAL(p1.name(), p2.name());
+}

@@ -3128,6 +3128,81 @@ TEST(AUTHORIZER_TEST, group_role_authz_implied_operations) {
     EXPECT_EQ(result.role, role_name1);
 }
 
+// Case-sensitive group matching
+TEST(AUTHORIZER_TEST, group_authz_case_sensitive) {
+    acl_principal user1(principal_type::user, "user1");
+    acl_principal group_lower(principal_type::group, "eng");
+    acl_principal group_upper(principal_type::group, "Eng");
+
+    acl_entry allow_lower(
+      group_lower,
+      acl_host::wildcard_host(),
+      acl_operation::read,
+      acl_permission::allow);
+
+    chunked_vector<acl_binding> bindings;
+    resource_pattern resource(
+      resource_type::topic, default_topic(), pattern_type::literal);
+    bindings.emplace_back(resource, allow_lower);
+
+    role_store roles;
+    auto auth = make_test_instance(authorizer::allow_empty_matches::no, &roles);
+    auth.add_bindings(bindings);
+
+    // User in group "Eng" (uppercase) should NOT match ACL for "eng"
+    auto result = auth.authorized(
+      default_topic,
+      acl_operation::read,
+      user1,
+      acl_host("192.168.1.1"),
+      security::superuser_required::no,
+      {group_upper});
+
+    EXPECT_FALSE(bool(result));
+
+    // User in group "eng" (matching case) should match
+    auto result2 = auth.authorized(
+      default_topic,
+      acl_operation::read,
+      user1,
+      acl_host("192.168.1.1"),
+      security::superuser_required::no,
+      {group_lower});
+
+    EXPECT_TRUE(bool(result2));
+}
+
+// Authorization with whitespace control chars in group name
+TEST(AUTHORIZER_TEST, group_authz_whitespace_chars_in_name) {
+    acl_principal user1(principal_type::user, "user1");
+    acl_principal group_tab(principal_type::group, "group\twith\ttabs");
+
+    acl_entry allow_tab(
+      group_tab,
+      acl_host::wildcard_host(),
+      acl_operation::read,
+      acl_permission::allow);
+
+    chunked_vector<acl_binding> bindings;
+    resource_pattern resource(
+      resource_type::topic, default_topic(), pattern_type::literal);
+    bindings.emplace_back(resource, allow_tab);
+
+    role_store roles;
+    auto auth = make_test_instance(authorizer::allow_empty_matches::no, &roles);
+    auth.add_bindings(bindings);
+
+    auto result = auth.authorized(
+      default_topic,
+      acl_operation::read,
+      user1,
+      acl_host("192.168.1.1"),
+      security::superuser_required::no,
+      {group_tab});
+
+    EXPECT_TRUE(bool(result));
+}
+
 // Test ACL pattern types (prefix, literal, wildcard) for context subjects.
 TEST(AUTHORIZER_TEST, authz_sr_context_subject_patterns) {
     namespace ppsr = pandaproxy::schema_registry;

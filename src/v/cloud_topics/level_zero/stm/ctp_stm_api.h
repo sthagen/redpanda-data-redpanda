@@ -127,9 +127,18 @@ public:
     ss::future<bool>
     sync_in_term(model::timeout_clock::time_point deadline, ss::abort_source&);
 
-    /// Fence writes
+    /// Fence writes. The `timeout` bounds the underlying ctp_stm raft sync;
+    /// callers that have their own deadline (e.g. the bulk-replicate paths in
+    /// the frontend) should pass it through so fence_epoch shares the same
+    /// budget instead of using the stm's default.
     ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
-    fence_epoch(cluster_epoch e);
+    fence_epoch(
+      cluster_epoch e,
+      model::timeout_clock::duration timeout = default_fence_epoch_timeout);
+
+    /// Default deadline used by `fence_epoch` when callers do not supply one.
+    static constexpr auto default_fence_epoch_timeout = std::chrono::seconds(
+      10);
 
     std::optional<cluster_epoch> get_max_epoch() const;
 

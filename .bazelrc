@@ -1,10 +1,6 @@
 common --registry=https://bcr.bazel.build
 common --extra_toolchains=@current_llvm_toolchain//:all
 
-# Store repositories also in the remote cache to speed up fetches and avoid
-# flakiness due to Github
-startup --experimental_remote_repo_contents_cache
-
 # Triple repo downloader retries to try working around github flakiness.
 common --experimental_repository_downloader_retries=15
 common --http_connector_attempts=24

@@ -11,36 +11,68 @@
 #include "iceberg/unicode.h"
 
 #include <cstdlib>
+#include <memory>
+#include <new>
+#include <stdexcept>
 #include <utf8proc.h>
 
 namespace iceberg {
 
 namespace {
-std::string case_fold(std::string_view s) {
+struct free_deleter {
+    void operator()(uint8_t* p) const noexcept {
+        // utf8proc_map allocates the output buffer with malloc; we own it.
+        // NOLINTNEXTLINE
+        free(p);
+    }
+};
+
+/// Owning wrapper around a utf8proc_map result buffer. The view is valid for
+/// the lifetime of this object.
+class folded_string {
+public:
+    folded_string() noexcept = default;
+    folded_string(uint8_t* data, size_t size) noexcept
+      : owner_(data)
+      , size_(size) {}
+
+    std::string_view view() const noexcept {
+        return {reinterpret_cast<const char*>(owner_.get()), size_};
+    }
+
+private:
+    std::unique_ptr<uint8_t, free_deleter> owner_;
+    size_t size_ = 0;
+};
+
+/// Case-fold \p s using utf8proc. Throws std::bad_alloc on allocation failure
+/// or std::runtime_error (with utf8proc_errmsg) on other utf8proc errors such
+/// as invalid UTF-8.
+folded_string case_fold(std::string_view s) {
     uint8_t* result = nullptr;
     const utf8proc_ssize_t len = utf8proc_map(
       reinterpret_cast<const uint8_t*>(s.data()),
       static_cast<utf8proc_ssize_t>(s.size()),
       &result,
-      static_cast<utf8proc_option_t>(
-        UTF8PROC_CASEFOLD | UTF8PROC_COMPOSE | UTF8PROC_NULLTERM));
-    if (len < 0) {
-        return std::string{s};
+      static_cast<utf8proc_option_t>(UTF8PROC_CASEFOLD | UTF8PROC_COMPOSE));
+    if (len == UTF8PROC_ERROR_NOMEM) {
+        throw std::bad_alloc{};
     }
-    std::string out(reinterpret_cast<char*>(result), static_cast<size_t>(len));
-    // utf8proc_map allocates the output buffer; we own it and must free it.
-    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc)
-    free(result);
-    return out;
+    if (len < 0) {
+        throw std::runtime_error(utf8proc_errmsg(len));
+    }
+    return {result, static_cast<size_t>(len)};
 }
 } // namespace
 
 bool names_equal(
   std::string_view a, std::string_view b, field_name_comparison norm) {
-    if (norm == field_name_comparison::lower_case) {
-        return case_fold(a) == case_fold(b);
+    switch (norm) {
+    case field_name_comparison::verbatim:
+        return a == b;
+    case field_name_comparison::lower_case:
+        return case_fold(a).view() == case_fold(b).view();
     }
-    return a == b;
 }
 
 } // namespace iceberg

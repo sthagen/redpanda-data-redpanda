@@ -16,6 +16,7 @@
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/level_zero/stm/types.h"
 #include "cloud_topics/types.h"
+#include "model/timeout_clock.h"
 #include "raft/consensus.h"
 #include "raft/persisted_stm.h"
 #include "ssx/future-util.h"
@@ -29,8 +30,6 @@
 #include <stdexcept>
 
 namespace cloud_topics {
-
-static constexpr auto sync_timeout = 10s;
 
 namespace {
 cluster_epoch extract_epoch(model::record_batch&& batch) {
@@ -441,9 +440,9 @@ ss::future<iobuf> ctp_stm::take_raft_snapshot(model::offset snapshot_at) {
 }
 
 ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
-ctp_stm::fence_epoch(cluster_epoch e) {
+ctp_stm::fence_epoch(cluster_epoch e, model::timeout_clock::duration timeout) {
     auto holder = _gate.hold();
-    if (!co_await sync(sync_timeout, _as)) {
+    if (!co_await sync(timeout, _as)) {
         // Prevent the below log spam if we are shutting down.
         _as.check();
         if (_raft->is_leader()) {
@@ -451,7 +450,8 @@ ctp_stm::fence_epoch(cluster_epoch e) {
         } else {
             vlog(_log.debug, "ctp_stm::fence_epoch sync timeout (not leader)");
         }
-        throw std::runtime_error(fmt_with_ctx(fmt::format, "Sync timeout"));
+        // The stm sync only return false on timeout or leadership transfer.
+        throw ss::timed_out_error{};
     }
     auto term = _raft->confirmed_term();
     while (true) {

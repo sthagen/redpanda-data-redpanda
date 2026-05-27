@@ -314,9 +314,10 @@ ss::future<bool> ctp_stm_api::sync_in_term(
 }
 
 ss::future<std::expected<cluster_epoch_fence, stale_cluster_epoch>>
-ctp_stm_api::fence_epoch(cluster_epoch e) {
+ctp_stm_api::fence_epoch(
+  cluster_epoch e, model::timeout_clock::duration timeout) {
     vlog(_log.debug, "Fencing epoch {} in term {}", e, _stm->_raft->term());
-    auto res = co_await _stm->fence_epoch(e);
+    auto res = co_await _stm->fence_epoch(e, timeout);
     vlog(
       _log.debug,
       "Fence acquired = {} for epoch {} in term {}",

@@ -220,6 +220,12 @@ class KeycloakAdminClient:
         assert group_id is not None, f"Group {group_name} not found"
         self._add_user_to_group(user_id=account_id, group_id=group_id)
 
+    def add_service_user_to_group_by_id(self, client_id: str, group_id: str):
+        id = self.kc_admin.get_client_id(client_id)
+        assert id is not None, f"Client {client_id} not found"
+        service_account_user = self.kc_admin.get_client_service_account_user(id)
+        self._add_user_to_group(user_id=service_account_user["id"], group_id=group_id)
+
     def remove_service_user_from_group(self, client_id: str, group_name: str):
         id = self.kc_admin.get_client_id(client_id)
         assert id is not None, f"Client {client_id} not found"

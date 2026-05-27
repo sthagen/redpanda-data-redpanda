@@ -13,6 +13,8 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <stdexcept>
 #include <string_view>
 
 using namespace iceberg;
@@ -66,4 +68,25 @@ TEST(NamesEqualNonASCII, Unicode) {
     // folding produces i + U+0307 COMBINING DOT ABOVE (a 1:many mapping).
     EXPECT_TRUE(names_equal("\xC4\xB0", "\x69\xCC\x87", fnn::lower_case));
     EXPECT_FALSE(names_equal("\xC4\xB0", "\x69", fnn::lower_case));
+}
+
+// A std::string_view is not required to be null-terminated; case folding must
+// respect the view's size and not read past the end.
+TEST(NamesEqualNonNullTerm, RespectsLength) {
+    constexpr std::array<char, 6> buffer{'f', 'o', 'o', 'b', 'a', 'r'};
+    std::string_view a{buffer.data(), 3};
+    EXPECT_TRUE(names_equal(a, "foo", fnn::lower_case));
+    EXPECT_TRUE(names_equal(a, "FOO", fnn::lower_case));
+    EXPECT_FALSE(names_equal(a, "foobar", fnn::lower_case));
+}
+
+// Invalid UTF-8 is surfaced as std::runtime_error in lower_case mode (case
+// folding can't proceed) but verbatim mode is a byte compare and must not
+// throw.
+TEST(NamesEqualInvalidUtf8, Throws) {
+    // \xC4 is a 2-byte UTF-8 lead with no continuation byte.
+    constexpr std::string_view bad = "\xC4";
+    EXPECT_THROW(names_equal(bad, "x", fnn::lower_case), std::runtime_error);
+    EXPECT_THROW(names_equal("x", bad, fnn::lower_case), std::runtime_error);
+    EXPECT_NO_THROW(names_equal(bad, "x", fnn::verbatim));
 }
