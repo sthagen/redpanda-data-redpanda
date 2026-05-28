@@ -214,6 +214,7 @@ enum translation_errc {
     shutting_down,
     out_of_disk,
     type_resolution_error,
+    unknown_error,
 };
 
 inline fmt::iterator format_to(translation_errc ec, fmt::iterator out) {
@@ -238,6 +239,8 @@ inline fmt::iterator format_to(translation_errc ec, fmt::iterator out) {
         return fmt::format_to(out, "translation_errc::out_of_disk");
     case type_resolution_error:
         return fmt::format_to(out, "translation_errc::type_resolution_error");
+    case unknown_error:
+        return fmt::format_to(out, "translation_errc::unknown_error");
     }
 }
 

@@ -9,6 +9,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cloud_topics/level_one/maintenance:meta",
         "//src/v/cloud_topics/level_one/maintenance:scheduler_probe",
+        "//src/v/cloud_topics/level_one/maintenance:scheduling_policies",
         "//src/v/cloud_topics/level_one/maintenance:worker",
         "//src/v/cluster:fwd",
         "//src/v/cluster:members_table",

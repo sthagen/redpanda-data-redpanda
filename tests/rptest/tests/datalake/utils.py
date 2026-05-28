@@ -29,3 +29,19 @@ def supported_storage_types():
     supported_storage = map(lambda x: x[1], supported_variants)
     unique = list(set(supported_storage))
     return unique
+
+
+def duckdb_supported_storage_types() -> list[CloudStorageType]:
+    """
+    Run only in docker environment with S3 storage type.
+
+    DuckDBPy requires explicit S3 access key / secret credentials, which we
+    only set up in docker. In other environments S3 access is brokered via
+    IAM roles, which DuckDBPy doesn't support.
+
+    TODO: extend support.
+    """
+    if get_cloud_provider() == "docker":
+        return [CloudStorageType.S3]
+    else:
+        return []

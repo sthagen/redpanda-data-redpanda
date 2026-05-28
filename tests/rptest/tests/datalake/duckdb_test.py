@@ -9,24 +9,13 @@
 
 from ducktape.mark import matrix
 
-from rptest.context.cloud_storage import CloudStorageType
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import SISettings, get_cloud_provider
+from rptest.services.redpanda import SISettings
 from rptest.tests.datalake.catalog_service_factory import filesystem_catalog_type
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
+from rptest.tests.datalake.utils import duckdb_supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
-
-
-def duckdb_supported_storage_types():
-    """
-    Run only in docker environment with S3 storage type.
-    TODO: extend support.
-    """
-    if get_cloud_provider() == "docker":
-        return [CloudStorageType.S3]
-    else:
-        return []
 
 
 class DuckDBTest(RedpandaTest):

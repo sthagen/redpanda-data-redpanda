@@ -58,6 +58,7 @@ public:
         shutting_down,
         out_of_disk,
         type_resolution_error,
+        unknown_error,
     };
 
     using custom_partitioning_enabled
@@ -129,6 +130,8 @@ private:
             return fmt::format_to(out, "disk exhausted");
         case errc::type_resolution_error:
             return fmt::format_to(out, "type resolution error");
+        case errc::unknown_error:
+            return fmt::format_to(out, "unknown error");
         }
     }
 

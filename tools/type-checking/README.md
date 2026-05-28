@@ -20,6 +20,8 @@ The main type checking orchestration script. Provides multiple commands:
 - **`promotion-check`** - Identify files that can be promoted to stricter type checking levels
 - **`fruit`** - Show files with fewest errors at each target level (low-hanging fruit for type checking improvements)
 - **`ci`** - Run both `check` and `promotion-check` and decorates the results (used in CI)
+- **`check-sorted`** - Verify that `type-check-strictness.json` is sorted
+- **`pre-commit`** - Run `check` on changed files (intended for use as a pre-commit hook); accepts paths rooted at repo root (`tests/...`) and strips the prefix internally
 
 ### `type-check-strictness.json`
 
@@ -88,8 +90,8 @@ task rp:type-check -- promotion-check --update
 # Run CI checks (both check and promotion-check)
 task rp:type-check -- ci
 
-# Check specific files
-task rp:type-check -- check --input-files "rptest/tests/my_test.py"
+# Check specific files (paths/globs are positional, relative to tests/)
+task rp:type-check -- check rptest/tests/my_test.py
 
 # Force all files to be checked at a specific level
 task rp:type-check -- check --force-level strict
@@ -151,7 +153,7 @@ git commit -m "chore: update type checking strictness"
 
 - `--tests-root PATH` - Path to tests directory (auto-detected by default)
 - `--config PATH` - Path to pyrightconfig.json
-- `--input-files GLOB` - Glob pattern for files to check (default: `rptest/**/*.py`)
+- `input_files` - Positional paths/globs of files to check, relative to `tests/` (default: `rptest/**/*.py`)
 - `--force-level LEVEL` - Override strictness levels and check all files at specified level
 - `--no-venv` - Don't use virtual environment when running pyright
 - `--verbose [LEVEL]` - Enable verbose output (0=off, 1=verbose, 2=very verbose)

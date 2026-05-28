@@ -223,6 +223,12 @@ for memory safety in coroutines, not self-reference.
 
 - Avoid catching bare `except:` as this can hide system exceptions, including exceptions
   raised by a signal when a test is being forcibly timed out. Instead use `except Exception:`.
+- After modifying files under `tests/rptest`, run type checking via
+  `tools/type-checking/type-check.sh check <files...>` (paths positional, relative to `tests/`)
+  to scope it to your changes. Do not invoke `type-check.py` directly.
+  See `tools/type-checking/README.md` for more details: the per-file
+  strictness levels in `type-check-strictness.json` and how to promote
+  files to stricter levels after adding type hints.
 
 ### Instructions for type hints
 

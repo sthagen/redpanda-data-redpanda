@@ -44,10 +44,9 @@ private:
               a->compaction_info_and_ts.has_value()
                 && b->compaction_info_and_ts.has_value(),
               "Sorting policy applied to logs without compaction_info_and_ts "
-              "assigned- "
-              "concurrency issue?");
+              "assigned- concurrency issue?");
             return a->compaction_info_and_ts->info.dirty_ratio
-                   > b->compaction_info_and_ts->info.dirty_ratio;
+                   < b->compaction_info_and_ts->info.dirty_ratio;
         }
     };
 };
@@ -67,10 +66,9 @@ private:
               a->compaction_info_and_ts.has_value()
                 && b->compaction_info_and_ts.has_value(),
               "Sorting policy applied to logs without compaction_info_and_ts "
-              "assigned- "
-              "concurrency issue?");
+              "assigned- concurrency issue?");
             return a->compaction_info_and_ts->info.earliest_dirty_ts
-                   < b->compaction_info_and_ts->info.earliest_dirty_ts;
+                   > b->compaction_info_and_ts->info.earliest_dirty_ts;
         }
     };
 };

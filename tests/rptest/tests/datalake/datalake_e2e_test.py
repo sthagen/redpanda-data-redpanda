@@ -45,7 +45,10 @@ from rptest.tests.datalake.catalog_service_factory import (
 )
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
-from rptest.tests.datalake.utils import supported_storage_types
+from rptest.tests.datalake.utils import (
+    duckdb_supported_storage_types,
+    supported_storage_types,
+)
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_debug_mode
 
@@ -771,7 +774,7 @@ class DatalakeE2ETests(RedpandaTest):
     # split keeps `--fail-bad-cluster-utilization` happy.
     @cluster(num_nodes=2)
     @matrix(
-        cloud_storage_type=[CloudStorageType.S3],
+        cloud_storage_type=duckdb_supported_storage_types(),
         catalog_type=[CatalogType.REST_JDBC],
     )
     def test_avro_all_iceberg_types_duckdb(self, cloud_storage_type, catalog_type):

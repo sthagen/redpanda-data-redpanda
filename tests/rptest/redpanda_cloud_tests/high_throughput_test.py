@@ -230,7 +230,7 @@ DEFAULT_MESSAGE_SIZE = 4 * KiB
 class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
     msg_size = DEFAULT_MESSAGE_SIZE
     # Min segment size across all tiers
-    min_segment_size = 16 * MiB
+    min_segment_size = 14 * MiB
     unavailable_timeout = 60
     # default message count to check
     msg_count = 100000
