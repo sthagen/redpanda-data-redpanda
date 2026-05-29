@@ -183,6 +183,20 @@ feature_manager::start(std::vector<model::node_id>&& cluster_founder_nodes) {
             }
         });
 
+    // Wake the background loop on any membership change. The active-
+    // version check in do_maybe_update_active_version is gated on the
+    // set of current members (members_table::node_ids()); when a node
+    // is fully removed (e.g. its decommission completes) no health
+    // report or leader change re-triggers the loop, so without this
+    // notification the active version can stay stuck below the
+    // cluster's actual minimum until the next leader change.
+    _members_notify_handle
+      = _members.local().register_members_updated_notification(
+        [this](model::node_id, model::membership_state) {
+            _members_changed = true;
+            _update_wait.signal();
+        });
+
     // Detach fiber for active version updater.
     // The writes of active version run in the background, because we
     // do it in response to callbacks (e.g. node version change from
@@ -214,6 +228,8 @@ ss::future<> feature_manager::stop() {
     _group_manager.local().unregister_leadership_notification(
       _leader_notify_handle);
     _hm_backend.local().unregister_node_callback(_health_notify_handle);
+    _members.local().unregister_members_updated_notification(
+      _members_notify_handle);
     _update_wait.broken();
     _verified_enterprise_license.broken();
     co_await _gate.close();
@@ -569,6 +585,11 @@ feature_manager::do_maybe_update_active_version(bool& failed_barrier) {
     const bool was_manual_finalize_pending = std::exchange(
       _manual_finalize_pending, false);
 
+    // Clear the membership-change wake bit before evaluating, so any
+    // change that races our read of members_table re-sets it and
+    // triggers another pass.
+    _members_changed = false;
+
     if (!_is_leader_of.has_value()) {
         // Drop accumulated updates to bound memory while we're not
         // the leader; updates_pending() already short-circuits when
@@ -772,6 +793,88 @@ feature_manager::submit_manual_finalize_request() {
     _manual_finalize_pending = true;
     _update_wait.signal();
     co_return finalize_status::ok;
+}
+
+ss::future<feature_manager::upgrade_status>
+feature_manager::get_upgrade_status() {
+    vassert(ss::this_shard_id() == backend_shard, "Wrong shard!");
+
+    upgrade_status status;
+    status.active_version = _feature_table.local().get_active_version();
+    status.auto_finalization_enabled
+      = config::shard_local_cfg().features_auto_finalization();
+
+    // The version a finalize would aim for: the highest logical version
+    // reported by any node. Matches do_maybe_update_active_version.
+    cluster_version max_version = invalid_version;
+    for (const auto& i : _node_versions) {
+        max_version = std::max(i.second, max_version);
+    }
+
+    // Best-effort enrichment: map node -> human-readable release version
+    // from the cached cluster health report. Exclude per-partition health
+    // (include_partitions::no): we only need each node's reported
+    // redpanda_version, and pulling partition metadata would make this
+    // pollable read-only RPC needlessly expensive on large clusters. A
+    // fetch failure just leaves release_version empty; the version
+    // observability below does not depend on it.
+    std::map<model::node_id, ss::sstring> release_by_node;
+    auto health = co_await _hm_frontend.local().get_cluster_health(
+      cluster_report_filter{
+        .node_report_filter
+        = node_report_filter{.include_partitions = include_partitions_info::no}},
+      force_refresh::no,
+      model::timeout_clock::now() + health_monitor_frontend::default_timeout);
+    if (health) {
+        for (const auto& report : health.value().node_reports) {
+            release_by_node.emplace(
+              report->id, report->local_state.redpanda_version());
+        }
+    }
+
+    // Gather per-member version + liveness, mirroring the precondition
+    // checks in do_maybe_update_active_version (all members known, all
+    // versions >= max_version, all alive). Kept as a read-only mirror
+    // rather than sharing code with that safety-critical loop; the raw
+    // per-member fields below are authoritative even if the rolled-up
+    // state lags a change to the loop's predicate.
+    bool all_known = true;
+    bool all_sufficient = true;
+    bool all_alive = true;
+    for (const auto& node_id : _members.local().node_ids()) {
+        upgrade_status::member m;
+        m.id = node_id;
+        if (
+          auto it = _node_versions.find(node_id); it != _node_versions.end()) {
+            m.version_known = true;
+            m.logical_version = it->second;
+            all_sufficient &= it->second >= max_version;
+        } else {
+            all_known = false;
+        }
+        m.alive = _hm_frontend.local().is_alive(node_id) == alive::yes;
+        all_alive &= m.alive;
+        if (
+          auto it = release_by_node.find(node_id);
+          it != release_by_node.end()) {
+            m.release_version = it->second;
+        }
+        status.members.push_back(std::move(m));
+    }
+
+    using state = upgrade_status::finalization_state;
+    if (max_version <= status.active_version) {
+        status.state = state::finalized;
+        status.version_after_finalization = status.active_version;
+    } else if (all_known && all_sufficient && all_alive) {
+        status.state = state::ready_to_finalize;
+        status.version_after_finalization = max_version;
+    } else {
+        status.state = state::upgrade_in_progress;
+        status.version_after_finalization = status.active_version;
+    }
+
+    co_return status;
 }
 
 ss::future<> feature_manager::do_maybe_activate_features() {

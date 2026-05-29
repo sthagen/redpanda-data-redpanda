@@ -23,6 +23,7 @@ from ducktape.mark import matrix, parametrize
 from ducktape.utils.util import wait_until
 
 from rptest.clients.kafka_cli_tools import KafkaCliTools
+from rptest.clients.kcl import KAFKA_ERROR_INVALID_CONFIG
 from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.rpk_remote import RpkRemoteTool
 from rptest.clients.types import TopicSpec
@@ -1635,19 +1636,16 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         out = self.client().alter_broker_config(
             {"log_message_timestamp_type": "CreateTime"}, incremental
         )
-        # kcl does not set an error exist status when config set fails, so must
-        # read its output text to validate that calls are successful
-        assert "OK" in out
+        assert out["error"] == 0, out
 
         out = self.client().alter_broker_config(
             {"log_message_timestamp_type": "LogAppendTime"}, incremental
         )
-        assert "OK" in out
+        assert out["error"] == 0, out
         if incremental:
             self.client().delete_broker_config(
                 ["log_message_timestamp_type"], incremental
             )
-            assert "OK" in out
 
         # Set a property by its Kafka-interop names and values
         kafka_props = {
@@ -1659,28 +1657,30 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         for property, value_list in kafka_props.items():
             for value in value_list:
                 out = self.client().alter_broker_config({property: value}, incremental)
-                assert "OK" in out
+                assert out["error"] == 0, out
 
         # Set a nonexistent property
-        with expect_exception(RuntimeError, lambda e: "INVALID_CONFIG" in str(e)):
-            self.client().alter_broker_config({"does_not_exist": "avalue"}, incremental)
+        out = self.client().alter_broker_config(
+            {"does_not_exist": "avalue"}, incremental
+        )
+        assert out["error"] == KAFKA_ERROR_INVALID_CONFIG, out
 
         # Set a malformed property
-        with expect_exception(RuntimeError, lambda e: "INVALID_CONFIG" in str(e)):
-            self.client().alter_broker_config(
-                {"log_message_timestamp_type": "BadValue"}, incremental
-            )
+        out = self.client().alter_broker_config(
+            {"log_message_timestamp_type": "BadValue"}, incremental
+        )
+        assert out["error"] == KAFKA_ERROR_INVALID_CONFIG, out
 
         # Set a property on a named broker: should fail because this
         # interface is only for cluster-wide properties
-        with expect_exception(
-            RuntimeError,
-            lambda e: "INVALID_CONFIG" in str(e)
-            and "Setting broker properties on named brokers is unsupported" in str(e),
-        ):
-            self.client().alter_broker_config(
-                {"log_message_timestamp_type": "CreateTime"}, incremental, broker=1
-            )
+        out = self.client().alter_broker_config(
+            {"log_message_timestamp_type": "CreateTime"}, incremental, broker=1
+        )
+        assert out["error"] == KAFKA_ERROR_INVALID_CONFIG, out
+        assert (
+            "Setting broker properties on named brokers is unsupported"
+            in out["error_message"]
+        ), out
 
     @cluster(num_nodes=3)
     def test_alter_configs(self):
@@ -1689,14 +1689,14 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         are correctly handled with an 'unsupported' response.
         """
 
-        with expect_exception(
-            RuntimeError,
-            lambda e: "INVALID_CONFIG" in str(e)
-            and "changing broker properties isn't supported via this API" in str(e),
-        ):
-            self.client().alter_broker_config(
-                {"log_message_timestamp_type": "CreateTime"}, incremental=False
-            )
+        result = self.client().alter_broker_config(
+            {"log_message_timestamp_type": "CreateTime"}, incremental=False
+        )
+        assert result["error"] == KAFKA_ERROR_INVALID_CONFIG, result
+        assert (
+            "changing broker properties isn't supported via this API"
+            in result["error_message"]
+        ), result
 
     # Note: "shared_key" is base64 encoded. It is decoded and that is the password used
     ABS_STATIC_CFG = {

@@ -74,10 +74,10 @@ worker_manager::try_acquire_work(ss::shard_id shard) {
     }
 
     dassert(
-      log->state == log_compaction_meta::log_state::queued,
+      log->compaction.s == log_compaction_state::status::queued,
       "Expected log state to be queued when acquiring work");
-    log->state = log_compaction_meta::log_state::inflight;
-    log->inflight_shard = shard;
+    log->compaction.s = log_compaction_state::status::inflight;
+    log->compaction.inflight_shard = shard;
     return ss::make_foreign(log);
 }
 
@@ -89,11 +89,11 @@ void worker_manager::complete_work(log_compaction_meta* log) {
       worker_manager_shard);
 
     dassert(
-      log->state == log_compaction_meta::log_state::inflight,
+      log->compaction.s == log_compaction_state::status::inflight,
       "Expected log state to be inflight when completing work");
-    log->state = log_compaction_meta::log_state::idle;
-    log->inflight_shard.reset();
-    log->compaction_info_and_ts.reset();
+    log->compaction.s = log_compaction_state::status::idle;
+    log->compaction.inflight_shard.reset();
+    log->compaction.info_and_ts.reset();
 
     _probe.log_compacted();
 }
@@ -103,7 +103,7 @@ void worker_manager::request_stop_compaction(log_compaction_meta_ptr log) {
         return;
     }
 
-    auto shard_opt = log->inflight_shard;
+    auto shard_opt = log->compaction.inflight_shard;
     if (!shard_opt.has_value()) {
         return;
     }

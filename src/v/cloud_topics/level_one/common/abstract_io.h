@@ -11,6 +11,7 @@
 #pragma once
 
 #include "bytes/iobuf.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "container/chunked_vector.h"
@@ -85,12 +86,12 @@ public:
     //
     // Behind the scenes, there may or may not be caching going on.
     virtual ss::future<std::expected<ss::input_stream<char>, errc>>
-    read_object(object_extent, ss::abort_source*) = 0;
+    read_object(object_extent, ss::abort_source*, cloud_io::group_id g) = 0;
 
     // The same as `read_object` except that instead of returning an input
     // stream, the data is fully buffered into an `iobuf`.
-    virtual ss::future<std::expected<iobuf, errc>>
-    read_object_as_iobuf(object_extent, ss::abort_source*);
+    virtual ss::future<std::expected<iobuf, errc>> read_object_as_iobuf(
+      object_extent, ss::abort_source*, cloud_io::group_id g);
 
     // Delete the specified objects from object storage.
     virtual ss::future<std::expected<void, errc>>

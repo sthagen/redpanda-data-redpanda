@@ -1123,6 +1123,58 @@ class AuditLogTestAdminApi(AuditLogTestBase):
         expected = self.redpanda.SUPERUSER_CREDENTIALS[0]
         assert actor == expected, f"Expected actor user {expected}, got {actor}"
 
+    @skip_fips_mode
+    @cluster(num_nodes=5)
+    def test_admin_v2_get_upgrade_status(self):
+        """
+        Verifies that calls to the admin v2 FeaturesService.GetUpgradeStatus
+        RPC produce an api_activity audit record when the "admin" event type
+        is enabled. Unlike FinalizeUpgrade this RPC is read-only (USER authz)
+        and succeeds; the audit entry is emitted at the auth boundary either
+        way.
+        """
+        self.modify_audit_event_types(["admin"])
+
+        admin_v2 = AdminV2(
+            self.redpanda,
+            auth=(
+                self.redpanda.SUPERUSER_CREDENTIALS[0],
+                self.redpanda.SUPERUSER_CREDENTIALS[1],
+            ),
+        )
+
+        # The audit record is emitted at the auth boundary, so it appears even
+        # if the handler transiently returns UNAVAILABLE (e.g. no controller
+        # leader during the election window under parallel load).
+        try:
+            admin_v2.features().get_upgrade_status(
+                features_pb2.GetUpgradeStatusRequest()
+            )
+        except Exception as e:
+            self.logger.debug(f"GetUpgradeStatus returned: {e}")
+
+        def is_get_upgrade_status_record(record):
+            if (
+                record["class_uid"] != 6003
+                or record["dst_endpoint"]["svc_name"] != self.admin_audit_svc_name
+            ):
+                return False
+            url = record["http_request"]["url"]["url_string"]
+            return "FeaturesService/GetUpgradeStatus" in url
+
+        records = self.find_matching_record(
+            is_get_upgrade_status_record,
+            lambda count: count >= 1,
+            "admin v2 GetUpgradeStatus audit record",
+        )
+
+        assert len(records) >= 1, (
+            f"Expected at least one record, got {len(records)}: {records}"
+        )
+        actor = records[0]["actor"]["user"]["name"]
+        expected = self.redpanda.SUPERUSER_CREDENTIALS[0]
+        assert actor == expected, f"Expected actor user {expected}, got {actor}"
+
 
 class AuditLogTestAdminAuthApi(AuditLogTestBase):
     """

@@ -16,7 +16,11 @@ from requests.exceptions import HTTPError
 
 from rptest.clients.default import DefaultClient
 from rptest.clients.kafka_cli_tools import KafkaCliTools
-from rptest.clients.kcl import KclCreateTopicsRequestTopic, RawKCL
+from rptest.clients.kcl import (
+    KAFKA_ERROR_THROTTLING_QUOTA_EXCEEDED,
+    KclCreateTopicsRequestTopic,
+    RawKCL,
+)
 from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
@@ -189,19 +193,16 @@ class ControllerConfigLimitTest(RedpandaTest):
             backoff_sec=1,
         )
         for i in range(requests_amount):
-            try:
-                self.client().alter_broker_config(
-                    {"controller_log_accummulation_rps_capacity_topic_operations": i},
-                    incremental=True,
-                )
-            except RuntimeError as e:
-                if "THROTTLING_QUOTA_EXCEEDED" in str(e):
-                    quota_error_amount += 1
-                else:
-                    # unexpected error type
-                    raise
-            else:
+            result = self.client().alter_broker_config(
+                {"controller_log_accummulation_rps_capacity_topic_operations": i},
+                incremental=True,
+            )
+            if result["error"] == 0:
                 success_amount += 1
+            elif result["error"] == KAFKA_ERROR_THROTTLING_QUOTA_EXCEEDED:
+                quota_error_amount += 1
+            else:
+                raise RuntimeError(f"unexpected alter_broker_config result: {result}")
             time.sleep(0.1)
         assert quota_error_amount > 0
         assert success_amount > 0
@@ -236,9 +237,9 @@ class ControllerConfigLimitTest(RedpandaTest):
                 {"controller_log_accummulation_rps_capacity_topic_operations": i + 25},
                 incremental=True,
             )
-            if "THROTTLING_QUOTA_EXCEEDED" in out:
+            if out["error"] == KAFKA_ERROR_THROTTLING_QUOTA_EXCEEDED:
                 quota_error_amount += 1
-            if "OK" in out:
+            elif out["error"] == 0:
                 success_amount += 1
         assert quota_error_amount == 0
         assert success_amount > 0

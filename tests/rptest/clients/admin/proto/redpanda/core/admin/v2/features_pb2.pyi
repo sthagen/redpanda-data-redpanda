@@ -15,7 +15,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import sys
 import typing
@@ -24,6 +28,35 @@ if sys.version_info >= (3, 10):
 else:
     import typing_extensions
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _FinalizationState:
+    ValueType = typing.NewType('ValueType', builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _FinalizationStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_FinalizationState.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    FINALIZATION_STATE_UNSPECIFIED: _FinalizationState.ValueType
+    FINALIZATION_STATE_FINALIZED: _FinalizationState.ValueType
+    'The active version already equals the logical version uniformly\n    supported by all members. Nothing to finalize, and no downgrade is\n    possible (the downgrade floor equals the current version).\n    '
+    FINALIZATION_STATE_READY_TO_FINALIZE: _FinalizationState.ValueType
+    'All members report the same logical version, higher than the\n    active version, and all are alive: the cluster can be finalized\n    (via FinalizeUpgrade, or automatically when\n    features_auto_finalization is enabled). A downgrade back to the\n    active version remains possible until finalization happens.\n    '
+    FINALIZATION_STATE_UPGRADE_IN_PROGRESS: _FinalizationState.ValueType
+    'Members report differing logical versions, or some member has not\n    reported a version yet or is not alive. Finalization is not yet\n    possible. A downgrade back to the active version remains possible.\n    '
+
+class FinalizationState(_FinalizationState, metaclass=_FinalizationStateEnumTypeWrapper):
+    """FinalizationState summarizes where the cluster sits in the
+    upgrade-finalization lifecycle. It is derived from the per-member
+    logical versions using the same preconditions the controller applies
+    when deciding whether to advance the active version.
+    """
+FINALIZATION_STATE_UNSPECIFIED: FinalizationState.ValueType
+FINALIZATION_STATE_FINALIZED: FinalizationState.ValueType
+'The active version already equals the logical version uniformly\nsupported by all members. Nothing to finalize, and no downgrade is\npossible (the downgrade floor equals the current version).\n'
+FINALIZATION_STATE_READY_TO_FINALIZE: FinalizationState.ValueType
+'All members report the same logical version, higher than the\nactive version, and all are alive: the cluster can be finalized\n(via FinalizeUpgrade, or automatically when\nfeatures_auto_finalization is enabled). A downgrade back to the\nactive version remains possible until finalization happens.\n'
+FINALIZATION_STATE_UPGRADE_IN_PROGRESS: FinalizationState.ValueType
+'Members report differing logical versions, or some member has not\nreported a version yet or is not alive. Finalization is not yet\npossible. A downgrade back to the active version remains possible.\n'
+Global___FinalizationState: typing_extensions.TypeAlias = FinalizationState
 
 @typing.final
 class FinalizeUpgradeRequest(google.protobuf.message.Message):
@@ -48,3 +81,75 @@ class FinalizeUpgradeResponse(google.protobuf.message.Message):
     def __init__(self) -> None:
         ...
 Global___FinalizeUpgradeResponse: typing_extensions.TypeAlias = FinalizeUpgradeResponse
+
+@typing.final
+class GetUpgradeStatusRequest(google.protobuf.message.Message):
+    """GetUpgradeStatusRequest takes no parameters."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+Global___GetUpgradeStatusRequest: typing_extensions.TypeAlias = GetUpgradeStatusRequest
+
+@typing.final
+class MemberVersion(google.protobuf.message.Message):
+    """MemberVersion is one cluster member's reported version state, as seen
+    by the controller leader.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NODE_ID_FIELD_NUMBER: builtins.int
+    LOGICAL_VERSION_FIELD_NUMBER: builtins.int
+    VERSION_KNOWN_FIELD_NUMBER: builtins.int
+    ALIVE_FIELD_NUMBER: builtins.int
+    RELEASE_VERSION_FIELD_NUMBER: builtins.int
+    node_id: builtins.int
+    'Broker / node id.'
+    logical_version: builtins.int
+    'Latest logical version this member reports, i.e. the highest\n    version its binary supports. Meaningful only when version_known is\n    true.\n    '
+    version_known: builtins.bool
+    'False when the controller leader has not yet received a version\n    report for this member (e.g. freshly added, or restarting).\n    '
+    alive: builtins.bool
+    "Liveness of this member per the controller leader's health\n    monitor.\n    "
+    release_version: builtins.str
+    'Human-readable Redpanda release version (e.g. "v25.2.1") reported\n    by this member, when known. Distinct from logical_version:\n    multiple releases can share one logical version.\n    '
+
+    def __init__(self, *, node_id: builtins.int=..., logical_version: builtins.int=..., version_known: builtins.bool=..., alive: builtins.bool=..., release_version: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['alive', b'alive', 'logical_version', b'logical_version', 'node_id', b'node_id', 'release_version', b'release_version', 'version_known', b'version_known']) -> None:
+        ...
+Global___MemberVersion: typing_extensions.TypeAlias = MemberVersion
+
+@typing.final
+class GetUpgradeStatusResponse(google.protobuf.message.Message):
+    """GetUpgradeStatusResponse describes the cluster's upgrade-finalization
+    state.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    STATE_FIELD_NUMBER: builtins.int
+    ACTIVE_VERSION_FIELD_NUMBER: builtins.int
+    VERSION_AFTER_FINALIZATION_FIELD_NUMBER: builtins.int
+    AUTO_FINALIZATION_ENABLED_FIELD_NUMBER: builtins.int
+    MEMBERS_FIELD_NUMBER: builtins.int
+    state: Global___FinalizationState.ValueType
+    'High-level lifecycle state derived from the per-member versions\n    below.\n    '
+    active_version: builtins.int
+    "The cluster's current active logical version. This is also the\n    downgrade floor: the cluster can still roll back to a binary that\n    supports this version. When state is FINALIZATION_STATE_FINALIZED\n    this equals version_after_finalization (no downgrade possible).\n    "
+    version_after_finalization: builtins.int
+    'The active version that a FinalizeUpgrade would produce right now.\n    Greater than active_version only when state is\n    FINALIZATION_STATE_READY_TO_FINALIZE; otherwise equal to\n    active_version (finalizing would be a no-op).\n    '
+    auto_finalization_enabled: builtins.bool
+    'Whether the cluster advances the active version automatically once\n    all members agree (the features_auto_finalization cluster config).\n    When false, an explicit FinalizeUpgrade is required.\n    '
+
+    @property
+    def members(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___MemberVersion]:
+        """Per-member reported version state. Compare logical_version across
+        members to see whether all nodes are on the same version (ready to
+        finalize) or still differ (upgrade in progress).
+        """
+
+    def __init__(self, *, state: Global___FinalizationState.ValueType=..., active_version: builtins.int=..., version_after_finalization: builtins.int=..., auto_finalization_enabled: builtins.bool=..., members: collections.abc.Iterable[Global___MemberVersion] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['active_version', b'active_version', 'auto_finalization_enabled', b'auto_finalization_enabled', 'members', b'members', 'state', b'state', 'version_after_finalization', b'version_after_finalization']) -> None:
+        ...
+Global___GetUpgradeStatusResponse: typing_extensions.TypeAlias = GetUpgradeStatusResponse

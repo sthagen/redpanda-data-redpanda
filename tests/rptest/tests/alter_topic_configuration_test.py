@@ -569,7 +569,7 @@ class AlterConfigMixedNodeTest(EndToEndTest):
             for node in self.redpanda.nodes:
                 desc = kcl.describe_topic(topic, node=node)
                 props = set()
-                for line in desc.split("\n"):
+                for line in desc:
                     line = line.rstrip()
                     # normalize spaces/tabs from outputs across nodes
                     line = " ".join(line.split())
@@ -673,7 +673,7 @@ class AlterConfigMixedNodeTest(EndToEndTest):
                 remote_read_valid = False
                 remote_write_valid = False
                 desc = kcl.describe_topic(topic, node=node)
-                for line in desc.split("\n"):
+                for line in desc:
                     line = line.rstrip()
                     if "redpanda.remote.read" in line:
                         remote_read_valid = remote_read in line

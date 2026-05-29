@@ -2875,7 +2875,7 @@ INSTANTIATE_TEST_SUITE_P(
       .object_sizes = {100, 2, 100, 15, 2, 100},
       .min_acceptable = 50,
       .expected_ranges
-      = {{.base_offset = 30_o, .last_offset = 49_o, .size_bytes = 17}},
+      = {{.base_offset = 30_o, .last_offset = 49_o, .size_bytes = 17, .extent_count = 2}},
     },
     // A single isolated small surrounded by healthies, a K=1 singleton
     // run that finalize() discards on close.
@@ -2909,7 +2909,7 @@ INSTANTIATE_TEST_SUITE_P(
       .object_sizes = {2, 2, 2},
       .min_acceptable = 50,
       .expected_ranges
-      = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 6}},
+      = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 6, .extent_count = 3}},
     },
     // Leading healthies are no-ops (no active range to close). Range
     // opens at obj 2, extends to obj 3, and closes on the trailing
@@ -2919,7 +2919,7 @@ INSTANTIATE_TEST_SUITE_P(
       .object_sizes = {100, 100, 2, 2, 100},
       .min_acceptable = 50,
       .expected_ranges
-      = {{.base_offset = 20_o, .last_offset = 39_o, .size_bytes = 4}},
+      = {{.base_offset = 20_o, .last_offset = 39_o, .size_bytes = 4, .extent_count = 2}},
     },
     // Smalls separated by a healthy: pure size-tier never bridges
     // across a healthy, so each small is its own K=1 singleton run and

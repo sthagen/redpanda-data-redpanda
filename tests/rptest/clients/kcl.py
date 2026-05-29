@@ -20,11 +20,18 @@ from typing import Any, NamedTuple
 from ducktape.utils.util import wait_until
 
 
+# Kafka API error codes referenced by tests. Full list:
+# https://kafka.apache.org/protocol#protocol_error_codes
+KAFKA_ERROR_INVALID_CONFIG = 40
+KAFKA_ERROR_THROTTLING_QUOTA_EXCEEDED = 89
+
+
 class KclPartitionOffset(NamedTuple):
     broker: str
     topic: str
     partition: int
     start_offset: int
+    stable_offset: int
     end_offset: int
     error: str
 
@@ -136,7 +143,7 @@ class KCL:
         ret: list[KclPartitionOffset] = []
         for l in lines:
             m = re.match(
-                r" *(?P<broker>\d+) +(?P<topic>.+?) +(?P<partition>\d+) +(?P<start>-?\d*?) +(?P<end>-?\d*?) +(?P<error>.*) *",
+                r" *(?P<broker>\d+) +(?P<topic>.+?) +(?P<partition>\d+) +(?P<start>-?\d*?) +(?P<stable>-?\d*?) +(?P<end>-?\d*?) +(?P<error>.*) *",
                 l,
             )
             if m:
@@ -146,6 +153,7 @@ class KCL:
                         m["topic"],
                         int(m["partition"]),
                         int(m["start"]) if m["start"] else -1,
+                        int(m["stable"]) if m["stable"] else -1,
                         int(m["end"]) if m["end"] else -1,
                         m["error"],
                     )
@@ -182,15 +190,17 @@ class KCL:
         entity_type: str,
         entity: Any,
         node: Any | None = None,
-    ) -> str:
+    ) -> dict[str, Any]:
         """
         :param broker: node id.
         :param values: dict of property name to new value
         :param incremental: if true, use incremental kafka APIs
         :param entity_type: one of 'broker', 'topic'
         :param entity: string-izable entity, or None to omit
+        :return: the single per-entity result from kcl's JSON envelope, with
+            at minimum an `error` (int kafka code) and `error_message` (str).
         """
-        cmd = ["admin", "configs", "alter"]
+        cmd = ["--format=json", "admin", "configs", "alter"]
 
         if entity_type == "broker":
             cmd.append("-tb")
@@ -201,25 +211,26 @@ class KCL:
 
         if incremental:
             cmd.append("-i")
+            for k, v in values.items():
+                cmd.extend(["-s", f"{k}={v}"])
         else:
             # By default, non-incremental AlterConfig will prompt on stdin (and hang)
-            cmd.append("--no-confirm")
-        for k, v in values.items():
-            cmd.extend(["-k", f"s:{k}={v}" if incremental else f"{k}={v}"])
+            cmd.append("--yes")
+            # `-k` is the only way to reach the legacy AlterConfigs API (key 33);
+            # `--set` and `--delete` auto-enable the incremental API (key 44).
+            for k, v in values.items():
+                cmd.extend(["-k", f"{k}={v}"])
 
         if entity:
             # cmd needs to be string, so handle things like broker=1
             cmd.append(str(entity))
 
         r = self._cmd(cmd, attempts=1, node=node)
-        if "OK" not in r:
-            raise RuntimeError(r)
-        else:
-            return r
+        return json.loads(r)["results"][0]
 
     def alter_broker_config(
         self, values: dict[str, Any], incremental: bool, broker: Any | None = None
-    ) -> str:
+    ) -> dict[str, Any]:
         return self._alter_config(values, incremental, "broker", broker)
 
     def alter_topic_config(
@@ -228,7 +239,7 @@ class KCL:
         incremental: bool,
         topic: str,
         node: Any | None = None,
-    ) -> str:
+    ) -> dict[str, Any]:
         return self._alter_config(values, incremental, "topic", topic, node=node)
 
     def delete_broker_config(self, keys: list[str], incremental: bool) -> str:
@@ -241,7 +252,7 @@ class KCL:
         if incremental:
             cmd.append("-i")
         for k in keys:
-            cmd.extend(["-k", f"d:{k}" if incremental else k])
+            cmd.extend(["--delete", k])
 
         return self._cmd(cmd, attempts=1)
 
@@ -251,12 +262,12 @@ class KCL:
         with_docs: bool = False,
         with_types: bool = False,
         node: Any | None = None,
-    ) -> str:
+    ) -> list[str]:
         """
         :param topic: the name of the topic to describe
         :param with_docs: if true, include documention strings in the response
         :param with_types: if true, include config type information in the reponse
-        :return: stdout string
+        :return: output lines
         """
         cmd = ["admin", "configs", "describe", topic, "--type", "topic"]
         if with_docs:
@@ -264,7 +275,14 @@ class KCL:
         if with_types:
             cmd.append("--with-types")
 
-        return self._cmd(cmd, attempts=1, node=node)
+        # describe puts the property table on stdout and (when --with-docs is
+        # set) the doc-strings on stderr; merge so callers get one blob.
+        stderr = subprocess.STDOUT if with_docs else subprocess.PIPE
+        lines = self._cmd(cmd, attempts=1, node=node, stderr=stderr).splitlines()
+        # Drop the "KEY TYPE VALUE SOURCE" header row prefixing the table.
+        if lines and lines[0].lstrip().startswith("KEY"):
+            lines = lines[1:]
+        return lines
 
     def offset_delete(
         self, group: str, topic_partitions: dict[str, list[int]]
@@ -290,8 +308,15 @@ class KCL:
             )
         )
 
-        cmd = ["group", "offset-delete", "-j", group] + request_args_w_flags
-        return json.loads(self._cmd(cmd, attempts=5))
+        # offset-delete exits non-zero on per-item failures but still emits
+        # valid JSON on stdout; parse e.output so callers can inspect
+        # per-item errors.
+        cmd = ["--format=json", "group", "offset-delete", group] + request_args_w_flags
+        try:
+            raw = self._cmd(cmd, attempts=1)
+        except subprocess.CalledProcessError as e:
+            raw = e.output
+        return json.loads(raw)
 
     def sasl_options(self) -> list[str]:
         if self.sasl_enabled():
@@ -351,6 +376,10 @@ class KCL:
         def do_alter_partitions() -> bool:
             nonlocal lines
             lines = self._cmd(cmd).splitlines()
+            # Drop the "TOPIC PARTITION STATUS DETAIL" header row so callers
+            # see only data rows.
+            if lines and lines[0].lstrip().startswith("TOPIC"):
+                lines = lines[1:]
 
             # Check for errors here instead of outside the KCL wrapper
             # because test writers can use method params to account for their expectations
@@ -449,11 +478,28 @@ class KCL:
         input: str | None = None,
         attempts: int = 5,
         node: Any | None = None,
+        stderr: int = subprocess.PIPE,
     ) -> str:
         """
 
         :param attempts: how many times to try before giving up (1 for no retries)
-        :return: stdout string
+        :param stderr: passed through to ``subprocess.check_output``. The
+                              default (``subprocess.PIPE``) captures stderr
+                              separately so ``CalledProcessError.stderr``
+                              carries kcl's error text (kcl puts server-side
+                              messages like "CLUSTER_AUTHORIZATION_FAILED" on
+                              stderr; tests reading ``e.stderr`` pick those
+                              up). Pass ``subprocess.STDOUT`` for the rare
+                              command whose successful output is split across
+                              streams (``admin configs describe --with-docs``
+                              puts the property table on stdout and the doc
+                              strings on stderr); the merged blob is then
+                              returned as the function's result.
+        :return: stdout (or stdout+stderr merged, depending on ``stderr``).
+                 ``group offset-delete`` exits non-zero on per-item failures
+                 while still emitting a valid JSON body on stdout; that call
+                 site wraps this helper in ``try/except CalledProcessError``
+                 and reads the response from ``e.output``.
         """
         brokers = node.name if node is not None else self._redpanda.brokers()
         cmd = (
@@ -466,7 +512,10 @@ class KCL:
         for retry in reversed(range(attempts)):
             try:
                 res = subprocess.check_output(
-                    cmd, text=True, input=input, stderr=subprocess.STDOUT
+                    cmd,
+                    text=True,
+                    input=input,
+                    stderr=stderr,
                 )
                 self._redpanda.logger.debug(res)
                 return res
@@ -521,6 +570,17 @@ class RawKCL(KCL):
         except Exception:
             return []
 
+    @staticmethod
+    def _unwrap_raw_response(raw_json: str) -> Any:
+        """kcl wraps ``misc raw-req`` output in
+        ``{"_command": ..., "_version": ..., "response": ...}``; return just
+        the response payload so callers don't need to know about the envelope.
+        """
+        parsed: dict[str, Any] = json.loads(raw_json)
+        if "_command" in parsed and "response" in parsed:
+            return parsed["response"]
+        return parsed
+
     def raw_create_topics(
         self,
         version: int,
@@ -543,10 +603,11 @@ class RawKCL(KCL):
                 for t in topics
             ],
         }
-        return self._cmd(
+        res = self._cmd(
             ["misc", "raw-req", "-b", str(self._controller_id()), "-k", "19"],
             input=json.dumps(create_topics_request),
         )
+        return json.dumps(self._unwrap_raw_response(res))
 
     def raw_delete_topics(self, version: int, topics: list[str]) -> str:
         assert version >= 0 and version <= 5, (
@@ -557,10 +618,11 @@ class RawKCL(KCL):
             "TimeoutMillis": 15000,
             "TopicNames": topics,
         }
-        return self._cmd(
+        res = self._cmd(
             ["misc", "raw-req", "-b", str(self._controller_id()), "-k", "20"],
             input=json.dumps(delete_topics_request),
         )
+        return json.dumps(self._unwrap_raw_response(res))
 
     def raw_create_partitions(
         self, version: int, topics: list[KclCreatePartitionsRequestTopic]
@@ -574,10 +636,11 @@ class RawKCL(KCL):
             "TimeoutMillis": 15000,
             "Topics": [{"Topic": t.name, "Count": t.num_partitions} for t in topics],
         }
-        return self._cmd(
+        res = self._cmd(
             ["misc", "raw-req", "-b", str(self._controller_id()), "-k", "37"],
             input=json.dumps(create_partitions_request),
         )
+        return json.dumps(self._unwrap_raw_response(res))
 
     def raw_alter_topic_config(
         self, version: int, topic: str, configs: dict[str, Any]
@@ -599,10 +662,11 @@ class RawKCL(KCL):
         ]
 
         self._redpanda.logger.info(f"DBG: {json.dumps(alter_configs_request)}")
-        return self._cmd(
+        res = self._cmd(
             ["misc", "raw-req", "-b", str(self._controller_id()), "-k", "33"],
             input=json.dumps(alter_configs_request),
         )
+        return json.dumps(self._unwrap_raw_response(res))
 
     def raw_alter_quotas(
         self, body: dict[str, Any], node: Any | None = None
@@ -612,26 +676,25 @@ class RawKCL(KCL):
             input=json.dumps(body),
             node=node,
         )
-        return json.loads(res)
+        return self._unwrap_raw_response(res)
 
     def raw_describe_quotas(self, body: dict[str, Any]) -> dict[str, Any]:
         res = self._cmd(
             ["misc", "raw-req", "-b", str(self._controller_id()), "-k", "48"],
             input=json.dumps(body),
         )
-        return json.loads(res)
+        return self._unwrap_raw_response(res)
 
     def raw_find_coordinator(self, body: dict[str, Any]) -> dict[str, Any]:
         res = self._cmd(["misc", "raw-req", "-k", "10"], input=json.dumps(body))
-        return json.loads(res)
+        return self._unwrap_raw_response(res)
 
     def raw_join_group(self, body: dict[str, Any]) -> dict[str, Any]:
         res = self.raw_find_coordinator(
             {"Version": 3, "CoordinatorKey": body["Group"], "CoordinatorType": 0}
         )
-
         res = self._cmd(
             ["misc", "raw-req", "-b", str(res["NodeID"]), "-k", "11"],
             input=json.dumps(body),
         )
-        return json.loads(res)
+        return self._unwrap_raw_response(res)

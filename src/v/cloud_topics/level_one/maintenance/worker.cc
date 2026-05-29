@@ -169,7 +169,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
 
     auto ctxlog = prefix_logger(compaction_log, fmt::format("{}", ntp));
 
-    if (!log->compaction_info_and_ts.has_value()) {
+    if (!log->compaction.info_and_ts.has_value()) {
         vlog(
           ctxlog.error,
           "Log in compaction process did not have metastore information "
@@ -184,15 +184,15 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
 
     auto compaction_offsets = metastore::compaction_offsets_response{
       .dirty_ranges
-      = log->compaction_info_and_ts->info.offsets_response.dirty_ranges,
+      = log->compaction.info_and_ts->info.offsets_response.dirty_ranges,
       .removable_tombstone_ranges
-      = log->compaction_info_and_ts->info.offsets_response
+      = log->compaction.info_and_ts->info.offsets_response
           .removable_tombstone_ranges};
     auto expected_compaction_epoch
-      = log->compaction_info_and_ts->info.compaction_epoch;
-    auto start_offset = log->compaction_info_and_ts->info.start_offset;
+      = log->compaction.info_and_ts->info.compaction_epoch;
+    auto start_offset = log->compaction.info_and_ts->info.start_offset;
     auto max_compactible_offset
-      = log->compaction_info_and_ts->max_compactible_offset;
+      = log->compaction.info_and_ts->max_compactible_offset;
 
     // Lazy initialization of offset map.
     if (!_map) {

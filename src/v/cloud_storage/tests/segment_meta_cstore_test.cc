@@ -807,3 +807,71 @@ BOOST_AUTO_TEST_CASE(test_segment_meta_cstore_append_retrieve_edge_case) {
       = metadata[cloud_storage::cstore_max_frame_size * 2].base_offset;
     BOOST_CHECK_NO_THROW(store.lower_bound(last_frame_first_offset));
 }
+
+// Regression test for the slow-path `last_hint_tosave` computation in
+// column_store::insert_entries. When the rebuild path clones the first frame
+// and the replacement region begins in the second frame, the code that
+// extracts hints from the to-be-cloned frames walks frames back-to-front with
+// a loop bound that excludes _frames.begin(), so the only cloned frame
+// (frame 0) is never inspected and every hint that belongs to it is dropped.
+//
+// Triggering conditions:
+//   1. Two or more frames exist (column has > cstore_max_frame_size
+//      elements).
+//   2. An insert lands strictly inside the second frame, forcing the slow
+//      rebuild path (the append-only fast path does not apply).
+BOOST_AUTO_TEST_CASE(slow_path_drops_hints_from_cloned_frame) {
+    auto make_segment = [](int64_t base) {
+        segment_meta s{};
+        s.is_compacted = false;
+        s.size_bytes = 100;
+        s.base_offset = model::offset(base);
+        s.committed_offset = model::offset(base);
+        s.delta_offset = model::offset_delta(0);
+        s.archiver_term = model::term_id(1);
+        s.segment_term = model::term_id(1);
+        s.delta_offset_end = model::offset_delta(0);
+        s.sname_format = segment_name_format::v2;
+        return s;
+    };
+
+    // A hint is emitted at the start of every row of
+    // FOR_buffer_depth * cstore_sampling_rate entries.
+    constexpr size_t hint_stride = details::FOR_buffer_depth
+                                   * cstore_sampling_rate;
+    // Fill frame 0 completely and a partial frame 1 that holds fewer than
+    // hint_stride entries, so frame 1 carries exactly one hint at its first
+    // element.
+    constexpr size_t frame_1_fill = hint_stride - 1;
+    constexpr size_t populate_n = cstore_max_frame_size + frame_1_fill;
+    // Frame 0 contributes cstore_max_frame_size / hint_stride hints at row
+    // boundaries; frame 1 contributes one hint at its first element.
+    constexpr size_t expected_hints = cstore_max_frame_size / hint_stride + 1;
+
+    segment_meta_cstore store;
+    for (size_t i = 0; i < populate_n; ++i) {
+        store.insert(make_segment(static_cast<int64_t>(i)));
+    }
+    store.flush_write_buffer();
+    const auto hints_before = store.hints_size();
+
+    // Replacement lands strictly inside frame 1, which forces
+    // insert_entries down the slow rebuild path (the entry is not
+    // append-only and not in frame 0) and exercises the buggy
+    // `last_hint_tosave` computation.
+    auto replacement = make_segment(
+      static_cast<int64_t>(cstore_max_frame_size) + 1);
+    replacement.size_bytes = 999; // distinguish from the original
+    store.insert(replacement);
+    store.flush_write_buffer();
+    const auto hints_after = store.hints_size();
+
+    BOOST_TEST_MESSAGE(
+      "hints_before=" << hints_before << " hints_after=" << hints_after);
+
+    // Frame 0's hints survive the share_frame clone; frame 1's first-element
+    // hint is re-emitted when frame 1 is rebuilt by re-appending its
+    // segments. Total is unchanged by the replacement.
+    BOOST_REQUIRE_EQUAL(hints_before, expected_hints);
+    BOOST_REQUIRE_EQUAL(hints_after, expected_hints);
+}

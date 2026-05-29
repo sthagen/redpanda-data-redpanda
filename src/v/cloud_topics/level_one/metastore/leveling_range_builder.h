@@ -24,25 +24,28 @@ namespace cloud_topics::l1 {
 // together with per-range stats the scheduler can use to plan work.
 struct levelable_range
   : serde::
-      envelope<levelable_range, serde::version<0>, serde::compat_version<0>> {
+      envelope<levelable_range, serde::version<1>, serde::compat_version<0>> {
     bool operator==(const levelable_range&) const = default;
 
     auto serde_fields() {
-        return std::tie(base_offset, last_offset, size_bytes);
+        return std::tie(base_offset, last_offset, size_bytes, extent_count);
     }
 
     kafka::offset base_offset;
     kafka::offset last_offset;
     // Sum of the undersized extents' bytes within this range.
     size_t size_bytes{0};
+    // Number of undersized extents within this range.
+    size_t extent_count{0};
 
     fmt::iterator format_to(fmt::iterator it) const {
         return fmt::format_to(
           it,
-          "{{base:{}, last:{}, size_bytes:{}}}",
+          "{{base:{}, last:{}, size_bytes:{}, extent_count:{}}}",
           base_offset,
           last_offset,
-          size_bytes);
+          size_bytes,
+          extent_count);
     }
 };
 
@@ -106,6 +109,7 @@ private:
                 .base_offset = _range->base,
                 .last_offset = _range->last,
                 .size_bytes = _range->bytes,
+                .extent_count = _range->extent_count,
               });
         }
         _range.reset();

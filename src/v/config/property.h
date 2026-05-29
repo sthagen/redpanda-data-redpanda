@@ -279,8 +279,8 @@ public:
     }
 
     std::optional<std::string_view> example() const override {
-        if (_meta.example.has_value()) {
-            return _meta.example;
+        if (_meta->example.has_value()) {
+            return _meta->example;
         } else {
             if constexpr (std::is_same_v<value_type, bool>) {
                 // Provide an example that is the opposite of the default

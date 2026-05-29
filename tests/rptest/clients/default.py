@@ -151,7 +151,7 @@ class DefaultClient:
         incremental: bool,
         *,
         broker: typing.Optional[int] = None,
-    ):
+    ) -> dict[str, typing.Any]:
         kcl = KCL(self._redpanda)
         return kcl.alter_broker_config(values, incremental, broker)
 

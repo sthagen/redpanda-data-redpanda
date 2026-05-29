@@ -20,6 +20,11 @@ cmp_t compaction_lag_scheduling_policy::get_comparator() const noexcept {
     return sort_policy{};
 }
 
+leveling_cmp_t
+leveling_extent_reclamation_policy::get_comparator() const noexcept {
+    return sort_policy{_target_size_per_object};
+}
+
 std::unique_ptr<scheduling_policy> make_default_scheduling_policy() {
     return std::make_unique<dirty_ratio_scheduling_policy>();
 }

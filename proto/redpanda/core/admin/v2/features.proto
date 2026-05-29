@@ -48,6 +48,24 @@ service FeaturesService {
             authz: SUPERUSER
         };
     }
+
+    // GetUpgradeStatus
+    //
+    // Reports observability for the upgrade-finalization lifecycle: the
+    // cluster's active logical version, the logical version each member
+    // reports (i.e. what its binary supports), whether the cluster is
+    // eligible to finalize, and the active version that a
+    // FinalizeUpgrade would produce. Read-only; intended to be polled
+    // before and after FinalizeUpgrade.
+    //
+    // The response reflects the controller leader's view; the request is
+    // transparently redirected there.
+    rpc GetUpgradeStatus(GetUpgradeStatusRequest)
+        returns (GetUpgradeStatusResponse) {
+        option (pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
 }
 
 // FinalizeUpgradeRequest takes no parameters: the target version is
@@ -59,3 +77,86 @@ message FinalizeUpgradeRequest {}
 // leader's background loop; poll the cluster's active version (via
 // `GET /v1/features`) to confirm.
 message FinalizeUpgradeResponse {}
+
+// GetUpgradeStatusRequest takes no parameters.
+message GetUpgradeStatusRequest {}
+
+// FinalizationState summarizes where the cluster sits in the
+// upgrade-finalization lifecycle. It is derived from the per-member
+// logical versions using the same preconditions the controller applies
+// when deciding whether to advance the active version.
+enum FinalizationState {
+    FINALIZATION_STATE_UNSPECIFIED = 0;
+
+    // The active version already equals the logical version uniformly
+    // supported by all members. Nothing to finalize, and no downgrade is
+    // possible (the downgrade floor equals the current version).
+    FINALIZATION_STATE_FINALIZED = 1;
+
+    // All members report the same logical version, higher than the
+    // active version, and all are alive: the cluster can be finalized
+    // (via FinalizeUpgrade, or automatically when
+    // features_auto_finalization is enabled). A downgrade back to the
+    // active version remains possible until finalization happens.
+    FINALIZATION_STATE_READY_TO_FINALIZE = 2;
+
+    // Members report differing logical versions, or some member has not
+    // reported a version yet or is not alive. Finalization is not yet
+    // possible. A downgrade back to the active version remains possible.
+    FINALIZATION_STATE_UPGRADE_IN_PROGRESS = 3;
+}
+
+// MemberVersion is one cluster member's reported version state, as seen
+// by the controller leader.
+message MemberVersion {
+    // Broker / node id.
+    int32 node_id = 1;
+
+    // Latest logical version this member reports, i.e. the highest
+    // version its binary supports. Meaningful only when version_known is
+    // true.
+    int64 logical_version = 2;
+
+    // False when the controller leader has not yet received a version
+    // report for this member (e.g. freshly added, or restarting).
+    bool version_known = 3;
+
+    // Liveness of this member per the controller leader's health
+    // monitor.
+    bool alive = 4;
+
+    // Human-readable Redpanda release version (e.g. "v25.2.1") reported
+    // by this member, when known. Distinct from logical_version:
+    // multiple releases can share one logical version.
+    string release_version = 5;
+}
+
+// GetUpgradeStatusResponse describes the cluster's upgrade-finalization
+// state.
+message GetUpgradeStatusResponse {
+    // High-level lifecycle state derived from the per-member versions
+    // below.
+    FinalizationState state = 1;
+
+    // The cluster's current active logical version. This is also the
+    // downgrade floor: the cluster can still roll back to a binary that
+    // supports this version. When state is FINALIZATION_STATE_FINALIZED
+    // this equals version_after_finalization (no downgrade possible).
+    int64 active_version = 2;
+
+    // The active version that a FinalizeUpgrade would produce right now.
+    // Greater than active_version only when state is
+    // FINALIZATION_STATE_READY_TO_FINALIZE; otherwise equal to
+    // active_version (finalizing would be a no-op).
+    int64 version_after_finalization = 3;
+
+    // Whether the cluster advances the active version automatically once
+    // all members agree (the features_auto_finalization cluster config).
+    // When false, an explicit FinalizeUpgrade is required.
+    bool auto_finalization_enabled = 4;
+
+    // Per-member reported version state. Compare logical_version across
+    // members to see whether all nodes are on the same version (ready to
+    // finalize) or still differ (upgrade in progress).
+    repeated MemberVersion members = 5;
+}

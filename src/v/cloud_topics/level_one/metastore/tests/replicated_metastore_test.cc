@@ -1297,7 +1297,7 @@ TEST_P(ReplicatedMetastoreTest, TestGetLevelingInfo) {
        .object_sizes = {100, 2, 100, 15, 2, 100},
        .min_acceptable = 50,
        .expected_ranges
-       = {{.base_offset = o{30}, .last_offset = o{49}, .size_bytes = 17}}},
+       = {{.base_offset = o{30}, .last_offset = o{49}, .size_bytes = 17, .extent_count = 2}}},
       {.name = "IsolatedSmallSingleton",
        .object_sizes = {100, 2, 100},
        .min_acceptable = 50,
@@ -1314,12 +1314,12 @@ TEST_P(ReplicatedMetastoreTest, TestGetLevelingInfo) {
        .object_sizes = {2, 2, 2},
        .min_acceptable = 50,
        .expected_ranges
-       = {{.base_offset = o{0}, .last_offset = o{29}, .size_bytes = 6}}},
+       = {{.base_offset = o{0}, .last_offset = o{29}, .size_bytes = 6, .extent_count = 3}}},
       {.name = "LeadingHealthyExtentsUntouched",
        .object_sizes = {100, 100, 2, 2, 100},
        .min_acceptable = 50,
        .expected_ranges
-       = {{.base_offset = o{20}, .last_offset = o{39}, .size_bytes = 4}}},
+       = {{.base_offset = o{20}, .last_offset = o{39}, .size_bytes = 4, .extent_count = 2}}},
       {.name = "SmallsAcrossHealthyAreNotMerged",
        .object_sizes = {100, 30, 100, 30, 100},
        .min_acceptable = 50,

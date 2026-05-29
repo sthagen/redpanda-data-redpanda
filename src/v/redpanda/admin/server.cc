@@ -4118,6 +4118,7 @@ void admin_server::register_cluster_routes() {
                 ret.all_nodes._set = true;
                 ret.nodes_down._set = true;
                 ret.high_disk_usage_nodes._set = true;
+                ret.nodes_in_recovery_mode._set = true;
                 ret.leaderless_partitions._set = true;
                 ret.under_replicated_partitions._set = true;
 

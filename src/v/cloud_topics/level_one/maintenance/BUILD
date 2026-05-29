@@ -98,6 +98,7 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/cloud_topics/level_one/metastore",
+        "//src/v/cloud_topics/level_one/metastore:leveling_range_builder",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:intrusive",
         "//src/v/model",
@@ -180,6 +181,8 @@ redpanda_cc_library(
     ],
     deps = [
         ":meta",
+        "//src/v/base",
+        "//src/v/config",
         "//src/v/model",
         "@seastar",
     ],

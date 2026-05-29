@@ -119,6 +119,9 @@ fmt::iterator format_to(visibility v, fmt::iterator);
 class base_property {
 public:
     struct metadata {
+        std::string_view name;
+        std::string_view desc;
+
         required required{required::no};
         needs_restart needs_restart{needs_restart::yes};
         std::optional<ss::sstring> example{std::nullopt};
@@ -145,17 +148,17 @@ public:
       std::string_view desc,
       metadata meta);
 
-    const std::string_view& name() const { return _name; }
-    const std::string_view& desc() const { return _desc; }
+    std::string_view name() const { return _meta->name; }
+    std::string_view desc() const { return _meta->desc; }
 
-    const required is_required() const { return _meta.required; }
-    bool needs_restart() const { return bool(_meta.needs_restart); }
-    visibility get_visibility() const { return _meta.visibility; }
-    bool is_secret() const { return bool(_meta.secret); }
+    const required is_required() const { return _meta->required; }
+    bool needs_restart() const { return bool(_meta->needs_restart); }
+    visibility get_visibility() const { return _meta->visibility; }
+    bool is_secret() const { return bool(_meta->secret); }
     const std::vector<std::string_view>& aliases() const {
-        return _meta.aliases;
+        return _meta->aliases;
     }
-    bool gets_restored() const { return bool(_meta.gets_restored); }
+    bool gets_restored() const { return bool(_meta->gets_restored); }
 
     /// Serialize the property value to JSON. A full configuration
     /// serialization is performed in config_store::to_json where the JSON
@@ -279,12 +282,8 @@ public:
      */
     virtual void notify_original_version(legacy_version) = 0;
 
-private:
-    std::string_view _name;
-    std::string_view _desc;
-
 protected:
-    metadata _meta;
+    const metadata* _meta;
     void assert_live_settable() const;
 };
 }; // namespace config

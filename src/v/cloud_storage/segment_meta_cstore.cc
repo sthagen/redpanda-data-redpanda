@@ -384,10 +384,13 @@ public:
                 // no hint will be saved
                 return _hints.end();
             }
-            --frame_it; // go back to last frame that will be cloned
-            for (; frame_it != _base_offset._frames.begin(); --frame_it) {
-                // go back until we have a non-empty frame. this should be just
-                // an iteration
+            // walk back from the first frame that is *not* cloned until we
+            // find a non-empty cloned frame, then map its last value to the
+            // hint range we want to preserve. The loop has to include
+            // _frames.begin() itself, otherwise the single-cloned-frame case
+            // falls through and drops every hint in the cloned region.
+            do {
+                --frame_it;
                 if (auto frame_max_offset = frame_it->last_value()) {
                     auto to_clone_hint = _hints.lower_bound(
                       frame_max_offset.value());
@@ -399,7 +402,7 @@ public:
                       frame_max_offset.value());
                     return to_clone_hint;
                 }
-            }
+            } while (frame_it != _base_offset._frames.begin());
             return _hints.end();
         }();
 
@@ -699,6 +702,8 @@ public:
         // at the end.
         _hints.erase(it, _hints.end());
     }
+
+    size_t hints_size() const { return _hints.size(); }
 
     /// Return two values: inflated size (size without compression) followed
     /// by the actual size that takes compression into account.
@@ -1054,6 +1059,11 @@ public:
         return _col.size();
     }
 
+    size_t hints_size() const {
+        flush_write_buffer();
+        return _col.hints_size();
+    }
+
     bool empty() const { return _write_buffer.empty() && _col.empty(); }
 
     bool contains(model::offset o) {
@@ -1171,6 +1181,8 @@ bool segment_meta_cstore::contains(model::offset o) const {
 bool segment_meta_cstore::empty() const { return _impl->empty(); }
 
 size_t segment_meta_cstore::size() const { return _impl->size(); }
+
+size_t segment_meta_cstore::hints_size() const { return _impl->hints_size(); }
 
 segment_meta_cstore::const_iterator
 segment_meta_cstore::upper_bound(model::offset o) const {

@@ -39,9 +39,9 @@ inline bool needs_compaction(
           ? topic_mcl.value()
           : config::shard_local_cfg().max_compaction_lag_ms();
     return compaction::log_needs_compaction(
-      log.compaction_info_and_ts->info.dirty_ratio,
+      log.compaction.info_and_ts->info.dirty_ratio,
       min_cleanable_dirty_ratio,
-      log.compaction_info_and_ts->info.earliest_dirty_ts,
+      log.compaction.info_and_ts->info.earliest_dirty_ts,
       max_compaction_lag_ms);
 }
 
@@ -120,16 +120,20 @@ log_info_collector::log_info_collector(
   , _max_compactible_offset_provider(
       std::move(max_compactible_offset_provider)) {}
 
-ss::future<> log_info_collector::collect_info_for_logs(
+ss::future<> log_info_collector::collect_compaction_info(
   log_set_t& logs_set,
   log_list_t& logs_list,
   log_compaction_queue& compaction_queue) const {
     auto now = model::timestamp::now();
 
-    auto to_collect = get_logs_to_collect(logs_list, logs_set.size(), now);
+    auto specs = build_compaction_specs(logs_list, logs_set.size(), now);
+
+    if (specs.empty()) {
+        co_return;
+    }
 
     auto compaction_infos_res = co_await _metastore->get_compaction_infos(
-      to_collect);
+      specs);
     if (!compaction_infos_res.has_value()) {
         vlog(
           compaction_log.warn,
@@ -147,7 +151,7 @@ ss::future<> log_info_collector::collect_info_for_logs(
         // compaction_infos unfortunately due to grouping by tidp, but needing
         // to look up compactible_offsets by ntp. If shard_table offered a way
         // to look up by tidp, this wouldn't be pessimized.
-        if (log.link.is_linked() && compaction_infos.contains(log.tidp)) {
+        if (compaction_infos.contains(log.tidp)) {
             // Use kafka::offset::min() as a placeholder; real values are filled
             // in by fill_max_compactible_offsets below.
             ntp_to_max_compactible_offset.insert_or_assign(
@@ -158,7 +162,7 @@ ss::future<> log_info_collector::collect_info_for_logs(
     co_await _max_compactible_offset_provider->fill_max_compactible_offsets(
       ntp_to_max_compactible_offset);
 
-    populate_log_infos(
+    populate_logs_with_compaction_info(
       compaction_infos,
       logs_set,
       logs_list,
@@ -168,20 +172,16 @@ ss::future<> log_info_collector::collect_info_for_logs(
 }
 
 chunked_vector<metastore::compaction_info_spec>
-log_info_collector::get_logs_to_collect(
+log_info_collector::build_compaction_specs(
   log_list_t& logs_list,
   size_t size,
   model::timestamp collection_timestamp) const {
-    chunked_vector<metastore::compaction_info_spec> to_collect;
+    chunked_vector<metastore::compaction_info_spec> specs;
 
-    to_collect.reserve(size);
+    specs.reserve(size);
 
     for (const auto& log : logs_list) {
-        if (!log.link.is_linked()) {
-            continue;
-        }
-
-        if (log.state == log_compaction_meta::log_state::inflight) {
+        if (log.compaction.s == log_compaction_state::status::inflight) {
             // No need to sample inflight logs
             vlog(
               compaction_log.debug,
@@ -190,19 +190,18 @@ log_info_collector::get_logs_to_collect(
             continue;
         }
 
-        if (log.compaction_info_and_ts.has_value()) {
+        if (log.compaction.info_and_ts.has_value()) {
             auto sample_interval
               = config::shard_local_cfg().cloud_topics_compaction_interval_ms();
             auto delta = to_time_point(collection_timestamp)
                          - to_time_point(
-                           log.compaction_info_and_ts->collected_at);
+                           log.compaction.info_and_ts->collected_at);
             if (delta <= sample_interval) {
                 vlog(
                   compaction_log.debug,
-                  "Skipping info collection for CTP {}, delta is less than "
-                  "sample interval.",
+                  "Skipping compaction info collection for CTP {}, delta is "
+                  "less than sample interval.",
                   log.ntp);
-
                 continue;
             }
         }
@@ -242,14 +241,14 @@ log_info_collector::get_logs_to_collect(
           log.ntp,
           tombstone_removal_ts);
 
-        to_collect.emplace_back(log.tidp, tombstone_removal_ts);
+        specs.emplace_back(log.tidp, tombstone_removal_ts);
     }
 
-    to_collect.shrink_to_fit();
-    return to_collect;
+    specs.shrink_to_fit();
+    return specs;
 }
 
-void log_info_collector::populate_log_infos(
+void log_info_collector::populate_logs_with_compaction_info(
   metastore::compaction_info_map& compaction_infos,
   log_set_t& logs_set,
   log_list_t& logs_list,
@@ -258,11 +257,7 @@ void log_info_collector::populate_log_infos(
     ntp_to_max_compactible_offset,
   model::timestamp collection_timestamp) const {
     for (auto& log : logs_list) {
-        if (!log.link.is_linked()) {
-            continue;
-        }
-
-        if (log.state == log_compaction_meta::log_state::inflight) {
+        if (log.compaction.s == log_compaction_state::status::inflight) {
             // Don't step on compaction info that is actively being used.
             continue;
         }
@@ -289,8 +284,7 @@ void log_info_collector::populate_log_infos(
             vlogl(
               compaction_log,
               lvl,
-              "Failed to collect compaction info for CTP {} during compaction: "
-              "{}",
+              "Failed to collect compaction info for CTP {}: {}",
               log.ntp,
               err);
             continue;
@@ -306,7 +300,7 @@ void log_info_collector::populate_log_infos(
         auto max_compactible_offset = offset_it->second;
 
         log.has_seen_reconciled_data = true;
-        log.compaction_info_and_ts = compaction_info_and_timestamp{
+        log.compaction.info_and_ts = compaction_info_and_timestamp{
           .info = std::move(compaction_info).value(),
           .collected_at = collection_timestamp,
           .max_compactible_offset = max_compactible_offset};
@@ -316,10 +310,10 @@ void log_info_collector::populate_log_infos(
           "Compaction info for CTP {} returned {} with max_compactible_offset: "
           "{}",
           log.ntp,
-          log.compaction_info_and_ts->info,
+          log.compaction.info_and_ts->info,
           max_compactible_offset);
 
-        if (log.state != log_compaction_meta::log_state::idle) {
+        if (log.compaction.s != log_compaction_state::status::idle) {
             // We don't need to queue an already queued log.
             continue;
         }
@@ -336,19 +330,16 @@ void log_info_collector::populate_log_infos(
         if (needs_compaction(log, topic_cfg)) {
             auto ptr_it = logs_set.find(log.tidp);
             if (ptr_it != logs_set.end()) {
-                log.state = log_compaction_meta::log_state::queued;
+                log.compaction.s = log_compaction_state::status::queued;
                 compaction_queue.push(*ptr_it);
             }
         }
     }
 }
 
-ss::future<> log_info_collector::collect_leveling_info(
-  chunked_vector<log_compaction_meta_ptr> logs) const {
-    if (logs.empty()) {
-        co_return;
-    }
-
+chunked_vector<metastore::leveling_info_spec>
+log_info_collector::build_leveling_specs(
+  log_list_t& logs_list, model::timestamp collection_timestamp) const {
     auto target_size
       = config::shard_local_cfg().cloud_topics_reconciliation_max_object_size();
     // TODO: Replace with cluster config.
@@ -357,10 +348,38 @@ ss::future<> log_info_collector::collect_leveling_info(
       static_cast<double>(target_size) * leveling_object_size_threshold);
 
     chunked_vector<metastore::leveling_info_spec> specs;
-    specs.reserve(logs.size());
-    for (const auto& log : logs) {
+    for (auto& log : logs_list) {
+        if (log.leveling.info_and_ts.has_value()) {
+            // TODO: replace with cluster config
+            auto sample_interval = 10min;
+            auto delta = to_time_point(collection_timestamp)
+                         - to_time_point(
+                           log.leveling.info_and_ts->collected_at);
+            if (delta <= sample_interval) {
+                vlog(
+                  compaction_log.debug,
+                  "Skipping leveling info collection for CTP {}, delta is "
+                  "less than sample interval.",
+                  log.ntp);
+                continue;
+            }
+        }
         specs.emplace_back(
-          metastore::leveling_info_spec{log->tidp, min_acceptable});
+          metastore::leveling_info_spec{log.tidp, min_acceptable});
+    }
+    return specs;
+}
+
+ss::future<> log_info_collector::collect_leveling_info(
+  log_set_t& logs_set,
+  log_list_t& logs_list,
+  leveling_queue& leveling_queue) const {
+    auto now = model::timestamp::now();
+
+    auto specs = build_leveling_specs(logs_list, now);
+
+    if (specs.empty()) {
+        co_return;
     }
 
     auto leveling_infos_res = co_await _metastore->get_leveling_infos(specs);
@@ -372,32 +391,63 @@ ss::future<> log_info_collector::collect_leveling_info(
         co_return;
     }
 
-    auto& leveling_infos = leveling_infos_res.value();
-    auto now = model::timestamp::now();
-    for (const auto& log : logs) {
-        auto it = leveling_infos.find(log->tidp);
-        if (it == leveling_infos.end()) {
+    auto leveling_infos = std::move(leveling_infos_res).value();
+
+    populate_logs_with_leveling_info(
+      leveling_infos, logs_set, leveling_queue, now);
+}
+
+void log_info_collector::populate_logs_with_leveling_info(
+  metastore::leveling_info_map& leveling_infos,
+  log_set_t& logs_set,
+  leveling_queue& leveling_queue,
+  model::timestamp collection_timestamp) const {
+    for (auto& [tidp, leveling_info] : leveling_infos) {
+        auto log_it = logs_set.find(tidp);
+        if (log_it == logs_set.end()) {
+            // CTP was concurrently unmanaged while the RPC was in flight.
             continue;
         }
+        auto& log = *log_it;
+        if (!leveling_info.has_value()) {
+            // Minimize logging on benign `missing_ntp` errors in case
+            // the `metastore` does not yet have any reconciled data for the log
+            // in question.
+            auto err = leveling_info.error();
+            auto lvl = err == metastore::errc::missing_ntp
+                           && !log->has_seen_reconciled_data
+                         ? ss::log_level::debug
+                         : ss::log_level::warn;
 
-        auto& result = it->second;
-        if (!result.has_value()) {
-            vlog(
-              compaction_log.warn,
+            vlogl(
+              compaction_log,
+              lvl,
               "Failed to collect leveling info for CTP {}: {}",
               log->ntp,
-              result.error());
+              err);
             continue;
         }
 
-        log->leveling_info_and_ts = leveling_info_and_timestamp{
-          .info = std::move(result).value(), .collected_at = now};
+        log->has_seen_reconciled_data = true;
+        log->leveling.info_and_ts = leveling_info_and_timestamp{
+          .info = std::move(leveling_info).value(),
+          .collected_at = collection_timestamp};
 
         vlog(
           compaction_log.debug,
           "Leveling info for CTP {} returned {}",
           log->ntp,
-          log->leveling_info_and_ts->info);
+          log->leveling.info_and_ts->info);
+
+        // Queue per-range jobs and clear range data while preserving
+        // collected_at as a rate-limit cookie for the next tick.
+        auto& info = log->leveling.info_and_ts->info;
+        for (auto& range : info.ranges) {
+            auto job = ss::make_lw_shared<leveling_job>(log, range, info.epoch);
+            leveling_queue.push(job);
+            ++(log->leveling.outstanding_ranges);
+        }
+        info.ranges.clear();
     }
 }
 

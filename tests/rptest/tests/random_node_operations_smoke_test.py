@@ -320,6 +320,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             tolerate_data_loss: bool = False,
             iceberg_enabled: bool = False,
             catalog_service: CatalogService | None = None,
+            max_buffered_records: int | None = None,
         ):
             self.test_context = test_context
             self.logger = logger
@@ -335,6 +336,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             self.tolerate_data_loss = tolerate_data_loss
             self.iceberg_enabled = iceberg_enabled
             self.catalog_service = catalog_service
+            self.max_buffered_records = max_buffered_records
 
         def _start_producer(self, clean: bool):
             self.producer = KgoVerifierProducer(
@@ -347,6 +349,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                 rate_limit_bps=self.rate_limit_bps,
                 key_set_cardinality=self.key_set_cardinality,
                 tolerate_data_loss=self.tolerate_data_loss,
+                max_buffered_records=self.max_buffered_records,
             )
 
             self.producer.start(clean=clean)
@@ -668,6 +671,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             compaction_enabled=False,
             iceberg_enabled=with_iceberg,
             catalog_service=self.catalog_service,
+            max_buffered_records=10240,
         )
 
         cloud_topics_compact_consumer = RandomNodeOperationsBase.producer_consumer(
@@ -683,6 +687,7 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             compaction_enabled=True,
             iceberg_enabled=with_iceberg,
             catalog_service=self.catalog_service,
+            max_buffered_records=10240,
         )
 
         tiered_cloud_delete_consumer = RandomNodeOperationsBase.producer_consumer(

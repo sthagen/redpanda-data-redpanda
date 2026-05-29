@@ -512,19 +512,35 @@ TEST_P(CoordinatorTestWithParams, TestConcurrentAddFiles) {
     }
     auto stop = ss::defer([&] {
         done = true;
-        for (auto& f : adders) {
-            f.get();
+        // Join any fibers not yet joined below. Pop as we go so we never
+        // get() a future twice (a second get() dereferences a detached, null
+        // promise). Swallow errors: this runs in a destructor, which must
+        // not throw.
+        while (!adders.empty()) {
+            try {
+                adders.back().get();
+            } catch (...) {
+            }
+            adders.pop_back();
         }
         if (chaos) {
-            chaos->get();
+            try {
+                chaos->get();
+            } catch (...) {
+            }
+            chaos.reset();
         }
     });
     RPTEST_REQUIRE_EVENTUALLY(60s, [&done] { return done; });
-    for (auto& f : adders) {
+    while (!adders.empty()) {
+        auto f = std::move(adders.back());
+        adders.pop_back();
         EXPECT_NO_FATAL_FAILURE(f.get());
     }
     if (chaos) {
-        EXPECT_NO_FATAL_FAILURE(chaos->get());
+        auto chaos_fut = std::move(*chaos);
+        chaos.reset();
+        EXPECT_NO_FATAL_FAILURE(chaos_fut.get());
     }
     stop.cancel();
     opt_ref leader_opt;

@@ -49,6 +49,21 @@ class FeaturesServiceClient:
             raise ConnectProtocolError('missing response message')
         return msg
 
+    def call_get_upgrade_status(self, req: proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse]:
+        """Low-level method to call GetUpgradeStatus, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.FeaturesService/GetUpgradeStatus'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse, extra_headers, timeout_seconds)
+
+    def get_upgrade_status(self, req: proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse:
+        response = self.call_get_upgrade_status(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
 class AsyncFeaturesServiceClient:
 
     def __init__(self, base_url: str, http_client: aiohttp.ClientSession, protocol: ConnectProtocol=ConnectProtocol.CONNECT_PROTOBUF):
@@ -70,14 +85,33 @@ class AsyncFeaturesServiceClient:
             raise ConnectProtocolError('missing response message')
         return msg
 
+    async def call_get_upgrade_status(self, req: proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse]:
+        """Low-level method to call GetUpgradeStatus, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.FeaturesService/GetUpgradeStatus'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse, extra_headers, timeout_seconds)
+
+    async def get_upgrade_status(self, req: proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse:
+        response = await self.call_get_upgrade_status(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
 @typing.runtime_checkable
 class FeaturesServiceProtocol(typing.Protocol):
 
     def finalize_upgrade(self, req: ClientRequest[proto.redpanda.core.admin.v2.features_pb2.FinalizeUpgradeRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.features_pb2.FinalizeUpgradeResponse]:
+        ...
+
+    def get_upgrade_status(self, req: ClientRequest[proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusResponse]:
         ...
 FEATURES_SERVICE_PATH_PREFIX = '/redpanda.core.admin.v2.FeaturesService'
 
 def wsgi_features_service(implementation: FeaturesServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
     app.register_unary_rpc('/redpanda.core.admin.v2.FeaturesService/FinalizeUpgrade', implementation.finalize_upgrade, proto.redpanda.core.admin.v2.features_pb2.FinalizeUpgradeRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.FeaturesService/GetUpgradeStatus', implementation.get_upgrade_status, proto.redpanda.core.admin.v2.features_pb2.GetUpgradeStatusRequest)
     return app

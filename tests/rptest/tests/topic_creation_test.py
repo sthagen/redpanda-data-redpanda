@@ -20,7 +20,7 @@ from ducktape.utils.util import wait_until
 from rptest.clients.default import DefaultClient
 from rptest.clients.kafka_cat import KafkaCat
 from rptest.clients.kafka_cli_tools import KafkaCliTools
-from rptest.clients.kcl import KCL, RawKCL
+from rptest.clients.kcl import KAFKA_ERROR_INVALID_CONFIG, KCL, RawKCL
 from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.types import TopicSpec
@@ -684,7 +684,7 @@ class CreateTopicsResponseTest(RedpandaTest):
         topic_response = create_topics_response[0]
 
         res = self.kcl_client.describe_topic(topic_name)
-        describe_configs = [line.split() for line in res.strip().split("\n")]
+        describe_configs = [line.split() for line in res]
 
         for key, value, source in describe_configs:
             topic_config = self.get_config_by_name(topic_response, key)
@@ -911,10 +911,10 @@ class CreateSITopicsTest(RedpandaTest):
                 )
 
         # As a control, confirm that if we did pass an invalid property, we would have got an error
-        with expect_exception(RuntimeError, lambda e: "invalid" in str(e)):
-            kcl.alter_topic_config(
-                {"redpanda.invalid.property": "true"}, incremental=False, topic=topic
-            )
+        result = kcl.alter_topic_config(
+            {"redpanda.invalid.property": "true"}, incremental=False, topic=topic
+        )
+        assert result["error"] == KAFKA_ERROR_INVALID_CONFIG, result
 
 
 # When quickly recreating topics after deleting them, redpanda's topic

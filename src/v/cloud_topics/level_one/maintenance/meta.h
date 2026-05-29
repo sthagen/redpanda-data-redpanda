@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/format_to.h"
+#include "cloud_topics/level_one/metastore/leveling_range_builder.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
@@ -40,6 +41,44 @@ struct leveling_info_and_timestamp {
     model::timestamp collected_at;
 };
 
+// Per-CTP state for the compaction maintenance subsystem.
+struct log_compaction_state {
+    // Whether this log is:
+    // 1. `idle` (not yet queued for compaction)
+    // 2. `queued` (present in the scheduler's `log_compaction_queue`)
+    // 3. `inflight` (currently undergoing a compaction on a worker shard)
+    enum class status { idle, queued, inflight };
+    status s{status::idle};
+
+    // If set, this is cached compaction metadata obtained from the metastore
+    // at the `collected_at` time. Guaranteed to have a value if
+    // `s == queued` or `s == inflight`.
+    std::optional<compaction_info_and_timestamp> info_and_ts{std::nullopt};
+
+    // If set, this is the shard on which the log is currently undergoing an
+    // inflight compaction. Guaranteed to have a value if `s == inflight`.
+    std::optional<ss::shard_id> inflight_shard{std::nullopt};
+};
+
+// Per-CTP state for the leveling maintenance subsystem.
+struct log_leveling_state {
+    // If set, leveling metadata obtained from the metastore at
+    // `collected_at` time.
+    std::optional<leveling_info_and_timestamp> info_and_ts{std::nullopt};
+
+    // Number of leveling ranges from this CTP that are currently queued or
+    // inflight.
+    //
+    // TODO: Use as a reference count for controlling `info_and_ts`'s
+    // lifetime. `info_and_ts` should be cleared when all of the outstanding
+    // ranges have been leveled (i.e. when this value reaches 0 again).
+    size_t outstanding_ranges{0};
+
+    // Refcount of inflight leveling ranges per worker shard for this CTP.
+    // A shard is present iff it is currently running at least one range.
+    chunked_hash_map<ss::shard_id, size_t> inflight_shards;
+};
+
 struct log_compaction_meta {
     log_compaction_meta(model::topic_id_partition tidp, model::ntp ntp)
       : tidp(std::move(tidp))
@@ -47,28 +86,13 @@ struct log_compaction_meta {
 
     model::topic_id_partition tidp;
     model::ntp ntp;
-    // Whether this log is:
-    // 1. `idle` (not yet queued for compaction)
-    // 2. `queued` (present in the scheduler's `log_compaction_queue`)
-    // 3. `inflight` (currently undergoing a compaction on a worker shard)
-    enum class log_state { idle, queued, inflight } state{log_state::idle};
-    // If set, this is cached compaction metadata obtained from the metastore at
-    // the `collected_at` time. Guaranteed to have a value if `state == queued`
-    // or `state == inflight`.
-    std::optional<compaction_info_and_timestamp> compaction_info_and_ts{
-      std::nullopt};
-    // If set, leveling metadata for this log obtained from the metastore at
-    // `collected_at` time. Guaranteed to have a value if this log is queued
-    // or inflight as a leveling job.
-    std::optional<leveling_info_and_timestamp> leveling_info_and_ts{
-      std::nullopt};
-    // If set, this is the shard on which the log is currently undergoing an
-    // inflight compaction. Guaranteed to have a value if `state == inflight`.
-    std::optional<ss::shard_id> inflight_shard{std::nullopt};
     intrusive_list_hook link;
-    // If `true`, we have been able to sample compaction info from the
-    // `metastore` previously.
+    // If `true`, we have been able to sample info from the `metastore` for this
+    // CTP previously.
     bool has_seen_reconciled_data{false};
+
+    log_compaction_state compaction;
+    log_leveling_state leveling;
 };
 
 using log_compaction_meta_ptr = ss::lw_shared_ptr<log_compaction_meta>;
@@ -124,6 +148,34 @@ using log_compaction_queue = std::priority_queue<
   log_compaction_meta_ptr,
   chunked_vector<log_compaction_meta_ptr>,
   cmp_t>;
+
+// A single levelable range scheduled as an independent job. Holds a
+// back-link to the per-CTP meta so the worker_manager can find inflight
+// ranges by tidp for preemption, and so per-log probes can be attributed.
+struct leveling_job {
+    leveling_job(
+      log_compaction_meta_ptr meta,
+      levelable_range range,
+      metastore::compaction_epoch epoch)
+      : meta(std::move(meta))
+      , range(range)
+      , epoch(epoch) {}
+
+    log_compaction_meta_ptr meta;
+    levelable_range range;
+    metastore::compaction_epoch epoch;
+};
+
+using leveling_job_ptr = ss::lw_shared_ptr<leveling_job>;
+using foreign_leveling_job_ptr = ss::foreign_ptr<leveling_job_ptr>;
+
+using leveling_cmp_t
+  = std::function<bool(const leveling_job_ptr&, const leveling_job_ptr&)>;
+
+using leveling_queue = std::priority_queue<
+  leveling_job_ptr,
+  chunked_vector<leveling_job_ptr>,
+  leveling_cmp_t>;
 
 enum class compaction_job_state {
     // No compaction job is currently inflight.

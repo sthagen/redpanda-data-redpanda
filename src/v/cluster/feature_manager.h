@@ -126,6 +126,48 @@ public:
     /// \c backend_shard.
     ss::future<finalize_status> submit_manual_finalize_request();
 
+    /// Observability snapshot of the upgrade-finalization lifecycle,
+    /// returned by \ref get_upgrade_status.
+    struct upgrade_status {
+        enum class finalization_state {
+            /// active_version already equals the version uniformly
+            /// supported by all members; nothing to finalize.
+            finalized,
+            /// All members report the same version > active_version and
+            /// are alive: finalizable now.
+            ready_to_finalize,
+            /// Members differ, or a member's version is unknown, or a
+            /// member is not alive: not finalizable yet.
+            upgrade_in_progress,
+        };
+
+        /// One member's reported version state.
+        struct member {
+            model::node_id id;
+            cluster_version logical_version{invalid_version};
+            bool version_known{false};
+            bool alive{false};
+            ss::sstring release_version;
+        };
+
+        finalization_state state{finalization_state::finalized};
+        cluster_version active_version{invalid_version};
+        cluster_version version_after_finalization{invalid_version};
+        bool auto_finalization_enabled{false};
+        std::vector<member> members;
+    };
+
+    /// Snapshot the cluster's upgrade-finalization state for
+    /// observability: per-member logical versions (from health reports)
+    /// and liveness, the active version, and the version a finalize
+    /// would advance to. The per-member preconditions mirror those
+    /// \ref do_maybe_update_active_version applies; the raw per-member
+    /// fields are authoritative even if the rolled-up \c state lags a
+    /// change to that loop. Reflects the controller leader's view, so
+    /// callers should invoke this on the leader. Must run on
+    /// \c backend_shard.
+    ss::future<upgrade_status> get_upgrade_status();
+
     features::enterprise_feature_report report_enterprise_features() const;
 
     /**
@@ -162,7 +204,7 @@ private:
         if (!_is_leader_of.has_value()) {
             return false;
         }
-        if (!_updates.empty() || _manual_finalize_pending) {
+        if (!_updates.empty() || _manual_finalize_pending || _members_changed) {
             return true;
         }
         return !auto_activate_features(
@@ -209,6 +251,8 @@ private:
       notification_id_type_invalid};
     cluster::notification_id_type _health_notify_handle{
       notification_id_type_invalid};
+    cluster::notification_id_type _members_notify_handle{
+      notification_id_type_invalid};
 
     // Barriers are only populated on shard 0
     feature_barrier_state<ss::lowres_clock> _barrier_state;
@@ -240,6 +284,18 @@ private:
     // before the loop replicates the advance loses the request. Cleared
     // on leadership change and consumed (one-shot) by the loop body.
     bool _manual_finalize_pending{false};
+
+    // Whether the cluster's membership has changed since the loop last
+    // evaluated the active version. Set from the members_table
+    // notification and consumed (one-shot) by the loop body. Required
+    // because do_maybe_update_active_version reads
+    // members_table::node_ids() to decide whether all members are at the
+    // candidate version: when a node is fully removed (e.g. its
+    // decommission completes), health reports cease and no leader
+    // change fires, so without this signal the loop never re-evaluates
+    // and the active version stays pinned to the just-removed node's
+    // version.
+    bool _members_changed{false};
 
     // Blocks cluster upgrades until the enterprise license has been verified
     ssx::semaphore _verified_enterprise_license{

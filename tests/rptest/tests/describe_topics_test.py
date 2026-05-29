@@ -348,11 +348,12 @@ class DescribeTopicsTest(RedpandaTest):
         tp_spec = TopicSpec()
         self.client().create_topic([tp_spec])
         kcl = KCL(self.redpanda)
-        output = (
-            kcl.describe_topic(tp_spec.name, with_docs=True, with_types=True)
-            .lower()
-            .splitlines()
-        )
+        output = [
+            line.lower()
+            for line in kcl.describe_topic(
+                tp_spec.name, with_docs=True, with_types=True
+            )
+        ]
 
         # The output format from topic describe has the following structure
         #

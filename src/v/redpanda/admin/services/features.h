@@ -27,6 +27,10 @@ public:
     ss::future<proto::admin::finalize_upgrade_response> finalize_upgrade(
       serde::pb::rpc::context, proto::admin::finalize_upgrade_request) override;
 
+    ss::future<proto::admin::get_upgrade_status_response> get_upgrade_status(
+      serde::pb::rpc::context,
+      proto::admin::get_upgrade_status_request) override;
+
 private:
     admin::proxy::client _proxy_client;
     cluster::controller* _controller;

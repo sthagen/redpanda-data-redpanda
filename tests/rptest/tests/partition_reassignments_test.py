@@ -501,7 +501,7 @@ class PartitionReassignmentsTest(RedpandaTest):
             kcl.alter_partition_reassignments({})
             assert "alter partition reassignments should have failed"
         except subprocess.CalledProcessError as e:
-            assert "AlterPartitionReassignment API is disabled. See" in e.output
+            assert "AlterPartitionReassignment API is disabled. See" in e.stderr
 
     @cluster(num_nodes=6)
     def test_add_partitions_with_inprogress_reassignments(self):
@@ -671,7 +671,7 @@ class PartitionReassignmentsACLsTest(RedpandaTest):
                 f"AlterPartition with user {username} passed. Expected fail."
             )
         except subprocess.CalledProcessError as e:
-            if e.output.startswith("CLUSTER_AUTHORIZATION_FAILED"):
+            if e.stderr.startswith("CLUSTER_AUTHORIZATION_FAILED"):
                 pass
             else:
                 raise
@@ -683,7 +683,7 @@ class PartitionReassignmentsACLsTest(RedpandaTest):
                 f"ListPartition with user {username} passed. Expected fail."
             )
         except subprocess.CalledProcessError as e:
-            if e.output.startswith("CLUSTER_AUTHORIZATION_FAILED"):
+            if e.stderr.startswith("CLUSTER_AUTHORIZATION_FAILED"):
                 pass
             else:
                 raise

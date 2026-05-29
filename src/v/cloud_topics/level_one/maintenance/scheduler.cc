@@ -172,7 +172,7 @@ ss::future<> compaction_scheduler::scheduling_loop() {
 
         _probe.set_compaction_queue_length(_compaction_queue.size());
 
-        co_await _log_info_collector.collect_info_for_logs(
+        co_await _log_info_collector.collect_compaction_info(
           _logs, _logs_list, _compaction_queue);
 
         co_await _worker_manager.alert_workers();

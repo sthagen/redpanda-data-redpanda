@@ -19,6 +19,7 @@
 #include <seastar/util/defer.hh>
 
 #include <ranges>
+#include <span>
 #include <vector>
 
 using namespace cloud_storage;
@@ -164,19 +165,23 @@ private:
     absl::btree_map<model::offset, segment_meta> _data;
 };
 
+/// Inserts \p items into \p store and, for stores that buffer writes,
+/// flushes the buffer so subsequent operations see the steady-state
+/// compressed layout instead of a partially-buffered one.
+template<class StoreT>
+void populate_store(StoreT& store, std::span<const segment_meta> items) {
+    for (const auto& s : items) {
+        store.insert(s);
+    }
+    if constexpr (requires { store.flush_write_buffer(); }) {
+        store.flush_write_buffer();
+    }
+}
+
 template<class StoreT>
 void cs_append_test(StoreT& store, size_t sz) {
     auto manifest = generate_metadata(sz);
-
-    size_t i = 0;
-    for (const auto& s : manifest) {
-        store.insert(s);
-        i++;
-        if (i == sz) {
-            // Do not add last element
-            break;
-        }
-    }
+    populate_store(store, std::span{manifest}.first(sz - 1));
 
     perf_tests::start_measuring_time();
     store.insert(manifest.back());
@@ -185,11 +190,7 @@ void cs_append_test(StoreT& store, size_t sz) {
 
 template<class StoreT>
 void cs_scan_test(StoreT& store, size_t sz) {
-    auto manifest = generate_metadata(sz);
-
-    for (const auto& s : manifest) {
-        store.insert(s);
-    }
+    populate_store(store, generate_metadata(sz));
 
     perf_tests::start_measuring_time();
     for (const auto& i : store) {
@@ -202,61 +203,74 @@ auto last_n(size_t n) {
     return std::views::reverse | std::views::take(n) | std::views::reverse;
 }
 
+/// Number of lookups executed inside a single timed window for the
+/// find/lower_bound/upper_bound benches. Reported as the per-run op count
+/// so per-op metrics stay comparable across changes.
+constexpr size_t lookup_batch_size = 20;
+
 template<class StoreT>
-void cs_find_test(StoreT& store, size_t sz) {
+size_t cs_find_test(StoreT& store, size_t sz) {
     auto manifest = generate_metadata(sz);
+    populate_store(store, manifest);
 
-    for (const auto& s : manifest) {
-        store.insert(s);
+    std::vector<model::offset> keys;
+    keys.reserve(lookup_batch_size);
+    for (auto& e : manifest | last_n(lookup_batch_size)) {
+        keys.push_back(e.base_offset);
     }
 
-    for (auto& e : manifest | last_n(20)) {
-        perf_tests::start_measuring_time();
-        auto i = store.find(e.base_offset);
+    perf_tests::start_measuring_time();
+    for (auto k : keys) {
+        auto i = store.find(k);
         perf_tests::do_not_optimize(i);
-        perf_tests::stop_measuring_time();
     }
+    perf_tests::stop_measuring_time();
+    return keys.size();
 }
 
 template<class StoreT>
-void cs_lower_bound_test(StoreT& store, size_t sz) {
+size_t cs_lower_bound_test(StoreT& store, size_t sz) {
     auto manifest = generate_metadata(sz);
+    populate_store(store, manifest);
 
-    for (const auto& s : manifest) {
-        store.insert(s);
+    std::vector<model::offset> keys;
+    keys.reserve(lookup_batch_size);
+    for (auto& e : manifest | last_n(lookup_batch_size)) {
+        keys.push_back(e.base_offset + model::offset(1));
     }
 
-    for (auto& e : manifest | last_n(20)) {
-        perf_tests::start_measuring_time();
-        auto i = store.lower_bound(e.base_offset + model::offset(1));
+    perf_tests::start_measuring_time();
+    for (auto k : keys) {
+        auto i = store.lower_bound(k);
         perf_tests::do_not_optimize(i);
-        perf_tests::stop_measuring_time();
     }
+    perf_tests::stop_measuring_time();
+    return keys.size();
 }
 
 template<class StoreT>
-void cs_upper_bound_test(StoreT& store, size_t sz) {
+size_t cs_upper_bound_test(StoreT& store, size_t sz) {
     auto manifest = generate_metadata(sz);
+    populate_store(store, manifest);
 
-    for (const auto& s : manifest) {
-        store.insert(s);
+    std::vector<model::offset> keys;
+    keys.reserve(lookup_batch_size);
+    for (auto& e : manifest | last_n(lookup_batch_size)) {
+        keys.push_back(e.base_offset + model::offset(1));
     }
 
-    for (auto& e : manifest | last_n(20)) {
-        perf_tests::start_measuring_time();
-        auto i = store.upper_bound(e.base_offset + model::offset(1));
+    perf_tests::start_measuring_time();
+    for (auto k : keys) {
+        auto i = store.upper_bound(k);
         perf_tests::do_not_optimize(i);
-        perf_tests::stop_measuring_time();
     }
+    perf_tests::stop_measuring_time();
+    return keys.size();
 }
 
 template<class StoreT>
 void cs_last_segment_test(StoreT& store, size_t sz) {
-    auto manifest = generate_metadata(sz);
-
-    for (const auto& s : manifest) {
-        store.insert(s);
-    }
+    populate_store(store, generate_metadata(sz));
 
     perf_tests::start_measuring_time();
     auto s = store.last_segment();
@@ -265,9 +279,7 @@ void cs_last_segment_test(StoreT& store, size_t sz) {
 }
 
 void cs_serialize_test(auto& store, size_t sz) {
-    for (auto manifest = generate_metadata(sz); auto& s : manifest) {
-        store.insert(s);
-    }
+    populate_store(store, generate_metadata(sz));
 
     perf_tests::start_measuring_time();
     auto buf = store.to_iobuf();
@@ -276,9 +288,7 @@ void cs_serialize_test(auto& store, size_t sz) {
 }
 
 void cs_deserialize_test(auto& store, size_t sz) {
-    for (auto manifest = generate_metadata(sz); auto& s : manifest) {
-        store.insert(s);
-    }
+    populate_store(store, generate_metadata(sz));
 
     auto buf = store.to_iobuf();
     perf_tests::start_measuring_time();
@@ -287,9 +297,7 @@ void cs_deserialize_test(auto& store, size_t sz) {
 }
 
 void cs_iteration_recompute_end_test(auto& store, size_t sz) {
-    for (auto manifest = generate_metadata(sz); auto& s : manifest) {
-        store.insert(s);
-    }
+    populate_store(store, generate_metadata(sz));
 
     perf_tests::start_measuring_time();
     for (auto it = store.begin(); it != store.end(); ++it) {
@@ -300,9 +308,7 @@ void cs_iteration_recompute_end_test(auto& store, size_t sz) {
 }
 
 void cs_iteration_precompute_end_test(auto& store, size_t sz) {
-    for (auto manifest = generate_metadata(sz); auto& s : manifest) {
-        store.insert(s);
-    }
+    populate_store(store, generate_metadata(sz));
 
     perf_tests::start_measuring_time();
     for (auto it = store.begin(), e_it = store.end(); it != e_it; ++it) {
@@ -334,12 +340,12 @@ PERF_TEST(cstore_bench, column_store_scan_result) {
 
 PERF_TEST(cstore_bench, column_store_find_baseline) {
     baseline_column_store store;
-    cs_find_test(store, 10000);
+    return cs_find_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_find_result) {
     segment_meta_cstore store;
-    cs_find_test(store, 10000);
+    return cs_find_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_find_no_hints) {
@@ -348,27 +354,27 @@ PERF_TEST(cstore_bench, column_store_find_no_hints) {
     auto _ = ss::defer([] {
         config::shard_local_cfg().storage_ignore_cstore_hints.set_value(false);
     });
-    cs_find_test(store, 10000);
+    return cs_find_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_lower_bound_baseline) {
     baseline_column_store store;
-    cs_lower_bound_test(store, 10000);
+    return cs_lower_bound_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_lower_bound_result) {
     segment_meta_cstore store;
-    cs_lower_bound_test(store, 10000);
+    return cs_lower_bound_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_upper_bound_baseline) {
     baseline_column_store store;
-    cs_upper_bound_test(store, 10000);
+    return cs_upper_bound_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_upper_bound_result) {
     segment_meta_cstore store;
-    cs_upper_bound_test(store, 10000);
+    return cs_upper_bound_test(store, 10000);
 }
 
 PERF_TEST(cstore_bench, column_store_last_segment_baseline) {
@@ -430,10 +436,7 @@ void cs_append_with_intervening_lookup_test(
     auto manifest = generate_metadata(pre_populate + append_n);
 
     segment_meta_cstore store;
-    for (size_t i = 0; i < pre_populate; ++i) {
-        store.insert(manifest[i]);
-    }
-    store.flush_write_buffer();
+    populate_store(store, std::span{manifest}.first(pre_populate));
 
     perf_tests::start_measuring_time();
     for (size_t i = pre_populate; i < pre_populate + append_n; ++i) {

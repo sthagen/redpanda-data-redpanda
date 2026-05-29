@@ -10,7 +10,9 @@
 
 #pragma once
 
+#include "base/vassert.h"
 #include "cloud_topics/level_one/maintenance/meta.h"
+#include "config/property.h"
 #include "model/fundamental.h"
 
 #include <iterator>
@@ -41,12 +43,12 @@ private:
           const log_compaction_meta_ptr& a,
           const log_compaction_meta_ptr& b) noexcept {
             vassert(
-              a->compaction_info_and_ts.has_value()
-                && b->compaction_info_and_ts.has_value(),
-              "Sorting policy applied to logs without compaction_info_and_ts "
+              a->compaction.info_and_ts.has_value()
+                && b->compaction.info_and_ts.has_value(),
+              "Sorting policy applied to logs without compaction.info_and_ts "
               "assigned- concurrency issue?");
-            return a->compaction_info_and_ts->info.dirty_ratio
-                   < b->compaction_info_and_ts->info.dirty_ratio;
+            return a->compaction.info_and_ts->info.dirty_ratio
+                   < b->compaction.info_and_ts->info.dirty_ratio;
         }
     };
 };
@@ -63,16 +65,54 @@ private:
           const log_compaction_meta_ptr& a,
           const log_compaction_meta_ptr& b) noexcept {
             vassert(
-              a->compaction_info_and_ts.has_value()
-                && b->compaction_info_and_ts.has_value(),
-              "Sorting policy applied to logs without compaction_info_and_ts "
+              a->compaction.info_and_ts.has_value()
+                && b->compaction.info_and_ts.has_value(),
+              "Sorting policy applied to logs without compaction.info_and_ts "
               "assigned- concurrency issue?");
-            return a->compaction_info_and_ts->info.earliest_dirty_ts
-                   > b->compaction_info_and_ts->info.earliest_dirty_ts;
+            return a->compaction.info_and_ts->info.earliest_dirty_ts
+                   > b->compaction.info_and_ts->info.earliest_dirty_ts;
         }
     };
 };
 
 std::unique_ptr<scheduling_policy> make_default_scheduling_policy();
+
+// Orders leveling jobs by expected extent-count reduction, highest first.
+// For each range, the expected number of output objects is approximated as
+// `ceil(size_bytes / target_size_per_object)`, and the reclaim count is
+// `extent_count - expected_outputs`.
+class leveling_extent_reclamation_policy {
+public:
+    explicit leveling_extent_reclamation_policy(
+      config::binding<size_t> target_size_per_object)
+      : _target_size_per_object(std::move(target_size_per_object)) {}
+
+    leveling_cmp_t get_comparator() const noexcept;
+
+private:
+    struct sort_policy {
+        bool operator()(
+          const leveling_job_ptr& a, const leveling_job_ptr& b) const noexcept {
+            return expected_reclaim(a->range) < expected_reclaim(b->range);
+        }
+
+        size_t expected_reclaim(const levelable_range& r) const noexcept {
+            const size_t target = target_size_per_object();
+            vassert(
+              target > 0,
+              "leveling_extent_reclamation_policy requires a positive "
+              "target_size_per_object");
+            const size_t expected_outputs = std::max<size_t>(
+              1, (r.size_bytes + target - 1) / target);
+            return r.extent_count > expected_outputs
+                     ? r.extent_count - expected_outputs
+                     : 0;
+        }
+
+        config::binding<size_t> target_size_per_object;
+    };
+
+    config::binding<size_t> _target_size_per_object;
+};
 
 } // namespace cloud_topics::l1

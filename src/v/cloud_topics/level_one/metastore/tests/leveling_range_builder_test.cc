@@ -91,7 +91,7 @@ INSTANTIATE_TEST_SUITE_P(
          {40_o, 49_o, 2},
          {50_o, 59_o, 100}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 30_o, .last_offset = 49_o, .size_bytes = 17}},
+      .expected_ranges = {{.base_offset = 30_o, .last_offset = 49_o, .size_bytes = 17, .extent_count = 2}},
     },
     // Single isolated small surrounded by healthies. A K=1 singleton
     // run that finalize() discards on close.
@@ -146,7 +146,7 @@ INSTANTIATE_TEST_SUITE_P(
                   {10_o, 19_o, 2},
                   {20_o, 29_o, 2}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 6}},
+      .expected_ranges = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 6, .extent_count = 3}},
     },
     // Leading healthies are no-ops (no active range to close). Range
     // opens at obj 2, extends to obj 3, and closes on the trailing
@@ -160,7 +160,7 @@ INSTANTIATE_TEST_SUITE_P(
          {30_o, 39_o, 2},
          {40_o, 49_o, 100}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 20_o, .last_offset = 39_o, .size_bytes = 4}},
+      .expected_ranges = {{.base_offset = 20_o, .last_offset = 39_o, .size_bytes = 4, .extent_count = 2}},
     },
     // Smalls separated by a healthy: pure size-tier never bridges across
     // a healthy extent, so each small is a singleton run with no saving.
@@ -221,7 +221,7 @@ INSTANTIATE_TEST_SUITE_P(
                   {70_o, 79_o, 30},
                   {80_o, 89_o, 100}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 60_o, .last_offset = 79_o, .size_bytes = 60}},
+      .expected_ranges = {{.base_offset = 60_o, .last_offset = 79_o, .size_bytes = 60, .extent_count = 2}},
     },
     // Variable extent widths: the algorithm should depend only on size
     // and offset ordering, not on each extent's offset width. Same shape
@@ -236,7 +236,7 @@ INSTANTIATE_TEST_SUITE_P(
          {201_o, 202_o, 2},
          {203_o, 999_o, 100}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 152_o, .last_offset = 202_o, .size_bytes = 17}},
+      .expected_ranges = {{.base_offset = 152_o, .last_offset = 202_o, .size_bytes = 17, .extent_count = 2}},
     },
     // Boundary: extents exactly at min_acceptable. Since the undersized
     // check is `< min_acceptable` (strict), 50 is not undersized; no
@@ -258,7 +258,7 @@ INSTANTIATE_TEST_SUITE_P(
                   {10_o, 19_o, 49},
                   {20_o, 29_o, 49}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 147}},
+      .expected_ranges = {{.base_offset = 0_o, .last_offset = 29_o, .size_bytes = 147, .extent_count = 3}},
     },
     // Boundary: mixed sizes at and just below min_acceptable. Only the
     // 49-byte extents are undersized; the 50-byte ones (== min_acceptable)
@@ -273,7 +273,7 @@ INSTANTIATE_TEST_SUITE_P(
          {30_o, 39_o, 50},
          {40_o, 49_o, 100}},
       .min_acceptable = 50,
-      .expected_ranges = {{.base_offset = 10_o, .last_offset = 29_o, .size_bytes = 98}},
+      .expected_ranges = {{.base_offset = 10_o, .last_offset = 29_o, .size_bytes = 98, .extent_count = 2}},
     }),
   [](const auto& info) { return info.param.name; });
 // clang-format on
