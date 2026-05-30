@@ -29,18 +29,6 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
-    name = "interval_map_test",
-    timeout = "short",
-    srcs = ["interval_map_test.cc"],
-    deps = [
-        ":testing",
-        "//src/v/io",
-        "@googletest//:gtest",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_gtest(
     name = "persistence_test",
     timeout = "moderate",
     srcs = ["persistence_test.cc"],

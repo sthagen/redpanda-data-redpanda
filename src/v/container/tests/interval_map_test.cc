@@ -8,7 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "io/interval_map.h"
+#include "container/interval_map.h"
 
 #include <seastar/util/later.hh>
 
@@ -16,9 +16,7 @@
 
 #include <random>
 
-namespace io = experimental::io;
-
-using imap = io::interval_map<uint64_t, uint64_t>;
+using imap = interval_map<uint64_t, uint64_t>;
 
 TEST(IntervalMap, InsertZeroLengthInterval) {
     imap map;

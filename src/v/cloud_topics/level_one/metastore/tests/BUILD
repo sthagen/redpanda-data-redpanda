@@ -205,6 +205,20 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "offset_interval_map_test",
+    timeout = "short",
+    srcs = [
+        "offset_interval_map_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/metastore:offset_interval_map",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "partition_validator_test",
     timeout = "short",
     srcs = [

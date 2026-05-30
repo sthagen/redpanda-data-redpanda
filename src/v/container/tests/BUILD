@@ -63,6 +63,20 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "interval_map_test",
+    timeout = "short",
+    srcs = [
+        "interval_map_test.cc",
+    ],
+    deps = [
+        "//src/v/container:interval_map",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_btest(
     name = "chunked_vector_async_test",
     timeout = "short",

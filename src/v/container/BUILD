@@ -54,6 +54,17 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "interval_map",
+    hdrs = [
+        "interval_map.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@abseil-cpp//absl/container:btree",
+    ],
+)
+
+redpanda_cc_library(
     name = "contiguous_range_map",
     hdrs = [
         "contiguous_range_map.h",

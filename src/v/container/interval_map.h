@@ -15,8 +15,6 @@
 #include <concepts>
 #include <utility>
 
-namespace experimental::io {
-
 /**
  * A container that maps intervals to values.
  *
@@ -236,5 +234,3 @@ template<std::integral T, typename V>
 size_t interval_map<T, V>::size() const {
     return map_.size();
 }
-
-} // namespace experimental::io

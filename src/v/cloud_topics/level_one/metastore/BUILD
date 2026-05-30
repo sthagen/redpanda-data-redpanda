@@ -23,6 +23,20 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "offset_interval_map",
+    hdrs = [
+        "offset_interval_map.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/container:chunked_vector",
+        "//src/v/container:interval_map",
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
     name = "leveling_range_builder",
     hdrs = [
         "leveling_range_builder.h",

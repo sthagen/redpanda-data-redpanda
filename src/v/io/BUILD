@@ -14,7 +14,6 @@ redpanda_cc_library(
         "persistence.cc",
     ],
     hdrs = [
-        "interval_map.h",
         "io_queue.h",
         "page.h",
         "page_cache.h",
@@ -26,6 +25,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/container:interval_map",
         "//src/v/container:intrusive",
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",

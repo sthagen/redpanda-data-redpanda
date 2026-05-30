@@ -10,7 +10,7 @@
  */
 #pragma once
 
-#include "io/interval_map.h"
+#include "container/interval_map.h"
 #include "io/page.h"
 
 #include <seastar/core/shared_ptr.hh>
