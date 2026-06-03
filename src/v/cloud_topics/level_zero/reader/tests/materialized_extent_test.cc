@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/micro_probe.h"
 #include "cloud_topics/level_zero/reader/materialized_extent.h"
@@ -36,7 +37,8 @@ TEST_F_CORO(materialized_extent_fixture, materialize_from_cache) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(res.has_value());
 
@@ -68,7 +70,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_get_fails) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
@@ -95,7 +98,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_get_throws) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
@@ -123,7 +127,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_get_shutdown) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
@@ -151,7 +156,8 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_throws) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
@@ -179,7 +185,8 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_throws_shutdown) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
@@ -206,7 +213,8 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_stall_then_success) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(res.has_value());
 
@@ -241,7 +249,8 @@ TEST_F_CORO(materialized_extent_fixture, is_cached_stall_then_timeout) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::timeout);
@@ -264,7 +273,8 @@ TEST_F_CORO(materialized_extent_fixture, materialize_from_cloud) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(res.has_value());
 
@@ -302,7 +312,8 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_return_failure) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::download_failure);
@@ -328,7 +339,8 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_throw_shutdown) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
@@ -355,7 +367,8 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_return_notfound) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::download_not_found);
@@ -382,7 +395,8 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_return_timeout) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::timeout);
@@ -409,7 +423,8 @@ TEST_F_CORO(materialized_extent_fixture, cloud_get_throw_error) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::unexpected_failure);
@@ -438,7 +453,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_reserve_space_throws) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(res.has_value());
 
@@ -473,7 +489,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_reserve_space_throws_shutdown) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
@@ -501,7 +518,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_put_throws) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(res.has_value());
 
@@ -535,7 +553,8 @@ TEST_F_CORO(materialized_extent_fixture, cache_put_throws_shutdown) {
       &remote,
       &cache,
       &rtc,
-      &probe);
+      &probe,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!res.has_value());
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);

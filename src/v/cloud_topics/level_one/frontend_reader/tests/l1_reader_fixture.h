@@ -11,6 +11,7 @@
 #pragma once
 
 #include "bytes/iostream.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_one/common/fake_io.h"
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
@@ -130,6 +131,27 @@ protected:
         auto res = co_await _metastore.add_objects(*meta_builder, term_map);
     }
 
+    /// Build a cloud_topic_log_reader_config for tests. Defaults the
+    /// scheduler group to default_group; tests don't exercise the
+    /// admission lane so the choice is incidental.
+    static cloud_topic_log_reader_config make_test_config(
+      kafka::offset start_offset = kafka::offset{0},
+      kafka::offset max_offset = kafka::offset::max(),
+      size_t max_bytes = std::numeric_limits<size_t>::max(),
+      bool strict_max_bytes = false) {
+        return cloud_topic_log_reader_config(
+          /*group=*/cloud_io::group_id::default_group,
+          start_offset,
+          max_offset,
+          /*min_bytes=*/0,
+          max_bytes,
+          /*type_filter=*/std::nullopt,
+          /*first_timestamp=*/std::nullopt,
+          /*abort_source=*/std::nullopt,
+          /*client_addr=*/std::nullopt,
+          /*strict_max_bytes=*/strict_max_bytes);
+    }
+
     model::record_batch_reader make_reader(
       const model::ntp& ntp,
       const model::topic_id_partition& tidp,
@@ -138,16 +160,8 @@ protected:
       size_t max_bytes = std::numeric_limits<size_t>::max(),
       bool strict_max_bytes = false,
       size_t lookahead_objects = 0) {
-        cloud_topic_log_reader_config config(
-          start_offset,
-          max_offset,
-          /*min_bytes=*/0, // min_bytes
-          max_bytes,
-          /*type_filter=*/std::nullopt,
-          /*first_timestamp=*/std::nullopt,
-          /*abort_source=*/std::nullopt,
-          /*client_addr=*/std::nullopt,
-          /*strict_max_bytes=*/strict_max_bytes);
+        auto config = make_test_config(
+          start_offset, max_offset, max_bytes, strict_max_bytes);
         config.lookahead_objects = lookahead_objects;
         return model::record_batch_reader(
           std::make_unique<level_one_log_reader_impl>(

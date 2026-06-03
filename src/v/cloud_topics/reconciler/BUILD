@@ -65,6 +65,7 @@ redpanda_cc_library(
         "source_probe.h",
     ],
     implementation_deps = [
+        "//src/v/cloud_io:scheduler_types",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics/frontend",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm",

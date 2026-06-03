@@ -40,6 +40,12 @@ alias(
 )
 
 alias(
+    name = "benchcmp",
+    actual = "//tools/benchcmp_impl:benchcmp",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "cc_gen",
     actual = "//bazel/compilation_database_generator",
 )

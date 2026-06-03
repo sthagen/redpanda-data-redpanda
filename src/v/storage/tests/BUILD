@@ -530,6 +530,7 @@ redpanda_cc_gtest(
         "//src/v/compaction:key_offset_map",
         "//src/v/config",
         "//src/v/model",
+        "//src/v/model:batch_compression",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
         "//src/v/storage",
@@ -787,6 +788,24 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:test_env",
         "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "segment_flush_test",
+    timeout = "short",
+    srcs = [
+        "segment_flush_test.cc",
+    ],
+    deps = [
+        "//src/v/model",
+        "//src/v/storage",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/storage:segment_appender",
+        "//src/v/storage/tests:disk_log_builder",
+        "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",
     ],

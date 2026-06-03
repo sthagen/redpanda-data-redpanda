@@ -485,6 +485,8 @@ iobuf encode(const column_meta_data& metadata) {
     constexpr auto index_page_offset_field_id = thrift::field_id(10);
     constexpr auto dictionary_page_offset_field_id = thrift::field_id(11);
     constexpr auto stats_field_id = thrift::field_id(12);
+    constexpr auto bloom_filter_offset_field_id = thrift::field_id(14);
+    constexpr auto bloom_filter_length_field_id = thrift::field_id(15);
     thrift::struct_encoder encoder;
     enum physical_type : int8_t {
         boolean = 0,
@@ -609,6 +611,18 @@ iobuf encode(const column_meta_data& metadata) {
           stats_field_id,
           thrift::field_type::structure,
           encode(*metadata.stats));
+    }
+    if (metadata.bloom_filter_offset) {
+        encoder.write_field(
+          bloom_filter_offset_field_id,
+          thrift::field_type::i64,
+          vint::to_bytes(*metadata.bloom_filter_offset));
+    }
+    if (metadata.bloom_filter_length) {
+        encoder.write_field(
+          bloom_filter_length_field_id,
+          thrift::field_type::i32,
+          vint::to_bytes(static_cast<int64_t>(*metadata.bloom_filter_length)));
     }
     return std::move(encoder).write_stop();
 }

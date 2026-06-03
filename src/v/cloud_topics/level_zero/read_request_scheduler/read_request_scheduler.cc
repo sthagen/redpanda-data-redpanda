@@ -50,9 +50,8 @@ std::unique_ptr<read_request<ss::lowres_clock>> make_proxy(
     vassert(
       ss::this_shard_id() == target_shard,
       "make_proxy called on the wrong shard");
-    dataplane_query query;
-    query.output_size_estimate = req.query.output_size_estimate;
-    query.meta = req.query.meta.copy();
+    dataplane_query query{
+      req.query.group, req.query.output_size_estimate, req.query.meta.copy()};
     auto proxy = std::make_unique<read_request<ss::lowres_clock>>(
       req.ntp, std::move(query), timeout, target_rtc, id);
     return proxy;

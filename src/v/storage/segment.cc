@@ -364,8 +364,7 @@ ss::future<> segment::do_flush() {
         return ss::make_ready_future<>();
     }
     auto o = _tracker.get_dirty_offset();
-    auto fsize = _appender->file_byte_offset();
-    return _appender->flush().then([this, o, fsize] {
+    return _appender->flush().then([this, o] {
         // never move committed offset backward, there may be multiple
         // outstanding flushes once the one executed later in terms of offset
         // finishes we guarantee that all previous flushes finished.
@@ -374,7 +373,6 @@ ss::future<> segment::do_flush() {
             std::max(o, _tracker.get_committed_offset())},
           offset_tracker::stable_offset_t{
             std::max(o, _tracker.get_stable_offset())});
-        _reader->set_file_size(std::max(fsize, _reader->file_size()));
         clear_cached_disk_usage();
     });
 }

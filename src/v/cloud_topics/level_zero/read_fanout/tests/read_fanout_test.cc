@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/read_fanout/read_fanout.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
@@ -147,7 +148,7 @@ static const model::ntp
 TEST_F_CORO(read_fanout_fixture, test_bypass) {
     // Check that the read request is bypassed when it has single extent
     co_await start();
-    l0::dataplane_query query;
+    l0::dataplane_query query{cloud_io::group_id::default_group};
     query.output_size_estimate = 1_MiB;
     query.meta.push_back(
       extent_meta{.byte_range_size = byte_range_size_t{1_MiB}});
@@ -174,7 +175,7 @@ TEST_F_CORO(read_fanout_fixture, test_scatter_gather) {
     auto obj2_uuid = uuid_t::create();
     auto obj3_uuid = uuid_t::create();
 
-    l0::dataplane_query query;
+    l0::dataplane_query query{cloud_io::group_id::default_group};
     query.output_size_estimate = 4_MiB;
     // Obj1, one extent
     query.meta.push_back(
@@ -222,7 +223,7 @@ TEST_F_CORO(read_fanout_fixture, test_failure) {
     auto obj1_uuid = uuid_t::create();
     auto obj2_uuid = uuid_t::create();
 
-    l0::dataplane_query query;
+    l0::dataplane_query query{cloud_io::group_id::default_group};
     query.output_size_estimate = 3_MiB;
 
     // Obj1, one extent

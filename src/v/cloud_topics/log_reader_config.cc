@@ -21,7 +21,7 @@ fmt::iterator cloud_topic_log_reader_config::format_to(fmt::iterator it) const {
       "start_offset:{}, max_offset:{}, min_bytes:{}, max_bytes:{}, "
       "strict_max_bytes:{}, type_filter: {}, first_timestamp:{}, "
       "skip_cache:{}, allow_mat_failure:{}, abortable:{}, "
-      "client_address:{}",
+      "client_address:{}, group:{}",
       start_offset,
       max_offset,
       min_bytes,
@@ -32,7 +32,8 @@ fmt::iterator cloud_topic_log_reader_config::format_to(fmt::iterator it) const {
       skip_cache,
       allow_mat_failure,
       abort_source.has_value(),
-      client_address);
+      client_address,
+      group);
 }
 
 }; // namespace cloud_topics

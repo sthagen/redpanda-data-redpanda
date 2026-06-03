@@ -11,10 +11,11 @@ from rptest.services.cluster import cluster
 from rptest.services.admin import Admin
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.utils.util import wait_until
+from rptest.clients.python_librdkafka import ck_consumer
 from rptest.clients.types import TopicSpec
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.util import firewall_blocked
-from confluent_kafka import KafkaError, admin, Producer, KafkaException, Consumer
+from confluent_kafka import KafkaError, admin, Producer, KafkaException
 from ducktape.mark import parametrize
 
 import confluent_kafka as ck
@@ -59,36 +60,32 @@ class IsolatedDecommissionedNodeTest(PreallocNodesTest):
         max_retries = 5
         retries_count = 0
 
-        consumer = Consumer(
-            {
-                "bootstrap.servers": self.redpanda.brokers(),
-                "group.id": f"consumer-{uuid.uuid4()}",
-                "auto.offset.reset": "earliest",
-                "isolation.level": "read_committed",
-            }
-        )
+        config = {
+            "bootstrap.servers": self.redpanda.brokers(),
+            "group.id": f"consumer-{uuid.uuid4()}",
+            "auto.offset.reset": "earliest",
+            "isolation.level": "read_committed",
+        }
+        with ck_consumer(config) as consumer:
+            consumer.subscribe([topic_name])
+            num_consumed = 0
+            prev_rec = bytes("0", "UTF-8")
 
-        consumer.subscribe([topic_name])
-        num_consumed = 0
-        prev_rec = bytes("0", "UTF-8")
+            while num_consumed != self.max_records and retries_count < max_retries:
+                max_consume_records = 10
+                timeout = 10
+                records = consumer.consume(max_consume_records, timeout)
 
-        while num_consumed != self.max_records and retries_count < max_retries:
-            max_consume_records = 10
-            timeout = 10
-            records = consumer.consume(max_consume_records, timeout)
+                if len(records) == 0:
+                    retries_count += 1
+                    time.sleep(3)
 
-            if len(records) == 0:
-                retries_count += 1
-                time.sleep(3)
+                for record in records:
+                    retries_count = 0
+                    assert prev_rec == record.key(), f"{prev_rec}, {record.key()}"
+                    prev_rec = bytes(str(int(prev_rec) + 1), "UTF-8")
 
-            for record in records:
-                retries_count = 0
-                assert prev_rec == record.key(), f"{prev_rec}, {record.key()}"
-                prev_rec = bytes(str(int(prev_rec) + 1), "UTF-8")
-
-            num_consumed += len(records)
-
-        consumer.close()
+                num_consumed += len(records)
 
         assert num_consumed == self.max_records, (
             f"Can not consume all data. Consumed: {num_consumed}, expected: {self.max_records}"

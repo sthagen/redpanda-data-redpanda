@@ -12,15 +12,21 @@
 #include "serde/parquet/column_writer.h"
 
 #include "absl/numeric/int128.h"
+#include "bytes/iobuf_parser.h"
 #include "compression/compression.h"
 #include "container/chunked_vector.h"
 #include "hashing/crc32.h"
+#include "hashing/xx.h"
+#include "serde/parquet/bloom_filter.h"
 #include "serde/parquet/column_stats_collector.h"
 #include "serde/parquet/encoding.h"
+#include "strings/utf8.h"
 
+#include <seastar/core/byteorder.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/util/variant_utils.hh>
 
+#include <bit>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
@@ -49,6 +55,65 @@ public:
 
 namespace {
 
+std::pair<iobuf, bool>
+truncate_min(iobuf value, int32_t max_len, bool is_utf8) {
+    if (max_len <= 0 || static_cast<int32_t>(value.size_bytes()) <= max_len) {
+        return {std::move(value), true};
+    }
+    if (!is_utf8) {
+        iobuf_parser parser(std::move(value));
+        return {parser.copy(max_len), false};
+    }
+    // Read one extra byte so utf8_truncate_min's "string fits" fast path
+    // doesn't fire and it properly scans for a codepoint boundary.
+    auto read_len = std::min(
+      value.size_bytes(), static_cast<size_t>(max_len) + 1);
+    iobuf_parser parser(std::move(value));
+    auto buf = parser.read_bytes(read_len);
+    auto sv = std::string_view(
+      reinterpret_cast<const char*>(buf.data()), buf.size());
+    auto prefix = utf8_truncate_min(sv, static_cast<size_t>(max_len));
+    iobuf result;
+    result.append(prefix.data(), prefix.size());
+    return {std::move(result), false};
+}
+
+std::optional<std::pair<iobuf, bool>>
+truncate_max(iobuf value, int32_t max_len, bool is_utf8) {
+    if (max_len <= 0 || static_cast<int32_t>(value.size_bytes()) <= max_len) {
+        return {{std::move(value), true}};
+    }
+    if (!is_utf8) {
+        iobuf_parser parser(std::move(value));
+        auto prefix = parser.read_bytes(max_len);
+        for (int i = static_cast<int>(prefix.size()) - 1; i >= 0; --i) {
+            if (prefix[i] < 0xFF) {
+                prefix[i]++;
+                iobuf result;
+                result.append(prefix.data(), i + 1);
+                return {{std::move(result), false}};
+            }
+        }
+        // All prefix bytes are 0xFF — no valid truncated upper bound.
+        return std::nullopt;
+    }
+    // Same +1 trick: give utf8_truncate_max a string longer than max_len so
+    // it takes the truncation path rather than the "string fits" fast path.
+    auto read_len = std::min(
+      value.size_bytes(), static_cast<size_t>(max_len) + 1);
+    iobuf_parser parser(std::move(value));
+    auto buf = parser.read_bytes(read_len);
+    auto sv = std::string_view(
+      reinterpret_cast<const char*>(buf.data()), buf.size());
+    auto opt = utf8_truncate_max(sv, static_cast<size_t>(max_len));
+    if (opt) {
+        iobuf result;
+        result.append(opt->data(), opt->size());
+        return {{std::move(result), false}};
+    }
+    return std::nullopt;
+}
+
 void extend_crc32(crc::crc32& crc, const iobuf& buf) {
     for (const auto& frag : buf) {
         crc.extend(frag.get(), frag.size());
@@ -62,11 +127,55 @@ crc::crc32 compute_crc32(Args&&... args) {
     return crc;
 }
 
+// Hash a parquet value to uint64_t using xxHash64 (seed=0), as required by
+// the Parquet bloom filter spec. Fixed-size values are hashed as their
+// little-endian byte representation; variable-length values are hashed
+// directly over their bytes.
+uint64_t hash_for_bloom(int32_value v) {
+    auto le = ss::cpu_to_le(v.val);
+    return xxhash_64(reinterpret_cast<const char*>(&le), sizeof(le));
+}
+uint64_t hash_for_bloom(int64_value v) {
+    auto le = ss::cpu_to_le(v.val);
+    return xxhash_64(reinterpret_cast<const char*>(&le), sizeof(le));
+}
+uint64_t hash_for_bloom(float32_value v) {
+    auto bits = ss::cpu_to_le(std::bit_cast<uint32_t>(v.val));
+    return xxhash_64(reinterpret_cast<const char*>(&bits), sizeof(bits));
+}
+uint64_t hash_for_bloom(float64_value v) {
+    auto bits = ss::cpu_to_le(std::bit_cast<uint64_t>(v.val));
+    return xxhash_64(reinterpret_cast<const char*>(&bits), sizeof(bits));
+}
+uint64_t hash_for_bloom(const byte_array_value& v) {
+    incremental_xxhash64 h;
+    for (const auto& frag : v.val) {
+        h.update(frag.get(), frag.size());
+    }
+    return h.digest();
+}
+uint64_t hash_for_bloom(const fixed_byte_array_value& v) {
+    incremental_xxhash64 h;
+    for (const auto& frag : v.val) {
+        h.update(frag.get(), frag.size());
+    }
+    return h.digest();
+}
+// Boolean columns never have bloom filters (see constructor below).
+// This overload exists only so the template compiles for boolean_value.
+uint64_t hash_for_bloom(boolean_value) {
+    vassert(false, "unreachable: boolean columns are never bloom-filtered");
+}
+
 template<typename value_type, auto comparator>
 class buffered_column_writer final : public column_writer::impl {
 public:
     buffered_column_writer(const schema_element& schema_element, options opts)
-      : _max_rep_level(schema_element.max_repetition_level)
+      : _bloom_filter(
+          opts.bloom_filter_ndv > 0
+            ? std::make_optional<bloom_filter>(opts.bloom_filter_ndv)
+            : std::nullopt)
+      , _max_rep_level(schema_element.max_repetition_level)
       , _max_def_level(schema_element.max_definition_level)
       , _opts(opts) {}
 
@@ -89,6 +198,9 @@ public:
                   value_memory_usage = sizeof(value_type);
               }
               _current_page_stats.record_value(v);
+              if (_bloom_filter) {
+                  _bloom_filter->insert(hash_for_bloom(v));
+              }
               _value_buffer.add_value(std::move(v));
           },
           [this](null_value) {
@@ -137,20 +249,31 @@ public:
         using bound_type = decltype(_flushed_stats)::bound_ref_type;
         std::optional<statistics::bound> max_bound;
         if (bound_type max = _current_page_stats.max()) {
-            // TODO: consider truncating large values instead of writing them
-            // (is_exact=false)
-            max_bound.emplace(
-              /*value=*/encode_for_stats(*max),
-              /*is_exact=*/true);
+            if constexpr (std::is_same_v<value_type, byte_array_value>) {
+                if (
+                  auto truncated = truncate_max(
+                    encode_for_stats(*max),
+                    _opts.max_stats_truncate_length,
+                    _opts.is_utf8_string)) {
+                    auto [val, is_exact] = std::move(*truncated);
+                    max_bound.emplace(std::move(val), is_exact);
+                }
+            } else {
+                max_bound.emplace(encode_for_stats(*max), true);
+            }
             _flushed_stats.record_value(*max);
         }
         std::optional<statistics::bound> min_bound;
         if (bound_type min = _current_page_stats.min()) {
-            // TODO: consider truncating large values instead of writing them
-            // (is_exact=false)
-            min_bound.emplace(
-              /*value=*/encode_for_stats(*min),
-              /*is_exact=*/true);
+            if constexpr (std::is_same_v<value_type, byte_array_value>) {
+                auto [val, is_exact] = truncate_min(
+                  encode_for_stats(*min),
+                  _opts.max_stats_truncate_length,
+                  _opts.is_utf8_string);
+                min_bound.emplace(std::move(val), is_exact);
+            } else {
+                min_bound.emplace(encode_for_stats(*min), true);
+            }
             _flushed_stats.record_value(*min);
         }
         _flushed_stats.record_null(_current_page_stats.null_count());
@@ -218,26 +341,56 @@ public:
         };
         using bound_type = decltype(_flushed_stats)::bound_ref_type;
         if (bound_type max = _flushed_stats.max()) {
-            full_stats.max.emplace(
-              /*value=*/encode_for_stats(*max),
-              /*is_exact=*/true);
+            if constexpr (std::is_same_v<value_type, byte_array_value>) {
+                if (
+                  auto truncated = truncate_max(
+                    encode_for_stats(*max),
+                    _opts.max_stats_truncate_length,
+                    _opts.is_utf8_string)) {
+                    auto [val, is_exact] = std::move(*truncated);
+                    full_stats.max.emplace(std::move(val), is_exact);
+                }
+            } else {
+                full_stats.max.emplace(encode_for_stats(*max), true);
+            }
         }
         if (bound_type min = _flushed_stats.min()) {
-            full_stats.min.emplace(
-              /*value=*/encode_for_stats(*min),
-              /*is_exact=*/true);
+            if constexpr (std::is_same_v<value_type, byte_array_value>) {
+                auto [val, is_exact] = truncate_min(
+                  encode_for_stats(*min),
+                  _opts.max_stats_truncate_length,
+                  _opts.is_utf8_string);
+                full_stats.min.emplace(std::move(val), is_exact);
+            } else {
+                full_stats.min.emplace(encode_for_stats(*min), true);
+            }
         }
         _flushed_stats.reset();
         _total_memory_usage = 0;
+        iobuf bf;
+        if (_bloom_filter) {
+            // Discard the filter if it is too full: FPP ≈ fill_ratio()^8,
+            // so the default threshold of 0.75 corresponds to ~10% FPP,
+            // at which point the filter is unlikely to be useful for
+            // skipping row groups.
+            if (
+              _bloom_filter->fill_ratio()
+              <= _opts.bloom_filter_max_fill_ratio) {
+                _bloom_filter->serialize(bf);
+            }
+            _bloom_filter->reset();
+        }
         co_return flushed_pages{
           .pages = std::exchange(_flushed_pages, {}),
           .stats = std::move(full_stats),
+          .bloom_filter = std::move(bf),
         };
     }
 
 private:
     column_stats_collector<value_type, comparator> _current_page_stats;
     column_stats_collector<value_type, comparator> _flushed_stats;
+    std::optional<bloom_filter> _bloom_filter;
     int64_t _total_memory_usage = 0;
     plain_encoder<value_type> _value_buffer;
     chunked_vector<def_level> _def_levels;
@@ -320,6 +473,8 @@ make_impl(const schema_element& e, byte_array_type t, options opts) {
           fixed_byte_array_value,
           ordering::fixed_byte_array>>(e, opts);
     }
+    opts.is_utf8_string = std::holds_alternative<string_type>(e.logical_type)
+                          || std::holds_alternative<enum_type>(e.logical_type);
     return std::make_unique<
       buffered_column_writer<byte_array_value, ordering::byte_array>>(e, opts);
 }

@@ -74,6 +74,7 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/base",
+        "//src/v/cloud_io:scheduler_types",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
         "//src/v/container:chunked_vector",
         "//src/v/model",
@@ -95,6 +96,7 @@ redpanda_cc_library(
         ":data_plane_impl",
         ":logger",
         ":topic_manifest_upload_manager",
+        "//src/v/cloud_io:scheduler_types",
         "//src/v/cloud_topics/housekeeper:manager",
         "//src/v/cloud_topics/level_one/metastore:flush_loop",
         "//src/v/cloud_topics/level_one/metastore:topic_purger",
@@ -168,6 +170,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_io:cache",
         "//src/v/cloud_io:remote",
+        "//src/v/cloud_io:scheduler_types",
         "//src/v/cloud_topics:cluster_services_interface",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/batch_cache",
@@ -275,6 +278,7 @@ redpanda_cc_library(
     deps = [
         ":types",
         "//src/v/base",
+        "//src/v/cloud_io:scheduler_types",
         "//src/v/model",
         "//src/v/utils:to_string",
     ],

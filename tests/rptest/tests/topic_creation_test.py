@@ -130,6 +130,29 @@ class TopicRecreateTest(RedpandaTest):
             },
         )
 
+    def _wait_for_topic_ready(
+        self,
+        topic: str,
+        partition_count: int,
+        replication_factor: int,
+    ) -> None:
+        rpk = RpkTool(self.redpanda)
+
+        def topic_is_ready():
+            partitions = list(rpk.describe_topic(topic))
+            return len(partitions) == partition_count and all(
+                p.leader != -1 and len(p.replicas) == replication_factor
+                for p in partitions
+            )
+
+        wait_until(
+            topic_is_ready,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic} readiness",
+            retry_on_exc=True,
+        )
+
     @cluster(num_nodes=6)
     @matrix(
         workload=[Workload.ACKS_1, Workload.ACKS_ALL, Workload.IDEMPOTENT],
@@ -149,6 +172,7 @@ class TopicRecreateTest(RedpandaTest):
         spec.cleanup_policy = cleanup_policy
 
         self.client().create_topic(spec)
+        self._wait_for_topic_ready(spec.name, partition_count, spec.replication_factor)
 
         producer_properties = {}
         if workload == Workload.ACKS_1:
@@ -184,12 +208,25 @@ class TopicRecreateTest(RedpandaTest):
             self.logger.debug(f"High watermark offsets: {hw_offsets}")
             return len(offsets_present) == partition_count and all(offsets_present)
 
+        # Long-lived librdkafka 2.12.1 producers stall after a topic
+        # delete+recreate, so recreate the swarm (fresh client) and wait
+        # for the new topic to be ready each iteration.
+        # See https://github.com/confluentinc/librdkafka/issues/4898
         for i in range(1, 20):
             rf = 3 if i % 2 == 0 else 1
             self.client().delete_topic(spec.name)
             spec.replication_factor = rf
             self.client().create_topic(spec)
-            wait_until(topic_is_healthy, 30, 2, err_msg=f"Topic {spec.name} health")
+            self._wait_for_topic_ready(spec.name, partition_count, rf)
+            swarm.stop()
+            swarm.wait()
+            swarm.start()
+            wait_until(
+                topic_is_healthy,
+                30,
+                2,
+                err_msg=f"Topic {spec.name} health",
+            )
             sleep(5)
 
         swarm.stop()
@@ -241,6 +278,10 @@ class TopicRecreateTest(RedpandaTest):
             self.logger.debug(f"High watermark offsets: {hw_offsets}")
             return len(offsets_present) == partition_count and all(offsets_present)
 
+        # Long-lived librdkafka 2.12.1 producers stall after a topic
+        # delete+recreate, so recreate the swarm (fresh client) and wait
+        # for the new topic to be ready each iteration.
+        # See https://github.com/confluentinc/librdkafka/issues/4898
         for i in range(1, 20):
             rf = 3 if i % 2 == 0 else 1
             self.client().delete_topic(topic)
@@ -250,6 +291,10 @@ class TopicRecreateTest(RedpandaTest):
                 replicas=rf,
                 config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
             )
+            self._wait_for_topic_ready(topic, partition_count, rf)
+            swarm.stop()
+            swarm.wait()
+            swarm.start()
             wait_until(topic_is_healthy, 30, 2, err_msg=f"Topic {topic} health")
             sleep(5)
 

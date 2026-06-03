@@ -37,12 +37,13 @@ fmt::iterator stats::format_to(fmt::iterator it) const {
       it,
       "{{ batches_processed: {}, batches_discarded: {}, "
       "records_discarded: {}, expired_tombstones_discarded: {}, "
-      "non_compactible_batches: {}{}}}",
+      "non_compactible_batches: {}, compressed_batches_reused: {}{}}}",
       batches_processed,
       batches_discarded,
       records_discarded,
       expired_tombstones_discarded,
       non_compactible_batches,
+      compressed_batches_reused,
       control_batches_discarded > 0
         ? fmt::format(
             ", control_batches_discarded: {}", control_batches_discarded)

@@ -218,15 +218,14 @@ public:
      * @brief Adds the given metric group to public and internal metrics.
      *
      * The behavior is same as ss::metrics::metric_groups::add_group but for
-     * both metric endpoints.
+     * both metric endpoints. The `disable_metrics` and `disable_public_metrics`
+     * config flags are honored, so callers do not need to check them
+     * themselves: if the internal endpoint is disabled the group is not
+     * registered on `_internal`, and likewise for the public endpoint.
      */
     all_metrics_groups& add_group(
       const seastar::metrics::group_name_type& name,
-      const std::initializer_list<seastar::metrics::metric_definition>& l) {
-        _internal.add_group(name, l);
-        _public.add_group(name, l);
-        return *this;
-    };
+      const std::initializer_list<seastar::metrics::metric_definition>& l);
 };
 
 } // namespace metrics

@@ -51,16 +51,8 @@ protected:
       kafka::offset max_offset = kafka::offset::max(),
       size_t max_bytes = std::numeric_limits<size_t>::max(),
       bool strict_max_bytes = false) {
-        cloud_topic_log_reader_config config(
-          start_offset,
-          max_offset,
-          /*min_bytes=*/0,
-          max_bytes,
-          std::nullopt,
-          std::nullopt,
-          std::nullopt,
-          std::nullopt,
-          strict_max_bytes);
+        auto config = make_test_config(
+          start_offset, max_offset, max_bytes, strict_max_bytes);
         return std::make_unique<level_one_log_reader_impl>(
           config, ntp, tidp, &_metastore, &_io);
     }
@@ -74,7 +66,7 @@ protected:
 
 TEST_F(l1_reader_cache_test, empty_cache_returns_nullopt) {
     auto [ntp, tidp] = make_ntidp("test_topic");
-    cloud_topic_log_reader_config cfg(kafka::offset{0}, kafka::offset::max());
+    auto cfg = make_test_config(kafka::offset{0}, kafka::offset::max());
     auto result = _cache->get_reader(tidp, cfg);
     ASSERT_FALSE(result.has_value());
     auto stats = _cache->get_stats();
@@ -108,7 +100,7 @@ TEST_F(l1_reader_cache_test, put_then_get_at_matching_offset) {
 
     // Verify miss at next offset since reader was disposed.
     auto next_offset = kafka::offset(last_offset() + 1);
-    cloud_topic_log_reader_config cfg(next_offset, kafka::offset::max());
+    auto cfg = make_test_config(next_offset, kafka::offset::max());
     auto hit = _cache->get_reader(tidp, cfg);
     EXPECT_FALSE(hit.has_value());
 }
@@ -137,7 +129,7 @@ TEST_F(l1_reader_cache_test, get_at_different_offset_is_miss) {
     ASSERT_FALSE(data.empty());
 
     // Reader is at EOS (max_offset reached). Try to get at offset 0 — miss.
-    cloud_topic_log_reader_config cfg2(kafka::offset{0}, kafka::offset::max());
+    auto cfg2 = make_test_config(kafka::offset{0}, kafka::offset::max());
     auto miss = _cache->get_reader(tidp, cfg2);
     EXPECT_FALSE(miss.has_value());
 }
@@ -168,7 +160,7 @@ TEST_F(l1_reader_cache_test, get_with_different_tidp_is_miss) {
 
     // Even though the reader is now at EOS (disposed), verify that a
     // lookup for a different tidp also returns nullopt.
-    cloud_topic_log_reader_config cfg(kafka::offset{0}, kafka::offset::max());
+    auto cfg = make_test_config(kafka::offset{0}, kafka::offset::max());
     auto miss = _cache->get_reader(tidp2, cfg);
     EXPECT_FALSE(miss.has_value());
 }
@@ -238,7 +230,7 @@ TEST_F(l1_reader_cache_test, size_cap_evicts_oldest) {
 
     // Verify reader A is gone — lookup for tidp_a should miss.
     auto next_a = kafka::offset(data_a.back().last_offset()() + 1);
-    cloud_topic_log_reader_config cfg_a(next_a, kafka::offset::max());
+    auto cfg_a = make_test_config(next_a, kafka::offset::max());
     auto miss = _cache->get_reader(tidp_a, cfg_a);
     EXPECT_FALSE(miss.has_value()) << "reader A should have been evicted";
 }
@@ -327,7 +319,7 @@ TEST_F(l1_reader_cache_test, sequential_fetches_hit_cache) {
     ASSERT_EQ(stats.cached_readers, 1) << "reader was not returned to cache";
 
     // Second fetch: get from cache at next_offset — must be a hit.
-    cloud_topic_log_reader_config cfg2(next_offset, kafka::offset::max());
+    auto cfg2 = make_test_config(next_offset, kafka::offset::max());
     auto hit = _cache->get_reader(tidp, cfg2);
     ASSERT_TRUE(hit.has_value()) << "expected cache hit at next offset";
 
@@ -371,7 +363,7 @@ TEST_F(l1_reader_cache_test, byte_limited_reader_is_reusable) {
     ASSERT_EQ(stats.cached_readers, 1) << "byte-limited reader was not cached";
 
     // Second fetch picks up where we left off.
-    cloud_topic_log_reader_config cfg2(next_offset, kafka::offset::max());
+    auto cfg2 = make_test_config(next_offset, kafka::offset::max());
     auto hit = _cache->get_reader(tidp, cfg2);
     ASSERT_TRUE(hit.has_value())
       << "expected cache hit after byte-limited read";

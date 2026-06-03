@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
@@ -57,7 +58,8 @@ TEST_F_CORO(materialized_extent_fixture, l0_fetch_handler_test) {
     vlog(test_log.debug, "Make reader");
     auto reader = co_await pipeline.make_reader(
       ntp,
-      {.output_size_estimate = 1_MiB, .meta = std::move(underlying)},
+      cloud_topics::l0::dataplane_query{
+        cloud_io::group_id::default_group, 1_MiB, std::move(underlying)},
       ss::lowres_clock::now() + 1s);
 
     ASSERT_TRUE_CORO(reader.has_value());
@@ -96,7 +98,8 @@ TEST_F_CORO(materialized_extent_fixture, l0_fetch_handler_timeout) {
     vlog(test_log.debug, "Make reader");
     auto reader = co_await pipeline.make_reader(
       ntp,
-      {.output_size_estimate = 1_MiB, .meta = std::move(underlying)},
+      cloud_topics::l0::dataplane_query{
+        cloud_io::group_id::default_group, 1_MiB, std::move(underlying)},
       ss::lowres_clock::now() + 1s);
 
     ASSERT_FALSE_CORO(reader.has_value());

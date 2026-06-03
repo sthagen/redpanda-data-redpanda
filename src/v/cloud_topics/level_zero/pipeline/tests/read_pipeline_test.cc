@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "model/namespace.h"
 #include "test_utils/test.h"
@@ -79,7 +80,8 @@ TEST_CORO(read_pipeline_test, interleaving_stages_bug) {
       requests;
 
     for (int i = 0; i < 6; i++) {
-        cloud_topics::l0::dataplane_query query;
+        cloud_topics::l0::dataplane_query query{
+          cloud_io::group_id::default_group};
         query.output_size_estimate = 1000 + i * 100; // Different sizes
         auto req
           = std::make_unique<cloud_topics::l0::read_request<ss::manual_clock>>(
@@ -145,7 +147,7 @@ TEST_CORO(read_pipeline_test, oversized_request) {
       requests;
 
     // First request is oversized (10000 bytes)
-    cloud_topics::l0::dataplane_query query1;
+    cloud_topics::l0::dataplane_query query1{cloud_io::group_id::default_group};
     query1.output_size_estimate = 10000;
     auto req1
       = std::make_unique<cloud_topics::l0::read_request<ss::manual_clock>>(
@@ -156,7 +158,7 @@ TEST_CORO(read_pipeline_test, oversized_request) {
     requests.push_back(std::move(req1));
 
     // Second request is normal size (1000 bytes)
-    cloud_topics::l0::dataplane_query query2;
+    cloud_topics::l0::dataplane_query query2{cloud_io::group_id::default_group};
     query2.output_size_estimate = 1000;
     auto req2
       = std::make_unique<cloud_topics::l0::read_request<ss::manual_clock>>(
@@ -213,7 +215,8 @@ TEST_CORO(read_pipeline_test, multiple_requests_within_limit) {
       requests;
 
     for (int i = 0; i < 3; i++) {
-        cloud_topics::l0::dataplane_query query;
+        cloud_topics::l0::dataplane_query query{
+          cloud_io::group_id::default_group};
         query.output_size_estimate = 1000;
         auto req
           = std::make_unique<cloud_topics::l0::read_request<ss::manual_clock>>(

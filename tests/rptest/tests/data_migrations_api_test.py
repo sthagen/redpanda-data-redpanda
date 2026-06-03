@@ -21,6 +21,7 @@ from ducktape.mark import matrix
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
 
+from rptest.clients.python_librdkafka import ck_consumer as ck_consumer_cm
 from rptest.clients.rpk import RpkGroup, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import (
@@ -180,22 +181,18 @@ class DataMigrationsApiTest(DataMigrationTestMixin):
         if group is None:
             self.last_consumer_id += 1
             group = f"group-{self.last_consumer_id}"
-        consumer = ck.Consumer(
-            {
-                "debug": "all",
-                "log_level": 7,
-                "logger": self.logger,
-                "session.timeout.ms": 6000,
-                "group.id": group,
-                "bootstrap.servers": self.redpanda.brokers(),
-                "auto.offset.reset": "earliest",
-                "isolation.level": "read_committed",
-            }
-        )
-        try:
+        config = {
+            "debug": "all",
+            "log_level": 7,
+            "logger": self.logger,
+            "session.timeout.ms": 6000,
+            "group.id": group,
+            "bootstrap.servers": self.redpanda.brokers(),
+            "auto.offset.reset": "earliest",
+            "isolation.level": "read_committed",
+        }
+        with ck_consumer_cm(config) as consumer:
             yield consumer
-        finally:
-            consumer.close()
 
     @contextmanager
     def flaky_admin_cm(self, other_cm):

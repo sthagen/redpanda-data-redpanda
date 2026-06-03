@@ -10,6 +10,7 @@
 
 #include "cloud_topics/reconciler/reconciliation_source.h"
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
@@ -133,8 +134,9 @@ public:
         }
 
         cloud_topic_log_reader_config cfg(
-          /*start_offset=*/std::max(
-            effective_start.value(), input_cfg.start_offset),
+          /*group=*/cloud_io::group_id::default_group,
+          /*start_offset=*/
+          std::max(effective_start.value(), input_cfg.start_offset),
           /*max_offset=*/kafka::prev_offset(maybe_lso.value()),
           /*min_bytes=*/1,
           /*max_bytes=*/input_cfg.max_bytes,

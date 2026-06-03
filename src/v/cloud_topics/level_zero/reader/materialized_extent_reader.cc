@@ -31,7 +31,8 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
   cloud_io::basic_cache_service_api<>* cache,
   allow_materialization_failure allow_mat_failure,
   retry_chain_node* rtc,
-  micro_probe* probe) {
+  micro_probe* probe,
+  cloud_io::group_id group) {
     absl::node_hash_map<object_id, iobuf> hydrated;
     chunked_vector<materialized_extent> extents;
     for (const auto& extent : query) {
@@ -45,7 +46,7 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
             back.object = payload.share(0, payload.size_bytes());
         } else {
             auto res = co_await materialize(
-              &back, bucket, api, cache, rtc, probe);
+              &back, bucket, api, cache, rtc, probe, group);
             if (!res.has_value()) {
                 if (
                   bool(allow_mat_failure)
@@ -86,10 +87,18 @@ ss::future<materialize_result> materialize_placeholders(
   cloud_io::basic_cache_service_api<ss::lowres_clock>& cache,
   allow_materialization_failure allow_mat_failure,
   retry_chain_node& rtc,
-  retry_chain_logger& logger) {
+  retry_chain_logger& logger,
+  cloud_io::group_id group) {
     micro_probe probe;
     auto extents = co_await materialize_sorted_run(
-      std::move(query), bucket, &api, &cache, allow_mat_failure, &rtc, &probe);
+      std::move(query),
+      bucket,
+      &api,
+      &cache,
+      allow_mat_failure,
+      &rtc,
+      &probe,
+      group);
     if (!extents.has_value()) {
         vlog(
           logger.warn,

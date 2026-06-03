@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/read_merge/read_merge.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
@@ -82,7 +83,7 @@ public:
 
     /// Helper: make a query targeting a specific object_id.
     static l0::dataplane_query make_query(object_id id, size_t size = 1_MiB) {
-        l0::dataplane_query query;
+        l0::dataplane_query query{cloud_io::group_id::default_group};
         query.output_size_estimate = size;
         query.meta.push_back(
           extent_meta{.id = id, .byte_range_size = byte_range_size_t{size}});

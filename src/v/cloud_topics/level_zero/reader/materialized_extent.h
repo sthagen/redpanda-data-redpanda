@@ -12,6 +12,7 @@
 
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -45,13 +46,15 @@ struct materialized_extent {
 /// ctp_placeholder.
 /// Return 'true' if the object was downloaded from the cloud storage.
 /// Otherwise, if the object was populated from the cache, return 'false'.
+/// `group` is the cloud_io admission group for the cloud download.
 ss::future<result<bool>> materialize(
   materialized_extent* extent,
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
   basic_retry_chain_node<>* rtc,
-  micro_probe* probe);
+  micro_probe* probe,
+  cloud_io::group_id group);
 
 // Get ctp_placeholder and the payload of the object and generate a record
 // batch

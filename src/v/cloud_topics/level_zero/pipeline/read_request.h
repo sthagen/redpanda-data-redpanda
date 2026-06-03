@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
@@ -36,10 +37,28 @@ struct dataplane_query_result {
 /// The query for the data-plane.
 /// The meta field contains a bunch of ctp_placeholder batches.
 struct dataplane_query {
+    /// cloud_io admission group for the cloud reads this query produces.
+    /// Required at construction so every site picks a lane explicitly.
+    explicit dataplane_query(cloud_io::group_id g)
+      : group(g) {}
+
+    /// Convenience ctor for sites that have all fields ready up front
+    /// (the dataplane entry point and pipeline-stage proxies).
+    dataplane_query(
+      cloud_io::group_id g,
+      size_t out_size_est,
+      chunked_vector<extent_meta> m,
+      allow_materialization_failure amf = allow_materialization_failure::no)
+      : output_size_estimate(out_size_est)
+      , meta(std::move(m))
+      , allow_mat_failure(amf)
+      , group(g) {}
+
     size_t output_size_estimate{0};
     chunked_vector<extent_meta> meta;
     allow_materialization_failure allow_mat_failure
       = allow_materialization_failure::no;
+    cloud_io::group_id group;
 };
 
 // This object is created for every fetch request.

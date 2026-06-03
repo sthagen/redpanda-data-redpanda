@@ -544,6 +544,13 @@ class ShadowLinkTestBase(PreallocNodesTest):
             kwargs["extra_rp_conf"].update(
                 {
                     "enable_cluster_metadata_upload_loop": False,
+                    # Background compaction for cloud topics runs on this
+                    # interval (default 30s). Tests that wait ~30s for
+                    # compaction / tombstone removal to make progress race
+                    # with the default tick; shrink it so removal lands well
+                    # within the wait window. The shadow topic is compacted on
+                    # this (target) cluster.
+                    "cloud_topics_compaction_interval_ms": 1000,
                 }
             )
 
@@ -559,6 +566,18 @@ class ShadowLinkTestBase(PreallocNodesTest):
                 sec_extra.update(
                     {
                         "enable_cluster_metadata_upload_loop": False,
+                        # Produce acks block until the L0 upload completes,
+                        # so the default 250ms upload interval caps produce
+                        # throughput at ~1 msg/interval and makes these
+                        # workloads time out. The producer writes to this
+                        # (source) cluster, so shrink it here for faster
+                        # test runs.
+                        "cloud_topics_produce_upload_interval": 25,
+                        # The final compaction-consistency check also expects
+                        # the source to have removed its tombstones, so shrink
+                        # the compaction tick here too (see the primary cluster
+                        # config above).
+                        "cloud_topics_compaction_interval_ms": 1000,
                     }
                 )
                 sec_kwargs["extra_rp_conf"] = sec_extra

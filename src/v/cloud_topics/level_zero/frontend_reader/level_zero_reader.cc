@@ -401,7 +401,8 @@ level_zero_log_reader_impl::materialize_batches(
           std::move(to_materialize),
           deadline,
           _config.abort_source,
-          _config.allow_mat_failure);
+          _config.allow_mat_failure,
+          _config.group);
         if (!mat_res.has_value()) {
             if (mat_res.error() == errc::shutting_down) {
                 vlog(_log.debug, "Materialize aborted due to shutdown");

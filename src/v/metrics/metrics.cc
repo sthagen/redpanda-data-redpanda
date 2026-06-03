@@ -70,4 +70,17 @@ internal_metric_groups& internal_metric_groups::add_group(
     return *this;
 }
 
+all_metrics_groups& all_metrics_groups::add_group(
+  const ss::metrics::group_name_type& name,
+  const std::initializer_list<ss::metrics::metric_definition>& l) {
+    const auto& cfg = config::shard_local_cfg();
+    if (!cfg.disable_metrics()) {
+        _internal.add_group(name, l);
+    }
+    if (!cfg.disable_public_metrics()) {
+        _public.add_group(name, l);
+    }
+    return *this;
+}
+
 } // namespace metrics

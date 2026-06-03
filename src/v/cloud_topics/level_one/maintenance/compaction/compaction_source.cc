@@ -10,6 +10,7 @@
 
 #include "cloud_topics/level_one/maintenance/compaction/compaction_source.h"
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/level_one/maintenance/compaction/compaction_filter.h"
 #include "cloud_topics/level_one/maintenance/logger.h"
@@ -210,7 +211,11 @@ ss::future<ss::stop_iteration> compaction_source::map_building_iteration() {
         const auto& max_offset = extent.last_offset;
 
         cloud_topic_log_reader_config config(
-          start_offset, max_offset, std::nullopt, _as);
+          cloud_io::group_id::default_group,
+          start_offset,
+          max_offset,
+          std::nullopt,
+          _as);
         auto rdr = model::record_batch_reader(
           std::make_unique<level_one_log_reader_impl>(
             config, _ntp, _tp, _metastore, _io, _l1_reader_probe));
@@ -279,7 +284,11 @@ ss::future<ss::stop_iteration> compaction_source::deduplication_iteration(
         kafka::offset start_offset{extent.base_offset};
         kafka::offset last_offset{extent.last_offset};
         cloud_topic_log_reader_config config(
-          start_offset, last_offset, std::nullopt, _as);
+          cloud_io::group_id::default_group,
+          start_offset,
+          last_offset,
+          std::nullopt,
+          _as);
         auto rdr = model::record_batch_reader(
           std::make_unique<level_one_log_reader_impl>(
             config, _ntp, _tp, _metastore, _io, _l1_reader_probe));

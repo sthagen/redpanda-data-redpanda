@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# Quiet, friendly entry point for benchcmp:
+#
+#     tools/benchcmp record //src/v/utils/tests:coro_rpbench
+#     tools/benchcmp run //src/v/utils/tests:coro_rpbench
+#
+# Runs the bazel-built tool (hermetic Python, not the system one) with bazel's
+# own INFO/progress output suppressed. benchcmp finds the repo through
+# $BUILD_WORKSPACE_DIRECTORY and uses absolute paths, so it needs no
+# working-directory changes — just run it from inside the repo.
+
+exec bazel run //tools/benchcmp_impl:benchcmp \
+  --noshow_progress \
+  --ui_event_filters=,+error,+fail \
+  --show_result=0 \
+  -- "$@"

@@ -107,7 +107,8 @@ ss::future<> fetch_handler::process_single_request(l0::read_request<>* req) {
             *_cache,
             req->query.allow_mat_failure,
             req->rtc,
-            req->rtc_logger));
+            req->rtc_logger,
+            req->query.group));
 
         if (extent.failed()) {
             auto ex = extent.get_exception();

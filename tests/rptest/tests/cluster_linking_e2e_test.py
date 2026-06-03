@@ -1892,13 +1892,20 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
     )
     @matrix(storage_mode=ALL_STORAGE_MODES)
     def test_replication_with_transactions(self, storage_mode):
-        if storage_mode == TopicSpec.STORAGE_MODE_CLOUD:
-            # Transactional replication with cloud storage mode is too
-            # slow and times out; skip until performance is improved.
-            _ = self.preallocated_nodes
-            self.logger.info("Skipping transactions test for cloud storage mode")
-            return
         topic = TopicSpec(name="source-topic", partition_count=1, replication_factor=3)
+
+        # Cloud-topic produce uploads are time-driven (250 ms default) when
+        # neither size nor cardinality thresholds fire. With a single-partition
+        # transactional workload that's the only firing condition, so lower
+        # the interval to keep this test from spending the entire run in the
+        # cloud-topics linger.
+        if storage_mode in (
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+        ):
+            self.source_cluster_service.set_cluster_config(
+                {"cloud_topics_produce_upload_interval": 25}
+            )
 
         self.create_source_topic(topic, storage_mode)
         self.create_link("test-link")
@@ -1915,7 +1922,10 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             msg_size=128,
             msg_cnt=10000,
             use_transactions=True,
-            producer_properties={"transaction_abort_rate": "0.3"},
+            producer_properties={
+                "transaction_abort_rate": "0.3",
+                "msgs_per_transaction": 50,
+            },
         ):
             self.verify()
 
@@ -2385,9 +2395,12 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
     )
     @matrix(storage_mode=ALL_STORAGE_MODES)
     def test_replication_with_compaction(self, storage_mode):
-        if storage_mode != TopicSpec.STORAGE_MODE_LOCAL:
+        if storage_mode not in (
+            TopicSpec.STORAGE_MODE_LOCAL,
+            TopicSpec.STORAGE_MODE_CLOUD,
+        ):
             # Compaction on shadow topics is not yet supported with
-            # tiered / cloud / tiered_cloud storage modes.
+            # tiered / tiered_cloud storage modes.
             _ = self.preallocated_nodes
             self.logger.info(
                 f"Skipping compaction test for storage_mode={storage_mode}"

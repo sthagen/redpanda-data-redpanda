@@ -12,6 +12,7 @@
 
 #include "base/outcome.h"
 #include "cloud_io/cache_service.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/batch_cache/batch_cache.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
@@ -164,7 +165,8 @@ public:
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout,
       model::opt_abort_source_t as,
-      allow_materialization_failure allow_mat_failure) override {
+      allow_materialization_failure allow_mat_failure,
+      cloud_io::group_id group) override {
         if (metadata.empty()) {
             co_return chunked_vector<model::record_batch>{};
         }
@@ -179,11 +181,11 @@ public:
           max_bytes);
         auto res = co_await _read_pipeline.local().make_reader(
           ntp,
-          {
-            .output_size_estimate = output_size_estimate,
-            .meta = std::move(metadata),
-            .allow_mat_failure = allow_mat_failure,
-          },
+          l0::dataplane_query{
+            group,
+            output_size_estimate,
+            std::move(metadata),
+            allow_mat_failure},
           timeout,
           as);
         if (!res) {

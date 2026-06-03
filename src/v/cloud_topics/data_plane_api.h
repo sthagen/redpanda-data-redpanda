@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/types.h"
 #include "container/chunked_vector.h"
@@ -75,13 +76,16 @@ public:
     // When `allow_mat_failure` is yes, download_not_found (404)
     // errors for individual extents are tolerated: the missing extents are
     // skipped and the result contains fewer batches than requested.
+    // `group` is the cloud_io admission group for the cloud reads this call
+    // produces.
     virtual ss::future<result<chunked_vector<model::record_batch>>> materialize(
       model::ntp ntp,
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout,
       model::opt_abort_source_t,
-      allow_materialization_failure allow_mat_failure) = 0;
+      allow_materialization_failure allow_mat_failure,
+      cloud_io::group_id group) = 0;
 
     /// Return the maximum bytes that may be requested in a single
     /// materialize() call. This reflects the read pipeline's memory quota.

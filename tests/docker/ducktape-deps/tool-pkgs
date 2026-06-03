@@ -14,8 +14,10 @@ apt-get install -qq \
   dmidecode \
   faketime \
   file \
+  fio \
   gnuplot-nox \
   iproute2 \
+  iperf3 \
   iptables \
   krb5-admin-server \
   krb5-kdc \
@@ -30,6 +32,7 @@ apt-get install -qq \
   openssh-server \
   pciutils \
   software-properties-common \
+  stress-ng \
   sudo
 
 # install llvm-addr2line-$(version), which is not available in the default ubuntu/debian repos,

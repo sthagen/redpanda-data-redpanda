@@ -128,7 +128,8 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
   basic_retry_chain_node<>* rtc,
-  micro_probe* probe);
+  micro_probe* probe,
+  cloud_io::group_id group);
 
 ss::future<result<bool>> materialize(
   materialized_extent* ext,
@@ -136,7 +137,8 @@ ss::future<result<bool>> materialize(
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
   basic_retry_chain_node<>* rtc,
-  micro_probe* probe) {
+  micro_probe* probe,
+  cloud_io::group_id group) {
     bool hydrated = false;
     // This iobuf contains the record batch replaced by the placeholder. It
     // might potentially contain data that belongs to other placeholder
@@ -200,7 +202,7 @@ ss::future<result<bool>> materialize(
         hydrated = true; // Indicates range read from cache
     } else {
         auto res = co_await materialize_from_cloud_storage(
-          cache_file_name, bucket, api, cache, rtc, probe);
+          cache_file_name, bucket, api, cache, rtc, probe, group);
         if (!res.has_value()) {
             co_return res.error();
         }
@@ -246,7 +248,8 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
   basic_retry_chain_node<>* rtc,
-  micro_probe* probe) {
+  micro_probe* probe,
+  cloud_io::group_id group) {
     // Populate the cache
     iobuf payload;
     cloud_io::download_request req{
@@ -265,8 +268,8 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
       .payload = payload};
 
     auto dl_result = result_from_ready_future(
-      co_await ss::coroutine::as_future(api->download_object(
-        std::move(req), cloud_io::group_id::consumer_fetch)),
+      co_await ss::coroutine::as_future(
+        api->download_object(std::move(req), group)),
       [](std::exception_ptr e) {
           vlog(cd_log.error, "Unexpected error during L0 download: {}", e);
       });

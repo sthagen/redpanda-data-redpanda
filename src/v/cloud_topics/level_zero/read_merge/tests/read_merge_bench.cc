@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/read_merge/read_merge.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -128,7 +129,7 @@ public:
     ss::future<> test_run_unique(int num_requests) {
         perf_tests::start_measuring_time();
         for (int i = 0; i < num_requests; i++) {
-            l0::dataplane_query query;
+            l0::dataplane_query query{cloud_io::group_id::default_group};
             query.output_size_estimate = 1_KiB;
             query.meta.push_back(
               extent_meta{
@@ -154,7 +155,7 @@ public:
 
         perf_tests::start_measuring_time();
         for (int i = 0; i < concurrency; i++) {
-            l0::dataplane_query query;
+            l0::dataplane_query query{cloud_io::group_id::default_group};
             query.output_size_estimate = 1_KiB;
             query.meta.push_back(
               extent_meta{
@@ -180,7 +181,7 @@ public:
 
         perf_tests::start_measuring_time();
         for (int i = 0; i < concurrency; i++) {
-            l0::dataplane_query query;
+            l0::dataplane_query query{cloud_io::group_id::default_group};
             query.output_size_estimate = 1_KiB;
             query.meta.push_back(
               extent_meta{

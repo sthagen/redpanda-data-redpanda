@@ -19,7 +19,11 @@
 #include "serde/parquet/metadata.h"
 #include "serde/parquet/shredder.h"
 
+#include <seastar/coroutine/exception.hh>
+
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 
 namespace serde::parquet {
 
@@ -50,6 +54,7 @@ public:
             if (!element.is_leaf()) {
                 return;
             }
+            bool is_bool = std::holds_alternative<bool_type>(element.type);
             _columns.emplace(
               element.position,
               column{
@@ -58,6 +63,9 @@ public:
                   element,
                   {
                     .compress = _opts.compress,
+                    .max_stats_truncate_length
+                    = _opts.max_stats_truncate_length,
+                    .bloom_filter_ndv = is_bool ? 0 : _opts.bloom_filter_ndv,
                   }),
               });
         });
@@ -149,6 +157,20 @@ public:
             rg.num_rows = row_count;
             rg.total_byte_size += chunk.meta_data.total_uncompressed_size;
             rg.total_compressed_size += chunk.meta_data.total_compressed_size;
+            if (flushed.bloom_filter.size_bytes() > 0) {
+                chunk.meta_data.bloom_filter_offset = _flushed_bytes;
+                auto bf_size = flushed.bloom_filter.size_bytes();
+                if (
+                  bf_size
+                  > static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                    co_await ss::coroutine::return_exception(
+                      std::runtime_error(
+                        "bloom filter exceeds int32 size limit"));
+                }
+                chunk.meta_data.bloom_filter_length = static_cast<int32_t>(
+                  bf_size);
+                co_await write_iobuf(std::move(flushed.bloom_filter));
+            }
             rg.columns.push_back(std::move(chunk));
         }
         if (page_count == 0) {
@@ -157,7 +179,7 @@ public:
         _row_groups.push_back(std::move(rg));
     }
 
-    ss::future<> close() {
+    ss::future<file_metadata> close() {
         co_await flush_row_group();
         int64_t num_rows = 0;
         for (const auto& rg : _row_groups) {
@@ -169,22 +191,23 @@ public:
                 orders.push_back(column_order::type_defined);
             }
         });
-        auto encoded_footer = encode(
-          file_metadata{
-            .version = 2,
-            .schema = flatten(_opts.schema),
-            .num_rows = num_rows,
-            .row_groups = std::move(_row_groups),
-            .key_value_metadata = std::move(_opts.metadata),
-            .created_by = fmt::format(
-              "Redpanda version {} (build {})", _opts.version, _opts.build),
-            .column_orders = std::move(orders),
-          });
+        file_metadata metadata{
+          .version = 2,
+          .schema = flatten(_opts.schema),
+          .num_rows = num_rows,
+          .row_groups = std::move(_row_groups),
+          .key_value_metadata = std::move(_opts.metadata),
+          .created_by = fmt::format(
+            "Redpanda version {} (build {})", _opts.version, _opts.build),
+          .column_orders = std::move(orders),
+        };
+        auto encoded_footer = encode(metadata);
         size_t footer_size = encoded_footer.size_bytes();
         co_await write_iobuf(std::move(encoded_footer));
         co_await write_iobuf(encode_footer_size(footer_size));
         co_await write_iobuf(iobuf::from("PAR1"));
         co_await _output.close();
+        co_return std::move(metadata);
     }
 
 private:
@@ -236,6 +259,6 @@ file_stats writer::stats() const { return _impl->stats(); }
 
 ss::future<> writer::flush_row_group() { return _impl->flush_row_group(); }
 
-ss::future<> writer::close() { return _impl->close(); }
+ss::future<file_metadata> writer::close() { return _impl->close(); }
 
 } // namespace serde::parquet

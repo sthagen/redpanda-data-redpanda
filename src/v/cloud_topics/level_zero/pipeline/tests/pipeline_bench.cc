@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
@@ -62,7 +63,7 @@ PERF_TEST_C(read_pipeline_bench, propagation_latency) {
     perf_tests::do_not_optimize(
       co_await pipeline.make_reader(
         model::controller_ntp,
-        {},
+        ct::l0::dataplane_query{cloud_io::group_id::default_group},
         ss::lowres_clock::now() + std::chrono::milliseconds(10)));
     perf_tests::stop_measuring_time();
 

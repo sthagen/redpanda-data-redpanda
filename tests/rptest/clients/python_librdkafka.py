@@ -8,6 +8,8 @@
 # by the Apache License, Version 2.0
 import functools
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, Optional, cast
 
 import requests
@@ -17,6 +19,20 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from rptest.services import tls
 from rptest.services.keycloak import OAuthConfig
 from rptest.services.redpanda_types import KafkaClientSecurity
+
+
+@contextmanager
+def ck_consumer(config: dict[str, Any], **kwargs: Any) -> Iterator[Consumer]:
+    """A confluent_kafka ``Consumer`` that is closed deterministically on exit.
+
+    Prefer this over a bare ``Consumer(...)``: an unclosed consumer destroyed
+    later by the GC can deadlock (CORE-16410).
+    """
+    consumer = Consumer(config, **kwargs)
+    try:
+        yield consumer
+    finally:
+        consumer.close()
 
 
 class PythonLibrdkafka:

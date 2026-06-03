@@ -12,6 +12,7 @@ import random
 import confluent_kafka as ck
 
 from rptest.clients.offline_log_viewer import OfflineLogViewer
+from rptest.clients.python_librdkafka import ck_consumer
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
@@ -70,34 +71,34 @@ class TransactionsStreamsTest(RedpandaTest, TransactionsMixin):
             "auto.offset.reset": "earliest",
             "enable.auto.commit": False,
         }
-        consumer = ck.Consumer(consumer_conf)
-        consumer.subscribe([self.input_t.name])
+        with ck_consumer(consumer_conf) as consumer:
+            consumer.subscribe([self.input_t.name])
 
-        producer.init_transactions()
-        consumed = 0
-        while consumed != input_records:
-            records = self.consume(consumer)
-            producer.begin_transaction()
-            for record in records:
-                producer.produce(
-                    self.output_t.name,
-                    record.value(),
-                    record.key(),
-                    on_delivery=self.on_delivery,
+            producer.init_transactions()
+            consumed = 0
+            while consumed != input_records:
+                records = self.consume(consumer)
+                producer.begin_transaction()
+                for record in records:
+                    producer.produce(
+                        self.output_t.name,
+                        record.value(),
+                        record.key(),
+                        on_delivery=self.on_delivery,
+                    )
+
+                producer.send_offsets_to_transaction(
+                    consumer.position(consumer.assignment()),
+                    consumer.consumer_group_metadata(),
                 )
 
-            producer.send_offsets_to_transaction(
-                consumer.position(consumer.assignment()),
-                consumer.consumer_group_metadata(),
-            )
+                producer.flush()
 
-            producer.flush()
-
-            if random.randint(0, 9) < 5:
-                producer.commit_transaction()
-            else:
-                producer.abort_transaction()
-            consumed += len(records)
+                if random.randint(0, 9) < 5:
+                    producer.commit_transaction()
+                else:
+                    producer.abort_transaction()
+                consumed += len(records)
 
         log_viewer = OfflineLogViewer(self.redpanda)
         for node in self.redpanda.started_nodes():

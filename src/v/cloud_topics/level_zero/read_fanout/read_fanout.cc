@@ -92,7 +92,7 @@ ss::future<> read_fanout::process_single_request(l0::read_request<>* req) {
           = ss::future<std::expected<dataplane_query_result, errc>>;
         chunked_vector<ret_future_t> futures;
         std::optional<dataplane_query> curr_query;
-        curr_query.emplace();
+        curr_query.emplace(req->query.group);
         auto timeout = req->expiration_time;
         for (const auto& meta : metadata) {
             if (
@@ -118,7 +118,7 @@ ss::future<> read_fanout::process_single_request(l0::read_request<>* req) {
             _pipeline_stage.push_next_stage(*proxy);
 
             futures.emplace_back(std::move(fut));
-            curr_query.emplace();
+            curr_query.emplace(req->query.group);
             curr_query->output_size_estimate = meta.byte_range_size();
             curr_query->meta.push_back(meta);
         }

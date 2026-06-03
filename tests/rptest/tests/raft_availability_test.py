@@ -103,7 +103,8 @@ class RaftAvailabilityTest(RedpandaTest):
     def _is_available(self, timeout_s=5):
         try:
             # Should fail
-            self.ping_pong().ping_pong(timeout_s)
+            with self.ping_pong() as pp:
+                pp.ping_pong(timeout_s)
         except Exception:
             return False
         else:
@@ -112,14 +113,16 @@ class RaftAvailabilityTest(RedpandaTest):
     def _expect_unavailable(self):
         try:
             # Should fail
-            self.ping_pong().ping_pong()
+            with self.ping_pong() as pp:
+                pp.ping_pong()
         except Exception:
             self.logger.exception("Cluster is unavailable as expected")
         else:
             assert False, "ping_pong should not have worked "
 
     def _expect_available(self):
-        self.ping_pong().ping_pong()
+        with self.ping_pong() as pp:
+            pp.ping_pong()
         self.logger.info("Cluster is available as expected")
 
     def _transfer_leadership(
@@ -288,7 +291,8 @@ class RaftAvailabilityTest(RedpandaTest):
         # Find which node is the leader
         initial_leader_id, replicas = self._wait_for_leader()
 
-        self.ping_pong().ping_pong()
+        with self.ping_pong() as pp:
+            pp.ping_pong()
 
         leader_node = self.redpanda.get_node_by_id(initial_leader_id)
         other_node_id = (set(replicas) - {initial_leader_id}).pop()
@@ -581,10 +585,10 @@ class RaftAvailabilityTest(RedpandaTest):
             )
 
             # expect messages to be produced and consumed without a timeout
-            connection = self.ping_pong()
-            connection.ping_pong(timeout_s=10, retries=10)
-            for i in range(0, 127):
-                connection.ping_pong()
+            with self.ping_pong() as connection:
+                connection.ping_pong(timeout_s=10, retries=10)
+                for i in range(0, 127):
+                    connection.ping_pong()
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_id_allocator_leader_isolation(self):
@@ -618,10 +622,10 @@ class RaftAvailabilityTest(RedpandaTest):
             )
 
             # expect messages to be produced and consumed without a timeout
-            connection = self.ping_pong()
-            connection.ping_pong(timeout_s=10, retries=10)
-            for i in range(0, 127):
-                connection.ping_pong()
+            with self.ping_pong() as connection:
+                connection.ping_pong(timeout_s=10, retries=10)
+                for i in range(0, 127):
+                    connection.ping_pong()
 
     @cluster(num_nodes=3)
     def test_initial_leader_stability(self):
@@ -700,7 +704,7 @@ class RaftAvailabilityTest(RedpandaTest):
                     check=lambda node_id: node_id != controller_id,
                 )
 
-        connection = self.ping_pong()
-        connection.ping_pong(timeout_s=10, retries=10)
-        for i in range(0, 127):
-            connection.ping_pong()
+        with self.ping_pong() as connection:
+            connection.ping_pong(timeout_s=10, retries=10)
+            for i in range(0, 127):
+                connection.ping_pong()

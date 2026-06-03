@@ -10,6 +10,7 @@
 
 #include "kafka/data/cloud_topic_read_replica.h"
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/log_reader_config.h"
 #include "cloud_topics/read_replica/metadata_provider.h"
@@ -169,6 +170,7 @@ partition_proxy::make_reader(kafka::log_reader_config cfg) {
 ss::future<storage::translating_reader> partition_proxy::make_reader(
   partition_proxy::snapshot snap, kafka::log_reader_config cfg) {
     cloud_topic_log_reader_config cloud_cfg(
+      cloud_io::group_id::consumer_fetch,
       cfg.start_offset,
       cfg.max_offset,
       cfg.min_bytes,

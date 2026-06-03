@@ -159,6 +159,12 @@ ENV PATH="${PATH}:/root/.cargo/bin"
 
 FROM rust AS client-swarm
 
+# The rdkafka 0.39 bump upgrades the transitive zstd-sys dep (rdkafka's
+# zstd support) to a version that builds its bindings with bindgen,
+# which needs libclang.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends libclang-dev
+
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/client-swarm /
 RUN /client-swarm && \
     rm /client-swarm

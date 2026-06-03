@@ -9,6 +9,7 @@
  */
 
 #include "base/vlog.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
 #include "cloud_topics/level_zero/reader/tests/materialized_extent_fixture.h"
@@ -50,7 +51,8 @@ TEST_F_CORO(materialized_extent_fixture, full_scan_test) {
       cache,
       cloud_topics::allow_materialization_failure::no,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
     ASSERT_EQ_CORO(actual.value().size(), expected.size());
     ASSERT_TRUE_CORO(actual.value() == expected);
 }
@@ -100,7 +102,8 @@ ss::future<> test_aggregated_log_partial_scan(
       fx->cache,
       cloud_topics::allow_materialization_failure::no,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
 
     ASSERT_EQ_CORO(actual.value().size(), expected_view.size());
     ASSERT_TRUE_CORO(actual.value() == expected_view);
@@ -132,7 +135,8 @@ TEST_F_CORO(materialized_extent_fixture, timeout_test) {
       cache,
       cloud_topics::allow_materialization_failure::no,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!actual.has_value());
     ASSERT_TRUE_CORO(actual.error() == cloud_topics::errc::timeout);
@@ -160,7 +164,8 @@ TEST_F_CORO(
       cache,
       cloud_topics::allow_materialization_failure::yes,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(actual.has_value());
     ASSERT_EQ_CORO(actual.value().size(), 0);
@@ -188,7 +193,8 @@ TEST_F_CORO(
       cache,
       cloud_topics::allow_materialization_failure::no,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!actual.has_value());
     ASSERT_TRUE_CORO(actual.error() == cloud_topics::errc::download_not_found);
@@ -216,7 +222,8 @@ TEST_F_CORO(
       cache,
       cloud_topics::allow_materialization_failure::yes,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(!actual.has_value());
     ASSERT_TRUE_CORO(actual.error() == cloud_topics::errc::timeout);
@@ -245,7 +252,8 @@ TEST_F_CORO(materialized_extent_fixture, skip_one_missing_extent_among_many) {
       cache,
       cloud_topics::allow_materialization_failure::yes,
       rtc,
-      logger);
+      logger,
+      cloud_io::group_id::default_group);
 
     ASSERT_TRUE_CORO(actual.has_value());
     ASSERT_EQ_CORO(actual.value().size(), 2);

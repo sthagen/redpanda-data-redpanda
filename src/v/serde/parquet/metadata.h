@@ -385,6 +385,12 @@ struct column_meta_data {
 
     /** optional statistics for this column chunk */
     std::optional<statistics> stats;
+
+    /** Byte offset from beginning of file to bloom filter data **/
+    std::optional<int64_t> bloom_filter_offset;
+
+    /** Length of bloom filter data (header + bitset) in bytes **/
+    std::optional<int32_t> bloom_filter_length;
 };
 
 struct column_chunk {

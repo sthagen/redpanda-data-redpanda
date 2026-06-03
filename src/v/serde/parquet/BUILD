@@ -100,6 +100,18 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "bloom_filter",
+    srcs = ["bloom_filter.cc"],
+    hdrs = ["bloom_filter.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/serde/thrift:compact",
+        "//src/v/utils:vint",
+    ],
+)
+
+redpanda_cc_library(
     name = "column_writer",
     srcs = [
         "column_stats_collector.cc",
@@ -110,6 +122,7 @@ redpanda_cc_library(
         "column_writer.h",
     ],
     deps = [
+        ":bloom_filter",
         ":encoding",
         ":metadata",
         ":schema",
@@ -120,6 +133,8 @@ redpanda_cc_library(
         "//src/v/compression",
         "//src/v/container:chunked_vector",
         "//src/v/hashing:crc32",
+        "//src/v/hashing:xx",
+        "//src/v/strings:utf8",
         "@abseil-cpp//absl/numeric:int128",
         "@seastar",
     ],
@@ -135,7 +150,6 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":column_writer",
-        ":metadata",
         ":shredder",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
@@ -144,6 +158,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":metadata",
         ":schema",
         ":value",
         "//src/v/base",

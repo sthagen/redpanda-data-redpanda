@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_topics/app.h"
 #include "cloud_topics/data_plane_api.h"
@@ -58,7 +59,8 @@ public:
        chunked_vector<extent_meta> metadata,
        model::timeout_clock::time_point timeout,
        model::opt_abort_source_t,
-       allow_materialization_failure allow_mat_failure),
+       allow_materialization_failure allow_mat_failure,
+       cloud_io::group_id group),
       (override));
 
     MOCK_METHOD(

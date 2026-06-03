@@ -10,6 +10,7 @@
 
 #include "cloud_topics/level_one/maintenance/leveling/leveling_source.h"
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/log_reader_config.h"
 #include "model/record_batch_reader.h"
@@ -78,7 +79,11 @@ ss::future<ss::stop_iteration> leveling_source::deduplication_iteration(
     kafka::offset start_offset{range.base_offset};
     kafka::offset last_offset{range.last_offset};
     cloud_topic_log_reader_config config(
-      start_offset, last_offset, std::nullopt, _as);
+      cloud_io::group_id::default_group,
+      start_offset,
+      last_offset,
+      std::nullopt,
+      _as);
     auto rdr = model::record_batch_reader(
       std::make_unique<level_one_log_reader_impl>(
         config, _ntp, _tp, _metastore, _io));

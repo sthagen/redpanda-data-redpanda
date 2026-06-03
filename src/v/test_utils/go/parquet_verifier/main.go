@@ -29,8 +29,9 @@ import (
 )
 
 type TestCase struct {
-	File []byte `json:"file"`
-	Rows []any  `json:"rows"`
+	File           []byte `json:"file"`
+	Rows           []any  `json:"rows"`
+	BloomFilterNDV int    `json:"bloom_filter_ndv"`
 }
 
 func main() {
@@ -246,6 +247,51 @@ func main() {
 					i, j, omax, rmin,
 				)
 			}
+		}
+	}
+
+	log.Println("validating bloom filters")
+	for i, rg := range originalFile.RowGroups() {
+		for j, col := range rg.ColumnChunks() {
+			fcc := col.(*parquet.FileColumnChunk)
+			isBool := fcc.Type().Kind() == parquet.Boolean
+			bf := fcc.BloomFilter()
+			if testCase.BloomFilterNDV == 0 || isBool {
+				if bf != nil {
+					log.Fatalf("❌ unexpected bloom filter in row group %d column %d\n", i, j)
+				}
+				continue
+			}
+			if bf == nil {
+				log.Fatalf("❌ missing bloom filter in row group %d column %d (NDV=%d)\n", i, j, testCase.BloomFilterNDV)
+			}
+			pages := fcc.Pages()
+			for {
+				page, err := pages.ReadPage()
+				if errors.Is(err, io.EOF) {
+					break
+				} else if err != nil {
+					log.Fatalln("❌ unable to read parquet page for bloom filter check:", err)
+				}
+				vals := make([]parquet.Value, page.NumValues())
+				n, err := page.Values().ReadValues(vals)
+				if n != len(vals) || (err != nil && !errors.Is(err, io.EOF)) {
+					log.Fatalf("❌ unable to read all page values for bloom filter check row group %d column %d: %v\n", i, j, err)
+				}
+				for _, v := range vals {
+					if v.IsNull() {
+						continue
+					}
+					ok, err := bf.Check(v)
+					if err != nil {
+						log.Fatalf("❌ bloom filter check error for row group %d column %d: %v\n", i, j, err)
+					}
+					if !ok {
+						log.Fatalf("❌ bloom filter false negative in row group %d column %d: value=%v\n", i, j, v)
+					}
+				}
+			}
+			_ = pages.Close()
 		}
 	}
 

@@ -18,6 +18,7 @@ from ducktape.mark import parametrize
 from kafkatest.services.kafka import KafkaService
 
 from rptest.clients.default import DefaultClient
+from rptest.clients.python_librdkafka import ck_consumer
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.kafka import KafkaServiceAdapter
@@ -128,31 +129,28 @@ class TxKafkaCompatTest(KafkaCompatTest):
 
             producer_2.commit_transaction()
 
-            consumer = ck.Consumer(
-                {
-                    "bootstrap.servers": broker_service.brokers(),
-                    "group.id": "group-1",
-                    "auto.offset.reset": "earliest",
-                    "enable.auto.commit": True,
-                    "isolation.level": "read_committed",
-                },
-                logger=self.logger,
-            )
-            consumer.subscribe([topic.name])
+            config = {
+                "bootstrap.servers": broker_service.brokers(),
+                "group.id": "group-1",
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": True,
+                "isolation.level": "read_committed",
+            }
+            with ck_consumer(config, logger=self.logger) as consumer:
+                consumer.subscribe([topic.name])
 
-            msgs = []
-            timeout = time.time() + 30
-            while len(msgs) < 10:
-                msg = consumer.poll(timeout=1)
-                if time.time() > timeout:
-                    break
+                msgs = []
+                timeout = time.time() + 30
+                while len(msgs) < 10:
+                    msg = consumer.poll(timeout=1)
+                    if time.time() > timeout:
+                        break
 
-                if msg:
-                    self.logger.info(
-                        f"consumed: {msg.value()} at offset: {msg.offset()}"
-                    )
-                    msgs.append(msg.value().decode("utf-8"))
-            consumer.close()
+                    if msg:
+                        self.logger.info(
+                            f"consumed: {msg.value()} at offset: {msg.offset()}"
+                        )
+                        msgs.append(msg.value().decode("utf-8"))
             return msgs
 
         self._compat_test_case(test_case)
@@ -207,25 +205,22 @@ class KafkaTimestampCompatTest(KafkaCompatTest):
                 producer.produce(topic.name, key="k", value=f"value-{ts}", timestamp=ts)
                 producer.flush()
 
-            consumer = ck.Consumer(
-                {
-                    "bootstrap.servers": broker_service.brokers(),
-                    "group.id": "group",
-                },
-                logger=self.logger,
-            )
-            consumer.subscribe([topic.name])
+            config = {
+                "bootstrap.servers": broker_service.brokers(),
+                "group.id": "group",
+            }
+            with ck_consumer(config, logger=self.logger) as consumer:
+                consumer.subscribe([topic.name])
 
-            msgs = []
-            timeout = time.time() + 5
-            while len(msgs) < num_messages:
-                msg = consumer.poll(timeout=1)
-                if time.time() > timeout:
-                    break
+                msgs = []
+                timeout = time.time() + 5
+                while len(msgs) < num_messages:
+                    msg = consumer.poll(timeout=1)
+                    if time.time() > timeout:
+                        break
 
-                if msg:
-                    msgs.append(msg.value().decode("utf-8"))
-            consumer.close()
+                    if msg:
+                        msgs.append(msg.value().decode("utf-8"))
             return msgs
 
         validation_modes = [

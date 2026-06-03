@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/read_fanout/read_fanout.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -142,7 +143,7 @@ public:
 
     /// Build one big vectorized query and then run it
     ss::future<> vectorized_test_run(int num_requests) {
-        l0::dataplane_query query;
+        l0::dataplane_query query{cloud_io::group_id::default_group};
         query.output_size_estimate = 1_KiB;
         for (int i = 0; i < num_requests; i++) {
             query.meta.push_back(
@@ -166,7 +167,7 @@ public:
     ss::future<> serialized_test_run(int num_requests) {
         std::vector<ss::future<>> fut;
         for (int i = 0; i < num_requests; i++) {
-            l0::dataplane_query query;
+            l0::dataplane_query query{cloud_io::group_id::default_group};
             query.output_size_estimate = 1_KiB;
             query.meta.push_back(
               extent_meta{

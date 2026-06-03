@@ -176,9 +176,9 @@ ss::future<> read_merge<Clock>::process_single_request(
 
         // Create a proxy request to push to the next stage.
         dataplane_query query{
-          .output_size_estimate = req->query.output_size_estimate,
-          .meta = req->query.meta.copy(),
-        };
+          req->query.group,
+          req->query.output_size_estimate,
+          req->query.meta.copy()};
 
         auto size_estimate = query.output_size_estimate;
         auto proxy = ss::make_lw_shared<read_request<Clock>>(

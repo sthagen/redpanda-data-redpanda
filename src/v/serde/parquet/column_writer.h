@@ -37,6 +37,9 @@ struct flushed_pages {
     chunked_vector<data_page> pages;
     // Stats for all flushed pages
     statistics stats;
+    // Serialized bloom filter for this column. Empty when bloom filters are
+    // disabled (bloom_filter_ndv == 0) or for boolean columns.
+    iobuf bloom_filter;
 };
 
 // A writer for a single column of parquet data.
@@ -48,6 +51,20 @@ public:
     struct options {
         // If true, use zstd compression for the column data.
         bool compress;
+        // Max byte length for BYTE_ARRAY column statistics truncation.
+        // 0 disables truncation. Fixed-size types are always written exactly.
+        int32_t max_stats_truncate_length = 4096;
+        // Set automatically from the column's logical type (string/enum).
+        // When true, truncation respects UTF-8 character boundaries so that
+        // truncated bounds are always valid UTF-8 strings.
+        bool is_utf8_string = false;
+        // Expected number of distinct values per row group for bloom filter
+        // sizing. 0 disables bloom filters for this column.
+        size_t bloom_filter_ndv = 0;
+        // Bloom filter fill ratio above which the filter is discarded at flush
+        // rather than emitted. FPP ≈ fill_ratio^8; the default 0.75
+        // corresponds to ~10% FPP.
+        double bloom_filter_max_fill_ratio = 0.75;
     };
 
     explicit column_writer(const schema_element&, options);

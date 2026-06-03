@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/read_request_scheduler/read_request_scheduler.h"
 #include "cloud_topics/types.h"
@@ -139,7 +140,7 @@ TEST_F_CORO(read_request_scheduler_fixture, smoke_test) {
     co_await start();
 
     for (int i = 0; i < 100; i++) {
-        l0::dataplane_query query;
+        l0::dataplane_query query{cloud_io::group_id::default_group};
         query.output_size_estimate = 1_KiB;
 
         query.meta.push_back(
@@ -167,7 +168,7 @@ TEST_F_CORO(read_request_scheduler_fixture, error_propagation) {
     auto failure_uuid = uuid_t::create();
     co_await add_failure(failure_uuid, ct::errc::download_failure);
 
-    l0::dataplane_query query;
+    l0::dataplane_query query{cloud_io::group_id::default_group};
     query.output_size_estimate = 1_MiB;
 
     query.meta.push_back(

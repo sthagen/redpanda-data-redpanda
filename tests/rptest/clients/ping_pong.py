@@ -103,6 +103,24 @@ class LogReader:
                 if check(offset, key, value):
                     return
 
+    def close(self) -> None:
+        # Break the stream_gen generator -> frame -> self reference cycle so the
+        # Consumer is reclaimed promptly by refcounting, then close it
+        # deterministically. An unclosed Consumer is only collected by the
+        # cyclic GC, and its C destructor (rd_kafka_destroy) can deadlock when
+        # it runs from a GC finalizer while a partition leader is unreachable
+        # (CORE-16410, librdkafka rk_lock/toppar lock-order inversion).
+        self.stream = None
+        if self.consumer is not None:
+            self.consumer.close()
+            self.consumer = None
+
+    def __enter__(self) -> "LogReader":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
 
 def expect(offset: int, key: str, value: str) -> Callable[[int, str, str], bool]:
     def check(ro: int, rk: str, rv: str) -> bool:
@@ -182,3 +200,12 @@ class PingPong:
         self.logger.info(
             f"ping_pong produced and consumed {key}={value}@{offset} in {(latency) * 1000.0:.2f} ms"
         )
+
+    def close(self) -> None:
+        self.consumer.close()
+
+    def __enter__(self) -> "PingPong":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()

@@ -10,6 +10,7 @@
  */
 #include "kafka/data/cloud_topic_partition.h"
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"
@@ -37,7 +38,8 @@ namespace {
 
 cloud_topics::cloud_topic_log_reader_config
 kafka_to_cloud_topic_log_reader_config(kafka::log_reader_config cfg) {
-    return {/*start_offset=*/cfg.start_offset,
+    return {/*group=*/cloud_io::group_id::consumer_fetch,
+            /*start_offset=*/cfg.start_offset,
             /*max_offset=*/cfg.max_offset,
             /*min_bytes=*/cfg.min_bytes,
             /*max_bytes=*/cfg.max_bytes,

@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/format_to.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "model/record_batch_types.h"
@@ -25,6 +26,7 @@ namespace cloud_topics {
 // TODO: Add enum/flag for L0 vs L1 reader
 struct cloud_topic_log_reader_config {
     cloud_topic_log_reader_config(
+      cloud_io::group_id group,
       kafka::offset start_offset,
       kafka::offset max_offset,
       size_t min_bytes,
@@ -42,18 +44,21 @@ struct cloud_topic_log_reader_config {
       , first_timestamp(first_timestamp)
       , abort_source(as)
       , client_address(std::move(client_addr))
-      , strict_max_bytes(strict_max_bytes) {}
+      , strict_max_bytes(strict_max_bytes)
+      , group(group) {}
 
     /**
      * Read offsets [start, end].
      */
     cloud_topic_log_reader_config(
+      cloud_io::group_id group,
       kafka::offset start_offset,
       kafka::offset max_offset,
       std::optional<model::timestamp> first_timestamp = std::nullopt,
       model::opt_abort_source_t as = std::nullopt,
       model::opt_client_address_t client_addr = std::nullopt)
       : cloud_topic_log_reader_config(
+          group,
           start_offset,
           max_offset,
           0,
@@ -100,6 +105,9 @@ struct cloud_topic_log_reader_config {
     //
     // NB: Applies to the L1 reader only.
     size_t lookahead_objects{0};
+
+    // cloud_io admission lane for this reader's cloud storage requests.
+    cloud_io::group_id group{cloud_io::group_id::default_group};
 
     fmt::iterator format_to(fmt::iterator it) const;
 };

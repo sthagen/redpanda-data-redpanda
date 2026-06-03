@@ -9,6 +9,7 @@
  */
 #include "cloud_topics/frontend/frontend.h"
 
+#include "cloud_io/scheduler_types.h"
 #include "cloud_storage/types.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
@@ -527,6 +528,7 @@ frontend::refine_timequery_result(
     // single batch here, because the local log is correct to the granularity of
     // a batch (but not within a batch due to placeholders).
     cloud_topic_log_reader_config reader_cfg(
+      /*group=*/cloud_io::group_id::consumer_fetch,
       /*start_offset=*/input.start_offset,
       /*max_offset=*/input.last_offset,
       /*first_timestamp=*/input.time,

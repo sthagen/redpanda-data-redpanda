@@ -6337,23 +6337,60 @@ class RedpandaService(Service, RedpandaServiceABC):
                 # Leadership moves may perturb the scrub, so disable it to
                 # streamline the actions below.
                 "enable_leader_balancer": False,
+                # Replica-set reassignments by the partition autobalancer
+                # (triggered by e.g. a recent decommission) can move a
+                # partition off the leader that just completed a full
+                # scrub, dropping `last_complete_scrub` from the new
+                # leader's manifest view and causing the polling loop
+                # below to time out. Disable replica autobalancing for
+                # the duration of the scrub. See CORE-15146.
+                "partition_autobalancing_mode": "off",
             },
             tolerate_stopped_nodes=True,
         )
 
+        # Per-partition: the leader we last reset scrubbing metadata on.
+        # Populated by the initial setup loop below and updated whenever
+        # the polling loop notices leadership has moved (via a 307 redirect
+        # from the anomalies endpoint) and rediscovers + resets on the new
+        # leader.
+        last_leader: dict[CloudStoragePartition, ClusterNode] = {}
         unavailable: set[CloudStoragePartition] = set()
+        scrubbed: set[CloudStoragePartition] = set()
+        all_anomalies: list[dict[str, Any]] = []
+
+        # Initial setup: find a leader and reset scrubbing metadata for
+        # every partition. Done outside wait_until so its time (up to
+        # ~10s per partition for await_stable_leader) doesn't count
+        # against the scrub-completion polling budget below. Partitions
+        # where we can't get this far are logged and added to
+        # `unavailable` so the polling loop just skips them.
         for p in cloud_storage_partitions:
             try:
                 leader_id = self._admin.await_stable_leader(
                     topic=p.topic, partition=p.index
                 )
-
+                leader = self.get_node_by_id(leader_id)
+                if leader is None:
+                    self.logger.warning(
+                        f"kafka/{p.topic}/{p.index}: leader id {leader_id} "
+                        f"not in started nodes, skipping scrub for this partition"
+                    )
+                    unavailable.add(p)
+                    continue
                 self._admin.reset_scrubbing_metadata(
                     namespace="kafka",
                     topic=p.topic,
                     partition=p.index,
-                    node=self.get_node_by_id(leader_id),
+                    node=leader,
                 )
+                last_leader[p] = leader
+            except TimeoutError as e:
+                self.logger.warning(
+                    f"kafka/{p.topic}/{p.index}: could not find stable "
+                    f"leader during scrub setup ({e}); skipping this partition"
+                )
+                unavailable.add(p)
             except HTTPError as he:
                 if he.response.status_code == 404:
                     # Old redpanda, doesn't have this endpoint.  We can't
@@ -6362,10 +6399,6 @@ class RedpandaService(Service, RedpandaServiceABC):
                     continue
                 else:
                     raise
-
-        cloud_storage_partitions -= unavailable
-        scrubbed: set[CloudStoragePartition] = set()
-        all_anomalies: list[dict[str, Any]] = []
 
         allowed_keys = set(
             ["ns", "topic", "partition", "revision_id", "last_complete_scrub_at"]
@@ -6408,14 +6441,55 @@ class RedpandaService(Service, RedpandaServiceABC):
                             detected.pop("segment_metadata_anomalies", None)
 
         def all_partitions_scrubbed():
-            waiting_for = cloud_storage_partitions - scrubbed
+            waiting_for = cloud_storage_partitions - scrubbed - unavailable
             self.logger.info(
                 f"Waiting for {len(waiting_for)} partitions to be scrubbed"
             )
             for p in waiting_for:
-                result = self._admin.get_cloud_storage_anomalies(
-                    namespace="kafka", topic=p.topic, partition=p.index
+                # Recovery branch: the polling loop previously cleared
+                # last_leader[p] because the anomalies endpoint returned
+                # a 307 (leader moved). Rediscover a stable leader and
+                # re-issue the reset on it. By the time we're polling
+                # the partition was already healthy enough to set up
+                # initially, so failures here are real (not just a
+                # transient setup race) and we let them propagate -
+                # wait_until's retry_on_exc=True will retry within the
+                # overall timeout and the assert message is preserved
+                # as the cause of the eventual TimeoutError.
+                if p not in last_leader:
+                    leader_id = self._admin.await_stable_leader(
+                        topic=p.topic, partition=p.index
+                    )
+                    leader = self.get_node_by_id(leader_id)
+                    assert leader is not None, (
+                        f"kafka/{p.topic}/{p.index}: stable leader id "
+                        f"{leader_id} did not map to a started node"
+                    )
+                    self._admin.reset_scrubbing_metadata(
+                        namespace="kafka",
+                        topic=p.topic,
+                        partition=p.index,
+                        node=leader,
+                    )
+                    last_leader[p] = leader
+                    continue
+
+                # Query anomalies on the known leader. Target it directly
+                # and disable redirect-following so a 307 (leader moved)
+                # surfaces as is_redirect == True instead of being
+                # transparently followed - which is our cue to forget the
+                # leader and rediscover next round. See CORE-15146.
+                r = self._admin._request(
+                    "GET",
+                    f"cloud_storage/anomalies/kafka/{p.topic}/{p.index}",
+                    node=last_leader[p],
+                    allow_redirects=False,
                 )
+                if r.is_redirect:
+                    last_leader.pop(p, None)
+                    continue
+
+                result = r.json()
                 if "last_complete_scrub_at" in result:
                     scrubbed.add(p)
 

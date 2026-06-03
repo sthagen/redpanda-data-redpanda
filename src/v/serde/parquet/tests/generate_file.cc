@@ -77,6 +77,7 @@ struct testcase {
     schema_element schema;
     std::vector<value> rows;
     iobuf parquet_file;
+    size_t bloom_filter_ndv = 0;
 };
 
 iobuf json(const testcase& tc) {
@@ -91,6 +92,8 @@ iobuf json(const testcase& tc) {
         json(w, tc.schema, row);
     }
     w.EndArray();
+    w.Key("bloom_filter_ndv");
+    w.Uint64(tc.bloom_filter_ndv);
     w.EndObject();
     return std::move(buf).as_iobuf();
 }
@@ -339,17 +342,23 @@ ss::future<iobuf> serialize_testcase(size_t test_case) {
           });
     }
     iobuf file;
+    size_t num_rows = test_case * 100;
+    // The all_types_schema has a repeated nested group with up to 64 elements
+    // per top-level row. Size the bloom filter NDV to account for the maximum
+    // number of leaf values in those nested columns, otherwise the filter fills
+    // past the discard threshold and is dropped.
+    size_t bloom_filter_ndv = num_rows * 64 + 50;
     writer w(
       {
         .schema = all_types_schema(),
         .metadata = {{"foo", "bar"}},
         .compress = test_case % 2 == 0,
+        .bloom_filter_ndv = bloom_filter_ndv,
       },
       make_iobuf_ref_output_stream(file));
     co_await w.init();
     auto schema = all_types_schema();
     std::vector<value> rows;
-    size_t num_rows = test_case * 100;
     for (size_t i = 0; i < num_rows; ++i) {
         auto v = generate_value(schema);
         rows.push_back(copy(v));
@@ -365,6 +374,7 @@ ss::future<iobuf> serialize_testcase(size_t test_case) {
         .schema = all_types_schema(),
         .rows = std::move(rows),
         .parquet_file = std::move(file),
+        .bloom_filter_ndv = bloom_filter_ndv,
       });
 }
 // NOLINTEND(*magic-number*)
