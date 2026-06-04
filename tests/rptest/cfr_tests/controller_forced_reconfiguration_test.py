@@ -164,17 +164,8 @@ class ControllerForcedReconfigurationApiTestBase(
     ) -> bool:
         """check that no partition currently has quorum loss"""
 
-        def controller_available() -> bool:
-            controller = self.redpanda.controller()
-            return controller is not None and bool(self.redpanda.node_id(controller))
-
         try:
-            wait_until(
-                controller_available,
-                timeout_sec=timeout.timeout_s,
-                backoff_sec=timeout.backoff_s,
-                err_msg="Controller not available",
-            )
+            self._controller_recovered(killed_ids=dead_node_ids, timeout=timeout)
             lost_majority = (
                 self.redpanda._admin.get_majority_lost_partitions_from_nodes(
                     dead_brokers=dead_node_ids,
@@ -392,19 +383,9 @@ class ControllerForcedReconfiguration_SmokeTest(
             surviving_node_count=1,
         )
 
-        def controller_available():
-            controller = self.redpanda.controller()
-            return (
-                controller is not None
-                and self.redpanda.node_id(controller) not in killed_node_ids
-            )
-
         self.redpanda.logger.debug("waiting for controller to recover")
-        wait_until(
-            lambda: controller_available(),
-            timeout_sec=REALLY_LONG_TIMEOUT.timeout_s,
-            backoff_sec=REALLY_LONG_TIMEOUT.backoff_s,
-            err_msg="Controller never came back",
+        self._controller_recovered(
+            killed_ids=killed_node_ids, timeout=REALLY_LONG_TIMEOUT
         )
         self.redpanda.logger.debug("controller recovered")
 
@@ -607,21 +588,9 @@ class ControllerForcedReconfiguration_Size5(
             surviving_node_count=len(designated_survivors),
         )
 
-        def controller_available():
-            controller = self.redpanda.controller()
-            return (
-                controller is not None
-                and self.redpanda.node_id(controller) not in killed_node_ids
-            )
-
         self.redpanda.logger.debug("waiting for controller to recover")
         recovery_timeout = TimeoutConfig(timeout_s=240, backoff_s=10)
-        wait_until(
-            lambda: controller_available(),
-            timeout_sec=recovery_timeout.timeout_s,
-            backoff_sec=recovery_timeout.backoff_s,
-            err_msg="Controller never came back",
-        )
+        self._controller_recovered(killed_ids=killed_node_ids, timeout=recovery_timeout)
         self.redpanda.logger.debug("controller recovered")
 
         """ meat 4: join new nodes until the cluster recovers to original node count"""
@@ -635,9 +604,7 @@ class ControllerForcedReconfiguration_Size5(
             self.redpanda.started_nodes(), MEDIUM_TIMEOUT, recovery_mode_enabled=False
         )
 
-        wait_until(
-            controller_available, MEDIUM_TIMEOUT.timeout_s, MEDIUM_TIMEOUT.backoff_s
-        )
+        self._controller_recovered(killed_ids=killed_node_ids, timeout=MEDIUM_TIMEOUT)
 
         """ meat 6: nodewise recovery"""
         self.redpanda.logger.debug(f"recovering from: {killed_node_ids}")
@@ -819,20 +786,8 @@ class ControllerForcedReconfiguration_Size6(
             surviving_node_count=len(step_f_survivor_ids),
         )
 
-        def controller_available():
-            controller = self.redpanda.controller()
-            return (
-                controller is not None
-                and self.redpanda.node_id(controller) not in step_f_dead_ids
-            )
-
         self.redpanda.logger.debug("waiting for controller to recover")
-        wait_until(
-            lambda: controller_available(),
-            timeout_sec=LONG_TIMEOUT.timeout_s,
-            backoff_sec=LONG_TIMEOUT.backoff_s,
-            err_msg="Controller never came back",
-        )
+        self._controller_recovered(killed_ids=step_f_dead_ids, timeout=LONG_TIMEOUT)
         self.redpanda.logger.debug("controller recovered")
 
         """ step G: ensure 'some' is in the topic list """

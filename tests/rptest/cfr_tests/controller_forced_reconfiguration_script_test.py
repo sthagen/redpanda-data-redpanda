@@ -266,12 +266,7 @@ class ControllerForcedReconfigurationBasicTest(
         operational."""
         surviving_count = len(survivors)
 
-        wait_until(
-            lambda: self._controller_recovered(killed_ids),
-            timeout_sec=REALLY_LONG_TIMEOUT.timeout_s,
-            backoff_sec=REALLY_LONG_TIMEOUT.backoff_s,
-            err_msg="Controller did not recover after CFR",
-        )
+        self._controller_recovered(killed_ids, REALLY_LONG_TIMEOUT)
 
         self._bulk_toggle_recovery_mode(
             nodes=survivors,
@@ -279,12 +274,7 @@ class ControllerForcedReconfigurationBasicTest(
             recovery_mode_enabled=False,
         )
 
-        wait_until(
-            lambda: self._controller_recovered(killed_ids),
-            timeout_sec=MEDIUM_TIMEOUT.timeout_s,
-            backoff_sec=MEDIUM_TIMEOUT.backoff_s,
-            err_msg="Controller did not recover after exiting recovery mode",
-        )
+        self._controller_recovered(killed_ids, MEDIUM_TIMEOUT)
 
         # Pass the service's internal TLS client cert (None when TLS is off)
         # along with explicit SASL credentials.  Both are needed because

@@ -32,9 +32,6 @@ from rptest.services.redpanda import TLSProvider
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import wait_until_result
 
-# Sentinel returned by the admin API when no leader exists for a partition.
-NO_LEADER = -1
-
 
 # ── Shared data types ────────────────────────────────────────────────────
 
@@ -232,24 +229,21 @@ class ControllerForcedReconfigurationTestBase(RedpandaTest):
             err_msg="Partition has a leader",
         )
 
-    def _controller_recovered(self, killed_ids: list[int]) -> bool:
-        """True when a controller leader exists that is NOT one of the
-        killed nodes.  Uses the authenticated admin client."""
-        admin = self.redpanda._admin
-        for node in self.redpanda.started_nodes():
-            try:
-                info = admin.get_partitions(
-                    namespace="redpanda",
-                    topic="controller",
-                    partition=0,
-                    node=node,
-                )
-                leader_id = info.get("leader_id", NO_LEADER)
-                if leader_id != NO_LEADER and leader_id not in killed_ids:
-                    return True
-            except Exception:
-                continue
-        return False
+    def _controller_recovered(
+        self,
+        killed_ids: list[int],
+        timeout: TimeoutConfig,
+    ) -> int:
+        """Wait until all living nodes agree on a controller leader not in ``killed_ids``."""
+        return self.redpanda._admin.await_stable_leader(
+            topic="controller",
+            partition=0,
+            namespace="redpanda",
+            timeout_s=timeout.timeout_s,
+            backoff_s=timeout.backoff_s,
+            hosts=self._living_hostnames(),
+            check=lambda node_id: node_id not in killed_ids,
+        )
 
     # ── cluster splitting ────────────────────────────────────────────────
 
