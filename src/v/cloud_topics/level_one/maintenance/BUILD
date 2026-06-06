@@ -66,6 +66,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/common:abstract_io",
         "//src/v/cloud_topics/level_one/common:file_io",
         "//src/v/cloud_topics/level_one/frontend_reader:level_one_reader_probe",
+        "//src/v/cloud_topics/level_one/maintenance/compaction:compaction_queue",
         "//src/v/cloud_topics/level_one/maintenance/compaction:compaction_source_and_sink",
         "//src/v/cloud_topics/level_one/metastore",
         "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
@@ -99,10 +100,25 @@ redpanda_cc_library(
     deps = [
         "//src/v/cloud_topics/level_one/metastore",
         "//src/v/cloud_topics/level_one/metastore:leveling_range_builder",
+        "//src/v/cloud_topics/level_one/metastore:offset_interval_map",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:intrusive",
         "//src/v/model",
         "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "keyed_priority_queue",
+    hdrs = [
+        "keyed_priority_queue.h",
+    ],
+    visibility = [
+        "//src/v/cloud_topics/level_one:__subpackages__",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/container:chunked_hash_map",
     ],
 )
 
@@ -152,6 +168,8 @@ redpanda_cc_library(
     deps = [
         ":logger",
         ":meta",
+        "//src/v/cloud_topics/level_one/maintenance/compaction:compaction_queue",
+        "//src/v/cloud_topics/level_one/maintenance/leveling:leveling_queue",
         "//src/v/cloud_topics/level_one/metastore",
         "//src/v/cluster",
         "//src/v/cluster:fwd",
@@ -211,6 +229,7 @@ redpanda_cc_library(
         ":worker",
         "//src/v/cloud_topics/level_one/common:file_io",
         "//src/v/cloud_topics/level_one/frontend_reader:level_one_reader_probe",
+        "//src/v/cloud_topics/level_one/maintenance/compaction:compaction_queue",
         "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
         "//src/v/cluster:fwd",
         "//src/v/cluster:members_table",

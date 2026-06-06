@@ -51,7 +51,7 @@ compaction_worker::compaction_worker(
   , _metadata_cache(metadata_cache)
   , _compaction_sg(compaction_sg)
   , _l1_reader_probe(l1_reader_probe) {
-    _poll_interval.watch([this]() { _worker_cv.signal(); });
+    _poll_interval.watch([this]() { _compaction_cv.signal(); });
 }
 
 ss::future<> compaction_worker::start() {
@@ -61,10 +61,10 @@ ss::future<> compaction_worker::start() {
 }
 
 ss::future<> compaction_worker::stop() {
-    terminate_current_job();
+    terminate_compaction_job();
     _worker_state = worker_state::stopped;
     _as.request_abort();
-    _worker_cv.broken();
+    _compaction_cv.broken();
 
     co_await _worker_update_queue.shutdown();
 
@@ -82,19 +82,19 @@ ss::future<> compaction_worker::stop() {
 
 void compaction_worker::start_work_loop() {
     vassert(
-      !_work_fut.has_value(),
-      "Cannot set value of _work_fut when it already has a value.");
-    _work_fut = ssx::spawn_with_gate_then(_gate, [this]() {
+      !_compaction_work_fut.has_value(),
+      "Cannot set value of _compaction_work_fut when it already has a value.");
+    _compaction_work_fut = ssx::spawn_with_gate_then(_gate, [this]() {
         return ss::with_scheduling_group(
-          _compaction_sg, [this]() { return work_loop(); });
+          _compaction_sg, [this]() { return compaction_work_loop(); });
     });
 }
 
-ss::future<> compaction_worker::work_loop() {
+ss::future<> compaction_worker::compaction_work_loop() {
     while (is_active()) {
         auto poll_interval = _poll_interval();
         try {
-            co_await _worker_cv.wait(_poll_interval());
+            co_await _compaction_cv.wait(_poll_interval());
         } catch (const ss::condition_variable_timed_out&) {
             // Fall through
         }
@@ -105,7 +105,8 @@ ss::future<> compaction_worker::work_loop() {
         }
 
         while (is_active()) {
-            auto maybe_work = co_await try_acquire_work_from_manager();
+            auto maybe_work
+              = co_await try_acquire_compaction_work_from_manager();
 
             if (!maybe_work.has_value()) {
                 break;
@@ -113,11 +114,11 @@ ss::future<> compaction_worker::work_loop() {
 
             auto work = std::move(maybe_work).value();
 
-            auto ntp = work->ntp;
+            auto ntp = work->meta->ntp;
 
             auto compact_fut = co_await ss::coroutine::as_future(
               compact_log(work.get()));
-            co_await complete_work_on_manager(std::move(work));
+            co_await complete_compaction_work_on_manager(std::move(work));
 
             if (compact_fut.failed()) {
                 auto eptr = compact_fut.get_exception();
@@ -136,13 +137,13 @@ ss::future<> compaction_worker::work_loop() {
 }
 
 ss::future<> compaction_worker::clear_work_fut() {
-    if (_work_fut.has_value()) {
-        co_await std::move(_work_fut).value();
-        _work_fut.reset();
+    if (_compaction_work_fut.has_value()) {
+        co_await std::move(_compaction_work_fut).value();
+        _compaction_work_fut.reset();
     }
 }
 
-ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
+ss::future<> compaction_worker::compact_log(compaction_job* job) {
     if (!is_active()) {
         co_return;
     }
@@ -150,49 +151,38 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
     // If there was a concurrent race with a request to cancel/stop an inflight
     // compaction, early return after resetting state to `idle`.
     if (
-      _job_state == compaction_job_state::soft_stop
-      || _job_state == compaction_job_state::hard_stop) {
-        _job_state = compaction_job_state::idle;
+      _compaction_job_state == compaction_job_state::soft_stop
+      || _compaction_job_state == compaction_job_state::hard_stop) {
+        _compaction_job_state = compaction_job_state::idle;
         co_return;
     }
 
-    if (!log) {
+    if (!job) {
         co_return;
     }
 
-    if (!log->link.is_linked()) {
+    if (!job->meta->link.is_linked()) {
         co_return;
     }
 
-    auto tidp = log->tidp;
-    auto ntp = log->ntp;
+    auto tidp = job->meta->tidp;
+    auto ntp = job->meta->ntp;
 
     auto ctxlog = prefix_logger(compaction_log, fmt::format("{}", ntp));
 
-    if (!log->compaction.info_and_ts.has_value()) {
-        vlog(
-          ctxlog.error,
-          "Log in compaction process did not have metastore information "
-          "set. Concurrency issue?");
-        co_return;
-    }
-
     vlog(ctxlog.info, "Compacting CTP");
 
-    _job_state = compaction_job_state::running;
+    _compaction_job_state = compaction_job_state::running;
     _inflight_ntp = ntp;
 
+    const auto& info_and_ts = job->info_and_ts;
     auto compaction_offsets = metastore::compaction_offsets_response{
-      .dirty_ranges
-      = log->compaction.info_and_ts->info.offsets_response.dirty_ranges,
+      .dirty_ranges = info_and_ts.info.offsets_response.dirty_ranges,
       .removable_tombstone_ranges
-      = log->compaction.info_and_ts->info.offsets_response
-          .removable_tombstone_ranges};
-    auto expected_compaction_epoch
-      = log->compaction.info_and_ts->info.compaction_epoch;
-    auto start_offset = log->compaction.info_and_ts->info.start_offset;
-    auto max_compactible_offset
-      = log->compaction.info_and_ts->max_compactible_offset;
+      = info_and_ts.info.offsets_response.removable_tombstone_ranges};
+    auto expected_compaction_epoch = info_and_ts.info.compaction_epoch;
+    auto start_offset = info_and_ts.info.start_offset;
+    auto max_compactible_offset = info_and_ts.max_compactible_offset;
 
     // Lazy initialization of offset map.
     if (!_map) {
@@ -231,7 +221,7 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
       _metastore,
       _io,
       _as,
-      _job_state,
+      _compaction_job_state,
       _probe,
       _l1_reader_probe,
       ctxlog);
@@ -273,26 +263,26 @@ ss::future<> compaction_worker::compact_log(log_compaction_meta* log) {
         vlog(ctxlog.info, "Finished compacting CTP");
     }
 
-    _job_state = compaction_job_state::idle;
+    _compaction_job_state = compaction_job_state::idle;
     _inflight_ntp.reset();
 }
 
-ss::future<std::optional<foreign_log_compaction_meta_ptr>>
-compaction_worker::try_acquire_work_from_manager() {
+ss::future<std::optional<foreign_compaction_job_ptr>>
+compaction_worker::try_acquire_compaction_work_from_manager() {
     co_return co_await ss::smp::submit_to(
       worker_manager::worker_manager_shard,
       [this, shard = ss::this_shard_id()]() {
-          return _worker_manager->try_acquire_work(shard);
+          return _worker_manager->try_acquire_compaction_work(shard);
       });
 }
 
-ss::future<> compaction_worker::complete_work_on_manager(
-  foreign_log_compaction_meta_ptr log) {
+ss::future<> compaction_worker::complete_compaction_work_on_manager(
+  foreign_compaction_job_ptr job) {
     co_return co_await ss::smp::submit_to(
-      worker_manager::worker_manager_shard, [this, log = std::move(log)] {
-          _worker_manager->complete_work(log.get());
+      worker_manager::worker_manager_shard, [this, job = std::move(job)] {
+          _worker_manager->complete_compaction_work(job.get());
           // Destruct foreign_ptr on owning shard by moving it into closure.
-          std::ignore = std::move(log);
+          std::ignore = std::move(job);
       });
 }
 
@@ -301,24 +291,24 @@ bool compaction_worker::is_active() const {
            && _worker_state == worker_state::active;
 }
 
-void compaction_worker::interrupt_current_job() {
+void compaction_worker::interrupt_compaction_job() {
     if (_inflight_ntp.has_value()) {
         vlog(
           compaction_log.debug,
           "Interrupting compaction job for CTP {}",
           _inflight_ntp);
     }
-    _job_state = compaction_job_state::soft_stop;
+    _compaction_job_state = compaction_job_state::soft_stop;
 }
 
-void compaction_worker::terminate_current_job() {
+void compaction_worker::terminate_compaction_job() {
     if (_inflight_ntp.has_value()) {
         vlog(
           compaction_log.debug,
           "Terminating compaction job for CTP {}",
           _inflight_ntp);
     }
-    _job_state = compaction_job_state::hard_stop;
+    _compaction_job_state = compaction_job_state::hard_stop;
 }
 
 ss::future<> compaction_worker::pause_worker() {
@@ -340,11 +330,12 @@ ss::future<> compaction_worker::do_pause_worker() {
       "Pausing compaction worker on shard {}",
       ss::this_shard_id());
 
-    interrupt_current_job();
+    interrupt_compaction_job();
 
     _worker_state = worker_state::paused;
-    // Signal `_worker_cv` in case work_loop is currently waiting.
-    alert_worker();
+    // Signal `_compaction_cv` in case compaction_work_loop is currently
+    // waiting.
+    alert_compaction_fiber();
     co_await clear_work_fut();
 
     vlog(
@@ -376,7 +367,7 @@ ss::future<> compaction_worker::do_resume_worker() {
       ss::this_shard_id());
 }
 
-void compaction_worker::alert_worker() { _worker_cv.signal(); }
+void compaction_worker::alert_compaction_fiber() { _compaction_cv.signal(); }
 
 ss::future<> compaction_worker::initialize_map() {
     if (_map) {

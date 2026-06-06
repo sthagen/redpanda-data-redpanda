@@ -4784,6 +4784,39 @@ configuration::configuration()
       "How often to trigger background compaction for cloud topics.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       30s)
+  , cloud_topics_leveling_interval_ms(
+      *this,
+      "cloud_topics_leveling_interval_ms",
+      "How often to scan managed cloud-topic partitions for leveling work "
+      "(rewrites of runs of undersized L1 objects).",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5min)
+  , cloud_topics_max_concurrent_leveling_jobs_per_shard(
+      *this,
+      "cloud_topics_max_concurrent_leveling_jobs_per_shard",
+      "Maximum number of leveling jobs that may run concurrently on a single "
+      "shard. Live-adjustable.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5,
+      {.min = size_t{1}, .max = size_t{64}})
+  , cloud_topics_leveling_min_extent_size_ratio(
+      *this,
+      "cloud_topics_leveling_min_extent_size_ratio",
+      "An L1 extent shorter than this ratio of "
+      "cloud_topics_reconciliation_max_object_size is considered undersized "
+      "and eligible for leveling.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      0.5,
+      {.min = 0.0, .max = 1.0})
+  , cloud_topics_leveling_max_range_bytes(
+      *this,
+      "cloud_topics_leveling_max_range_bytes",
+      "Maximum total bytes per leveling job (one contiguous run of "
+      "undersized extents). Runs exceeding this are split into multiple "
+      "jobs so that each job's rewrite and metastore commit stays bounded "
+      "in time and blast radius. Lower values mean more, smaller jobs.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1_GiB)
   , cloud_topics_compaction_key_map_memory(
       *this,
       "cloud_topics_compaction_key_map_memory",

@@ -38,6 +38,10 @@ public:
         return _compaction_runs.auto_measure();
     }
 
+    std::unique_ptr<hist_t::measurement> auto_leveling_measurement() {
+        return _leveling_runs.auto_measure();
+    }
+
     void add_stats(const compaction::stats& stats) {
         _batches_processed += stats.batches_processed;
         _batches_removed += stats.batches_discarded;
@@ -45,13 +49,21 @@ public:
         _tombstones_removed += stats.expired_tombstones_discarded;
     }
 
+    // Records the net reduction in object/extent count from a committed
+    // leveling range: `input_extents - output_objects`.
+    void add_leveling_extents_reclaimed(uint64_t reclaimed) {
+        _leveling_extents_reclaimed += reclaimed;
+    }
+
 private:
     hist_t _compaction_runs;
+    hist_t _leveling_runs;
 
     uint64_t _batches_processed{0};
     uint64_t _batches_removed{0};
     uint64_t _records_removed{0};
     uint64_t _tombstones_removed{0};
+    uint64_t _leveling_extents_reclaimed{0};
 
     metrics::internal_metric_groups _metrics;
 };

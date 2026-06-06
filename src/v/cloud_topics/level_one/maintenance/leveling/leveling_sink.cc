@@ -14,6 +14,8 @@
 #include "cloud_topics/level_one/metastore/retry.h"
 #include "model/fundamental.h"
 
+#include <numeric>
+
 namespace cloud_topics::l1 {
 
 leveling_sink::leveling_sink(
@@ -24,6 +26,7 @@ leveling_sink::leveling_sink(
   ss::abort_source& as,
   config::binding<size_t> max_object_size,
   size_t upload_part_size,
+  compaction_worker_probe& probe,
   prefix_logger& ctxlog,
   object_builder::options opts)
   : l1_object_sink(
@@ -35,7 +38,8 @@ leveling_sink::leveling_sink(
       upload_part_size,
       ctxlog,
       std::move(opts))
-  , _expected_compaction_epoch(epoch) {}
+  , _expected_compaction_epoch(epoch)
+  , _probe(probe) {}
 
 ss::future<bool>
 leveling_sink::initialize(compaction::sliding_window_reducer::source& src) {
@@ -44,6 +48,12 @@ leveling_sink::initialize(compaction::sliding_window_reducer::source& src) {
     if (lv_src._leveling_ranges.empty()) {
         co_return false;
     }
+
+    _input_extents = std::accumulate(
+      lv_src._leveling_ranges.begin(),
+      lv_src._leveling_ranges.end(),
+      size_t{0},
+      [](size_t acc, const auto& range) { return acc + range.extent_count; });
 
     co_await init_metadata_builder();
 
@@ -89,7 +99,16 @@ ss::future<> leveling_sink::finalize(bool success) {
       },
       _as);
     if (replace_res.has_value()) {
-        vlog(_ctxlog.info, "Finalized leveling");
+        auto reclaimed = _input_extents > _output_objects
+                           ? _input_extents - _output_objects
+                           : size_t{0};
+        _probe.add_leveling_extents_reclaimed(reclaimed);
+        vlog(
+          _ctxlog.info,
+          "Finalized leveling with {} extents reclaimed ({}->{})",
+          reclaimed,
+          _input_extents,
+          _output_objects);
     } else {
         vlog(
           _ctxlog.warn,

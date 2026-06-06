@@ -339,45 +339,120 @@ class ClusterLinkingProgressVerifier:
         )
 
     def check_topic_hwms(self, timeout: int = 120, debug_only: bool = False):
-        # describe target first to make sure the lag is always greater than or equal to 0
+        """Verify the target topic's high watermarks have caught up to the source.
+
+        Describes the topic on both clusters and compares the per-partition high
+        watermark; any partition whose watermarks differ is counted as lagging.
+        With debug_only=True discrepancies are only logged (used to dump
+        diagnostics when the workload stalls); otherwise a lagging or mismatched
+        partition fails verification.
+
+        describe_topics() retries until source and target agree on the partition
+        set and every partition has a readable high watermark on both sides, so
+        the comparison never races against transient leadership churn. See
+        CORE-16414 for the failure this guards against.
+        """
+
         def describe_topics():
+            last_log = None
+
+            def log_once(message):
+                # Throttle to distinct states: a persistent condition leaves one
+                # line per transition rather than spamming on every backoff.
+                nonlocal last_log
+                if message != last_log:
+                    last_log = message
+                    self.logger.warning(message)
+
             def describe_once():
-                target = list(self.target_rpk.describe_topic(self.topic))
-                source = list(self.source_rpk.describe_topic(self.topic))
-                if len(source) != len(target):
+                # tolerant=True keeps momentarily-leaderless partitions in the
+                # result (with high_watermark=None) instead of dropping them,
+                # which separates two concerns the default describe conflates:
+                #
+                #   1. Structural: the set of partition ids is fixed for a
+                #      provisioned topic and is reported in metadata regardless
+                #      of leadership. Source and target must agree on it; a
+                #      persistent mismatch is a real (shadow-link) bug, surfaced
+                #      via the timeout below.
+                #   2. Transient: an individual partition may briefly have no
+                #      leader (e.g. during failure injection) and thus no
+                #      readable high watermark. We wait for liveness rather than
+                #      silently skipping the partition.
+                #
+                # Logging both (throttled) keeps the signal alive even when a
+                # transient condition is waited out and the test passes.
+                #
+                # Target is described before source so that, for a partition
+                # still replicating, target_hw <= source_hw and the lag computed
+                # below stays non-negative.
+                target = {
+                    p.id: p
+                    for p in self.target_rpk.describe_topic(self.topic, tolerant=True)
+                }
+                source = {
+                    p.id: p
+                    for p in self.source_rpk.describe_topic(self.topic, tolerant=True)
+                }
+
+                if not source or source.keys() != target.keys():
+                    log_once(
+                        f"Partition set mismatch (structural) for {self.topic} "
+                        f"while computing lag: source={sorted(source.keys())} "
+                        f"target={sorted(target.keys())}; retrying"
+                    )
                     return False, None
+
+                not_ready = [
+                    pid
+                    for pid in sorted(source.keys())
+                    if source[pid].high_watermark is None
+                    or target[pid].high_watermark is None
+                ]
+                if not_ready:
+                    log_once(
+                        f"Partitions without a readable high watermark for "
+                        f"{self.topic}: {not_ready}; retrying"
+                    )
+                    return False, None
+
                 return True, (target, source)
 
             return wait_until_result(
                 describe_once,
                 timeout_sec=timeout,
                 backoff_sec=0.5,
-                err_msg=f"Failed to describe topics for lag calculation in {timeout} seconds",
+                err_msg=f"Source and target did not converge on a comparable set of partitions for lag calculation in {timeout} seconds",
             )
 
         try:
             (target, source) = describe_topics()
-            assert len(target) == len(source), (
-                "Verification failed, Topic partitions count mismatch between source and target"
+            # Postcondition of describe_topics(): the partition sets match and
+            # every high watermark is non-None on both sides, so partitions line
+            # up by id and the subtraction below cannot see None. The assert
+            # documents (and defensively re-checks) that invariant.
+            assert source.keys() == target.keys(), (
+                "Verification failed, Topic partitions mismatch between source and target"
             )
             partitions_with_lag = 0
-            for source_partition, target_partition in zip(source, target):
-                assert source_partition.id == target_partition.id, (
-                    f"Partition id mismatch {source_partition.id} != {target_partition.id}"
-                )
+            for pid in sorted(source.keys()):
+                source_partition = source[pid]
+                target_partition = target[pid]
                 if target_partition.high_watermark != source_partition.high_watermark:
                     lag = (
                         source_partition.high_watermark
                         - target_partition.high_watermark
                     )
                     self.logger.debug(
-                        f"Partition {self.topic}/{source_partition.id} - source: ({source_partition}), target: ({target_partition}) lag: {lag}"
+                        f"Partition {self.topic}/{pid} - source: ({source_partition}), target: ({target_partition}) lag: {lag}"
                     )
                     partitions_with_lag += 1
-                assert debug_only or partitions_with_lag == 0, (
-                    f"Verification failed, {partitions_with_lag} partitions do not have synced high watermarks"
-                )
+            assert debug_only or partitions_with_lag == 0, (
+                f"Verification failed, {partitions_with_lag} partitions do not have synced high watermarks"
+            )
         except Exception as e:
+            # debug_only callers (e.g. the workload-stall diagnostic dump) want a
+            # best-effort snapshot, so swallow failures; real verification
+            # propagates them.
             self.logger.warning(f"Verification failed: {e}")
             if not debug_only:
                 raise

@@ -2409,6 +2409,16 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         self.logger.info(
             "Create a topic with compaction settings set but without compaction and tombstone removal enabled"
         )
+        # `rpk consume -o :end` blocks until the consumer reaches the high
+        # watermark, which never decreases. Once tombstone removal deletes the
+        # record(s) at the tail of the compacted log, those tail offsets become
+        # unreachable and the consume hangs until it times out. Anchor the tail
+        # with a sentinel record that has a unique, non-tombstone key: it
+        # survives both compaction (latest record per key is kept) and tombstone
+        # removal (not a tombstone), so the highest offset always holds a live
+        # record and `:end` stays reachable. The sentinel is excluded from the
+        # key/tombstone counts below.
+        sentinel_key = "sentinel-anchor"
         topic = TopicSpec(
             name="compacted-topic",
             partition_count=1,
@@ -2444,6 +2454,11 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         ):
             self.verify()
 
+        # Produce the tail anchor (see sentinel_key comment above) to the source
+        # and wait for it to replicate, so the highest offset on the target
+        # holds a live record before compaction and tombstone removal begin.
+        self.source_cluster_rpk.produce(topic.name, key=sentinel_key, msg="anchor")
+
         def get_compaction_progress(
             rpk: RpkTool = self.target_cluster_rpk,
         ) -> tuple[int, int]:
@@ -2455,6 +2470,8 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 format="%k,%v\n",
             ).splitlines():
                 key, value = line.split(",", maxsplit=1)
+                if key == sentinel_key:
+                    continue
                 keys += [key]
                 if value == "":
                     tombstones += 1
@@ -2463,6 +2480,19 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
                 f"Data read from target topic: {len(keys)=}, {keys[:5]=}, {tombstones=}"
             )
             return len(keys), tombstones
+
+        self.logger.info("Waiting for the sentinel record to replicate to the target")
+        wait_until(
+            lambda: sentinel_key
+            in self.target_cluster_rpk.consume(
+                topic=topic.name,
+                offset=":end",
+                format="%k\n",
+            ).split(),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Sentinel record did not replicate to the target cluster",
+        )
 
         self.logger.info("Verifying that replicated records can be compacted")
         pre_compaction_keys, _ = get_compaction_progress()

@@ -76,6 +76,16 @@ public:
         return map_.find(offset()) != map_.end();
     }
 
+    // Returns whether the inclusive range [base, last] overlaps any range
+    // already present.
+    bool overlaps(kafka::offset base, kafka::offset last) const {
+        if (base > last) {
+            return false;
+        }
+        auto len = last() - base() + 1;
+        return map_.overlaps(typename imap_t::interval{base(), len});
+    }
+
     // Returns whether every offset in the inclusive range [start, last] is
     // present. Because ranges are not coalesced, [start, last] may span
     // several contiguous ranges, so walk them until the range is covered or a

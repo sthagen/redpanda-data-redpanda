@@ -14,6 +14,7 @@
 #include "absl/algorithm/container.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_map.h"
 #include "config/configuration.h"
 #include "container/chunked_vector.h"
@@ -819,20 +820,21 @@ public:
     insert_schema_result
     insert_schema(const context& ctx, schema_definition def) {
         if (auto id = get_schema_id(ctx, def); id.has_value()) {
-            return {*id, false};
+            return {.id = *id, .inserted = false};
         }
 
         const auto id = _schemas.empty()
                           ? schema_id{1}
                           : std::prev(_schemas.end())->first.id + 1;
-        auto [_, inserted] = _schemas.try_emplace(
+        auto [it, inserted] = _schemas.try_emplace(
           context_schema_id{ctx, id}, std::move(def));
 
         if (inserted) {
-            get_or_create_context_store(ctx).increment_schema_count();
+            get_or_create_context_store(ctx).increment_schema_count(
+              it->second.definition.type());
         }
 
-        return {id, inserted};
+        return {.id = id, .inserted = inserted};
     }
 
     bool upsert_schema(
@@ -844,7 +846,8 @@ public:
           std::move(id), schema_entry(std::move(def)));
 
         if (inserted) {
-            get_or_create_context_store(it->first.ctx).increment_schema_count();
+            get_or_create_context_store(it->first.ctx)
+              .increment_schema_count(it->second.definition.type());
         }
 
         return inserted;
@@ -855,7 +858,8 @@ public:
         if (it != _schemas.end()) {
             auto ctx_it = _context_stores.find(id.ctx);
             if (ctx_it != _context_stores.end()) {
-                ctx_it->second.decrement_schema_count();
+                ctx_it->second.decrement_schema_count(
+                  it->second.definition.type());
             }
             _schemas.erase(it);
         }
@@ -1185,15 +1189,22 @@ private:
         schema_id _next_schema_id{1};
         bool _materialized{false};
 
-        void increment_schema_count() { _schema_count++; }
+        void increment_schema_count(const schema_type type) {
+            _schema_counts[type]++;
+        }
 
-        void decrement_schema_count() {
-            if (_schema_count > 0) {
-                _schema_count--;
+        void decrement_schema_count(const schema_type type) {
+            auto& count = _schema_counts[type];
+            if (count > 0) {
+                count--;
             }
         }
 
-        void clear_schema_count() { _schema_count = 0; }
+        void clear_schema_count() {
+            for (auto& [_, count] : _schema_counts) {
+                count = 0;
+            }
+        }
 
         void increment_subject_count(is_deleted deleted) {
             if (deleted == is_deleted::yes) {
@@ -1234,7 +1245,10 @@ private:
     private:
         metrics::internal_metric_groups _metrics;
         metrics::public_metric_groups _public_metrics;
-        size_t _schema_count{0};
+        absl::flat_hash_map<schema_type, size_t> _schema_counts{
+          {schema_type::avro, 0},
+          {schema_type::json, 0},
+          {schema_type::protobuf, 0}};
         size_t _subject_count_not_deleted{0};
         size_t _subject_count_deleted{0};
 
@@ -1243,12 +1257,13 @@ private:
             auto group_name = prometheus_sanitize::metrics_name(
               "schema_registry_cache");
 
-            const auto make_schema_count = [this, &ctx]() {
+            const auto make_schema_count = [this, &ctx](schema_type type) {
                 return sm::make_gauge(
                   "schema_count",
-                  [this] { return _schema_count; },
-                  sm::description("The number of schemas in the store"),
-                  {sm::label{"context"}(ctx)});
+                  [this, type] { return _schema_counts.at(type); },
+                  sm::description("The number of schemas in the store by type"),
+                  {sm::label{"context"}(ctx),
+                   sm::label{"type"}(to_string_view(type))});
             };
 
             const auto make_subject_count = [this, &ctx](is_deleted deleted) {
@@ -1266,7 +1281,9 @@ private:
             if (!config::shard_local_cfg().disable_metrics()) {
                 _metrics.add_group(
                   group_name,
-                  {make_schema_count(),
+                  {make_schema_count(schema_type::avro),
+                   make_schema_count(schema_type::json),
+                   make_schema_count(schema_type::protobuf),
                    make_subject_count(is_deleted::no),
                    make_subject_count(is_deleted::yes)},
                   {},
@@ -1276,7 +1293,12 @@ private:
             if (!config::shard_local_cfg().disable_public_metrics()) {
                 _public_metrics.add_group(
                   group_name,
-                  {make_schema_count().aggregate({sm::shard_label}),
+                  {make_schema_count(schema_type::avro)
+                     .aggregate({sm::shard_label}),
+                   make_schema_count(schema_type::json)
+                     .aggregate({sm::shard_label}),
+                   make_schema_count(schema_type::protobuf)
+                     .aggregate({sm::shard_label}),
                    make_subject_count(is_deleted::no)
                      .aggregate({sm::shard_label}),
                    make_subject_count(is_deleted::yes)

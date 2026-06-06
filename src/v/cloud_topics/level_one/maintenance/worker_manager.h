@@ -11,6 +11,7 @@
 #pragma once
 
 #include "cloud_topics/level_one/common/file_io.h"
+#include "cloud_topics/level_one/maintenance/compaction/compaction_queue.h"
 #include "cloud_topics/level_one/maintenance/logger.h"
 #include "cloud_topics/level_one/maintenance/meta.h"
 #include "cloud_topics/level_one/maintenance/scheduler_probe.h"
@@ -40,7 +41,7 @@ public:
     static constexpr ss::shard_id worker_manager_shard = 0;
 
     worker_manager(
-      log_compaction_queue&,
+      compaction_queue&,
       ss::sharded<file_io>*,
       ss::sharded<replicated_metastore>*,
       ss::sharded<cluster::metadata_cache>*,
@@ -56,14 +57,14 @@ public:
     // be invoked during application shutdown.
     ss::future<> stop();
 
-    // Returns the top entry of `_work_queue`, if it is not empty, and sets
-    // inflight state for the provided shard & CTP. Returns `std::nullopt` if
-    // the `_work_queue` is empty.
-    std::optional<foreign_log_compaction_meta_ptr>
-      try_acquire_work(ss::shard_id);
+    // Returns the top job of `_compaction_queue`, if it is not empty, and marks
+    // the provided shard as compacting that job's CTP. Returns `std::nullopt`
+    // if the `_compaction_queue` is empty.
+    std::optional<foreign_compaction_job_ptr>
+      try_acquire_compaction_work(ss::shard_id);
 
-    // Resets inflight state for the provided CTP.
-    void complete_work(log_compaction_meta*);
+    // Clears the inflight shard for the completed job's CTP.
+    void complete_compaction_work(compaction_job*);
 
     // If an inflight compaction job for the provided log exists, a signal is
     // sent to the worker shard on which the job is occurring to request an
@@ -79,8 +80,8 @@ public:
     void request_stop_compaction(log_compaction_meta_ptr);
 
     // Alert all workers that new jobs have become available in the
-    // `_work_queue`.
-    ss::future<> alert_workers();
+    // `_compaction_queue`.
+    ss::future<> alert_compaction_workers();
 
     // Pauses the worker on the provided shard.
     ss::future<> pause_worker(ss::shard_id);
@@ -93,7 +94,7 @@ private:
     friend class ::SchedulerTestFixture;
 
     // Owned by `scheduler`.
-    log_compaction_queue& _work_queue;
+    compaction_queue& _compaction_queue;
 
     // Owned by `app`.
     ss::sharded<file_io>* _io;

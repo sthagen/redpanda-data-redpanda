@@ -137,13 +137,17 @@ partition_balancer_state::apply_snapshot(const controller_snapshot& snap) {
 
 partition_balancer_state::probe::probe(const partition_balancer_state& parent)
   : _parent(parent) {
-    if (
-      config::shard_local_cfg().disable_metrics() || ss::this_shard_id() != 0) {
+    if (ss::this_shard_id() != 0) {
         return;
     }
 
-    setup_metrics(_metrics);
-    setup_metrics(_public_metrics);
+    const auto& cfg = config::shard_local_cfg();
+    if (!cfg.disable_metrics()) {
+        setup_metrics(_metrics);
+    }
+    if (!cfg.disable_public_metrics()) {
+        setup_metrics(_public_metrics);
+    }
 }
 
 void partition_balancer_state::probe::setup_metrics(

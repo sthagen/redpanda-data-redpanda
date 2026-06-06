@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "base/vassert.h"
 #include "cloud_topics/level_one/frontend_reader/tests/l1_reader_fixture.h"
 #include "cloud_topics/level_one/maintenance/log_info_collector.h"
 #include "cloud_topics/level_one/maintenance/scheduler.h"
@@ -71,6 +72,24 @@ public:
           &l1::compaction_worker::start);
         scheduler->start_bg_loop();
         co_return;
+    }
+
+    // Marks a managed CTP as queued for compaction and pushes it into the
+    // scheduler's compaction queue, as the info collector would.
+    void enqueue_for_compaction(const model::topic_id_partition& tidp) {
+        auto it = scheduler->_logs.find(tidp);
+        vassert(it != scheduler->_logs.end(), "CTP {} is not managed", tidp);
+        scheduler->_compaction_queue.push(
+          ss::make_lw_shared<l1::compaction_job>(
+            *it, l1::compaction_info_and_timestamp{}));
+    }
+
+    bool compaction_queue_contains(const model::topic_id_partition& tidp) {
+        return scheduler->_compaction_queue.contains(tidp);
+    }
+
+    size_t compaction_queue_size() {
+        return scheduler->_compaction_queue.size();
     }
 
     ss::future<> pause_worker(ss::shard_id shard) {

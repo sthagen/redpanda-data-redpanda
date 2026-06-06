@@ -28,27 +28,21 @@ public:
     scheduling_policy& operator=(scheduling_policy&&) noexcept = default;
     virtual ~scheduling_policy() = default;
 
-    virtual cmp_t get_comparator() const noexcept = 0;
+    virtual compaction_cmp_t get_comparator() const noexcept = 0;
 };
 
 // Compacts partitions from highest dirty ratio (the ratio of unclean bytes in
 // the log to the total log size) to lowest.
 class dirty_ratio_scheduling_policy : public scheduling_policy {
 public:
-    cmp_t get_comparator() const noexcept final;
+    compaction_cmp_t get_comparator() const noexcept final;
 
 private:
     struct sort_policy {
         static bool operator()(
-          const log_compaction_meta_ptr& a,
-          const log_compaction_meta_ptr& b) noexcept {
-            vassert(
-              a->compaction.info_and_ts.has_value()
-                && b->compaction.info_and_ts.has_value(),
-              "Sorting policy applied to logs without compaction.info_and_ts "
-              "assigned- concurrency issue?");
-            return a->compaction.info_and_ts->info.dirty_ratio
-                   < b->compaction.info_and_ts->info.dirty_ratio;
+          const compaction_job_ptr& a, const compaction_job_ptr& b) noexcept {
+            return a->info_and_ts.info.dirty_ratio
+                   < b->info_and_ts.info.dirty_ratio;
         }
     };
 };
@@ -57,20 +51,14 @@ private:
 // the first uncompacted record) to lowest.
 class compaction_lag_scheduling_policy : public scheduling_policy {
 public:
-    cmp_t get_comparator() const noexcept final;
+    compaction_cmp_t get_comparator() const noexcept final;
 
 private:
     struct sort_policy {
         static bool operator()(
-          const log_compaction_meta_ptr& a,
-          const log_compaction_meta_ptr& b) noexcept {
-            vassert(
-              a->compaction.info_and_ts.has_value()
-                && b->compaction.info_and_ts.has_value(),
-              "Sorting policy applied to logs without compaction.info_and_ts "
-              "assigned- concurrency issue?");
-            return a->compaction.info_and_ts->info.earliest_dirty_ts
-                   > b->compaction.info_and_ts->info.earliest_dirty_ts;
+          const compaction_job_ptr& a, const compaction_job_ptr& b) noexcept {
+            return a->info_and_ts.info.earliest_dirty_ts
+                   > b->info_and_ts.info.earliest_dirty_ts;
         }
     };
 };

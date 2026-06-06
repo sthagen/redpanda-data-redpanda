@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "config/configuration.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "serde/envelope.h"
@@ -61,12 +62,20 @@ struct levelable_range
 //
 //   - Undersized extent: extend (or open) the active range.
 //   - Healthy extent: close the active range.
+//   - When the active range reaches `max_acceptable_range_bytes` after
+//     extending, commit it and start a fresh range with the next undersized
+//     extent. This caps each leveling job's work to a bounded size so it
+//     fits within a single output L1 object, runs in seconds rather than
+//     minutes, and can be soft-stopped at coarse-grained boundaries without
+//     wasting hours of upload work.
 //   - On close: commit the range only if it contains more than one
 //     extent (K > 1), as singleton runs can't reduce extent count.
 class leveling_range_builder {
 public:
     explicit leveling_range_builder(size_t min_acceptable_extent_bytes)
-      : _min_acceptable_extent_bytes(min_acceptable_extent_bytes) {}
+      : _min_acceptable_extent_bytes(min_acceptable_extent_bytes)
+      , _max_acceptable_range_bytes(
+          config::shard_local_cfg().cloud_topics_leveling_max_range_bytes()) {}
 
     // Processes a single extent.
     void process_extent(kafka::offset base, kafka::offset last, size_t len) {
@@ -82,6 +91,11 @@ public:
         _range->last = last;
         _range->bytes += len;
         _range->extent_count += 1;
+
+        // Cap per-range bytes so each leveling job stays bounded.
+        if (_range->bytes >= _max_acceptable_range_bytes) {
+            maybe_commit_range();
+        }
     }
 
     // Commit any pending range and return the accumulated ranges. Must
@@ -116,6 +130,7 @@ private:
     }
 
     size_t _min_acceptable_extent_bytes;
+    size_t _max_acceptable_range_bytes;
     std::optional<in_progress_range> _range;
     chunked_vector<levelable_range> _ranges;
 };

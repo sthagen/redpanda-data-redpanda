@@ -192,7 +192,10 @@ ss::future<> l1_object_sink::flush(kafka::offset object_last_offset) {
           finish_res.error());
         std::ignore = _metadata_builder->remove_pending_object(oid);
         _any_object_failed = true;
+        co_return;
     }
+
+    ++_output_objects;
 }
 
 ss::future<> l1_object_sink::prepare_iteration(kafka::offset next_extent_base) {

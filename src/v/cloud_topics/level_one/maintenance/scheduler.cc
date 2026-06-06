@@ -54,7 +54,7 @@ compaction_scheduler::compaction_scheduler(
   , _compaction_interval(
       config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {
-    _compaction_interval.watch([this]() { _sem.signal(); });
+    _compaction_interval.watch([this]() { _compaction_sem.signal(); });
 }
 
 compaction_scheduler::compaction_scheduler(log_info_collector info_collector)
@@ -65,7 +65,7 @@ compaction_scheduler::compaction_scheduler(log_info_collector info_collector)
   , _compaction_interval(
       config::shard_local_cfg().cloud_topics_compaction_interval_ms.bind())
   , _compaction_queue(_scheduling_policy->get_comparator()) {
-    _compaction_interval.watch([this]() { _sem.signal(); });
+    _compaction_interval.watch([this]() { _compaction_sem.signal(); });
 }
 
 bool compaction_scheduler::is_managed(const model::ntp& ntp) const noexcept {
@@ -84,17 +84,12 @@ void compaction_scheduler::manage_partition(
   const model::topic_id_partition& tidp,
   std::string_view ctx) {
     vlog(
-      compaction_log.info,
-      "Asked to manage compacted CTP: {}/{} ({})",
-      ntp,
-      tidp,
-      ctx);
+      compaction_log.info, "Asked to manage CTP: {}/{} ({})", ntp, tidp, ctx);
     auto [it, success] = _logs.insert(
       ss::make_lw_shared<log_compaction_meta>(tidp, ntp));
     _logs_list.push_back(*it->get());
     _ntp_to_tidp.emplace(ntp, tidp);
-    vassert(
-      success, "Could not manage compacted CTP {} (concurrency issue?)", ntp);
+    vassert(success, "Could not manage CTP {} (concurrency issue?)", ntp);
     _probe.set_log_count(_logs.size());
 }
 
@@ -102,32 +97,27 @@ void compaction_scheduler::unmanage_partition(
   const model::ntp& ntp, std::string_view ctx) {
     auto tidp_entry = _ntp_to_tidp.extract(ntp);
     if (!tidp_entry.has_value()) {
-        vassert(
-          false,
-          "Could not unmanage compacted CTP {} (concurrency issue?)",
-          ntp);
+        vassert(false, "Could not unmanage CTP {} (concurrency issue?)", ntp);
     }
 
     auto& tidp = tidp_entry->second;
 
-    vlog(
-      compaction_log.info,
-      "Asked to unmanage compacted CTP: {} ({})",
-      ntp,
-      ctx);
+    vlog(compaction_log.info, "Asked to unmanage CTP: {} ({})", ntp, ctx);
 
     auto handle_opt = _logs.extract(tidp);
     if (!handle_opt) {
-        vassert(
-          false,
-          "Could not unmanage compacted CTP {} (concurrency issue?)",
-          ntp);
+        vassert(false, "Could not unmanage CTP {} (concurrency issue?)", ntp);
     }
 
     auto handle = std::move(handle_opt).value();
 
+    // Evict any queued (non-inflight) compaction entry for this CTP so it does
+    // not linger in the queue holding the meta alive. An inflight log is not in
+    // the queue (it was popped on dispatch); it is stopped below.
+    _compaction_queue.clear(tidp);
+
     // Manually unlink here to ensure that if the handle also exists in the
-    // `log_compaction_queue`, `is_linked()` still returns `false` when it is
+    // `compaction_queue`, `is_linked()` still returns `false` when it is
     // eventually considered for compaction.
     handle->link.unlink();
 
@@ -140,7 +130,7 @@ void compaction_scheduler::unmanage_partition(
 
 void compaction_scheduler::start_bg_loop() {
     ssx::repeat_until_gate_closed_or_aborted(_gate, _as, [this] {
-        return scheduling_loop().handle_exception(
+        return compaction_scheduling_loop().handle_exception(
           [](const std::exception_ptr& e) {
               auto log_level = ssx::is_shutdown_exception(e)
                                  ? ss::log_level::debug
@@ -154,13 +144,14 @@ void compaction_scheduler::start_bg_loop() {
     });
 }
 
-ss::future<> compaction_scheduler::scheduling_loop() {
+ss::future<> compaction_scheduler::compaction_scheduling_loop() {
     vlog(compaction_log.debug, "Starting compaction scheduling loop");
     while (!_gate.is_closed() && !_as.abort_requested()) {
         auto compaction_interval = _compaction_interval();
         try {
-            co_await _sem.wait(
-              _compaction_interval(), std::max(_sem.current(), size_t(1)));
+            co_await _compaction_sem.wait(
+              _compaction_interval(),
+              std::max(_compaction_sem.current(), size_t(1)));
         } catch (const ss::semaphore_timed_out&) {
             // Fall through
         }
@@ -175,7 +166,7 @@ ss::future<> compaction_scheduler::scheduling_loop() {
         co_await _log_info_collector.collect_compaction_info(
           _logs, _logs_list, _compaction_queue);
 
-        co_await _worker_manager.alert_workers();
+        co_await _worker_manager.alert_compaction_workers();
     }
 }
 
@@ -189,7 +180,7 @@ ss::future<> compaction_scheduler::start() {
 ss::future<> compaction_scheduler::stop() {
     vlog(compaction_log.debug, "Stopping compaction scheduling loop");
     _as.request_abort();
-    _sem.broken();
+    _compaction_sem.broken();
 
     // Stop making new jobs.
     auto close_fut = _gate.close();

@@ -8,6 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_topics/level_one/maintenance/compaction/compaction_queue.h"
+#include "cloud_topics/level_one/maintenance/leveling/leveling_queue.h"
 #include "cloud_topics/level_one/maintenance/meta.h"
 #include "cloud_topics/level_one/maintenance/scheduler_probe.h"
 #include "cloud_topics/level_one/maintenance/scheduling_policies.h"
@@ -48,14 +50,19 @@ public:
     work_fut_has_value(l1::worker_manager& manager, ss::shard_id shard) {
         return manager._workers.invoke_on(
           shard, [](l1::compaction_worker& worker) {
-              return worker._work_fut.has_value();
+              return worker._compaction_work_fut.has_value();
           });
     }
 };
 
 TEST_F(WorkerManagerTestFixture, PauseAndResumeWorkers) {
+    auto cmp_func =
+      [](const l1::compaction_job_ptr& a, const l1::compaction_job_ptr& b) {
+          return a->meta->ntp < b->meta->ntp;
+      };
+
     l1::compaction_scheduler_probe probe;
-    l1::log_compaction_queue pq;
+    l1::compaction_queue pq(std::move(cmp_func));
     l1::worker_manager manager(pq, nullptr, nullptr, nullptr, probe, nullptr);
     start_workers(manager).get();
     auto stop_manager = ss::defer([&manager] { manager.stop().get(); });
@@ -78,14 +85,13 @@ TEST_F(WorkerManagerTestFixture, PauseAndResumeWorkers) {
 }
 
 TEST_F(WorkerManagerTestFixture, AcquireWork) {
-    auto cmp_func = [](
-                      const l1::log_compaction_meta_ptr& a,
-                      const l1::log_compaction_meta_ptr& b) {
-        return a->ntp < b->ntp;
-    };
+    auto cmp_func =
+      [](const l1::compaction_job_ptr& a, const l1::compaction_job_ptr& b) {
+          return a->meta->ntp < b->meta->ntp;
+      };
 
     l1::compaction_scheduler_probe probe;
-    l1::log_compaction_queue pq(std::move(cmp_func));
+    l1::compaction_queue pq(std::move(cmp_func));
     l1::log_list_t list;
     l1::worker_manager manager(pq, nullptr, nullptr, nullptr, probe, nullptr);
     auto stop_manager = ss::defer([&manager] { manager.stop().get(); });
@@ -97,28 +103,27 @@ TEST_F(WorkerManagerTestFixture, AcquireWork) {
     auto meta = ss::make_lw_shared<l1::log_compaction_meta>(
       test_tidp, test_ntp);
     list.push_back(*meta);
-    using status = l1::log_compaction_state::status;
-    meta->compaction.s = status::queued;
-    pq.emplace(meta);
+    auto job = ss::make_lw_shared<l1::compaction_job>(
+      meta, l1::compaction_info_and_timestamp{});
+    pq.push(job);
 
-    auto work_opt = manager.try_acquire_work(ss::this_shard_id());
+    auto work_opt = manager.try_acquire_compaction_work(ss::this_shard_id());
     ASSERT_TRUE(work_opt.has_value());
-    ASSERT_EQ(work_opt.value()->ntp, test_ntp);
-    ASSERT_EQ(work_opt.value()->tidp, test_tidp);
-    ASSERT_TRUE(work_opt.value()->compaction.inflight_shard.has_value());
-    ASSERT_EQ(work_opt.value()->compaction.s, status::inflight);
+    ASSERT_EQ(work_opt.value()->meta->ntp, test_ntp);
+    ASSERT_EQ(work_opt.value()->meta->tidp, test_tidp);
+    ASSERT_TRUE(work_opt.value()->meta->compaction.inflight_shard.has_value());
     ASSERT_EQ(
-      work_opt.value()->compaction.inflight_shard.value(), ss::this_shard_id());
+      work_opt.value()->meta->compaction.inflight_shard.value(),
+      ss::this_shard_id());
 
-    manager.complete_work(work_opt.value().get());
-    ASSERT_FALSE(work_opt.value()->compaction.inflight_shard.has_value());
-    ASSERT_EQ(work_opt.value()->compaction.s, status::idle);
+    manager.complete_compaction_work(work_opt.value().get());
+    ASSERT_FALSE(work_opt.value()->meta->compaction.inflight_shard.has_value());
 }
 
 // Verifies that `dirty_ratio_scheduling_policy` orders partitions from
 // highest `dirty_ratio` to lowest.
 TEST(DirtyRatioSchedulingPolicyTest, OrdersHighestDirtyRatioFirst) {
-    auto make_meta = [](std::string_view topic_name, double ratio) {
+    auto make_job = [](std::string_view topic_name, double ratio) {
         auto ntp = model::ntp(
           model::ns("kafka"),
           model::topic(ss::sstring{topic_name}),
@@ -126,36 +131,37 @@ TEST(DirtyRatioSchedulingPolicyTest, OrdersHighestDirtyRatioFirst) {
         auto tidp = model::topic_id_partition(
           model::topic_id(uuid_t::create()), ntp.tp.partition);
         auto m = ss::make_lw_shared<l1::log_compaction_meta>(tidp, ntp);
-        m->compaction.info_and_ts = l1::compaction_info_and_timestamp{
-          .info = {.dirty_ratio = ratio},
-          .collected_at = model::timestamp::now(),
-          .max_compactible_offset = kafka::offset::max(),
-        };
-        return m;
+        return ss::make_lw_shared<l1::compaction_job>(
+          std::move(m),
+          l1::compaction_info_and_timestamp{
+            .info = {.dirty_ratio = ratio},
+            .collected_at = model::timestamp::now(),
+            .max_compactible_offset = kafka::offset::max(),
+          });
     };
 
-    auto low = make_meta("low", 0.1);
-    auto mid = make_meta("mid", 0.5);
-    auto high = make_meta("high", 0.9);
+    auto low = make_job("low", 0.1);
+    auto mid = make_job("mid", 0.5);
+    auto high = make_job("high", 0.9);
 
     l1::dirty_ratio_scheduling_policy policy;
-    l1::log_compaction_queue q(policy.get_comparator());
+    l1::compaction_queue q(policy.get_comparator());
     q.push(low);
     q.push(mid);
     q.push(high);
 
     // Pop order should be: most dirty -> least dirty.
-    ASSERT_DOUBLE_EQ(q.top()->compaction.info_and_ts->info.dirty_ratio, 0.9);
+    ASSERT_DOUBLE_EQ(q.top()->info_and_ts.info.dirty_ratio, 0.9);
     q.pop();
-    ASSERT_DOUBLE_EQ(q.top()->compaction.info_and_ts->info.dirty_ratio, 0.5);
+    ASSERT_DOUBLE_EQ(q.top()->info_and_ts.info.dirty_ratio, 0.5);
     q.pop();
-    ASSERT_DOUBLE_EQ(q.top()->compaction.info_and_ts->info.dirty_ratio, 0.1);
+    ASSERT_DOUBLE_EQ(q.top()->info_and_ts.info.dirty_ratio, 0.1);
 }
 
 // Verifies that `compaction_lag_scheduling_policy` orders partitions from
 // highest lag (oldest `earliest_dirty_ts`) to lowest (most recent).
 TEST(CompactionLagSchedulingPolicyTest, OrdersHighestLagFirst) {
-    auto make_meta = [](std::string_view topic_name, model::timestamp ts) {
+    auto make_job = [](std::string_view topic_name, model::timestamp ts) {
         auto ntp = model::ntp(
           model::ns("kafka"),
           model::topic(ss::sstring{topic_name}),
@@ -163,37 +169,35 @@ TEST(CompactionLagSchedulingPolicyTest, OrdersHighestLagFirst) {
         auto tidp = model::topic_id_partition(
           model::topic_id(uuid_t::create()), ntp.tp.partition);
         auto m = ss::make_lw_shared<l1::log_compaction_meta>(tidp, ntp);
-        m->compaction.info_and_ts = l1::compaction_info_and_timestamp{
-          .info = {.earliest_dirty_ts = ts},
-          .collected_at = model::timestamp::now(),
-          .max_compactible_offset = kafka::offset::max(),
-        };
-        return m;
+        return ss::make_lw_shared<l1::compaction_job>(
+          std::move(m),
+          l1::compaction_info_and_timestamp{
+            .info = {.earliest_dirty_ts = ts},
+            .collected_at = model::timestamp::now(),
+            .max_compactible_offset = kafka::offset::max(),
+          });
     };
 
     // Smaller timestamp = older = higher lag.
-    auto old_log = make_meta("old", model::timestamp{1000});
-    auto mid_log = make_meta("mid", model::timestamp{5000});
-    auto new_log = make_meta("new", model::timestamp{9000});
+    auto old_log = make_job("old", model::timestamp{1000});
+    auto mid_log = make_job("mid", model::timestamp{5000});
+    auto new_log = make_job("new", model::timestamp{9000});
 
     l1::compaction_lag_scheduling_policy policy;
-    l1::log_compaction_queue q(policy.get_comparator());
+    l1::compaction_queue q(policy.get_comparator());
     q.push(mid_log);
     q.push(new_log);
     q.push(old_log);
 
     // Pop order should be: oldest (highest lag) -> newest (lowest lag).
     ASSERT_EQ(
-      q.top()->compaction.info_and_ts->info.earliest_dirty_ts,
-      model::timestamp{1000});
+      q.top()->info_and_ts.info.earliest_dirty_ts, model::timestamp{1000});
     q.pop();
     ASSERT_EQ(
-      q.top()->compaction.info_and_ts->info.earliest_dirty_ts,
-      model::timestamp{5000});
+      q.top()->info_and_ts.info.earliest_dirty_ts, model::timestamp{5000});
     q.pop();
     ASSERT_EQ(
-      q.top()->compaction.info_and_ts->info.earliest_dirty_ts,
-      model::timestamp{9000});
+      q.top()->info_and_ts.info.earliest_dirty_ts, model::timestamp{9000});
 }
 
 // Verifies that `leveling_extent_reclamation_policy` orders jobs by

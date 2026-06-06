@@ -74,7 +74,6 @@ ss::future<> do_level(
       io,
       as,
       state,
-      probe,
       test_ctxlog);
     auto sink = std::make_unique<l1::leveling_sink>(
       tidp,
@@ -84,6 +83,7 @@ ss::future<> do_level(
       as,
       config::mock_binding<size_t>(max_object_size),
       test_upload_part_size,
+      probe,
       test_ctxlog);
 
     auto reducer = compaction::sliding_window_reducer(
@@ -296,7 +296,6 @@ TEST_F(LevelingReducerTest, HardStopPreempts) {
       &_io,
       as,
       state,
-      probe,
       test_ctxlog);
     auto sink = std::make_unique<l1::leveling_sink>(
       tidp,
@@ -306,6 +305,7 @@ TEST_F(LevelingReducerTest, HardStopPreempts) {
       as,
       config::mock_binding<size_t>(128_MiB),
       test_upload_part_size,
+      probe,
       test_ctxlog);
 
     auto reducer = compaction::sliding_window_reducer(
@@ -353,7 +353,6 @@ TEST_F(LevelingReducerTest, EmptyLevelingRangesIsNoOp) {
       &_io,
       as,
       state,
-      probe,
       test_ctxlog);
     auto sink = std::make_unique<l1::leveling_sink>(
       tidp,
@@ -363,6 +362,7 @@ TEST_F(LevelingReducerTest, EmptyLevelingRangesIsNoOp) {
       as,
       config::mock_binding<size_t>(128_MiB),
       test_upload_part_size,
+      probe,
       test_ctxlog);
 
     bool initialized = sink->initialize(*src).get();

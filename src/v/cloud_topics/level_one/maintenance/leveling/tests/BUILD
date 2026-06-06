@@ -1,4 +1,36 @@
-load("//bazel:test.bzl", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest")
+
+redpanda_cc_gtest(
+    name = "leveling_queue_test",
+    timeout = "short",
+    srcs = ["leveling_queue_test.cc"],
+    cpu = 1,
+    deps = [
+        "//src/v/cloud_topics/level_one/maintenance:meta",
+        "//src/v/cloud_topics/level_one/maintenance/leveling:leveling_queue",
+        "//src/v/cloud_topics/level_one/metastore",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "leveling_queue_rpbench",
+    timeout = "short",
+    srcs = ["leveling_queue_bench.cc"],
+    deps = [
+        "//src/v/cloud_topics/level_one/maintenance:meta",
+        "//src/v/cloud_topics/level_one/maintenance/leveling:leveling_queue",
+        "//src/v/cloud_topics/level_one/metastore",
+        "//src/v/container:chunked_vector",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "@seastar",
+        "@seastar//:benchmark",
+    ],
+)
 
 redpanda_cc_gtest(
     name = "leveling_reducer_test",

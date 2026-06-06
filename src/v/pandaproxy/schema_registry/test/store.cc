@@ -13,6 +13,7 @@
 #include "pandaproxy/schema_registry/test/compatibility_avro.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/schema_registry/util.h"
+#include "test_utils/metrics.h"
 
 #include <boost/test/unit_test.hpp>
 
@@ -1232,4 +1233,47 @@ BOOST_AUTO_TEST_CASE(test_store_context_materialized) {
     contexts = s.get_materialized_contexts();
     BOOST_REQUIRE_EQUAL(contexts.size(), 1);
     BOOST_REQUIRE_EQUAL(contexts[0], pps::default_context);
+}
+
+BOOST_AUTO_TEST_CASE(test_store_schema_count_metrics) {
+    pps::store s;
+
+    auto schema_count = [](pps::schema_type type) {
+        auto val = test_utils::find_metric_value<uint64_t>(
+          "schema_registry_cache_schema_count",
+          ss::metrics::default_handle(),
+          {{"context", "."}, {"type", ss::sstring(pps::to_string_view(type))}});
+        BOOST_REQUIRE(val.has_value());
+        return *val;
+    };
+
+    const auto json_def = pps::schema_definition{
+      pps::schema_definition::raw_string{R"({})"}, pps::schema_type::json};
+    const auto proto_def = pps::schema_definition{
+      pps::schema_definition::raw_string{R"(syntax = "proto3";)"},
+      pps::schema_type::protobuf};
+
+    // Insert one AVRO schema; only the AVRO counter increments.
+    s.insert({subject0, string_def0.share()});
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::avro), 1u);
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::json), 0u);
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::protobuf), 0u);
+
+    // A duplicate insert (same schema, different subject) does not increment.
+    s.insert({subject1, string_def0.share()});
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::avro), 1u);
+
+    // Insert JSON and PROTOBUF schemas; each counter increments independently.
+    s.insert({subject1, json_def.share()});
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::json), 1u);
+
+    s.insert({subject2, proto_def.share()});
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::protobuf), 1u);
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::avro), 1u);
+
+    // Deleting a schema decrements only its type counter.
+    s.delete_schema({pps::default_context, pps::schema_id{1}});
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::avro), 0u);
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::json), 1u);
+    BOOST_CHECK_EQUAL(schema_count(pps::schema_type::protobuf), 1u);
 }

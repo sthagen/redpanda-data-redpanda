@@ -29,6 +29,11 @@ build --linkopt -stdlib=libc++
 # (it has `python` version 3 but Bazel uses the `python3` executable).
 common --@rules_python//python/config_settings:bootstrap_impl=script
 
+# Redpanda's only Java consumer is the iceberg-rest-catalog gradle genrule.
+# Without this flag the JDK defaults to local_jdk, found on the host's
+# PATH/JAVA_HOME, so the build breaks on hosts without a system JDK (e.g. CI).
+common --java_runtime_version=remotejdk_21
+
 # By default build without CGO
 build --@rules_go//go/config:pure
 

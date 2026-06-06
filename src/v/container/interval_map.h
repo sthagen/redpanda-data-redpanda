@@ -95,6 +95,13 @@ public:
     [[nodiscard]] const_iterator find(T index) const;
 
     /**
+     * Return true if any stored interval overlaps [start, start+length).
+     *
+     * A non-positive length never overlaps.
+     */
+    [[nodiscard]] bool overlaps(interval interval) const;
+
+    /**
      * Return an iterator to the first entry in the map.
      *
      * If the map is empty then end() is returned.
@@ -207,6 +214,41 @@ interval_map<T, V>::const_iterator interval_map<T, V>::find(T index) const {
     }
 
     return map_.cend();
+}
+
+template<std::integral T, typename V>
+bool interval_map<T, V>::overlaps(interval interval) const {
+    const auto length = interval.length;
+    if (length <= 0) {
+        return false;
+    }
+
+    const auto start = interval.start;
+    const auto end = start + length;
+
+    auto it = map_.lower_bound(start);
+    if (it == map_.end()) {
+        // All intervals start before `start`; the rightmost one overlaps iff
+        // its end edge extends past `start`.
+        if (map_.empty()) {
+            return false;
+        }
+        it = std::prev(it);
+        return it->first.end > start;
+    }
+
+    // `it` is the first interval with start >= `start`; it overlaps iff our
+    // interval reaches into it.
+    if (end > it->first.start) {
+        return true;
+    }
+
+    // Otherwise the only candidate is the interval immediately to the left.
+    if (it == map_.begin()) {
+        return false;
+    }
+    it = std::prev(it);
+    return it->first.end > start;
 }
 
 template<std::integral T, typename V>

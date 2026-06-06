@@ -21,6 +21,22 @@
 using namespace cloud_topics;
 using namespace std::chrono_literals;
 
+// Unmanaging a CTP that is queued for compaction should evict its entry from
+// the `compaction_queue`, rather than leaving a stale pointer to linger until
+// it eventually bubbles to the top.
+TEST_F(SchedulerTestFixture, UnmanageEvictsQueuedEntry) {
+    auto [ntp, tidp] = make_ntidp("evict-me");
+    scheduler->manage_partition(ntp, tidp, "test");
+
+    // Simulate the info collector having enqueued this CTP for compaction.
+    enqueue_for_compaction(tidp);
+    ASSERT_TRUE(compaction_queue_contains(tidp));
+
+    scheduler->unmanage_partition(ntp, "test");
+    ASSERT_FALSE(compaction_queue_contains(tidp));
+    ASSERT_EQ(compaction_queue_size(), 0u);
+}
+
 // This test produces data and stresses concurrent addition and removal of ntps
 // to the compaction_scheduler, as well as pausing and resuming of a single
 // worker (test is built with cpu = 1).

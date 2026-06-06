@@ -58,6 +58,19 @@ void compaction_worker_probe::setup_metrics() {
           sm::description(
             "The duration of a compaction run for cloud topic partitions on "
             "this shard")),
+        sm::make_histogram(
+          "leveling_duration_microseconds",
+          [this] { return _leveling_runs.internal_histogram_logform(); },
+          sm::description(
+            "The duration of a leveling-range rewrite for cloud topic "
+            "partitions on this shard")),
+        sm::make_counter(
+          "leveling_extents_reclaimed_total",
+          [this] { return _leveling_extents_reclaimed; },
+          sm::description(
+            "Net reduction in object/extent count from committed leveling "
+            "ranges (input extents minus output objects) across all cloud "
+            "topic partitions on this shard")),
       });
 }
 

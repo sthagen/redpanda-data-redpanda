@@ -37,12 +37,18 @@ public:
     void set_compaction_queue_length(uint32_t compaction_queue_length) {
         _compaction_queue_length = compaction_queue_length;
     }
+    void set_leveling_queue_length(uint32_t leveling_queue_length) {
+        _leveling_queue_length = leveling_queue_length;
+    }
     void log_compacted() { ++_log_compactions; }
+    void leveling_range_completed() { ++_leveling_ranges_completed; }
 
 private:
     uint32_t _log_count{0};
     uint32_t _compaction_queue_length{0};
+    uint32_t _leveling_queue_length{0};
     uint64_t _log_compactions{0};
+    uint64_t _leveling_ranges_completed{0};
 
     metrics::internal_metric_groups _metrics;
 };

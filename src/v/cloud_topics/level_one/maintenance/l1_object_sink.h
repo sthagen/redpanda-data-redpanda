@@ -88,6 +88,10 @@ protected:
     // Tracks whether any upload failed during this job.
     bool _any_object_failed{false};
 
+    // Number of output L1 objects successfully registered with the metadata
+    // builder.
+    size_t _output_objects{0};
+
     // The L1 object currently being built via multipart upload.
     struct inflight_object_t {
         cloud_storage_clients::multipart_upload_ref upload;

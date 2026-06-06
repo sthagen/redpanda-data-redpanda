@@ -3,6 +3,19 @@ load("//bazel:build.bzl", "redpanda_cc_library")
 package(default_visibility = ["//src/v/cloud_topics/level_one:__subpackages__"])
 
 redpanda_cc_library(
+    name = "compaction_queue",
+    hdrs = [
+        "compaction_queue.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cloud_topics/level_one/maintenance:keyed_priority_queue",
+        "//src/v/cloud_topics/level_one/maintenance:meta",
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
     name = "compaction_filter",
     srcs = [
         "compaction_filter.cc",

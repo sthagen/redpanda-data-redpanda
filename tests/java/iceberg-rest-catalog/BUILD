@@ -19,6 +19,8 @@ genrule(
     cmd = """
         OUT_PATH=$$(realpath $(OUTS))
         GRADLE_BIN="$$PWD/$(location @gradle_dist//:bin/gradle)"
+        export JAVA_HOME="$$PWD/$(JAVABASE)"
+        export PATH="$$JAVA_HOME/bin:$$PATH"
         SRC_DIR=$$(dirname $(location build.gradle))
         export GRADLE_USER_HOME=$$(mktemp -d)
         cd $$SRC_DIR
@@ -30,5 +32,6 @@ genrule(
         cp build/libs/iceberg-rest-catalog-all.jar $$OUT_PATH
     """,
     tags = ["requires-network"],
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     visibility = ["//visibility:public"],
 )

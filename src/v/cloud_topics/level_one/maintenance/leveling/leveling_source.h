@@ -12,7 +12,6 @@
 
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/maintenance/meta.h"
-#include "cloud_topics/level_one/maintenance/worker_probe.h"
 #include "cloud_topics/level_one/metastore/leveling_range_builder.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "compaction/reducer.h"
@@ -36,7 +35,6 @@ public:
       io*,
       ss::abort_source&,
       compaction_job_state&,
-      compaction_worker_probe&,
       prefix_logger&);
 
     ss::future<> initialize() final;
@@ -69,7 +67,6 @@ private:
 
     ss::abort_source& _as;
     compaction_job_state& _state;
-    compaction_worker_probe& _probe;
     prefix_logger& _ctxlog;
 };
 

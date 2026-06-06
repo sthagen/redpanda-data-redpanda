@@ -16,7 +16,6 @@ from rptest.clients.default import DefaultClient
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import MetricsEndpoint, make_redpanda_service
-from rptest.tests.redpanda_test import RedpandaTest
 
 BOOTSTRAP_CONFIG = {
     "disable_metrics": False,
@@ -84,11 +83,11 @@ class MetricsTest(Test):
         assert len(metrics_pre_change) == len(metrics_pre_chanage_again)
 
 
-class DisableMetricsTest(RedpandaTest):
-    # Allowlist of Seastar metric group prefixes that are expected to
-    # remain on the internal endpoint even with disable_metrics=True.
-    # Any metric family not matching is a Redpanda application metric
-    # and should not be present.
+class DisableMetricsTest(Test):
+    # Group-name prefixes for metrics that Seastar registers on the internal
+    # endpoint and that legitimately remain even with disable_metrics=True.
+    # Any internal family not matching this is a Redpanda application metric
+    # and must not be present.
     SEASTAR_METRIC_RE = re.compile(
         r"^vectorized_("
         r"alien|"
@@ -102,47 +101,104 @@ class DisableMetricsTest(RedpandaTest):
         r")_"
     )
 
-    def __init__(self, test_ctx):
-        super().__init__(
-            test_ctx,
+    # Redpanda-owned metrics that match SEASTAR_METRIC_RE only because they
+    # share a group name with Seastar (available_memory registers under the
+    # "memory" group, see src/v/resource_mgmt/available_memory.cc). They are
+    # still Redpanda metrics and must obey the disable flags, so they count
+    # as leaks if present on a disabled endpoint despite matching the regex.
+    REDPANDA_METRICS_MATCHING_SEASTAR_RE = {
+        "vectorized_memory_available_memory",
+        "vectorized_memory_available_memory_low_water_mark",
+    }
+
+    def __init__(self, test_ctx, *args, **kwargs):
+        self.ctx = test_ctx
+        self.redpanda = None
+        super().__init__(test_ctx, *args, **kwargs)
+
+    def setUp(self):
+        pass
+
+    def start_redpanda(self, disable_metrics, disable_public_metrics):
+        self.redpanda = make_redpanda_service(
+            self.ctx,
             num_brokers=1,
             extra_rp_conf={
-                "disable_metrics": True,
-                "disable_public_metrics": True,
+                "disable_metrics": disable_metrics,
+                "disable_public_metrics": disable_public_metrics,
             },
+        )
+        self.redpanda.start()
+
+    def _is_allowed_internal(self, name):
+        return (
+            bool(self.SEASTAR_METRIC_RE.match(name))
+            and name not in self.REDPANDA_METRICS_MATCHING_SEASTAR_RE
+        )
+
+    def _redpanda_metrics(self, node, endpoint):
+        """Names of the Redpanda-owned metric families present on `endpoint`.
+
+        On the internal endpoint Seastar metrics legitimately remain, so they
+        are filtered out; the public endpoint only ever carries Redpanda
+        metrics, so every non-empty family counts.
+        """
+        families = self.redpanda.metrics(node, endpoint)
+        if endpoint == MetricsEndpoint.METRICS:
+            return [
+                f.name
+                for f in families
+                if f.samples and not self._is_allowed_internal(f.name)
+            ]
+        return [f.name for f in families if f.samples]
+
+    def _verify_endpoint_disabled(self, disabled_endpoint):
+        """Disable a single metrics endpoint and verify it is the only one
+        affected: it must carry no Redpanda metrics, while the other endpoint
+        keeps exposing them."""
+        enabled_endpoint = (
+            MetricsEndpoint.PUBLIC_METRICS
+            if disabled_endpoint == MetricsEndpoint.METRICS
+            else MetricsEndpoint.METRICS
+        )
+        self.start_redpanda(
+            disable_metrics=disabled_endpoint == MetricsEndpoint.METRICS,
+            disable_public_metrics=disabled_endpoint == MetricsEndpoint.PUBLIC_METRICS,
+        )
+        node = self.redpanda.nodes[0]
+
+        leaked = self._redpanda_metrics(node, disabled_endpoint)
+        for name in leaked:
+            self.redpanda.logger.debug(
+                f"leaked Redpanda metric on disabled "
+                f"{disabled_endpoint.value} endpoint: {name}"
+            )
+        assert len(leaked) == 0, (
+            f"disabling the {disabled_endpoint.value} endpoint did not suppress "
+            f"Redpanda metrics; leaked {len(leaked)} families: {leaked[:10]}"
+        )
+
+        present = self._redpanda_metrics(node, enabled_endpoint)
+        assert len(present) > 0, (
+            f"expected Redpanda metrics to remain on the "
+            f"{enabled_endpoint.value} endpoint, but found none"
         )
 
     @cluster(num_nodes=1)
-    def test_disable_metrics(self):
+    def test_disable_internal_metrics(self):
         """
-        Verify that starting Redpanda with both disable_metrics and
-        disable_public_metrics causes the internal endpoint to contain
-        only Seastar metrics (no Redpanda application metrics) and the
-        public endpoint to be completely empty.
+        With disable_metrics=True (and public metrics still enabled), the
+        internal /metrics endpoint must expose only Seastar metrics - no
+        Redpanda application metrics - while the public endpoint is
+        unaffected and still exposes Redpanda metrics.
         """
-        node = self.redpanda.nodes[0]
+        self._verify_endpoint_disabled(MetricsEndpoint.METRICS)
 
-        # Check internal metrics: only Seastar metrics should remain.
-        internal_families = self.redpanda.metrics(node, MetricsEndpoint.METRICS)
-        non_seastar = [
-            f.name
-            for f in internal_families
-            if f.samples and not self.SEASTAR_METRIC_RE.match(f.name)
-        ]
-        for name in non_seastar:
-            self.redpanda.logger.debug(f"unexpected internal metric family: {name}")
-        assert len(non_seastar) == 0, (
-            f"Expected only Seastar metrics on internal endpoint, "
-            f"got {len(non_seastar)} Redpanda metric families: "
-            f"{non_seastar[:10]}"
-        )
-
-        # Check public metrics: should be completely empty.
-        public_families = self.redpanda.metrics(node, MetricsEndpoint.PUBLIC_METRICS)
-        non_empty = [f.name for f in public_families if f.samples]
-        for name in non_empty:
-            self.redpanda.logger.debug(f"unexpected public metric family: {name}")
-        assert len(non_empty) == 0, (
-            f"Expected no public metrics, got {len(non_empty)} "
-            f"families: {non_empty[:10]}"
-        )
+    @cluster(num_nodes=1)
+    def test_disable_public_metrics(self):
+        """
+        With disable_public_metrics=True (and internal metrics still
+        enabled), the public endpoint must be completely empty while the
+        internal endpoint is unaffected and still exposes Redpanda metrics.
+        """
+        self._verify_endpoint_disabled(MetricsEndpoint.PUBLIC_METRICS)

@@ -1,6 +1,21 @@
 load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_cc_gtest(
+    name = "keyed_priority_queue_test",
+    timeout = "short",
+    srcs = [
+        "keyed_priority_queue_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/cloud_topics/level_one/maintenance:keyed_priority_queue",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "worker_manager_test",
     timeout = "short",
     srcs = [
@@ -11,6 +26,8 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_one/maintenance:scheduler_probe",
         "//src/v/cloud_topics/level_one/maintenance:scheduling_policies",
         "//src/v/cloud_topics/level_one/maintenance:worker",
+        "//src/v/cloud_topics/level_one/maintenance/compaction:compaction_queue",
+        "//src/v/cloud_topics/level_one/maintenance/leveling:leveling_queue",
         "//src/v/cluster:fwd",
         "//src/v/cluster:members_table",
         "//src/v/cluster:partition_leaders_table",
@@ -35,6 +52,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_one/maintenance:log_info_collector",
         "//src/v/cloud_topics/level_one/maintenance:meta",
         "//src/v/cloud_topics/level_one/maintenance:scheduling_policies",
+        "//src/v/cloud_topics/level_one/metastore:offset_interval_map",
         "//src/v/cluster:fwd",
         "//src/v/cluster:members_table",
         "//src/v/cluster:partition_leaders_table",

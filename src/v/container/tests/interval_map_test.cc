@@ -154,6 +154,38 @@ TEST(IntervalMap, InsertWithSparseOverlaps) {
     }
 }
 
+TEST(IntervalMap, Overlaps) {
+    imap map;
+    // An empty map overlaps nothing.
+    EXPECT_FALSE(map.overlaps({0, 10}));
+
+    // [10, 20) [30, 40)
+    EXPECT_TRUE(map.insert({10, 10}, 0).second);
+    EXPECT_TRUE(map.insert({30, 10}, 0).second);
+
+    // A zero-length interval never overlaps.
+    EXPECT_FALSE(map.overlaps({15, 0}));
+
+    // Exact, contained, and partial overlaps of an interval all report true.
+    EXPECT_TRUE(map.overlaps({10, 10}));
+    EXPECT_TRUE(map.overlaps({12, 3}));
+    EXPECT_TRUE(map.overlaps({5, 6}));  // [5, 11) reaches into [10, 20)
+    EXPECT_TRUE(map.overlaps({19, 5})); // [19, 24) reaches into [10, 20)
+
+    // Abutting-but-disjoint, the gap between intervals, and past the end do not
+    // overlap.
+    EXPECT_FALSE(map.overlaps({0, 10}));  // [0, 10) abuts [10, 20)
+    EXPECT_FALSE(map.overlaps({20, 10})); // [20, 30) sits in the gap
+    EXPECT_FALSE(map.overlaps({40, 10})); // [40, 50) past the end
+
+    // A range spanning the gap overlaps both intervals.
+    EXPECT_TRUE(map.overlaps({0, 50}));
+    EXPECT_TRUE(map.overlaps({19, 12})); // [19, 31) touches both
+
+    // overlaps() does not mutate the map.
+    EXPECT_EQ(map.size(), 2);
+}
+
 TEST(IntervalMap, FindInEmptyMapReturnsEnd) {
     const imap map;
     EXPECT_EQ(map.find(0), map.end());

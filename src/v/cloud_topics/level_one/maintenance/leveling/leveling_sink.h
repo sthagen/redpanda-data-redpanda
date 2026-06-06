@@ -11,6 +11,7 @@
 #pragma once
 
 #include "cloud_topics/level_one/maintenance/l1_object_sink.h"
+#include "cloud_topics/level_one/maintenance/worker_probe.h"
 #include "utils/prefix_logger.h"
 
 namespace cloud_topics::l1 {
@@ -28,6 +29,7 @@ public:
       ss::abort_source&,
       config::binding<size_t> max_object_size,
       size_t upload_part_size,
+      compaction_worker_probe&,
       prefix_logger&,
       object_builder::options = {});
 
@@ -41,6 +43,13 @@ public:
 private:
     // The expected compaction epoch for the log.
     const metastore::compaction_epoch _expected_compaction_epoch;
+
+    compaction_worker_probe& _probe;
+
+    // Total undersized input extents across this job's leveling ranges, summed
+    // in `initialize()`. Compared against the base class's `_output_objects`
+    // on commit to report the net extent-count reduction.
+    size_t _input_extents{0};
 };
 
 } // namespace cloud_topics::l1

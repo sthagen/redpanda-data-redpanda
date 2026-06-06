@@ -209,31 +209,33 @@ void group_manager::trigger_leadership_notification(
 }
 
 void group_manager::setup_metrics() {
-    if (config::shard_local_cfg().disable_metrics()) {
-        return;
-    }
-
     namespace sm = ss::metrics;
 
-    _metrics.add_group(
-      prometheus_sanitize::metrics_name("raft"),
-      {sm::make_gauge(
-         "group_count",
-         [this] { return _groups.size(); },
-         sm::description("Number of raft groups")),
-       sm::make_gauge(
-         "learners_gap_bytes",
-         [this] { return _learners_gap_bytes; },
-         sm::description(
-           "Total numbers of bytes that must be delivered to learners"))});
+    const auto& cfg = config::shard_local_cfg();
 
-    _public_metrics.add_group(
-      prometheus_sanitize::metrics_name("raft"),
-      {sm::make_gauge(
-        "learners_gap_bytes",
-        [this] { return _learners_gap_bytes; },
-        sm::description(
-          "Total numbers of bytes that must be delivered to learners"))});
+    if (!cfg.disable_metrics()) {
+        _metrics.add_group(
+          prometheus_sanitize::metrics_name("raft"),
+          {sm::make_gauge(
+             "group_count",
+             [this] { return _groups.size(); },
+             sm::description("Number of raft groups")),
+           sm::make_gauge(
+             "learners_gap_bytes",
+             [this] { return _learners_gap_bytes; },
+             sm::description(
+               "Total numbers of bytes that must be delivered to learners"))});
+    }
+
+    if (!cfg.disable_public_metrics()) {
+        _public_metrics.add_group(
+          prometheus_sanitize::metrics_name("raft"),
+          {sm::make_gauge(
+            "learners_gap_bytes",
+            [this] { return _learners_gap_bytes; },
+            sm::description(
+              "Total numbers of bytes that must be delivered to learners"))});
+    }
 }
 
 void group_manager::trigger_config_update_notification() {

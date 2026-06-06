@@ -9,7 +9,9 @@
  */
 
 #include "cloud_topics/level_one/metastore/leveling_range_builder.h"
+#include "config/configuration.h"
 #include "model/fundamental.h"
+#include "test_utils/scoped_config.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -277,3 +279,61 @@ INSTANTIATE_TEST_SUITE_P(
     }),
   [](const auto& info) { return info.param.name; });
 // clang-format on
+
+// Verifies that long runs of undersized extents are split into multiple
+// ranges when the accumulated bytes reach
+// `cloud_topics_leveling_max_range_bytes`.
+TEST(LevelingRangeBuilderCapTest, LongRunIsSplit) {
+    scoped_config cfg;
+    // Cap at 100 bytes. Each undersized extent is 30 bytes -> 4 extents fit
+    // (120 bytes), so the cap triggers after the 4th extent. Expect a split.
+    cfg.get("cloud_topics_leveling_max_range_bytes").set_value(size_t{100});
+
+    leveling_range_builder builder{/*min_acceptable_extent_bytes=*/50};
+    // 10 undersized extents of 30 bytes each.
+    for (int i = 0; i < 10; ++i) {
+        builder.process_extent(
+          kafka::offset{i * 10},
+          kafka::offset{i * 10 + 9},
+          /*len=*/30);
+    }
+    auto ranges = std::move(builder).finalize();
+
+    // The cap commits after the 4th extent (cumulative 120 bytes >= 100), so
+    // extents 0..3 form one range. The next range starts at extent 4 and is
+    // again capped at the 4-extent mark (extents 4..7 -> 120 bytes). The
+    // remaining extents 8..9 form a third range (2 extents, K=2, committed).
+    EXPECT_EQ(ranges.size(), 3u);
+    EXPECT_EQ(ranges[0].base_offset, kafka::offset{0});
+    EXPECT_EQ(ranges[0].last_offset, kafka::offset{39});
+    EXPECT_EQ(ranges[0].size_bytes, size_t{120});
+    EXPECT_EQ(ranges[1].base_offset, kafka::offset{40});
+    EXPECT_EQ(ranges[1].last_offset, kafka::offset{79});
+    EXPECT_EQ(ranges[1].size_bytes, size_t{120});
+    EXPECT_EQ(ranges[2].base_offset, kafka::offset{80});
+    EXPECT_EQ(ranges[2].last_offset, kafka::offset{99});
+    EXPECT_EQ(ranges[2].size_bytes, size_t{60});
+}
+
+// Verifies that a singleton remainder after a split is dropped (K=1 rule).
+TEST(LevelingRangeBuilderCapTest, SplitWithSingletonRemainderDropped) {
+    scoped_config cfg;
+    cfg.get("cloud_topics_leveling_max_range_bytes").set_value(size_t{100});
+
+    leveling_range_builder builder{/*min_acceptable_extent_bytes=*/50};
+    // 5 undersized extents of 30 bytes each. Cap triggers after the 4th
+    // (cumulative 120 >= 100), so extents 0..3 form one range. The 5th is
+    // a singleton remainder and gets dropped.
+    for (int i = 0; i < 5; ++i) {
+        builder.process_extent(
+          kafka::offset{i * 10},
+          kafka::offset{i * 10 + 9},
+          /*len=*/30);
+    }
+    auto ranges = std::move(builder).finalize();
+
+    EXPECT_EQ(ranges.size(), 1u);
+    EXPECT_EQ(ranges[0].base_offset, kafka::offset{0});
+    EXPECT_EQ(ranges[0].last_offset, kafka::offset{39});
+    EXPECT_EQ(ranges[0].size_bytes, size_t{120});
+}

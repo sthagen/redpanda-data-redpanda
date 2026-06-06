@@ -122,6 +122,45 @@ TEST(OffsetIntervalMapTest, TestContains) {
     ASSERT_FALSE(m.contains(o{3}));
 }
 
+TEST(OffsetIntervalMapTest, TestOverlaps) {
+    offset_interval_map<int> m;
+    // An empty map overlaps nothing.
+    ASSERT_FALSE(m.overlaps(o{0}, o{10}));
+
+    ASSERT_TRUE(m.insert(o{1}, o{5}, 1));
+
+    // Exact match, partial overlaps on either side, a contained range, and a
+    // superset all overlap the existing interval.
+    ASSERT_TRUE(m.overlaps(o{1}, o{5}));
+    ASSERT_TRUE(m.overlaps(o{0}, o{1}));
+    ASSERT_TRUE(m.overlaps(o{5}, o{10}));
+    ASSERT_TRUE(m.overlaps(o{2}, o{3}));
+    ASSERT_TRUE(m.overlaps(o{0}, o{10}));
+
+    // Disjoint ranges on either side, and an inverted range, do not overlap.
+    ASSERT_FALSE(m.overlaps(o{6}, o{10}));
+    ASSERT_FALSE(m.overlaps(o{0}, o{0}));
+    ASSERT_FALSE(m.overlaps(o{5}, o{1}));
+
+    // overlaps() is non-mutating: the map is left untouched.
+    EXPECT_THAT(m.to_vec(), testing::ElementsAre(MatchesEntry(o{1}, o{5}, 1)));
+}
+
+TEST(OffsetIntervalMapTest, TestOverlapsAcrossGap) {
+    // With two disjoint ranges, a query spanning the gap overlaps both, one
+    // landing entirely in the gap overlaps neither, and queries touching either
+    // range overlap it.
+    offset_interval_map<int> m;
+    ASSERT_TRUE(m.insert(o{0}, o{2}, 1));
+    ASSERT_TRUE(m.insert(o{10}, o{12}, 2));
+
+    ASSERT_TRUE(m.overlaps(o{2}, o{10}));
+    ASSERT_TRUE(m.overlaps(o{0}, o{20}));
+    ASSERT_FALSE(m.overlaps(o{4}, o{8}));
+    ASSERT_TRUE(m.overlaps(o{12}, o{15}));
+    ASSERT_TRUE(m.overlaps(o{1}, o{1}));
+}
+
 TEST(OffsetIntervalMapTest, TestCovers) {
     offset_interval_map<int> m;
     ASSERT_FALSE(m.covers(o{0}, o{0}));

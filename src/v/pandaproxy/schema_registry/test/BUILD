@@ -147,6 +147,7 @@ redpanda_cc_btest(
         ":compatibility_avro",
         "//src/v/pandaproxy/schema_registry:store",
         "//src/v/pandaproxy/schema_registry:types",
+        "//src/v/test_utils:metrics",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar//:testing",
