@@ -408,10 +408,125 @@ message SchemaRegistrySyncOptions {
     // `_schemas` topic, unset this field, then either fail-over the topic or
     // delete it.
     message ShadowSchemaRegistryTopic {}
+    // Replicates selected Schema Registry subjects, configs, modes, and schema
+    // IDs over the Schema Registry HTTP API.
+    message ShadowSchemaRegistryApi {
+        // The source Schema Registry URL to use.
+        string source_url = 1;
+
+        // Authentication settings for requests to the source Schema Registry.
+        // If unset, requests are sent without authentication.
+        SchemaRegistryAuthOptions auth_options = 2;
+
+        // TLS settings for requests to the source Schema Registry.
+        optional common.v1.TLSSettings tls_settings = 3;
+
+        // Interval between incremental polls for new source subjects and
+        // subject versions. If unset or zero, the cluster default of 10s is
+        // used.
+        google.protobuf.Duration tail_interval = 4;
+        // The effective interval between incremental polls.
+        google.protobuf.Duration effective_tail_interval = 5
+            [(google.api.field_behavior) = OUTPUT_ONLY];
+
+        // Interval between full scans of the selected source subjects. If unset
+        // or zero, the cluster default of 5m is used.
+        google.protobuf.Duration full_sync_interval = 6;
+        // The effective interval between full scans.
+        google.protobuf.Duration effective_full_sync_interval = 7
+            [(google.api.field_behavior) = OUTPUT_ONLY];
+
+        // Maximum request rate, in requests per second, for calls to the source
+        // Schema Registry. If unset or zero, a default rate limit of 30
+        // requests/s is used.
+        int32 max_source_requests_per_second = 8;
+        // The effective maximum request rate, in requests per second.
+        int32 effective_max_source_requests_per_second = 9
+            [(google.api.field_behavior) = OUTPUT_ONLY];
+
+        // Filter for specific Schema Registry contexts and subjects to select
+        // for replication. If unset or empty, the whole source Schema Registry
+        // is replicated.
+        SchemaRegistrySourceFilter source_filter = 10;
+
+        // Mapping from source contexts implied by `source_filter` to
+        // destination contexts. Each source context included in the replication
+        // must map to a distinct destination context to avoid
+        // collisions. If unset, source context names are preserved.
+        SchemaRegistryContextDestination destination = 11;
+
+        // Policy for handling source schema features unsupported by the
+        // destination, such as rulesets or metadata tags. If unset, FAIL is
+        // used.
+        UnsupportedSchemaFeaturePolicy unsupported_schema_feature_policy = 12;
+    }
     // Schema Registry shadowing mode.
     oneof schema_registry_shadowing_mode {
         ShadowSchemaRegistryTopic shadow_schema_registry_topic = 1;
+        ShadowSchemaRegistryApi shadow_schema_registry_api = 2;
     }
+}
+// Authentication settings for source Schema Registry HTTP requests.
+message SchemaRegistryAuthOptions {
+    oneof auth_options {
+        // Authenticate source Schema Registry requests with HTTP Basic auth.
+        HTTPBasicAuthOptions basic = 1;
+    }
+}
+// HTTP Basic auth credentials.
+message HTTPBasicAuthOptions {
+    // HTTP Basic auth username. For Confluent Cloud, this is the API key.
+    string username = 1;
+    // HTTP Basic auth password. For Confluent Cloud, this is the API secret.
+    string password = 2
+        [(google.api.field_behavior) = INPUT_ONLY, debug_redact = true];
+    // Indicates that the password has been set.
+    bool password_set = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // Timestamp of when the password was last set - only valid if password_set
+    // is true.
+    google.protobuf.Timestamp password_set_at = 4
+        [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+// Filter for specific Schema Registry contexts and subjects to select for
+// replication. If unset or empty, the whole source Schema Registry is
+// replicated.
+message SchemaRegistrySourceFilter {
+    // Source contexts to replicate in full, for example ".", ".prod", or
+    // ".staging". If both `contexts` and `subjects` are set, the effective
+    // source scope is the union of both selections.
+    repeated string contexts = 1;
+
+    // Exact source subjects to replicate, using Schema Registry qualified
+    // subject syntax. For example, "orders-value" selects the subject in the
+    // default context, and ":.prod:orders-value" selects the subject in context
+    // ".prod". If both `contexts` and `subjects` are set, the union of both
+    // selections is replicated. If a subject is also included by `contexts`, it
+    // is counted and replicated once.
+    repeated string subjects = 2;
+}
+// Destination context mapping for source Schema Registry data.
+message SchemaRegistryContextDestination {
+    oneof mapping {
+        // Preserve source context names in the destination Schema Registry.
+        SchemaRegistryIdentityContextMapping identity = 1;
+        // Map selected source contexts to explicit destination contexts.
+        SchemaRegistryExactContextMappings exact = 2;
+    }
+}
+// Preserve source context names in the destination Schema Registry.
+message SchemaRegistryIdentityContextMapping {}
+// Explicit source-to-destination context mappings.
+message SchemaRegistryExactContextMappings {
+    // Explicit source-to-destination context mappings. Every source context in
+    // the effective source scope must have exactly one mapping.
+    repeated SchemaRegistryContextMap mappings = 1;
+}
+// One source-to-destination context mapping.
+message SchemaRegistryContextMap {
+    // Source context name.
+    string source = 1;
+    // Destination context name.
+    string destination = 2;
 }
 // Options for syncing consumer offsets
 message ConsumerOffsetSyncOptions {
@@ -536,6 +651,8 @@ message ShadowLinkStatus {
     repeated ShadowTopic shadow_topics = 3;
     // List of topic properties that are being synced
     repeated string synced_shadow_topic_properties = 4;
+    // Status of Schema Registry syncing.
+    SchemaRegistrySyncStatus schema_registry_sync_status = 5;
 }
 // Status of a task
 message ShadowLinkTaskStatus {
@@ -569,6 +686,82 @@ message TopicPartitionInformation {
     int64 high_watermark = 4;
     // Timestamp of the last time the source partition information was updated
     google.protobuf.Timestamp source_last_updated_timestamp = 5;
+}
+// Status of Schema Registry syncing.
+message SchemaRegistrySyncStatus {
+    // Last observed source and destination Schema Registry inventory. These
+    // counts are updated as sync work observes source and destination state.
+    SchemaRegistryInventory inventory = 1;
+
+    // Sync currently running. This is unset when no Schema Registry sync is
+    // running.
+    SchemaRegistryCurrentSync current_sync = 2;
+
+    // Counters from the most recently completed full sync. This is unset until
+    // a full sync completes on the current task instance.
+    SchemaRegistrySyncSummary last_full_sync = 3;
+
+    // Cumulative counters since the Schema Registry task started. These
+    // counters reset after task restart or leadership transfer.
+    SchemaRegistrySyncSummary totals_since_task_start = 4;
+
+    // Short sanitized summary of the most recent Schema Registry sync
+    // error. Detailed errors are written to broker logs.
+    string last_error_message = 5;
+}
+// A Schema Registry sync that is currently running.
+message SchemaRegistryCurrentSync {
+    // Type of Schema Registry sync currently running.
+    SchemaRegistrySyncType sync_type = 1;
+
+    // Counters for the sync currently running.
+    SchemaRegistrySyncSummary summary = 2;
+}
+// Last observed Schema Registry inventory.
+message SchemaRegistryInventory {
+    // Number of source subjects selected for replication after applying source
+    // scope context and subject filters.
+    int64 selected_source_subjects = 1;
+
+    // Number of source subject versions selected for replication after
+    // applying source scope context and subject filters.
+    int64 selected_source_subject_versions = 2;
+
+    // Number of destination subjects corresponding to the selected source
+    // subjects after applying destination context mapping.
+    int64 destination_subjects = 3;
+
+    // Number of destination subject versions corresponding to the selected
+    // source subjects after applying destination context mapping.
+    int64 destination_subject_versions = 4;
+}
+// Summary counters for one Schema Registry sync or for a cumulative interval.
+message SchemaRegistrySyncSummary {
+    // Time when the sync started. For cumulative counters, this is the time
+    // when the Schema Registry task started.
+    google.protobuf.Timestamp start_time = 1;
+
+    // Time when the sync finished. This is unset for a sync that is still
+    // running and for cumulative counters.
+    google.protobuf.Timestamp finish_time = 2;
+
+    // Number of selected subject versions created, updated, or deleted on the
+    // destination.
+    int64 subject_versions_changed = 3;
+
+    // Number of selected compatibility configuration changes applied to the
+    // destination.
+    int64 compatibility_configs_changed = 4;
+
+    // Number of selected mode changes applied to the destination.
+    int64 modes_changed = 5;
+
+    // Number of unsupported fields removed from schemas or schema configs when
+    // UNSUPPORTED_SCHEMA_FEATURE_POLICY_REMOVE is used.
+    int64 unsupported_features_removed = 6;
+
+    // Number of errors observed during the sync or cumulative interval.
+    int64 errors = 7;
 }
 
 /* Enums */
@@ -622,6 +815,24 @@ enum TaskState {
     TASK_STATE_NOT_RUNNING = 4;
     // Task is faulted
     TASK_STATE_FAULTED = 5;
+}
+// Type of Schema Registry sync currently running.
+enum SchemaRegistrySyncType {
+    // The Schema Registry sync type is not specified.
+    SCHEMA_REGISTRY_SYNC_TYPE_UNSPECIFIED = 0;
+    // A full source scan is running.
+    SCHEMA_REGISTRY_SYNC_TYPE_FULL = 1;
+    // An incremental tail sync is running.
+    SCHEMA_REGISTRY_SYNC_TYPE_TAIL = 2;
+}
+// Policy for handling source schema features unsupported by the destination.
+enum UnsupportedSchemaFeaturePolicy {
+    // Use the default unsupported schema feature handling behavior.
+    UNSUPPORTED_SCHEMA_FEATURE_POLICY_UNSPECIFIED = 0;
+    // Fail the sync when an unsupported schema feature is encountered.
+    UNSUPPORTED_SCHEMA_FEATURE_POLICY_FAIL = 1;
+    // Remove unsupported schema features before writing to the destination.
+    UNSUPPORTED_SCHEMA_FEATURE_POLICY_REMOVE = 2;
 }
 // State of a shadow topic
 enum ShadowTopicState {

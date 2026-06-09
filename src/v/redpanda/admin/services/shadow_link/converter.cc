@@ -37,6 +37,7 @@ using proto::admin::create_shadow_link_request;
 using proto::admin::name_filter;
 using proto::admin::plain_config;
 using proto::admin::schema_registry_sync_options;
+using proto::admin::schema_registry_sync_options_shadow_schema_registry_api;
 using proto::admin::schema_registry_sync_options_shadow_schema_registry_topic;
 using proto::admin::scram_config;
 using proto::admin::scram_mechanism;
@@ -199,6 +200,10 @@ create_schema_registry_sync_config(
         const schema_registry_sync_options_shadow_schema_registry_topic&) {
           config.sync_schema_registry_topic_mode = cluster_link::model::
             schema_registry_sync_config::shadow_entire_schema_registry{};
+      },
+      [](const schema_registry_sync_options_shadow_schema_registry_api&) {
+          throw std::invalid_argument(
+            "Schema Registry API shadowing is not supported");
       },
       [&config](std::monostate) {
           config.sync_schema_registry_topic_mode = std::nullopt;

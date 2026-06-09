@@ -166,7 +166,7 @@ class RpCloudApiClient(object):
 
     @staticmethod
     def cluster_endpoint(id=None):
-        _e = "/v1beta2/clusters"
+        _e = "/v1/clusters"
         if id:
             _e += f"/{id}"
         return _e

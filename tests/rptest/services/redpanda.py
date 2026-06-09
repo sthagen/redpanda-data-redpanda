@@ -1285,6 +1285,14 @@ class RedpandaServiceConstants:
         "admin", "admin1234567890", "SCRAM-SHA-256"
     )
 
+    # Internal namespace (model::kafka_internal_namespace) hosting system topics
+    # such as the cloud-topics L1 metastore, transactions, id allocator, etc.
+    KAFKA_INTERNAL_NAMESPACE = "kafka_internal"
+    # Cloud-topics L1 metastore topic (model::l1_metastore_nt). Created eagerly
+    # at bootstrap with rf=1 and reconfigured up to
+    # internal_topic_replication_factor as nodes join.
+    CLOUD_TOPICS_METASTORE_TOPIC = "ct_l1_domain"
+
 
 class RedpandaServiceABC(ABC, RedpandaServiceConstants):
     """A base class for all Redpanda services. This lowest-common denominator
@@ -3468,7 +3476,7 @@ class RedpandaService(Service, RedpandaServiceABC):
                     "_redpanda.audit_log",
                     "_redpanda.transform_logs",
                 },
-                "kafka_internal": {"ct_l1_domain"},
+                self.KAFKA_INTERNAL_NAMESPACE: {self.CLOUD_TOPICS_METASTORE_TOPIC},
             }
             expected["l1_staging"] = set()  # make type deduction happy
 

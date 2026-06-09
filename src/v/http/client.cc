@@ -211,6 +211,7 @@ ss::future<client::request_response_t> client::make_request(
               .count = tcp_keepalive_probes,
             });
           set_keepalive(true);
+          set_nodelay(true);
           return ss::make_ready_future<request_response_t>(
             std::make_tuple(req, res));
       })

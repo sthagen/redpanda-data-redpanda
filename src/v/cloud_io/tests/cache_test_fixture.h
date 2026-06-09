@@ -130,6 +130,16 @@ public:
         sharded_cache.local().trim_carryover(size_limit, object_limit).get();
     }
 
+    bool delete_file_and_empty_parents(std::string_view path) {
+        return sharded_cache
+          .invoke_on(
+            ss::shard_id{0},
+            [path](cloud_io::cache& c) {
+                return c.delete_file_and_empty_parents(path);
+            })
+          .get();
+    }
+
     void set_trim_thresholds(
       double size_limit_percent,
       double object_limit_percent,

@@ -238,6 +238,32 @@ FIXTURE_TEST(eviction_cleans_directory, cache_test_fixture) {
     BOOST_CHECK(ss::file_exists(CACHE_DIR.native()).get());
 }
 
+// Regression test for CORE-16287: a hot chunk can be concurrently evicted and
+// re-hydrated, so the trimmer may try to delete a chunk file that another path
+// has already removed. delete_file_and_empty_parents must treat the
+// already-absent file as removed and keep cleaning up empty parents, instead of
+// throwing (which surfaced a spurious "trim: couldn't delete ... No such file
+// or directory" ERROR and failed tests via the bad-log-lines check).
+FIXTURE_TEST(delete_already_removed_file_is_tolerated, cache_test_fixture) {
+    auto data_string = create_data_string('a', 1_MiB);
+    const std::filesystem::path key{"unique_prefix/test_topic/seg_chunks/0"};
+    put_into_cache(data_string, key);
+
+    // Simulate a concurrent deleter removing the chunk file out of band.
+    ss::remove_file((CACHE_DIR / key).native()).get();
+    BOOST_REQUIRE(!ss::file_exists((CACHE_DIR / key).native()).get());
+
+    // Deleting the now-absent file must not throw, and must still clean up the
+    // empty parent directories left behind.
+    BOOST_CHECK_NO_THROW(
+      delete_file_and_empty_parents((CACHE_DIR / key).native()));
+
+    BOOST_CHECK(!ss::file_exists(
+                   (CACHE_DIR / "unique_prefix/test_topic/seg_chunks").native())
+                   .get());
+    BOOST_CHECK(ss::file_exists(CACHE_DIR.native()).get());
+}
+
 FIXTURE_TEST(invalidate_outside_cache_dir_throws, cache_test_fixture) {
     // make sure the cache directory is empty to get reliable results
     ss::recursive_touch_directory(CACHE_DIR.native()).get();

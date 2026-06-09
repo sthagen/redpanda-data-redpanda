@@ -1149,16 +1149,44 @@ SEASTAR_THREAD_TEST_CASE(variant) {
     static_assert(!std::is_nothrow_copy_constructible_v<my_variant>);
     static_assert(
       std::is_nothrow_copy_constructible_v<serde::variant<int, bool>>);
+}
 
-    serde::variant<int, bool> v0 = false;
-    serde::variant<int, bool, ss::sstring> v1 = "foo";
-    // It's not valid to read variants of different types or sizes.
-    BOOST_CHECK_THROW(
-      serde::from_iobuf<decltype(v0)>(serde::to_iobuf(v1)),
-      serde::serde_exception);
-    BOOST_CHECK_THROW(
-      serde::from_iobuf<decltype(v1)>(serde::to_iobuf(v0)),
-      serde::serde_exception);
+// Characterizes the cross-version read matrix for evolving a serde::variant by
+// *appending* an alternative. We model evolving
+//
+//     old = serde::variant<T0>   ->   new = serde::variant<T0, T1>
+//
+// where T0 = int (index 0) and T1 = ss::sstring (index 1). The three writer
+// shapes are: old writer (always index 0), new writer holding T0 ("I0",
+// index 0), and new writer holding T1 ("I1", index 1).
+SEASTAR_THREAD_TEST_CASE(variant_append_compat) {
+    using old_variant = serde::variant<int>;
+    using new_variant = serde::variant<int, ss::sstring>;
+
+    const old_variant old_writer = 7;                    // index 0 (T0)
+    const new_variant new_writer_i0 = 7;                 // index 0 (T0)
+    const new_variant new_writer_i1 = ss::sstring{"hi"}; // index 1 (T1)
+
+    const auto read_old = [](const auto& w) {
+        return serde::from_iobuf<old_variant>(serde::to_iobuf(w));
+    };
+    const auto read_new = [](const auto& w) {
+        return serde::from_iobuf<new_variant>(serde::to_iobuf(w));
+    };
+
+    // old reader <- old writer: reads T0.
+    BOOST_REQUIRE(read_old(old_writer) == old_variant{7});
+    // old reader <- new writer I0: reads T0 (newly allowed by the relaxation).
+    BOOST_REQUIRE(read_old(new_writer_i0) == old_variant{7});
+    // old reader <- new writer I1: throws, T1's index is unknown to old reader.
+    BOOST_CHECK_THROW(read_old(new_writer_i1), serde::serde_exception);
+
+    // new reader <- old writer: reads T0 (newly allowed by the relaxation).
+    BOOST_REQUIRE(read_new(old_writer) == new_variant{7});
+    // new reader <- new writer I0: reads T0.
+    BOOST_REQUIRE(read_new(new_writer_i0) == new_variant{7});
+    // new reader <- new writer I1: reads T1.
+    BOOST_REQUIRE(read_new(new_writer_i1) == new_variant{ss::sstring{"hi"}});
 }
 
 SEASTAR_THREAD_TEST_CASE(pair_test) {

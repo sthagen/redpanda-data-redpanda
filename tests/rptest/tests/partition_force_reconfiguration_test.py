@@ -756,9 +756,77 @@ class NodeWiseRecoveryTest(RedpandaTest):
             retry_on_exc=True,
         )
 
+    def _bootstrap_settled(self, internal_topic_rf: int) -> bool:
+        """Predicate: cluster bootstrap has settled enough to start a recovery.
+
+        Node-wise recovery cannot make progress on a partition that has an
+        in-flight reconfiguration: the partition balancer planner classifies
+        such a partition as moving/immutable and never force-reconfigures it,
+        so a recovery issued while a move is in flight stalls until timeout.
+
+        The cloud-topics internal metastore topic
+        (kafka_internal/ct_l1_domain) reliably undergoes a replica-set change
+        during bootstrap -- it is born rf=1 and reconfigured up to
+        internal_topic_replication_factor (default 3) as nodes join. This
+        predicate is true once that topic has reached its target rf AND there
+        are no reconfigurations pending anywhere in the cluster.
+        """
+        # No partition moves / reconfigurations in flight cluster-wide.
+        reconfigurations = self.admin.list_reconfigurations()
+        if reconfigurations:
+            self.logger.debug(
+                f"bootstrap not settled: {len(reconfigurations)} reconfiguration(s) "
+                f"in progress: {reconfigurations}"
+            )
+            return False
+
+        # Cloud-topics internal metastore topic has reached its target rf. If
+        # the rf=1->N move hasn't been issued yet the partitions are still rf=1,
+        # so the move is yet to come -- keep waiting.
+        namespace = RedpandaService.KAFKA_INTERNAL_NAMESPACE
+        topic = RedpandaService.CLOUD_TOPICS_METASTORE_TOPIC
+        try:
+            partitions = self.admin.get_partitions(topic=topic, namespace=namespace)
+        except requests.exceptions.HTTPError as e:
+            # Topic not created yet (eager creation races bootstrap).
+            self.logger.debug(
+                f"bootstrap not settled: {namespace}/{topic} not queryable yet: {e}"
+            )
+            return False
+
+        if not partitions:
+            return False
+
+        for p in partitions:
+            rf = len(p["replicas"])
+            if rf != internal_topic_rf:
+                self.logger.debug(
+                    f"bootstrap not settled: {namespace}/{topic}/{p['partition_id']} "
+                    f"rf={rf}, want {internal_topic_rf}"
+                )
+                return False
+        return True
+
+    def wait_for_bootstrap_to_settle(self, internal_topic_rf: int = 3):
+        """Wait until cluster bootstrap settles so node-wise recovery isn't
+        disrupted by an in-flight internal-topic reconfiguration. See
+        _bootstrap_settled for details."""
+        wait_until(
+            lambda: self._bootstrap_settled(internal_topic_rf=internal_topic_rf),
+            timeout_sec=self.default_timeout_sec,
+            backoff_sec=2,
+            err_msg="cluster bootstrap did not settle (cloud-topics internal "
+            "topic still reconfiguring or moves in progress)",
+            retry_on_exc=True,
+        )
+
     @cluster(num_nodes=6)
     @matrix(dead_node_count=[1, 2])
     def test_node_wise_recovery(self, dead_node_count):
+        # Wait for bootstrap-time internal-topic reconfigurations to settle
+        # before inducing failures, otherwise an in-flight move stalls recovery.
+        self.wait_for_bootstrap_to_settle()
+
         num_topics = 20
         # Create a mix of rf=1 and 3 topics.
         topics = []
@@ -949,6 +1017,10 @@ class NodeWiseRecoveryTest(RedpandaTest):
     @matrix(wait_for_final_manifest_uploads=[False, True])
     def test_recovery_local_data_missing(self, wait_for_final_manifest_uploads):
         self.redpanda._disable_cloud_storage_diagnostics = True
+
+        # Wait for bootstrap-time internal-topic reconfigurations to settle
+        # before inducing failures, otherwise an in-flight move stalls recovery.
+        self.wait_for_bootstrap_to_settle()
 
         topic = TopicSpec(
             replication_factor=3,

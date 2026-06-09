@@ -4,6 +4,7 @@ import random
 import string
 import subprocess
 import tempfile
+import threading
 import typing
 from enum import Enum, IntEnum
 from typing import NamedTuple
@@ -350,6 +351,7 @@ class TLSCertManager:
         # In order to attempt to cover more code paths, we will randomly select
         # between RSA and ECDSA if the key type is not specified
         self._key_type: TLSKeyType = key_type or random.choice(list(TLSKeyType))
+        self._exec_lock = threading.Lock()
         self._ca = self._create_ca()
         self.certs: dict[str, Certificate] = {}
 
@@ -368,9 +370,16 @@ class TLSCertManager:
         output = None
         while True:
             try:
-                output = subprocess.check_output(
-                    cmd.split(), cwd=self._dir.name, stderr=subprocess.STDOUT
-                )
+                # openssl ca is not safe to run concurrently against a shared
+                # CA database (index.txt / serial.txt). create_cert is called
+                # across nodes concurrently via for_nodes' thread pool sharing
+                # one manager, so serialize the openssl process itself: a single
+                # invocation is atomic w.r.t. the DB, so only the exec needs the
+                # lock, not the surrounding retry/logging.
+                with self._exec_lock:
+                    output = subprocess.check_output(
+                        cmd.split(), cwd=self._dir.name, stderr=subprocess.STDOUT
+                    )
                 self._logger.debug(f"openssl output: {output}")
                 return output.decode("utf-8")
             except subprocess.CalledProcessError as e:
@@ -554,6 +563,7 @@ class TLSChainCACertManager(TLSCertManager):
         # In order to attempt to cover more code paths, we will randomly select
         # between RSA and ECDSA if the key type is not specified
         self._key_type: TLSKeyType = key_type or random.choice(list(TLSKeyType))
+        self._exec_lock = threading.Lock()
         self._cas: list[CertificateAuthority] = []
         self._cas.append(
             self._create_ca(

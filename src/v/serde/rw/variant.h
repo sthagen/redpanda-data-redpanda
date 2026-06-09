@@ -29,10 +29,23 @@ namespace serde {
 //
 // # Variant Wire Compatibility:
 //
-// Variant is treated as a primitive atomic type, that means that *any* changes
-// to the variant itself is not backwards compatible. `serde::variant` should
-// always be wrapped in another `serde::envelope` to allow for changing the
-// variant, and that wrapper struct needs to handle changes to the variant.
+// The wire format is: [variant size][active index][active alternative].
+// Compatibility is positional: the active index must map to the same type in
+// every definition that may read or write the value.
+//
+// Compatible changes:
+//   - Append alternatives to the end. Existing indexes keep their meaning, so
+//     readers can read values whose active index they know, even if the
+//     serialized variant size differs.
+//     Note: writing a newly appended alternative still requires rollout gating;
+//     older readers cannot read an active index that is not in their
+//     definition.
+//
+// Incompatible changes:
+//   - Reordering alternatives.
+//   - Inserting alternatives before existing alternatives.
+//   - Removing alternatives that may appear on the wire.
+//   - Changing the type at an existing index.
 template<typename... Types>
 struct variant : public std::variant<Types...> {
     using type = std::variant<Types...>;
@@ -141,29 +154,25 @@ void tag_invoke(
     using Type = std::decay_t<decltype(t)>;
     using UnderlyingType = Type::type;
 
-    auto size = read_nested<size_t>(in, bytes_left_limit);
+    // The serialized size is intentionally *not* required to match the current
+    // variant size: appending alternatives keeps the index -> type mapping
+    // stable, so a differing size is expected when reading across versions. We
+    // only validate that the active index is known to the current definition.
+    auto serialized_size = read_nested<size_t>(in, bytes_left_limit);
     auto index = read_nested<size_t>(in, bytes_left_limit);
 
-    if (size != std::variant_size_v<UnderlyingType>) [[unlikely]] {
-        throw serde_exception(fmt_with_ctx(
-          ssx::sformat,
-          "reading type {} of size {}: {} bytes left - unexpected variant "
-          "size: {}, current variant size: {}, likely backwards compat issues.",
-          type_str<Type>(),
-          sizeof(Type),
-          in.bytes_left(),
-          size,
-          std::variant_size_v<UnderlyingType>));
-    }
     if (index >= std::variant_size_v<UnderlyingType>) [[unlikely]] {
         throw serde_exception(fmt_with_ctx(
           ssx::sformat,
-          "reading type {} of size {}: {} bytes left - unexpected variant "
-          "index: {}, variant size: {}",
+          "reading type {} of size {}: {} bytes left - variant index {} is out "
+          "of range for the current definition (serialized variant size: {}, "
+          "current variant size: {}); the active alternative is not known to "
+          "this binary, likely a compatibility issue.",
           type_str<Type>(),
           sizeof(Type),
           in.bytes_left(),
           index,
+          serialized_size,
           std::variant_size_v<UnderlyingType>));
     }
     constexpr detail::variant_factory<UnderlyingType> factory{};
