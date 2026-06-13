@@ -88,6 +88,38 @@ TEST(OffsetIntervalMapTest, TestInsertAdjacentAtBoundarySucceeds) {
         MatchesEntry(o{1}, o{5}, 1), MatchesEntry(o{6}, o{10}, 3)));
 }
 
+TEST(OffsetIntervalMapTest, TestAssignExactRangeOnly) {
+    offset_interval_map<int> m;
+    ASSERT_TRUE(m.insert(o{1}, o{5}, 1));
+    ASSERT_TRUE(m.insert(o{6}, o{10}, 2));
+
+    // Exact inclusive bounds: updates the value in place, leaving the range
+    // set and the neighbouring range untouched.
+    ASSERT_TRUE(m.assign(o{1}, o{5}, 100));
+    EXPECT_THAT(
+      m.to_vec(),
+      testing::ElementsAre(
+        MatchesEntry(o{1}, o{5}, 100), MatchesEntry(o{6}, o{10}, 2)));
+
+    // A subset, a superset, a partial overlap extending left, and a base
+    // inside the range (not its start) all fail to exactly match and are
+    // rejected.
+    ASSERT_FALSE(m.assign(o{2}, o{4}, 7));
+    ASSERT_FALSE(m.assign(o{1}, o{10}, 7));
+    ASSERT_FALSE(m.assign(o{0}, o{5}, 7));
+    ASSERT_FALSE(m.assign(o{3}, o{5}, 7));
+
+    // An absent range and an empty range (last < base) are no-ops.
+    ASSERT_FALSE(m.assign(o{20}, o{25}, 7));
+    ASSERT_FALSE(m.assign(o{5}, o{4}, 7));
+
+    // None of the rejected assigns changed anything.
+    EXPECT_THAT(
+      m.to_vec(),
+      testing::ElementsAre(
+        MatchesEntry(o{1}, o{5}, 100), MatchesEntry(o{6}, o{10}, 2)));
+}
+
 TEST(OffsetIntervalMapTest, TestEmptyMapQueries) {
     offset_interval_map<int> m;
     ASSERT_TRUE(m.empty());

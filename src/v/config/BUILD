@@ -55,6 +55,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/cloud_io:scheduler_types",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:intrusive",
         "//src/v/features:enterprise_feature_messages",
@@ -76,6 +77,7 @@ redpanda_cc_library(
         "//src/v/utils:unresolved_address",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/container:node_hash_set",
+        "@abseil-cpp//absl/strings",
         "@boost//:algorithm",
         "@boost//:filesystem",
         "@boost//:lexical_cast",

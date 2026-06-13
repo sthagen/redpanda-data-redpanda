@@ -92,6 +92,11 @@ public:
         return {e.key, e.value};
     }
 
+    void clear() {
+        _ordered_entries.clear();
+        _entry_it_by_key.clear();
+    }
+
 private:
     set_t _ordered_entries;
     // Maps a key to its slot in `_ordered_entries`. std::set iterators are

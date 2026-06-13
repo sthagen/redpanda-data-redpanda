@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_test_cc_library(
     name = "simple_reducer",
@@ -30,6 +30,27 @@ redpanda_cc_gtest(
         "//src/v/compaction:key_offset_map",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "filter_rpbench",
+    srcs = [
+        "filter_bench.cc",
+    ],
+    deps = [
+        ":simple_reducer",
+        "//src/v/bytes",
+        "//src/v/compaction:key",
+        "//src/v/compaction:key_offset_map",
+        "//src/v/container:chunked_circular_buffer",
+        "//src/v/model",
+        "//src/v/model:batch_compression",
+        "//src/v/random:generators",
+        "//src/v/reflection:adl",
+        "//src/v/storage:record_batch_builder",
+        "@seastar",
+        "@seastar//:benchmark",
     ],
 )
 

@@ -13,6 +13,7 @@
 
 #include "cluster/metadata_cache.h"
 #include "cluster_link/service.h"
+#include "features/feature_table.h"
 #include "redpanda/admin/services/shadow_link/converter.h"
 #include "redpanda/admin/services/shadow_link/err.h"
 #include "redpanda/admin/services/utils.h"
@@ -21,13 +22,30 @@
 namespace admin {
 ss::logger sllog("shadow_link_service");
 
+namespace {
+void check_sr_api_sync_supported(
+  const cluster_link::model::schema_registry_sync_config& cfg,
+  const features::feature_table& feature_table) {
+    if (cfg.api_mode() == nullptr) {
+        return;
+    }
+    if (!feature_table.is_active(features::feature::shadow_link_sr_api_sync)) {
+        throw serde::pb::rpc::failed_precondition_exception(
+          "Schema Registry API sync mode cannot be configured until the "
+          "cluster is fully upgraded");
+    }
+}
+} // namespace
+
 shadow_link_service_impl::shadow_link_service_impl(
   admin::proxy::client proxy_client,
   ss::sharded<cluster_link::service>* service,
-  ss::sharded<cluster::metadata_cache>* md_cache)
+  ss::sharded<cluster::metadata_cache>* md_cache,
+  ss::sharded<features::feature_table>* feature_table)
   : _proxy_client(std::move(proxy_client))
   , _service(service)
-  , _md_cache(md_cache) {}
+  , _md_cache(md_cache)
+  , _feature_table(feature_table) {}
 
 ss::future<proto::admin::create_shadow_link_response>
 shadow_link_service_impl::create_shadow_link(
@@ -45,11 +63,20 @@ shadow_link_service_impl::create_shadow_link(
           .create_shadow_link(serde::pb::rpc::context{}, std::move(req));
     }
     vlog(sllog.info, "create_shadow_link: {}", req);
+    bool validate_only = req.get_validate_only();
     auto md = convert_create_to_metadata(std::move(req));
+    check_sr_api_sync_supported(
+      md.configuration.schema_registry_sync_cfg, _feature_table->local());
     auto get_resp = _service->local().get_cluster_link(md.name);
     if (get_resp.has_value()) {
         throw serde::pb::rpc::already_exists_exception(
           ssx::sformat("Shadow link with name {} already exists", md.name));
+    }
+
+    if (validate_only) {
+        handle_error(
+          co_await _service->local().test_connection(md.name, md.connection));
+        co_return proto::admin::create_shadow_link_response{};
     }
 
     auto resp = handle_error(
@@ -167,6 +194,8 @@ shadow_link_service_impl::update_shadow_link(
 
     auto update_cmd = create_update_cluster_link_config_cmd(
       std::move(req), std::move(current_link));
+    check_sr_api_sync_supported(
+      update_cmd.link_config.schema_registry_sync_cfg, _feature_table->local());
 
     auto updated_md = handle_error(
       co_await _service->local().update_cluster_link(

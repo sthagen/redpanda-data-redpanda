@@ -305,8 +305,7 @@ iobuf::placeholder iobuf::reserve(size_t sz) {
 }
 
 ss::sstring iobuf::linearize_to_string() const {
-    constexpr static size_t max_size = 128_KiB;
-    if (size_bytes() > max_size) {
+    if (size_bytes() > max_linearize_size) {
         throw std::runtime_error(
           fmt::format("string too big: {}", size_bytes()));
     }

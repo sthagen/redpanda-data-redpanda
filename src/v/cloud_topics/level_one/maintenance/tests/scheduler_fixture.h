@@ -70,7 +70,8 @@ public:
           nullptr);
         co_await scheduler->_worker_manager._workers.invoke_on_all(
           &l1::compaction_worker::start);
-        scheduler->start_bg_loop();
+        co_await scheduler->resume_compaction_loop();
+        co_await scheduler->resume_leveling_loop();
         co_return;
     }
 
@@ -99,6 +100,42 @@ public:
     ss::future<> resume_worker(ss::shard_id shard) {
         co_await scheduler->_worker_manager.resume_worker(shard);
     }
+
+    // ── Scheduling-loop disable/enable accessors ────────────────────
+    // The scheduler's loop lifecycle is private; the fixture is a friend.
+
+    using loop_state = l1::compaction_scheduler::loop_state;
+
+    loop_state compaction_loop_state() {
+        return scheduler->_compaction_target_loop_state;
+    }
+    loop_state leveling_loop_state() {
+        return scheduler->_leveling_target_loop_state;
+    }
+    bool compaction_loop_running() {
+        return scheduler->_compaction_loop_fut.has_value();
+    }
+    bool leveling_loop_running() {
+        return scheduler->_leveling_loop_fut.has_value();
+    }
+
+    ss::future<> pause_compaction_loop() {
+        return scheduler->pause_compaction_loop();
+    }
+    ss::future<> resume_compaction_loop() {
+        return scheduler->resume_compaction_loop();
+    }
+    ss::future<> pause_leveling_loop() {
+        return scheduler->pause_leveling_loop();
+    }
+    ss::future<> resume_leveling_loop() {
+        return scheduler->resume_leveling_loop();
+    }
+
+    // Arms the `cloud_topics_{compaction,leveling}_disabled` config watches.
+    // The real `start()` does this; `start_scheduler()` above launches the
+    // loops directly without it, so tests exercising the config path call this.
+    void arm_config_watches() { scheduler->watch_config_changes(); }
 
     ss::future<> TearDownAsync() override { co_await scheduler->stop(); }
 

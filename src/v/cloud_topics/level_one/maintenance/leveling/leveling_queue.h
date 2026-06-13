@@ -91,6 +91,13 @@ public:
         _heads.erase(tidp);
     }
 
+    /// Clear all entries across both levels of the queue.
+    void clear_all() {
+        _queues.clear();
+        _heads.clear();
+        _size = 0;
+    }
+
     /// Total number of queued jobs across all partitions.
     size_t size() const { return _size; }
     bool empty() const { return _size == 0; }

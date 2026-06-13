@@ -12,6 +12,7 @@
 #include "cluster_link/model/types.h"
 
 #include "base/format_to.h"
+#include "base/vassert.h"
 #include "model/timestamp.h"
 #include "ssx/async_algorithm.h"
 #include "utils/to_string.h"
@@ -180,12 +181,117 @@ security_settings_sync_config security_settings_sync_config::copy() const {
     return copy;
 }
 
+schema_registry_sync_config::source_filter
+schema_registry_sync_config::source_filter::copy() const {
+    source_filter copy;
+    copy.contexts = contexts.copy();
+    copy.subjects = subjects.copy();
+    return copy;
+}
+
+schema_registry_sync_config::exact_context_mapping
+schema_registry_sync_config::exact_context_mapping::copy() const {
+    exact_context_mapping copy;
+    copy.mappings.reserve(mappings.size());
+    for (const auto& [source, destination] : mappings) {
+        copy.mappings.emplace(source, destination);
+    }
+    return copy;
+}
+
+schema_registry_sync_config::shadow_schema_registry_api
+schema_registry_sync_config::shadow_schema_registry_api::copy() const {
+    shadow_schema_registry_api copy;
+    copy.source_url = source_url;
+    copy.auth_config = auth_config;
+    copy.tls_enabled = tls_enabled;
+    copy.cert = cert;
+    copy.key = key;
+    copy.ca = ca;
+    copy.tls_provide_sni = tls_provide_sni;
+    copy.tail_interval = tail_interval;
+    copy.full_sync_interval = full_sync_interval;
+    copy.max_source_requests_per_second = max_source_requests_per_second;
+    copy.filter = filter.copy();
+    if (destination.has_value()) {
+        ss::visit(
+          *destination,
+          [&copy](const identity_context_mapping&) {
+              copy.destination = identity_context_mapping{};
+          },
+          [&copy](const exact_context_mapping& exact) {
+              copy.destination = exact.copy();
+          });
+    }
+    copy.feature_policy = feature_policy;
+    return copy;
+}
+
+schema_registry_sync_config schema_registry_sync_config::copy() const {
+    schema_registry_sync_config copy;
+    if (sync_mode.has_value()) {
+        ss::visit(
+          *sync_mode,
+          [&copy](const shadow_entire_schema_registry&) {
+              copy.sync_mode = shadow_entire_schema_registry{};
+          },
+          [&copy](const shadow_schema_registry_api& api) {
+              copy.sync_mode = api.copy();
+          });
+    }
+    return copy;
+}
+
+void schema_registry_sync_config::serde_write(iobuf& out) const {
+    using serde::write;
+    // Preserve the released v0 two-field wire layout: field 0 is the
+    // topic-mode variant, field 1 (added in v1) is the API-mode config. The
+    // in-memory variant guarantees at most one is engaged.
+    using wire_topic_mode_t = serde::variant<shadow_entire_schema_registry>;
+    std::optional<wire_topic_mode_t> topic_mode;
+    std::optional<shadow_schema_registry_api> api_mode;
+    if (sync_mode.has_value()) {
+        ss::visit(
+          *sync_mode,
+          [&topic_mode](const shadow_entire_schema_registry&) {
+              topic_mode.emplace(shadow_entire_schema_registry{});
+          },
+          [&api_mode](const shadow_schema_registry_api& api) {
+              api_mode = api.copy();
+          });
+    }
+    write(out, std::move(topic_mode));
+    write(out, std::move(api_mode));
+}
+
+void schema_registry_sync_config::serde_read(
+  iobuf_parser& in, const serde::header& h) {
+    using serde::read_nested;
+    using wire_topic_mode_t = serde::variant<shadow_entire_schema_registry>;
+
+    auto topic_mode = read_nested<std::optional<wire_topic_mode_t>>(
+      in, h._bytes_left_limit);
+    std::optional<shadow_schema_registry_api> api_mode;
+    if (h._version >= 1) {
+        api_mode = read_nested<std::optional<shadow_schema_registry_api>>(
+          in, h._bytes_left_limit);
+    }
+
+    if (api_mode.has_value()) {
+        sync_mode.emplace(std::move(*api_mode));
+    } else if (topic_mode.has_value()) {
+        sync_mode.emplace(shadow_entire_schema_registry{});
+    } else {
+        sync_mode.reset();
+    }
+}
+
 link_configuration link_configuration::copy() const {
     link_configuration copy;
     copy.topic_metadata_mirroring_cfg = topic_metadata_mirroring_cfg.copy();
     copy.consumer_groups_mirroring_cfg = consumer_groups_mirroring_cfg.copy();
     copy.security_settings_sync_cfg = security_settings_sync_cfg.copy();
-    copy.schema_registry_sync_cfg = schema_registry_sync_cfg;
+    copy.schema_registry_sync_cfg = schema_registry_sync_cfg.copy();
     return copy;
 }
 
@@ -269,15 +375,103 @@ schema_registry_sync_config::shadow_entire_schema_registry::format_to(
     return fmt::format_to(it, "{{ shadow_entire_schema_registry }}");
 }
 
-fmt::iterator schema_registry_sync_config::format_to(fmt::iterator it) const {
-    if (sync_schema_registry_topic_mode.has_value()) {
-        return ss::visit(
-          *sync_schema_registry_topic_mode, [&it](const auto& mode) {
-              return fmt::format_to(
-                it, "{{ sync_schema_registry_topic_mode: {} }}", mode);
-          });
+fmt::iterator
+schema_registry_sync_config::basic_auth::format_to(fmt::iterator it) const {
+    auto time = std::format(
+      "{:%FT%H:%M:%S}", ::model::to_time_point(password_last_updated));
+    return fmt::format_to(
+      it,
+      "{{ basic_auth: {{ username: {}, password: ****, "
+      "password_last_updated: {} }} }}",
+      username,
+      time);
+}
+
+fmt::iterator
+schema_registry_sync_config::source_filter::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{ contexts: {}, subjects: {} }}", contexts, subjects);
+}
+
+fmt::iterator schema_registry_sync_config::identity_context_mapping::format_to(
+  fmt::iterator it) const {
+    return fmt::format_to(it, "{{ identity_context_mapping }}");
+}
+
+fmt::iterator schema_registry_sync_config::exact_context_mapping::format_to(
+  fmt::iterator it) const {
+    return fmt::format_to(it, "{{ mappings: {} }}", mappings);
+}
+
+namespace {
+std::string_view to_string_view(
+  cluster_link::model::schema_registry_sync_config::unsupported_feature_policy
+    policy) {
+    using policy_t = cluster_link::model::schema_registry_sync_config::
+      unsupported_feature_policy;
+    switch (policy) {
+    case policy_t::fail:
+        return "fail";
+    case policy_t::remove:
+        return "remove";
     }
-    return fmt::format_to(it, "{{ sync_schema_registry_topic_mode: none }}");
+    vunreachable(
+      "Unknown unsupported_feature_policy {}", static_cast<int>(policy));
+}
+} // namespace
+
+fmt::iterator
+schema_registry_sync_config::shadow_schema_registry_api::format_to(
+  fmt::iterator it) const {
+    std::string auth = auth_config.has_value()
+                         ? ss::visit(
+                             *auth_config,
+                             [](const auto& authn) {
+                                 return fmt::format("{}", authn);
+                             })
+                         : std::string{"none"};
+    std::string destination_mapping
+      = destination.has_value()
+          ? ss::visit(
+              *destination,
+              [](const auto& mapping) { return fmt::format("{}", mapping); })
+          : std::string{"preserve-source-contexts"};
+    return fmt::format_to(
+      it,
+      "{{ shadow_schema_registry_api: {{ source_url: {}, auth_config: {}, "
+      "tls_enabled: {}, cert: {}, key: {:s}, ca: {}, tls_provide_sni: {}, "
+      "tail_interval: {}, full_sync_interval: {}, "
+      "max_source_requests_per_second: {}, source_filter: {}, destination: {}, "
+      "unsupported_schema_feature_policy: {} }} }}",
+      source_url,
+      auth,
+      tls_enabled,
+      cert,
+      key,
+      ca,
+      tls_provide_sni,
+      tail_interval,
+      full_sync_interval,
+      max_source_requests_per_second,
+      filter,
+      destination_mapping,
+      to_string_view(feature_policy));
+}
+
+fmt::iterator schema_registry_sync_config::format_to(fmt::iterator it) const {
+    if (!sync_mode.has_value()) {
+        return fmt::format_to(it, "{{ sync_mode: none }}");
+    }
+    return ss::visit(
+      *sync_mode,
+      [&it](const shadow_entire_schema_registry& mode) {
+          return fmt::format_to(
+            it, "{{ sync_schema_registry_topic_mode: {} }}", mode);
+      },
+      [&it](const shadow_schema_registry_api& api) {
+          return fmt::format_to(
+            it, "{{ sync_schema_registry_api_mode: {} }}", api);
+      });
 }
 } // namespace cluster_link::model
 

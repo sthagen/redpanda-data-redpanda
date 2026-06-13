@@ -48,31 +48,50 @@ class ExampleRunner(BackgroundThreadService):
 
         start_time = time.time()
 
-        while True:
-            # Terminate loop on timeout or stop_node
-            if time.time() > start_time + self._timeout:
-                break
-            if self._stopping.is_set():
-                break
+        try:
+            while True:
+                # Terminate loop on timeout or stop_node
+                if time.time() > start_time + self._timeout:
+                    break
+                if self._stopping.is_set():
+                    break
 
+                try:
+                    line = next(output_iter)
+                    line = line.strip()
+                    self.logger.debug(line)
+                except RemoteCommandError as e:
+                    if self._stopping.is_set():
+                        # Killing the process on stop makes ssh_capture exit
+                        # non-zero; that's expected, not a failure.
+                        break
+                    self.logger.exception(f"Command {cmd} returned an error: {e}")
+                    self._error = e
+                    # No retries: thread is complete, test will fail when
+                    # it calls condition_met and sees the error.
+                    break
+
+                # Take first line as pid
+                if not self._pid:
+                    self._pid = line
+                else:
+                    # Call to example.condition will automatically
+                    # store result in a boolean variable
+                    self._example.condition(line)
+        finally:
+            # The example (e.g. a long-running Kafka Streams app) keeps
+            # running after we stop reading its output. Kill it when the
+            # worker exits rather than relying only on stop_node: a leaked
+            # client can otherwise survive teardown and, because ducktape
+            # recycles docker hostnames, reconnect to an unrelated cluster
+            # and corrupt it (e.g. auto-create __consumer_offsets on a
+            # freshly-started node).
             try:
-                line = next(output_iter)
-                line = line.strip()
-                self.logger.debug(line)
+                self._kill_node(node)
             except RemoteCommandError as e:
-                self.logger.exception(f"Command {cmd} returned an error: {e}")
-                self._error = e
-                # No retries: thread is complete, test will fail when it calls
-                # condition_met and sees the error.
-                break
-
-            # Take first line as pid
-            if not self._pid:
-                self._pid = line
-            else:
-                # Call to example.condition will automatically
-                # store result in a boolean variable
-                self._example.condition(line)
+                self.logger.warning(
+                    f"Error killing example process on {node.name}: {e}"
+                )
 
     def condition_met(self):
         if self._error:
@@ -85,7 +104,9 @@ class ExampleRunner(BackgroundThreadService):
 
     def stop_node(self, node, **_):
         self._stopping.set()
+        self._kill_node(node)
 
+    def _kill_node(self, node):
         try:
             if self._pid:
                 node.account.signal(self._pid, 9, allow_fail=True)

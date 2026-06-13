@@ -337,15 +337,13 @@ bool frontend::schema_registry_shadowing_active() const {
             // If it is, return whether or not it is mutable based on its status
             return !is_topic_mutable(topic_it->second.status);
         }
-        // If mirror_schema_registry_topic option is set and the topic is not
-        // yet in the mirror topic list, then shadowing for SR is active
+        // A shadowing mode is engaged but there is no (mutable) mirror topic:
+        // either topic mode before the _schemas mirror topic appears, or API
+        // mode which has no mirror topic at all. In both cases local writes
+        // must be blocked so they cannot conflict with subjects, versions,
+        // IDs, modes, and configs the sync imports from the source.
         const auto& sr_cfg = md->configuration.schema_registry_sync_cfg;
-        if (
-          sr_cfg.sync_schema_registry_topic_mode.has_value()
-          && std::holds_alternative<
-            ::cluster_link::model::schema_registry_sync_config::
-              shadow_entire_schema_registry>(
-            sr_cfg.sync_schema_registry_topic_mode.value())) {
+        if (sr_cfg.is_topic_mode() || sr_cfg.api_mode() != nullptr) {
             return true;
         }
 

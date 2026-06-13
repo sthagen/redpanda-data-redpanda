@@ -1166,6 +1166,15 @@ service::delete_cluster_link(model::name_t name, bool force_delete_link) {
       });
 }
 
+ss::future<cl_result<void>>
+service::test_connection(model::name_t name, model::connection_config config) {
+    auto h = _gate.hold();
+    return with_manager([name = std::move(name),
+                         config = std::move(config)](manager* mgr) mutable {
+        return mgr->test_connection(std::move(name), std::move(config));
+    });
+}
+
 ss::future<cl_result<model::metadata_ptr>>
 service::delete_shadow_topic_from_shadow_link(
   model::name_t link_name, ::model::topic shadow_topic) {

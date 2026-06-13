@@ -9,7 +9,7 @@
  */
 #include "cloud_io/scheduler.h"
 
-#include "base/vassert.h"
+#include "cloud_io/reservation_policy.h"
 #include "cloud_io/scheduler_policy.h"
 
 #include <seastar/core/coroutine.hh>
@@ -50,7 +50,9 @@ scheduler::make_policy(size_t capacity, scheduler_config cfg) {
     case policy_type::passthrough:
         return std::make_unique<passthrough>(capacity);
     case policy_type::reservation:
-        vassert(false, "reservation_policy not yet supported");
+        return std::make_unique<reservation_policy<>>(
+          capacity,
+          std::move(cfg.reservation).value_or(reservation_policy_config{}));
     }
     std::unreachable();
 }

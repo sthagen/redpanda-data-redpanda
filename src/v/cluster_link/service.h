@@ -129,6 +129,18 @@ public:
     delete_cluster_link(model::name_t name, bool force_delete_link);
 
     /**
+     * @brief Tests connectivity and permissions to a source cluster without
+     * persisting any state. Used to implement the validate_only path of
+     * CreateShadowLink.
+     *
+     * @param name Link name used in log and error messages
+     * @param config Connection configuration to test
+     * @return nothing on success or a preflight error
+     */
+    ss::future<cl_result<void>>
+    test_connection(model::name_t name, model::connection_config config);
+
+    /**
      * @brief Removes a shadow topic from a shadow link, removing all state but
      * leaving the topic
      *

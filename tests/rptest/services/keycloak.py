@@ -400,6 +400,29 @@ class KeycloakService(Service):
             "https-port": self.https_port,
         }
 
+    def _dump_startup_failure(self, node):
+        """Log Keycloak's process state and log file into the test log.
+
+        Called when startup fails, before teardown's clean_node() removes
+        KC_LOG_FILE. A failure during start_node happens in a test's
+        constructor or setUp, where ducktape does not collect the service's
+        declared logs, so the cause of the failure is otherwise lost. Logging
+        it here preserves it in the always-collected test log."""
+        try:
+            alive = self.alive(node)
+        except Exception as e:
+            alive = f"<unknown: {e!r}>"
+        try:
+            log = node.account.ssh_output(
+                f"cat {KC_LOG_FILE}", allow_fail=True, combine_stderr=True
+            ).decode("utf-8", errors="replace")
+        except Exception as e:
+            log = f"<failed to read {KC_LOG_FILE}: {e!r}>"
+        self.logger.error(
+            f"Keycloak failed to start (quarkus process alive={alive}). "
+            f"Contents of {KC_LOG_FILE}:\n{log}"
+        )
+
     def start_node(self, node, access_token_lifespan_s=DEFAULT_AT_LIFESPAN_S, **kwargs):
         scheme = "https" if self.using_tls else "http"
         extra_cfg = {
@@ -417,9 +440,13 @@ class KeycloakService(Service):
         self.logger.debug(f"Starting Keycloak service {cfg_writer.rep}")
 
         with node.account.monitor_log(KC_LOG_FILE) as monitor:
-            node.account.ssh(f"{KC} build", allow_fail=False)
-            node.account.ssh_capture(self._start_cmd(), allow_fail=False)
-            monitor.wait_until("(main) Profile dev activated.", timeout_sec=30)
+            try:
+                node.account.ssh(f"{KC} build", allow_fail=False)
+                node.account.ssh_capture(self._start_cmd(), allow_fail=False)
+                monitor.wait_until("(main) Profile dev activated.", timeout_sec=60)
+            except Exception:
+                self._dump_startup_failure(node)
+                raise
 
         self.logger.debug(f"Keycloak PIDs: {self.pids(node)}")
 

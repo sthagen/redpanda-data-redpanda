@@ -173,7 +173,7 @@ class NessieCatalog(CatalogService):
     def _nessie_iceberg_path(self, node):
         return f"{self._nessie_base_path(node)}/iceberg"
 
-    def start_node(self, node, timeout_sec=60, **kwargs):
+    def start_node(self, node, timeout_sec=180, **kwargs):
         node.account.ssh(
             "mkdir -p %s" % NessieCatalog.PERSISTENT_ROOT, allow_fail=False
         )

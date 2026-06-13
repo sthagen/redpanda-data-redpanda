@@ -214,6 +214,9 @@ public:
 
     members_table_provider& get_members_table_provider() noexcept;
 
+    ss::future<cl_result<void>>
+    test_connection(model::name_t name, model::connection_config config);
+
 private:
     /// Called periodically to reconcile registered tasks on created links
     ss::future<> link_task_reconciler();

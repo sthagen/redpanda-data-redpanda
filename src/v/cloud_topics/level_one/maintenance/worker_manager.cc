@@ -15,19 +15,23 @@
 #include "cloud_topics/level_one/maintenance/meta.h"
 #include "cloud_topics/level_one/maintenance/worker.h"
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
+#include "container/chunked_vector.h"
+#include "model/timestamp.h"
 #include "resource_mgmt/cpu_scheduling.h"
 #include "ssx/future-util.h"
 
 namespace cloud_topics::l1 {
 
 worker_manager::worker_manager(
-  compaction_queue& work_queue,
+  compaction_queue& compaction_queue,
+  leveling_queue& leveling_queue,
   ss::sharded<file_io>* io,
   ss::sharded<replicated_metastore>* metastore,
   ss::sharded<cluster::metadata_cache>* metadata_cache,
   compaction_scheduler_probe& probe,
   ss::sharded<level_one_reader_probe>* l1_reader_probe)
-  : _compaction_queue(work_queue)
+  : _compaction_queue(compaction_queue)
+  , _leveling_queue(leveling_queue)
   , _io(io)
   , _metastore(metastore)
   , _metadata_cache(metadata_cache)
@@ -55,8 +59,7 @@ worker_manager::try_acquire_compaction_work(ss::shard_id shard) {
     vassert(
       ss::this_shard_id() == worker_manager_shard,
       "Expected calls to worker_manager::try_acquire_compaction_work() to "
-      "always "
-      "execute on shard {}",
+      "always execute on shard {}",
       worker_manager_shard);
 
     if (_compaction_queue.empty()) {
@@ -88,8 +91,7 @@ void worker_manager::complete_compaction_work(compaction_job* job) {
     vassert(
       ss::this_shard_id() == worker_manager_shard,
       "Expected calls to worker_manager::complete_compaction_work() to always "
-      "execute on "
-      "shard {}",
+      "execute on shard {}",
       worker_manager_shard);
 
     dassert(
@@ -99,6 +101,81 @@ void worker_manager::complete_compaction_work(compaction_job* job) {
     job->meta->compaction.inflight_shard.reset();
 
     _probe.log_compacted();
+}
+
+std::optional<foreign_leveling_job_ptr>
+worker_manager::try_acquire_leveling_work(ss::shard_id shard) {
+    vassert(
+      ss::this_shard_id() == worker_manager_shard,
+      "Expected calls to worker_manager::try_acquire_leveling_work() to always "
+      "execute on shard {}",
+      worker_manager_shard);
+
+    while (!_leveling_queue.empty()) {
+        auto job = _leveling_queue.top();
+        _leveling_queue.pop();
+        _probe.set_leveling_queue_length(_leveling_queue.size());
+
+        if (!job || !job->meta || !job->meta->link.is_linked()) {
+            // The CTP was unmanaged after this job was queued; drop it.
+            continue;
+        }
+
+        ++(job->meta->leveling.inflight_shards[shard]);
+        // Mark the range inflight (no commit timestamp yet) so the collector
+        // won't re-queue an overlapping range until this job completes.
+        [[maybe_unused]] const bool inserted
+          = job->meta->leveling.inflight_ranges.insert(
+            job->range.base_offset, job->range.last_offset, std::nullopt);
+        dassert(
+          inserted,
+          "Failed to mark leveling range {}~{} for CTP {} inflight; it is "
+          "empty or overlaps a range already inflight, which the collector "
+          "should have skipped when queueing.",
+          job->range.base_offset,
+          job->range.last_offset,
+          job->meta->tidp);
+        return ss::make_foreign(job);
+    }
+
+    return std::nullopt;
+}
+
+void worker_manager::complete_leveling_work(
+  leveling_job* job, ss::shard_id shard) {
+    vassert(
+      ss::this_shard_id() == worker_manager_shard,
+      "Expected calls to worker_manager::complete_leveling_work() to always "
+      "execute on shard {}",
+      worker_manager_shard);
+
+    if (!job || !job->meta) {
+        return;
+    }
+
+    auto& leveling = job->meta->leveling;
+    auto& inflight_shard_cnt = leveling.inflight_shards[shard];
+    dassert(
+      inflight_shard_cnt > 0,
+      "inflight shard count should be greater than 0 when completing leveling "
+      "work.");
+    --inflight_shard_cnt;
+
+    // The range was recorded as active (`nullopt`) on dequeue. Stamp it with
+    // the commit time in place so the collector applies a post-commit cooldown
+    // before re-scheduling it, evicting it once a later collection postdates
+    // the commit.
+    [[maybe_unused]] const bool assigned = leveling.inflight_ranges.assign(
+      job->range.base_offset, job->range.last_offset, model::timestamp::now());
+    dassert(
+      assigned,
+      "Failed to stamp completed leveling range {}~{} for CTP {} with a commit "
+      "time; no inflight range with exactly those bounds was found.",
+      job->range.base_offset,
+      job->range.last_offset,
+      job->meta->tidp);
+
+    _probe.leveling_range_completed();
 }
 
 void worker_manager::request_stop_compaction(log_compaction_meta_ptr log) {
@@ -120,22 +197,69 @@ void worker_manager::request_stop_compaction(log_compaction_meta_ptr log) {
     });
 }
 
+void worker_manager::request_stop_leveling(log_compaction_meta_ptr log) {
+    if (!log) {
+        return;
+    }
+
+    chunked_vector<ss::shard_id> shards;
+    for (const auto& [shard, count] : log->leveling.inflight_shards) {
+        if (count > 0) {
+            shards.push_back(shard);
+        }
+    }
+
+    if (shards.empty()) {
+        return;
+    }
+
+    ssx::spawn_with_gate(
+      _gate, [this, tidp = log->tidp, shards = std::move(shards)]() mutable {
+          return _workers.invoke_on(
+            std::move(shards), [tidp](compaction_worker& worker) {
+                return worker.terminate_leveling_jobs_for_tidp(tidp);
+            });
+      });
+}
+
 ss::future<> worker_manager::alert_compaction_workers() {
     auto guard = _gate.hold();
     co_await _workers.invoke_on_all(
       [](compaction_worker& worker) { worker.alert_compaction_fiber(); });
 }
 
-ss::future<> worker_manager::pause_worker(ss::shard_id worker) {
+ss::future<> worker_manager::alert_leveling_workers() {
     auto guard = _gate.hold();
-    co_await _workers.invoke_on(
-      worker, [](compaction_worker& worker) { return worker.pause_worker(); });
+    co_await _workers.invoke_on_all(
+      [](compaction_worker& worker) { worker.alert_leveling_fiber(); });
 }
 
-ss::future<> worker_manager::resume_worker(ss::shard_id worker) {
+ss::future<>
+worker_manager::pause_worker(ss::shard_id worker, maintenance_job_type kind) {
     auto guard = _gate.hold();
-    co_await _workers.invoke_on(
-      worker, [](compaction_worker& worker) { return worker.resume_worker(); });
+    co_await _workers.invoke_on(worker, [kind](compaction_worker& worker) {
+        return worker.pause_worker(kind);
+    });
+}
+
+ss::future<>
+worker_manager::resume_worker(ss::shard_id worker, maintenance_job_type kind) {
+    auto guard = _gate.hold();
+    co_await _workers.invoke_on(worker, [kind](compaction_worker& worker) {
+        return worker.resume_worker(kind);
+    });
+}
+
+ss::future<> worker_manager::pause_all_workers(maintenance_job_type kind) {
+    auto guard = _gate.hold();
+    co_await _workers.invoke_on_all(
+      [kind](compaction_worker& worker) { return worker.pause_worker(kind); });
+}
+
+ss::future<> worker_manager::resume_all_workers(maintenance_job_type kind) {
+    auto guard = _gate.hold();
+    co_await _workers.invoke_on_all(
+      [kind](compaction_worker& worker) { return worker.resume_worker(kind); });
 }
 
 } // namespace cloud_topics::l1

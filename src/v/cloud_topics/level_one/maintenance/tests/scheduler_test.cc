@@ -14,6 +14,7 @@
 #include "model/tests/random_batch.h"
 #include "random/generators.h"
 #include "storage/tests/batch_generators.h"
+#include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
 #include <gtest/gtest.h>
@@ -35,6 +36,85 @@ TEST_F(SchedulerTestFixture, UnmanageEvictsQueuedEntry) {
     scheduler->unmanage_partition(ntp, "test");
     ASSERT_FALSE(compaction_queue_contains(tidp));
     ASSERT_EQ(compaction_queue_size(), 0u);
+}
+
+// Disabling the compaction loop tears down its fiber and flips it to `paused`,
+// independently of leveling; re-enabling brings it back to `active`.
+TEST_F(SchedulerTestFixture, DisableEnableCompactionLoop) {
+    // start_scheduler() launched both loops.
+    ASSERT_EQ(compaction_loop_state(), loop_state::active);
+    ASSERT_TRUE(compaction_loop_running());
+
+    pause_compaction_loop().get();
+    ASSERT_EQ(compaction_loop_state(), loop_state::paused);
+    ASSERT_FALSE(compaction_loop_running());
+    // Leveling is unaffected.
+    ASSERT_EQ(leveling_loop_state(), loop_state::active);
+    ASSERT_TRUE(leveling_loop_running());
+
+    resume_compaction_loop().get();
+    ASSERT_EQ(compaction_loop_state(), loop_state::active);
+    ASSERT_TRUE(compaction_loop_running());
+}
+
+// Symmetric to the above: leveling disable/enable leaves compaction running.
+TEST_F(SchedulerTestFixture, DisableEnableLevelingLoop) {
+    ASSERT_EQ(leveling_loop_state(), loop_state::active);
+    ASSERT_TRUE(leveling_loop_running());
+
+    pause_leveling_loop().get();
+    ASSERT_EQ(leveling_loop_state(), loop_state::paused);
+    ASSERT_FALSE(leveling_loop_running());
+    ASSERT_EQ(compaction_loop_state(), loop_state::active);
+    ASSERT_TRUE(compaction_loop_running());
+
+    resume_leveling_loop().get();
+    ASSERT_EQ(leveling_loop_state(), loop_state::active);
+    ASSERT_TRUE(leveling_loop_running());
+}
+
+// Disabling drops any queued (not-yet-dispatched) work, so resumed/other
+// workers don't pick up stale jobs.
+TEST_F(SchedulerTestFixture, DisableDrainsCompactionQueue) {
+    auto [ntp, tidp] = make_ntidp("drain-me");
+    scheduler->manage_partition(ntp, tidp, "test");
+    enqueue_for_compaction(tidp);
+    ASSERT_EQ(compaction_queue_size(), 1u);
+
+    pause_compaction_loop().get();
+    ASSERT_EQ(compaction_queue_size(), 0u);
+}
+
+// Redundant disable/enable calls are no-ops, not a crash, double-spawn, or
+// double-join.
+TEST_F(SchedulerTestFixture, DisableEnableIdempotent) {
+    pause_compaction_loop().get();
+    pause_compaction_loop().get(); // already paused
+    ASSERT_FALSE(compaction_loop_running());
+    ASSERT_EQ(compaction_loop_state(), loop_state::paused);
+
+    resume_compaction_loop().get();
+    resume_compaction_loop().get(); // already running
+    ASSERT_TRUE(compaction_loop_running());
+    ASSERT_EQ(compaction_loop_state(), loop_state::active);
+}
+
+// Drives the real path: `cloud_topics_compaction_disabled` -> binding watch ->
+// `_scheduler_update_queue` -> pause/resume of the loop.
+TEST_F(SchedulerTestFixture, DisableEnableViaConfig) {
+    arm_config_watches();
+    scoped_config cfg;
+
+    cfg.get("cloud_topics_compaction_disabled").set_value(true);
+    RPTEST_REQUIRE_EVENTUALLY(
+      5s, [this] { return !compaction_loop_running(); });
+    ASSERT_EQ(compaction_loop_state(), loop_state::paused);
+    // Leveling stays up: the switches are independent.
+    ASSERT_TRUE(leveling_loop_running());
+
+    cfg.get("cloud_topics_compaction_disabled").set_value(false);
+    RPTEST_REQUIRE_EVENTUALLY(5s, [this] { return compaction_loop_running(); });
+    ASSERT_EQ(compaction_loop_state(), loop_state::active);
 }
 
 // This test produces data and stresses concurrent addition and removal of ntps

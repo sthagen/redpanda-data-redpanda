@@ -12,7 +12,6 @@
 #include "base/format_to.h"
 
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -96,6 +95,19 @@ static_assert(
   std::to_underlying(group_id::default_group) + 1 == num_group_ids,
   "num_group_ids must equal the number of group_id enumerators; "
   "update both when adding or removing a group.");
+
+/// A parsed reservation target: a group and its target_reserved slot count.
+struct group_target {
+    group_id group;
+    uint32_t slots;
+    bool operator==(const group_target&) const = default;
+};
+
+/// Parse a "group_name:slots" target spec. Returns the (group, slots) target
+/// when the spec is well-formed and the name matches a known group_id, else
+/// nullopt.
+std::optional<group_target>
+try_parse_target_spec(std::string_view spec) noexcept;
 
 /// Fixed-size array of T indexed by group_id.
 template<typename T>

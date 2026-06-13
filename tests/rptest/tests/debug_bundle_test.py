@@ -877,8 +877,8 @@ class DebugBundleOAuthBearerAuthn(DebugBundleTestBase):
         kc_node = self.keycloak.nodes[0]
         try:
             self.keycloak.start_node(kc_node)
-        except Exception as e:
-            self.logger.error(f"Keycloak failed to start: {e}")
+        except Exception:
+            self.logger.exception("Keycloak failed to start")
             self.keycloak.clean_node(kc_node)
             raise
 

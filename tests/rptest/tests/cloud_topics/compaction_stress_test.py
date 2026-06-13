@@ -19,7 +19,6 @@ from rptest.services.kgo_verifier_services import (
     KgoVerifierProducer,
     KgoVerifierSeqConsumer,
 )
-from rptest.services.redpanda import MetricsEndpoint
 from rptest.tests.cloud_topics.e2e_test import EndToEndCloudTopicsBase
 from rptest.utils.mode_checks import is_debug_mode
 
@@ -55,40 +54,7 @@ class CompactionStressBase(EndToEndCloudTopicsBase):
             environment=environment,
         )
 
-    # ── Metric helpers ──────────────────────────────────────────────
-
-    def _metric_sum(self, metric_name: str) -> float:
-        assert self.redpanda
-        return self.redpanda.metric_sum(
-            metric_name=metric_name,
-            metrics_endpoint=MetricsEndpoint.METRICS,
-            expect_metric=True,
-        )
-
-    def get_log_compactions(self) -> float:
-        return self._metric_sum(
-            "vectorized_cloud_topics_compaction_scheduler_log_compactions"
-        )
-
-    def get_records_removed(self) -> float:
-        return self._metric_sum(
-            "vectorized_cloud_topics_compaction_worker_records_removed"
-        )
-
-    def get_managed_logs(self) -> float:
-        return self._metric_sum(
-            "vectorized_cloud_topics_compaction_scheduler_managed_log_count"
-        )
-
     # ── Wait helpers ────────────────────────────────────────────────
-
-    def wait_for_managed_logs(self, timeout_sec: int = 60):
-        wait_until(
-            lambda: self.get_managed_logs() > 0,
-            timeout_sec=timeout_sec,
-            backoff_sec=1,
-            err_msg="Did not see management of compact-enabled CTPs.",
-        )
 
     def wait_for_compaction_rounds(
         self,
@@ -120,53 +86,6 @@ class CompactionStressBase(EndToEndCloudTopicsBase):
                 f"Expected >= {min_removed} records removed, "
                 f"got {self.get_records_removed()}"
             ),
-        )
-
-    def wait_for_compaction_quiesce(
-        self,
-        stable_sec: int = 30,
-        timeout_sec: int = 360,
-    ):
-        """
-        Wait for records_removed to stabilize, meaning compaction has
-        converged and there is nothing left to remove. The metric must
-        remain unchanged for `stable_sec` consecutive seconds.
-        """
-        import time
-
-        # First wait for at least one removal so we know compaction started.
-        wait_until(
-            lambda: self.get_records_removed() > 0,
-            timeout_sec=60,
-            backoff_sec=2,
-            err_msg="Compaction never started removing records",
-        )
-
-        prev = self.get_records_removed()
-        stable_since = time.time()
-
-        def _stable() -> bool:
-            nonlocal prev, stable_since
-            now_removed = self.get_records_removed()
-            if now_removed != prev:
-                self.logger.info(
-                    f"Compaction still active: records_removed {prev} -> {now_removed}"
-                )
-                prev = now_removed
-                stable_since = time.time()
-            return time.time() - stable_since >= stable_sec
-
-        wait_until(
-            _stable,
-            timeout_sec=timeout_sec,
-            backoff_sec=5,
-            err_msg=lambda: (
-                f"Compaction did not quiesce within {timeout_sec}s "
-                f"(records_removed={self.get_records_removed()})"
-            ),
-        )
-        self.logger.info(
-            f"Compaction quiesced: {self.get_records_removed()} records removed"
         )
 
     def produce_and_wait(

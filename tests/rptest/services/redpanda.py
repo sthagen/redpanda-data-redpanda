@@ -995,6 +995,20 @@ class SISettings:
 
         if self.cloud_storage_max_connections:
             conf["cloud_storage_max_connections"] = self.cloud_storage_max_connections
+            # The reservation policy (the default) asserts that the sum of
+            # per-group target_reserved values fits under the pool capacity.
+            # The cluster default sums to 6; shrink to a 1+1+1=3 override when
+            # the pool fits that but not the default. For pools smaller than 3
+            # we leave the override unset so build_scheduler_config's clamp
+            # falls back to no reservation (every admit through the common
+            # pool) — at cap<3 there isn't enough room to keep a per-group
+            # floor under the assertion.
+            if 3 <= self.cloud_storage_max_connections < 6:
+                conf["cloud_io_scheduler_reservation"] = [
+                    "producer_upload:1",
+                    "consumer_fetch:1",
+                    "default_group:1",
+                ]
         if self.cloud_storage_readreplica_manifest_sync_timeout_ms:
             conf["cloud_storage_readreplica_manifest_sync_timeout_ms"] = (
                 self.cloud_storage_readreplica_manifest_sync_timeout_ms

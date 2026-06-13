@@ -41,3 +41,18 @@ redpanda_cc_gtest(
         "@googletest//:gtest_main",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "utf8_sanitize_test",
+    timeout = "short",
+    srcs = [
+        "utf8_sanitize_test.cc",
+    ],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/strings:utf8",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@seastar",
+    ],
+)

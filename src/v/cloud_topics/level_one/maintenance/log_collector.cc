@@ -87,25 +87,22 @@ void partition_leader_log_collector::on_ntp_change(
 
         auto& topic_cfg = topic_cfg_opt.value();
 
-        auto is_compacted_cloud_topic = topic_cfg.is_compacted()
-                                        && topic_cfg.is_cloud_topic();
+        // All cloud topics are managed: compaction and leveling are both
+        // L1 maintenance work, and leveling applies regardless of
+        // cleanup policy.
+        auto is_cloud_topic = topic_cfg.is_cloud_topic();
         auto is_leader_for = _leaders->local().get_leader(ntp) == _self;
-        if (is_compacted_cloud_topic && is_leader_for && !is_managed) {
-            // This is likely an existing cloud topic which is now `compact`
-            // enabled. We should manage it iff this broker already hosts
-            // the partition leader.
+        if (is_cloud_topic && is_leader_for && !is_managed) {
             auto tp_id = topic_cfg.tp_id;
             vassert(tp_id.has_value(), "Expected tp_id to have value.");
             auto tidp = model::topic_id_partition(
               tp_id.value(), ntp.tp.partition);
 
-            _manage_cb(ntp, tidp, "Enabled compaction");
+            _manage_cb(ntp, tidp, "Topic became a cloud topic");
         }
 
-        if (!is_compacted_cloud_topic && is_managed) {
-            // This is likely an existing cloud topic which is no longer
-            // `compact` enabled.
-            _unmanage_cb(ntp, "Disabled compaction");
+        if (!is_cloud_topic && is_managed) {
+            _unmanage_cb(ntp, "Topic is no longer a cloud topic");
         }
         return;
     }
@@ -128,10 +125,10 @@ void partition_leader_log_collector::on_leadership_change(
 
     auto& topic_cfg = topic_cfg_opt.value();
 
-    auto is_compacted_cloud_topic = topic_cfg.is_compacted()
-                                    && topic_cfg.is_cloud_topic();
-
-    if (!is_compacted_cloud_topic) {
+    // Manage every cloud topic — leveling applies regardless of cleanup
+    // policy; the compaction loop independently filters non-compacted
+    // topics during sampling.
+    if (!topic_cfg.is_cloud_topic()) {
         return;
     }
 

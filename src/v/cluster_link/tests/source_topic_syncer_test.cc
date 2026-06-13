@@ -225,8 +225,7 @@ TEST_F_CORO(source_topic_syncer_test, schema_registry_test) {
 
     // Now enable schema registry topic mirroring and ensure that it shows up
     auto update = co_await link_metadata->copy();
-    update.configuration.schema_registry_sync_cfg
-      .sync_schema_registry_topic_mode
+    update.configuration.schema_registry_sync_cfg.sync_mode
       = model::schema_registry_sync_config::shadow_entire_schema_registry{};
     auto link_id = fixture()->find_link_id_by_name(model::name_t("test_link"));
     ASSERT_TRUE_CORO(link_id.has_value());
@@ -258,7 +257,7 @@ TEST_F_CORO(source_topic_syncer_test, schema_registry_exists_but_empty) {
       cluster::errc::success);
 
     auto md = get_default_metadata();
-    md.configuration.schema_registry_sync_cfg.sync_schema_registry_topic_mode
+    md.configuration.schema_registry_sync_cfg.sync_mode
       = model::schema_registry_sync_config::shadow_entire_schema_registry{};
     co_await fixture()->upsert_link(std::move(md));
 
@@ -291,7 +290,7 @@ TEST_F_CORO(source_topic_syncer_test, schema_registry_exists_not_empty) {
       ::model::schema_registry_internal_tp, kafka::offset(10));
 
     auto md = get_default_metadata();
-    md.configuration.schema_registry_sync_cfg.sync_schema_registry_topic_mode
+    md.configuration.schema_registry_sync_cfg.sync_mode
       = model::schema_registry_sync_config::shadow_entire_schema_registry{};
     co_await fixture()->upsert_link(std::move(md));
 

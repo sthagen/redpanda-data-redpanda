@@ -11,13 +11,63 @@
 #include "cloud_storage/configuration.h"
 
 #include "base/vlog.h"
+#include "cloud_io/scheduler_types.h"
 #include "cloud_storage/logger.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
 
+#include <algorithm>
+#include <functional>
+
 namespace cloud_storage {
 
 namespace {
+
+cloud_io::scheduler_config build_scheduler_config(size_t capacity) {
+    cloud_io::scheduler_config cfg;
+    cfg.policy = config::shard_local_cfg().cloud_io_scheduler_policy();
+    if (cfg.policy == cloud_io::policy_type::reservation) {
+        cloud_io::reservation_policy_config rcfg;
+        for (const auto& spec :
+             config::shard_local_cfg().cloud_io_scheduler_reservation()) {
+            if (
+              const auto parsed = cloud_io::try_parse_target_spec(spec);
+              parsed.has_value()) {
+                rcfg.target_reserved[parsed->group] = parsed->slots;
+            } else {
+                // No per_group slot for a name that isn't a known
+                // group_id, so skip it.
+                vlog(
+                  cst_log.warn,
+                  "cloud_io_scheduler_reservation: ignoring unknown spec "
+                  "'{}'",
+                  spec);
+            }
+        }
+        // The reservation policy asserts at construction that the sum of
+        // per-group target_reserved fits under capacity. Drop the
+        // reservation if a misconfiguration would exceed it, rather than
+        // tripping that assertion at startup; the policy still runs, with
+        // every admit flowing through the common pool until the operator
+        // reconciles the two properties.
+        const auto target_sum = std::ranges::fold_left(
+          rcfg.target_reserved, size_t{0}, std::plus{});
+        if (target_sum > capacity) {
+            vlog(
+              cst_log.warn,
+              "cloud_io_scheduler_reservation target_reserved sum ({}) "
+              "exceeds cloud_storage_max_connections ({}); falling back "
+              "to no reservation. Adjust either property to enable "
+              "per-group reservation lanes.",
+              target_sum,
+              capacity);
+            rcfg = {};
+        }
+        cfg.reservation = std::move(rcfg);
+    }
+    return cfg;
+}
+
 cloud_storage_clients::default_overrides get_default_overrides() {
     // Set default overrides
     cloud_storage_clients::default_overrides overrides;
@@ -114,11 +164,12 @@ ss::future<configuration> configuration::get_s3_config() {
         disable_metrics,
         disable_public_metrics);
 
+    const auto cap = static_cast<size_t>(
+      config::shard_local_cfg().cloud_storage_max_connections.value());
     configuration cfg{
       .client_config = std::move(s3_conf),
-      .connection_limit = cloud_storage::connection_limit(
-        config::shard_local_cfg().cloud_storage_max_connections.value()),
-      .scheduler = {},
+      .connection_limit = cloud_storage::connection_limit(cap),
+      .scheduler = build_scheduler_config(cap),
       .bucket_name = bucket_name,
       .cloud_credentials_source = cloud_credentials_source,
     };
@@ -177,11 +228,12 @@ ss::future<configuration> configuration::get_abs_config() {
         disable_metrics,
         disable_public_metrics);
 
+    const auto cap = static_cast<size_t>(
+      config::shard_local_cfg().cloud_storage_max_connections.value());
     configuration cfg{
       .client_config = std::move(abs_conf),
-      .connection_limit = cloud_storage::connection_limit(
-        config::shard_local_cfg().cloud_storage_max_connections.value()),
-      .scheduler = {},
+      .connection_limit = cloud_storage::connection_limit(cap),
+      .scheduler = build_scheduler_config(cap),
       .bucket_name = cloud_storage_clients::bucket_name(get_value_or_throw(
         config::shard_local_cfg().cloud_storage_azure_container,
         "cloud_storage_azure_container")),

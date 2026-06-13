@@ -28,6 +28,9 @@ namespace {
 inline bool needs_compaction(
   const metastore::compaction_info_response& info,
   const cluster::topic_configuration& topic_cfg) {
+    if (!topic_cfg.is_compacted()) {
+        return false;
+    }
     auto& topic_mcdr = topic_cfg.properties.min_cleanable_dirty_ratio;
     auto min_cleanable_dirty_ratio
       = topic_mcdr.has_optional_value()
@@ -181,19 +184,25 @@ log_info_collector::build_compaction_specs(
     specs.reserve(size);
 
     for (const auto& log : logs_list) {
+        auto topic_cfg_opt = _topic_metadata_provider->get_topic_cfg(
+          model::topic_namespace_view(log.ntp));
+
+        if (!topic_cfg_opt.has_value()) {
+            continue;
+        }
+
+        // All cloud topics are managed, but only compacted ones are sampled
+        // for compaction; non-compacted topics are managed solely for leveling.
+        if (!topic_cfg_opt.value().get().is_compacted()) {
+            continue;
+        }
+
         if (log.compaction.inflight_shard.has_value()) {
             // No need to sample inflight logs
             vlog(
               compaction_log.debug,
               "Skipping info collection for CTP {}, compaction is inflight",
               log.ntp);
-            continue;
-        }
-
-        auto topic_cfg_opt = _topic_metadata_provider->get_topic_cfg(
-          model::topic_namespace_view(log.ntp));
-
-        if (!topic_cfg_opt.has_value()) {
             continue;
         }
 

@@ -320,18 +320,21 @@ class CreateShadowLinkRequest(google.protobuf.message.Message):
     """
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     SHADOW_LINK_FIELD_NUMBER: builtins.int
+    VALIDATE_ONLY_FIELD_NUMBER: builtins.int
+    validate_only: builtins.bool
+    'If true, validate connection parameters without creating the link.\n    Returns an empty response on success or an error if validation fails.\n    '
 
     @property
     def shadow_link(self) -> Global___ShadowLink:
         """The shadow link to create"""
 
-    def __init__(self, *, shadow_link: Global___ShadowLink | None=...) -> None:
+    def __init__(self, *, shadow_link: Global___ShadowLink | None=..., validate_only: builtins.bool=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> None:
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link', 'validate_only', b'validate_only']) -> None:
         ...
 Global___CreateShadowLinkRequest: typing_extensions.TypeAlias = CreateShadowLinkRequest
 

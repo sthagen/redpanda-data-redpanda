@@ -354,6 +354,18 @@ ss::future<err_info> manager::link_preflight_checks(const model::metadata& md) {
     co_return return_error;
 }
 
+ss::future<cl_result<void>>
+manager::test_connection(model::name_t name, model::connection_config config) {
+    model::metadata md;
+    md.name = std::move(name);
+    md.connection = std::move(config);
+    auto err = co_await link_preflight_checks(md);
+    if (err.code() != errc::success) {
+        co_return err;
+    }
+    co_return outcome::success();
+}
+
 ss::future<cl_result<model::metadata_ptr>>
 manager::upsert_cluster_link(model::metadata md) {
     static constexpr auto wait_for_link_creation_timeout = 30s;

@@ -52,6 +52,9 @@ public:
         }
     }
 
+    /// Clear all entries in the queue.
+    void clear_all() { _queue.clear(); }
+
     bool empty() const { return _queue.empty(); }
     size_t size() const { return _queue.size(); }
     bool contains(const model::topic_id_partition& tidp) const {

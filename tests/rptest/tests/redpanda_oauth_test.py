@@ -125,8 +125,8 @@ class RedpandaOIDCTestBase(Test):
             self.keycloak.start_node(
                 kc_node, access_token_lifespan_s=access_token_lifespan
             )
-        except Exception as e:
-            self.logger.error(f"{e}")
+        except Exception:
+            self.logger.exception("Keycloak failed to start")
             self.keycloak.clean_node(kc_node)
             assert False, "Keycloak failed to start"
 

@@ -95,6 +95,17 @@ public:
     [[nodiscard]] const_iterator find(T index) const;
 
     /**
+     * Assign \p value, in place, to the interval exactly equal to
+     * [interval.start, interval.start + interval.length).
+     *
+     * Returns true iff an interval with exactly those bounds exists and was
+     * updated; an interval that merely contains or partially overlaps the range
+     * is left untouched. Only the mapped value changes; the interval set and
+     * its ordering (which is by interval, not value) are unaffected.
+     */
+    bool assign(interval interval, V value);
+
+    /**
      * Return true if any stored interval overlaps [start, start+length).
      *
      * A non-positive length never overlaps.
@@ -133,6 +144,11 @@ public:
     [[nodiscard]] size_t size() const;
 
 private:
+    // Locates the interval containing `index` in `map` (const or mutable),
+    // returning `map.end()` if none. Shared by `find` and `assign`.
+    template<typename Map>
+    static auto find_impl(Map& map, T index);
+
     map_type map_;
 };
 
@@ -186,23 +202,24 @@ interval_map<T, V>::insert(interval interval, V value) {
 }
 
 template<std::integral T, typename V>
-interval_map<T, V>::const_iterator interval_map<T, V>::find(T index) const {
-    auto it = map_.lower_bound(index);
-    if (it == map_.cend()) {
-        if (map_.empty()) {
-            return map_.cend();
+template<typename Map>
+auto interval_map<T, V>::find_impl(Map& map, T index) {
+    auto it = map.lower_bound(index);
+    if (it == map.end()) {
+        if (map.empty()) {
+            return map.end();
         }
         it = std::prev(it);
 
     } else if (it->first.start == index) {
         return it;
 
-    } else if (it == map_.cbegin()) {
+    } else if (it == map.begin()) {
         /*
          * equality condition failing before this means that the index is before
          * the first interval in the container.
          */
-        return map_.cend();
+        return map.end();
 
     } else {
         --it;
@@ -213,7 +230,28 @@ interval_map<T, V>::const_iterator interval_map<T, V>::find(T index) const {
         return it;
     }
 
-    return map_.cend();
+    return map.end();
+}
+
+template<std::integral T, typename V>
+interval_map<T, V>::const_iterator interval_map<T, V>::find(T index) const {
+    return find_impl(map_, index);
+}
+
+template<std::integral T, typename V>
+bool interval_map<T, V>::assign(interval interval, V value) {
+    const auto length = interval.length;
+    if (length <= 0) {
+        return false;
+    }
+    const auto start = interval.start;
+    const auto end = start + length;
+    auto it = find_impl(map_, start);
+    if (it == map_.end() || it->first.start != start || it->first.end != end) {
+        return false;
+    }
+    it->second = std::move(value);
+    return true;
 }
 
 template<std::integral T, typename V>

@@ -228,6 +228,11 @@ struct reservation_group_state {
     uint64_t admit_total = 0;
     uint64_t admit_immediate_total = 0;
 
+    /// Lifetime count of waiters that aborted while queued (incl. the
+    /// shutdown sweep in stop()). Bumped once per waiter in
+    /// reservation_waiter::cancel().
+    uint64_t canceled_total = 0;
+
     /// Timestamp of the most recent `active` → `dwelling` transition.
     /// nullopt if the group has never been `active`.
     std::optional<time_point> inactive_since;
@@ -474,6 +479,7 @@ void reservation_waiter<Clock>::cancel() noexcept {
           state == waiter_state::enqueued,
           "reservation_waiter::cancel: linked waiter in non-enqueued state");
         state = waiter_state::canceled;
+        ++_gs->canceled_total;
         p.set_exception(
           std::make_exception_ptr(ss::abort_requested_exception{}));
         _gs->maybe_mark_inactive();

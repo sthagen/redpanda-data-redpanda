@@ -401,3 +401,30 @@ TEST(IntervalMap, RandomIntervals) {
         seastar::maybe_yield().get();
     }
 }
+
+TEST(IntervalMap, AssignExactMatchOnly) {
+    imap map;
+    EXPECT_TRUE(map.insert({0, 10}, 1).second);
+    EXPECT_TRUE(map.insert({10, 10}, 2).second);
+
+    // Exact bounds: updates in place and leaves the interval set unchanged.
+    EXPECT_TRUE(map.assign({0, 10}, 100));
+    EXPECT_EQ(map.find(0)->second, 100);
+    EXPECT_EQ(map.size(), 2);
+    // The neighbouring interval is untouched.
+    EXPECT_EQ(map.find(10)->second, 2);
+
+    // Same base but wrong length (subset / superset) does not match.
+    EXPECT_FALSE(map.assign({0, 5}, 7));
+    EXPECT_FALSE(map.assign({0, 20}, 7));
+    EXPECT_EQ(map.find(0)->second, 100);
+
+    // An offset inside an interval that is not its base does not match.
+    EXPECT_FALSE(map.assign({5, 5}, 7));
+    EXPECT_EQ(map.find(0)->second, 100);
+
+    // Absent range and zero length are no-ops.
+    EXPECT_FALSE(map.assign({100, 10}, 7));
+    EXPECT_FALSE(map.assign({0, 0}, 7));
+    EXPECT_EQ(map.size(), 2);
+}

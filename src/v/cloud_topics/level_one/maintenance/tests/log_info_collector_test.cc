@@ -69,9 +69,16 @@ protected:
     }
 };
 
-// A fake topic config provider which always returns a value.
+// A fake topic config provider which always returns a value. The config is
+// marked compacted so it passes the compaction loop's `is_compacted()` filter
+// in `build_compaction_specs`/`needs_compaction`.
 class fake_cfg_provider : public l1::topic_cfg_provider {
 public:
+    fake_cfg_provider() {
+        _cfg.properties.cleanup_policy_bitflags
+          = model::cleanup_policy_bitflags::compaction;
+    }
+
     std::optional<std::reference_wrapper<const cluster::topic_configuration>>
     get_topic_cfg(model::topic_namespace_view) const final {
         return _cfg;

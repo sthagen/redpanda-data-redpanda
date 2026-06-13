@@ -188,11 +188,7 @@ std::optional<ss::sstring> is_valid_topic(
 }
 
 bool shadowing_entire_sr(const model::schema_registry_sync_config& cfg) {
-    return cfg.sync_schema_registry_topic_mode.has_value()
-           && std::holds_alternative<
-             ::cluster_link::model::schema_registry_sync_config::
-               shadow_entire_schema_registry>(
-             *cfg.sync_schema_registry_topic_mode);
+    return cfg.is_topic_mode();
 }
 
 bool select_topic(
@@ -214,11 +210,11 @@ source_topic_syncer::source_topic_syncer(
       config.configuration.topic_metadata_mirroring_cfg.get_task_interval(),
       source_topic_syncer::task_name)
   , _config(config.configuration.topic_metadata_mirroring_cfg.copy())
-  , _sr_config(config.configuration.schema_registry_sync_cfg) {}
+  , _sr_config(config.configuration.schema_registry_sync_cfg.copy()) {}
 
 void source_topic_syncer::update_config(const model::metadata& config) {
     _config = config.configuration.topic_metadata_mirroring_cfg.copy();
-    _sr_config = config.configuration.schema_registry_sync_cfg;
+    _sr_config = config.configuration.schema_registry_sync_cfg.copy();
     set_run_interval(
       config.configuration.topic_metadata_mirroring_cfg.get_task_interval());
 }

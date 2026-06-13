@@ -72,41 +72,23 @@ TEST_F(CompactionFixture, ManageAndDeleteCompactedTopic) {
       10s, [&] { return !compaction_scheduler->is_managed(ntp); });
 }
 
-TEST_F(CompactionFixture, AlterAndManageUncompactedTopic) {
-    // Enabling `compact` cleanup policy on an existing cloud topic should make
-    // it managed in the scheduler.
+TEST_F(CompactionFixture, UncompactedTopicIsManaged) {
+    // All cloud topics are managed by the scheduler regardless of cleanup
+    // policy: compaction is per-loop-eligibility, but leveling applies to
+    // every cloud topic.
     const model::topic topic_name("tapioca");
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     create_cloud_topic(ntp, cluster::topic_properties{}).get();
 
     auto* ct_app = app.cloud_topics_app.get();
     auto* compaction_scheduler = ct_app->get_compaction_scheduler();
-    ASSERT_FALSE(compaction_scheduler->is_managed(ntp));
-
-    auto property_update = cluster::incremental_topic_updates{};
-    property_update.cleanup_policy_bitflags.op
-      = cluster::incremental_update_operation::set;
-    property_update.cleanup_policy_bitflags.value
-      = model::cleanup_policy_bitflags::compaction;
-    auto custom_update = cluster::incremental_topic_custom_updates{};
-    auto update = cluster::topic_properties_update_vector{
-      cluster::topic_properties_update{
-        model::topic_namespace(ntp.ns, ntp.tp.topic),
-        std::move(property_update),
-        std::move(custom_update)}};
-
-    app.controller->get_topics_frontend()
-      .local()
-      .update_topic_properties(std::move(update), model::no_timeout)
-      .get();
-
     RPTEST_REQUIRE_EVENTUALLY(
       10s, [&] { return compaction_scheduler->is_managed(ntp); });
 }
 
-TEST_F(CompactionFixture, ManageAndAlterCompactedTopic) {
-    // Disabling `compact` cleanup policy on a managed cloud topic should make
-    // it unmanaged in the scheduler.
+TEST_F(CompactionFixture, TopicStaysManagedWhenCompactionToggled) {
+    // Cloud topics remain managed through cleanup-policy toggles. Compaction
+    // and leveling are gated downstream; management itself is unaffected.
     const model::topic topic_name("tapioca");
     model::ntp ntp(model::kafka_namespace, topic_name, 0);
     create_cloud_topic(ntp, compact_topic_props).get();
@@ -133,6 +115,15 @@ TEST_F(CompactionFixture, ManageAndAlterCompactedTopic) {
       .update_topic_properties(std::move(update), model::no_timeout)
       .get();
 
-    RPTEST_REQUIRE_EVENTUALLY(
-      10s, [&] { return !compaction_scheduler->is_managed(ntp); });
+    // Wait for the cleanup policy update to propagate to metadata_cache, and
+    // assert the partition remains managed at the same point in time.
+    RPTEST_REQUIRE_EVENTUALLY(10s, [&] {
+        auto md_ref = app.metadata_cache.local().get_topic_metadata_ref(
+          model::topic_namespace_view(ntp));
+        if (!md_ref.has_value()) {
+            return false;
+        }
+        const auto& cfg = md_ref.value().get().get_configuration();
+        return !cfg.is_compacted() && compaction_scheduler->is_managed(ntp);
+    });
 }

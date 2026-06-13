@@ -13,6 +13,7 @@
 #include "cloud_topics/level_one/common/file_io.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader_probe.h"
 #include "cloud_topics/level_one/maintenance/compaction/compaction_queue.h"
+#include "cloud_topics/level_one/maintenance/leveling/leveling_queue.h"
 #include "cloud_topics/level_one/maintenance/log_collector.h"
 #include "cloud_topics/level_one/maintenance/log_info_collector.h"
 #include "cloud_topics/level_one/maintenance/meta.h"
@@ -23,6 +24,7 @@
 #include "config/property.h"
 #include "model/fundamental.h"
 #include "ssx/semaphore.h"
+#include "ssx/work_queue.h"
 
 class SchedulerTestFixture;
 
@@ -79,12 +81,44 @@ public:
     void unmanage_partition(const model::ntp&, std::string_view);
 
 private:
-    // Starts the backgrounded scheduling loop.
-    void start_bg_loop();
+    // Registers binding watches that drive disabling/enabling maintenance
+    // fibers by submitting start/stop jobs to `_scheduler_update_queue`.
+    void watch_config_changes();
 
-    // The main compaction loop. Invoked in a background fiber until `_as` has
-    // an abort requested or the `_gate` is closed.
+    // The compaction scheduling loop.
     ss::future<> compaction_scheduling_loop();
+
+    // The leveling scheduling loop.
+    ss::future<> leveling_scheduling_loop();
+
+    // A single scheduling iteration called from above loops.
+    ss::future<> do_compaction_scheduling();
+    ss::future<> do_leveling_scheduling();
+
+    // True iff the corresponding loop should keep running: the gate is open,
+    // the scheduler-wide abort has not fired, and the loop's target state is
+    // `active`.
+    bool should_run_compaction_loop() const;
+    bool should_run_leveling_loop() const;
+
+    // Sets `_*_target_loop_state = active` and drives the loop toward it:
+    // launches the background maintenance fiber, assigning a value to
+    // `_*_loop_fut` while resuming underlying workers. No-ops once the
+    // scheduler is shutting down.
+    ss::future<> resume_compaction_loop();
+    ss::future<> resume_leveling_loop();
+
+    // Sets `_*_target_loop_state = paused` and drives the loop toward it:
+    // tears down the background maintenance fiber, clearing `_*_loop_fut`
+    // while pausing underlying workers. No-ops once the scheduler is shutting
+    // down.
+    ss::future<> pause_compaction_loop();
+    ss::future<> pause_leveling_loop();
+
+    // Join a loop's fiber and clear its future (no-op if not running). Mirrors
+    // the per-shard worker's `clear_*_work_fut`.
+    ss::future<> clear_compaction_loop_fut();
+    ss::future<> clear_leveling_loop_fut();
 
 private:
     // Pointer to sharded `file_io` held by `app`. Used by the `worker_manager`
@@ -111,10 +145,20 @@ private:
     // The interval on which compaction loop is executed.
     config::binding<std::chrono::milliseconds> _compaction_interval;
 
+    // The interval on which the leveling loop is executed.
+    config::binding<std::chrono::milliseconds> _leveling_interval;
+
+    config::binding<bool> _compaction_disabled;
+    config::binding<bool> _leveling_disabled;
+
     // This semaphore is used as a way to signal a change to
     // `cloud_topics_compaction_interval_ms` during the `wait()` operation in
     // the compaction scheduling loop.
     ssx::semaphore _compaction_sem{0, "cloud_topics::scheduler::compaction"};
+
+    // Used to signal a change to `cloud_topics_leveling_interval_ms` during
+    // the `wait()` operation in the leveling scheduling loop.
+    ssx::semaphore _leveling_sem{0, "cloud_topics::scheduler::leveling"};
 
     ss::abort_source _as;
     ss::gate _gate;
@@ -130,6 +174,32 @@ private:
     // Jobs for logs in `_logs/_logs_list` that have a sampled metastore info
     // and are eligible for compaction, ordered by the scheduling policy.
     compaction_queue _compaction_queue;
+
+    // Leveling jobs (one per levelable_range) ready to be picked up by the
+    // leveling fiber on any worker shard, ordered by expected extent
+    // reclamation.
+    leveling_queue _leveling_queue;
+
+    // Linearizes enable/disable transitions of the scheduling loops so that a
+    // rapid disable/enable can't race the asynchronous teardown of a loop.
+    ssx::work_queue _scheduler_update_queue;
+
+    // Per-loop *target* lifecycle state: what we want the loop to become, not
+    // what it currently is. Each linearized transition task records the new
+    // desire here as its first act and then drives the loop toward it; the
+    // loop's fiber keeps running only while the target remains `active`. The
+    // actual state is derived: the fiber is up iff `_*_loop_fut` is engaged.
+    // * `active`: the loop should be running and scheduling work.
+    // * `paused`: disabled via the disablement configs. The fiber is torn
+    //    down (`_loop_fut == std::nullopt`) until re-enabled.
+    // * `stopped`: the scheduler is shutting down; terminal.
+    enum class loop_state { active, paused, stopped };
+    loop_state _compaction_target_loop_state{loop_state::paused};
+    loop_state _leveling_target_loop_state{loop_state::paused};
+
+    // The scheduling-loop fibers, if running.
+    std::optional<ss::future<>> _compaction_loop_fut;
+    std::optional<ss::future<>> _leveling_loop_fut;
 
     // TODO: remove this once more cluster objects speak `topic_id_partition`.
     chunked_hash_map<model::ntp, model::topic_id_partition> _ntp_to_tidp;

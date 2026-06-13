@@ -9,6 +9,7 @@
 
 #include "config/configuration.h"
 
+#include "absl/strings/ascii.h"
 #include "base/units.h"
 #include "cluster/scheduling/topic_memory_per_partition_default.h"
 #include "config/base_property.h"
@@ -28,6 +29,9 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/thread.hh>
 
+#include <fmt/ranges.h>
+
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -2197,6 +2201,51 @@ configuration::configuration()
       "to upload and download activities.",
       {.visibility = visibility::user},
       20)
+  , cloud_io_scheduler_policy(
+      *this,
+      "cloud_io_scheduler_policy",
+      "Selects the admission policy used by cloud_io::scheduler. "
+      "'passthrough' disables admission control (client pool is the only "
+      "constraint). 'reservation' introduces reserved-slot admission control, "
+      "configurable across a fixed set of groups: producer_upload, "
+      "consumer_fetch, and default_group.",
+      {.needs_restart = needs_restart::yes,
+       .example = "passthrough",
+       .visibility = visibility::tunable},
+      cloud_io::policy_type::reservation,
+      {cloud_io::policy_type::passthrough, cloud_io::policy_type::reservation})
+  , cloud_io_scheduler_reservation(
+      *this,
+      "cloud_io_scheduler_reservation",
+      "Per-group target_reserved values for the reservation_policy "
+      "admission scheduler. Each entry has the form 'group_name:slots' "
+      "(e.g. 'producer_upload:2'). The policy keeps each group's "
+      "reservation lane sized to this target while the group is active; "
+      "idle reservations past the dwell window are reclaimed back to "
+      "the common pool. Entries with an unrecognized group name are "
+      "rejected when the property is set. Only consulted when "
+      "cloud_io_scheduler_policy=reservation.",
+      {.needs_restart = needs_restart::yes,
+       .example
+       = R"(['producer_upload:2', 'consumer_fetch:2', 'default_group:2'])",
+       .visibility = visibility::tunable},
+      {
+        "producer_upload:2",
+        "consumer_fetch:2",
+        "default_group:2",
+      },
+      [](const std::vector<ss::sstring>& specs) -> std::optional<ss::sstring> {
+          for (const auto& spec : specs) {
+              if (!cloud_io::try_parse_target_spec(spec).has_value()) {
+                  return ssx::sformat(
+                    "invalid reservation target spec '{}': expected "
+                    "'group_name:slots' where group_name is one of {}",
+                    spec,
+                    fmt::join(cloud_io::all_group_ids, ", "));
+              }
+          }
+          return std::nullopt;
+      })
   , cloud_storage_disable_tls(
       *this,
       "cloud_storage_disable_tls",
@@ -3979,6 +4028,45 @@ configuration::configuration()
           }
           return std::nullopt;
       })
+  , oidc_http_proxy_username(
+      *this,
+      "oidc_http_proxy_username",
+      "Username for HTTP Basic authentication to the OIDC forward proxy "
+      "(oidc_http_proxy_url). Leave unset for an unauthenticated proxy. "
+      "Both username and password must be set for credentials to be sent.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      std::nullopt,
+      [](const auto& v) -> std::optional<ss::sstring> {
+          if (!v.has_value()) {
+              return std::nullopt;
+          }
+          if (v->find(':') != ss::sstring::npos) {
+              return "must not contain ':' (RFC 7617)";
+          }
+          if (std::ranges::any_of(*v, absl::ascii_iscntrl)) {
+              return "must not contain control characters";
+          }
+          return std::nullopt;
+      })
+  , oidc_http_proxy_password(
+      *this,
+      "oidc_http_proxy_password",
+      "Password for HTTP Basic authentication to the OIDC forward proxy "
+      "(oidc_http_proxy_url). Leave unset for an unauthenticated proxy. "
+      "Both username and password must be set for credentials to be sent.",
+      {.needs_restart = needs_restart::no,
+       .visibility = visibility::user,
+       .secret = is_secret::yes},
+      std::nullopt,
+      [](const auto& v) -> std::optional<ss::sstring> {
+          if (!v.has_value()) {
+              return std::nullopt;
+          }
+          if (std::ranges::any_of(*v, absl::ascii_iscntrl)) {
+              return "must not contain control characters";
+          }
+          return std::nullopt;
+      })
   , oidc_token_audience(
       *this,
       "oidc_token_audience",
@@ -4817,6 +4905,18 @@ configuration::configuration()
       "in time and blast radius. Lower values mean more, smaller jobs.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1_GiB)
+  , cloud_topics_compaction_disabled(
+      *this,
+      "cloud_topics_compaction_disabled",
+      "When true, completely disables compaction of cloud topics.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
+  , cloud_topics_leveling_disabled(
+      *this,
+      "cloud_topics_leveling_disabled",
+      "When true, completely disables leveling of cloud topics.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , cloud_topics_compaction_key_map_memory(
       *this,
       "cloud_topics_compaction_key_map_memory",

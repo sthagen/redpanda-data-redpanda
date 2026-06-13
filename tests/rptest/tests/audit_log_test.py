@@ -2352,7 +2352,7 @@ class AuditLogTestOauth(AuditLogTestBase):
         try:
             self.keycloak.start_node(kc_node)
         except Exception as e:
-            self.logger.error(f"{e}")
+            self.logger.exception("Keycloak failed to start")
             self.keycloak.clean_node(kc_node)
             assert False, f"Keycloak failed to start: {e}"
 

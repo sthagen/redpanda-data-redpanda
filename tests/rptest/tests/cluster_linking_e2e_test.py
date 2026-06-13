@@ -200,6 +200,13 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
     def _expect_connect_error(self, expected_code: ConnectErrorCode):
         return expect_exception(ConnectError, lambda e: e.code == expected_code)
 
+    def _schema_registry_api_sync_options(
+        self,
+    ) -> shadow_link_pb2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi:
+        return shadow_link_pb2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi(
+            source_url="http://schema-registry.example.com:8081"
+        )
+
     def _topics_are_present_in_target_cluster(self, topics):
         target_rpk = RpkTool(self.target_cluster.service)
         topics_in_target = {t for t in target_rpk.list_topics()}
@@ -211,6 +218,39 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                 return False
 
         return True
+
+    @cluster(num_nodes=6)
+    def test_schema_registry_api_sync_rejected_when_feature_inactive(self):
+        self.target_cluster_service.set_feature_active("shadow_link_sr_api_sync", False)
+
+        create_req = self.create_default_link_request(
+            link_name="sr-api-link",
+            mirror_all_acls=False,
+            mirror_all_groups=False,
+            mirror_all_topics=False,
+        )
+        create_req.shadow_link.configurations.schema_registry_sync_options.shadow_schema_registry_api.CopyFrom(
+            self._schema_registry_api_sync_options()
+        )
+
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
+            self.create_link_with_request(req=create_req)
+
+        shadow_link = self.create_link(
+            "test-link",
+            mirror_all_acls=False,
+            mirror_all_groups=False,
+            mirror_all_topics=False,
+        )
+        shadow_link.configurations.schema_registry_sync_options.shadow_schema_registry_api.CopyFrom(
+            self._schema_registry_api_sync_options()
+        )
+        update_mask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=["configurations.schema_registry_sync_options"]
+        )
+
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
+            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
 
     @cluster(num_nodes=6)
     def test_create_default_link(self):
@@ -1286,6 +1326,65 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         node_to_stop = self.source_cluster._service.get_node(idx=1)
         self.source_cluster._service.stop_node(node_to_stop)
         self.create_link("link-with-partial-connectivity")
+
+    @cluster(num_nodes=6)
+    def test_validate_only(self):
+        """
+        Tests the validate_only flag on CreateShadowLink:
+        - With a valid source cluster, the preflight connection checks pass and
+          the response is empty (no uid), without any link being persisted.
+        - With unreachable bootstrap servers, the call fails with
+          FAILED_PRECONDITION and no link is persisted.
+        - Without validate_only, the same request creates the link for real:
+          a non-empty uid is returned and the link appears in list_links.
+        - The duplicate-name check runs before the validate_only branch, so an
+          existing link name raises ALREADY_EXISTS even with validate_only=True.
+        """
+        link_name = "test-link"
+
+        # validate_only=True with a reachable source cluster: preflight passes,
+        # empty response returned, no link persisted.
+        req = self.create_default_link_request(link_name)
+        req.validate_only = True
+        resp_link = self.create_link_with_request(req=req)
+        assert resp_link.uid == "", (
+            f"Expected empty uid on validate_only response, got '{resp_link.uid}'"
+        )
+        links = self.list_links()
+        assert len(links) == 0, (
+            f"Expected no links after validate_only=True, got {len(links)}"
+        )
+
+        # validate_only=True with bad bootstrap servers: preflight fails with
+        # FAILED_PRECONDITION, still no link persisted.
+        bad_req = self.create_default_link_request(link_name)
+        bad_req.validate_only = True
+        bad_req.shadow_link.configurations.client_options.bootstrap_servers[:] = [
+            "non.existent.server:9092"
+        ]
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
+            self.create_link_with_request(req=bad_req)
+        links = self.list_links()
+        assert len(links) == 0, (
+            f"Expected no links after failed validate_only, got {len(links)}"
+        )
+
+        # The same request without validate_only creates the link for real:
+        # non-empty uid returned and the link appears in list_links.
+        real_req = self.create_default_link_request(link_name)
+        real_link = self.create_link_with_request(req=real_req)
+        assert real_link.uid != "", (
+            f"Expected non-empty uid on real create response, got '{real_link.uid}'"
+        )
+        links = self.list_links()
+        assert len(links) == 1, f"Expected one link after real create, got {len(links)}"
+
+        # Confirm validate_only=True with a duplicate name raises ALREADY_EXISTS
+        # before even running preflight.
+        dup_req = self.create_default_link_request(link_name)
+        dup_req.validate_only = True
+        with self._expect_connect_error(ConnectErrorCode.ALREADY_EXISTS):
+            self.create_link_with_request(req=dup_req)
 
     @cluster(num_nodes=6)
     def test_link_creation_incompatible_api(self):

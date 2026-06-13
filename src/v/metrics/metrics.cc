@@ -19,6 +19,11 @@ const ss::metrics::label namespace_label{"namespace"};
 const ss::metrics::label topic_label{"topic"};
 const ss::metrics::label partition_label{"partition"};
 
+bool any_enabled() {
+    const auto& cfg = config::shard_local_cfg();
+    return !cfg.disable_metrics() || !cfg.disable_public_metrics();
+}
+
 internal_metric_groups& internal_metric_groups::add_group(
   const ss::metrics::group_name_type& name,
   std::vector<ss::metrics::impl::metric_definition_impl> metrics,

@@ -14,3 +14,17 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "metrics_test",
+    timeout = "short",
+    srcs = [
+        "metrics_test.cc",
+    ],
+    deps = [
+        "//src/v/metrics",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@googletest//:gtest",
+    ],
+)

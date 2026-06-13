@@ -237,9 +237,10 @@ TEST_F_CORO(
     co_await collector.stop();
 }
 
-/// Test that disabling compaction on a managed partition triggers unmanage.
+/// Test that disabling compaction on a managed cloud topic keeps it managed
+/// (it remains a cloud topic, so it is still managed for leveling).
 TEST_F_CORO(
-  log_collector_test_fixture, test_disable_compaction_unmanages_partition) {
+  log_collector_test_fixture, test_disable_compaction_keeps_partition_managed) {
     auto tp = model::topic("test_topic_4");
     auto tp_id = model::topic_id::create();
     // Create a compacted cloud topic directly.
@@ -298,9 +299,10 @@ TEST_F_CORO(
       model::topic_namespace(model::kafka_namespace, tp), std::move(updates));
     co_await _topics.local().apply(std::move(update_cmd), model::offset{1});
 
-    // unmanage_cb SHOULD have been called since compaction was disabled.
-    EXPECT_TRUE(unmanage_called);
-    EXPECT_EQ(unmanaged_ntp, ntp);
+    // unmanage_cb should NOT have been called: the partition is still a
+    // cloud topic and remains managed for leveling even though compaction
+    // was turned off.
+    EXPECT_FALSE(unmanage_called);
 
     co_await collector.stop();
 }

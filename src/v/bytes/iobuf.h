@@ -13,6 +13,7 @@
 #include "base/format_to.h"
 #include "base/likely.h"
 #include "base/seastarx.h"
+#include "base/units.h"
 #include "bytes/details/io_allocation_size.h"
 #include "bytes/details/io_byte_iterator.h"
 #include "bytes/details/io_fragment.h"
@@ -88,6 +89,9 @@ public:
     using iterator_consumer = details::io_iterator_consumer;
     using byte_iterator = details::io_byte_iterator;
     using placeholder = details::io_placeholder;
+
+    /// Maximum size accepted by linearize_to_string().
+    static constexpr size_t max_linearize_size = 128_KiB;
 
     static iobuf from(std::string_view view) {
         iobuf i;

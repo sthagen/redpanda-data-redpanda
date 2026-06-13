@@ -83,7 +83,10 @@ void application::configure_admin_server(model::node_id node_id) {
           // Add RPC services
           s.add_service(
             std::make_unique<admin::shadow_link_service_impl>(
-              create_client(), &_cluster_link_service, &metadata_cache));
+              create_client(),
+              &_cluster_link_service,
+              &metadata_cache,
+              &controller->get_feature_table()));
           s.add_service(
             std::make_unique<admin::debug_service_impl>(
               create_client(), stress_fiber_manager));

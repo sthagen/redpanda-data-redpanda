@@ -6,7 +6,7 @@ require (
 	github.com/kr/pretty v0.3.1
 	github.com/parquet-go/parquet-go v0.24.1-0.20250203011650-a58243e6e9c1
 	github.com/segmentio/encoding v0.4.1
-	github.com/sergi/go-diff v1.3.1
+	github.com/sergi/go-diff v1.4.0
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0
 )
 

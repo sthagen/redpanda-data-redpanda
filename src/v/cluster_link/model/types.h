@@ -519,7 +519,7 @@ struct topic_metadata_mirroring_config
 struct schema_registry_sync_config
   : serde::envelope<
       schema_registry_sync_config,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     struct shadow_entire_schema_registry
       : serde::envelope<
@@ -535,17 +535,195 @@ struct schema_registry_sync_config
         fmt::iterator format_to(fmt::iterator) const;
     };
 
-    using shadow_schema_registry_mode_t
-      = serde::variant<shadow_entire_schema_registry>;
+    struct basic_auth
+      : serde::
+          envelope<basic_auth, serde::version<0>, serde::compat_version<0>> {
+        ss::sstring username;
+        ss::sstring password;
+        ::model::timestamp password_last_updated;
 
-    std::optional<shadow_schema_registry_mode_t>
-      sync_schema_registry_topic_mode;
+        friend bool operator==(const basic_auth&, const basic_auth&) = default;
 
-    auto serde_fields() { return std::tie(sync_schema_registry_topic_mode); }
+        auto serde_fields() {
+            return std::tie(username, password, password_last_updated);
+        }
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    using auth_config_t = serde::variant<basic_auth>;
+
+    struct source_filter
+      : serde::
+          envelope<source_filter, serde::version<0>, serde::compat_version<0>> {
+        chunked_vector<ss::sstring> contexts;
+        chunked_vector<ss::sstring> subjects;
+
+        friend bool
+        operator==(const source_filter&, const source_filter&) = default;
+
+        auto serde_fields() { return std::tie(contexts, subjects); }
+
+        source_filter copy() const;
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    struct identity_context_mapping
+      : serde::envelope<
+          identity_context_mapping,
+          serde::version<0>,
+          serde::compat_version<0>> {
+        friend bool operator==(
+          const identity_context_mapping&,
+          const identity_context_mapping&) = default;
+
+        auto serde_fields() { return std::tie(); }
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    struct exact_context_mapping
+      : serde::envelope<
+          exact_context_mapping,
+          serde::version<0>,
+          serde::compat_version<0>> {
+        // Source context name -> destination context name. The shadowing API
+        // requires every source context in scope to have exactly one mapping,
+        // so a map keyed by source encodes that uniqueness invariant and gives
+        // O(1) destination lookup during sync.
+        chunked_hash_map<ss::sstring, ss::sstring> mappings;
+
+        friend bool operator==(
+          const exact_context_mapping&, const exact_context_mapping&) = default;
+
+        auto serde_fields() { return std::tie(mappings); }
+
+        exact_context_mapping copy() const;
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    using destination_mapping_t
+      = serde::variant<identity_context_mapping, exact_context_mapping>;
+
+    enum class unsupported_feature_policy : uint8_t {
+        fail,
+        remove,
+    };
+
+    struct shadow_schema_registry_api
+      : serde::envelope<
+          shadow_schema_registry_api,
+          serde::version<0>,
+          serde::compat_version<0>> {
+        ss::sstring source_url;
+        std::optional<auth_config_t> auth_config;
+
+        connection_config::tls_enabled_t tls_enabled{
+          connection_config::tls_enabled_t::no};
+        std::optional<tls_file_or_value> cert;
+        std::optional<tls_file_or_value> key;
+        std::optional<tls_file_or_value> ca;
+        connection_config::tls_provide_sni_t tls_provide_sni{
+          connection_config::tls_provide_sni_t::yes};
+
+        std::optional<ss::lowres_clock::duration> tail_interval;
+        static constexpr auto default_tail_interval = std::chrono::seconds(10);
+        std::optional<ss::lowres_clock::duration> full_sync_interval;
+        static constexpr auto default_full_sync_interval = std::chrono::minutes(
+          5);
+        std::optional<int32_t> max_source_requests_per_second;
+        static constexpr auto default_max_source_requests_per_second = 30;
+
+        source_filter filter;
+        std::optional<destination_mapping_t> destination;
+        unsupported_feature_policy feature_policy{
+          unsupported_feature_policy::fail};
+
+        ss::lowres_clock::duration get_tail_interval() const {
+            return tail_interval.value_or(default_tail_interval);
+        }
+
+        ss::lowres_clock::duration get_full_sync_interval() const {
+            return full_sync_interval.value_or(default_full_sync_interval);
+        }
+
+        int32_t get_max_source_requests_per_second() const {
+            return max_source_requests_per_second.value_or(
+              default_max_source_requests_per_second);
+        }
+
+        friend bool operator==(
+          const shadow_schema_registry_api&,
+          const shadow_schema_registry_api&) = default;
+
+        auto serde_fields() {
+            return std::tie(
+              source_url,
+              auth_config,
+              tls_enabled,
+              cert,
+              key,
+              ca,
+              tls_provide_sni,
+              tail_interval,
+              full_sync_interval,
+              max_source_requests_per_second,
+              filter,
+              destination,
+              feature_policy);
+        }
+
+        shadow_schema_registry_api copy() const;
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    // At most one shadowing mode may be engaged. Modelling the two modes as a
+    // single variant makes the "both modes set" state unrepresentable. The
+    // on-wire layout still serializes as two separate optional fields (see
+    // serde_write/serde_read) to stay backwards compatible with v0 topic-mode
+    // records.
+    using shadow_schema_registry_mode_t = serde::
+      variant<shadow_entire_schema_registry, shadow_schema_registry_api>;
+
+    std::optional<shadow_schema_registry_mode_t> sync_mode;
+
+    /// Returns the API-based shadowing config when API mode is engaged, else
+    /// nullptr.
+    const shadow_schema_registry_api* api_mode() const {
+        if (
+          sync_mode.has_value()
+          && std::holds_alternative<shadow_schema_registry_api>(*sync_mode)) {
+            return &std::get<shadow_schema_registry_api>(*sync_mode);
+        }
+        return nullptr;
+    }
+    shadow_schema_registry_api* api_mode() {
+        if (
+          sync_mode.has_value()
+          && std::holds_alternative<shadow_schema_registry_api>(*sync_mode)) {
+            return &std::get<shadow_schema_registry_api>(*sync_mode);
+        }
+        return nullptr;
+    }
+
+    /// True when shadowing the entire Schema Registry via topic replication.
+    bool is_topic_mode() const {
+        return sync_mode.has_value()
+               && std::holds_alternative<shadow_entire_schema_registry>(
+                 *sync_mode);
+    }
+
+    void serde_write(iobuf&) const;
+    void serde_read(iobuf_parser&, const serde::header&);
 
     friend bool operator==(
       const schema_registry_sync_config&,
       const schema_registry_sync_config&) = default;
+
+    schema_registry_sync_config copy() const;
 
     fmt::iterator format_to(fmt::iterator) const;
 };

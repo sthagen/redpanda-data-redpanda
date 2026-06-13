@@ -1,4 +1,28 @@
-load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest", "redpanda_test_cc_library")
+
+redpanda_cc_bench(
+    name = "filter_rpbench",
+    timeout = "moderate",
+    srcs = [
+        "filter_bench.cc",
+    ],
+    deps = [
+        "//src/v/bytes",
+        "//src/v/cloud_topics/level_one/maintenance/compaction:compaction_filter",
+        "//src/v/cloud_topics/level_one/metastore:offset_interval_set",
+        "//src/v/compaction:key",
+        "//src/v/compaction:key_offset_map",
+        "//src/v/compaction/tests:simple_reducer",
+        "//src/v/container:chunked_circular_buffer",
+        "//src/v/model",
+        "//src/v/model:batch_compression",
+        "//src/v/random:generators",
+        "//src/v/reflection:adl",
+        "//src/v/storage:record_batch_builder",
+        "@seastar",
+        "@seastar//:benchmark",
+    ],
+)
 
 redpanda_cc_gtest(
     name = "compaction_queue_test",

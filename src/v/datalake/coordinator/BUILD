@@ -185,6 +185,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/bytes",
         "//src/v/container:chunked_vector",
+        "//src/v/datalake:base_types",
         "//src/v/serde",
         "//src/v/serde:bytes",
         "@fmt",
@@ -216,7 +217,9 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":commit_offset_metadata",
+        ":data_file",
         ":state",
+        "//src/v/bytes",
         "//src/v/config",
         "//src/v/datalake:logger",
         "//src/v/datalake:table_id_provider",

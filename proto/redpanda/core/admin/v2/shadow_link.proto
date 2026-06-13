@@ -147,6 +147,9 @@ message ShadowTopic {
 message CreateShadowLinkRequest {
     // The shadow link to create
     ShadowLink shadow_link = 1;
+    // If true, validate connection parameters without creating the link.
+    // Returns an empty response on success or an error if validation fails.
+    bool validate_only = 2 [(google.api.field_behavior) = OPTIONAL];
 }
 // Response to creating a shadow link
 message CreateShadowLinkResponse {

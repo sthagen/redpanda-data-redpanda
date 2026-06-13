@@ -12,11 +12,16 @@
 #include "base/vassert.h"
 #include "base/vlog.h"
 #include "cloud_io/logger.h"
+#include "config/configuration.h"
+#include "metrics/metrics.h"
+#include "metrics/prometheus_sanitize.h"
+#include "ssx/sformat.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
+#include <seastar/core/metrics.hh>
 #include <seastar/util/log.hh>
 
 #include <fmt/ranges.h>
@@ -26,6 +31,7 @@
 #include <functional>
 #include <ranges>
 #include <utility>
+#include <vector>
 
 namespace cloud_io {
 
@@ -64,6 +70,9 @@ reservation_policy<Clock>::reservation_policy(
 
     _reclaim_timer.arm(reclaim_interval);
 
+    setup_metrics();
+    setup_public_metrics();
+
     vlog(
       log.info,
       "reservation_policy initialized: capacity={} dwell={}s "
@@ -76,6 +85,8 @@ reservation_policy<Clock>::reservation_policy(
 template<class Clock>
 ss::future<> reservation_policy<Clock>::stop() {
     _reclaim_timer.cancel();
+    _metrics.clear();
+    _public_metrics.clear();
     for (auto& gs : _groups) {
         gs.stop();
     }
@@ -248,10 +259,23 @@ reservation_policy<Clock>::admit_immediate_total(group_id g) const noexcept {
 }
 
 template<class Clock>
+uint64_t reservation_policy<Clock>::canceled_total(group_id g) const noexcept {
+    return _groups[g].canceled_total;
+}
+
+template<class Clock>
 size_t reservation_policy<Clock>::total_waiters() const noexcept {
     return std::ranges::fold_left(
       _groups, size_t{0}, [](size_t acc, const auto& gs) {
           return acc + gs.waiter_count();
+      });
+}
+
+template<class Clock>
+uint64_t reservation_policy<Clock>::total_canceled() const noexcept {
+    return std::ranges::fold_left(
+      _groups, uint64_t{0}, [](uint64_t acc, const auto& gs) {
+          return acc + gs.canceled_total;
       });
 }
 
@@ -287,6 +311,136 @@ bool reservation_policy<Clock>::try_take_common_slot() noexcept {
 template<class Clock>
 void reservation_policy<Clock>::put_common_slots(size_t n) noexcept {
     _shared += n;
+}
+
+template<class Clock>
+void reservation_policy<Clock>::setup_metrics() {
+    if (config::shard_local_cfg().disable_metrics()) {
+        return;
+    }
+
+    namespace sm = ss::metrics;
+    const auto group_name = prometheus_sanitize::metrics_name(
+      "cloud_io_scheduler");
+    constexpr auto group_label_key = "group_id";
+
+    _metrics.add_group(
+      group_name,
+      {
+        sm::make_gauge(
+          "available_slots",
+          [this] { return available_slots(); },
+          sm::description(
+            "Total slots currently available (shared + all reserved).")),
+        sm::make_gauge(
+          "total_capacity",
+          [this] { return total_capacity(); },
+          sm::description("Configured total slot capacity.")),
+        sm::make_gauge(
+          "total_waiters",
+          [this] { return total_waiters(); },
+          sm::description("Total fibers queued across all groups.")),
+        sm::make_counter(
+          "total_waiters_canceled",
+          [this] { return total_canceled(); },
+          sm::description(
+            "Total waiters that aborted while queued across all groups.")),
+      });
+
+    for (auto g : all_group_ids) {
+        const std::vector<sm::label_instance> labels{
+          sm::label(group_label_key)(ssx::sformat("{}", g))};
+
+        _metrics.add_group(
+          group_name,
+          {
+            sm::make_gauge(
+              "in_flight",
+              [this, g] { return in_flight(g); },
+              sm::description("Concurrent ops currently holding a slot."),
+              labels),
+            sm::make_gauge(
+              "waiters",
+              [this, g] { return waiters(g); },
+              sm::description("Fibers queued on this group."),
+              labels),
+            sm::make_counter(
+              "admit_total",
+              [this, g] { return admit_total(g); },
+              sm::description("Total admit() calls completed for this group."),
+              labels),
+            sm::make_counter(
+              "admit_immediate_total",
+              [this, g] { return admit_immediate_total(g); },
+              sm::description(
+                "admit() calls that took the fast path (no queue)."),
+              labels),
+            sm::make_counter(
+              "canceled_total",
+              [this, g] { return canceled_total(g); },
+              sm::description(
+                "Waiters that aborted while queued on this group."),
+              labels),
+            sm::make_gauge(
+              "current_reserved",
+              [this, g] { return current_reserved(g); },
+              sm::description(
+                "Runtime reservation size. Starts at target_reserved; "
+                "reclaimed when idle past dwell; rebuilt via refill."),
+              labels),
+          });
+    }
+}
+
+template<class Clock>
+void reservation_policy<Clock>::setup_public_metrics() {
+    if (config::shard_local_cfg().disable_public_metrics()) {
+        return;
+    }
+
+    namespace sm = ss::metrics;
+    const auto group_name = prometheus_sanitize::metrics_name(
+      "cloud_io_scheduler");
+    constexpr auto group_label_key = "group_id";
+    const auto aggregate_labels = std::vector<sm::label>{sm::shard_label};
+
+    _public_metrics.add_group(
+      group_name,
+      {
+        sm::make_gauge(
+          "available_slots",
+          [this] { return available_slots(); },
+          sm::description(
+            "Total slots currently available (shared + all reserved)."))
+          .aggregate(aggregate_labels),
+        sm::make_gauge(
+          "total_capacity",
+          [this] { return total_capacity(); },
+          sm::description("Configured total slot capacity."))
+          .aggregate(aggregate_labels),
+      });
+
+    for (auto g : all_group_ids) {
+        const std::vector<sm::label_instance> labels{
+          sm::label(group_label_key)(ssx::sformat("{}", g))};
+
+        _public_metrics.add_group(
+          group_name,
+          {
+            sm::make_gauge(
+              "in_flight",
+              [this, g] { return in_flight(g); },
+              sm::description("Concurrent ops currently holding a slot."),
+              labels)
+              .aggregate(aggregate_labels),
+            sm::make_gauge(
+              "waiters",
+              [this, g] { return waiters(g); },
+              sm::description("Fibers queued on this group."),
+              labels)
+              .aggregate(aggregate_labels),
+          });
+    }
 }
 
 template class reservation_policy<ss::lowres_clock>;

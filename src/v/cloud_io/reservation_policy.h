@@ -13,6 +13,7 @@
 #include "cloud_io/reservation_policy_types.h"
 #include "cloud_io/scheduler_policy.h"
 #include "cloud_io/scheduler_types.h"
+#include "metrics/metrics.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
@@ -99,8 +100,14 @@ public:
     /// Lifetime fast-path-admit count for a group.
     uint64_t admit_immediate_total(group_id) const noexcept;
 
+    /// Lifetime count of waiters that aborted while queued for a group.
+    uint64_t canceled_total(group_id) const noexcept;
+
     /// Total queued waiters across all groups.
     size_t total_waiters() const noexcept;
+
+    /// Lifetime count of canceled waiters across all groups.
+    uint64_t total_canceled() const noexcept;
 
 private:
     /// Dispatch the next queued waiter on behalf of a release on
@@ -133,6 +140,10 @@ private:
 
     void put_common_slots(size_t n) noexcept;
 
+    void setup_metrics();
+
+    void setup_public_metrics();
+
     size_t _current_total_capacity{0};
     /// The common pool of slots. Any group can claim from it; releases
     /// go back here unless refill diverts them into a group's
@@ -150,6 +161,9 @@ private:
     static constexpr
       typename Clock::duration reclaim_interval = std::chrono::seconds{1};
     ss::timer<Clock> _reclaim_timer;
+
+    metrics::internal_metric_groups _metrics;
+    metrics::public_metric_groups _public_metrics;
 };
 
 extern template class reservation_policy<ss::lowres_clock>;

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "cloud_io/scheduler_types.h"
 #include "config/bounded_property.h"
 #include "config/broker_endpoint.h"
 #include "config/config_store.h"
@@ -398,6 +399,8 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds>
       cloud_storage_upload_loop_max_backoff_ms;
     property<int16_t> cloud_storage_max_connections;
+    enum_property<cloud_io::policy_type> cloud_io_scheduler_policy;
+    property<std::vector<ss::sstring>> cloud_io_scheduler_reservation;
     property<bool> cloud_storage_disable_tls;
     property<int16_t> cloud_storage_api_endpoint_port;
     property<std::optional<ss::sstring>> cloud_storage_trust_file;
@@ -692,6 +695,8 @@ struct configuration final : public config_store {
     // oidc authentication
     property<ss::sstring> oidc_discovery_url;
     property<std::optional<ss::sstring>> oidc_http_proxy_url;
+    property<std::optional<ss::sstring>> oidc_http_proxy_username;
+    property<std::optional<ss::sstring>> oidc_http_proxy_password;
     property<ss::sstring> oidc_token_audience;
     property<std::chrono::seconds> oidc_clock_skew_tolerance;
     property<ss::sstring> oidc_principal_mapping;
@@ -817,6 +822,8 @@ public:
     bounded_property<double, numeric_bounds>
       cloud_topics_leveling_min_extent_size_ratio;
     property<size_t> cloud_topics_leveling_max_range_bytes;
+    property<bool> cloud_topics_compaction_disabled;
+    property<bool> cloud_topics_leveling_disabled;
     bounded_property<uint64_t> cloud_topics_compaction_key_map_memory;
     property<std::chrono::milliseconds>
       cloud_topics_long_term_garbage_collection_interval;

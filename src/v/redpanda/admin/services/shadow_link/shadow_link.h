@@ -14,6 +14,7 @@
 #include "cluster/fwd.h"
 #include "cluster_link/fwd.h"
 #include "cluster_link/model/types.h"
+#include "features/fwd.h"
 #include "proto/redpanda/core/admin/v2/shadow_link.proto.h"
 #include "redpanda/admin/proxy/client.h"
 
@@ -25,7 +26,8 @@ public:
     shadow_link_service_impl(
       admin::proxy::client proxy_client,
       ss::sharded<cluster_link::service>* service,
-      ss::sharded<cluster::metadata_cache>* md_cache);
+      ss::sharded<cluster::metadata_cache>* md_cache,
+      ss::sharded<features::feature_table>* feature_table);
 
     ss::future<proto::admin::create_shadow_link_response> create_shadow_link(
       serde::pb::rpc::context,
@@ -77,5 +79,6 @@ private:
 
     ss::sharded<cluster_link::service>* _service;
     ss::sharded<cluster::metadata_cache>* _md_cache;
+    ss::sharded<features::feature_table>* _feature_table;
 };
 } // namespace admin

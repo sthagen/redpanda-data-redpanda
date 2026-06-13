@@ -33,6 +33,13 @@ extern const ss::metrics::label partition_label;
 // endpoint.
 const auto public_metrics_handle = ss::metrics::default_handle() + 1;
 
+/// True if at least one of the internal or public metrics endpoints is enabled
+/// (i.e. `all_metrics_groups::add_group` would register at least one series).
+///
+/// Use this to skip expensive work that only feeds metrics when no endpoint is
+/// enabled.
+bool any_enabled();
+
 // A thin wrapper around ss::metrics::metric_groups that isn't moveable.
 //
 // The standard usage pattern for metric_groups_base (and children) is as a
