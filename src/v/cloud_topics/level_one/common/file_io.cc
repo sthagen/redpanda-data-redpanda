@@ -169,10 +169,6 @@ file_io::read_object(
     static constexpr auto timeout = 10s;
     static constexpr auto backoff = 100ms;
     retry_chain_node root(*as, ss::lowres_clock::now() + timeout, backoff);
-    lazy_abort_source las{[as] {
-        return as->abort_requested() ? std::make_optional("abort requested")
-                                     : std::nullopt;
-    }};
     // TODO(cloud_topics): Optimize the cache such that it understands partial
     // objects? Or we assert somehow there are no overlaps (or just live with
     // them).
