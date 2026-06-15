@@ -9,6 +9,7 @@
 
 #include "base/units.h"
 #include "cluster/commands.h"
+#include "cluster/data_policy.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/metadata_dissemination_types.h"
 #include "cluster/security_types.h"
@@ -35,7 +36,6 @@
 #include "test_utils/randoms.h"
 #include "test_utils/rpc.h"
 #include "utils/tristate.h"
-#include "v8_engine/data_policy.h"
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sstring.hh>
@@ -253,7 +253,7 @@ struct incremental_topic_updates_v2 {
     cluster::property_update<tristate<size_t>> retention_bytes;
     cluster::property_update<tristate<std::chrono::milliseconds>>
       retention_duration;
-    cluster::property_update<std::optional<v8_engine::data_policy>> data_policy;
+    cluster::property_update<std::optional<cluster::data_policy>> data_policy;
 };
 
 } // namespace old
@@ -367,7 +367,7 @@ SEASTAR_THREAD_TEST_CASE(incremental_topic_updates_backward_compatibilty_test) {
     old_updates_with_dp.retention_duration = updates.retention_duration;
     old_updates_with_dp.segment_size = updates.segment_size;
     old_updates_with_dp.data_policy.op = random_op();
-    old_updates_with_dp.data_policy.value = v8_engine::data_policy(
+    old_updates_with_dp.data_policy.value = cluster::data_policy(
       random_generators::gen_alphanum_string(6),
       random_generators::gen_alphanum_string(6));
 
@@ -1345,10 +1345,10 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
         roundtrip_test(data);
     }
     {
-        cluster::property_update<std::optional<v8_engine::data_policy>>
+        cluster::property_update<std::optional<cluster::data_policy>>
           data_policy;
         if (tests::random_bool()) {
-            data_policy.value = v8_engine::data_policy(
+            data_policy.value = cluster::data_policy(
               random_generators::gen_alphanum_string(20),
               random_generators::gen_alphanum_string(20));
         }
@@ -1360,10 +1360,10 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
         roundtrip_test(data);
     }
     {
-        cluster::property_update<std::optional<v8_engine::data_policy>>
+        cluster::property_update<std::optional<cluster::data_policy>>
           data_policy;
         if (tests::random_bool()) {
-            data_policy.value = v8_engine::data_policy(
+            data_policy.value = cluster::data_policy(
               random_generators::gen_alphanum_string(20),
               random_generators::gen_alphanum_string(20));
         }
@@ -1382,10 +1382,10 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
     {
         cluster::topic_properties_update_vector updates;
         for (int i = 0, mi = random_generators::get_int(10); i < mi; i++) {
-            cluster::property_update<std::optional<v8_engine::data_policy>>
+            cluster::property_update<std::optional<cluster::data_policy>>
               data_policy;
             if (tests::random_bool()) {
-                data_policy.value = v8_engine::data_policy(
+                data_policy.value = cluster::data_policy(
                   random_generators::gen_alphanum_string(20),
                   random_generators::gen_alphanum_string(20));
             }

@@ -13,7 +13,6 @@
 #include "base/seastarx.h"
 #include "bytes/bytes.h"
 #include "container/chunked_vector.h"
-#include "datalake/base_types.h"
 #include "serde/envelope.h"
 #include "serde/rw/bytes.h"
 
@@ -25,7 +24,7 @@ namespace datalake::coordinator {
 
 // Represents a file that exists in object storage.
 struct data_file
-  : serde::envelope<data_file, serde::version<2>, serde::compat_version<0>> {
+  : serde::envelope<data_file, serde::version<1>, serde::compat_version<0>> {
     auto serde_fields() {
         return std::tie(
           remote_path,
@@ -34,8 +33,7 @@ struct data_file
           hour_deprecated,
           table_schema_id,
           partition_spec_id,
-          partition_key,
-          column_stats);
+          partition_key);
     }
     ss::sstring remote_path = "";
     size_t row_count = 0;
@@ -50,9 +48,7 @@ struct data_file
     // single-value serialization" (see iceberg/values_bytes.h).
     // Nulls are represented by std::nullopt.
     chunked_vector<std::optional<bytes>> partition_key;
-    // Per-column statistics extracted from the parquet footer. Empty when
-    // written by an older version or when stats are unavailable.
-    chunked_vector<per_column_stats> column_stats;
+    // TODO: add kafka schema id
 
     data_file copy() const {
         return {
@@ -63,7 +59,6 @@ struct data_file
           .table_schema_id = table_schema_id,
           .partition_spec_id = partition_spec_id,
           .partition_key = partition_key.copy(),
-          .column_stats = column_stats.copy(),
         };
     }
 

@@ -1199,7 +1199,7 @@ adl<cluster::incremental_topic_updates>::from(iobuf_parser& in) {
         // data_policy property from update_topic_properties_cmd is never used.
         // data_policy_frontend replicates this property and store it to
         // create_data_policy_cmd_data, data_policy_manager handles it
-        adl<cluster::property_update<std::optional<v8_engine::data_policy>>>{}
+        adl<cluster::property_update<std::optional<cluster::data_policy>>>{}
           .from(in);
     }
     if (
@@ -1382,7 +1382,7 @@ cluster::incremental_topic_custom_updates
 adl<cluster::incremental_topic_custom_updates>::from(iobuf_parser& in) {
     cluster::incremental_topic_custom_updates updates;
     updates.data_policy
-      = adl<cluster::property_update<std::optional<v8_engine::data_policy>>>{}
+      = adl<cluster::property_update<std::optional<cluster::data_policy>>>{}
           .from(in);
     return updates;
 }

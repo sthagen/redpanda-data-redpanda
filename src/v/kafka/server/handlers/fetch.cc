@@ -1323,6 +1323,8 @@ class simple_fetch_planner final : public fetch_planner::impl {
               const auto max_batch_size
                 = topic_cfg.properties.batch_max_bytes.value_or(
                   metadata_cache.get_default_batch_max_bytes());
+              const auto* disabled_set = metadata_cache.get_topic_disabled_set(
+                tn_view);
 
               for (const kafka::fetch_session_partition& fp : partitions) {
                   // if this is not an initial fetch we are allowed to skip
@@ -1343,7 +1345,8 @@ class simple_fetch_planner final : public fetch_planner::impl {
 
                   if (
                     unlikely(
-                      metadata_cache.is_disabled(tn_view, partition_id))) {
+                      disabled_set
+                      && disabled_set->is_disabled(partition_id))) {
                       resp_it->set(
                         make_partition_response_error(
                           partition_id, error_code::replica_not_available),

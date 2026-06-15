@@ -48,7 +48,7 @@ iobuf iobuf::copy() const {
 iobuf iobuf_copy(iobuf::iterator_consumer& in, size_t len) {
     iobuf ret;
 
-    int bytes_left = len;
+    size_t bytes_left = len;
     while (bytes_left) {
         ss::temporary_buffer<char> buf(
           details::io_allocation_size::ss_next_allocation_size(bytes_left));

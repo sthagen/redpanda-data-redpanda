@@ -34,21 +34,12 @@ ss::future<chunked_vector<model::record_batch>>
 replicate_entries_stm::share_batches() {
     // one extra copy is needed for retries
     chunked_vector<model::record_batch> batches;
-    batches.reserve(_batches->size());
-    co_await ssx::async_for_each(*_batches, [&batches](model::record_batch& b) {
+    batches.reserve(_batches.size());
+    co_await ssx::async_for_each(_batches, [&batches](model::record_batch& b) {
         batches.push_back(b.share());
     });
 
     co_return batches;
-}
-
-ss::future<> replicate_entries_stm::flush_log() {
-    auto flush_f = ss::now();
-    if (_is_flush_required) {
-        flush_f = _ptr->flush_log().discard_result();
-    }
-    _dispatch_sem.signal();
-    return flush_f;
 }
 
 clock_type::time_point replicate_entries_stm::append_entries_timeout() {
@@ -96,13 +87,25 @@ replicate_entries_stm::send_append_entries_request(
 }
 
 ss::future<> replicate_entries_stm::dispatch_one(vnode id) {
-    return ss::with_gate(
-             _req_bg,
-             [this, id]() mutable {
-                 return id == _ptr->self() ? flush_log()
-                                           : dispatch_remote_append_entries(id);
-             })
-      .handle_exception_type([](const ss::gate_closed_exception&) {});
+    try {
+        auto holder = _req_bg.hold();
+        if (id == _ptr->self()) {
+            // self dispatch means flushing the leader log
+            if (_is_flush_required) {
+                // start the flush before signalling the dispatch semaphore,
+                // the dispatcher only waits for the flush to be started, not
+                // to finish
+                auto flush_f = _ptr->flush_log();
+                _dispatch_sem.signal();
+                co_await std::move(flush_f);
+            } else {
+                _dispatch_sem.signal();
+            }
+        } else {
+            co_await dispatch_remote_append_entries(id);
+        }
+    } catch (const ss::gate_closed_exception&) {
+    }
 }
 
 ss::future<> replicate_entries_stm::dispatch_remote_append_entries(vnode id) {
@@ -276,7 +279,7 @@ ss::future<result<replicate_result>> replicate_entries_stm::apply(units_t u) {
         // Wait until all RPCs will be dispatched
         return _dispatch_sem.wait(_requests_count).then([this] {
             // release memory reservations, and destroy data
-            _batches.reset();
+            _batches = {};
             _units.release();
         });
     });
@@ -365,9 +368,7 @@ replicate_entries_stm::replicate_entries_stm(
   , _meta(r.metadata())
   , _is_flush_required(r.is_flush_required())
   , _batches_size(r.batches_size())
-  , _batches(
-      std::make_unique<chunked_vector<model::record_batch>>(
-        std::move(r).release_batches()))
+  , _batches(std::move(r).release_batches())
   , _followers_seq(std::move(seqs))
   , _ctxlog(_ptr->_ctxlog) {}
 

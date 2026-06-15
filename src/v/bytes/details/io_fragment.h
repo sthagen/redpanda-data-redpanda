@@ -379,11 +379,6 @@ private:
 #endif
 };
 
-inline void dispose_io_fragment(io_fragment* f) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
-    delete f; // NOLINT
-#pragma GCC diagnostic pop
-}
+inline void dispose_io_fragment(io_fragment* f) { delete f; }
 
 } // namespace details

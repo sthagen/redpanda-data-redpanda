@@ -17,6 +17,7 @@
 #include "cloud_storage/remote_label.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/cluster_link/errc.h"
+#include "cluster/data_policy.h"
 #include "cluster/errc.h"
 #include "cluster/feature_update_action.h"
 #include "cluster/fwd.h"
@@ -55,7 +56,6 @@
 #include "serde/rw/vector.h"
 #include "storage/ntp_config.h"
 #include "utils/tristate.h"
-#include "v8_engine/data_policy.h"
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sstring.hh>
@@ -779,9 +779,9 @@ struct incremental_topic_custom_updates
       incremental_topic_custom_updates,
       serde::version<1>,
       serde::compat_version<0>> {
-    // Data-policy property is replicated by data_policy_frontend and handled by
-    // data_policy_manager.
-    property_update<std::optional<v8_engine::data_policy>> data_policy;
+    // Relic of the removed data-policy feature, never set. Kept for wire
+    // format compatibility.
+    property_update<std::optional<cluster::data_policy>> data_policy;
     // Replication factor is custom handled.
     property_update<std::optional<replication_factor>> replication_factor;
 

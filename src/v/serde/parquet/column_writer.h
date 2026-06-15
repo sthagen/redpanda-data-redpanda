@@ -100,10 +100,6 @@ public:
     // (within another row group).
     ss::future<flushed_pages> flush_pages();
 
-    // Aggregated min/max/null_count statistics across all row groups written
-    // to this column. Must be called after the final flush_pages().
-    statistics file_column_stats();
-
 private:
     std::unique_ptr<impl> _impl;
 };
