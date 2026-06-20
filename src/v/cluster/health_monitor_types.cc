@@ -358,7 +358,8 @@ fmt::iterator cluster_health_overview::format_to(fmt::iterator it) const {
       "high_disk_usage_nodes: {}, nodes_in_recovery_mode: {}, "
       "bytes_in_cloud_storage: {}, leaderless_count: {}, "
       "under_replicated_count: {}, leaderless_partitions: {}, "
-      "under_replicated_partitions: {}}}",
+      "under_replicated_partitions: {}, refresh_failed: {}, "
+      "all_members_reported: {}}}",
       controller_id,
       all_nodes,
       unhealthy_reasons,
@@ -369,7 +370,9 @@ fmt::iterator cluster_health_overview::format_to(fmt::iterator it) const {
       leaderless_count,
       under_replicated_count,
       leaderless_partitions,
-      under_replicated_partitions);
+      under_replicated_partitions,
+      refresh_failed,
+      all_members_reported);
 }
 
 } // namespace cluster

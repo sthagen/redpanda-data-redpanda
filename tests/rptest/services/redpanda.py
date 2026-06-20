@@ -6350,7 +6350,14 @@ class RedpandaService(Service, RedpandaServiceABC):
                 # transfer we end up waiting for the next full scrub cycle,
                 # see CORE-14424
                 "cloud_storage_partial_scrub_interval_ms": 100,
-                "cloud_storage_full_scrub_interval_ms": 10 * 1000,
+                # Effectively disable periodic re-scrubs for the lifetime
+                # of this helper: once a partition completes its full
+                # scrub it must stay "done" until the wait succeeds,
+                # otherwise it gets re-enqueued on every housekeeping
+                # cycle and starves the laggards of the shared op quota
+                # (CORE-15146). 24h is well past any plausible test
+                # runtime, so the value is effectively infinite here.
+                "cloud_storage_full_scrub_interval_ms": 24 * 60 * 60 * 1000,
                 "cloud_storage_scrubbing_interval_jitter_ms": 100,
                 "cloud_storage_background_jobs_quota": 5000,
                 "cloud_storage_housekeeping_interval_ms": 100,

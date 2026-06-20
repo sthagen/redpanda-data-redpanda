@@ -74,10 +74,9 @@ public:
           leaders,
           _handler,
           node_id,
+          config::shard_local_cfg().metadata_dissemination_retries.value(),
           config::shard_local_cfg()
-            .cloud_storage_cluster_metadata_retries.value(),
-          config::shard_local_cfg()
-            .cloud_storage_cluster_metadata_upload_timeout_ms.value())
+            .metadata_dissemination_retry_delay_ms.value())
       , _handler(uploader) {}
 
     ss::future<> start() { co_return; }

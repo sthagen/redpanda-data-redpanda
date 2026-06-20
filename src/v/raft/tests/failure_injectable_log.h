@@ -139,6 +139,9 @@ public:
     std::optional<model::offset>
       retention_offset(storage::gc_config) const final;
 
+    ss::future<std::optional<model::offset>>
+      compute_gc_offset(storage::gc_config) final;
+
     ssize_t dirty_segment_bytes() const final;
     ssize_t closed_segment_bytes() const final;
 

@@ -21,6 +21,7 @@
 #include "features/feature_table.h"
 #include "features/fwd.h"
 #include "model/timeout_clock.h"
+#include "pandaproxy/schema_registry/fwd.h"
 #include "rpc/connection_cache.h"
 #include "rpc/fwd.h"
 
@@ -143,10 +144,16 @@ public:
     ss::future<chunked_vector<topic_result>> delete_mirror_topics(
       chunked_vector<model::topic>, model::timeout_clock::time_point);
 
-    /**
-     * @brief Returns true if schema registry topic is being shadowed
-     */
+    /// True if any Schema Registry shadowing mode is active.
     bool schema_registry_shadowing_active() const;
+
+    /// True if Schema Registry writes from this source must be rejected.
+    bool schema_registry_writes_disabled(
+      pandaproxy::schema_registry::write_source) const;
+
+    /// True if this node must not create a local _schemas topic because
+    /// topic-mode shadowing owns it.
+    bool schema_registry_internal_topic_creation_blocked() const;
 
 private:
     ss::future<errc>

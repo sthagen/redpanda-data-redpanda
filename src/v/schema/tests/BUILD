@@ -13,6 +13,7 @@ redpanda_test_cc_library(
         "//src/v/base",
         "//src/v/pandaproxy/schema_registry:types",
         "//src/v/schema:registry",
+        "@fmt",
         "@seastar",
     ],
 )

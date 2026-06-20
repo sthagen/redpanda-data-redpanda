@@ -70,6 +70,27 @@ class RpCloudApiClient(object):
             self._token = j["access_token"]
         return self._token
 
+    def _with_token_refresh(self, send, *, refresh_eligible):
+        """Issue a request via `send()` and, on a 401 while using our cached
+        bearer, drop the token, refresh, and retry once.
+
+        The cloud-api bearer is cached for the cluster's lifetime; long-running
+        tests can outlive its TTL or hit a server-side rotation, after which
+        every call 401s. DEVPROD-4327.
+        """
+        resp = send()
+        if (
+            refresh_eligible
+            and resp.status_code == requests.codes.unauthorized
+            and self._token is not None
+        ):
+            self._logger.warning(
+                "cloud-api returned 401; refreshing OAuth token and retrying once"
+            )
+            self._token = None
+            resp = send()
+        return resp
+
     @overload
     def _http_get(
         self,
@@ -97,33 +118,44 @@ class RpCloudApiClient(object):
         self,
         endpoint="",
         base_url=None,
-        override_headers={},
+        override_headers=None,
         text_response=False,
         quite=False,
         **kwargs,
     ) -> Union[None, dict, str]:
-        token = self._get_token()
-        headers = override_headers or {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-        }
         _base = base_url if base_url else self._config.api_url
-        resp = self._session.get(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        def send():
+            if override_headers:
+                headers = override_headers
+            else:
+                token = self._get_token()
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json",
+                }
+            return self._session.get(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        resp = self._with_token_refresh(send, refresh_eligible=not override_headers)
         _r = self._handle_error(resp, quite=quite)
         if text_response:
             return _r.text
         else:
             return _r.json()
 
-    def _http_post(self, base_url=None, endpoint="", override_headers={}, **kwargs):
-        token = self._get_token()
-        self._logger.debug(f"http token: '{token}'")
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-        } | override_headers
+    def _http_post(self, base_url=None, endpoint="", override_headers=None, **kwargs):
         _base = base_url if base_url else self._config.api_url
-        resp = self._session.post(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        def send():
+            token = self._get_token()
+            self._logger.debug(f"acquired cloud-api token ({len(token)} chars)")
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            } | (override_headers or {})
+            return self._session.post(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        resp = self._with_token_refresh(send, refresh_eligible=True)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 
@@ -131,29 +163,39 @@ class RpCloudApiClient(object):
         self,
         base_url: str | None = None,
         endpoint: str = "",
-        override_headers: dict[str, str] = {},
+        override_headers: dict[str, str] | None = None,
         **kwargs,
     ):
         """
         Like _http_post but uses PATCH.
         Injects Bearer token and Accept header the same way.
         """
-        token = self._get_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-        } | override_headers
-
         _base = base_url if base_url else self._config.api_url
-        resp = self._session.patch(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        def send():
+            token = self._get_token()
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            } | (override_headers or {})
+            return self._session.patch(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        resp = self._with_token_refresh(send, refresh_eligible=True)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 
     def _http_delete(self, base_url=None, endpoint="", **kwargs):
-        token = self._get_token()
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         _base = base_url if base_url else self._config.api_url
-        resp = self._session.delete(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        def send():
+            token = self._get_token()
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            }
+            return self._session.delete(f"{_base}{endpoint}", headers=headers, **kwargs)
+
+        resp = self._with_token_refresh(send, refresh_eligible=True)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 

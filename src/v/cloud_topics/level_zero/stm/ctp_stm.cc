@@ -306,8 +306,8 @@ ss::future<> ctp_stm::do_apply(const model::record_batch& batch) {
               case ctp_stm_key::reset_state:
                   apply_reset_state(std::move(r));
                   return ss::stop_iteration::no;
-              case ctp_stm_key::set_allowed_local_start_offset:
-                  apply_set_allowed_local_start_offset(std::move(r));
+              case ctp_stm_key::set_min_allowed_local_threshold:
+                  apply_set_min_allowed_local_threshold(std::move(r));
                   return ss::stop_iteration::no;
               }
               throw std::runtime_error(fmt_with_ctx(
@@ -350,11 +350,11 @@ void ctp_stm::apply_reset_state(model::record record) {
     _state = std::move(cmd.state);
 }
 
-void ctp_stm::apply_set_allowed_local_start_offset(model::record record) {
-    auto cmd = serde::from_iobuf<set_allowed_local_start_offset_cmd>(
+void ctp_stm::apply_set_min_allowed_local_threshold(model::record record) {
+    auto cmd = serde::from_iobuf<set_min_allowed_local_threshold_cmd>(
       record.release_value());
-    vlog(_log.debug, "Applying set_allowed_local_start_offset: {}", cmd.value);
-    _state.set_allowed_local_start_offset(cmd.value);
+    vlog(_log.debug, "Applying set_min_allowed_local_threshold: {}", cmd.value);
+    _state.set_min_allowed_local_threshold(cmd.value);
     _lro_advanced.signal();
 }
 
@@ -530,7 +530,7 @@ model::offset ctp_stm::prefix_truncate_target() {
     // and LRLO, so it's the upper bound. The hint, when set, pulls the
     // target down so older data stays local.
     auto cap = max_removable_local_log_offset();
-    auto hint = _state.get_allowed_local_start_offset();
+    auto hint = _state.get_min_allowed_local_threshold();
     auto target = cap;
     if (hint.has_value()) {
         // Translate the kafka::offset hint to a log offset. to_log_offset

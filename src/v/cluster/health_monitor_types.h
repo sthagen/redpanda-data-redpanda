@@ -476,6 +476,17 @@ struct cluster_health_overview {
     std::vector<model::ntp> under_replicated_partitions;
     size_t under_replicated_count{};
     std::optional<size_t> bytes_in_cloud_storage;
+    // True if the refresh attempted at assembly time errored. False on
+    // success, or if no refresh was needed (cache fresh enough to skip).
+    // Also surfaced as "no_health_report" in unhealthy_reasons.
+    bool refresh_failed{false};
+    // True if, at overview-assembly time, the local _reports cache holds a
+    // health report for every known cluster member (and refresh_failed is
+    // false). Signals that this overview reflects a fully-collected view
+    // rather than a partial one. The underlying refresh may have happened
+    // earlier - this is a property of the cache state, not of a single
+    // refresh attempt.
+    bool all_members_reported{false};
 
     fmt::iterator format_to(fmt::iterator it) const;
 };

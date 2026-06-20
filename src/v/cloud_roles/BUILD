@@ -120,6 +120,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
+        "//src/v/cloud_instance_metadata",
         "//src/v/config",
         "//src/v/hashing:secure",
         "//src/v/http",

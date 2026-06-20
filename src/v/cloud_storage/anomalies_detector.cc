@@ -43,7 +43,14 @@ ss::future<anomalies_detector::result> anomalies_detector::run(
     _result = result{};
     _received_quota = quota_total;
 
-    vlog(_logger.debug, "Downloading partition manifest ...");
+    vlog(
+      _logger.debug,
+      "Downloading partition manifest ... scrub_from={} quota.max_ops={} "
+      "quota.max_segs={} force_seg_checks={}",
+      scrub_from,
+      quota_total.max_num_operations,
+      quota_total.max_num_segments,
+      force_segment_api_checks);
 
     partition_manifest_downloader dl(
       _bucket, _remote_path_provider, _ntp, _initial_rev, _remote);
@@ -51,8 +58,14 @@ ss::future<anomalies_detector::result> anomalies_detector::run(
     auto dl_result = co_await dl.download_manifest(rtc_node, &manifest);
     ++_result.ops;
     if (dl_result.has_error()) {
-        vlog(_logger.debug, "Failed downloading partition manifest ...");
         _result.status = scrub_status::failed;
+        vlog(
+          _logger.debug,
+          "Failed downloading partition manifest, exiting scrub: error={} "
+          "ops={} segs={}",
+          dl_result.error(),
+          _result.ops,
+          _result.segments_visited);
         co_return _result;
     }
     if (
@@ -61,6 +74,15 @@ ss::future<anomalies_detector::result> anomalies_detector::run(
         _result.detected.missing_partition_manifest = true;
         co_return _result;
     }
+
+    vlog(
+      _logger.debug,
+      "Partition manifest loaded: start_offset={} last_offset={} "
+      "num_segments={} num_spillovers={}",
+      manifest.get_start_offset(),
+      manifest.get_last_offset(),
+      manifest.size(),
+      manifest.get_spillover_map().size());
 
     std::deque<ss::sstring> spill_manifest_paths;
     const auto& spillovers = manifest.get_spillover_map();
@@ -169,6 +191,16 @@ ss::future<anomalies_detector::result> anomalies_detector::run(
         _result.status = scrub_status::partial;
     }
 
+    vlog(
+      _logger.debug,
+      "Scrub run complete: status={} last_scrubbed_offset={} ops={} segs={} "
+      "scrub_from_was_set={}",
+      _result.status,
+      _result.last_scrubbed_offset,
+      _result.ops,
+      _result.segments_visited,
+      scrub_from.has_value());
+
     co_return _result;
 }
 
@@ -203,8 +235,12 @@ anomalies_detector::check_manifest(
   const existence_query_context& query_ctx) {
     vlog(
       _logger.debug,
-      "Checking manifest {}",
-      manifest.get_manifest_path(_remote_path_provider));
+      "Checking manifest {} range=[{},{}] num_segs={} scrub_from={}",
+      manifest.get_manifest_path(_remote_path_provider),
+      manifest.get_start_offset(),
+      manifest.get_last_offset(),
+      manifest.size(),
+      scrub_from);
     if (
       scrub_from
       && (manifest.get_start_offset() > *scrub_from || manifest.get_last_offset() == scrub_from)) {
@@ -217,7 +253,6 @@ anomalies_detector::check_manifest(
           manifest.get_last_offset(),
           manifest.get_manifest_path(_remote_path_provider),
           scrub_from);
-
         co_return stop_detector::no;
     }
 
@@ -237,29 +272,53 @@ anomalies_detector::check_manifest(
         vlog(
           _logger.debug,
           "Manifest with offset range [{}, {}] num segments {} ({}) skipped, "
-          "not enough object quota to visit any segment. Skipping ...",
+          "not enough object quota to visit any segment "
+          "(visitable_tail={}, get_visitable_segments={}). Skipping ...",
           manifest.get_start_offset(),
           manifest.get_last_offset(),
           manifest.size(),
-          manifest.get_manifest_path(_remote_path_provider));
+          manifest.get_manifest_path(_remote_path_provider),
+          visitable_tail_segments,
+          get_visitable_segments());
         co_return stop_detector::no;
     }
     std::optional<segment_meta> previous_seg_meta;
     auto manifest_end = manifest.end();
+    bool seek_succeeded = false;
     if (scrub_from && manifest.get_last_offset() > scrub_from) {
         if (
           auto iter = manifest.segment_containing(*scrub_from);
           iter != manifest_end) {
             previous_seg_meta = *iter;
             seg_iter = std::move(++iter);
+            seek_succeeded = true;
         }
     }
+    vlog(
+      _logger.debug,
+      "Starting segment loop start_index={} visitable_tail={} "
+      "scrub_from={} seek_succeeded={} starting_at_end={}",
+      start_index,
+      visitable_tail_segments,
+      scrub_from,
+      seek_succeeded,
+      seg_iter == manifest_end);
 
+    size_t visited_in_this_call = 0;
     for (; seg_iter != manifest_end; ++seg_iter) {
         if (should_stop()) {
             _result.status = scrub_status::partial;
+            vlog(
+              _logger.debug,
+              "Stopping mid-segment-loop: visited_in_call={} "
+              "last_scrubbed_offset={} total_segs_visited={} ops={}",
+              visited_in_this_call,
+              _result.last_scrubbed_offset,
+              _result.segments_visited,
+              _result.ops);
             co_return stop_detector::yes;
         }
+        ++visited_in_this_call;
 
         const auto& seg_meta = *seg_iter;
         const auto segment_path = remote_segment_path{
@@ -280,8 +339,13 @@ anomalies_detector::check_manifest(
 
     vlog(
       _logger.debug,
-      "Finished checking manifest {}",
-      manifest.get_manifest_path(_remote_path_provider));
+      "Finished checking manifest {} visited_in_call={} "
+      "last_scrubbed_offset={} total_segs_visited={} ops={}",
+      manifest.get_manifest_path(_remote_path_provider),
+      visited_in_this_call,
+      _result.last_scrubbed_offset,
+      _result.segments_visited,
+      _result.ops);
     co_return stop_detector::no;
 }
 
@@ -317,17 +381,37 @@ size_t anomalies_detector::get_visitable_segments() const {
 
 bool anomalies_detector::should_stop() const {
     if (_as.abort_requested()) {
+        vlog(
+          _logger.trace,
+          "should_stop=true reason=abort_requested "
+          "ops={} segs={} last_scrubbed_offset={}",
+          _result.ops,
+          _result.segments_visited,
+          _result.last_scrubbed_offset);
         return true;
     }
 
-    if (
-      archival::run_quota_t{_result.ops} > _received_quota.max_num_operations
-      || segment_depth_t{_result.segments_visited}
-           >= _received_quota.max_num_segments) {
+    const bool ops_over = archival::run_quota_t{_result.ops}
+                          > _received_quota.max_num_operations;
+    const bool segs_over = segment_depth_t{_result.segments_visited}
+                           >= _received_quota.max_num_segments;
+    if (ops_over || segs_over) {
         // Allow the scrubbing of one segment even if that means
         // going above the quota in order to ensure some forward
         // progress in all quota cases.
-        return _result.last_scrubbed_offset.has_value();
+        const bool stop = _result.last_scrubbed_offset.has_value();
+        vlog(
+          _logger.trace,
+          "should_stop={} reason={} ops={}/{} segs={}/{} "
+          "last_scrubbed_offset={}",
+          stop,
+          ops_over ? "ops_quota" : "segs_quota",
+          _result.ops,
+          _received_quota.max_num_operations,
+          _result.segments_visited,
+          _received_quota.max_num_segments,
+          _result.last_scrubbed_offset);
+        return stop;
     }
 
     return false;

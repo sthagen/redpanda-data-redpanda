@@ -131,7 +131,7 @@ private:
     void apply_set_start_offset(model::record);
     void apply_advance_epoch(model::record, model::offset base_offset);
     void apply_reset_state(model::record);
-    void apply_set_allowed_local_start_offset(model::record);
+    void apply_set_min_allowed_local_threshold(model::record);
 
     ss::future<raft::local_snapshot_applied>
     apply_local_snapshot(raft::stm_snapshot_header, iobuf&&) override;

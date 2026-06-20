@@ -25,7 +25,9 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
+#include <algorithm>
 #include <exception>
+#include <limits>
 #include <optional>
 
 using namespace std::chrono_literals;
@@ -112,7 +114,10 @@ ss::future<> seq_writer::read_sync() {
 }
 
 ss::future<> seq_writer::check_mutable(
-  const context& ctx, const std::optional<subject>& sub) {
+  const context& ctx, const std::optional<subject>& sub, write_source src) {
+    if (bypasses_write_policy(src)) {
+        co_return;
+    }
     auto mode = sub ? co_await _store.get_mode(
                         {ctx, *sub}, default_to_global::yes)
                     : co_await _store.get_mode(ctx, default_to_global::yes);
@@ -283,8 +288,128 @@ seq_writer::write_subject_version(stored_schema schema) {
       });
 }
 
+ss::future<std::optional<sharded_store::insert_result>>
+seq_writer::do_write_subject_version_imported(
+  stored_schema schema, model::offset write_at) {
+    // schema.schema is moved below; keep an owning subject copy.
+    const auto sub = schema.schema.sub();
+
+    // Imported ids and versions are external input; the store later
+    // computes id + 1 and version + 1, which must stay representable.
+    constexpr auto max_imported_id = schema_id{
+      std::numeric_limits<schema_id::type>::max() - 1};
+    if (schema.id < schema_id{1} || schema.id > max_imported_id) {
+        throw as_exception(invalid_schema(
+          fmt::format("Imported schema id {} is not valid", schema.id())));
+    }
+    constexpr auto max_imported_version = schema_version{
+      std::numeric_limits<schema_version::type>::max() - 1};
+    if (
+      schema.version < schema_version{1}
+      || schema.version > max_imported_version) {
+        throw as_exception(
+          error_info{
+            error_code::schema_version_invalid,
+            fmt::format(
+              "Imported schema version {} is not valid", schema.version())});
+    }
+
+    const auto ctx_id = context_schema_id{sub.ctx, schema.id};
+    auto existing_definition = co_await _store.maybe_get_schema_definition(
+      ctx_id);
+    if (
+      existing_definition.has_value()
+      && existing_definition.value() != schema.schema.def()) {
+        throw as_exception(overwrite_schema_with_id_not_permitted(schema.id));
+    }
+
+    auto versions = co_await _store.get_subject_versions(
+      sub, include_deleted::yes);
+    auto existing_version = std::ranges::find(
+      versions, schema.version, &subject_version_entry::version);
+    if (existing_version != versions.end()) {
+        if (existing_version->id != schema.id) {
+            throw as_exception(
+              error_info{
+                error_code::subject_version_schema_id_already_exists,
+                fmt::format(
+                  "Subject {} version {} is already registered with schema "
+                  "id {}, not imported schema id {}",
+                  sub,
+                  schema.version(),
+                  existing_version->id(),
+                  schema.id())});
+        }
+        if (
+          existing_definition.has_value()
+          && existing_version->deleted == schema.deleted) {
+            co_return sharded_store::insert_result{
+              .version = schema.version, .id = schema.id, .inserted = false};
+        }
+    }
+
+    auto canonical = std::move(schema.schema);
+    const auto version = schema.version;
+    const auto id = schema.id;
+    const auto deleted = schema.deleted;
+
+    vlog(
+      srlog.debug,
+      "seq_writer::write_subject_version_imported offset={} subject={} "
+      "schema={} version={} deleted={}",
+      write_at,
+      sub,
+      id,
+      version,
+      static_cast<bool>(deleted));
+
+    batch_builder rb(write_at);
+    auto record_offset = write_at;
+
+    if (
+      auto is_materialized = co_await _store.is_context_materialized(sub.ctx);
+      !is_materialized) {
+        vlog(srlog.debug, "Writing CONTEXT record for ctx={}", sub.ctx);
+        auto ctx_key = context_key{
+          .seq{record_offset}, .node{_node_id}, .ctx{sub.ctx}};
+        auto ctx_value = context_value{.ctx{sub.ctx}};
+        rb(std::move(ctx_key), std::move(ctx_value));
+        ++record_offset;
+    }
+
+    auto key = schema_key{
+      .seq{record_offset}, .node{_node_id}, .sub{sub}, .version{version}};
+    auto value = schema_value{
+      .schema{std::move(canonical)},
+      .version{version},
+      .id{id},
+      .deleted = deleted};
+    rb(std::move(key), std::move(value));
+
+    if (co_await produce_and_apply(write_at, std::move(rb).build())) {
+        co_return sharded_store::insert_result{
+          .version = version,
+          .id = id,
+          .inserted = existing_version == versions.end()};
+    }
+    co_return std::nullopt;
+}
+
+ss::future<sharded_store::insert_result>
+seq_writer::write_subject_version_imported(stored_schema schema) {
+    co_return co_await sequenced_write(
+      [&schema](model::offset write_at, seq_writer& seq) {
+          return seq.do_write_subject_version_imported(
+            schema.share(), write_at);
+      },
+      write_source::schema_registry_sync);
+}
+
 ss::future<std::optional<bool>> seq_writer::do_write_config(
-  context_subject sub, compatibility_level compat, model::offset write_at) {
+  context_subject sub,
+  compatibility_level compat,
+  model::offset write_at,
+  write_source src) {
     vlog(
       srlog.debug,
       "write_config sub={} compat={} offset={}",
@@ -294,7 +419,7 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
 
     auto sub_opt = sub.is_context_only() ? std::nullopt
                                          : std::make_optional(sub.sub);
-    co_await check_mutable(sub.ctx, sub_opt);
+    co_await check_mutable(sub.ctx, sub_opt, src);
 
     try {
         // Check for no-op case
@@ -327,21 +452,23 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
     }
 }
 
-ss::future<bool>
-seq_writer::write_config(context_subject ctx_sub, compatibility_level compat) {
-    return sequenced_write([ctx_sub{std::move(ctx_sub)},
-                            compat](model::offset write_at, seq_writer& seq) {
-        return seq.do_write_config(ctx_sub, compat, write_at);
-    });
+ss::future<bool> seq_writer::write_config(
+  context_subject ctx_sub, compatibility_level compat, write_source src) {
+    return sequenced_write(
+      [ctx_sub{std::move(ctx_sub)}, compat, src](
+        model::offset write_at, seq_writer& seq) {
+          return seq.do_write_config(ctx_sub, compat, write_at, src);
+      },
+      src);
 }
 
 ss::future<std::optional<bool>>
-seq_writer::do_delete_config(context_subject ctx_sub) {
+seq_writer::do_delete_config(context_subject ctx_sub, write_source src) {
     vlog(srlog.debug, "delete config sub={}", ctx_sub);
 
     auto sub_opt = ctx_sub.is_context_only() ? std::nullopt
                                              : std::make_optional(ctx_sub.sub);
-    co_await check_mutable(ctx_sub.ctx, sub_opt);
+    co_await check_mutable(ctx_sub.ctx, sub_opt, src);
 
     chunked_vector<seq_marker> sequences;
     try {
@@ -368,15 +495,21 @@ seq_writer::do_delete_config(context_subject ctx_sub) {
     }
 }
 
-ss::future<bool> seq_writer::delete_config(context_subject ctx_sub) {
+ss::future<bool>
+seq_writer::delete_config(context_subject ctx_sub, write_source src) {
     return sequenced_write(
-      [ctx_sub{std::move(ctx_sub)}](model::offset, seq_writer& seq) {
-          return seq.do_delete_config(ctx_sub);
-      });
+      [ctx_sub{std::move(ctx_sub)}, src](model::offset, seq_writer& seq) {
+          return seq.do_delete_config(ctx_sub, src);
+      },
+      src);
 }
 
 ss::future<std::optional<bool>> seq_writer::do_write_mode(
-  context_subject ctx_sub, mode m, force f, model::offset write_at) {
+  context_subject ctx_sub,
+  mode m,
+  force f,
+  model::offset write_at,
+  write_source src) {
     vlog(
       srlog.debug,
       "write_mode sub={} mode={} force={} offset={}",
@@ -385,7 +518,7 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
       f,
       write_at);
 
-    _store.check_mode_mutability(force::no);
+    _store.check_mode_mutable(src);
 
     try {
         // Check for no-op case
@@ -451,18 +584,20 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
     }
 }
 
-ss::future<bool>
-seq_writer::write_mode(context_subject ctx_sub, mode mode, force f) {
-    return sequenced_write([ctx_sub{std::move(ctx_sub)}, mode, f](
-                             model::offset write_at, seq_writer& seq) {
-        return seq.do_write_mode(ctx_sub, mode, f, write_at);
-    });
+ss::future<bool> seq_writer::write_mode(
+  context_subject ctx_sub, mode mode, force f, write_source src) {
+    return sequenced_write(
+      [ctx_sub{std::move(ctx_sub)}, mode, f, src](
+        model::offset write_at, seq_writer& seq) {
+          return seq.do_write_mode(ctx_sub, mode, f, write_at, src);
+      },
+      src);
 }
 
-ss::future<std::optional<bool>>
-seq_writer::do_delete_mode(context_subject ctx_sub, model::offset write_at) {
+ss::future<std::optional<bool>> seq_writer::do_delete_mode(
+  context_subject ctx_sub, model::offset write_at, write_source src) {
     vlog(srlog.debug, "delete mode sub={} offset={}", ctx_sub, write_at);
-    _store.check_mode_mutability(force::no);
+    _store.check_mode_mutable(src);
 
     chunked_vector<seq_marker> sequences;
     try {
@@ -488,11 +623,14 @@ seq_writer::do_delete_mode(context_subject ctx_sub, model::offset write_at) {
     }
 }
 
-ss::future<bool> seq_writer::delete_mode(context_subject ctx_sub) {
+ss::future<bool>
+seq_writer::delete_mode(context_subject ctx_sub, write_source src) {
     return sequenced_write(
-      [ctx_sub{std::move(ctx_sub)}](model::offset write_at, seq_writer& seq) {
-          return seq.do_delete_mode(ctx_sub, write_at);
-      });
+      [ctx_sub{std::move(ctx_sub)},
+       src](model::offset write_at, seq_writer& seq) {
+          return seq.do_delete_mode(ctx_sub, write_at, src);
+      },
+      src);
 }
 
 ss::future<std::optional<bool>>
@@ -533,8 +671,11 @@ ss::future<> seq_writer::delete_context(context ctx) {
 
 /// Impermanent delete: update a version with is_deleted=true
 ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
-  context_subject sub, schema_version version, model::offset write_at) {
-    co_await check_mutable(sub.ctx, sub.sub);
+  context_subject sub,
+  schema_version version,
+  model::offset write_at,
+  write_source src) {
+    co_await check_mutable(sub.ctx, sub.sub, src);
 
     if (co_await _store.is_referenced(sub, version)) {
         throw as_exception(has_references(sub, version));
@@ -572,17 +713,19 @@ ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
 }
 
 ss::future<bool> seq_writer::delete_subject_version(
-  context_subject sub, schema_version version) {
+  context_subject sub, schema_version version, write_source src) {
     return sequenced_write(
-      [sub{std::move(sub)}, version](model::offset write_at, seq_writer& seq) {
-          return seq.do_delete_subject_version(sub, version, write_at);
-      });
+      [sub{std::move(sub)}, version, src](
+        model::offset write_at, seq_writer& seq) {
+          return seq.do_delete_subject_version(sub, version, write_at, src);
+      },
+      src);
 }
 
 ss::future<std::optional<chunked_vector<schema_version>>>
 seq_writer::do_delete_subject_impermanent(
-  context_subject sub, model::offset write_at) {
-    co_await check_mutable(sub.ctx, sub.sub);
+  context_subject sub, model::offset write_at, write_source src) {
+    co_await check_mutable(sub.ctx, sub.sub, src);
 
     // Grab the versions before they're gone.
     auto versions = co_await _store.get_versions(sub, include_deleted::no);
@@ -630,12 +773,13 @@ seq_writer::do_delete_subject_impermanent(
 }
 
 ss::future<chunked_vector<schema_version>>
-seq_writer::delete_subject_impermanent(context_subject sub) {
+seq_writer::delete_subject_impermanent(context_subject sub, write_source src) {
     vlog(srlog.debug, "delete_subject_impermanent sub={}", sub);
     return sequenced_write(
-      [sub{std::move(sub)}](model::offset write_at, seq_writer& seq) {
-          return seq.do_delete_subject_impermanent(sub, write_at);
-      });
+      [sub{std::move(sub)}, src](model::offset write_at, seq_writer& seq) {
+          return seq.do_delete_subject_impermanent(sub, write_at, src);
+      },
+      src);
 }
 
 /// Permanent deletions (i.e. writing tombstones for previous sequenced
@@ -643,16 +787,21 @@ seq_writer::delete_subject_impermanent(context_subject sub) {
 /// Include a version if we are only to hard delete that version, otherwise
 /// will hard-delete the whole subject.
 ss::future<chunked_vector<schema_version>> seq_writer::delete_subject_permanent(
-  context_subject sub, std::optional<schema_version> version) {
+  context_subject sub,
+  std::optional<schema_version> version,
+  write_source src) {
     return sequenced_write(
-      [sub{std::move(sub)}, version](model::offset, seq_writer& seq) {
-          return seq.delete_subject_permanent_inner(sub, version);
-      });
+      [sub{std::move(sub)}, version, src](model::offset, seq_writer& seq) {
+          return seq.delete_subject_permanent_inner(sub, version, src);
+      },
+      src);
 }
 
 ss::future<std::optional<chunked_vector<schema_version>>>
 seq_writer::delete_subject_permanent_inner(
-  context_subject sub, std::optional<schema_version> version) {
+  context_subject sub,
+  std::optional<schema_version> version,
+  write_source src) {
     chunked_vector<seq_marker> sequences;
     batch_builder rb{model::offset{0}};
 
@@ -660,7 +809,7 @@ seq_writer::delete_subject_permanent_inner(
     /// within these store functions (will throw a 404-equivalent if so)
     vlog(srlog.debug, "delete_subject_permanent sub={}", sub);
 
-    co_await check_mutable(sub.ctx, sub.sub);
+    co_await check_mutable(sub.ctx, sub.sub, src);
 
     if (version.has_value()) {
         // Check version first to see if the version exists

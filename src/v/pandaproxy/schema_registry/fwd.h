@@ -26,4 +26,6 @@ class transport;
 class kafka_client_transport;
 class rpc_transport;
 
+enum class write_source;
+
 } // namespace pandaproxy::schema_registry

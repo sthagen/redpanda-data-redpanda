@@ -180,14 +180,14 @@ kafka::offset ctp_stm_state::start_offset() const noexcept {
     return _start_offset;
 }
 
-void ctp_stm_state::set_allowed_local_start_offset(
+void ctp_stm_state::set_min_allowed_local_threshold(
   std::optional<kafka::offset> offset) noexcept {
-    _allowed_local_start_offset = offset;
+    _min_allowed_local_threshold = offset;
 }
 
 std::optional<kafka::offset>
-ctp_stm_state::get_allowed_local_start_offset() const noexcept {
-    return _allowed_local_start_offset;
+ctp_stm_state::get_min_allowed_local_threshold() const noexcept {
+    return _min_allowed_local_threshold;
 }
 
 fmt::iterator ctp_stm_state::format_to(fmt::iterator it) const {

@@ -256,6 +256,11 @@ failure_injectable_log::retention_offset(storage::gc_config cfg) const {
     return _underlying_log->retention_offset(cfg);
 }
 
+ss::future<std::optional<model::offset>>
+failure_injectable_log::compute_gc_offset(storage::gc_config cfg) {
+    return _underlying_log->compute_gc_offset(cfg);
+}
+
 ssize_t failure_injectable_log::dirty_segment_bytes() const {
     return _underlying_log->dirty_segment_bytes();
 }

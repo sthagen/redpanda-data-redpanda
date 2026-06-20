@@ -2462,6 +2462,7 @@ redpanda_cc_library(
         "//src/v/net:tls",
         "//src/v/net:types",
         "//src/v/pandaproxy/schema_registry:config",
+        "//src/v/pandaproxy/schema_registry:fwd",
         "//src/v/pandaproxy/schema_registry:subject_name_strategy",
         "//src/v/pandaproxy/schema_registry:types",
         "//src/v/raft",

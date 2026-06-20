@@ -911,8 +911,12 @@ ss::future<compatibility_result> sharded_store::do_is_compatible(
     co_return result;
 }
 
-void sharded_store::check_mode_mutability(force f) const {
-    _store.local().check_mode_mutability(f).value();
+void sharded_store::check_mode_mutable(write_source src) const {
+    // Internal sync bypasses the operator mode_mutability lockout.
+    _store.local()
+      .check_mode_mutability(
+        bypasses_write_policy(src) ? force::yes : force::no)
+      .value();
 }
 
 ss::future<bool> sharded_store::has_version(

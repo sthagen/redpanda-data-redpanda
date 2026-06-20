@@ -229,8 +229,10 @@ DEFAULT_MESSAGE_SIZE = 4 * KiB
 
 class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
     msg_size = DEFAULT_MESSAGE_SIZE
-    # Min segment size across all tiers
-    min_segment_size = 14 * MiB
+    # Preferred (smallest) segment size for generating many segments. Clamped
+    # at runtime to the tier's allowed range [log_segment_size_min,
+    # log_segment_size_max], which varies per tier.
+    min_segment_size = 16 * MiB
     unavailable_timeout = 60
     # default message count to check
     msg_count = 100000
@@ -257,6 +259,19 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         self._num_brokers = config_profile["nodes_count"]
         self._cluster_config_log_segment_size = int(cluster_config["log_segment_size"])
+        # Cloud tiers restrict segment.bytes to [log_segment_size_min,
+        # log_segment_size_max], and the range differs per tier. Read the live
+        # bounds so segment sizes can be clamped into range, rather than
+        # hardcoding a value that is only valid on some tiers.
+        self._log_segment_size_min, self._log_segment_size_max = (
+            self._segment_size_bounds()
+        )
+        self.min_segment_size = self._clamp_segment_size(self.min_segment_size)
+        self.logger.info(
+            f"Tier segment size bounds: "
+            f"[{self._log_segment_size_min}, {self._log_segment_size_max}]; "
+            f"using min_segment_size={self.min_segment_size}"
+        )
         self._memory_per_broker = get_machine_info(
             config_profile["machine_type"]
         ).memory
@@ -469,7 +484,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
             )
         finally:
             producer.stop()
-            producer.wait(timeout_sec=600)
 
         # Once some segments are generated, configure the topic to use more
         # realistic sizes.
@@ -480,6 +494,30 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
         self.adjust_topic_segment_properties(
             self._cluster_config_log_segment_size // 2, retention_bytes
         )
+
+    def _segment_size_bounds(self) -> tuple[int, int | None]:
+        """Query the tier's allowed segment-size range from the live cluster config.
+
+        Cloud tiers set log_segment_size_min/max and reject segment.bytes
+        outside that range with INVALID_CONFIG. The bounds differ per tier, so
+        they must be read at runtime. The admin port isn't reachable from the
+        test runner, so rpk is run inside the cluster (same pattern as
+        config_profile_verify_test). Returns (min, max); an unset bound is
+        reported as a permissive default (1 for min, None for max).
+        """
+        live_config = json.loads(
+            self.redpanda.kubectl.exec("rpk redpanda admin config print --host 0")
+        )
+        seg_min = live_config.get("log_segment_size_min")
+        seg_max = live_config.get("log_segment_size_max")
+        return (int(seg_min) if seg_min else 1, int(seg_max) if seg_max else None)
+
+    def _clamp_segment_size(self, segment_bytes: int) -> int:
+        """Clamp a desired segment size into the tier's allowed [min, max] range."""
+        clamped = max(self._log_segment_size_min, segment_bytes)
+        if self._log_segment_size_max is not None:
+            clamped = min(clamped, self._log_segment_size_max)
+        return clamped
 
     def adjust_topic_segment_properties(
         self, segment_bytes: int, retention_local_bytes: int
@@ -1238,7 +1276,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         finally:
             producer.stop()
-            producer.wait(timeout_sec=600)
 
         self.redpanda.assert_cluster_is_reusable()
 
@@ -1348,7 +1385,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         finally:
             producer.stop()
-            producer.wait(timeout_sec=600)
 
         self.redpanda.assert_cluster_is_reusable()
 
@@ -1457,7 +1493,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
             finally:
                 self.logger.info("Stopping thrashing consumers")
                 consumer.stop()
-                consumer.wait(timeout_sec=600)
 
             final_cloud_storage_cache_op_put = self.redpanda.metric_sum(
                 "redpanda_cloud_storage_cache_op_put_total",
@@ -1515,7 +1550,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         finally:
             producer.stop()
-            producer.wait(timeout_sec=600)
             self.free_preallocated_nodes()
 
         self.redpanda.assert_cluster_is_reusable()
@@ -1642,7 +1676,6 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         finally:
             producer.stop()
-            producer.wait(timeout_sec=600)
             self.free_preallocated_nodes()
 
         self.redpanda.assert_cluster_is_reusable()
@@ -1848,7 +1881,7 @@ class HighThroughputTest(PreallocNodesMixin, RedpandaCloudTest):
 
         self.logger.info("Starting stage_tiered_storage_consuming")
 
-        segment_size = 128 * MiB  # 128 MiB
+        segment_size = self._clamp_segment_size(128 * MiB)
         consume_rate = 1 * GiB  # 1 GiB/s
 
         # create a new topic with low local retention.

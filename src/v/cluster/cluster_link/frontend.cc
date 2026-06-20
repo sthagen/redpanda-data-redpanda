@@ -22,6 +22,7 @@
 #include "config/configuration.h"
 #include "model/namespace.h"
 #include "model/validation.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "rpc/connection_cache.h"
 #include "ssx/when_all.h"
 
@@ -39,6 +40,7 @@ using ::cluster_link::model::name_t;
 using ::cluster_link::model::update_cluster_link_configuration_cmd;
 using ::cluster_link::model::update_mirror_topic_properties_cmd;
 using ::cluster_link::model::update_mirror_topic_status_cmd;
+namespace ppsr = pandaproxy::schema_registry;
 
 namespace {
 errc map_errc(std::error_code ec) {
@@ -317,38 +319,58 @@ ss::future<chunked_vector<topic_result>> frontend::delete_mirror_topics(
       std::move(futures));
 }
 
+namespace {
+
+bool link_shadows_schema_registry_topic(
+  const ::cluster_link::model::metadata& md) {
+    const auto& mirror_topics = md.state.mirror_topics;
+    auto topic_it = mirror_topics.find(
+      ::model::schema_registry_internal_tp.topic);
+    if (topic_it != mirror_topics.end()) {
+        return !is_topic_mutable(topic_it->second.status);
+    }
+    // Topic mode owns _schemas even before the mirror topic appears.
+    return md.configuration.schema_registry_sync_cfg.is_topic_mode();
+}
+
+bool link_disables_schema_registry_writes(
+  const ::cluster_link::model::metadata& md, ppsr::write_source source) {
+    switch (source) {
+    case ppsr::write_source::client:
+        return link_shadows_schema_registry_topic(md)
+               || md.configuration.schema_registry_sync_cfg.api_mode()
+                    != nullptr;
+    case ppsr::write_source::schema_registry_sync:
+        return link_shadows_schema_registry_topic(md);
+    }
+    __builtin_unreachable();
+}
+
+} // namespace
+
 bool frontend::schema_registry_shadowing_active() const {
+    return schema_registry_writes_disabled(ppsr::write_source::client);
+}
+
+bool frontend::schema_registry_writes_disabled(
+  ppsr::write_source source) const {
     if (!cluster_link_active()) {
-        // If not shadow links are active then quick exit
         return false;
     }
 
     auto link_ids = get_all_link_ids();
-    return std::ranges::any_of(link_ids, [this](id_t link_id) -> bool {
+    return std::ranges::any_of(link_ids, [this, source](id_t link_id) -> bool {
         const auto md = find_link_by_id(link_id);
         if (!md) {
             return false;
         }
-        // Check to see if the schema registry topic is in the mirror topic list
-        const auto& mirror_topics = md->state.mirror_topics;
-        auto topic_it = mirror_topics.find(
-          ::model::schema_registry_internal_tp.topic);
-        if (topic_it != mirror_topics.end()) {
-            // If it is, return whether or not it is mutable based on its status
-            return !is_topic_mutable(topic_it->second.status);
-        }
-        // A shadowing mode is engaged but there is no (mutable) mirror topic:
-        // either topic mode before the _schemas mirror topic appears, or API
-        // mode which has no mirror topic at all. In both cases local writes
-        // must be blocked so they cannot conflict with subjects, versions,
-        // IDs, modes, and configs the sync imports from the source.
-        const auto& sr_cfg = md->configuration.schema_registry_sync_cfg;
-        if (sr_cfg.is_topic_mode() || sr_cfg.api_mode() != nullptr) {
-            return true;
-        }
-
-        return false;
+        return link_disables_schema_registry_writes(*md, source);
     });
+}
+
+bool frontend::schema_registry_internal_topic_creation_blocked() const {
+    return schema_registry_writes_disabled(
+      ppsr::write_source::schema_registry_sync);
 }
 
 ss::future<errc> frontend::do_mutation(

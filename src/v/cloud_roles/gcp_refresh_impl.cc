@@ -10,6 +10,7 @@
 
 #include "gcp_refresh_impl.h"
 
+#include "cloud_instance_metadata/gcp_metadata.h"
 #include "request_response_helpers.h"
 
 #include <seastar/core/coroutine.hh>
@@ -17,13 +18,6 @@
 namespace cloud_roles {
 static constexpr std::string_view token_path
   = "/computeMetadata/v1/instance/service-accounts/default/token";
-
-/// This header must be sent to GCP metadata API along with each request
-struct metadata_flavor {
-    static constexpr std::string_view header_name = "Metadata-Flavor";
-
-    static constexpr std::string_view value = "Google";
-};
 
 struct gcp_response_schema {
     static constexpr std::string_view expiry_field = "expires_in";
@@ -45,15 +39,9 @@ gcp_refresh_impl::gcp_refresh_impl(
       std::move(metrics_tag)) {}
 
 ss::future<api_response> gcp_refresh_impl::fetch_credentials() {
-    http::client::request_header oauth_req;
-
-    oauth_req.method(boost::beast::http::verb::get);
-    oauth_req.target(token_path.data());
-    oauth_req.set(
-      metadata_flavor::header_name.data(), metadata_flavor::value.data());
-
     co_return co_await make_request(
-      co_await make_api_client("gcp"), std::move(oauth_req));
+      co_await make_api_client("gcp"),
+      cloud_instance_metadata::gcp_metadata::get(token_path));
 }
 
 api_response_parse_result gcp_refresh_impl::parse_response(iobuf response) {

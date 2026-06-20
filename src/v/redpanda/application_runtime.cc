@@ -314,6 +314,10 @@ void application::wire_up_runtime_services(
     construct_single_service(
       _host_metrics_watcher, std::ref(_log), data_dir, cache_dir);
 
+    // Expose cloud instance info as metrics (detected in the background).
+    construct_single_service(_instance_metrics, std::ref(_as.local()));
+    _instance_metrics->start();
+
     construct_service(_kafka_connections_service, std::ref(_kafka_server.ref()))
       .get();
 

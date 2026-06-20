@@ -17,17 +17,29 @@ class sequence_state_checker_test
   : public pandaproxy::schema_registry::sequence_state_checker {
 public:
     explicit sequence_state_checker_test(
-      writes_disabled_t wd = writes_disabled_t::no)
-      : _wd(wd) {}
-    writes_disabled_t writes_disabled() const final { return _wd; }
+      writes_disabled_t client_writes_disabled = writes_disabled_t::no,
+      writes_disabled_t sync_writes_disabled = writes_disabled_t::no)
+      : _client_writes_disabled(client_writes_disabled)
+      , _sync_writes_disabled(sync_writes_disabled) {}
+
+    writes_disabled_t writes_disabled(
+      pandaproxy::schema_registry::write_source source) const final {
+        switch (source) {
+        case pandaproxy::schema_registry::write_source::client:
+            return _client_writes_disabled;
+        case pandaproxy::schema_registry::write_source::schema_registry_sync:
+            return _sync_writes_disabled;
+        }
+    }
 
 private:
-    writes_disabled_t _wd;
+    writes_disabled_t _client_writes_disabled;
+    writes_disabled_t _sync_writes_disabled;
 };
 
-/// No-op transport used in tests where seq_writer is only instantiated to
-/// receive consume_to_store offset updates.
-class noop_transport final : public pandaproxy::schema_registry::transport {
+/// Transport whose operations all throw, for tests where the transport
+/// must not be reached.
+class noop_transport : public pandaproxy::schema_registry::transport {
 public:
     ss::future<> stop() final { return ss::now(); }
     ss::future<pandaproxy::schema_registry::produce_result>
@@ -54,4 +66,23 @@ public:
         throw std::runtime_error(
           "noop_transport::create_topic not implemented");
     }
+};
+
+/// Transport that applies writes and records produced batches.
+class accepting_transport final : public noop_transport {
+public:
+    ss::future<pandaproxy::schema_registry::produce_result>
+    produce(model::record_batch batch) override {
+        auto base = batch.base_offset();
+        produced.push_back(std::move(batch));
+        return ss::make_ready_future<
+          pandaproxy::schema_registry::produce_result>(
+          pandaproxy::schema_registry::produce_result{.base_offset = base});
+    }
+
+    ss::future<model::offset> get_high_watermark() override {
+        return ss::make_ready_future<model::offset>(model::offset{0});
+    }
+
+    chunked_vector<model::record_batch> produced;
 };

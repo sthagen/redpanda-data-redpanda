@@ -15,6 +15,8 @@
 
 #include <seastar/core/future.hh>
 
+#include <map>
+
 namespace schema {
 
 struct fake_store : public pandaproxy::schema_registry::schema_getter {
@@ -64,6 +66,33 @@ public:
     ss::future<pandaproxy::schema_registry::context_schema_id> create_schema(
       pandaproxy::schema_registry::subject_schema unparsed) override;
 
+    ss::future<pandaproxy::schema_registry::context_schema_id>
+    import_schema(pandaproxy::schema_registry::stored_schema imported) override;
+
+    ss::future<bool> soft_delete_schema(
+      pandaproxy::schema_registry::context_subject sub,
+      pandaproxy::schema_registry::schema_version version) override;
+
+    ss::future<chunked_vector<pandaproxy::schema_registry::schema_version>>
+    permanent_delete_schema(
+      pandaproxy::schema_registry::context_subject sub,
+      std::optional<pandaproxy::schema_registry::schema_version> version)
+      override;
+
+    ss::future<bool> write_mode(
+      pandaproxy::schema_registry::context_subject sub,
+      pandaproxy::schema_registry::mode mode) override;
+
+    ss::future<bool>
+    delete_mode(pandaproxy::schema_registry::context_subject sub) override;
+
+    ss::future<bool> write_config(
+      pandaproxy::schema_registry::context_subject sub,
+      pandaproxy::schema_registry::compatibility_level compat) override;
+
+    ss::future<bool>
+    delete_config(pandaproxy::schema_registry::context_subject sub) override;
+
     const std::vector<pandaproxy::schema_registry::stored_schema>& get_all();
 
     void set_inject_failures(const std::exception_ptr& injected) {
@@ -75,5 +104,13 @@ private:
 
     std::exception_ptr _injected_failure;
     mutable fake_store _store;
+    std::map<
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::mode>
+      _modes;
+    std::map<
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::compatibility_level>
+      _configs;
 };
 } // namespace schema

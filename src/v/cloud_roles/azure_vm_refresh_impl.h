@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "cloud_instance_metadata/azure_imds.h"
 #include "cloud_roles/refresh_credentials.h"
 
 namespace cloud_roles {
@@ -19,8 +20,10 @@ public:
     // this is the local-only address of the instance metadata service, that
     // will be used to get an authorization token
     // https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service
-    static constexpr std::string_view default_host = "169.254.169.254";
-    static constexpr uint16_t default_port = 80;
+    static constexpr std::string_view default_host
+      = cloud_instance_metadata::azure_imds::host;
+    static constexpr uint16_t default_port
+      = cloud_instance_metadata::azure_imds::port;
 
     azure_vm_refresh_impl(
       net::unresolved_address address,

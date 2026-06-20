@@ -6,6 +6,7 @@
 #
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
+import json
 import random
 import string
 import time
@@ -26,7 +27,7 @@ from rptest.clients.rpk import RPKACLInput, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
-from rptest.services.redpanda import SISettings
+from rptest.services.redpanda import RedpandaService, SISettings
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.clients.admin.v2 import Admin, metastore_pb, ntp_pb
 from connectrpc.errors import ConnectError, ConnectErrorCode
@@ -39,6 +40,44 @@ MiB = KiB * KiB
 
 def random_string(length):
     return "".join([random.choice(string.ascii_lowercase) for i in range(0, length)])
+
+
+def latest_manifest_caught_up(redpanda: RedpandaService, target_offset: int) -> bool:
+    """Whether WCR's restore source -- the highest-metadata_id cluster metadata
+    manifest -- references a controller snapshot at or beyond target_offset.
+
+    The manifest is read directly rather than via BucketView: the uploader
+    rotates manifests about once a second, and BucketView eagerly downloads
+    every listed object, so it loses the list/get race. A False result may also
+    mean the chosen manifest was rotated out between the list and the get (a
+    transient race, logged at debug) -- callers should poll.
+    """
+    cluster_uuid = redpanda._admin.get_cluster_uuid()
+    if cluster_uuid is None:
+        return False
+    bucket = redpanda.si_settings.cloud_storage_bucket
+    client = redpanda.cloud_storage_client
+    prefix = f"cluster_metadata/{cluster_uuid}/manifests/"
+    keys = [
+        o.key
+        for o in client.list_objects(bucket, prefix=prefix)
+        if o.key.endswith("/cluster_manifest.json")
+    ]
+    if not keys:
+        return False
+    # Highest metadata_id is the manifest WCR restores from.
+    latest = max(keys, key=lambda k: int(k.split("/")[-2]))
+    try:
+        manifest = json.loads(client.get_object_data(bucket, latest))
+    except Exception:
+        redpanda.logger.debug(f"Manifest {latest} rotated out between list and get")
+        return False
+    snapshot_offset = manifest.get("controller_snapshot_offset", -1)
+    redpanda.logger.debug(
+        f"Latest manifest {latest}: "
+        f"controller_snapshot_offset={snapshot_offset} (target {target_offset})"
+    )
+    return snapshot_offset >= target_offset
 
 
 class ClusterRecoveryTest(RedpandaTest):
@@ -919,8 +958,22 @@ class ClusterRecoveryWithNameTest(RedpandaTest):
         )
 
     def _wait_for_metadata_upload(self):
-        self.redpanda.wait_for_controller_snapshot(self.redpanda.nodes[0])
-        time.sleep(5)
+        controller = wait_until_result(
+            self.redpanda.controller,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Timed out waiting for a controller leader",
+        )
+        target_offset = self.redpanda._admin.get_controller_status(controller)[
+            "committed_index"
+        ]
+        wait_until(
+            lambda: latest_manifest_caught_up(self.redpanda, target_offset),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Timed out waiting for the latest uploaded manifest to "
+            "reference a controller snapshot that includes the current state",
+        )
 
     def _stop_and_recreate_cluster(
         self, config: dict[str, Any], *, expect_fail: bool = False

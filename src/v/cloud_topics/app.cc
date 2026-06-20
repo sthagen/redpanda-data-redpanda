@@ -18,6 +18,7 @@
 #include "cloud_topics/level_one/metastore/flush_loop.h"
 #include "cloud_topics/level_one/metastore/topic_purger.h"
 #include "cloud_topics/level_zero/gc/level_zero_gc.h"
+#include "cloud_topics/level_zero/notifier/level_zero_notifier.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/manager/manager.h"
 #include "cloud_topics/read_replica/metadata_manager.h"
@@ -181,6 +182,11 @@ ss::future<> app::construct(
     co_await construct_service(housekeeper_manager, ss::sharded_parameter([&] {
                                    return &replicated_metastore.local();
                                }));
+
+    co_await construct_service(
+      l0_notifier,
+      &controller->get_shard_table(),
+      &controller->get_partition_manager());
 
     co_await construct_service(
       topic_manifest_upload_mgr, std::ref(*remote), bucket);

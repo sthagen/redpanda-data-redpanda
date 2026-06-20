@@ -799,9 +799,7 @@ redpanda_thread_fixture::make_data(std::optional<model::timestamp> base_ts) {
             model::offset(0),
             20,
             maybe_compress_batches::yes,
-            log_append_config{
-              .should_fsync = log_append_config::fsync::yes,
-              .timeout = model::no_timeout},
+            log_append_config{.should_fsync = log_append_config::fsync::yes},
             disk_log_builder::should_flush_after::yes,
             base_ts)
           | stop();

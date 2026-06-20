@@ -43,6 +43,7 @@
 #include "kafka/server/snc_quota_manager.h"
 #include "metrics/aggregate_metrics_watcher.h"
 #include "metrics/host_metrics_watcher.h"
+#include "metrics/instance_metrics.h"
 #include "metrics/metrics.h"
 #include "net/conn_quota.h"
 #include "pandaproxy/rest/configuration.h"
@@ -344,6 +345,8 @@ private:
     std::unique_ptr<crash_tracker::service> _crash_tracker_service;
 
     std::unique_ptr<metrics::host_metrics_watcher> _host_metrics_watcher;
+
+    std::unique_ptr<instance_info::instance_metrics> _instance_metrics;
 
     ss::sharded<admin::kafka_connections_service> _kafka_connections_service;
 

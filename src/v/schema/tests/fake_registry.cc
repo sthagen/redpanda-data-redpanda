@@ -18,6 +18,11 @@
 #include <seastar/core/future.hh>
 #include <seastar/util/log.hh>
 
+#include <fmt/format.h>
+
+#include <algorithm>
+#include <utility>
+
 namespace {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables,cert-err58-cpp)
 static ss::logger dummy_logger("schema_test_logger");
@@ -125,6 +130,120 @@ schema::fake_registry::create_schema(ppsr::subject_schema unparsed) {
     });
     co_return _store.schemas.back().context_id();
 }
+
+ss::future<ppsr::context_schema_id>
+schema::fake_registry::import_schema(ppsr::stored_schema imported) {
+    maybe_throw_injected_failure();
+
+    for (const auto& s : _store.schemas) {
+        if (
+          s.context_id() == imported.context_id()
+          && s.schema.def() != imported.schema.def()) {
+            throw as_exception(
+              ppsr::overwrite_schema_with_id_not_permitted(imported.id));
+        }
+    }
+
+    for (auto& s : _store.schemas) {
+        if (
+          s.schema.sub() == imported.schema.sub()
+          && s.version == imported.version) {
+            if (s.id != imported.id) {
+                throw as_exception(
+                  ppsr::error_info{
+                    ppsr::error_code::subject_version_schema_id_already_exists,
+                    fmt::format(
+                      "Subject {} version {} is already registered with "
+                      "schema id {}, not imported schema id {}",
+                      imported.schema.sub(),
+                      imported.version(),
+                      s.id(),
+                      imported.id())});
+            }
+            s = imported.share();
+            co_return s.context_id();
+        }
+    }
+
+    _store.schemas.push_back(imported.share());
+    co_return imported.context_id();
+}
+
+ss::future<bool> schema::fake_registry::soft_delete_schema(
+  ppsr::context_subject sub, ppsr::schema_version version) {
+    maybe_throw_injected_failure();
+    for (auto& s : _store.schemas) {
+        if (s.schema.sub() == sub && s.version == version) {
+            auto was_deleted = std::exchange(s.deleted, ppsr::is_deleted::yes);
+            co_return was_deleted == ppsr::is_deleted::no;
+        }
+    }
+    throw as_exception(ppsr::not_found(sub, version));
+}
+
+ss::future<chunked_vector<ppsr::schema_version>>
+schema::fake_registry::permanent_delete_schema(
+  ppsr::context_subject sub, std::optional<ppsr::schema_version> version) {
+    maybe_throw_injected_failure();
+    chunked_vector<ppsr::schema_version> deleted;
+    std::erase_if(_store.schemas, [&](const ppsr::stored_schema& schema) {
+        const auto matches
+          = schema.schema.sub() == sub
+            && (!version.has_value() || schema.version == *version);
+        if (matches) {
+            deleted.push_back(schema.version);
+        }
+        return matches;
+    });
+    if (deleted.empty()) {
+        throw as_exception(
+          version.has_value() ? ppsr::not_found(sub, *version)
+                              : ppsr::not_found(sub));
+    }
+    co_return deleted;
+}
+
+ss::future<bool>
+schema::fake_registry::write_mode(ppsr::context_subject sub, ppsr::mode mode) {
+    maybe_throw_injected_failure();
+    auto it = _modes.find(sub);
+    if (it == _modes.end()) {
+        _modes.emplace(std::move(sub), mode);
+        co_return true;
+    }
+    if (it->second == mode) {
+        co_return false;
+    }
+    it->second = mode;
+    co_return true;
+}
+
+ss::future<bool> schema::fake_registry::delete_mode(ppsr::context_subject sub) {
+    maybe_throw_injected_failure();
+    co_return _modes.erase(sub) > 0;
+}
+
+ss::future<bool> schema::fake_registry::write_config(
+  ppsr::context_subject sub, ppsr::compatibility_level compat) {
+    maybe_throw_injected_failure();
+    auto it = _configs.find(sub);
+    if (it == _configs.end()) {
+        _configs.emplace(std::move(sub), compat);
+        co_return true;
+    }
+    if (it->second == compat) {
+        co_return false;
+    }
+    it->second = compat;
+    co_return true;
+}
+
+ss::future<bool>
+schema::fake_registry::delete_config(ppsr::context_subject sub) {
+    maybe_throw_injected_failure();
+    co_return _configs.erase(sub) > 0;
+}
+
 const std::vector<ppsr::stored_schema>& schema::fake_registry::get_all() {
     maybe_throw_injected_failure();
     return _store.schemas;

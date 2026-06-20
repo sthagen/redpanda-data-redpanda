@@ -10,14 +10,17 @@
 
 #pragma once
 
+#include "cloud_instance_metadata/aws_imds.h"
 #include "cloud_roles/refresh_credentials.h"
 
 namespace cloud_roles {
 
 class aws_refresh_impl final : public refresh_credentials::impl {
 public:
-    static constexpr std::string_view default_host = "169.254.169.254";
-    static constexpr uint16_t default_port = 80;
+    static constexpr std::string_view default_host
+      = cloud_instance_metadata::aws_imds::host;
+    static constexpr uint16_t default_port
+      = cloud_instance_metadata::aws_imds::port;
 
     aws_refresh_impl(
       net::unresolved_address address,
@@ -44,12 +47,6 @@ protected:
     /// fails due to the following error responses: 403, 404, 405; then we
     /// permanently switch to fallback mode and make IMDSv1 requests.
     ss::future<api_response> fetch_instance_metadata_token();
-
-    /// Issues request to instance metadata API with a token injected as a
-    /// header, if the token is present. In fallback mode this is effectively a
-    /// no-op.
-    ss::future<api_response> make_request_with_token(
-      http::client::request_header req, std::optional<std::string_view> token);
 
     bool is_fallback_required(const api_request_error& response);
 

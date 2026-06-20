@@ -234,6 +234,17 @@ public:
     get_reclaimable_offsets(gc_config cfg) = 0;
     virtual void set_cloud_gc_offset(model::offset) = 0;
 
+    /// Prepare for GC-driven prefix truncation: do whatever work `gc_config`
+    /// implies and return the offset that GC would evict up to (std::nullopt
+    /// when no eviction is warranted). The offset is usually derived from
+    /// local retention, but not always: space management may have pinned it
+    /// via set_cloud_gc_offset. This is not a pure query -- it may mutate the
+    /// underlying log -- which is why it is async. It does NOT request
+    /// eviction itself. Shared by disk_log_impl::do_gc and cloud-topic
+    /// ctp_stm housekeeping.
+    virtual ss::future<std::optional<model::offset>>
+    compute_gc_offset(gc_config cfg) = 0;
+
     virtual const segment_set& segments() const = 0;
     virtual segment_set& segments() = 0;
 

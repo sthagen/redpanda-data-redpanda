@@ -326,6 +326,7 @@ class GroupMetricsTest(RedpandaTest):
             timeout_sec=10,
             backoff_sec=1,
             err_msg="Initial check metric failed",
+            retry_on_exc=True,
         )
 
         self.client().delete_topic(topic)
@@ -342,6 +343,7 @@ class GroupMetricsTest(RedpandaTest):
             timeout_sec=10,
             backoff_sec=1,
             err_msg="Topic recreation check metric failed",
+            retry_on_exc=True,
         )
 
     @cluster(num_nodes=7)

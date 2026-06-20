@@ -94,6 +94,7 @@ redpanda_cc_library(
         "//src/v/kafka/server:qdc_monitor_config",
         "//src/v/kafka/server:write_at_offset_stm",
         "//src/v/metrics",
+        "//src/v/metrics:instance_metrics",
         "//src/v/migrations",
         "//src/v/net",
         "//src/v/net:tls",

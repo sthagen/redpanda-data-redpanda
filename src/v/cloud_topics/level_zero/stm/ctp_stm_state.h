@@ -130,17 +130,17 @@ public:
     std::optional<model::offset>
     get_last_reconciled_log_offset() const noexcept;
 
-    /// Set the allowed local start offset hint.
+    /// Set the min allowed local threshold hint.
     ///
     /// This value is produced by the reconciler and indicates the lower bound
     /// of kafka offsets that may be retained locally. The STM caches it but
     /// does not enforce truncation directly; a separate path applies it as a
     /// prefix-truncate target on the raft log.
-    void set_allowed_local_start_offset(std::optional<kafka::offset>) noexcept;
+    void set_min_allowed_local_threshold(std::optional<kafka::offset>) noexcept;
 
-    /// Get the allowed local start offset hint, if any.
+    /// Get the min allowed local threshold hint, if any.
     std::optional<kafka::offset>
-    get_allowed_local_start_offset() const noexcept;
+    get_min_allowed_local_threshold() const noexcept;
 
     auto serde_fields() {
         return std::tie(
@@ -152,7 +152,7 @@ public:
           _previous_applied_epoch,
           _start_offset,
           _size_estimator,
-          _allowed_local_start_offset);
+          _min_allowed_local_threshold);
     }
 
     /// Max collectible offset is defined by the LRO.
@@ -233,9 +233,9 @@ private:
     // Estimates total cloud data bytes addressable by the surviving log.
     size_estimator _size_estimator;
 
-    /// Allowed local start offset hint, produced by the reconciler.
+    /// Min allowed local threshold hint, produced by the reconciler.
     /// Cached state only; truncation is applied elsewhere.
-    std::optional<kafka::offset> _allowed_local_start_offset;
+    std::optional<kafka::offset> _min_allowed_local_threshold;
 };
 
 }; // namespace cloud_topics

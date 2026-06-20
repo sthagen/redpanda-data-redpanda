@@ -69,7 +69,6 @@ private:
     ss::future<> do_start();
     ss::future<> create_internal_topic();
     ss::future<> fetch_internal_topic();
-    bool active_sr_mirroring() const;
     configuration _config;
     ssx::semaphore _mem_sem;
     adjustable_semaphore _inflight_sem;

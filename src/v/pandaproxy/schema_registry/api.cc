@@ -154,10 +154,10 @@ public:
       std::unique_ptr<cluster::controller>& c)
       : _controller(c) {}
 
-    writes_disabled_t writes_disabled() const final {
-        return writes_disabled_t{_controller->get_cluster_link_frontend()
-                                   .local()
-                                   .schema_registry_shadowing_active()};
+    writes_disabled_t writes_disabled(write_source source) const final {
+        auto& frontend = _controller->get_cluster_link_frontend().local();
+        return writes_disabled_t{
+          frontend.schema_registry_writes_disabled(source)};
     }
 
 private:

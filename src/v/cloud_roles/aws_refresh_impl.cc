@@ -10,19 +10,15 @@
 
 #include "aws_refresh_impl.h"
 
+#include "cloud_instance_metadata/aws_imds.h"
 #include "cloud_roles/logger.h"
 #include "request_response_helpers.h"
 #include "strings/utf8.h"
 
-namespace cloud_roles {
+#include <algorithm>
 
-struct instance_metadata_token_headers {
-    static constexpr auto key = "X-aws-ec2-metadata-token";
-    static constexpr auto ttl_key = "X-aws-ec2-metadata-token-ttl-seconds";
-    static constexpr auto ttl_value = "21600";
-};
+namespace imds = cloud_instance_metadata::aws_imds;
 
-} // namespace cloud_roles
 namespace {
 
 ss::sstring read_string_from_response(cloud_roles::api_response response) {
@@ -34,17 +30,8 @@ ss::sstring read_string_from_response(cloud_roles::api_response response) {
     return str;
 }
 
-void add_metadata_token_to_request(
-  http::client::request_header& req, std::string_view token) {
-    req.insert(
-      cloud_roles::instance_metadata_token_headers::key,
-      {token.data(), token.size()});
-}
-
-constexpr auto fallback_status_codes = std::to_array(
-  {boost::beast::http::status::not_found,
-   boost::beast::http::status::forbidden,
-   boost::beast::http::status::method_not_allowed});
+// TTL of the IMDSv2 session token requested for each fetch cycle.
+constexpr auto imds_token_ttl = std::chrono::seconds{21600};
 
 } // namespace
 
@@ -73,11 +60,7 @@ aws_refresh_impl::aws_refresh_impl(
   , _service(std::move(service)) {}
 
 bool aws_refresh_impl::is_fallback_required(const api_request_error& response) {
-    return std::find(
-             fallback_status_codes.cbegin(),
-             fallback_status_codes.cend(),
-             response.status)
-           != fallback_status_codes.cend();
+    return std::ranges::contains(imds::v1_fallback_statuses, response.status);
 }
 
 ss::future<api_response> aws_refresh_impl::fetch_credentials() {
@@ -143,14 +126,12 @@ ss::future<api_response> aws_refresh_impl::fetch_credentials() {
           .error_kind = api_request_error_kind::failed_retryable};
     }
 
-    http::client::request_header creds_req;
-    auto host = address().host();
-    creds_req.insert(
-      boost::beast::http::field::host, {host.data(), host.size()});
-    creds_req.method(boost::beast::http::verb::get);
-    creds_req.target(
-      fmt::format("/latest/meta-data/iam/security-credentials/{}", *_role));
-    co_return co_await make_request_with_token(std::move(creds_req), token);
+    co_return co_await make_request(
+      co_await make_api_client("aws"),
+      imds::get(
+        address().host(),
+        fmt::format("/latest/meta-data/iam/security-credentials/{}", *_role),
+        token));
 }
 
 api_response_parse_result aws_refresh_impl::parse_response(iobuf resp) {
@@ -191,37 +172,18 @@ api_response_parse_result aws_refresh_impl::parse_response(iobuf resp) {
 
 ss::future<api_response>
 aws_refresh_impl::fetch_role_name(std::optional<std::string_view> token) {
-    http::client::request_header role_req;
-    auto host = address().host();
-    role_req.insert(
-      boost::beast::http::field::host, {host.data(), host.size()});
-    role_req.method(boost::beast::http::verb::get);
-    role_req.target("/latest/meta-data/iam/security-credentials/");
-    co_return co_await make_request_with_token(std::move(role_req), token);
+    co_return co_await make_request(
+      co_await make_api_client("aws"),
+      imds::get(
+        address().host(),
+        "/latest/meta-data/iam/security-credentials/",
+        token));
 }
 
 ss::future<api_response> aws_refresh_impl::fetch_instance_metadata_token() {
-    http::client::request_header token_request;
-    auto host = address().host();
-    token_request.insert(
-      boost::beast::http::field::host, {host.data(), host.size()});
-    token_request.insert(
-      instance_metadata_token_headers::ttl_key,
-      instance_metadata_token_headers::ttl_value);
-    token_request.method(boost::beast::http::verb::put);
-    token_request.target("/latest/api/token");
-
     co_return co_await make_request(
-      co_await make_api_client("aws"), std::move(token_request));
-}
-
-ss::future<api_response> aws_refresh_impl::make_request_with_token(
-  http::client::request_header req, std::optional<std::string_view> token) {
-    if (token.has_value()) {
-        add_metadata_token_to_request(req, token.value());
-    }
-    co_return co_await make_request(
-      co_await make_api_client("aws"), std::move(req));
+      co_await make_api_client("aws"),
+      imds::token_request(address().host(), imds_token_ttl));
 }
 
 fmt::iterator aws_refresh_impl::format_to(fmt::iterator it) const {

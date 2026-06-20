@@ -1645,7 +1645,7 @@ class Admin:
     def get_peer_status(self, node: ClusterNode, peer_id: int) -> dict[str, Any]:
         return self._request("GET", f"debug/peer_status/{peer_id}", node=node).json()
 
-    def get_controller_status(self, node: MaybeNode) -> dict[str, Any]:
+    def get_controller_status(self, node: MaybeNode = None) -> dict[str, Any]:
         return self._request("GET", "debug/controller_status", node=node).json()
 
     def get_cluster_uuid(self, node: MaybeNode = None) -> str | None:

@@ -10,14 +10,17 @@
 
 #pragma once
 
+#include "cloud_instance_metadata/gcp_metadata.h"
 #include "cloud_roles/refresh_credentials.h"
 
 namespace cloud_roles {
 
 class gcp_refresh_impl final : public refresh_credentials::impl {
 public:
-    static constexpr std::string_view default_host = "169.254.169.254";
-    static constexpr uint16_t default_port = 80;
+    static constexpr std::string_view default_host
+      = cloud_instance_metadata::gcp_metadata::host;
+    static constexpr uint16_t default_port
+      = cloud_instance_metadata::gcp_metadata::port;
 
     gcp_refresh_impl(
       net::unresolved_address address,

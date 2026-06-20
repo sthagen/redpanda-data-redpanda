@@ -227,8 +227,8 @@ public:
 
     ss::future<bool> has_version(context_subject, schema_id, include_deleted);
 
-    //// \brief Throw if the store is not mutable
-    void check_mode_mutability(force f) const;
+    //// \brief Throw if mode changes are not allowed for this write source.
+    void check_mode_mutable(write_source src) const;
 
     ///\brief Look up the id of a schema by definition
     ss::future<std::optional<schema_id>>

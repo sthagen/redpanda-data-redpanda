@@ -89,6 +89,79 @@ public:
         co_return ppsr::context_schema_id{std::move(ctx), result.id};
     }
 
+    ss::future<ppsr::context_schema_id>
+    import_schema(ppsr::stored_schema schema) override {
+        auto ctx = schema.schema.sub().ctx;
+        auto [reader, writer] = co_await service();
+        co_await writer->read_sync();
+        auto parsed = co_await reader->make_canonical_schema(
+          std::move(schema.schema),
+          ppsr::normalize::no,
+          /*consider_always_normalize_config=*/false);
+        co_await reader->validate_schema(parsed.share());
+        schema.schema = std::move(parsed);
+        auto result = co_await writer->write_subject_version_imported(
+          std::move(schema));
+        _last_sync_time = ss::lowres_clock::now();
+        co_return ppsr::context_schema_id{std::move(ctx), result.id};
+    }
+
+    ss::future<bool> soft_delete_schema(
+      ppsr::context_subject sub, ppsr::schema_version version) override {
+        auto [_, writer] = co_await service();
+        auto result = co_await writer->delete_subject_version(
+          std::move(sub), version, ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+        co_return result;
+    }
+
+    ss::future<chunked_vector<ppsr::schema_version>> permanent_delete_schema(
+      ppsr::context_subject sub,
+      std::optional<ppsr::schema_version> version) override {
+        auto [_, writer] = co_await service();
+        auto result = co_await writer->delete_subject_permanent(
+          std::move(sub), version, ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+        co_return result;
+    }
+
+    ss::future<bool>
+    write_mode(ppsr::context_subject sub, ppsr::mode m) override {
+        auto [_, writer] = co_await service();
+        auto result = co_await writer->write_mode(
+          std::move(sub),
+          m,
+          ppsr::force::yes,
+          ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+        co_return result;
+    }
+
+    ss::future<bool> delete_mode(ppsr::context_subject sub) override {
+        auto [_, writer] = co_await service();
+        auto result = co_await writer->delete_mode(
+          std::move(sub), ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+        co_return result;
+    }
+
+    ss::future<bool> write_config(
+      ppsr::context_subject sub, ppsr::compatibility_level compat) override {
+        auto [_, writer] = co_await service();
+        auto result = co_await writer->write_config(
+          std::move(sub), compat, ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+        co_return result;
+    }
+
+    ss::future<bool> delete_config(ppsr::context_subject sub) override {
+        auto [_, writer] = co_await service();
+        auto result = co_await writer->delete_config(
+          std::move(sub), ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+        co_return result;
+    }
+
 private:
     ss::future<std::pair<ppsr::sharded_store*, ppsr::seq_writer*>>
     service() const {
@@ -131,6 +204,38 @@ public:
     }
     ss::future<ppsr::context_schema_id>
     create_schema(ppsr::subject_schema) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<ppsr::context_schema_id>
+    import_schema(ppsr::stored_schema) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<bool>
+    soft_delete_schema(ppsr::context_subject, ppsr::schema_version) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<chunked_vector<ppsr::schema_version>> permanent_delete_schema(
+      ppsr::context_subject, std::optional<ppsr::schema_version>) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<bool> write_mode(ppsr::context_subject, ppsr::mode) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<bool> delete_mode(ppsr::context_subject) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<bool>
+    write_config(ppsr::context_subject, ppsr::compatibility_level) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<bool> delete_config(ppsr::context_subject) override {
         throw std::logic_error(
           "invalid attempted usage of a disabled schema registry");
     }

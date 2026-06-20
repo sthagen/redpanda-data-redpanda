@@ -70,5 +70,50 @@ public:
         std::optional<pandaproxy::schema_registry::schema_version>) const = 0;
     virtual ss::future<pandaproxy::schema_registry::context_schema_id>
       create_schema(pandaproxy::schema_registry::subject_schema) = 0;
+
+    /// \name Internal sync/import API
+    ///
+    /// Used by shadow-link Schema Registry API sync. These calls preserve
+    /// source ids/versions and bypass public REST write guards: read-only mode,
+    /// mode_mutability, and the API-sync client write blocker. They remain
+    /// blocked while _schemas itself is topic-shadowed.
+    ///
+    /// Deletes are not as idempotent as imports: reference checks still
+    /// apply and permanently deleting an already-deleted target throws, so
+    /// deletes must be replayed in source order.
+    ///
+    /// Do not call these on behalf of a client request.
+    ///@{
+
+    /// Import a schema with source id/version. Identical imports are no-ops;
+    /// conflicts throw.
+    virtual ss::future<pandaproxy::schema_registry::context_schema_id>
+      import_schema(pandaproxy::schema_registry::stored_schema) = 0;
+
+    virtual ss::future<bool> soft_delete_schema(
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::schema_version) = 0;
+
+    virtual ss::future<
+      chunked_vector<pandaproxy::schema_registry::schema_version>>
+      permanent_delete_schema(
+        pandaproxy::schema_registry::context_subject,
+        std::optional<pandaproxy::schema_registry::schema_version>) = 0;
+
+    virtual ss::future<bool> write_mode(
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::mode) = 0;
+
+    virtual ss::future<bool>
+      delete_mode(pandaproxy::schema_registry::context_subject) = 0;
+
+    virtual ss::future<bool> write_config(
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::compatibility_level) = 0;
+
+    virtual ss::future<bool>
+      delete_config(pandaproxy::schema_registry::context_subject) = 0;
+
+    ///@}
 };
 } // namespace schema

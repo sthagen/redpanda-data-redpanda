@@ -79,10 +79,10 @@ public:
       model::timeout_clock::time_point deadline,
       ss::abort_source& as);
 
-    /// Replicate a set_allowed_local_start_offset_cmd. The STM stores the
+    /// Replicate a set_min_allowed_local_threshold_cmd. The STM stores the
     /// value as a hint for prefix_truncate_below_lro.
     ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
-    set_allowed_local_start_offset(
+    set_min_allowed_local_threshold(
       std::optional<kafka::offset> value,
       model::timeout_clock::time_point deadline,
       ss::abort_source& as);

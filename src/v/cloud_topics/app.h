@@ -42,6 +42,7 @@ class cloud_topics_manager;
 template<class>
 class level_zero_gc_t;
 class housekeeper_manager;
+class level_zero_notifier;
 class topic_manifest_upload_manager;
 
 namespace l1 {
@@ -115,6 +116,7 @@ private:
     ss::sharded<cloud_topics_manager> manager;
     ss::sharded<level_zero_gc_t<ss::lowres_clock>> l0_gc;
     ss::sharded<housekeeper_manager> housekeeper_manager;
+    ss::sharded<level_zero_notifier> l0_notifier;
     ss::sharded<topic_manifest_upload_manager> topic_manifest_upload_mgr;
     std::unique_ptr<l1::compaction_scheduler> compaction_scheduler;
     ss::sharded<l0::cluster_services> cluster_services;

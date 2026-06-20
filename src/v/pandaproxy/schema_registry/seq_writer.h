@@ -33,7 +33,7 @@ public:
     sequence_state_checker& operator=(sequence_state_checker&&) = delete;
 
     using writes_disabled_t = ss::bool_class<struct writes_disabled_tag>;
-    virtual writes_disabled_t writes_disabled() const = 0;
+    virtual writes_disabled_t writes_disabled(write_source) const = 0;
 };
 
 using namespace std::chrono_literals;
@@ -60,8 +60,10 @@ public:
     ss::future<> read_sync();
 
     // Throws 42205 if the subject cannot be modified
-    ss::future<>
-    check_mutable(const context& ctx, const std::optional<subject>& sub);
+    ss::future<> check_mutable(
+      const context& ctx,
+      const std::optional<subject>& sub,
+      write_source src = write_source::client);
 
     // API for readers: notify us when they have read and applied an offset
     ss::future<> advance_offset(model::offset offset);
@@ -69,25 +71,45 @@ public:
     ss::future<sharded_store::insert_result>
     write_subject_version(stored_schema schema);
 
-    ss::future<bool>
-    write_config(context_subject ctx_sub, compatibility_level compat);
+    /// Internal sync path for importing a subject version with caller-supplied
+    /// schema ID, version, and deleted state. Bypasses client write guards
+    /// such as read-only mode and mode_mutability.
+    ss::future<sharded_store::insert_result>
+    write_subject_version_imported(stored_schema schema);
 
-    ss::future<bool> delete_config(context_subject ctx_sub);
+    ss::future<bool> write_config(
+      context_subject ctx_sub,
+      compatibility_level compat,
+      write_source src = write_source::client);
 
-    ss::future<bool> write_mode(context_subject ctx_sub, mode m, force f);
+    ss::future<bool> delete_config(
+      context_subject ctx_sub, write_source src = write_source::client);
 
-    ss::future<bool> delete_mode(context_subject ctx_sub);
+    /// \param f bypasses only the import-mode emptiness check, never
+    /// mode_mutability.
+    ss::future<bool> write_mode(
+      context_subject ctx_sub,
+      mode m,
+      force f,
+      write_source src = write_source::client);
+
+    ss::future<bool> delete_mode(
+      context_subject ctx_sub, write_source src = write_source::client);
 
     ss::future<> delete_context(context ctx);
 
-    ss::future<bool>
-    delete_subject_version(context_subject sub, schema_version version);
+    ss::future<bool> delete_subject_version(
+      context_subject sub,
+      schema_version version,
+      write_source src = write_source::client);
 
-    ss::future<chunked_vector<schema_version>>
-    delete_subject_impermanent(context_subject sub);
+    ss::future<chunked_vector<schema_version>> delete_subject_impermanent(
+      context_subject sub, write_source src = write_source::client);
 
     ss::future<chunked_vector<schema_version>> delete_subject_permanent(
-      context_subject sub, std::optional<schema_version> version);
+      context_subject sub,
+      std::optional<schema_version> version,
+      write_source src = write_source::client);
 
 private:
     ss::smp_submit_to_options _smp_opts;
@@ -102,39 +124,55 @@ private:
     ss::future<std::optional<sharded_store::insert_result>>
     do_write_subject_version(stored_schema schema, model::offset write_at);
 
+    ss::future<std::optional<sharded_store::insert_result>>
+    do_write_subject_version_imported(
+      stored_schema schema, model::offset write_at);
+
     ss::future<std::optional<bool>> do_write_config(
       context_subject ctx_sub,
       compatibility_level compat,
-      model::offset write_at);
-
-    ss::future<std::optional<bool>> do_delete_config(context_subject ctx_sub);
-
-    ss::future<std::optional<bool>> do_write_mode(
-      context_subject ctx_sub, mode m, force f, model::offset write_at);
+      model::offset write_at,
+      write_source src);
 
     ss::future<std::optional<bool>>
-    do_delete_mode(context_subject ctx_sub, model::offset write_at);
+    do_delete_config(context_subject ctx_sub, write_source src);
+
+    ss::future<std::optional<bool>> do_write_mode(
+      context_subject ctx_sub,
+      mode m,
+      force f,
+      model::offset write_at,
+      write_source src);
+
+    ss::future<std::optional<bool>> do_delete_mode(
+      context_subject ctx_sub, model::offset write_at, write_source src);
 
     ss::future<std::optional<bool>>
     do_delete_context(context ctx, model::offset write_at);
 
     ss::future<std::optional<bool>> do_delete_subject_version(
-      context_subject sub, schema_version version, model::offset write_at);
+      context_subject sub,
+      schema_version version,
+      model::offset write_at,
+      write_source src);
 
     ss::future<std::optional<chunked_vector<schema_version>>>
-    do_delete_subject_impermanent(context_subject sub, model::offset write_at);
+    do_delete_subject_impermanent(
+      context_subject sub, model::offset write_at, write_source src);
 
     ss::future<std::optional<chunked_vector<schema_version>>>
     delete_subject_permanent_inner(
-      context_subject sub, std::optional<schema_version> version);
+      context_subject sub,
+      std::optional<schema_version> version,
+      write_source src);
 
     simple_time_jitter<ss::lowres_clock> _jitter{std::chrono::milliseconds{50}};
 
     /// Helper for write paths that use sequence+retry logic to synchronize
     /// multiple writing nodes.
     template<typename F>
-    auto sequenced_write(F f) {
-        if (_state_checker->writes_disabled()) [[unlikely]] {
+    auto sequenced_write(F f, write_source src = write_source::client) {
+        if (_state_checker->writes_disabled(src)) [[unlikely]] {
             throw as_exception(writes_disabled());
         }
         auto base_backoff = _jitter.next_duration();

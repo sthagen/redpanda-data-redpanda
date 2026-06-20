@@ -101,6 +101,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/metastore:flush_loop",
         "//src/v/cloud_topics/level_one/metastore:topic_purger",
         "//src/v/cloud_topics/level_zero/gc:level_zero_gc",
+        "//src/v/cloud_topics/level_zero/notifier:level_zero_notifier",
         "//src/v/cloud_topics/manager",
         "//src/v/cloud_topics/read_replica:metadata_manager",
         "//src/v/cloud_topics/read_replica:snapshot_manager",

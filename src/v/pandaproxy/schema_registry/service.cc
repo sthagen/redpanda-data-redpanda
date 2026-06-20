@@ -672,7 +672,11 @@ ss::future<> service::create_internal_topic() {
     // If shadow linking is active and a link is actively mirroring the
     // schema registry topic, then we will not create the topic and we will
     // throw an error.  This is so the oneshot doesn't become 'completed'.
-    if (active_sr_mirroring()) {
+    // API sync needs a local _schemas topic; topic mirroring does not.
+    if (
+      _controller->get_cluster_link_frontend()
+        .local()
+        .schema_registry_internal_topic_creation_blocked()) {
         throw std::runtime_error(
           "Shadow Linking actively mirroring schema "
           "registry topic.  Topic will not be created");
@@ -750,12 +754,6 @@ ss::future<> service::fetch_internal_topic() {
     // reprocess them once now that the whole topic has been read, in case
     // they have a reference to a schema declared later in the topic.
     co_await _store.process_marked_schemas();
-}
-
-bool service::active_sr_mirroring() const {
-    return _controller->get_cluster_link_frontend()
-      .local()
-      .schema_registry_shadowing_active();
 }
 
 service::service(

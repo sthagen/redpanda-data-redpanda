@@ -10,6 +10,7 @@
 
 #include "azure_vm_refresh_impl.h"
 
+#include "cloud_instance_metadata/azure_imds.h"
 #include "request_response_helpers.h"
 
 namespace cloud_roles {
@@ -55,20 +56,16 @@ ss::future<api_response> azure_vm_refresh_impl::fetch_credentials() {
     // performs this GET
     // 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://storage.azure.com/&client_id={$client_id}'
     // to the vm-local IMDS
-    auto req = http::client::request_header{};
-    req.method(boost::beast::http::verb::get);
     // TODO fix deps and use boost::url
-    req.target(
-      fmt::format(
-        "/metadata/identity/oauth2/token?"
-        "api-version=2018-02-01"
-        "&resource=https%3A%2F%2Fstorage.azure.com%2F"
-        "&client_id={}",
-        client_id_opt.value()));
-    req.set("Metadata", "true");
-
     co_return co_await make_request(
-      co_await make_api_client("azure_vm_instance_metadata"), std::move(req));
+      co_await make_api_client("azure_vm_instance_metadata"),
+      cloud_instance_metadata::azure_imds::get(
+        fmt::format(
+          "/metadata/identity/oauth2/token?"
+          "api-version=2018-02-01"
+          "&resource=https%3A%2F%2Fstorage.azure.com%2F"
+          "&client_id={}",
+          client_id_opt.value())));
 }
 
 api_response_parse_result

@@ -184,18 +184,18 @@ ctp_stm_api::set_start_offset(
 }
 
 ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
-ctp_stm_api::set_allowed_local_start_offset(
+ctp_stm_api::set_min_allowed_local_threshold(
   std::optional<kafka::offset> value,
   model::timeout_clock::time_point deadline,
   ss::abort_source& as) {
     // Idempotency: skip replication if the cached value already matches.
-    if (_stm->state().get_allowed_local_start_offset() == value) {
+    if (_stm->state().get_min_allowed_local_threshold() == value) {
         co_return std::monostate{};
     }
 
     vlog(
       _log.debug,
-      "Replicating ctp_stm_cmd::set_allowed_local_start_offset{{{}}}",
+      "Replicating ctp_stm_cmd::set_min_allowed_local_threshold{{{}}}",
       value);
 
     // Capture the leader's term up front so the replicate fails fast if
@@ -205,8 +205,8 @@ ctp_stm_api::set_allowed_local_start_offset(
     storage::record_batch_builder builder(
       model::record_batch_type::ctp_stm_command, model::offset(0));
     builder.add_raw_kv(
-      serde::to_iobuf(set_allowed_local_start_offset_cmd::key),
-      serde::to_iobuf(set_allowed_local_start_offset_cmd(value)));
+      serde::to_iobuf(set_min_allowed_local_threshold_cmd::key),
+      serde::to_iobuf(set_min_allowed_local_threshold_cmd(value)));
 
     auto batch = std::move(builder).build();
     auto apply_result = co_await replicated_apply(

@@ -43,6 +43,24 @@ using verbose = ss::bool_class<struct verbose_tag>;
 using is_qualified = ss::bool_class<struct is_qualified_tag>;
 using is_config_or_mode = ss::bool_class<struct is_config_or_mode_tag>;
 
+/// Identifies the write path for shadowing write policy. The
+/// schema_registry_sync source also bypasses destination write policy
+/// (read-only mode and the mode_mutability lockout); \ref force stays
+/// independent, carrying only Confluent `?force=` semantics.
+enum class write_source {
+    /// Public write paths: HTTP handlers and other client-facing callers.
+    client,
+    /// The internal Schema Registry sync importer (shadow link API sync).
+    schema_registry_sync,
+};
+
+/// Internal Schema Registry sync replicates a source cluster's
+/// already-accepted writes, so it bypasses destination write policy
+/// (read-only mode and the mode_mutability lockout). Client writes do not.
+inline bool bypasses_write_policy(write_source src) {
+    return src == write_source::schema_registry_sync;
+}
+
 template<typename E>
 std::enable_if_t<std::is_enum_v<E>, std::optional<E>>
   from_string_view(std::string_view);
