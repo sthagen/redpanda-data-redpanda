@@ -11,7 +11,9 @@
 
 #include "http/request_builder.h"
 
+#include "bytes/bytes.h"
 #include "http/utils.h"
+#include "utils/base64.h"
 
 #include <boost/algorithm/string/join.hpp>
 
@@ -96,6 +98,14 @@ request_builder& request_builder::with_content_length(size_t content_length) {
 
 request_builder& request_builder::with_bearer_auth(std::string_view token) {
     _request.set(bh::field::authorization, fmt::format("Bearer {}", token));
+    return *this;
+}
+
+request_builder& request_builder::with_basic_auth(
+  std::string_view username, std::string_view password) {
+    auto credentials = fmt::format("{}:{}", username, password);
+    auto encoded = bytes_to_base64(bytes::from_string(credentials));
+    _request.set(bh::field::authorization, fmt::format("Basic {}", encoded));
     return *this;
 }
 

@@ -40,6 +40,7 @@ class frontend;
 namespace security {
 class credential_store;
 class authorizer;
+class role_store;
 namespace audit {
 class audit_log_manager;
 }
@@ -102,6 +103,7 @@ public:
       seastar::sharded<cluster::id_allocator_frontend>&,
       seastar::sharded<security::credential_store>&,
       seastar::sharded<security::authorizer>&,
+      seastar::sharded<security::role_store>&,
       seastar::sharded<security::audit::audit_log_manager>&,
       seastar::sharded<security::oidc::service>&,
       seastar::sharded<cluster::security_frontend>&,

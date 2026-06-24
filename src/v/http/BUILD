@@ -61,7 +61,9 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/base",
+        "//src/v/bytes",
         "//src/v/http:utils",
+        "//src/v/utils:base64",
         "//src/v/utils:named_type",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

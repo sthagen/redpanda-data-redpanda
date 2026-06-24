@@ -41,6 +41,8 @@ using force = ss::bool_class<struct force_tag>;
 using normalize = ss::bool_class<struct normalize_tag>;
 using verbose = ss::bool_class<struct verbose_tag>;
 using is_qualified = ss::bool_class<struct is_qualified_tag>;
+using qualified_subjects_enabled
+  = ss::bool_class<struct qualified_subjects_enabled_tag>;
 using is_config_or_mode = ss::bool_class<struct is_config_or_mode_tag>;
 
 /// Identifies the write path for shadowing write policy. The
@@ -207,8 +209,17 @@ struct context_subject {
     }
 
     /// Parse from qualified subject ":.context:subject" or unqualified
-    /// "subject" (which uses the default context)
+    /// "subject" (which uses the default context). Whether the qualified form
+    /// is honored is read from this node's cluster config
+    /// (schema_registry_enable_qualified_subjects).
     static context_subject from_string(std::string_view input);
+
+    /// As above, but the caller supplies whether qualified parsing is enabled
+    /// instead of reading cluster config. Use from code that must not depend on
+    /// this node's cluster config, e.g. a client parsing the responses of a
+    /// remote schema registry.
+    static context_subject
+    from_string(std::string_view input, qualified_subjects_enabled enabled);
 
     /// Helper for testing to create a simple unqualified subject in the default
     /// context
@@ -275,8 +286,17 @@ void validate_context(const context& ctx);
 /// A reference subject that may be qualified or unqualified.
 /// Unqualified references are resolved relative to a parent schema's context.
 struct context_subject_reference {
-    /// Parse from a string while detecting qualification status
+    /// Parse from a string while detecting qualification status. Whether the
+    /// qualified form is honored is read from this node's cluster config
+    /// (schema_registry_enable_qualified_subjects).
     static context_subject_reference from_string(std::string_view input);
+
+    /// As above, but the caller supplies whether qualified parsing is enabled
+    /// instead of reading cluster config. Use from code that must not depend on
+    /// this node's cluster config, e.g. a client parsing the responses of a
+    /// remote schema registry.
+    static context_subject_reference
+    from_string(std::string_view input, qualified_subjects_enabled enabled);
 
     /// Helper for testing to create a simple unqualified reference
     static context_subject_reference unqualified(std::string_view input) {

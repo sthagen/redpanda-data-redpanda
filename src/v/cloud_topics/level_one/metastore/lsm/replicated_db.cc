@@ -139,6 +139,13 @@ replicated_database::open(
         lsm::options{
           .database_epoch = epoch(),
           .compaction_scheduling_group = sg,
+          .write_buffer_size = config::shard_local_cfg()
+                                 .cloud_topics_metastore_write_buffer_size(),
+          .max_pre_open_fibers
+          = config::shard_local_cfg()
+              .cloud_topics_metastore_max_pre_open_fibers(),
+          .block_cache_size
+          = config::shard_local_cfg().cloud_topics_metastore_block_cache_size(),
           .file_deletion_delay = absl::FromChrono(
             config::shard_local_cfg()
               .cloud_topics_long_term_file_deletion_delay()),

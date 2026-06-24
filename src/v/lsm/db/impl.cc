@@ -68,11 +68,13 @@ ss::future<std::unique_ptr<impl>> impl::open(
     }
     // If we're readonly, we don't need to start any compaction loop.
     if (db->_opts->readonly) {
+        db->maybe_start_prewarm();
         vlog(log.trace, "open_end readonly=true");
         co_return db;
     }
     co_await db->_gc_actor.start();
     db->maybe_schedule_compaction();
+    db->maybe_start_prewarm();
     vlog(log.trace, "open_end readonly=false");
     co_return db;
 }
@@ -298,25 +300,50 @@ lsm::data_stats impl::get_data_stats() const {
 ss::future<> impl::recover() {
     vlog(log.trace, "recover_start");
     co_await _versions->recover();
-    // If requested, then pre-open all the files we know about.
-    if (auto max_fibers = _opts->max_pre_open_fibers) {
-        chunked_vector<ss::lw_shared_ptr<file_meta_data>> all_files;
-        for (auto level : _opts->levels) {
-            auto files = _versions->current()->get_overlapping_inputs(
-              level.number, std::nullopt, std::nullopt);
-            for (auto& file : files) {
-                all_files.push_back(std::move(file));
-            }
-        }
-        vlog(log.trace, "recover_pre_open_start files={}", all_files.size());
-        co_await ss::max_concurrent_for_each(
-          all_files, max_fibers, [this](ss::lw_shared_ptr<file_meta_data> f) {
-              return _table_cache->create_iterator(f->handle, f->file_size)
-                .discard_result();
-          });
-        vlog(log.trace, "recover_pre_open_end files={}", all_files.size());
-    }
     vlog(log.trace, "recover_end");
+}
+
+void impl::maybe_start_prewarm() {
+    if (_opts->max_pre_open_fibers == 0) {
+        return;
+    }
+    auto h = _gate.hold();
+    ssx::background = prewarm().then_wrapped([h](ss::future<> f) {
+        if (f.failed()) {
+            auto ex = f.get_exception();
+            vlog(log.warn, "prewarm aborted: {}", ex);
+        }
+    });
+}
+
+ss::future<> impl::prewarm() {
+    auto max_fibers = _opts->max_pre_open_fibers;
+    auto version = _versions->current();
+    chunked_vector<ss::lw_shared_ptr<file_meta_data>> all_files;
+    for (auto level : _opts->levels) {
+        auto files = version->get_overlapping_inputs(
+          level.number, std::nullopt, std::nullopt);
+        for (auto& file : files) {
+            all_files.push_back(std::move(file));
+        }
+    }
+    vlog(log.trace, "prewarm_start files={}", all_files.size());
+    co_await ss::max_concurrent_for_each(
+      all_files, max_fibers, [this](ss::lw_shared_ptr<file_meta_data> f) {
+          if (_as.abort_requested()) {
+              return ss::now();
+          }
+          return _table_cache->create_iterator(f->handle, f->file_size)
+            .discard_result()
+            .handle_exception([f](const std::exception_ptr& e) {
+                vlog(
+                  log.debug,
+                  "prewarm failed to open file {}: {}",
+                  f->handle.id(),
+                  e);
+            });
+      });
+    vlog(log.trace, "prewarm_end files={}", all_files.size());
 }
 
 void impl::maybe_schedule_compaction() {

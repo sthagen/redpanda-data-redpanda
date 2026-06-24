@@ -287,6 +287,8 @@ public:
         return _conn->server().credentials();
     }
 
+    security::role_store& role_store() { return _conn->server().role_store(); }
+
     bool audit() const { return _audit_successful; }
 
     bool audit_authn_failure(ss::sstring reason) {

@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_set.h"
 #include "random/generators.h"
 #include "security/role.h"
@@ -27,6 +28,18 @@ namespace {
 absl::node_hash_set<role_name>
 make_role_name_set(const role_store::roles_range& range) {
     return {range.begin(), range.end()};
+}
+
+// Index roles_with_members() output by name for order-independent comparison
+// (both the map and the per-role member set compare regardless of order).
+absl::flat_hash_map<role_name, role::container_type>
+members_by_role(const chunked_vector<role_with_members>& roles) {
+    absl::flat_hash_map<role_name, role::container_type> out;
+    out.reserve(roles.size());
+    for (const auto& [name, r] : roles) {
+        out.emplace(name, r.members());
+    }
+    return out;
 }
 
 } // namespace
@@ -344,6 +357,74 @@ BOOST_FIXTURE_TEST_CASE(
     BOOST_CHECK_MESSAGE(
       got.contains(other_role_name),
       "Expected to find other_role_name in the filtered results");
+}
+
+// roles_with_members() returns every role with its full member set in a
+// single pass, matching what get() would return for each role.
+BOOST_FIXTURE_TEST_CASE(
+  roles_with_members_returns_all, role_store_range_fixture) {
+    const role::container_type both{mem0, mem1};
+
+    auto got = members_by_role(
+      store.roles_with_members([](const auto&) { return true; }));
+
+    const absl::flat_hash_map<role_name, role::container_type> expected{
+      {role0_name, both}, {role1_name, both}, {other_role_name, both}};
+    BOOST_CHECK(got == expected);
+}
+
+// roles_with_members() includes roles that have no members (the member store
+// alone would omit them).
+BOOST_AUTO_TEST_CASE(roles_with_members_includes_empty_roles) {
+    role_store store;
+    const role_member m{role_member_type::user, "u"};
+    BOOST_REQUIRE(store.put(role_name{"has_member"}, role{{m}}));
+    BOOST_REQUIRE(store.put(role_name{"empty"}, role{}));
+
+    auto got = members_by_role(
+      store.roles_with_members([](const auto&) { return true; }));
+
+    const absl::flat_hash_map<role_name, role::container_type> expected{
+      {role_name{"has_member"}, role::container_type{m}},
+      {role_name{"empty"}, role::container_type{}}};
+    BOOST_CHECK(got == expected);
+}
+
+// roles_with_members() on an empty store yields nothing.
+BOOST_AUTO_TEST_CASE(roles_with_members_empty_store) {
+    role_store store;
+    BOOST_CHECK(
+      store.roles_with_members([](const auto&) { return true; }).empty());
+}
+
+// roles_with_members(pred) returns only roles whose name satisfies the
+// predicate, each still carrying its full member set.
+BOOST_FIXTURE_TEST_CASE(roles_with_members_filtered, role_store_range_fixture) {
+    auto got = members_by_role(store.roles_with_members(
+      [&](const role_name& n) { return n == role0_name; }));
+
+    const role::container_type both{mem0, mem1};
+    const absl::flat_hash_map<role_name, role::container_type> expected{
+      {role0_name, both}};
+    BOOST_CHECK(got == expected);
+}
+
+// A predicate matching an empty role still includes it (with no members),
+// and a predicate that matches nothing yields nothing.
+BOOST_AUTO_TEST_CASE(roles_with_members_filtered_includes_empty_match) {
+    role_store store;
+    BOOST_REQUIRE(store.put(role_name{"empty"}, role{}));
+    BOOST_REQUIRE(store.put(
+      role_name{"full"}, role{{role_member{role_member_type::user, "u"}}}));
+
+    auto got = members_by_role(store.roles_with_members(
+      [](const role_name& n) { return n == role_name{"empty"}; }));
+    const absl::flat_hash_map<role_name, role::container_type> expected{
+      {role_name{"empty"}, role::container_type{}}};
+    BOOST_CHECK(got == expected);
+
+    BOOST_CHECK(
+      store.roles_with_members([](const role_name&) { return false; }).empty());
 }
 
 BOOST_AUTO_TEST_CASE(role_store_big_store) {

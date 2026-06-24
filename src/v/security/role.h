@@ -175,6 +175,13 @@ private:
     container_type _members;
 };
 
+/// A role paired with its name, as produced by role_store enumeration
+/// (role itself stores only members, not its name).
+struct role_with_members {
+    role_name name;
+    role role;
+};
+
 } // namespace security
 
 /// role has begin()/end() so fmt sees it as a range. Disable that and provide

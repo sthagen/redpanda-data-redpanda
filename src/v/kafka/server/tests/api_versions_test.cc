@@ -7,9 +7,12 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "kafka/protocol/types.h"
 #include "kafka/server/handlers/api_versions.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/boost_fixture.h"
+
+#include <algorithm>
 
 // https://github.com/apache/kafka/blob/eaccb92/core/src/test/scala/unit/kafka/server/ApiVersionsRequestTest.scala
 
@@ -85,4 +88,11 @@ FIXTURE_TEST(flex_with_null_client_id, redpanda_thread_fixture) {
     auto response = client.dispatch(request, kafka::api_version(3)).get();
     BOOST_TEST(response.data.error_code == kafka::error_code::none);
     client.stop().then([&client] { client.shutdown(); }).get();
+}
+
+FIXTURE_TEST(reserved_range_apis_advertised, redpanda_thread_fixture) {
+    auto apis = kafka::get_supported_apis();
+    BOOST_CHECK(std::ranges::any_of(apis, [](const auto& a) {
+        return a.api_key == kafka::redpanda_api_key_base;
+    }));
 }

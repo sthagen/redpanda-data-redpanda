@@ -117,6 +117,24 @@ redpanda_proto_library(
 )
 
 proto_library(
+    name = "iceberg_proto",
+    srcs = ["iceberg.proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//proto/redpanda/core/pbgen:options_proto",
+        "//proto/redpanda/core/pbgen:rpc_proto",
+    ],
+)
+
+redpanda_proto_library(
+    name = "iceberg_redpanda_proto",
+    protos = [
+        ":iceberg_proto",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
     name = "security_proto",
     srcs = ["security.proto"],
     visibility = ["//visibility:public"],

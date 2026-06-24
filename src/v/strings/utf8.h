@@ -15,10 +15,6 @@
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 
-#include <boost/locale.hpp>
-#include <boost/locale/encoding_utf.hpp>
-#include <boost/locale/utf.hpp>
-
 #include <optional>
 #include <string>
 #include <string_view>
@@ -116,29 +112,6 @@ void validate_no_control(std::string_view s, ExceptionThrower auto thrower) {
 
 inline void validate_no_control(std::string_view s) {
     validate_no_control(s, default_control_character_thrower{});
-}
-
-/// \brief Truncates incomplete character sequences from the provided string.
-/// Throws on invalid character sequences hence also validates
-/// \param s a string view to validate_and_truncate
-/// \return the length of the longest valid utf8 substring starting at s.begin()
-inline size_t validate_and_truncate(std::string_view s) {
-    auto begin = s.cbegin();
-    auto end = s.cend();
-
-    size_t valid_length{0};
-    while (begin != end) {
-        const boost::locale::utf::code_point c
-          = boost::locale::utf::utf_traits<char>::decode(begin, end);
-        if (c == boost::locale::utf::illegal) {
-            throw invalid_utf8_exception("Cannot decode string as UTF8");
-        }
-        if (c == boost::locale::utf::incomplete) {
-            return valid_length;
-        }
-        valid_length = (begin - s.cbegin());
-    }
-    return valid_length;
 }
 
 /// Returns true iff \p s is valid UTF-8. Rejects surrogates, overlong

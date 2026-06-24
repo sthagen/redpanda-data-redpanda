@@ -670,26 +670,16 @@ security_service_impl::list_roles(
     vlog(securitylog.trace, "list_roles: {}", req);
 
     // TODO: implement filtering based on request parameters
-    auto pred = [](const auto&) { return true; };
-
     const auto& local_role_store = _controller->get_role_store().local();
-    const auto role_name_views = local_role_store.range(pred);
 
     proto::admin::list_roles_response res;
     auto& pb_roles = res.get_roles();
 
-    for (const auto& role_name_view : role_name_views) {
-        const security::role_name role_name{role_name_view};
-        vlog(securitylog.debug, "Found role: {}", role_name);
-        const auto role = local_role_store.get(role_name);
-        if (role) {
-            pb_roles.push_back(convert_to_pb_role(role_name, *role));
-        } else {
-            vlog(
-              securitylog.error,
-              "Role '{}' listed in store but could not be retrieved",
-              role_name);
-        }
+    // Single pass over the member store; a per-role get() would rescan it on
+    // every role.
+    for (const auto& [role_name, role] : local_role_store.roles_with_members(
+           [](const auto&) { return true; })) {
+        pb_roles.push_back(convert_to_pb_role(role_name(), role));
     }
 
     co_return res;

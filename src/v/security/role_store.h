@@ -25,6 +25,7 @@
 #include <ranges>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace security {
 
@@ -134,6 +135,15 @@ public:
     // });
     range_query_container_type
     range(std::function<bool(const role_accessor&)>&& pred) const;
+
+    // Retrieve roles whose name satisfies pred, each together with its
+    // members, computed in a single pass over the member store (linear in
+    // total memberships). Prefer this over calling get() per role when
+    // enumerating: get() rescans the member store on every call, so per-role
+    // get() is quadratic. Matching roles with no members are included (with
+    // an empty member set).
+    chunked_vector<role_with_members>
+    roles_with_members(const std::function<bool(const role_name&)>& pred) const;
 
     static constexpr auto name_prefix_filter =
       [](const role_accessor& e, std::string_view filter) {

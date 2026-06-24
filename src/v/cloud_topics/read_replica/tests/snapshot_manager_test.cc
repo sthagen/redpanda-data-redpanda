@@ -18,6 +18,7 @@
 #include "config/configuration.h"
 #include "lsm/lsm.h"
 #include "storage/disk.h"
+#include "test_utils/scoped_config.h"
 #include "test_utils/tmp_dir.h"
 
 #include <gtest/gtest.h>
@@ -33,6 +34,32 @@ const auto test_tidp = model::topic_id_partition{
   model::topic_id{uuid_t::create()}, model::partition_id{0}};
 using o = kafka::offset;
 
+void start_cache(
+  ss::sharded<cloud_io::cache>& cache, const std::filesystem::path& dir) {
+    cloud_io::cache::initialize(dir).get();
+    cache
+      .start(
+        dir,
+        30_GiB,
+        config::mock_binding<double>(0.0),
+        config::mock_binding<uint64_t>(100_MiB),
+        config::mock_binding<std::optional<double>>(std::nullopt),
+        config::mock_binding<uint32_t>(100000),
+        config::mock_binding<uint16_t>(3))
+      .get();
+    cache.invoke_on_all([](cloud_io::cache& c) { return c.start(); }).get();
+    cache
+      .invoke_on(
+        ss::shard_id{0},
+        [](cloud_io::cache& c) {
+            c.notify_disk_status(
+              100ULL * 1024 * 1024 * 1024,
+              50ULL * 1024 * 1024 * 1024,
+              storage::disk_space_alert::ok);
+        })
+      .get();
+}
+
 } // namespace
 class SnapshotManagerTest
   : public ::testing::Test
@@ -41,39 +68,23 @@ public:
     void SetUp() override {
         db_s3_imposter_fixture::start().get();
         sr_ = cloud_io::scoped_remote::create(10, conf);
-        config::shard_local_cfg()
-          .cloud_storage_readreplica_manifest_sync_timeout_ms.set_value(500ms);
+        cfg_.get("cloud_storage_readreplica_manifest_sync_timeout_ms")
+          .set_value(500ms);
         staging_dir_ = std::make_unique<temporary_dir>("snapshot_manager_test");
 
-        auto cache_dir = staging_dir_->get_path() / "cache";
-        cloud_io::cache::initialize(cache_dir).get();
-        writer_cache_
-          .start(
-            cache_dir,
-            30_GiB,
-            config::mock_binding<double>(0.0),
-            config::mock_binding<uint64_t>(100_MiB),
-            config::mock_binding<std::optional<double>>(std::nullopt),
-            config::mock_binding<uint32_t>(100000),
-            config::mock_binding<uint16_t>(3))
-          .get();
-        writer_cache_
-          .invoke_on_all([](cloud_io::cache& c) { return c.start(); })
-          .get();
-        writer_cache_
-          .invoke_on(
-            ss::shard_id{0},
-            [](cloud_io::cache& c) {
-                c.notify_disk_status(
-                  100ULL * 1024 * 1024 * 1024,
-                  50ULL * 1024 * 1024 * 1024,
-                  storage::disk_space_alert::ok);
-            })
-          .get();
+        // The writer and reader run separate caches in one process, so disable
+        // metrics to avoid double-registering the shared cache metric names.
+        cfg_.get("disable_metrics").set_value(true);
+        cfg_.get("disable_public_metrics").set_value(true);
+
+        // The writer and reader use separate caches so that the reader
+        // hydrates from S3 rather than reading the writer's cached objects.
+        start_cache(writer_cache_, staging_dir_->get_path() / "writer_cache");
+        start_cache(reader_cache_, staging_dir_->get_path() / "reader_cache");
 
         reader_staging_dir_ = staging_dir_->get_path() / "reader";
         snapshot_mgr_ = std::make_unique<read_replica::snapshot_manager>(
-          reader_staging_dir_, &sr_->remote.local(), nullptr);
+          reader_staging_dir_, &sr_->remote.local(), &reader_cache_.local());
     }
 
     void TearDown() override {
@@ -85,6 +96,7 @@ public:
             snapshot_mgr_->stop().get();
             snapshot_mgr_.reset();
         }
+        reader_cache_.stop().get();
         writer_cache_.stop().get();
         sr_.reset();
         db_s3_imposter_fixture::stop().get();
@@ -138,8 +150,10 @@ public:
     }
 
 protected:
+    scoped_config cfg_;
     std::unique_ptr<temporary_dir> staging_dir_;
     ss::sharded<cloud_io::cache> writer_cache_;
+    ss::sharded<cloud_io::cache> reader_cache_;
     std::filesystem::path reader_staging_dir_;
     std::unique_ptr<cloud_io::scoped_remote> sr_;
     std::unique_ptr<read_replica::snapshot_manager> snapshot_mgr_;

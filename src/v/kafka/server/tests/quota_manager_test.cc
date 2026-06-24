@@ -13,9 +13,11 @@
 #include "kafka/server/client_quota_translator.h"
 #include "kafka/server/quota_manager.h"
 #include "test_utils/async.h"
+#include "test_utils/metrics.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/metrics_api.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -25,6 +27,7 @@
 
 #include <array>
 #include <chrono>
+#include <string_view>
 
 using namespace std::chrono_literals;
 using cluster::client_quota::entity_key;
@@ -578,4 +581,519 @@ SEASTAR_THREAD_TEST_CASE(test_increasing_specificity) {
         }
     }
 }
+
+namespace {
+
+/// Maps a single-component key type to the component label that carries
+/// its value (e.g. "client_id" -> "redpanda_quota_client_id").
+ss::sstring component_label_for(std::string_view key_type) {
+    if (key_type == "user") {
+        return "redpanda_quota_user";
+    }
+    if (key_type == "client_id") {
+        return "redpanda_quota_client_id";
+    }
+    if (key_type == "group_name") {
+        return "redpanda_quota_group_name";
+    }
+    return {};
+}
+
+/// Value of a per-entity counter (`metric_name`) for a single-component
+/// entity (user/client_id/group_name) and quota_type, or nullopt if no such
+/// series exists. The shard label is added automatically by find_metric_value.
+std::optional<uint64_t> entity_metric_value(
+  std::string_view metric_name,
+  std::string_view key_type,
+  std::string_view key_value,
+  std::string_view quota_type) {
+    return test_utils::find_metric_value<uint64_t>(
+      metric_name,
+      ss::metrics::default_handle(),
+      {{"redpanda_quota_type", ss::sstring(quota_type)},
+       {component_label_for(key_type), ss::sstring(key_value)}});
+}
+
+std::optional<uint64_t> entity_throughput(
+  std::string_view key_type,
+  std::string_view key_value,
+  std::string_view quota_type) {
+    return entity_metric_value(
+      "kafka_quotas_client_quota_throughput_by_entity",
+      key_type,
+      key_value,
+      quota_type);
+}
+
+std::optional<uint64_t> entity_throttle_time_ms(
+  std::string_view key_type,
+  std::string_view key_value,
+  std::string_view quota_type) {
+    return entity_metric_value(
+      "kafka_quotas_client_quota_throttle_time_ms_by_entity",
+      key_type,
+      key_value,
+      quota_type);
+}
+
+/// True if a per-entity throttle-time series exists for the given entity and
+/// quota_type.
+bool has_entity_throttle_metric(
+  std::string_view key_type,
+  std::string_view key_value,
+  std::string_view quota_type) {
+    return entity_throttle_time_ms(key_type, key_value, quota_type).has_value();
+}
+
+/// Issues produce requests for (user, cid) at a fixed timestamp until one is
+/// throttled, which is when the per-entity probe is created. Fails the test
+/// if no throttle occurs within the timeout.
+void produce_until_throttled(
+  quota_manager& qm, quota_manager::clock::time_point now) {
+    tests::cooperative_spin_wait_with_timeout(
+      5s,
+      [now, &qm](this auto) -> ss::future<bool> {
+          auto delay = co_await qm.record_produce_tp_and_throttle(
+            user, cid, 10000, now);
+          co_return delay > quota_manager::clock::duration::zero();
+      })
+      .get();
+}
+
+/// Issues partition-mutation requests for (user, cid) at a fixed timestamp
+/// until one is throttled, which is when the per-entity probe is created.
+/// Fails the test if no throttle occurs within the timeout.
+void mutate_until_throttled(
+  quota_manager& qm, quota_manager::clock::time_point now) {
+    tests::cooperative_spin_wait_with_timeout(
+      5s,
+      [now, &qm](this auto) -> ss::future<bool> {
+          auto delay = co_await qm.record_partition_mutations(
+            user, cid, 1000, now);
+          co_return delay > quota_manager::clock::duration::zero();
+      })
+      .get();
+}
+
+} // namespace
+
+// When kafka_per_entity_quota_metrics is off (the default), no per-entity
+// metric series are registered even when a entity is actively throttled.
+SEASTAR_THREAD_TEST_CASE(per_entity_metrics_not_registered_when_disabled) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+
+    fixture f;
+
+    auto default_values = entity_value{.producer_byte_rate = 100};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+
+    quota_manager::clock::duration delay;
+    tests::cooperative_spin_wait_with_timeout(
+      5s,
+      [now, &qm, &delay](this auto) -> ss::future<bool> {
+          delay = co_await qm.record_produce_tp_and_throttle(
+            user, cid, 10000, now);
+          co_return delay > quota_manager::clock::duration::zero();
+      })
+      .get();
+
+    BOOST_CHECK(
+      !has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+}
+
+// With the flag enabled, no metric series is registered until a throttle
+// actually fires.
+SEASTAR_THREAD_TEST_CASE(per_entity_metrics_not_registered_before_throttle) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    // A quota large enough that a single 1-byte record won't exhaust it
+    auto default_values = entity_value{.producer_byte_rate = 1000000};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+
+    const auto delay
+      = qm.record_produce_tp_and_throttle(user, cid, 1, now).get();
+
+    BOOST_CHECK_EQUAL(delay, quota_manager::clock::duration::zero());
+    BOOST_CHECK(
+      !has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// Calling record_fetch_tp without a subsequent throttle_fetch_tp never
+// creates a per-entity metric series, even when the bucket is exhausted.
+SEASTAR_THREAD_TEST_CASE(record_fetch_tp_alone_does_not_register_probe) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    auto default_values = entity_value{.consumer_byte_rate = 100};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+
+    for (int i = 0; i < 10; ++i) {
+        qm.record_fetch_tp(user, cid, 10000, now).get();
+    }
+
+    BOOST_CHECK(
+      !has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// After GC expires the local map entry the per-entity probe is destroyed
+// and the metric series is deregistered. A stale timestamp is passed so
+// last_seen_ms is already past the expire threshold (now - 10 * full_window)
+// the first time GC fires.
+SEASTAR_THREAD_TEST_CASE(per_entity_probe_deregistered_on_gc) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+        conf.quota_manager_gc_sec.set_value(std::chrono::milliseconds{10});
+        conf.default_window_sec.set_value(std::chrono::milliseconds{1});
+        conf.default_num_windows.set_value(static_cast<int16_t>(1));
+    }).get();
+
+    fixture f;
+
+    auto default_values = entity_value{.producer_byte_rate = 100};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    // 1 s in the past puts last_seen_ms well beyond expire_threshold
+    // (clock::now() - 10 * 1ms = clock::now() - 10ms).
+    const auto stale_now = quota_manager::clock::now() - 1s;
+
+    quota_manager::clock::duration delay;
+    tests::cooperative_spin_wait_with_timeout(
+      5s,
+      [stale_now, &qm, &delay](this auto) -> ss::future<bool> {
+          delay = co_await qm.record_produce_tp_and_throttle(
+            user, cid, 10000, stale_now);
+          co_return delay > quota_manager::clock::duration::zero();
+      })
+      .get();
+
+    BOOST_REQUIRE(
+      has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+
+    // No more quota calls - last_seen_ms stays stale. GC fires at ~10ms
+    // intervals; the entry is immediately eligible and the probe is destroyed.
+    tests::cooperative_spin_wait_with_timeout(
+      2s,
+      [](this auto) -> ss::future<bool> {
+          co_return !has_entity_throttle_metric(
+            "client_id", "franz-go", "produce_quota");
+      })
+      .get();
+
+    BOOST_CHECK(
+      !has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// Toggling kafka_per_entity_quota_metrics off immediately clears all
+// per-entity probes without waiting for the GC cycle.
+SEASTAR_THREAD_TEST_CASE(per_entity_probe_cleared_on_config_toggle_off) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    auto default_values = entity_value{.producer_byte_rate = 100};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+
+    quota_manager::clock::duration delay;
+    tests::cooperative_spin_wait_with_timeout(
+      5s,
+      [now, &qm, &delay](this auto) -> ss::future<bool> {
+          delay = co_await qm.record_produce_tp_and_throttle(
+            user, cid, 10000, now);
+          co_return delay > quota_manager::clock::duration::zero();
+      })
+      .get();
+
+    BOOST_REQUIRE(
+      has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+
+    BOOST_CHECK(
+      !has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+}
+
+// A produce throttle registers the per-entity series and records the
+// entity's throughput; a later produce that does not throttle (probe already
+// exists) keeps accumulating it.
+SEASTAR_THREAD_TEST_CASE(per_entity_produce_records_throughput) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    auto default_values = entity_value{.producer_byte_rate = 100};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+
+    produce_until_throttled(qm, now);
+
+    BOOST_CHECK(
+      has_entity_throttle_metric("client_id", "franz-go", "produce_quota"));
+
+    auto throttle_ms = entity_throttle_time_ms(
+      "client_id", "franz-go", "produce_quota");
+    BOOST_REQUIRE(throttle_ms.has_value());
+    BOOST_CHECK(*throttle_ms > 0);
+
+    auto throttled = entity_throughput(
+      "client_id", "franz-go", "produce_quota");
+    BOOST_REQUIRE(throttled.has_value());
+    BOOST_CHECK(*throttled > 0);
+
+    // Far enough in the future that the rate window has fully replenished, so
+    // this produce is not throttled but still records throughput because the
+    // probe already exists (the else-if branch).
+    const auto later = now + 1h;
+    auto later_delay
+      = qm.record_produce_tp_and_throttle(user, cid, 50, later).get();
+    BOOST_CHECK_EQUAL(later_delay, quota_manager::clock::duration::zero());
+
+    auto after = entity_throughput("client_id", "franz-go", "produce_quota");
+    BOOST_REQUIRE(after.has_value());
+    BOOST_CHECK_EQUAL(*after - *throttled, 50);
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// Once a fetch throttle has created the probe, record_fetch_tp accumulates the
+// entity's fetch throughput.
+SEASTAR_THREAD_TEST_CASE(per_entity_fetch_records_throughput) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    auto default_values = entity_value{.consumer_byte_rate = 100};
+    f.quota_store.local().set_quota(default_key, default_values);
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+
+    qm.record_fetch_tp(user, cid, 10000, now).get();
+    quota_manager::clock::duration delay;
+    tests::cooperative_spin_wait_with_timeout(
+      5s,
+      [now, &qm, &delay](this auto) -> ss::future<bool> {
+          delay = co_await qm.throttle_fetch_tp(user, cid, now);
+          co_return delay > quota_manager::clock::duration::zero();
+      })
+      .get();
+
+    BOOST_REQUIRE(
+      has_entity_throttle_metric("client_id", "franz-go", "fetch_quota"));
+    // Bytes recorded before the probe existed are dropped, so the counter
+    // starts at 0 here.
+    auto before
+      = entity_throughput("client_id", "franz-go", "fetch_quota").value_or(0);
+
+    qm.record_fetch_tp(user, cid, 1234, now).get();
+
+    auto after = entity_throughput("client_id", "franz-go", "fetch_quota");
+    BOOST_REQUIRE(after.has_value());
+    BOOST_CHECK_EQUAL(*after - before, 1234);
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// A throttled partition-mutation request registers the per-entity series for
+// the partition_mutation_quota type and records the entity's throttle time and
+// mutation count (throughput is in mutations, not bytes, for this quota type).
+SEASTAR_THREAD_TEST_CASE(per_entity_partition_mutations_record_throughput) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    f.quota_store.local().set_quota(
+      default_key, entity_value{.controller_mutation_rate = 100});
+
+    auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
+    mutate_until_throttled(qm, now);
+
+    BOOST_CHECK(has_entity_throttle_metric(
+      "client_id", "franz-go", "partition_mutation_quota"));
+
+    auto throttle_ms = entity_throttle_time_ms(
+      "client_id", "franz-go", "partition_mutation_quota");
+    BOOST_REQUIRE(throttle_ms.has_value());
+    BOOST_CHECK(*throttle_ms > 0);
+
+    auto throttled = entity_throughput(
+      "client_id", "franz-go", "partition_mutation_quota");
+    BOOST_REQUIRE(throttled.has_value());
+    BOOST_CHECK(*throttled > 0);
+
+    // Far enough in the future that the rate window has fully replenished, so
+    // this mutation is not throttled but still records throughput because the
+    // probe already exists (the else branch).
+    const auto later = now + 1h;
+    auto later_delay = qm.record_partition_mutations(user, cid, 5, later).get();
+    BOOST_CHECK_EQUAL(later_delay, 0ms);
+
+    auto after = entity_throughput(
+      "client_id", "franz-go", "partition_mutation_quota");
+    BOOST_REQUIRE(after.has_value());
+    BOOST_CHECK_EQUAL(*after - *throttled, 5);
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// A user-scoped quota produces a k_user tracker key, labelled with the user in
+// quota_user and quota_type=produce_quota.
+SEASTAR_THREAD_TEST_CASE(per_entity_user_quota_labels) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    f.quota_store.local().set_quota(
+      entity_key{entity_key::user_match{user}},
+      entity_value{.producer_byte_rate = 100});
+
+    auto& qm = f.sqm.local();
+    produce_until_throttled(qm, quota_manager::clock::now());
+
+    BOOST_CHECK(has_entity_throttle_metric("user", user, "produce_quota"));
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// A client-id-prefix (group) quota produces a k_group_name tracker key,
+// labelled with the prefix in quota_group_name and quota_type=produce_quota.
+SEASTAR_THREAD_TEST_CASE(per_entity_group_quota_labels) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    f.quota_store.local().set_quota(
+      franz_go_key, entity_value{.producer_byte_rate = 100});
+
+    auto& qm = f.sqm.local();
+    produce_until_throttled(qm, quota_manager::clock::now());
+
+    BOOST_CHECK(
+      has_entity_throttle_metric("group_name", "franz-go", "produce_quota"));
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// A (user, client-id) quota produces a pair tracker key carrying both the
+// quota_user and quota_client_id labels - the case the old single-value label
+// format could collide on. find_metric_value matches the labels exactly.
+SEASTAR_THREAD_TEST_CASE(per_entity_user_client_id_quota_labels) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    f.quota_store.local().set_quota(
+      entity_key{
+        entity_key::user_match{user}, entity_key::client_id_match{cid}},
+      entity_value{.producer_byte_rate = 100});
+
+    auto& qm = f.sqm.local();
+    produce_until_throttled(qm, quota_manager::clock::now());
+
+    auto series = test_utils::find_metric_value<uint64_t>(
+      "kafka_quotas_client_quota_throughput_by_entity",
+      ss::metrics::default_handle(),
+      {{"redpanda_quota_user", user},
+       {"redpanda_quota_client_id", cid},
+       {"redpanda_quota_type", "produce_quota"}});
+    BOOST_CHECK(series.has_value());
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
+// A (user, client-id-prefix) quota produces a pair tracker key carrying both
+// the quota_user and quota_group_name labels.
+SEASTAR_THREAD_TEST_CASE(per_entity_user_group_quota_labels) {
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(true);
+    }).get();
+
+    fixture f;
+
+    f.quota_store.local().set_quota(
+      entity_key{
+        entity_key::user_match{user},
+        entity_key::client_id_prefix_match{"franz-go"}},
+      entity_value{.producer_byte_rate = 100});
+
+    auto& qm = f.sqm.local();
+    produce_until_throttled(qm, quota_manager::clock::now());
+
+    auto series = test_utils::find_metric_value<uint64_t>(
+      "kafka_quotas_client_quota_throughput_by_entity",
+      ss::metrics::default_handle(),
+      {{"redpanda_quota_user", user},
+       {"redpanda_quota_group_name", "franz-go"},
+       {"redpanda_quota_type", "produce_quota"}});
+    BOOST_CHECK(series.has_value());
+
+    set_config([](config::configuration& conf) {
+        conf.kafka_per_entity_quota_metrics.set_value(false);
+    }).get();
+}
+
 } // namespace kafka

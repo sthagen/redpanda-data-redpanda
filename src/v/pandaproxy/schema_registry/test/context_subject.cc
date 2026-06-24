@@ -115,6 +115,54 @@ TEST_F(ContextSubjectTest, FlagOffUnqualifiedUsesDefaultContext) {
     EXPECT_EQ(ctx_sub.sub(), "plain-topic");
 }
 
+TEST_F(ContextSubjectTest, FromStringExplicitPolicyParsesPerArgument) {
+    const auto enabled = qualified_subjects_enabled::yes;
+    const auto disabled = qualified_subjects_enabled::no;
+
+    // Enabled: the qualified-subject grammar applies.
+    EXPECT_EQ(
+      context_subject::from_string("my-topic", enabled),
+      (context_subject{default_context, subject{"my-topic"}}));
+    EXPECT_EQ(
+      context_subject::from_string(":.my-ctx:my-topic", enabled),
+      (context_subject{context{".my-ctx"}, subject{"my-topic"}}));
+    // Only the first colon after ":." splits context from subject.
+    EXPECT_EQ(
+      context_subject::from_string(":.ctx:a:b:c", enabled),
+      (context_subject{context{".ctx"}, subject{"a:b:c"}}));
+    // A leading ':' not followed by '.' is not a context marker.
+    EXPECT_EQ(
+      context_subject::from_string(":no-dot", enabled),
+      (context_subject{default_context, subject{":no-dot"}}));
+
+    // Disabled: the entire string is a subject in the default context.
+    EXPECT_EQ(
+      context_subject::from_string(":.my-ctx:my-topic", disabled),
+      (context_subject{default_context, subject{":.my-ctx:my-topic"}}));
+    EXPECT_EQ(
+      context_subject::from_string("plain-topic", disabled),
+      (context_subject{default_context, subject{"plain-topic"}}));
+}
+
+TEST_F(ContextSubjectTest, FromStringExplicitPolicyIgnoresClusterConfig) {
+    // The two-arg overload honors the caller-supplied policy regardless of the
+    // cluster config flag: set the global flag opposite to each explicit policy
+    // and prove the argument wins.
+    config::shard_local_cfg()
+      .schema_registry_enable_qualified_subjects.set_value(false);
+    EXPECT_EQ(
+      context_subject::from_string(
+        ":.my-ctx:my-topic", qualified_subjects_enabled::yes),
+      (context_subject{context{".my-ctx"}, subject{"my-topic"}}));
+
+    config::shard_local_cfg()
+      .schema_registry_enable_qualified_subjects.set_value(true);
+    EXPECT_EQ(
+      context_subject::from_string(
+        ":.my-ctx:my-topic", qualified_subjects_enabled::no),
+      (context_subject{default_context, subject{":.my-ctx:my-topic"}}));
+}
+
 TEST_F(ContextSubjectTest, ValidateSubjectRejectsReservedNames) {
     // __GLOBAL as subject is always rejected, regardless of context or mode
     EXPECT_THROW(
@@ -211,7 +259,13 @@ TEST_F(ContextSubjectTest, ValidateSubjectConfigModeFlag) {
       exception);
 }
 
-class ContextSubjectReferenceTest : public ::testing::Test {};
+class ContextSubjectReferenceTest : public ::testing::Test {
+protected:
+    void TearDown() override {
+        config::shard_local_cfg()
+          .schema_registry_enable_qualified_subjects.reset();
+    }
+};
 
 TEST_F(ContextSubjectReferenceTest, FromString) {
     // Unqualified subjects: qualified=false
@@ -270,6 +324,27 @@ TEST_F(ContextSubjectReferenceTest, ToStringRoundTrip) {
         auto got = context_subject_reference::from_string(input).to_string();
         EXPECT_EQ(got, input);
     }
+}
+
+TEST_F(
+  ContextSubjectReferenceTest, FromStringExplicitPolicyIgnoresClusterConfig) {
+    // The two-arg overload honors the caller-supplied policy regardless of the
+    // cluster config flag: set the global flag opposite to each explicit policy
+    // and prove the argument wins.
+    config::shard_local_cfg()
+      .schema_registry_enable_qualified_subjects.set_value(false);
+    auto qual = context_subject_reference::from_string(
+      ":.ctx:sub", qualified_subjects_enabled::yes);
+    EXPECT_EQ(qual.qualified, is_qualified::yes);
+    EXPECT_EQ(qual.sub, (context_subject{context{".ctx"}, subject{"sub"}}));
+
+    config::shard_local_cfg()
+      .schema_registry_enable_qualified_subjects.set_value(true);
+    auto unqual = context_subject_reference::from_string(
+      ":.ctx:sub", qualified_subjects_enabled::no);
+    EXPECT_EQ(unqual.qualified, is_qualified::no);
+    EXPECT_EQ(
+      unqual.sub, (context_subject{default_context, subject{":.ctx:sub"}}));
 }
 
 } // namespace pandaproxy::schema_registry

@@ -68,6 +68,16 @@ TEST(request_builder, test_with_everything) {
     EXPECT_EQ(sorted, expected);
 }
 
+TEST(request_builder, with_basic_auth) {
+    auto req = http::request_builder{}
+                 .host("http://a.b")
+                 .with_basic_auth("user", "pass")
+                 .build();
+    ASSERT_TRUE(req.has_value());
+    // base64("user:pass") == "dXNlcjpwYXNz"
+    EXPECT_EQ(req.value()[bh::field::authorization], "Basic dXNlcjpwYXNz");
+}
+
 TEST(request_builder, test_invalid_host) {
     http::request_builder rb;
     const auto bad_host = "foobar.xyz";

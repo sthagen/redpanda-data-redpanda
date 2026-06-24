@@ -531,13 +531,17 @@ TEST_F(ImplTest, PreOpenFiles) {
     _options->max_pre_open_fibers = 0;
     restart();
 
+    // Warming, if any, runs in the background; drain to give it a chance.
+    tests::drain_task_queue().get();
     EXPECT_EQ(opened_files().size(), 0);
     EXPECT_TRUE(matches_shadow());
 
-    // Restart with max_pre_open_fibers > 0 (enabled)
+    // Restart with max_pre_open_fibers > 0 (enabled). Warming is a background
+    // fiber, so wait for the reactor to drain.
     _options->max_pre_open_fibers = 4;
     restart();
 
+    tests::drain_task_queue().get();
     EXPECT_EQ(opened_files().size(), files.size());
     for (const auto& file : files) {
         EXPECT_TRUE(opened_files().contains(file))

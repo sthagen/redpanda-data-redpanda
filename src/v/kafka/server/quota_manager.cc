@@ -26,6 +26,7 @@
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shard_id.hh>
 #include <seastar/util/later.hh>
+#include <seastar/util/variant_utils.hh>
 
 #include <fmt/chrono.h>
 
@@ -150,6 +151,130 @@ private:
     metrics_container_t _metrics{};
 };
 
+class quota_manager::per_entity_probe {
+public:
+    per_entity_probe() = default;
+    // The registered counters reference _throttle_time_ms / _throughput, so the
+    // probe must never move once setup() has run.
+    per_entity_probe(const per_entity_probe&) = delete;
+    per_entity_probe& operator=(const per_entity_probe&) = delete;
+    per_entity_probe(per_entity_probe&&) = delete;
+    per_entity_probe& operator=(per_entity_probe&&) = delete;
+    ~per_entity_probe() = default;
+
+    void setup(const tracker_key& key, client_quota_type qt) {
+        namespace sm = ss::metrics;
+
+        auto maybe_labels = make_labels(key, qt);
+        if (!maybe_labels) {
+            return;
+        }
+        auto labels = *std::move(maybe_labels);
+
+        auto group_name = prometheus_sanitize::metrics_name("kafka:quotas");
+        _metrics.add_group(
+          group_name,
+          {sm::make_counter(
+             "client_quota_throttle_time_ms_by_entity",
+             _throttle_time_ms,
+             sm::description("Total per-entity quota throttling delay (ms)"),
+             labels)
+             .aggregate({sm::shard_label}),
+           sm::make_counter(
+             "client_quota_throughput_by_entity",
+             _throughput,
+             sm::description(
+               "Per-entity quota throughput (bytes for produce/fetch, "
+               "partition "
+               "mutations for partition-mutation quotas)"),
+             labels)
+             .aggregate({sm::shard_label})});
+    }
+
+    void record_throttle(clock::duration d) {
+        _throttle_time_ms
+          += std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
+    }
+
+    void record_throughput(uint64_t bytes) { _throughput += bytes; }
+
+private:
+    using labels_t = std::vector<ss::metrics::label_instance>;
+
+    // Each identity component gets its own label, emitted only when present.
+    // Distinct tracker_keys therefore map to distinct sets of component labels,
+    // so no separate discriminator label is needed (and single-element keys
+    // carry no empty labels). The quota_type label separates the produce/fetch/
+    // partition-mutation series of a single identity, which can share one
+    // tracker_key but are tracked and rate limited independently.
+    std::optional<labels_t>
+    make_labels(const tracker_key& key, client_quota_type qt) const {
+        auto user = metrics::make_namespaced_label("quota_user");
+        auto client_id = metrics::make_namespaced_label("quota_client_id");
+        auto group = metrics::make_namespaced_label("quota_group_name");
+        auto type = metrics::make_namespaced_label("quota_type")(
+          fmt::format("{}", qt));
+        return ss::visit(
+          key,
+          [&](const std::pair<k_user, k_client_id>& p)
+            -> std::optional<labels_t> {
+              return labels_t{user(p.first()), client_id(p.second()), type};
+          },
+          [&](const std::pair<k_user, k_group_name>& p)
+            -> std::optional<labels_t> {
+              return labels_t{user(p.first()), group(p.second()), type};
+          },
+          [&](const k_user& u) -> std::optional<labels_t> {
+              return labels_t{user(u()), type};
+          },
+          [&](const k_client_id& c) -> std::optional<labels_t> {
+              return labels_t{client_id(c()), type};
+          },
+          [&](const k_group_name& g) -> std::optional<labels_t> {
+              return labels_t{group(g()), type};
+          },
+          [](const k_not_applicable&) { return std::optional<labels_t>{}; });
+    }
+
+    metrics::all_metrics_groups _metrics;
+    uint64_t _throttle_time_ms{0U};
+    uint64_t _throughput{0U};
+};
+
+quota_manager::local_quota_entry::local_quota_entry(
+  std::shared_ptr<client_quota> q) noexcept
+  : quota(std::move(q)) {}
+
+void quota_manager::ensure_entity_probe(
+  const tracker_key& key,
+  client_quota_type qt,
+  const quota_manager::entity_probe_callback_t& cb) {
+    auto it = _local_map.find(key);
+    if (it == _local_map.end()) {
+        return;
+    }
+    auto& probe = it->second.probes[qt];
+    if (!probe) {
+        probe = std::make_unique<per_entity_probe>();
+        probe->setup(key, qt);
+    }
+    cb(*probe);
+}
+
+void quota_manager::with_entity_probe(
+  const tracker_key& key,
+  client_quota_type qt,
+  const quota_manager::entity_probe_callback_t& cb) {
+    auto it = _local_map.find(key);
+    if (it == _local_map.end()) {
+        return;
+    }
+    auto probe_it = it->second.probes.find(qt);
+    if (probe_it != it->second.probes.end() && probe_it->second) {
+        cb(*probe_it->second);
+    }
+}
+
 using clock = quota_manager::clock;
 
 quota_manager::quota_manager(
@@ -160,7 +285,9 @@ quota_manager::quota_manager(
       config::shard_local_cfg().kafka_throughput_replenish_threshold.bind())
   , _translator{client_quota_store}
   , _gc_freq(config::shard_local_cfg().quota_manager_gc_sec.bind())
-  , _max_delay(config::shard_local_cfg().max_kafka_throttle_delay_ms.bind()) {
+  , _max_delay(config::shard_local_cfg().max_kafka_throttle_delay_ms.bind())
+  , _per_entity_metrics(
+      config::shard_local_cfg().kafka_per_entity_quota_metrics.bind()) {
     if (seastar::this_shard_id() == quotas_shard) {
         _global_map = global_map_t{};
 
@@ -174,6 +301,7 @@ quota_manager::~quota_manager() { _gc_timer.cancel(); }
 ss::future<> quota_manager::stop() {
     _gc_timer.cancel();
     co_await _gate.close();
+    _local_map.clear();
     _probe.reset();
 }
 
@@ -186,6 +314,13 @@ ss::future<> quota_manager::start() {
         auto update_quotas = [this]() { update_client_quotas(); };
         _translator.watch(update_quotas);
     }
+    _per_entity_metrics.watch([this] {
+        if (!_per_entity_metrics()) {
+            for (auto& [_, entry] : _local_map) {
+                entry.probes.clear();
+            }
+        }
+    });
     return ss::now();
 }
 
@@ -200,13 +335,13 @@ ss::future<clock::duration> quota_manager::maybe_add_and_retrieve_quota(
 
         vlog(
           client_quota_log.trace, "Inserting new key into local map: {}", qid);
-        it = _local_map.emplace(qid, std::move(new_q)).first;
+        it = _local_map.try_emplace(qid, std::move(new_q)).first;
     } else {
         // bump to prevent gc
-        it->second->last_seen_ms.local() = now;
+        it->second.quota->last_seen_ms.local() = now;
     }
 
-    co_return cb(*it->second);
+    co_return cb(*it->second.quota);
 }
 
 ss::future<std::shared_ptr<quota_manager::client_quota>>
@@ -360,6 +495,18 @@ ss::future<std::chrono::milliseconds> quota_manager::record_partition_mutations(
 
     auto capped_delay = cap_to_max_delay(key, delay);
     _probe->record_throttle_time(value.rule, ctx.q_type, capped_delay);
+    if (_per_entity_metrics()) {
+        if (capped_delay > clock::duration::zero()) {
+            ensure_entity_probe(key, ctx.q_type, [&](per_entity_probe& probe) {
+                probe.record_throttle(capped_delay);
+                probe.record_throughput(mutations);
+            });
+        } else {
+            with_entity_probe(key, ctx.q_type, [&](per_entity_probe& probe) {
+                probe.record_throughput(mutations);
+            });
+        }
+    }
     vlog(
       client_quota_log.trace,
       "request: ctx:{}, key:{}, value:{}, mutations: {}, delay:{}, "
@@ -432,6 +579,18 @@ ss::future<clock::duration> quota_manager::record_produce_tp_and_throttle(
 
     auto capped_delay = cap_to_max_delay(key, delay);
     _probe->record_throttle_time(value.rule, ctx.q_type, capped_delay);
+    if (_per_entity_metrics()) {
+        if (capped_delay > clock::duration::zero()) {
+            ensure_entity_probe(key, ctx.q_type, [&](per_entity_probe& probe) {
+                probe.record_throttle(capped_delay);
+                probe.record_throughput(bytes);
+            });
+        } else {
+            with_entity_probe(key, ctx.q_type, [&](per_entity_probe& probe) {
+                probe.record_throughput(bytes);
+            });
+        }
+    }
     vlog(
       client_quota_log.trace,
       "request: ctx:{}, key:{}, value:{}, bytes: {}, delay:{}, "
@@ -479,6 +638,15 @@ ss::future<> quota_manager::record_fetch_tp(
           fetch_tracker.record(bytes);
           return clock::duration::zero();
       });
+
+    // with_entity_probe never creates a probe - throttle_fetch_tp is the
+    // sole creator, so series are registered only for throttled entities (the
+    // cardinality bound), not for every entity that fetches.
+    if (_per_entity_metrics()) {
+        with_entity_probe(key, ctx.q_type, [&](per_entity_probe& probe) {
+            probe.record_throughput(bytes);
+        });
+    }
 }
 
 ss::future<clock::duration> quota_manager::throttle_fetch_tp(
@@ -519,6 +687,11 @@ ss::future<clock::duration> quota_manager::throttle_fetch_tp(
 
     auto capped_delay = cap_to_max_delay(key, delay);
     _probe->record_throttle_time(value.rule, ctx.q_type, capped_delay);
+    if (_per_entity_metrics() && capped_delay > clock::duration::zero()) {
+        ensure_entity_probe(key, ctx.q_type, [&](per_entity_probe& probe) {
+            probe.record_throttle(capped_delay);
+        });
+    }
     vlog(
       client_quota_log.trace,
       "throttle request: ctx:{}, key:{}, value:{}, delay:{}, "
@@ -593,7 +766,7 @@ ss::future<> quota_manager::do_global_gc() {
 ss::future<> quota_manager::do_local_gc(clock::time_point expire_threshold) {
     for (auto it = _local_map.begin(); it != _local_map.end();) {
         auto& [key, value] = *it;
-        if (value->last_seen_ms.local() < expire_threshold) {
+        if (value.quota->last_seen_ms.local() < expire_threshold) {
             vlog(client_quota_log.trace, "Local GC expiring key: {}", key);
             it = _local_map.erase(it);
         } else {

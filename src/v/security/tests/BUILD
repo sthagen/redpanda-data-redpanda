@@ -196,6 +196,7 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/security",
         "//src/v/test_utils:seastar_boost",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:node_hash_set",
         "@boost//:range",
         "@boost//:test",

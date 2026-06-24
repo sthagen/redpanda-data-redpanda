@@ -76,6 +76,7 @@ public:
       ss::sharded<cluster::id_allocator_frontend>&,
       ss::sharded<security::credential_store>&,
       ss::sharded<security::authorizer>&,
+      ss::sharded<security::role_store>&,
       ss::sharded<security::audit::audit_log_manager>&,
       ss::sharded<security::oidc::service>&,
       ss::sharded<cluster::security_frontend>&,
@@ -154,6 +155,8 @@ public:
     security::credential_store& credentials() { return _credentials.local(); }
 
     security::authorizer& authorizer() { return _authorizer.local(); }
+
+    security::role_store& role_store() { return _role_store.local(); }
 
     security::audit::audit_log_manager& audit_mgr() {
         return _audit_mgr.local();
@@ -293,6 +296,7 @@ private:
     bool _recovery_mode_enabled{false};
     ss::sharded<security::credential_store>& _credentials;
     ss::sharded<security::authorizer>& _authorizer;
+    ss::sharded<security::role_store>& _role_store;
     ss::sharded<security::audit::audit_log_manager>& _audit_mgr;
     ss::sharded<security::oidc::service>& _oidc_service;
     ss::sharded<cluster::security_frontend>& _security_frontend;

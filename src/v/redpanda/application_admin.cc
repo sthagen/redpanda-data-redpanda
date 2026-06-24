@@ -15,6 +15,7 @@
 #include "redpanda/admin/services/cluster.h"
 #include "redpanda/admin/services/datalake/datalake.h"
 #include "redpanda/admin/services/features.h"
+#include "redpanda/admin/services/iceberg/iceberg.h"
 #include "redpanda/admin/services/internal/breakglass.h"
 #include "redpanda/admin/services/internal/debug.h"
 #include "redpanda/admin/services/internal/level_zero.h"
@@ -93,6 +94,9 @@ void application::configure_admin_server(model::node_id node_id) {
           s.add_service(
             std::make_unique<admin::datalake_service_impl>(
               create_client(), &_datalake_coordinator_fe));
+          s.add_service(
+            std::make_unique<admin::iceberg_service_impl>(
+              &_datalake_coordinator_fe));
           s.add_service(
             std::make_unique<admin::cluster_service_impl>(
               create_client(),

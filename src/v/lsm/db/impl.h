@@ -110,6 +110,12 @@ private:
 
     ss::future<> recover();
 
+    // If pre-opening is enabled (max_pre_open_fibers > 0), launches a
+    // best-effort background fiber that warms the table cache by opening
+    // every SST in the current version.
+    void maybe_start_prewarm();
+    ss::future<> prewarm();
+
     ss::future<> make_room_for_write();
 
     void maybe_schedule_compaction();

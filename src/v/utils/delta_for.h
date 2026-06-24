@@ -24,7 +24,7 @@
 #include "serde/rw/tags.h"
 #include "ssx/sformat.h"
 
-#include <seastar/util/log.hh>
+#include <boost/iterator/iterator_facade.hpp>
 
 #include <concepts>
 #include <cstddef>

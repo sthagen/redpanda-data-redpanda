@@ -989,11 +989,12 @@ async def main() -> None:
 
     cores = args.cores
     if cores is None:
-        # Use 75% of cores for redpanda.  e.g. 3 node cluster on a 16 node system
-        # gives each node 4 cores.
-        cpu_count = psutil.cpu_count(logical=False)
-        assert cpu_count
-        cores = max((3 * (cpu_count // 4)) // args.nodes, 1)
+        # Default to 2 cores per node rather than scaling with the host's core
+        # count. The per-node memory default is capped at 4 GB (see below), and
+        # Redpanda requires at least 1 GB per core. 2 cores keeps the 2 GB
+        # minimum comfortably within that 4 GB cap while staying lightweight
+        # regardless of machine size. Pass --cores to use more.
+        cores = 2
     env = os.environ.copy()
     if "ASAN_OPTIONS" not in env:
         env["ASAN_OPTIONS"] = "disable_coredump=0:abort_on_error=1"

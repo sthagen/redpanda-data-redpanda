@@ -28,6 +28,8 @@
 #include <seastar/util/noncopyable_function.hh>
 #include <seastar/util/shared_token_bucket.hh>
 
+#include <absl/container/flat_hash_map.h>
+
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -78,9 +80,6 @@ public:
     // std::shared_ptr<> on shard 0 and (2) we need a way to keep track of a
     // reference count across multiple shards, which is exactly what
     // std::shared_ptr<> is meant for.
-    using local_map_t
-      = chunked_hash_map<tracker_key, std::shared_ptr<client_quota>>;
-
     using global_map_t
       = chunked_hash_map<tracker_key, std::shared_ptr<client_quota>>;
 
@@ -132,6 +131,41 @@ private:
       = ss::noncopyable_function<clock::duration(client_quota&)>;
 
     class client_quotas_probe;
+    class per_entity_probe;
+
+    // Per-shard local map entry. Pairs the shared quota state (rate trackers)
+    // with shard-local metric probes that are populated only when the entity
+    // is actively being throttled.
+    struct local_quota_entry {
+        explicit local_quota_entry(std::shared_ptr<client_quota> q) noexcept;
+
+        std::shared_ptr<client_quota> quota;
+        // One probe per quota type, registered lazily on first throttle. A
+        // single tracker_key can be shared across produce/fetch/partition
+        // mutation quotas, so each type needs its own series. The unique_ptr
+        // keeps the probe address stable across rehashes, which its registered
+        // counters depend on.
+        absl::
+          flat_hash_map<client_quota_type, std::unique_ptr<per_entity_probe>>
+            probes;
+    };
+
+    using local_map_t = chunked_hash_map<tracker_key, local_quota_entry>;
+
+    using entity_probe_callback_t
+      = ss::noncopyable_function<void(per_entity_probe&)>;
+
+    // Runs `cb` with the probe for (`key`, `qt`), creating and registering it
+    // on first use (reusing an existing one otherwise). No-op if `key` has no
+    // local-map entry.
+    void ensure_entity_probe(
+      const tracker_key&, client_quota_type, const entity_probe_callback_t&);
+
+    // Runs `cb` with the probe for (`key`, `qt`) only if one is already
+    // registered; never creates one (used on paths that must not register a
+    // series).
+    void with_entity_probe(
+      const tracker_key&, client_quota_type, const entity_probe_callback_t&);
 
     clock::duration cap_to_max_delay(const tracker_key&, clock::duration);
 
@@ -162,6 +196,7 @@ private:
     ss::timer<> _gc_timer;
     config::binding<std::chrono::milliseconds> _gc_freq;
     config::binding<std::chrono::milliseconds> _max_delay;
+    config::binding<bool> _per_entity_metrics;
     ss::gate _gate;
     std::optional<ssx::mutex> _global_map_mutex; // Only on shard 0
 };

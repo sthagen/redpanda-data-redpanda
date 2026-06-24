@@ -67,10 +67,10 @@ fmt::iterator schema_metadata::format_to(fmt::iterator it) const {
 }
 
 namespace {
-std::pair<context_subject, is_qualified> parse_subject(std::string_view input) {
+std::pair<context_subject, is_qualified>
+parse_subject(std::string_view input, qualified_subjects_enabled enabled) {
     // If qualified subject parsing is disabled, treat everything as literal
-    if (!config::shard_local_cfg()
-           .schema_registry_enable_qualified_subjects()) {
+    if (!enabled) {
         return {
           context_subject{default_context, subject{input}}, is_qualified::no};
     }
@@ -99,15 +99,30 @@ std::pair<context_subject, is_qualified> parse_subject(std::string_view input) {
     // Default case: unqualified subject or invalid qualified syntax
     return {context_subject{default_context, subject{input}}, is_qualified::no};
 }
+
+qualified_subjects_enabled cluster_qualified_subjects_enabled() {
+    return qualified_subjects_enabled{
+      config::shard_local_cfg().schema_registry_enable_qualified_subjects()};
+}
 } // namespace
 
 context_subject context_subject::from_string(std::string_view input) {
-    return parse_subject(input).first;
+    return from_string(input, cluster_qualified_subjects_enabled());
+}
+
+context_subject context_subject::from_string(
+  std::string_view input, qualified_subjects_enabled enabled) {
+    return parse_subject(input, enabled).first;
 }
 
 context_subject_reference
 context_subject_reference::from_string(std::string_view input) {
-    auto [sub, qualified] = parse_subject(input);
+    return from_string(input, cluster_qualified_subjects_enabled());
+}
+
+context_subject_reference context_subject_reference::from_string(
+  std::string_view input, qualified_subjects_enabled enabled) {
+    auto [sub, qualified] = parse_subject(input, enabled);
     return context_subject_reference{
       .sub = std::move(sub),
       .qualified = qualified,

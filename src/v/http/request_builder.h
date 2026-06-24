@@ -71,6 +71,12 @@ public:
     // Adds a Bearer auth token header
     request_builder& with_bearer_auth(std::string_view token);
 
+    // Adds an HTTP Basic auth header (RFC 7617): the value is
+    // "Basic " + base64(username + ":" + password). The caller must ensure the
+    // username contains no ':'.
+    request_builder&
+    with_basic_auth(std::string_view username, std::string_view password);
+
     request_builder& with_content_type(std::string_view content_type);
 
     // Builds a final HTTP request, the returned type is an error variant if the

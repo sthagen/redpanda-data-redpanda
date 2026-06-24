@@ -148,7 +148,10 @@ ss::future<> database_refresher::open_or_refresh() {
       lsm::options{
         .database_epoch = lsm::internal::database_epoch::max(),
         .readonly = true,
-        // TODO: tuning.
+        .max_pre_open_fibers = config::shard_local_cfg()
+                                 .cloud_topics_metastore_max_pre_open_fibers(),
+        .block_cache_size
+        = config::shard_local_cfg().cloud_topics_metastore_block_cache_size(),
       },
       std::move(io));
     vlog(logger_.debug, "Opened with seqno {}", db.max_applied_seqno());
