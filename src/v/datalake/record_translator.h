@@ -15,6 +15,7 @@
 #include "datalake/schema_identifier.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/values.h"
+#include "model/metadata.h"
 #include "model/record.h"
 #include "model/timestamp.h"
 
@@ -60,6 +61,9 @@ public:
 
 class key_value_translator : public record_translator {
 public:
+    explicit key_value_translator(
+      model::iceberg_mode::headers_config headers_cfg = {})
+      : _headers_cfg(headers_cfg) {}
     record_type
     build_type(std::optional<shared_resolved_type_t> val_type) override;
     ss::future<checked<iceberg::struct_value, errc>> translate_data(
@@ -72,10 +76,16 @@ public:
       model::timestamp_type ts_t,
       const chunked_vector<model::record_header>& headers) override;
     ~key_value_translator() override = default;
+
+private:
+    model::iceberg_mode::headers_config _headers_cfg;
 };
 
 class structured_data_translator : public record_translator {
 public:
+    explicit structured_data_translator(
+      model::iceberg_mode::headers_config headers_cfg = {})
+      : _headers_cfg(headers_cfg) {}
     record_type
     build_type(std::optional<shared_resolved_type_t> val_type) override;
     ss::future<checked<iceberg::struct_value, errc>> translate_data(
@@ -88,6 +98,9 @@ public:
       model::timestamp_type ts_t,
       const chunked_vector<model::record_header>& headers) override;
     ~structured_data_translator() override = default;
+
+private:
+    model::iceberg_mode::headers_config _headers_cfg;
 };
 
 // Switches between key-value and structured translator, depending on if there
@@ -96,6 +109,10 @@ public:
 // mode with a topic config! Instead, callers should explicitly choose.
 class default_translator : public record_translator {
 public:
+    explicit default_translator(
+      model::iceberg_mode::headers_config headers_cfg = {})
+      : kv_translator(headers_cfg)
+      , structured_translator(headers_cfg) {}
     record_type
     build_type(std::optional<shared_resolved_type_t> val_type) override;
     ss::future<checked<iceberg::struct_value, errc>> translate_data(

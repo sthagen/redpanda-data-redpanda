@@ -97,7 +97,8 @@ public:
       const reset_input_stream& reset_str,
       lazy_abort_source& lazy_abort_source,
       const std::string_view stream_label,
-      std::optional<size_t> max_retries) = 0;
+      std::optional<size_t> max_retries,
+      group_id gid = group_id::default_group) = 0;
 
     virtual ss::future<download_result> download_stream(
       transfer_details transfer_details,

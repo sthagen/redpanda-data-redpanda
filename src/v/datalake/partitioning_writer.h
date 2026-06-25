@@ -27,8 +27,8 @@ namespace datalake {
 // are partitioned by an Iceberg partition key.
 //
 // Uses the default partition spec to partition. As such, this class expects
-// that schemas and values given as inputs are constructed with the default
-// ("schemaless") schema and fields at the front.
+// that schemas and values given as inputs are constructed with the base
+// redpanda system fields at the front.
 class partitioning_writer {
 public:
     explicit partitioning_writer(

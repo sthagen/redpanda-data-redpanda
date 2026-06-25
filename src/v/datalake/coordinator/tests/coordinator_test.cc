@@ -254,6 +254,7 @@ public:
       const model::topic& topic, model::revision_id rev) {
         auto topic_cfg = cluster::topic_configuration(
           model::kafka_namespace, topic, 1, 1);
+        topic_cfg.properties.iceberg_mode = model::iceberg_mode::key_value;
         for (auto& crd : crds) {
             auto tt_res = crd->topic_table
                             .apply(

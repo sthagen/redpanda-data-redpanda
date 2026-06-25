@@ -1926,7 +1926,7 @@ db_domain_manager::restore_domain(rpc::restore_domain_request req) {
     cloud_storage_clients::object_key domain_prefix{
       domain_cloud_prefix(req.new_uuid)};
     auto meta_persist = co_await lsm::io::open_cloud_metadata_persistence(
-      remote_, bucket_, domain_prefix);
+      remote_, bucket_, domain_prefix, cloud_io::group_id::metastore);
 
     // When reading the manifest this will find the latest manifest at or below
     // the given epoch. So to find the latest, supply the max epoch.

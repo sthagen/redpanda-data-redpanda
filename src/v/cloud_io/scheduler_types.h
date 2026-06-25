@@ -54,12 +54,14 @@ enum class group_id : uint8_t {
     producer_upload,
     /// Reads serving Kafka fetch requests. Latency-critical.
     consumer_fetch,
+    /// IO for the metastore. Latency-critical.
+    metastore,
     /// Everything else: manifest I/O, archival writes, hydration,
     /// replication, housekeeping.
     default_group,
 };
 
-inline constexpr size_t num_group_ids = 3;
+inline constexpr size_t num_group_ids = 4;
 
 constexpr std::string_view to_string_view(group_id g) {
     switch (g) {
@@ -67,6 +69,8 @@ constexpr std::string_view to_string_view(group_id g) {
         return "producer_upload";
     case group_id::consumer_fetch:
         return "consumer_fetch";
+    case group_id::metastore:
+        return "metastore";
     case group_id::default_group:
         return "default_group";
     }

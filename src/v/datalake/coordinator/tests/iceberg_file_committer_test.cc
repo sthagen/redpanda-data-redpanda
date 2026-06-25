@@ -115,7 +115,7 @@ public:
         auto res = schema_mgr
                      .ensure_table_schema(
                        table_ident,
-                       datalake::schemaless_struct_type(),
+                       datalake::rp_base_struct_type({}),
                        datalake::hour_partition_spec(),
                        iceberg::field_name_comparison::verbatim)
                      .get();
@@ -701,7 +701,7 @@ TEST_F(FileCommitterTest, TestDontLoadMainTable) {
     auto create_res = schema_mgr
                         .ensure_table_schema(
                           datalake::table_id_provider::dlq_table_id(topic),
-                          datalake::schemaless_struct_type(),
+                          datalake::rp_base_struct_type({}),
                           datalake::hour_partition_spec(),
                           iceberg::field_name_comparison::verbatim)
                         .get();

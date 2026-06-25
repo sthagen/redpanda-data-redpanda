@@ -110,7 +110,8 @@ ss::future<> upload_file(
   const cloud_storage_clients::bucket_name& bucket,
   const cloud_storage_clients::object_key& cloud_key,
   const std::filesystem::path& local_path,
-  size_t written) {
+  size_t written,
+  cloud_io::group_id gid) {
     auto root = make_cloud_rtc(as);
     lazy_abort_source las{[&as] {
         return as.abort_requested() ? std::make_optional("abort requested")
@@ -134,7 +135,8 @@ ss::future<> upload_file(
       },
       las,
       "SST file upload",
-      std::nullopt);
+      std::nullopt,
+      gid);
     check_cloud_result(result);
 }
 
@@ -145,12 +147,14 @@ public:
       cloud_io::remote* remote,
       ss::abort_source* as,
       cloud_storage_clients::bucket_name bucket,
-      cloud_storage_clients::object_key cloud_key)
+      cloud_storage_clients::object_key cloud_key,
+      cloud_io::group_id gid)
       : _staging(std::move(staging))
       , _remote(remote)
       , _as(as)
       , _bucket(std::move(bucket))
-      , _cloud_key(std::move(cloud_key)) {}
+      , _cloud_key(std::move(cloud_key))
+      , _gid(gid) {}
 
     ss::future<> append(iobuf b) override {
         auto deadline = ss::lowres_clock::now() + reservation_timeout;
@@ -182,7 +186,8 @@ public:
           _bucket,
           _cloud_key,
           _staging.path(),
-          _staging.written()));
+          _staging.written(),
+          _gid));
         if (upload_fut.failed()) {
             auto ex = upload_fut.get_exception();
             co_await cleanup_staging_file();
@@ -224,6 +229,7 @@ private:
     ss::abort_source* _as;
     cloud_storage_clients::bucket_name _bucket;
     cloud_storage_clients::object_key _cloud_key;
+    cloud_io::group_id _gid;
 };
 
 class cloud_cache_data_persistence : public data_persistence {
@@ -232,11 +238,13 @@ public:
       cloud_io::cache* cache,
       cloud_io::remote* remote,
       cloud_storage_clients::bucket_name bucket,
-      cloud_storage_clients::object_key prefix)
+      cloud_storage_clients::object_key prefix,
+      cloud_io::group_id gid)
       : _cache(cache)
       , _remote(remote)
       , _bucket(std::move(bucket))
-      , _prefix(std::move(prefix)) {}
+      , _prefix(std::move(prefix))
+      , _gid(gid) {}
 
     ss::future<optional_pointer<random_access_file_reader>>
     open_random_access_reader(internal::file_handle h) override {
@@ -265,7 +273,10 @@ public:
                       content_length, std::move(stream), key);
                 },
                 "SST file download",
-                /*acquire_hydration_units=*/true));
+                /*acquire_hydration_units=*/true,
+                /*byte_range=*/std::nullopt,
+                /*throttle_metric_ms_cb=*/{},
+                _gid));
             if (dl_fut.failed()) {
                 throw_as_lsm_ex(
                   dl_fut.get_exception(), "error downloading file");
@@ -295,7 +306,8 @@ public:
           _remote,
           &_as,
           _bucket,
-          cloud_key(filename));
+          cloud_key(filename),
+          _gid);
     }
 
     ss::future<> remove_file(internal::file_handle h) override {
@@ -307,11 +319,13 @@ public:
         cloud_io::upload_result result{};
         try {
             co_await _cache->invalidate(cache_key(filename));
-            result = co_await _remote->delete_object({
-              .bucket = _bucket,
-              .key = cloud_key(filename),
-              .parent_rtc = rtc,
-            });
+            result = co_await _remote->delete_object(
+              {
+                .bucket = _bucket,
+                .key = cloud_key(filename),
+                .parent_rtc = rtc,
+              },
+              _gid);
         } catch (const std::system_error& e) {
             if (e.code() != std::errc::no_such_file_or_directory) {
                 throw io_error_exception(
@@ -336,7 +350,15 @@ public:
         cloud_io::list_result result
           = cloud_storage_clients::error_outcome::fail;
         try {
-            result = co_await _remote->list_objects(_bucket, rtc, _prefix);
+            result = co_await _remote->list_objects(
+              _bucket,
+              rtc,
+              _prefix,
+              /*delimiter=*/std::nullopt,
+              /*item_filter=*/std::nullopt,
+              /*max_keys=*/std::nullopt,
+              /*continuation_token=*/std::nullopt,
+              _gid);
         } catch (...) {
             auto ex = std::current_exception();
             if (ssx::is_shutdown_exception(ex)) {
@@ -431,6 +453,7 @@ private:
     cloud_io::remote* _remote;
     cloud_storage_clients::bucket_name _bucket;
     cloud_storage_clients::object_key _prefix;
+    cloud_io::group_id _gid;
     ss::abort_source _as;
     ss::gate _gate;
 };
@@ -440,10 +463,12 @@ public:
     cloud_metadata_persistence(
       cloud_io::remote* remote,
       cloud_storage_clients::bucket_name bucket,
-      cloud_storage_clients::object_key prefix)
+      cloud_storage_clients::object_key prefix,
+      cloud_io::group_id gid)
       : _remote(remote)
       , _bucket(std::move(bucket))
-      , _prefix(std::move(prefix)) {}
+      , _prefix(std::move(prefix))
+      , _gid(gid) {}
 
     ss::future<std::optional<iobuf>>
     read_manifest(internal::database_epoch epoch) override {
@@ -458,16 +483,18 @@ public:
             co_return std::nullopt;
         }
         iobuf b;
-        auto result = co_await _remote->download_object({
-          .transfer_details = {
-            .bucket = _bucket,
-            .key = std::move(*it),
-            .parent_rtc = rtc,
+        auto result = co_await _remote->download_object(
+          {
+            .transfer_details = {
+              .bucket = _bucket,
+              .key = std::move(*it),
+              .parent_rtc = rtc,
+            },
+            .display_str = "LSM Manifest download",
+            .payload = b,
+            .expect_missing = true,
           },
-          .display_str = "LSM Manifest download",
-          .payload = b,
-          .expect_missing = true,
-        });
+          _gid);
         co_return check_cloud_result(result) ? std::make_optional(std::move(b))
                                              : std::nullopt;
     }
@@ -478,15 +505,17 @@ public:
         auto _ = _gate.hold();
         auto rtc = make_cloud_rtc(_as);
         auto my_key = manifest_key(epoch);
-        auto result = co_await _remote->upload_object({
-          .transfer_details = {
-            .bucket = _bucket,
-            .key = my_key,
-            .parent_rtc = rtc,
+        auto result = co_await _remote->upload_object(
+          {
+            .transfer_details = {
+              .bucket = _bucket,
+              .key = my_key,
+              .parent_rtc = rtc,
+            },
+            .display_str = "LSM Manifest upload",
+            .payload = std::move(b),
           },
-          .display_str = "LSM Manifest upload",
-          .payload = std::move(b),
-        });
+          _gid);
         check_cloud_result(result);
         chunked_vector<cloud_storage_clients::object_key> keys_to_delete;
         for (const auto& key : co_await list_manifests()) {
@@ -499,7 +528,7 @@ public:
             co_return;
         }
         result = co_await _remote->delete_objects(
-          _bucket, std::move(keys_to_delete), rtc, [](size_t) {});
+          _bucket, std::move(keys_to_delete), rtc, [](size_t) {}, _gid);
     }
 
     ss::future<> close() override {
@@ -514,7 +543,14 @@ private:
         using namespace cloud_storage_clients;
         auto rtc = make_cloud_rtc(_as);
         auto list_result = co_await _remote->list_objects(
-          _bucket, rtc, manifest_prefix());
+          _bucket,
+          rtc,
+          manifest_prefix(),
+          /*delimiter=*/std::nullopt,
+          /*item_filter=*/std::nullopt,
+          /*max_keys=*/std::nullopt,
+          /*continuation_token=*/std::nullopt,
+          _gid);
         if (list_result.has_error()) {
             switch (list_result.error()) {
             case error_outcome::fail:
@@ -551,6 +587,7 @@ private:
     cloud_io::remote* _remote;
     cloud_storage_clients::bucket_name _bucket;
     cloud_storage_clients::object_key _prefix;
+    cloud_io::group_id _gid;
     ss::abort_source _as;
     ss::gate _gate;
 };
@@ -561,18 +598,20 @@ ss::future<std::unique_ptr<data_persistence>> open_cloud_cache_data_persistence(
   cloud_io::cache* cache,
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
-  cloud_storage_clients::object_key prefix) {
+  cloud_storage_clients::object_key prefix,
+  cloud_io::group_id gid) {
     co_return std::make_unique<cloud_cache_data_persistence>(
-      cache, remote, std::move(bucket), std::move(prefix));
+      cache, remote, std::move(bucket), std::move(prefix), gid);
 }
 
 ss::future<std::unique_ptr<metadata_persistence>>
 open_cloud_metadata_persistence(
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
-  cloud_storage_clients::object_key prefix) {
+  cloud_storage_clients::object_key prefix,
+  cloud_io::group_id gid) {
     co_return std::make_unique<cloud_metadata_persistence>(
-      remote, std::move(bucket), std::move(prefix));
+      remote, std::move(bucket), std::move(prefix), gid);
 }
 
 } // namespace lsm::io

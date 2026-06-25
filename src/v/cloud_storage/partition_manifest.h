@@ -21,7 +21,6 @@
 #include "model/record.h"
 #include "model/timestamp.h"
 #include "serde/rw/envelope.h"
-#include "utils/tracking_allocator.h"
 
 #include <seastar/core/iostream.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -123,18 +122,13 @@ public:
     /// Create empty manifest that supposed to be updated later
     partition_manifest();
 
-    /// Create manifest for specific ntp with memory tracked on a child tracker
-    /// of `partition_mem_tracker`.
-    explicit partition_manifest(
-      model::ntp ntp,
-      model::initial_revision_id rev,
-      ss::shared_ptr<util::mem_tracker> partition_mem_tracker = nullptr);
+    /// Create manifest for specific ntp.
+    explicit partition_manifest(model::ntp ntp, model::initial_revision_id rev);
 
     template<class segment_t>
     partition_manifest(
       model::ntp ntp,
       model::initial_revision_id rev,
-      ss::shared_ptr<util::mem_tracker> manifest_mem_tracker,
       model::offset so,
       model::offset lo,
       model::offset lco,
@@ -154,7 +148,6 @@ public:
       model::offset last_applied_offset)
       : _ntp(std::move(ntp))
       , _rev(rev)
-      , _mem_tracker(std::move(manifest_mem_tracker))
       , _segments()
       , _last_offset(lo)
       , _start_offset(so)
@@ -496,8 +489,6 @@ public:
     /// after the call.
     void delete_replaced_segments();
 
-    ss::shared_ptr<util::mem_tracker> mem_tracker() { return _mem_tracker; }
-
     /// Transition manifest into such state which makes any uploads or reuploads
     /// impossible.
     void disable_permanently();
@@ -536,7 +527,6 @@ public:
     }
 
     auto serde_fields() {
-        // this list excludes _mem_tracker, which is not serialized
         return std::tie(
           _ntp,
           _rev,
@@ -559,7 +549,6 @@ public:
           _applied_offset);
     }
     auto serde_fields() const {
-        // this list excludes _mem_tracker, which is not serialized
         return std::tie(
           _ntp,
           _rev,
@@ -582,7 +571,7 @@ public:
           _applied_offset);
     }
 
-    /// Compare two manifests for equality. Don't compare the mem_tracker.
+    /// Compare two manifests for equality.
     bool operator==(const partition_manifest& other) const {
         return serde_fields() == other.serde_fields();
     }
@@ -656,10 +645,6 @@ private:
 
     model::ntp _ntp;
     model::initial_revision_id _rev;
-
-    // Tracker of memory for this manifest.
-    // Currently only tracks memory allocated for `_segments`.
-    ss::shared_ptr<util::mem_tracker> _mem_tracker;
 
     segment_map _segments;
     /// Collection of replaced but not yet removed segments

@@ -215,16 +215,17 @@ ss::future<> segment_appender::do_append(const char* buf, size_t n) {
             }
         }
 
-        size_t written = 0;
         if (likely(_head)) {
-            const size_t sz = _head->append(buf + written, n - written);
-            written += sz;
-            _bytes_flush_pending += sz;
+            const size_t written = _head->append(buf, n);
+            _bytes_flush_pending += written;
             if (_head->is_full()) {
                 dispatch_background_head_write();
             }
+            buf += written;
+            n -= written;
         }
-        if (written == n) {
+
+        if (n == 0) {
             co_return;
         }
 
@@ -237,9 +238,6 @@ ss::future<> segment_appender::do_append(const char* buf, size_t n) {
         auto chunk = co_await internal::chunks().get();
         vassert(!_head, "cannot overwrite existing chunk");
         _head = std::move(chunk);
-
-        buf += written;
-        n -= written;
     }
 }
 

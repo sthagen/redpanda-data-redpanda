@@ -382,7 +382,6 @@ private:
 
     ssx::mutex _lock{"archival_metadata_stm"};
 
-    ss::shared_ptr<util::mem_tracker> _mem_tracker;
     ss::shared_ptr<cloud_storage::partition_manifest> _manifest;
 
     // The offset of the last mark_clean_cmd applied: if the manifest is

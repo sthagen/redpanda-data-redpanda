@@ -111,10 +111,10 @@ default_translator::translate_data(
 
 record_type
 key_value_translator::build_type(std::optional<shared_resolved_type_t>) {
-    auto ret_type = schemaless_struct_type();
+    auto ret_type = rp_base_struct_type(_headers_cfg);
     ret_type.fields.emplace_back(
       iceberg::nested_field::create(
-        schemaless_next_field_id,
+        rp_base_next_field_id,
         "value",
         iceberg::field_required::no,
         iceberg::binary_type{}));
@@ -146,7 +146,7 @@ key_value_translator::translate_data(
     auto ret_data = iceberg::struct_value{};
 
     auto system_data = build_rp_struct(
-      pid, o, std::move(key), ts, ts_t, headers);
+      pid, o, std::move(key), ts, ts_t, headers, _headers_cfg);
     ret_data.fields.emplace_back(std::move(system_data));
     ret_data.fields.emplace_back(
       parsable_val ? std::make_optional<iceberg::value>(
@@ -157,7 +157,7 @@ key_value_translator::translate_data(
 
 record_type structured_data_translator::build_type(
   std::optional<shared_resolved_type_t> val_type) {
-    auto ret_type = schemaless_struct_type();
+    auto ret_type = rp_base_struct_type(_headers_cfg);
     std::optional<schema_identifier> val_id;
     if (val_type.has_value()) {
         val_id = val_type.value()->id;
@@ -195,7 +195,7 @@ record_type structured_data_translator::build_type(
                 // Use the next id of the system defaults.
                 system_fields.fields.emplace_back(
                   iceberg::nested_field::create(
-                    schemaless_next_field_id,
+                    rp_base_next_field_id,
                     "data",
                     field->required,
                     std::move(field->type)));
@@ -236,7 +236,7 @@ structured_data_translator::translate_data(
     }
     auto ret_data = iceberg::struct_value{};
     auto system_data = build_rp_struct(
-      pid, o, std::move(key), ts, ts_t, headers);
+      pid, o, std::move(key), ts, ts_t, headers, _headers_cfg);
     // Fill in the internal value field.
     ret_data.fields.emplace_back(std::move(system_data));
 

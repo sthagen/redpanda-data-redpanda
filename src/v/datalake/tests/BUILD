@@ -432,6 +432,26 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_gtest(
+    name = "table_definition_test",
+    timeout = "short",
+    srcs = [
+        "table_definition_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/container:chunked_vector",
+        "//src/v/datalake:table_definition",
+        "//src/v/iceberg:datatypes",
+        "//src/v/iceberg:values",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "credential_manager_test",
     timeout = "short",
     srcs = [

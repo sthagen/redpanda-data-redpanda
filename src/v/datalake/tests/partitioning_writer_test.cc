@@ -32,7 +32,7 @@ val_with_timestamp(const field_type& type, model::timestamp timestamp_ms) {
     return std::move(*std::get<std::unique_ptr<struct_value>>(val));
 }
 iceberg::struct_type default_type_with_columns(size_t extra_columns) {
-    auto type = schemaless_struct_type();
+    auto type = rp_base_struct_type({});
     for (size_t i = 0; i < extra_columns; ++i) {
         type.fields.emplace_back(
           nested_field::create(

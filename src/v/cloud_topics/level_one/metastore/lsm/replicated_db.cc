@@ -115,7 +115,7 @@ replicated_database::open(
 
     auto data_persist_fut = co_await ss::coroutine::as_future(
       lsm::io::open_cloud_cache_data_persistence(
-        cache, remote, bucket, domain_prefix));
+        cache, remote, bucket, domain_prefix, cloud_io::group_id::metastore));
     if (data_persist_fut.failed()) {
         co_return std::unexpected(wrap_failed_future(
           data_persist_fut.get_exception(), "Failed to open data persistence"));

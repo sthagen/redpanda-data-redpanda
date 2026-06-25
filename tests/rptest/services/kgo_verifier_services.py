@@ -1222,7 +1222,7 @@ class ProduceStatus:
         bad_offsets=0,
         max_offsets_produced=dict(),
         restarts=0,
-        latency=None,
+        latency: dict[str, float] | None = None,
         active=False,
         failed_transactions=0,
         aborted_transaction_msgs=0,
@@ -1236,7 +1236,7 @@ class ProduceStatus:
         self.max_offsets_produced = max_offsets_produced
         self.restarts = restarts
         if latency is None:
-            latency = {"p50": 0, "p90": 0, "p99": 0}
+            latency = {"p50": 0.0, "p90": 0.0, "p99": 0.0}
         self.latency = latency
         self.active = active
         self.failed_transactions = failed_transactions

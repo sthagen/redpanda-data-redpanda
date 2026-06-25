@@ -65,7 +65,8 @@ public:
        const reset_input_stream&,
        lazy_abort_source&,
        const std::string_view,
-       std::optional<size_t>),
+       std::optional<size_t>,
+       cloud_io::group_id),
       (override));
 
     MOCK_METHOD(

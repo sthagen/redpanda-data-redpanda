@@ -9,39 +9,58 @@
  */
 #include "datalake/table_definition.h"
 
+#include "strings/utf8.h"
+
 namespace datalake {
 
-iceberg::struct_type schemaless_struct_type() {
-    return schemaless_desc::build();
-}
-
-iceberg::schema default_schema() {
-    return iceberg::schema{
-      .schema_struct = schemaless_struct_type(),
-      .schema_id = iceberg::schema::default_id,
-      .identifier_field_ids = {},
-    };
+iceberg::struct_type
+rp_base_struct_type(model::iceberg_mode::headers_config headers_cfg) {
+    auto st = rp_base_desc::build();
+    using hsm = model::iceberg_mode::header_schema_mode;
+    switch (headers_cfg.value_type) {
+    case hsm::binary:
+        break;
+    case hsm::string: {
+        auto& list = std::get<iceberg::list_type>(
+          type_field<rp_desc, "headers">(rp_struct_type(st)).type);
+        type_field<header_kv_desc, "value">(
+          std::get<iceberg::struct_type>(list.element_field->type))
+          .type = iceberg::string_type{};
+        break;
+    }
+    }
+    return st;
 }
 
 namespace {
 
-std::optional<iceberg::value>
-build_headers_value(const chunked_vector<model::record_header>& headers) {
+std::optional<iceberg::value> build_headers_value(
+  const chunked_vector<model::record_header>& headers,
+  model::iceberg_mode::headers_config cfg) {
     if (headers.empty()) {
         return std::nullopt;
     }
+    using hsm = model::iceberg_mode::header_schema_mode;
     auto hdr_list = std::make_unique<iceberg::list_value>();
     for (const auto& hdr : headers) {
-        auto kv = header_kv_desc::build_value(
-          val<"key">(
-            hdr.key_size() >= 0 ? std::make_optional<iceberg::value>(
-                                    iceberg::string_value(hdr.key().copy()))
-                                : std::nullopt),
-          val<"value">(
-            hdr.value_size() >= 0 ? std::make_optional<iceberg::value>(
-                                      iceberg::binary_value(hdr.value().copy()))
-                                  : std::nullopt));
-        hdr_list->elements.emplace_back(std::move(kv));
+        auto key_val = hdr.key_size() >= 0
+                         ? std::make_optional<iceberg::value>(
+                             iceberg::string_value{hdr.key().copy()})
+                         : std::nullopt;
+        std::optional<iceberg::value> hdr_val;
+        if (cfg.value_type == hsm::string) {
+            if (hdr.value_size() >= 0) {
+                hdr_val = iceberg::string_value{
+                  utf8_sanitize(hdr.value().copy())};
+            }
+        } else {
+            if (hdr.value_size() >= 0) {
+                hdr_val = iceberg::binary_value{hdr.value().copy()};
+            }
+        }
+        hdr_list->elements.emplace_back(
+          header_kv_desc::build_value(
+            val<"key">(std::move(key_val)), val<"value">(std::move(hdr_val))));
     }
     return hdr_list;
 }
@@ -54,16 +73,18 @@ std::unique_ptr<iceberg::struct_value> build_rp_struct(
   std::optional<iobuf> key,
   model::timestamp ts,
   model::timestamp_type ts_t,
-  const chunked_vector<model::record_header>& headers) {
+  const chunked_vector<model::record_header>& headers,
+  model::iceberg_mode::headers_config cfg) {
+    auto headers_val = build_headers_value(headers, cfg);
+    auto key_val = key ? std::make_optional<iceberg::value>(
+                           iceberg::binary_value{std::move(*key)})
+                       : std::nullopt;
     return rp_desc::build_value(
       val<"partition">(iceberg::int_value(pid)),
       val<"offset">(iceberg::long_value(o)),
       val<"timestamp">(iceberg::timestamptz_value(ts.value() * 1000)),
-      val<"headers">(build_headers_value(headers)),
-      val<"key">(
-        key ? std::make_optional<iceberg::value>(
-                iceberg::binary_value(std::move(*key)))
-            : std::nullopt),
+      val<"headers">(std::move(headers_val)),
+      val<"key">(std::move(key_val)),
       val<"timestamp_type">(iceberg::int_value{static_cast<int32_t>(ts_t)}));
 }
 

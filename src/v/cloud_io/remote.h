@@ -99,7 +99,8 @@ public:
     ///
     /// \param path is a full S3 object path
     /// \param bucket is a name of the S3 bucket
-    ss::future<upload_result> delete_object(transfer_details);
+    ss::future<upload_result>
+    delete_object(transfer_details, group_id gid = group_id::default_group);
 
     /// \brief Delete multiple objects from S3
     ///
@@ -122,7 +123,8 @@ public:
       const cloud_storage_clients::bucket_name& bucket,
       R keys,
       retry_chain_node& parent,
-      std::function<void(size_t)> req_cb);
+      std::function<void(size_t)> req_cb,
+      group_id gid = group_id::default_group);
 
     /// \brief Lists objects in a bucket
     ///
@@ -157,7 +159,8 @@ public:
       std::optional<cloud_storage_clients::client::item_filter> item_filter
       = std::nullopt,
       std::optional<size_t> max_keys = std::nullopt,
-      std::optional<ss::sstring> continuation_token = std::nullopt);
+      std::optional<ss::sstring> continuation_token = std::nullopt,
+      group_id gid = group_id::default_group);
 
     /// \brief Upload small objects to bucket. Suitable for uploading simple
     /// strings, does not check for leadership before upload like the segment
@@ -196,7 +199,8 @@ public:
       const reset_input_stream& reset_str,
       lazy_abort_source& lazy_abort_source,
       const std::string_view stream_label,
-      std::optional<size_t> max_retries) override;
+      std::optional<size_t> max_retries,
+      group_id gid = group_id::default_group) override;
 
     ss::future<download_result> download_stream(
       transfer_details transfer_details,
@@ -217,7 +221,8 @@ public:
       const cloud_storage_clients::bucket_name& bucket,
       R keys,
       retry_chain_node& parent,
-      std::function<void(size_t)> req_cb);
+      std::function<void(size_t)> req_cb,
+      group_id gid);
 
     /// Delete a single batch of keys. The batch size must not exceed the
     /// backend limits.
@@ -227,7 +232,8 @@ public:
       const cloud_storage_clients::bucket_name& bucket,
       chunked_vector<cloud_storage_clients::object_key> keys,
       retry_chain_node& parent,
-      std::function<void(size_t)> req_cb);
+      std::function<void(size_t)> req_cb,
+      group_id gid);
 
     const io_resources& resources() const { return *_resources; }
 

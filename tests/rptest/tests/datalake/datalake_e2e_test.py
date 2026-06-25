@@ -724,7 +724,7 @@ class DatalakeE2ETests(RedpandaTest):
                 },
                 default_value_schema=avro.loads(schema_str),
             )
-            producer.produce(topic=topic, value=record)
+            producer.produce(topic=topic, value=record, headers=[("h", b"hello")])
             producer.flush()
             dl.wait_for_translation(topic, msg_count=1)
 
@@ -739,6 +739,14 @@ class DatalakeE2ETests(RedpandaTest):
                 assert got == c.pyiceberg, (
                     f"pyiceberg {c.name}: expected={c.pyiceberg!r} got={got!r}"
                 )
+
+            # Verify headers are present and stored as binary (default mode).
+            hdrs = pydict["redpanda"][0]["headers"]
+            assert len(hdrs) == 1, f"expected 1 header, got {hdrs!r}"
+            assert hdrs[0]["key"] == "h", f"unexpected header key: {hdrs[0]['key']!r}"
+            assert hdrs[0]["value"] == b"hello", (
+                f"unexpected header value: {hdrs[0]['value']!r}"
+            )
 
             # Engine readback — one SQL projection, each column is a bool
             # check. All should be True.
@@ -758,6 +766,25 @@ class DatalakeE2ETests(RedpandaTest):
                 assert got is True, (
                     f"engine {c.name} check failed ({sql_check(c)}): got={got!r}"
                 )
+
+            # Verify header key and binary value via SQL.
+            hdr_key_sql = _engine_sql(
+                default="element_at(redpanda.headers, 1).key = 'h'",
+                duckdb_py="redpanda.headers[1].key = 'h'",
+            )(query_engine)
+            hdr_val_sql = _engine_sql(
+                default="element_at(redpanda.headers, 1).value = X'68656c6c6f'",
+                duckdb_py="redpanda.headers[1].value = '\\x68\\x65\\x6c\\x6c\\x6f'::BLOB",
+            )(query_engine)
+            hdr_rows = engine.run_query_fetch_all(
+                f"SELECT ({hdr_key_sql}) AS hdr_key_ok,"
+                f" ({hdr_val_sql}) AS hdr_val_ok FROM {table}"
+            )
+            assert len(hdr_rows) == 1
+            assert hdr_rows[0][0] is True, f"header key check failed: {hdr_rows[0]}"
+            assert hdr_rows[0][1] is True, (
+                f"header binary value check failed: {hdr_rows[0]}"
+            )
 
     @cluster(num_nodes=3)
     @matrix(
@@ -779,6 +806,75 @@ class DatalakeE2ETests(RedpandaTest):
     )
     def test_avro_all_iceberg_types_duckdb(self, cloud_storage_type, catalog_type):
         self._run_avro_all_iceberg_types(QueryEngineType.DUCKDB_PY, catalog_type)
+
+    @cluster(num_nodes=3)
+    @matrix(
+        cloud_storage_type=supported_storage_types(),
+        query_engine=[QueryEngineType.SPARK],
+        catalog_type=[CatalogType.REST_JDBC],
+    )
+    def test_header_string_mode(self, cloud_storage_type, query_engine, catalog_type):
+        """Verify that headers:value_type=string stores header values as UTF-8
+        strings, sanitizing invalid byte sequences to U+FFFD."""
+        topic = "header_string_mode"
+        table = f"redpanda.{topic}"
+        with DatalakeServices(
+            self.test_ctx,
+            redpanda=self.redpanda,
+            include_query_engines=[query_engine],
+            catalog_type=catalog_type,
+        ) as dl:
+            dl.create_iceberg_enabled_topic(
+                topic, iceberg_mode="headers:value_type=string"
+            )
+            producer = Producer({"bootstrap.servers": self.redpanda.brokers()})
+            # One header with valid UTF-8, one with a leading invalid byte so
+            # we verify sanitization fires end-to-end.
+            producer.produce(
+                topic,
+                value=b"v",
+                headers=[("ascii", b"hello"), ("bad_utf8", b"\x80world")],
+            )
+            producer.flush()
+            dl.wait_for_translation(topic, msg_count=1)
+
+            # pyiceberg: verify values and types (comes back as str, not bytes).
+            tbl = dl.catalog_client().load_table(("redpanda", topic))
+            pydict = tbl.scan().to_arrow().to_pydict()
+            hdrs = pydict["redpanda"][0]["headers"]
+            assert len(hdrs) == 2, f"expected 2 headers, got {hdrs!r}"
+            by_key = {h["key"]: h["value"] for h in hdrs}
+            assert by_key["ascii"] == "hello", f"unexpected value: {by_key['ascii']!r}"
+            # Invalid leading byte sanitized to U+FFFD.
+            assert by_key["bad_utf8"] == "\ufffdworld", (
+                f"unexpected value: {by_key['bad_utf8']!r}"
+            )
+
+            # Verify table structure: header values should be string, not binary.
+            spark = dl.spark()
+            spark_expected_out = [
+                (
+                    "redpanda",
+                    "struct<partition:int,offset:bigint,timestamp:timestamp,headers:array<struct<key:string,value:string>>,key:binary,timestamp_type:int>",
+                    None,
+                ),
+                ("value", "binary", None),
+                ("", "", ""),
+                ("# Partitioning", "", ""),
+                ("Part 0", "hours(redpanda.timestamp)", ""),
+            ]
+            spark_describe_out = spark.run_query_fetch_all(f"describe {table}")
+            assert spark_describe_out == spark_expected_out, str(spark_describe_out)
+
+            # SQL engine: verify the header value column is queryable as a
+            # string literal.
+            engine = dl.query_engine(query_engine)
+            rows = engine.run_query_fetch_all(
+                f"SELECT (element_at(redpanda.headers, 1).value = 'hello') AS ok"
+                f" FROM {table}"
+            )
+            assert len(rows) == 1
+            assert rows[0][0] is True, f"SQL string header check failed: {rows[0]}"
 
     # Note: nothing unique about this test so run it with single catalog/query engine.
     @cluster(num_nodes=3)

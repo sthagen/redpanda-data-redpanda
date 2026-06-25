@@ -18,17 +18,23 @@
 namespace lsm::io {
 
 /// Open a data persistence backed by the cloud cache and cloud storage.
+/// `gid` tags every cloud operation this persistence issues for the
+/// cloud_io scheduler; defaults to default_group.
 ss::future<std::unique_ptr<data_persistence>> open_cloud_cache_data_persistence(
   cloud_io::cache* cache,
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
-  cloud_storage_clients::object_key prefix);
+  cloud_storage_clients::object_key prefix,
+  cloud_io::group_id gid = cloud_io::group_id::default_group);
 
-/// Open a metadata persistence backed by cloud storage.
+/// Open a metadata persistence backed by cloud storage. `gid` tags every
+/// cloud operation this persistence issues for the cloud_io scheduler;
+/// defaults to default_group.
 ss::future<std::unique_ptr<metadata_persistence>>
 open_cloud_metadata_persistence(
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
-  cloud_storage_clients::object_key prefix);
+  cloud_storage_clients::object_key prefix,
+  cloud_io::group_id gid = cloud_io::group_id::default_group);
 
 } // namespace lsm::io

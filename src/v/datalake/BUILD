@@ -275,6 +275,7 @@ redpanda_cc_library(
         "//src/v/iceberg:schema",
         "//src/v/iceberg:values",
         "//src/v/model",
+        "//src/v/strings:utf8",
         "@seastar",
     ],
 )

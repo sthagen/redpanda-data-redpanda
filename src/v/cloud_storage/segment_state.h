@@ -11,6 +11,7 @@
 #pragma once
 
 #include "cloud_storage/partition_manifest.h"
+#include "container/intrusive_list_helpers.h"
 #include "model/fundamental.h"
 #include "seastar/core/weak_ptr.hh"
 #include "ssx/semaphore.h"

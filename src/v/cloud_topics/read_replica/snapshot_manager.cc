@@ -135,9 +135,9 @@ ss::future<> database_refresher::open_or_refresh() {
     cloud_storage_clients::object_key domain_prefix{
       domain_cloud_prefix(domain_uuid_)};
     auto data_persist = co_await lsm::io::open_cloud_cache_data_persistence(
-      cache_, remote_, bucket_, domain_prefix);
+      cache_, remote_, bucket_, domain_prefix, cloud_io::group_id::metastore);
     auto meta_persist = co_await lsm::io::open_cloud_metadata_persistence(
-      remote_, bucket_, domain_prefix);
+      remote_, bucket_, domain_prefix, cloud_io::group_id::metastore);
     lsm::io::persistence io{
       .data = std::move(data_persist),
       .metadata = std::move(meta_persist),

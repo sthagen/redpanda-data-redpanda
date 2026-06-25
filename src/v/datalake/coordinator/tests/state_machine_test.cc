@@ -167,6 +167,7 @@ struct coordinator_stm_fixture : stm_raft_fixture<stm> {
     ss::future<> register_in_topic_table() {
         auto topic_cfg = cluster::topic_configuration(
           tp_ns.ns, tp_ns.tp, /*partition_count=*/1, /*replication_factor=*/1);
+        topic_cfg.properties.iceberg_mode = model::iceberg_mode::key_value;
         auto tt_res = co_await topic_table.apply(
           cluster::create_topic_cmd{tp_ns, {topic_cfg, {}}},
           model::offset{rev()});

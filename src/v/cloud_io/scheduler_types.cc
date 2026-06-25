@@ -32,17 +32,17 @@ try_parse_target_spec(std::string_view spec) noexcept {
     if (ec != std::errc{} || end != value_str.data() + value_str.size()) {
         return std::nullopt;
     }
-    const auto g = string_switch<std::optional<group_id>>(name)
-                     .match(
-                       to_string_view(group_id::producer_upload),
-                       group_id::producer_upload)
-                     .match(
-                       to_string_view(group_id::consumer_fetch),
-                       group_id::consumer_fetch)
-                     .match(
-                       to_string_view(group_id::default_group),
-                       group_id::default_group)
-                     .default_match(std::nullopt);
+    const auto g
+      = string_switch<std::optional<group_id>>(name)
+          .match(
+            to_string_view(group_id::producer_upload),
+            group_id::producer_upload)
+          .match(
+            to_string_view(group_id::consumer_fetch), group_id::consumer_fetch)
+          .match(to_string_view(group_id::metastore), group_id::metastore)
+          .match(
+            to_string_view(group_id::default_group), group_id::default_group)
+          .default_match(std::nullopt);
     if (!g.has_value()) {
         return std::nullopt;
     }

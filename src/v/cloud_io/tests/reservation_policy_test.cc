@@ -393,9 +393,9 @@ TEST_CORO(
 // lane) sits under its reservation target, queued, and never gets dispatched.
 TEST_CORO(
   ReservationPolicyTest, ReservedSaturatedGroupDoesNotStarveUndertargetPeer) {
-    // capacity=6; cf=2, default=2, pu=0 -> _shared=2.
+    // capacity=6; cf=2, default=2, pu=mc=0 -> _shared=2.
     cloud_io::reservation_policy<ss::manual_clock> policy{6};
-    configure(policy, /*total_slots=*/6, /*target_reserved=*/{0, 2, 2});
+    configure(policy, /*total_slots=*/6, /*target_reserved=*/{0, 2, 0, 2});
     ss::abort_source as;
 
     // cf grabs and holds both reserved slots; staying active protects its

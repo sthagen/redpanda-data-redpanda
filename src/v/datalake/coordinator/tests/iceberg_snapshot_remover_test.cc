@@ -67,7 +67,7 @@ public:
     ss::future<> create_table(const iceberg::table_identifier& table_id) {
         auto res = co_await catalog.load_or_create_table(
           table_id,
-          datalake::schemaless_struct_type(),
+          datalake::rp_base_struct_type({}),
           datalake::hour_partition_spec());
         ASSERT_FALSE_CORO(res.has_error());
     }

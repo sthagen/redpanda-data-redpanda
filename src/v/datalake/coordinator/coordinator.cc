@@ -279,7 +279,8 @@ struct coordinator::table_schema_provider {
     get_table_id(const model::topic&) const = 0;
 
     virtual ss::future<checked<iceberg::struct_type, coordinator::errc>>
-      get_record_type(record_schema_components) const = 0;
+    get_record_type(
+      const cluster::topic_metadata&, record_schema_components) const = 0;
 
     virtual ss::sstring
     get_partition_spec(const cluster::topic_metadata&) const = 0;
@@ -375,7 +376,7 @@ coordinator::do_ensure_table_exists(
 
     auto table_id = schema_provider.get_table_id(topic);
     auto record_type = co_await schema_provider.get_record_type(
-      std::move(comps));
+      topic_md->get(), std::move(comps));
     if (!record_type.has_value()) {
         vlog(
           datalake_log.warn,
@@ -418,7 +419,9 @@ struct coordinator::main_table_schema_provider
     }
 
     ss::future<checked<iceberg::struct_type, coordinator::errc>>
-    get_record_type(record_schema_components comps) const final {
+    get_record_type(
+      const cluster::topic_metadata& topic_md,
+      record_schema_components comps) const final {
         std::optional<shared_resolved_type_t> val_type;
         if (comps.val_identifier) {
             auto type_res = co_await parent.type_resolver_.resolve_identifier(
@@ -429,7 +432,12 @@ struct coordinator::main_table_schema_provider
             val_type = std::move(type_res.value());
         }
 
-        auto record_type = default_translator{}.build_type(std::move(val_type));
+        const auto& mode = topic_md.get_configuration().properties.iceberg_mode;
+        if (mode.is_disabled()) {
+            co_return errc::failed;
+        }
+        auto record_type = default_translator{mode.headers()}.build_type(
+          std::move(val_type));
         co_return std::move(record_type.type);
     }
 
@@ -492,8 +500,16 @@ struct coordinator::dlq_table_schema_provider
     }
 
     ss::future<checked<iceberg::struct_type, coordinator::errc>>
-    get_record_type(record_schema_components) const final {
-        co_return key_value_translator{}.build_type(std::nullopt).type;
+    get_record_type(
+      const cluster::topic_metadata& topic_md,
+      record_schema_components) const final {
+        const auto& mode = topic_md.get_configuration().properties.iceberg_mode;
+        if (mode.is_disabled()) {
+            co_return errc::failed;
+        }
+        co_return key_value_translator{mode.headers()}
+          .build_type(std::nullopt)
+          .type;
     }
 
     ss::sstring get_partition_spec(const cluster::topic_metadata&) const final {

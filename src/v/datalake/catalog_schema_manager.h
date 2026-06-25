@@ -111,7 +111,7 @@ public:
     // Ensure the table schema is compatible with the writer struct. If the
     // table does not exist it is created, or, if the table exists and its
     // current schema doesn't include all of the fields (e.g. we are going from
-    // the schemaless schema to a schema containing user fields), the table's
+    // a key-value schema to a schema containing user fields), the table's
     // schema is updated to be compatible with the writer_struct.
     ss::future<checked<std::nullopt_t, schema_manager::errc>>
     ensure_table_schema(

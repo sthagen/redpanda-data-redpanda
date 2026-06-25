@@ -115,19 +115,13 @@ segment_meta partition_manifest::lw_segment_meta::convert(
 partition_manifest::partition_manifest()
   : _ntp()
   , _rev()
-  , _mem_tracker(ss::make_shared<util::mem_tracker>(""))
   , _segments()
   , _last_offset(0) {}
 
 partition_manifest::partition_manifest(
-  model::ntp ntp,
-  model::initial_revision_id rev,
-  ss::shared_ptr<util::mem_tracker> partition_mem_tracker)
+  model::ntp ntp, model::initial_revision_id rev)
   : _ntp(std::move(ntp))
   , _rev(rev)
-  , _mem_tracker(
-      partition_mem_tracker ? partition_mem_tracker->create_child("manifest")
-                            : ss::make_shared<util::mem_tracker>(""))
   , _segments()
   , _last_offset(0) {}
 
@@ -629,7 +623,7 @@ bool partition_manifest::advance_start_kafka_offset(
 }
 
 void partition_manifest::unsafe_reset() {
-    *this = partition_manifest{_ntp, _rev, _mem_tracker};
+    *this = partition_manifest{_ntp, _rev};
 }
 
 bool partition_manifest::advance_highest_producer_id(model::producer_id pid) {
@@ -1052,7 +1046,6 @@ partition_manifest partition_manifest::clone() const {
     partition_manifest tmp(
       _ntp,
       _rev,
-      _mem_tracker,
       _start_offset,
       _last_offset,
       _last_uploaded_compacted_offset,
@@ -1280,9 +1273,6 @@ struct partition_manifest_handler
   : public rapidjson::
       BaseReaderHandler<rapidjson::UTF8<>, partition_manifest_handler> {
     using key_string = ss::basic_sstring<char, uint32_t, 31>;
-
-    explicit partition_manifest_handler(ss::shared_ptr<util::mem_tracker> mt)
-      : _manifest_mem_tracker(std::move(mt)) {}
 
     bool StartObject() {
         switch (_state) {
@@ -1799,8 +1789,6 @@ struct partition_manifest_handler
     std::optional<segment_name_format> _meta_sname_format;
     std::optional<size_t> _metadata_size_hint;
 
-    ss::shared_ptr<util::mem_tracker> _manifest_mem_tracker;
-
     void check_that_required_meta_fields_are_present() {
         if (!_size_bytes) {
             throw std::runtime_error(fmt_with_ctx(
@@ -1874,7 +1862,7 @@ void partition_manifest::update_with_json(iobuf buf) {
     std::istream stream(&ibuf);
     json::IStreamWrapper wrapper(stream);
     rapidjson::Reader reader;
-    partition_manifest_handler handler(_mem_tracker);
+    partition_manifest_handler handler;
 
     if (reader.Parse(wrapper, handler)) {
         partition_manifest::do_update(std::move(handler));
