@@ -17,4 +17,16 @@ namespace kafka {
 template<typename... Ts>
 struct type_list {};
 
+/// Concatenate two type_lists into a single type_list.
+template<typename A, typename B>
+struct type_list_cat;
+
+template<typename... Ts, typename... Us>
+struct type_list_cat<type_list<Ts...>, type_list<Us...>> {
+    using type = type_list<Ts..., Us...>;
+};
+
+template<typename A, typename B>
+using type_list_cat_t = typename type_list_cat<A, B>::type;
+
 } // namespace kafka

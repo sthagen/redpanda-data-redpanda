@@ -71,6 +71,7 @@ ss::future<> app::construct(
       config::node().l1_staging_path().string());
 
     co_await construct_service(_l1_reader_probe);
+    co_await construct_service(_l1_file_io_probe);
 
     co_await construct_service(
       _l1_reader_cache,
@@ -88,7 +89,8 @@ ss::future<> app::construct(
       config::node().l1_staging_path(),
       ss::sharded_parameter([&remote] { return &remote->local(); }),
       bucket,
-      ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }));
+      ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }),
+      ss::sharded_parameter([this] { return &_l1_file_io_probe.local(); }));
 
     co_await construct_service(
       domain_supervisor,
@@ -119,7 +121,8 @@ ss::future<> app::construct(
       rr_snapshot_manager_,
       config::node().l1_staging_path(),
       ss::sharded_parameter([&remote] { return &remote->local(); }),
-      ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }));
+      ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }),
+      ss::sharded_parameter([this] { return &_l1_file_io_probe.local(); }));
 
     co_await construct_service(
       rr_metadata_manager_,
@@ -142,6 +145,7 @@ ss::future<> app::construct(
       ss::sharded_parameter(
         [&metadata_cache] { return &metadata_cache->local(); }),
       ss::sharded_parameter([this] { return &_l1_reader_probe.local(); }),
+      ss::sharded_parameter([this] { return &_l1_file_io_probe.local(); }),
       ss::sharded_parameter([this] { return &_l1_reader_cache.local(); }),
       ss::sharded_parameter([this] { return &rr_metadata_manager_.local(); }),
       ss::sharded_parameter([this] { return &rr_snapshot_manager_.local(); }));
@@ -185,8 +189,12 @@ ss::future<> app::construct(
 
     co_await construct_service(
       l0_notifier,
+      self,
+      leaders_table,
+      metadata_cache,
       &controller->get_shard_table(),
-      &controller->get_partition_manager());
+      &controller->get_partition_manager(),
+      connection_cache);
 
     co_await construct_service(
       topic_manifest_upload_mgr, std::ref(*remote), bucket);
@@ -202,7 +210,8 @@ ss::future<> app::construct(
         .partition_manager = &controller->get_partition_manager()},
       &l1_io,
       &replicated_metastore,
-      &_l1_reader_probe);
+      &_l1_reader_probe,
+      &l0_notifier);
 
     // Must be last to register so it will be first to be stopped in
     // `app::stop`. This is to ensure that stopped services don't receive
@@ -427,6 +436,10 @@ ss::sharded<level_zero_gc>* app::get_level_zero_gc() { return &l0_gc; }
 
 cluster_services& app::get_local_cluster_services() {
     return std::ref(cluster_services.local());
+}
+
+ss::sharded<level_zero_notifier>* app::get_sharded_l0_notifier() {
+    return &l0_notifier;
 }
 
 } // namespace cloud_topics

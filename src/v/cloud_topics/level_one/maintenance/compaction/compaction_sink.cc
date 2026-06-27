@@ -66,6 +66,20 @@ get_new_cleaned_ranges(
     return new_cleaned_ranges;
 }
 
+// Computes the new min_allowed_local_threshold floor from the ranges compaction
+// just cleaned: the exclusive lower bound for local reads, i.e. one past the
+// highest cleaned offset. Returns nullopt when nothing was cleaned.
+// `new_cleaned_ranges` is ordered by descending offset (compaction indexes the
+// head of the log first), so the front range carries the max last_offset.
+std::optional<kafka::offset> get_max_cleaned_offset(
+  const chunked_vector<metastore::compaction_update::cleaned_range>&
+    new_cleaned_ranges) {
+    if (new_cleaned_ranges.empty()) {
+        return std::nullopt;
+    }
+    return kafka::next_offset(new_cleaned_ranges.front().last_offset);
+}
+
 } // namespace
 
 compaction_sink::compaction_sink(
@@ -80,7 +94,8 @@ compaction_sink::compaction_sink(
   config::binding<size_t> max_object_size,
   size_t upload_part_size,
   prefix_logger& ctxlog,
-  object_builder::options opts)
+  object_builder::options opts,
+  cloud_topics::level_zero_notifier* notifier)
   : l1_object_sink(
       std::move(tp),
       io,
@@ -93,7 +108,8 @@ compaction_sink::compaction_sink(
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
   , _expected_compaction_epoch(expected_compaction_epoch)
-  , _start_offset(start_offset) {}
+  , _start_offset(start_offset)
+  , _notifier(notifier) {}
 
 ss::future<bool>
 compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
@@ -213,6 +229,35 @@ ss::future<> compaction_sink::finalize(bool success) {
           _removable_tombstone_ranges, _processed_extents);
         auto new_cleaned_ranges = get_new_cleaned_ranges(
           _new_cleaned_ranges, _processed_extents, _start_offset);
+
+        // Advance the partition's min_allowed_local_threshold floor before
+        // committing the compaction. Compaction removes tombstones within the
+        // cleaned ranges, so local reads below the new floor could otherwise
+        // serve records that L1 has just deleted. If the floor cannot be
+        // advanced we skip the commit and retry the whole job later. _notifier
+        // is null only in tests, where the notification is a no-op.
+        if (
+          auto new_floor = get_max_cleaned_offset(new_cleaned_ranges);
+          new_floor.has_value() && _notifier != nullptr) {
+            vlog(
+              _ctxlog.debug,
+              "[{}] compaction advancing min_allowed_local_threshold to {}",
+              _tp,
+              *new_floor);
+            auto res = co_await _notifier->set_min_allowed_local_threshold(
+              _tp, *new_floor);
+            if (!res.has_value()) {
+                vlog(
+                  _ctxlog.warn,
+                  "[{}] skipping compaction commit: failed to advance "
+                  "min_allowed_local_threshold to {} ({})",
+                  _tp,
+                  *new_floor,
+                  res.error());
+                co_return;
+            }
+        }
+
         co_await compact_objects_with_update(
           std::move(new_cleaned_ranges), std::move(removed_tombstone_ranges));
     }

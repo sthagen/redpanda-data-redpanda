@@ -36,8 +36,7 @@ fill_flex(api_key_table<api_version>& versions, type_list<Ts...>) {
 
 consteval auto get_flexible_request_min_versions_list() {
     api_key_table<api_version> versions{invalid_api};
-    fill_flex(versions, request_types{});
-    fill_flex(versions, redpanda_request_types{});
+    fill_flex(versions, all_request_types{});
     return versions;
 }
 

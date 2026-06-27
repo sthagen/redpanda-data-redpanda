@@ -118,6 +118,11 @@ using request_types = make_request_types<
 // stay sized to the standard range; both lists feed api_key_indexed_array.
 using redpanda_request_types = make_request_types<describe_redpanda_roles_api>;
 
+// Union of the standard and reserved request types, for consumers that fill a
+// region-routed api_key_indexed_array or build a flat list over every API.
+using all_request_types
+  = type_list_cat_t<request_types, redpanda_request_types>;
+
 namespace detail {
 template<typename... Ts>
 consteval api_key::type max_key(type_list<Ts...>) {

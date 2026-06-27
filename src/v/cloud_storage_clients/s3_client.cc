@@ -20,7 +20,9 @@
 #include "bytes/streambuf.h"
 #include "cloud_storage_clients/logger.h"
 #include "cloud_storage_clients/multipart_upload.h"
+#include "cloud_storage_clients/s3_client_utils.h"
 #include "cloud_storage_clients/s3_error.h"
+#include "cloud_storage_clients/s3_multipart_state.h"
 #include "cloud_storage_clients/upstream.h"
 #include "cloud_storage_clients/util.h"
 #include "cloud_storage_clients/xml_sax_parser.h"
@@ -533,96 +535,7 @@ std::string request_creator::make_target(
 // client //
 
 namespace {
-inline cloud_storage_clients::s3_error_code
-status_to_error_code(boost::beast::http::status s) {
-    // According to this https://repost.aws/knowledge-center/http-5xx-errors-s3
-    // the 500 and 503 errors are used in case of throttling
-    if (
-      s == boost::beast::http::status::service_unavailable
-      || s == boost::beast::http::status::internal_server_error) {
-        return cloud_storage_clients::s3_error_code::slow_down;
-    }
-    return cloud_storage_clients::s3_error_code::_unknown;
-}
 
-rest_error_response parse_xml_rest_error_response(iobuf&& buf) {
-    try {
-        auto resp = xml::iobuf_to_ptree(std::move(buf), s3_log);
-        constexpr const char* empty = "";
-        auto code = xml::get_from_ptree<std::string>(resp, "Error.Code", empty);
-        auto msg = xml::get_from_ptree<std::string>(
-          resp, "Error.Message", empty);
-        auto rid = xml::get_from_ptree<std::string>(
-          resp, "Error.RequestId", empty);
-        auto res = xml::get_from_ptree<std::string>(
-          resp, "Error.Resource", empty);
-        rest_error_response err(code, msg, rid, res);
-        return err;
-    } catch (...) {
-        vlog(s3_log.error, "!!error parse error {}", std::current_exception());
-        throw;
-    }
-}
-
-rest_error_response parse_unknown_format_error_response(
-  boost::beast::http::status status, iobuf buf) {
-    static constexpr auto max_body_size = static_cast<size_t>(4_KiB);
-    static constexpr auto truncation_warning_segment = " [truncated~4096]";
-
-    auto maybe_truncation_warning = "";
-    auto read_size = buf.size_bytes();
-
-    // if the error message exceeds reasonable size (4k), truncate it and
-    // indicate a truncation to the recipient
-    if (read_size > max_body_size) {
-        maybe_truncation_warning = truncation_warning_segment;
-        read_size = max_body_size;
-    }
-
-    ss::sstring error_body
-      = utf8_sanitize(buf.share(0, read_size)).linearize_to_string();
-
-    return rest_error_response{
-      fmt::format("{}", status_to_error_code(status)),
-      fmt::format(
-        "http status: {}, error body{}: {}",
-        status,
-        maybe_truncation_warning,
-        error_body),
-      "",
-      ""};
-}
-
-template<typename ResultT = void>
-ss::future<ResultT> parse_rest_error_response(
-  response_content_type type, boost::beast::http::status result, iobuf buf) {
-    // AWS errors occasionally come with an empty body
-    // (See https://github.com/redpanda-data/redpanda/issues/6061)
-    // Without a proper code, we treat it as a hint to gracefully retry
-    // (synthesize the slow_down code).
-    if (!buf.empty()) {
-        if (type == response_content_type::xml) {
-            // Error responses from S3 _should_ have the Content-Type header set
-            // with `application/xml`- however, certain responses (such as `503
-            // Service Unavailable`) may not be of this form.
-            // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
-            return ss::make_exception_future<ResultT>(
-              parse_xml_rest_error_response(std::move(buf)));
-        } else {
-            // render out up to 4k of plaintext or json errors
-            return ss::make_exception_future<ResultT>(
-              parse_unknown_format_error_response(result, std::move(buf)));
-        }
-    }
-
-    return ss::make_exception_future<ResultT>(rest_error_response(
-      fmt::format("{}", status_to_error_code(result)),
-      fmt::format("Empty error response, status code {}", result),
-      "",
-      ""));
-}
-
-namespace {
 struct gcs_error_handler
   : public rapidjson::BaseReaderHandler<rapidjson::UTF8<>, gcs_error_handler> {
     enum class state : uint8_t { init, in_error, in_message, found };
@@ -667,7 +580,6 @@ ss::sstring parse_gcs_error_reason(iobuf body) {
         return "Unknown";
     }
 };
-} // namespace
 
 /// Parse GCS batch delete response using multipart parsing utilities
 /// GCS batch responses follow the multipart/mixed format similar to ABS
@@ -1759,6 +1671,7 @@ request_creator::make_abort_multipart_upload_request(
 
 ss::future<result<ss::shared_ptr<multipart_upload_state>, error_outcome>>
 s3_client::initiate_multipart_upload(
+  ss::shared_ptr<client_provider> provider,
   const plain_bucket_name& bucket,
   const object_key& key,
   size_t part_size,
@@ -1781,267 +1694,11 @@ s3_client::initiate_multipart_upload(
           multipart_limits::max_s3_part_size);
     }
 
-    // Create and return multipart state
-    // Caller will wrap this in a multipart_upload
+    // Create and return the backend state. It leases a client from `provider`
+    // for each request rather than holding one.
     auto state = ss::make_shared<s3_multipart_state>(
-      this, bucket, key, timeout);
+      std::move(provider), bucket, key, timeout);
     co_return state;
-}
-
-// s3_multipart_state implementations //
-
-s3_multipart_state::s3_multipart_state(
-  s3_client* client,
-  plain_bucket_name bucket,
-  object_key key,
-  ss::lowres_clock::duration timeout)
-  : _client(client)
-  , _bucket(std::move(bucket))
-  , _key(std::move(key))
-  , _timeout(timeout) {}
-
-ss::future<> s3_multipart_state::initialize_multipart() {
-    vlog(
-      s3_log.debug,
-      "Initializing S3 multipart upload for {}/{}",
-      _bucket,
-      _key);
-
-    auto header = _client->_requestor.make_create_multipart_upload_request(
-      _bucket, _key);
-    if (!header) {
-        throw std::system_error(header.error());
-    }
-
-    vlog(
-      s3_log.trace, "send CreateMultipartUpload request:\n{}", header.value());
-
-    auto response_stream = co_await _client->_client.request(
-      std::move(header.value()), _timeout);
-
-    co_await response_stream->prefetch_headers();
-    vassert(response_stream->is_header_done(), "Header is not received");
-
-    const auto status = response_stream->get_headers().result();
-    if (status != boost::beast::http::status::ok) {
-        const auto content_type = util::get_response_content_type(
-          response_stream->get_headers());
-        auto buf = co_await http::drain(std::move(response_stream));
-        co_return co_await parse_rest_error_response(
-          content_type, status, std::move(buf));
-    }
-
-    // Parse XML response to extract UploadId
-    auto response_buf = co_await http::drain(std::move(response_stream));
-
-    try {
-        auto response_tree = xml::iobuf_to_ptree(
-          std::move(response_buf), s3_log);
-        _upload_id = xml::get_from_ptree<std::string>(
-          response_tree, "InitiateMultipartUploadResult.UploadId");
-
-        _client->_probe->register_multipart_create();
-
-        vlog(
-          s3_log.debug,
-          "Initialized S3 multipart upload with upload_id: {}",
-          _upload_id);
-    } catch (const std::exception& ex) {
-        vlog(
-          s3_log.error,
-          "Failed to parse CreateMultipartUpload response: {}",
-          ex);
-        throw std::runtime_error(
-          fmt::format(
-            "Failed to parse UploadId from CreateMultipartUpload response: {}",
-            ex.what()));
-    }
-}
-
-ss::future<> s3_multipart_state::upload_part(size_t part_num, iobuf data) {
-    vassert(!_upload_id.empty(), "Multipart upload not initialized");
-
-    const size_t data_size = data.size_bytes();
-    vlog(
-      s3_log.debug,
-      "Uploading part {} (size: {}) for upload_id: {}",
-      part_num,
-      data_size,
-      _upload_id);
-
-    auto header = _client->_requestor.make_upload_part_request(
-      _bucket, _key, part_num, _upload_id, data_size);
-    if (!header) {
-        throw std::system_error(header.error());
-    }
-
-    vlog(s3_log.trace, "send UploadPart request:\n{}", header.value());
-
-    // Convert iobuf to input_stream
-    auto body = make_iobuf_input_stream(std::move(data));
-
-    auto response_stream = co_await _client->_client
-                             .request(std::move(header.value()), body, _timeout)
-                             .finally([&body] { return body.close(); });
-
-    co_await response_stream->prefetch_headers();
-    vassert(response_stream->is_header_done(), "Header is not received");
-
-    const auto status = response_stream->get_headers().result();
-    if (status != boost::beast::http::status::ok) {
-        const auto content_type = util::get_response_content_type(
-          response_stream->get_headers());
-        auto buf = co_await http::drain(std::move(response_stream));
-        co_return co_await parse_rest_error_response(
-          content_type, status, std::move(buf));
-    }
-
-    // Extract ETag from response headers
-    const auto& headers = response_stream->get_headers();
-    auto etag_it = headers.find(boost::beast::http::field::etag);
-    if (etag_it == headers.end()) {
-        co_await http::drain(std::move(response_stream));
-        throw std::runtime_error("UploadPart response missing ETag header");
-    }
-
-    ss::sstring etag(etag_it->value().data(), etag_it->value().size());
-    _etags.push_back(std::move(etag));
-
-    // Drain response
-    co_await http::drain(std::move(response_stream));
-
-    _client->_probe->register_multipart_upload();
-
-    vlog(
-      s3_log.debug, "Uploaded part {} with ETag: {}", part_num, _etags.back());
-}
-
-ss::future<> s3_multipart_state::complete_multipart_upload() {
-    vassert(!_upload_id.empty(), "Multipart upload not initialized");
-
-    vlog(
-      s3_log.debug,
-      "Completing S3 multipart upload {} with {} parts",
-      _upload_id,
-      _etags.size());
-
-    auto request = _client->_requestor.make_complete_multipart_upload_request(
-      _bucket, _key, _upload_id, _etags);
-    if (!request) {
-        throw std::system_error(request.error());
-    }
-
-    auto [header, body] = std::move(request.value());
-    vlog(s3_log.trace, "send CompleteMultipartUpload request:\n{}", header);
-
-    auto response_stream = co_await _client->_client
-                             .request(std::move(header), body, _timeout)
-                             .finally([&body] { return body.close(); });
-
-    co_await response_stream->prefetch_headers();
-    vassert(response_stream->is_header_done(), "Header is not received");
-
-    const auto status = response_stream->get_headers().result();
-    if (status != boost::beast::http::status::ok) {
-        const auto content_type = util::get_response_content_type(
-          response_stream->get_headers());
-        auto buf = co_await http::drain(std::move(response_stream));
-        co_return co_await parse_rest_error_response(
-          content_type, status, std::move(buf));
-    }
-
-    // AWS S3 can return errors embedded in a 200 OK response body for
-    // CompleteMultipartUpload. The response must be parsed to detect these.
-    // See:
-    // https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html
-    auto response_buf = co_await http::drain(std::move(response_stream));
-    auto response_tree = xml::iobuf_to_ptree(std::move(response_buf), s3_log);
-    if (
-      auto error_code = xml::get_optional_from_ptree<std::string>(
-        response_tree, "Error.Code");
-      error_code) {
-        throw rest_error_response(
-          *error_code,
-          xml::get_from_ptree<std::string>(response_tree, "Error.Message", ""),
-          xml::get_from_ptree<std::string>(
-            response_tree, "Error.RequestId", ""),
-          xml::get_from_ptree<std::string>(
-            response_tree, "Error.Resource", ""));
-    }
-
-    _client->_probe->register_multipart_complete();
-
-    vlog(s3_log.debug, "Completed multipart upload {}", _upload_id);
-}
-
-ss::future<> s3_multipart_state::abort_multipart_upload() {
-    if (_upload_id.empty()) {
-        // Nothing to abort
-        vlog(s3_log.debug, "Abort called but multipart not initialized");
-        co_return;
-    }
-
-    vlog(s3_log.debug, "Aborting S3 multipart upload {}", _upload_id);
-
-    auto header = _client->_requestor.make_abort_multipart_upload_request(
-      _bucket, _key, _upload_id);
-    if (!header) {
-        // Log error but don't throw - abort should be best effort
-        vlog(
-          s3_log.warn,
-          "Failed to create abort request: {}",
-          header.error().message());
-        co_return;
-    }
-
-    vlog(
-      s3_log.trace, "send AbortMultipartUpload request:\n{}", header.value());
-
-    try {
-        auto response_stream = co_await _client->_client.request(
-          std::move(header.value()), _timeout);
-
-        co_await response_stream->prefetch_headers();
-        vassert(response_stream->is_header_done(), "Header is not received");
-
-        const auto status = response_stream->get_headers().result();
-        if (
-          status != boost::beast::http::status::no_content
-          && status != boost::beast::http::status::ok) {
-            vlog(
-              s3_log.warn,
-              "AbortMultipartUpload returned unexpected status: {}",
-              status);
-        }
-
-        // Drain response
-        co_await http::drain(std::move(response_stream));
-
-        _client->_probe->register_multipart_abort();
-
-        vlog(s3_log.debug, "Aborted multipart upload {}", _upload_id);
-    } catch (const std::exception& ex) {
-        // Log but don't throw - abort failures are non-fatal
-        vlog(
-          s3_log.warn,
-          "Failed to abort multipart upload {}: {}",
-          _upload_id,
-          ex);
-    }
-}
-
-ss::future<> s3_multipart_state::upload_as_single_object(iobuf data) {
-    vlog(
-      s3_log.debug,
-      "Using single put_object for small file (size: {})",
-      data.size_bytes());
-
-    const size_t data_size = data.size_bytes();
-    auto body = make_iobuf_input_stream(std::move(data));
-
-    // Use existing put_object implementation
-    co_await _client->do_put_object(
-      _bucket, _key, data_size, std::move(body), _timeout);
 }
 
 } // namespace cloud_storage_clients

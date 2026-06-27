@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import time
 import typing
+import yaml
 from collections import namedtuple
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Literal, Optional, overload
@@ -1323,6 +1324,36 @@ class RpkTool:
         ]
         output = self._execute(cmd)
         return json.loads(output) if output_format == "json" else output
+
+    def _run_shadow(self, args: list[str], output_format: str | None = None) -> Any:
+        cmd = [
+            self._rpk_binary(),
+            "-X",
+            "admin.hosts=" + self._admin_host(),
+            "shadow",
+        ] + args
+        if output_format is not None:
+            cmd += ["--format", output_format]
+        output = self._execute(cmd)
+        return json.loads(output) if output_format == "json" else output
+
+    def shadow_create(self, config: dict[str, Any], no_confirm: bool = True) -> str:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as tf:
+            yaml.safe_dump(config, tf)
+            tf.flush()
+            args = ["create", "-c", tf.name]
+            if no_confirm:
+                args.append("--no-confirm")
+            return self._run_shadow(args)
+
+    def shadow_status(self, name: str, output_format: str = "json") -> Any:
+        return self._run_shadow(["status", name, "--print-all"], output_format)
+
+    def shadow_describe(self, name: str, output_format: str = "json") -> Any:
+        return self._run_shadow(["describe", name, "--print-all"], output_format)
+
+    def shadow_list(self, output_format: str = "json") -> Any:
+        return self._run_shadow(["list"], output_format)
 
     def _run_topic(self, cmd, stdin=None, timeout=None, use_schema_registry=False):
         cmd = [self._rpk_binary(), "topic"] + self._kafka_conn_settings() + cmd

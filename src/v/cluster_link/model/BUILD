@@ -28,6 +28,7 @@ redpanda_cc_library(
         "//src/v/serde:map",
         "//src/v/serde:named_type",
         "//src/v/serde:optional",
+        "//src/v/serde:set",
         "//src/v/serde:variant",
         "//src/v/serde:vector",
         "//src/v/utils:absl_sstring_hash",

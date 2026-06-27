@@ -23,6 +23,7 @@
 namespace cloud_storage_clients {
 
 class upstream;
+class client_provider;
 class multipart_upload;
 class multipart_upload_state;
 using multipart_upload_ref = ss::shared_ptr<multipart_upload>;
@@ -103,25 +104,23 @@ public:
       ss::lowres_clock::duration timeout,
       bool accept_no_content = false) = 0;
 
-    /// Initiate a multipart upload state
+    /// Create the backend state for a multipart upload.
     ///
-    /// Returns a multipart_upload_state object that can be used to construct
-    /// a multipart_upload. This allows callers to wrap the state with
-    /// additional context (e.g., client lease) before creating the upload.
+    /// Returns a multipart_upload_state that can be wrapped in a
+    /// multipart_upload. The state leases a client from `provider` for each
+    /// request rather than holding one for the upload's lifetime.
     ///
-    /// The returned state should be wrapped in a multipart_upload using:
-    ///   auto upload = ss::make_shared<multipart_upload>(state, part_size);
-    ///
+    /// \param provider supplies a leased client per request
     /// \param bucket Bucket name
     /// \param key Object key
     /// \param part_size Size of each part in bytes. Requirements:
     ///        - S3/GCS: Must be >= 5 MiB (except last part)
     ///        - ABS: Must be <= 4000 MiB (4 GB)
     /// \param timeout Operation timeout
-    /// \return multipart_upload_state that can be wrapped in multipart_upload
     virtual ss::future<
       result<ss::shared_ptr<multipart_upload_state>, error_outcome>>
     initiate_multipart_upload(
+      ss::shared_ptr<client_provider> provider,
       const plain_bucket_name& bucket,
       const object_key& key,
       size_t part_size,

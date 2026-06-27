@@ -1,0 +1,559 @@
+# Copyright 2026 Redpanda Data, Inc.
+#
+# Use of this software is governed by the Business Source License
+# included in the file licenses/BSL.md
+#
+# As of the Change Date specified in that file, in accordance with
+# the Business Source License, use of this software will be governed
+# by the Apache License, Version 2.0
+
+"""
+End-to-end coverage for ctp_stm local retention in cloud-topic partitions.
+
+min_allowed_local_threshold (MASH) is a kafka-offset floor set by L1 compaction:
+below it, local data is non-authoritative and ctp_stm housekeeping is free to
+evict. For cleanup.policy=delete + storage.mode=tiered_cloud, L1 compaction
+does not run, so MASH stays unset; the cap on local data comes from the storage
+layer (`compute_local_retention_offset`, which folds in strict retention +
+retention.local.target.bytes + cloud_gc_offset) and is driven by ctp_stm
+housekeeping.
+
+These tests verify the resulting observable behavior:
+- tiered_cloud + delete + strict: local footprint converges near
+  retention.local.target.bytes (storage-layer retention path).
+- Cluster-wide disk pressure (via _cloud_gc_offset) reclaims past the local
+  target.
+- Switching cleanup.policy to compact causes L1 compaction to run, which
+  advances MASH; ctp_stm housekeeping then evicts up to the new floor.
+- Once the local log is trimmed, reads below the local log start are served
+  from L1, so a consumer can still read the whole partition from offset 0.
+"""
+
+import random
+
+from ducktape.tests.test import TestContext
+from ducktape.utils.util import wait_until
+
+from rptest.clients.rpk import RpkTool
+from rptest.clients.types import TopicSpec
+from rptest.services.admin import Admin
+from rptest.services.cluster import cluster
+from rptest.services.kgo_verifier_services import (
+    KgoVerifierProducer,
+    KgoVerifierSeqConsumer,
+)
+from rptest.tests.cloud_topics.e2e_test import EndToEndCloudTopicsBase
+
+
+class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
+    """
+    Verify that tiered_cloud partitions honor retention.local.target.bytes
+    (via the storage-layer retention path consulted by ctp_stm), that
+    applying disk pressure evicts aggressively, that enabling compaction
+    advances MASH via L1 compaction, and that reads below the trimmed local
+    log start pivot to the L1 reader.
+    """
+
+    topic_name = "tc_local_retention"
+
+    # Override base class topics - we create them per test with custom configs.
+    topics = ()
+
+    # Sizes are deliberately small so the test runs quickly. The local
+    # target is a few segments; retention.bytes is large enough that
+    # regular size-based retention does not trigger.
+    segment_size = 1 * 1024 * 1024  # 1 MiB
+    local_target_bytes = 4 * segment_size  # 4 MiB
+    retention_bytes = 1024 * 1024 * 1024  # 1 GiB - effectively unlimited
+    bytes_to_produce = 32 * segment_size  # 32 MiB - well above local target
+    msg_size = 16 * 1024  # 16 KiB
+
+    def __init__(self, test_context: TestContext):
+        extra_rp_conf = {
+            # Fast reconciliation so L0->L1 movement happens quickly.
+            "cloud_topics_reconciliation_min_interval": 1000,  # 1s
+            "cloud_topics_reconciliation_max_interval": 2000,  # 2s
+            # Fast L1 compaction so cleanup.policy=compact tests observe
+            # MASH advance within the test timeout.
+            "cloud_topics_compaction_interval_ms": 5000,  # 5s
+            # Fast housekeeping/GC so prefix-truncate and local eviction
+            # happen on test timescales.
+            "cloud_storage_housekeeping_interval_ms": 2000,  # 2s
+            "log_compaction_interval_ms": 2000,  # 2s
+            # Use the configured segment size for all topics.
+            "log_segment_size": self.segment_size,
+            "log_segment_size_min": self.segment_size,
+            # Short trim interval so the space manager's control loop
+            # fires within the lifetime of fast tests.
+            "retention_local_trim_interval": 2000,  # 2s
+            # ctp_stm consults compute_local_retention_offset, which only
+            # caps local data at retention.local.target.bytes when strict
+            # retention is engaged (mirrors
+            # disk_log_impl::maybe_apply_local_storage_overrides).
+            "retention_local_strict": True,
+            "retention_local_strict_override": True,
+        }
+
+        super().__init__(
+            test_context=test_context,
+            extra_rp_conf=extra_rp_conf,
+        )
+
+    def setUp(self):
+        # Start the cluster with cloud topics enabled. We will create our
+        # own topics inside each test so we can pick storage_mode and
+        # cleanup.policy explicitly.
+        assert self.redpanda
+        self.redpanda.start()
+        self.redpanda.set_feature_active("tiered_cloud_topics", True, timeout_sec=30)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _create_topic(
+        self,
+        storage_mode: str,
+        cleanup_policy: str = TopicSpec.CLEANUP_DELETE,
+        partitions: int = 1,
+    ):
+        rpk = RpkTool(self.redpanda)
+        config = {
+            TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+            "cleanup.policy": cleanup_policy,
+            "retention.bytes": str(self.retention_bytes),
+            "retention.local.target.bytes": str(self.local_target_bytes),
+            "segment.bytes": str(self.segment_size),
+        }
+        rpk.create_topic(
+            topic=self.topic_name,
+            partitions=partitions,
+            replicas=3,
+            config=config,
+        )
+
+    def _produce(
+        self,
+        bytes_to_produce: int,
+        key_set_cardinality: int | None = None,
+    ):
+        msg_count = bytes_to_produce // self.msg_size
+        KgoVerifierProducer.oneshot(
+            self.test_context,
+            self.redpanda,
+            self.topic_name,
+            msg_size=self.msg_size,
+            msg_count=msg_count,
+            key_set_cardinality=key_set_cardinality,
+            timeout_sec=180,
+        )
+
+    def _local_partition_bytes(self, topic: str | None = None) -> int:
+        """
+        Sum the on-disk footprint of all replicas of the topic across all
+        nodes, using the partition_size Prometheus metric exposed by each
+        broker. This is what the space manager / local-retention path is
+        actually shrinking.
+        """
+        if topic is None:
+            topic = self.topic_name
+        total = 0
+        assert self.redpanda is not None
+        samples = self.redpanda.metrics_sample("partition_size")
+        if samples is None:
+            return 0
+        for s in samples.samples:
+            if s.labels.get("topic") == topic:
+                total += int(s.value)
+        return total
+
+    def _wait_local_below(self, ceiling_bytes: int, timeout_sec: int = 120):
+        last = [-1]
+
+        def cond() -> bool:
+            size = self._local_partition_bytes()
+            last[0] = size
+            self.logger.info(
+                f"local partition_size sum = {size}, ceiling = {ceiling_bytes}"
+            )
+            return size <= ceiling_bytes
+
+        wait_until(
+            cond,
+            timeout_sec=timeout_sec,
+            backoff_sec=3,
+            err_msg=lambda: (
+                f"local footprint did not drop below {ceiling_bytes} "
+                f"(last observed: {last[0]})"
+            ),
+        )
+
+    def _wait_local_at_least(self, floor_bytes: int, timeout_sec: int = 60):
+        last = [-1]
+
+        def cond() -> bool:
+            size = self._local_partition_bytes()
+            last[0] = size
+            self.logger.info(
+                f"local partition_size sum = {size}, floor = {floor_bytes}"
+            )
+            return size >= floor_bytes
+
+        wait_until(
+            cond,
+            timeout_sec=timeout_sec,
+            backoff_sec=3,
+            err_msg=lambda: (
+                f"local footprint did not reach {floor_bytes} "
+                f"(last observed: {last[0]})"
+            ),
+        )
+
+    def _compaction_records_removed(self) -> float:
+        assert self.redpanda is not None
+        return self.redpanda.metric_sum(
+            metric_name=("vectorized_cloud_topics_compaction_worker_records_removed"),
+            expect_metric=True,
+        )
+
+    def _compaction_rounds(self) -> float:
+        assert self.redpanda is not None
+        return self.redpanda.metric_sum(
+            metric_name=(
+                "vectorized_cloud_topics_compaction_scheduler_log_compactions"
+            ),
+            expect_metric=True,
+        )
+
+    def _wait_for_partition_info(self, timeout_sec: int = 60):
+        """Wait until rpk can describe the partition (i.e. it is replicated)."""
+        rpk = RpkTool(self.redpanda)
+
+        def has_partition() -> bool:
+            try:
+                parts = list(rpk.describe_topic(self.topic_name))
+                return len(parts) > 0
+            except Exception:
+                return False
+
+        wait_until(
+            has_partition,
+            timeout_sec=timeout_sec,
+            backoff_sec=2,
+            err_msg=f"topic {self.topic_name} did not become describable",
+        )
+
+    # ------------------------------------------------------------------
+    # Tests
+    # ------------------------------------------------------------------
+
+    @cluster(num_nodes=4)
+    def test_local_data_grows_in_tiered_cloud(self):
+        """
+        In tiered_cloud + cleanup.policy=delete with strict retention engaged,
+        compute_local_retention_offset caps local data at
+        retention.local.target.bytes via the standard
+        maybe_apply_local_storage_overrides path. ctp_stm housekeeping reads
+        that offset and prefix-truncates accordingly. The local footprint
+        should converge near the local target rather than near LRO.
+
+        L1 compaction does not run for cleanup.policy=delete, so MASH stays
+        unset and the floor contribution is min(); the cap comes entirely
+        from the storage-layer query.
+
+        Replication factor is 3, so the cluster-wide sum of partition_size is
+        roughly 3 * per-replica retention.
+        """
+        self._create_topic(storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD)
+        self._wait_for_partition_info()
+
+        self._produce(self.bytes_to_produce)
+        self.wait_until_reconciled(topic=self.topic_name, partition=0)
+
+        # We expect each replica to converge near retention.local.target.bytes.
+        # The floor (half the target) proves we are not collapsing to LRO; the
+        # ceiling proves local retention actually trims toward the target. Allow
+        # two segments of headroom per replica: one for the never-evicted active
+        # segment, one for trim-cycle latency / replica lag. Still ~5x below the
+        # produced footprint, so a regression where retention/the floor is
+        # ignored fails.
+        replication = 3
+        per_replica_floor = self.local_target_bytes
+        per_replica_ceiling = self.local_target_bytes + 2 * self.segment_size
+
+        self._wait_local_at_least(
+            floor_bytes=replication * per_replica_floor // 2,
+            timeout_sec=120,
+        )
+        self._wait_local_below(
+            ceiling_bytes=replication * per_replica_ceiling,
+            timeout_sec=180,
+        )
+
+        final = self._local_partition_bytes()
+        self.logger.info(f"final local footprint: {final}")
+        # And critically: it must not have collapsed to ~segment_size, which
+        # would mean LRO-only retention.
+        assert final > replication * self.segment_size, (
+            f"local footprint collapsed to LRO-only ({final} bytes); "
+            f"expected near {replication * self.local_target_bytes} bytes"
+        )
+
+    @cluster(num_nodes=4)
+    def test_compact_topic_evicts_via_l1_floor(self):
+        """
+        On a tiered_cloud + cleanup.policy=compact topic the local log is a
+        cache: ctp_stm housekeeping truncates aggressively (the same way it
+        does for storage.mode=cloud) because the authoritative compacted view
+        lives in L1. So once L1 compaction has run against the partition's L1
+        objects, local segments are evicted regardless of the storage-layer
+        local-retention target.
+
+        We assert observable outcomes:
+        1. L1 compaction actually runs and removes records (requires keyed
+           data with duplicates, which we drive with low key_set_cardinality).
+        2. Local footprint shrinks below the strict-retention cap, showing
+           that compacted topics evict aggressively rather than holding data
+           up to the local-retention target.
+        """
+        # Low key cardinality so compaction has plenty of duplicates to
+        # dedupe. With ~2k messages and 64 keys, every key is updated many
+        # times, and L1 compaction can reduce the log meaningfully.
+        key_set_cardinality = 64
+        self._create_topic(
+            storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            cleanup_policy=TopicSpec.CLEANUP_COMPACT,
+        )
+        self._wait_for_partition_info()
+
+        self._produce(
+            self.bytes_to_produce,
+            key_set_cardinality=key_set_cardinality,
+        )
+        self.wait_until_reconciled(topic=self.topic_name, partition=0)
+
+        replication = 3
+
+        # Wait for L1 compaction to actually do work: at least one log
+        # compaction round must complete with records removed. Metrics are
+        # exported by the compaction scheduler / worker (see
+        # cloud_topics/compaction_stress_test.py for the pattern).
+        wait_until(
+            lambda: self._compaction_rounds() >= 1,
+            timeout_sec=240,
+            backoff_sec=3,
+            err_msg="L1 compaction did not run for the compacted topic",
+        )
+        wait_until(
+            lambda: self._compaction_records_removed() > 0,
+            timeout_sec=240,
+            backoff_sec=3,
+            err_msg="L1 compaction did not remove any records",
+        )
+
+        # ctp_stm housekeeping trims the local log aggressively for compacted
+        # topics. Use a generous ceiling: 5 segments per replica absorbs the
+        # active segment + tail buffer that the LRO/active-reader ceiling pins.
+        self._wait_local_below(
+            ceiling_bytes=replication * 5 * self.segment_size,
+            timeout_sec=240,
+        )
+
+    @cluster(num_nodes=4)
+    def test_compact_leadership_move_advances_mash(self):
+        """
+        When the partition leader is moved away from the node running L1
+        compaction, the level_zero_notifier still forwards the new
+        min_allowed_local_threshold (MASH) floor to the new leader over the
+        L0 RPC, and ctp_stm housekeeping on the new leader evicts local data
+        up to that floor.
+
+        Scenario:
+        1. Create a compact + tiered_cloud topic and produce keyed data.
+        2. Wait for L0→L1 reconciliation so there are L1 objects to compact.
+        3. Identify the current partition leader, then transfer leadership to a
+           different broker so that L1 compaction will run on a non-leader node.
+        4. Trigger/await L1 compaction (records_removed > 0).
+        5. Assert that the local footprint on the new leader converges well
+           below the produced range — MASH advanced and ctp_stm evicted.
+        """
+        key_set_cardinality = 64
+        self._create_topic(
+            storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            cleanup_policy=TopicSpec.CLEANUP_COMPACT,
+        )
+        self._wait_for_partition_info()
+
+        self._produce(
+            self.bytes_to_produce,
+            key_set_cardinality=key_set_cardinality,
+        )
+        self.wait_until_reconciled(topic=self.topic_name, partition=0)
+
+        # Find the current leader and pick a different node to transfer to,
+        # so that L1 compaction runs on a non-leader node.
+        assert self.redpanda is not None
+        admin = Admin(self.redpanda)
+        leader_id = admin.get_partition_leader(
+            namespace="kafka",
+            topic=self.topic_name,
+            partition=0,
+        )
+        all_node_ids = [self.redpanda.node_id(n) for n in self.redpanda.nodes]
+        non_leader_ids = [nid for nid in all_node_ids if nid != leader_id]
+        assert non_leader_ids, "expected at least one non-leader replica"
+        new_leader_id = random.choice(non_leader_ids)
+
+        self.logger.info(
+            f"Transferring partition 0 leadership from node {leader_id} "
+            f"to node {new_leader_id}"
+        )
+
+        def _transfer_done() -> bool:
+            try:
+                admin.transfer_leadership_to(
+                    namespace="kafka",
+                    topic=self.topic_name,
+                    partition=0,
+                    target_id=new_leader_id,
+                )
+            except Exception:
+                pass
+            current = admin.get_partition_leader(
+                namespace="kafka",
+                topic=self.topic_name,
+                partition=0,
+            )
+            return current == new_leader_id
+
+        wait_until(
+            _transfer_done,
+            timeout_sec=60,
+            backoff_sec=2,
+            err_msg=(f"leadership did not move to node {new_leader_id} within 60s"),
+        )
+        self.logger.info(
+            f"Leadership confirmed on node {new_leader_id}; "
+            "L1 compaction will now run on a non-leader node"
+        )
+
+        wait_until(
+            lambda: self._compaction_rounds() >= 1,
+            timeout_sec=240,
+            backoff_sec=3,
+            err_msg="L1 compaction did not run after leadership move",
+        )
+        wait_until(
+            lambda: self._compaction_records_removed() > 0,
+            timeout_sec=240,
+            backoff_sec=3,
+            err_msg="L1 compaction did not remove any records after leadership move",
+        )
+
+        # The non-leader node forwarded the new MASH floor to the new leader
+        # via the L0 RPC; ctp_stm on the new leader then evicted local data.
+        # Use the same generous ceiling as the non-leadership-move variant.
+        replication = 3
+        self._wait_local_below(
+            ceiling_bytes=replication * 5 * self.segment_size,
+            timeout_sec=240,
+        )
+
+    # 5 nodes: 3 brokers + a producer and a sequential consumer held alive
+    # at the same time (the consumer validates against the live producer).
+    @cluster(num_nodes=5)
+    def test_read_below_local_start_pivots_to_l1(self):
+        """
+        In tiered_cloud the local log is a cache: local retention trims it
+        while the authoritative data stays in L1 (retention.bytes is
+        effectively unlimited, so nothing is globally deleted). The frontend
+        read path must therefore pivot reads below the local log start to the
+        L1 reader.
+
+        This produces well above the local target, waits for the local
+        footprint to shrink so the partition prefix lives only in L1, then
+        consumes the whole topic from the beginning and asserts:
+          1. every produced record is read back (the trimmed-away prefix is
+             served correctly), and
+          2. the L1 reader actually did work (read_bytes increased), proving
+             the prefix came from L1 rather than the local log.
+
+        If the pivot keyed on LRO or on min_allowed_local_threshold (which is
+        unset for cleanup.policy=delete) instead of the local log start, reads
+        of the trimmed prefix would hit the empty local log and the consumer
+        would fail to read the full range.
+        """
+        self._create_topic(storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD)
+        self._wait_for_partition_info()
+
+        assert self.redpanda is not None
+        msg_count = self.bytes_to_produce // self.msg_size
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            self.topic_name,
+            msg_size=self.msg_size,
+            msg_count=msg_count,
+        )
+        producer.start()
+        producer.wait(timeout_sec=180)
+        self.wait_until_reconciled(topic=self.topic_name, partition=0)
+
+        # Wait until local retention has trimmed the local log well below the
+        # produced footprint, so the partition prefix is only available in L1.
+        replication = 3
+        per_replica_ceiling = self.local_target_bytes + 2 * self.segment_size
+        self._wait_local_below(
+            ceiling_bytes=replication * per_replica_ceiling,
+            timeout_sec=180,
+        )
+
+        # The partition start offset must still be 0: data is globally retained
+        # in L1, only the local cache was trimmed. Otherwise the read below is
+        # vacuous (nothing to serve from L1).
+        rpk = RpkTool(self.redpanda)
+        part = next(iter(rpk.describe_topic(self.topic_name)))
+        assert part.start_offset == 0, (
+            f"expected partition start offset 0 (data retained in L1), got "
+            f"{part.start_offset}"
+        )
+
+        def l1_read_bytes() -> float:
+            assert self.redpanda is not None
+            return self.redpanda.metric_sum(
+                metric_name=("vectorized_cloud_topics_level_one_reader_read_bytes"),
+                expect_metric=False,
+            )
+
+        before = l1_read_bytes()
+
+        # Consume the whole topic from the beginning. Passing the producer
+        # makes wait() block until every produced offset is read and validated,
+        # so a failure to serve the trimmed prefix from L1 fails the test.
+        consumer = KgoVerifierSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            self.topic_name,
+            self.msg_size,
+            loop=False,
+            producer=producer,
+        )
+        consumer.start(clean=False)
+        consumer.wait(timeout_sec=300)
+
+        valid_reads = consumer.consumer_status.validator.valid_reads
+        assert valid_reads >= msg_count, (
+            f"read {valid_reads} valid records, expected at least {msg_count}; "
+            f"the trimmed prefix was not served"
+        )
+
+        after = l1_read_bytes()
+        self.logger.info(f"L1 reader read_bytes: before={before} after={after}")
+        assert after > before, (
+            "expected the L1 reader to serve the trimmed prefix, but "
+            "cloud_topics_level_one_reader_read_bytes did not increase "
+            f"({before} -> {after})"
+        )
+
+        producer.free()
+        consumer.free()

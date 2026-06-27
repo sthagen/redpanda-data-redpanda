@@ -27,6 +27,7 @@
 #include "serde/rw/map.h"
 #include "serde/rw/named_type.h"
 #include "serde/rw/optional.h"
+#include "serde/rw/set.h"
 #include "serde/rw/variant.h"
 #include "serde/rw/vector.h"
 #include "utils/absl_sstring_hash.h"
@@ -958,13 +959,44 @@ struct security_settings_sync_config
 };
 
 /**
+ * Configuration for syncing RBAC roles
+ */
+struct role_sync_config
+  : serde::
+      envelope<role_sync_config, serde::version<0>, serde::compat_version<0>> {
+    /// Flag to indicate if the task is enabled or not
+    enabled_t is_enabled{enabled_t::yes};
+    /// Interval for the role sync task
+    std::optional<ss::lowres_clock::duration> task_interval;
+    /// Default interval
+    static constexpr auto task_interval_default = std::chrono::seconds{30};
+
+    ss::lowres_clock::duration get_task_interval() const {
+        return task_interval.value_or(task_interval_default);
+    }
+
+    /// Filters selecting which roles to shadow, by role name. Defaults to
+    /// empty: no roles are synced until at least one include filter is added.
+    chunked_vector<resource_name_filter_pattern> role_name_filters;
+
+    friend bool
+    operator==(const role_sync_config&, const role_sync_config&) = default;
+
+    auto serde_fields() {
+        return std::tie(is_enabled, task_interval, role_name_filters);
+    }
+
+    role_sync_config copy() const;
+};
+
+/**
  * Configuration of a cluster link. Configuration changes are driven by the
  * API and are a result of user actions.
  */
 struct link_configuration
   : serde::envelope<
       link_configuration,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     /// Configuration for the auto mirror topic creation task
     topic_metadata_mirroring_config topic_metadata_mirroring_cfg;
@@ -974,6 +1006,8 @@ struct link_configuration
     security_settings_sync_config security_settings_sync_cfg;
     /// Configuration for syncing schema registry
     schema_registry_sync_config schema_registry_sync_cfg;
+    /// Configuration for syncing RBAC roles
+    role_sync_config role_sync_cfg;
 
     friend bool
     operator==(const link_configuration&, const link_configuration&) = default;
@@ -983,7 +1017,8 @@ struct link_configuration
           topic_metadata_mirroring_cfg,
           consumer_groups_mirroring_cfg,
           security_settings_sync_cfg,
-          schema_registry_sync_cfg);
+          schema_registry_sync_cfg,
+          role_sync_cfg);
     }
 
     link_configuration copy() const;
@@ -1855,6 +1890,14 @@ struct fmt::formatter<cluster_link::model::security_settings_sync_config>
     auto format(
       const cluster_link::model::security_settings_sync_config& m,
       format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::role_sync_config>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::role_sync_config& m, format_context& ctx) const
+      -> decltype(ctx.out());
 };
 
 template<>

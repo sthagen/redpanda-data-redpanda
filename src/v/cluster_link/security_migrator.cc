@@ -13,6 +13,7 @@
 
 #include "cluster_link/link.h"
 #include "cluster_link/model/types.h"
+#include "cluster_link/utils.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/handlers/details/security.h"
 #include "security/acl.h"
@@ -25,13 +26,6 @@ using namespace std::chrono_literals;
 namespace cluster_link {
 
 namespace {
-bool has_required_permissions(
-  kafka::cluster_authorized_operations permissions_to_check,
-  kafka::cluster_authorized_operations required_permissions) {
-    return (permissions_to_check & required_permissions)
-           == required_permissions;
-}
-
 security::acl_operation model_to_security(model::acl_operation op) {
     switch (op) {
     case model::acl_operation::any:
@@ -314,49 +308,17 @@ security_migrator::run_impl(ss::abort_source& as) {
           .reason = std::move(msg)};
     }
 
-    kafka::api_version describe_acls_version;
-    try {
-        auto supported_api_versions = co_await cluster.supported_api_versions(
-          kafka::describe_acls_api::key, as);
-        if (!supported_api_versions.has_value()) {
-            auto msg = ssx::sformat(
-              "Failed to get supported API version for DescribeACLs");
-            vlog(logger().warn, "{}", msg);
-            co_return state_transition{
-              .desired_state = model::task_state::link_unavailable,
-              .reason = std::move(msg)};
-        }
-
-        if (
-          supported_api_versions.value().min
-          > kafka::describe_acls_api::max_valid) {
-            auto msg = ssx::sformat(
-              "Unsupported API version for DescribeACLs: {}",
-              supported_api_versions.value().min);
-            vlog(logger().warn, "{}", msg);
-            co_return state_transition{
-              .desired_state = model::task_state::link_unavailable,
-              .reason = std::move(msg)};
-        }
-
-        describe_acls_version = std::min(
-          supported_api_versions.value().max,
-          kafka::describe_acls_api::max_valid);
-        vlog(
-          logger().debug,
-          "Using describe_acls version: {}",
-          describe_acls_version);
-    } catch (const ss::abort_requested_exception&) {
-        // Rethrow abort requested to allow caller to handle it
-        throw;
-    } catch (const std::exception& e) {
-        auto msg = ssx::sformat(
-          "Failed to get supported API version for DescribeACLs: {}", e.what());
-        vlog(logger().warn, "{}", msg);
+    auto version_res = co_await negotiate_api_version<kafka::describe_acls_api>(
+      cluster, as);
+    if (!version_res.has_value()) {
+        vlog(logger().warn, "{}", version_res.error());
         co_return state_transition{
           .desired_state = model::task_state::link_unavailable,
-          .reason = std::move(msg)};
+          .reason = std::move(version_res).error()};
     }
+    auto describe_acls_version = version_res.value();
+    vlog(
+      logger().debug, "Using describe_acls version: {}", describe_acls_version);
 
     as.check();
     auto acls_f = co_await ss::coroutine::as_future(

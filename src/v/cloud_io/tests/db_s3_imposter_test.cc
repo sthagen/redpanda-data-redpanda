@@ -254,9 +254,6 @@ TEST_F(db_s3_imposter_test, multipart_upload) {
     mp->put(make_part('A')).get();
     mp->put(make_part('B')).get();
     mp->complete().get();
-    // The multipart handle holds a client pool lease. The pool has one
-    // client, so we must release it before download() can acquire one.
-    mp = {};
 
     auto [res, content] = download("multi/assembled");
     ASSERT_EQ(res, download_result::success);
@@ -281,7 +278,50 @@ TEST_F(db_s3_imposter_test, multipart_abort) {
     part.append(data.data(), data.size());
     mp->put(std::move(part)).get();
     mp->abort().get();
-    mp = {};
 
     EXPECT_EQ(head("aborted/obj"), download_result::notfound);
+}
+
+TEST_F(db_s3_imposter_test, concurrent_open_multipart_uploads) {
+    // Regression: the client pool has a single connection. A multipart upload
+    // leases a client per request rather than pinning one for its whole
+    // lifetime, so a second upload opened while the first is still in flight
+    // can still acquire a client. Pinning a client across the upload's
+    // lifetime would wedge the one-connection pool here.
+    constexpr size_t part_size = 5 * 1024 * 1024;
+
+    auto open_upload = [&](std::string_view key) {
+        auto mp_result = remote()
+                           .initiate_multipart_upload(
+                             bucket_name, object_key(key), part_size, 30s)
+                           .get();
+        EXPECT_FALSE(mp_result.has_error());
+        return std::move(mp_result.value());
+    };
+
+    auto make_part = [](char fill) {
+        iobuf buf;
+        ss::sstring data(part_size, fill);
+        buf.append(data.data(), data.size());
+        return buf;
+    };
+
+    // Both uploads are open at once over the single-connection pool.
+    auto a = open_upload("multi/a");
+    auto b = open_upload("multi/b");
+
+    a->put(make_part('A')).get();
+    b->put(make_part('B')).get();
+    a->complete().get();
+    b->complete().get();
+
+    auto [res_a, content_a] = download("multi/a");
+    ASSERT_EQ(res_a, download_result::success);
+    EXPECT_EQ(content_a.size(), part_size);
+    EXPECT_EQ(content_a[0], 'A');
+
+    auto [res_b, content_b] = download("multi/b");
+    ASSERT_EQ(res_b, download_result::success);
+    EXPECT_EQ(content_b.size(), part_size);
+    EXPECT_EQ(content_b[0], 'B');
 }

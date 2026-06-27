@@ -13,9 +13,8 @@
 
 namespace cluster_link::model {
 namespace {
-template<typename T>
 bool select_using_filter(
-  const T& resource,
+  std::string_view resource,
   const chunked_vector<resource_name_filter_pattern>& patterns) {
     bool matched = false;
     for (const auto& pattern : patterns) {
@@ -28,7 +27,7 @@ bool select_using_filter(
             break;
         case filter_pattern_type::prefix:
             if (!pattern.pattern.empty()) {
-                filter_selected = resource().starts_with(pattern.pattern);
+                filter_selected = resource.starts_with(pattern.pattern);
             }
             break;
         }
@@ -51,13 +50,19 @@ bool select_using_filter(
 bool select_topic(
   ::model::topic_view topic,
   const chunked_vector<resource_name_filter_pattern>& patterns) {
-    return select_using_filter(topic, patterns);
+    return select_using_filter(topic(), patterns);
 }
 
 bool select_group(
   const kafka::group_id& group_id,
   const chunked_vector<resource_name_filter_pattern>& patterns) {
-    return select_using_filter(group_id, patterns);
+    return select_using_filter(group_id(), patterns);
+}
+
+bool select_role(
+  std::string_view role_name,
+  const chunked_vector<resource_name_filter_pattern>& patterns) {
+    return select_using_filter(role_name, patterns);
 }
 
 } // namespace cluster_link::model

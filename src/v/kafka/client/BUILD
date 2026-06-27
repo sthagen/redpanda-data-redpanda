@@ -47,6 +47,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:describe_groups",
         "//src/v/kafka/protocol:describe_log_dirs",
         "//src/v/kafka/protocol:describe_producers",
+        "//src/v/kafka/protocol:describe_redpanda_roles",
         "//src/v/kafka/protocol:describe_transactions",
         "//src/v/kafka/protocol:describe_user_scram_credentials",
         "//src/v/kafka/protocol:end_txn",

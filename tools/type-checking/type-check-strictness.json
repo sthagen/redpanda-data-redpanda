@@ -186,6 +186,7 @@
         "rptest/tests/rpk_group_test.py",
         "rptest/tests/rpk_plugin_test.py",
         "rptest/tests/rpk_role_test.py",
+        "rptest/tests/rpk_shadow_link_test.py",
         "rptest/tests/rpk_topic_test.py",
         "rptest/tests/rpk_tuner_test.py",
         "rptest/tests/sasl_reauth_test.py",

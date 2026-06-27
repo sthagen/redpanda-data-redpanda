@@ -122,6 +122,11 @@ using handler_request_types = make_handler_request_types<
 using redpanda_handler_request_types
   = make_handler_request_types<describe_redpanda_roles_handler>;
 
+// Union of the standard and reserved handler types, for consumers that fill a
+// region-routed dispatch LUT or build a flat list over every handler.
+using all_handler_request_types
+  = type_list_cat_t<handler_request_types, redpanda_handler_request_types>;
+
 template<typename... RequestTypes>
 static constexpr size_t max_api_key(type_list<RequestTypes...>) {
     /// Black magic here is an overload of std::max() that takes an

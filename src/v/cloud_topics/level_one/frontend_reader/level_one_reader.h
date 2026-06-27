@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/units.h"
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
@@ -75,13 +76,16 @@ struct open_stream {
  */
 class level_one_log_reader_impl : public model::record_batch_reader::impl {
 public:
+    static constexpr size_t default_max_slice_bytes = 32_MiB;
+
     level_one_log_reader_impl(
       const cloud_topic_log_reader_config& cfg,
       model::ntp ntp,
       model::topic_id_partition tidp,
       l1::metastore* metastore,
       l1::io* io_interface,
-      level_one_reader_probe* probe = nullptr);
+      level_one_reader_probe* probe = nullptr,
+      size_t max_slice_bytes = default_max_slice_bytes);
 
     bool is_end_of_stream() const final;
 
@@ -201,6 +205,7 @@ private:
     level_one_reader_probe* _probe;
     prefix_logger _log;
     size_t _bytes_consumed{0};
+    size_t _max_slice_bytes;
     bool _was_cached{false};
 
     // Open stream for the current object. Non-null while the reader is

@@ -86,9 +86,30 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "single_flight",
+    srcs = ["single_flight.cc"],
+    hdrs = ["single_flight.h"],
+    deps = [
+        ":abstract_io",
+        "//src/v/base",
+        "//src/v/container:chunked_hash_map",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "file_io",
-    srcs = ["file_io.cc"],
-    hdrs = ["file_io.h"],
+    srcs = [
+        "file_io.cc",
+        "file_io_probe.cc",
+    ],
+    hdrs = [
+        "file_io.h",
+        "file_io_probe.h",
+    ],
+    implementation_deps = [
+        "//src/v/base",
+    ],
     visibility = [
         "//src/v/cloud_topics:__pkg__",
         "//src/v/cloud_topics/level_one:__subpackages__",
@@ -98,13 +119,17 @@ redpanda_cc_library(
         ":abstract_io",
         ":object_id",
         ":object_utils",
+        ":single_flight",
+        "//src/v/base",
         "//src/v/cloud_io:cache",
         "//src/v/cloud_io:io_result",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics:logger",
         "//src/v/config",
+        "//src/v/metrics",
         "//src/v/model",
+        "//src/v/utils:retry_chain_node",
         "@seastar",
     ],
 )

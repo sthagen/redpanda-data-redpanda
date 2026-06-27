@@ -30,6 +30,7 @@
 #include "kafka/protocol/describe_groups.h"
 #include "kafka/protocol/describe_log_dirs.h"
 #include "kafka/protocol/describe_producers.h"
+#include "kafka/protocol/describe_redpanda_roles.h"
 #include "kafka/protocol/describe_transactions.h"
 #include "kafka/protocol/describe_user_scram_credentials.h"
 #include "kafka/protocol/end_txn.h"
@@ -70,7 +71,10 @@ auto response_variant(type_list<Ts...>) {
 }
 } // namespace internal
 
-using request_t = decltype(internal::request_variant(request_types{}));
-using response_t = decltype(internal::response_variant(request_types{}));
+// request_t and response_t cover both standard Kafka APIs and the
+// Redpanda-specific reserved-range APIs so that dispatch_to_any works
+// for all KafkaApi types including those with keys >= 15000.
+using request_t = decltype(internal::request_variant(all_request_types{}));
+using response_t = decltype(internal::response_variant(all_request_types{}));
 
 } // namespace kafka::client

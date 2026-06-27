@@ -1,0 +1,15 @@
+{
+    "namespace": "cloud_topics::l0::rpc::impl",
+    "service_name": "l0_rpc",
+    "run_handlers_in_scheduling_group": true,
+    "includes": [
+        "cloud_topics/level_zero/rpc/rpc_types.h"
+    ],
+    "methods": [
+        {
+            "name": "set_min_allowed_local_threshold",
+            "input_type": "set_min_allowed_local_threshold_request",
+            "output_type": "set_min_allowed_local_threshold_reply"
+        }
+    ]
+}

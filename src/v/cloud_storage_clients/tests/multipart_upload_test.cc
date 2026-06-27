@@ -26,6 +26,34 @@ using namespace cloud_storage_clients::tests;
 static ss::logger test_log("multipart_upload_test");
 static constexpr size_t test_part_size = 5_MiB;
 
+// Builds a multipart_upload wired like remote.cc does: its backend state leases
+// a client per request from a pooled provider, so no single client is held for
+// the whole upload. `pool` and `as` must outlive the returned upload.
+static ss::shared_ptr<multipart_upload> make_pooled_upload(
+  ss::sharded<client_pool>& pool,
+  ss::abort_source& as,
+  const bucket_name_parts& bucket,
+  const object_key& key,
+  ss::lowres_clock::duration timeout) {
+    auto provider = ss::make_shared<pooled_client_provider>(
+      pool.local(),
+      bucket,
+      cloud_io::group_id::default_group,
+      timeout,
+      as,
+      ss::gate::holder{});
+    // Brief lease, only to dispatch initiate on the right backend type; it is
+    // dropped before the upload issues any request.
+    auto lease = pool.local().acquire(bucket, as).get();
+    auto state = lease.client
+                   ->initiate_multipart_upload(
+                     provider, bucket.name, key, test_part_size, timeout)
+                   .get();
+    BOOST_REQUIRE(state.has_value());
+    return ss::make_shared<multipart_upload>(
+      std::move(state.value()), test_part_size, test_log);
+}
+
 SEASTAR_THREAD_TEST_CASE(test_multipart_upload_basic) {
     s3_imposter_fixture imposter;
 
@@ -66,18 +94,8 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_basic) {
     const auto key = object_key("test-key");
     auto timeout = std::chrono::seconds(30);
 
-    // Acquire client from pool
     ss::abort_source as;
-    auto lease = pool.local().acquire(test_bucket, as).get();
-
-    auto state_result = lease.client
-                          ->initiate_multipart_upload(
-                            test_bucket.name, key, test_part_size, timeout)
-                          .get();
-
-    BOOST_REQUIRE(state_result.has_value());
-    auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size, test_log);
+    auto upload = make_pooled_upload(pool, as, test_bucket, key, timeout);
 
     // Write 6 MiB of data (should trigger one part upload immediately)
     auto data = ::tests::random_iobuf(6_MiB);
@@ -116,18 +134,8 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_small_file_optimization) {
     const auto key = object_key("small-key");
     auto timeout = std::chrono::seconds(30);
 
-    // Acquire client from pool
     ss::abort_source as;
-    auto lease = pool.local().acquire(test_bucket, as).get();
-
-    auto state_result = lease.client
-                          ->initiate_multipart_upload(
-                            test_bucket.name, key, test_part_size, timeout)
-                          .get();
-
-    BOOST_REQUIRE(state_result.has_value());
-    auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size, test_log);
+    auto upload = make_pooled_upload(pool, as, test_bucket, key, timeout);
 
     // Write only 3 MiB (less than part_size)
     auto data = ::tests::random_iobuf(3_MiB);
@@ -177,18 +185,8 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_abort) {
     const auto key = object_key("abort-key");
     auto timeout = std::chrono::seconds(30);
 
-    // Acquire client from pool
     ss::abort_source as;
-    auto lease = pool.local().acquire(test_bucket, as).get();
-
-    auto state_result = lease.client
-                          ->initiate_multipart_upload(
-                            test_bucket.name, key, test_part_size, timeout)
-                          .get();
-
-    BOOST_REQUIRE(state_result.has_value());
-    auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size, test_log);
+    auto upload = make_pooled_upload(pool, as, test_bucket, key, timeout);
 
     // Write data to trigger multipart initialization
     auto data = ::tests::random_iobuf(6_MiB);
@@ -256,18 +254,8 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_complete_error_in_body) {
     const auto key = object_key("error-key");
     auto timeout = std::chrono::seconds(30);
 
-    // Acquire client from pool
     ss::abort_source as;
-    auto lease = pool.local().acquire(test_bucket, as).get();
-
-    auto state_result = lease.client
-                          ->initiate_multipart_upload(
-                            test_bucket.name, key, test_part_size, timeout)
-                          .get();
-
-    BOOST_REQUIRE(state_result.has_value());
-    auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size, test_log);
+    auto upload = make_pooled_upload(pool, as, test_bucket, key, timeout);
 
     // Write exactly 5 MiB (triggers first part upload, no leftover)
     auto data = ::tests::random_iobuf(5_MiB);
@@ -318,16 +306,7 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_put_after_abort_is_noop) {
     auto timeout = std::chrono::seconds(30);
 
     ss::abort_source as;
-    auto lease = pool.local().acquire(test_bucket, as).get();
-
-    auto state_result = lease.client
-                          ->initiate_multipart_upload(
-                            test_bucket.name, key, test_part_size, timeout)
-                          .get();
-
-    BOOST_REQUIRE(state_result.has_value());
-    auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size, test_log);
+    auto upload = make_pooled_upload(pool, as, test_bucket, key, timeout);
 
     // Write enough data to trigger multipart initialization
     auto data = ::tests::random_iobuf(6_MiB);
@@ -370,16 +349,7 @@ SEASTAR_THREAD_TEST_CASE(test_multipart_upload_put_after_complete_is_noop) {
     auto timeout = std::chrono::seconds(30);
 
     ss::abort_source as;
-    auto lease = pool.local().acquire(test_bucket, as).get();
-
-    auto state_result = lease.client
-                          ->initiate_multipart_upload(
-                            test_bucket.name, key, test_part_size, timeout)
-                          .get();
-
-    BOOST_REQUIRE(state_result.has_value());
-    auto upload = ss::make_shared<multipart_upload>(
-      std::move(state_result.value()), test_part_size, test_log);
+    auto upload = make_pooled_upload(pool, as, test_bucket, key, timeout);
 
     // Write small data and complete
     auto data = ::tests::random_iobuf(1_MiB);

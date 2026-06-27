@@ -52,6 +52,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":l1_reader_fixture",
+        "//src/v/base",
         "//src/v/bytes:iostream",
         "//src/v/cloud_topics:log_reader_config",
         "//src/v/cloud_topics:logger",

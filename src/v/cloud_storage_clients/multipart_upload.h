@@ -42,10 +42,13 @@ constexpr size_t max_abs_block_size = 4000_MiB;
 constexpr size_t max_parts = 10'000;
 } // namespace multipart_limits
 
-/// Abstract interface for backend-specific multipart upload state
+/// Abstract interface for backend-specific multipart upload state.
 ///
-/// Each cloud provider (S3, ABS) implements this interface to handle
-/// the specific API calls required for multipart uploads.
+/// Each cloud provider (S3, ABS) implements this to handle the specific API
+/// calls required for multipart uploads. Implementations lease a client per
+/// request from a client_provider rather than holding one for the upload's
+/// lifetime, so concurrent uploads can't pin every pooled client and deadlock
+/// the reads that feed them.
 class multipart_upload_state {
 public:
     virtual ~multipart_upload_state() = default;
@@ -96,7 +99,7 @@ public:
 /// and a streaming API via as_stream().
 ///
 /// Usage:
-///   auto upload = co_await client.initiate_multipart_upload(...);
+///   auto upload = co_await remote.initiate_multipart_upload(...);
 ///   co_await upload->put(data1);
 ///   co_await upload->put(data2);
 ///   co_await upload->complete();  // or abort()
@@ -114,7 +117,7 @@ public:
 
     /// Construct a multipart upload
     ///
-    /// \param state Backend-specific state implementation
+    /// \param state Backend-specific state that performs the requests
     /// \param part_size Size of each part in bytes
     /// \param logger Logger to use for diagnostics
     explicit multipart_upload(

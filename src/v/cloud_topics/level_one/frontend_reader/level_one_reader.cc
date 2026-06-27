@@ -41,7 +41,8 @@ level_one_log_reader_impl::level_one_log_reader_impl(
   model::topic_id_partition tidp,
   l1::metastore* metastore,
   l1::io* io_interface,
-  level_one_reader_probe* probe)
+  level_one_reader_probe* probe,
+  size_t max_slice_bytes)
   : _config(cfg)
   , _ntp(std::move(ntp))
   , _tidp(tidp)
@@ -49,7 +50,8 @@ level_one_log_reader_impl::level_one_log_reader_impl(
   , _metastore(metastore)
   , _io(io_interface)
   , _probe(probe)
-  , _log(cd_log, fmt::format("[{}/{}/{}]", fmt::ptr(this), _ntp, _tidp)) {
+  , _log(cd_log, fmt::format("[{}/{}/{}]", fmt::ptr(this), _ntp, _tidp))
+  , _max_slice_bytes(max_slice_bytes) {
     vlog(_log.debug, "New reader created {}", _config);
 }
 
@@ -389,6 +391,10 @@ level_one_log_reader_impl::read_batches(l1::object_reader& reader) {
         }
         if (is_over_limit_with_bytes(hdr->size_bytes)) {
             set_end_of_stream();
+            break;
+        }
+
+        if (bytes_read > 0 && bytes_read + hdr->size_bytes > _max_slice_bytes) {
             break;
         }
 

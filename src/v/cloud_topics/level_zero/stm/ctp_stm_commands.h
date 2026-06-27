@@ -110,12 +110,12 @@ struct reset_state_cmd
     ctp_stm_state state;
 };
 
-/// Sets the cached `min_allowed_local_threshold` hint on ctp_stm.
+/// Advances the `min_allowed_local_threshold` floor on ctp_stm.
 ///
-/// The reconciler replicates this command after computing the offset
-/// from local segment stats and effective local-retention targets.
-/// nullopt clears the hint (used when storage.mode != tiered_cloud or
-/// when compaction is enabled on the topic).
+/// Replicated by L1 compaction (via level_zero_notifier) after a partition is
+/// compacted: `value` is the new kafka-offset floor below which local data is
+/// non-authoritative. The floor is monotonic non-decreasing; the STM ignores
+/// values that do not advance it.
 struct set_min_allowed_local_threshold_cmd
   : public serde::envelope<
       set_min_allowed_local_threshold_cmd,
@@ -125,13 +125,12 @@ struct set_min_allowed_local_threshold_cmd
       std::to_underlying(ctp_stm_key::set_min_allowed_local_threshold));
 
     set_min_allowed_local_threshold_cmd() noexcept = default;
-    explicit set_min_allowed_local_threshold_cmd(
-      std::optional<kafka::offset> v) noexcept
+    explicit set_min_allowed_local_threshold_cmd(kafka::offset v) noexcept
       : value(v) {}
 
     auto serde_fields() { return std::tie(value); }
 
-    std::optional<kafka::offset> value;
+    kafka::offset value;
 };
 
 } // namespace cloud_topics

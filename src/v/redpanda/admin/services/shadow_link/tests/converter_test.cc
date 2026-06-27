@@ -2170,3 +2170,87 @@ TEST(converter_test, timestamp_to_string) {
         EXPECT_EQ(absl::FromUnixMillis(1759193250080), ts);
     }
 }
+
+TEST(converter_test, metadata_to_shadow_link_roles) {
+    auto md = ss::make_lw_shared<cluster_link::model::metadata>();
+    md->configuration.role_sync_cfg.task_interval = 45s;
+    md->configuration.role_sync_cfg.role_name_filters.push_back(
+      cluster_link::model::resource_name_filter_pattern{
+        .pattern_type = cluster_link::model::filter_pattern_type::prefix,
+        .filter = cluster_link::model::filter_type::include,
+        .pattern = "analytics-"});
+
+    auto sl = admin::metadata_to_shadow_link(std::move(md), {});
+
+    const auto& role_sync = sl.get_configurations().get_role_sync_options();
+    EXPECT_EQ(role_sync.get_interval(), absl::Seconds(45));
+    EXPECT_EQ(role_sync.get_paused(), false);
+    ASSERT_EQ(role_sync.get_role_name_filters().size(), 1);
+
+    const auto& filter = role_sync.get_role_name_filters()[0];
+    EXPECT_EQ(filter.get_pattern_type(), proto::admin::pattern_type::prefix);
+    EXPECT_EQ(filter.get_filter_type(), proto::admin::filter_type::include);
+    EXPECT_EQ(filter.get_name(), "analytics-");
+}
+
+TEST(converter_test, shadow_link_to_metadata_roles) {
+    proto::admin::create_shadow_link_request req;
+    auto& shadow_link = req.get_shadow_link();
+    shadow_link.set_name("test-link");
+
+    auto& configs = shadow_link.get_configurations();
+    configs.get_client_options().set_bootstrap_servers({"localhost:9092"});
+
+    auto& role_sync = configs.get_role_sync_options();
+    role_sync.set_interval(absl::Seconds(45));
+    role_sync.set_paused(true);
+
+    auto& filter = role_sync.get_role_name_filters().emplace_back();
+    filter.set_pattern_type(proto::admin::pattern_type::prefix);
+    filter.set_filter_type(proto::admin::filter_type::include);
+    filter.set_name("analytics-");
+
+    auto md = admin::convert_create_to_metadata(std::move(req));
+
+    const auto& role_sync_cfg = md.configuration.role_sync_cfg;
+    EXPECT_EQ(role_sync_cfg.get_task_interval(), 45s);
+    EXPECT_FALSE(role_sync_cfg.is_enabled);
+    ASSERT_EQ(role_sync_cfg.role_name_filters.size(), 1);
+
+    const auto& filter_pattern = role_sync_cfg.role_name_filters[0];
+    EXPECT_EQ(
+      filter_pattern.pattern_type,
+      cluster_link::model::filter_pattern_type::prefix);
+    EXPECT_EQ(filter_pattern.filter, cluster_link::model::filter_type::include);
+    EXPECT_EQ(filter_pattern.pattern, "analytics-");
+}
+
+TEST(converter_test, update_shadow_link_role_sync) {
+    cluster_link::model::metadata current_md;
+    current_md.name = cluster_link::model::name_t{"test-link"};
+    current_md.uuid = cluster_link::model::uuid_t{uuid_t::create()};
+    current_md.connection.bootstrap_servers = {
+      net::unresolved_address("localhost", 9092)};
+    admin::set_client_id(current_md);
+
+    proto::admin::update_shadow_link_request req;
+    req.get_shadow_link()
+      .get_configurations()
+      .get_role_sync_options()
+      .set_interval(absl::Seconds(90));
+    req.get_update_mask().paths.push_back(
+      serde::pb::field_mask::path{
+        "configurations", "role_sync_options", "interval"});
+
+    auto update_cmd = admin::create_update_cluster_link_config_cmd(
+      std::move(req),
+      ss::make_lw_shared<cluster_link::model::metadata>({
+        .name = current_md.name,
+        .uuid = current_md.uuid,
+        .connection = current_md.connection,
+        .configuration = current_md.configuration.copy(),
+      }));
+
+    EXPECT_EQ(update_cmd.connection, current_md.connection);
+    EXPECT_EQ(update_cmd.link_config.role_sync_cfg.get_task_interval(), 90s);
+}

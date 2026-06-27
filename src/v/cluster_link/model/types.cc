@@ -286,12 +286,20 @@ void schema_registry_sync_config::serde_read(
     }
 }
 
+role_sync_config role_sync_config::copy() const {
+    role_sync_config copy;
+    copy.is_enabled = is_enabled;
+    copy.task_interval = task_interval;
+    copy.role_name_filters = role_name_filters.copy();
+    return copy;
+}
 link_configuration link_configuration::copy() const {
     link_configuration copy;
     copy.topic_metadata_mirroring_cfg = topic_metadata_mirroring_cfg.copy();
     copy.consumer_groups_mirroring_cfg = consumer_groups_mirroring_cfg.copy();
     copy.security_settings_sync_cfg = security_settings_sync_cfg.copy();
     copy.schema_registry_sync_cfg = schema_registry_sync_cfg.copy();
+    copy.role_sync_cfg = role_sync_cfg.copy();
     return copy;
 }
 
@@ -908,17 +916,30 @@ auto fmt::formatter<cluster_link::model::security_settings_sync_config>::format(
       cfg.acl_filters);
 }
 
+auto fmt::formatter<cluster_link::model::role_sync_config>::format(
+  const cluster_link::model::role_sync_config& cfg, format_context& ctx) const
+  -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{enabled: {}, task_interval: {}, role_name_filters: {}}}",
+      cfg.is_enabled,
+      cfg.task_interval,
+      cfg.role_name_filters);
+}
+
 auto fmt::formatter<cluster_link::model::link_configuration>::format(
   const cluster_link::model::link_configuration& cfg, format_context& ctx) const
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
       "{{topic_metadata_mirroring_cfg: {}, consumer_groups_mirroring_cfg: {}, "
-      "security_settings_sync_cfg: {}, schema_registry_sync_cfg: {}}}",
+      "security_settings_sync_cfg: {}, schema_registry_sync_cfg: {}, "
+      "role_sync_cfg: {}}}",
       cfg.topic_metadata_mirroring_cfg,
       cfg.consumer_groups_mirroring_cfg,
       cfg.security_settings_sync_cfg,
-      cfg.schema_registry_sync_cfg);
+      cfg.schema_registry_sync_cfg,
+      cfg.role_sync_cfg);
 }
 
 auto fmt::

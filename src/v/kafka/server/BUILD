@@ -104,6 +104,18 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "roles",
+    hdrs = [
+        "handlers/details/roles.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/kafka/protocol/schemata:describe_redpanda_roles_response",
+        "//src/v/security",
+    ],
+)
+
+redpanda_cc_library(
     name = "server",
     srcs = [
         "client_quota_translator.cc",
@@ -272,6 +284,7 @@ redpanda_cc_library(
         ":datalake_usage_api",
         ":logger",
         ":qdc_monitor_config",
+        ":roles",
         ":security",
         ":topic_config_utils",
         "//proto/redpanda/core/admin/v2:kafka_connections_redpanda_proto",

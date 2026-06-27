@@ -34,4 +34,8 @@ bool select_group(
   const kafka::group_id& group_id,
   const chunked_vector<resource_name_filter_pattern>& patterns);
 
+bool select_role(
+  std::string_view role_name,
+  const chunked_vector<resource_name_filter_pattern>& patterns);
+
 } // namespace cluster_link::model

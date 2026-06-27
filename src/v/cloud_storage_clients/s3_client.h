@@ -253,6 +253,7 @@ public:
     /// \return multipart_upload_state that can be wrapped in multipart_upload
     ss::future<result<ss::shared_ptr<multipart_upload_state>, error_outcome>>
     initiate_multipart_upload(
+      ss::shared_ptr<client_provider> provider,
       const plain_bucket_name& bucket,
       const object_key& key,
       size_t part_size,
@@ -341,36 +342,6 @@ private:
     request_creator _requestor;
     http::client _client;
     ss::shared_ptr<client_probe> _probe;
-};
-
-/// S3-specific multipart upload state
-class s3_multipart_state : public multipart_upload_state {
-public:
-    s3_multipart_state(
-      s3_client* client,
-      plain_bucket_name bucket,
-      object_key key,
-      ss::lowres_clock::duration timeout);
-
-    ss::future<> initialize_multipart() override;
-    ss::future<> upload_part(size_t part_num, iobuf data) override;
-    ss::future<> complete_multipart_upload() override;
-    ss::future<> abort_multipart_upload() override;
-    ss::future<> upload_as_single_object(iobuf data) override;
-
-    bool is_multipart_initialized() const override {
-        return !_upload_id.empty();
-    }
-
-    ss::sstring upload_id() const override { return _upload_id; }
-
-private:
-    s3_client* _client;
-    plain_bucket_name _bucket;
-    object_key _key;
-    ss::lowres_clock::duration _timeout;
-    ss::sstring _upload_id;
-    std::vector<ss::sstring> _etags;
 };
 
 class gcs_client : public s3_client {

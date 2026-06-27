@@ -279,8 +279,7 @@ struct coordinator::table_schema_provider {
     get_table_id(const model::topic&) const = 0;
 
     virtual ss::future<checked<iceberg::struct_type, coordinator::errc>>
-    get_record_type(
-      const cluster::topic_metadata&, record_schema_components) const = 0;
+      get_record_type(model::iceberg_mode, record_schema_components) const = 0;
 
     virtual ss::sstring
     get_partition_spec(const cluster::topic_metadata&) const = 0;
@@ -312,8 +311,11 @@ coordinator::do_ensure_table_exists(
         co_return convert_stm_errc(sync_res.error());
     }
 
-    auto topic_md = topic_table_.get_topic_metadata_ref(
-      model::topic_namespace_view{model::kafka_namespace, topic});
+    const model::topic_namespace_view tp_ns{model::kafka_namespace, topic};
+    // The reference returned here points into the topic table and must not be
+    // held across a scheduling point. It is re-acquired and re-validated after
+    // every suspension below before being used again.
+    auto topic_md = topic_table_.get_topic_metadata_ref(tp_ns);
     if (!topic_md || topic_md->get().get_revision() != topic_revision) {
         vlog(
           datalake_log.debug,
@@ -374,9 +376,23 @@ coordinator::do_ensure_table_exists(
 
     // TODO: verify stm state after replication
 
+    // replicate_and_wait above may have suspended, invalidating topic_md.
+    // Re-acquire and re-validate the revision before using it again.
+    topic_md = topic_table_.get_topic_metadata_ref(tp_ns);
+    if (!topic_md || topic_md->get().get_revision() != topic_revision) {
+        vlog(
+          datalake_log.debug,
+          "Rejecting {} for {} rev {}: topic table changed during replication",
+          method_name,
+          topic,
+          topic_revision);
+        co_return errc::revision_mismatch;
+    }
+
     auto table_id = schema_provider.get_table_id(topic);
     auto record_type = co_await schema_provider.get_record_type(
-      topic_md->get(), std::move(comps));
+      topic_md->get().get_configuration().properties.iceberg_mode,
+      std::move(comps));
     if (!record_type.has_value()) {
         vlog(
           datalake_log.warn,
@@ -420,8 +436,11 @@ struct coordinator::main_table_schema_provider
 
     ss::future<checked<iceberg::struct_type, coordinator::errc>>
     get_record_type(
-      const cluster::topic_metadata& topic_md,
-      record_schema_components comps) const final {
+      model::iceberg_mode mode, record_schema_components comps) const final {
+        if (mode.is_disabled()) {
+            co_return errc::failed;
+        }
+
         std::optional<shared_resolved_type_t> val_type;
         if (comps.val_identifier) {
             auto type_res = co_await parent.type_resolver_.resolve_identifier(
@@ -432,10 +451,6 @@ struct coordinator::main_table_schema_provider
             val_type = std::move(type_res.value());
         }
 
-        const auto& mode = topic_md.get_configuration().properties.iceberg_mode;
-        if (mode.is_disabled()) {
-            co_return errc::failed;
-        }
         auto record_type = default_translator{mode.headers()}.build_type(
           std::move(val_type));
         co_return std::move(record_type.type);
@@ -501,9 +516,7 @@ struct coordinator::dlq_table_schema_provider
 
     ss::future<checked<iceberg::struct_type, coordinator::errc>>
     get_record_type(
-      const cluster::topic_metadata& topic_md,
-      record_schema_components) const final {
-        const auto& mode = topic_md.get_configuration().properties.iceberg_mode;
+      model::iceberg_mode mode, record_schema_components) const final {
         if (mode.is_disabled()) {
             co_return errc::failed;
         }

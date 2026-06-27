@@ -168,32 +168,6 @@ private:
 // Forward declaration
 class abs_client;
 
-/// Azure Blob Storage multipart upload state
-class abs_multipart_state : public multipart_upload_state {
-public:
-    abs_multipart_state(
-      abs_client* client,
-      plain_bucket_name container,
-      object_key key,
-      ss::lowres_clock::duration timeout);
-
-    ss::future<> initialize_multipart() override;
-    ss::future<> upload_part(size_t part_num, iobuf data) override;
-    ss::future<> complete_multipart_upload() override;
-    ss::future<> abort_multipart_upload() override;
-    ss::future<> upload_as_single_object(iobuf data) override;
-    bool is_multipart_initialized() const override { return _initialized; }
-    ss::sstring upload_id() const override { return ""; }
-
-private:
-    abs_client* _client;
-    plain_bucket_name _container;
-    object_key _key;
-    ss::lowres_clock::duration _timeout;
-    std::vector<ss::sstring> _block_ids;
-    bool _initialized{false};
-};
-
 /// S3 REST-API client
 class abs_client : public client {
     friend class abs_multipart_state;
@@ -273,6 +247,7 @@ public:
     /// \return multipart_upload_state that can be wrapped in multipart_upload
     ss::future<result<ss::shared_ptr<multipart_upload_state>, error_outcome>>
     initiate_multipart_upload(
+      ss::shared_ptr<client_provider> provider,
       const plain_bucket_name& bucket,
       const object_key& key,
       size_t part_size,

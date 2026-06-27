@@ -48,6 +48,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/base",
         "//src/v/bytes:iostream",
         "//src/v/cloud_topics:log_reader_config",
         "//src/v/cloud_topics:logger",

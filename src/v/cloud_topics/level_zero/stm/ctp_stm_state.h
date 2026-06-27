@@ -130,17 +130,18 @@ public:
     std::optional<model::offset>
     get_last_reconciled_log_offset() const noexcept;
 
-    /// Set the min allowed local threshold hint.
+    /// Advance the min allowed local threshold floor.
     ///
-    /// This value is produced by the reconciler and indicates the lower bound
-    /// of kafka offsets that may be retained locally. The STM caches it but
-    /// does not enforce truncation directly; a separate path applies it as a
-    /// prefix-truncate target on the raft log.
-    void set_min_allowed_local_threshold(std::optional<kafka::offset>) noexcept;
+    /// The floor is a kafka-offset lower bound advanced by L1 compaction: data
+    /// below it has been compacted in L1 and is non-authoritative locally, so a
+    /// separate path is free to prefix-truncate the raft log up to it. The
+    /// floor is monotonic non-decreasing; values that do not advance it are
+    /// ignored. The unset floor is kafka::offset::min().
+    void set_min_allowed_local_threshold(kafka::offset) noexcept;
 
-    /// Get the min allowed local threshold hint, if any.
-    std::optional<kafka::offset>
-    get_min_allowed_local_threshold() const noexcept;
+    /// Get the min allowed local threshold floor. Returns kafka::offset::min()
+    /// when the floor is unset.
+    kafka::offset get_min_allowed_local_threshold() const noexcept;
 
     auto serde_fields() {
         return std::tie(
@@ -233,9 +234,10 @@ private:
     // Estimates total cloud data bytes addressable by the surviving log.
     size_estimator _size_estimator;
 
-    /// Min allowed local threshold hint, produced by the reconciler.
-    /// Cached state only; truncation is applied elsewhere.
-    std::optional<kafka::offset> _min_allowed_local_threshold;
+    /// Min allowed local threshold floor advanced by L1 compaction.
+    /// kafka::offset::min() means unset (no floor). Truncation is applied
+    /// elsewhere.
+    kafka::offset _min_allowed_local_threshold = kafka::offset::min();
 };
 
 }; // namespace cloud_topics

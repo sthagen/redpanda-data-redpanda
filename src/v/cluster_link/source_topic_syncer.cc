@@ -14,6 +14,7 @@
 #include "cluster_link/link.h"
 #include "cluster_link/model/filter_utils.h"
 #include "cluster_link/model/types.h"
+#include "cluster_link/utils.h"
 #include "model/namespace.h"
 
 namespace cluster_link {
@@ -32,13 +33,6 @@ const absl::flat_hash_map<ss::sstring, ss::sstring>
 
 const chunked_vector<ss::sstring> topic_prefix_denylist{
   ss::sstring("__redpanda"), ss::sstring("_redpanda")};
-
-bool has_required_permissions(
-  kafka::topic_authorized_operations permissions_to_check,
-  kafka::topic_authorized_operations required_permissions) {
-    return (permissions_to_check & required_permissions)
-           == required_permissions;
-}
 
 template<typename K, typename V>
 chunked_hash_map<K, V> copy_hash_map(const chunked_hash_map<K, V>& source) {
@@ -255,50 +249,20 @@ source_topic_syncer::run_impl(ss::abort_source& as) {
 
     // Grab the version of DescribeConfigs that's supported on the source
     // cluster and ensure we support it
-    kafka::api_version describe_configs_version;
-    try {
-        auto supported_api_versions = co_await cluster.supported_api_versions(
-          kafka::describe_configs_api::key, as);
-        if (!supported_api_versions.has_value()) {
-            auto msg = ssx::sformat(
-              "Failed to get supported API version for describe_configs");
-            vlog(logger().warn, "{}", msg);
-            co_return state_transition{
-              .desired_state = model::task_state::link_unavailable,
-              .reason = std::move(msg)};
-        }
-        // Make sure the minimum version supported on the cluster is not higher
-        // than the maximum version supported by the shadow cluster
-        if (
-          supported_api_versions.value().min
-          > kafka::describe_configs_api::max_valid) {
-            auto msg = ssx::sformat(
-              "Unsupported DescribeConfigs API version: {}",
-              supported_api_versions.value());
-            vlog(logger().warn, "{}", msg);
-            co_return state_transition{
-              .desired_state = model::task_state::link_unavailable,
-              .reason = std::move(msg)};
-        }
-        describe_configs_version = std::min(
-          supported_api_versions.value().max,
-          kafka::describe_configs_api::max_valid);
-        vlog(
-          logger().debug,
-          "Using describe_configs version: {}",
-          describe_configs_version);
-    } catch (const ss::abort_requested_exception&) {
-        // Rethrow abort requested to allow caller to handle it
-        throw;
-    } catch (const std::exception& e) {
-        auto msg = ssx::sformat(
-          "Failed to get supported API version for describe_configs: {}",
-          e.what());
-        vlog(logger().warn, "{}", msg);
+    auto version_res
+      = co_await negotiate_api_version<kafka::describe_configs_api>(
+        cluster, as);
+    if (!version_res.has_value()) {
+        vlog(logger().warn, "{}", version_res.error());
         co_return state_transition{
           .desired_state = model::task_state::link_unavailable,
-          .reason = std::move(msg)};
+          .reason = std::move(version_res).error()};
     }
+    auto describe_configs_version = version_res.value();
+    vlog(
+      logger().debug,
+      "Using describe_configs version: {}",
+      describe_configs_version);
 
     // If we are going to shadow the schema registry topic, we need to ensure
     // that it's either empty or it does not exist.  Check for its HWM.  This is

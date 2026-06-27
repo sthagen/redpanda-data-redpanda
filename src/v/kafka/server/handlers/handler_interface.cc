@@ -130,17 +130,15 @@ struct handler_holder {
       H::handle};
 };
 
-template<typename... Std, typename... Rsv>
-constexpr auto make_lut(type_list<Std...>, type_list<Rsv...>) {
+template<typename... H>
+constexpr auto make_lut(type_list<H...>) {
     api_key_table<handler> lut{};
-    ((lut[Std::api::key] = &handler_holder<Std>::instance), ...);
-    ((lut[Rsv::api::key] = &handler_holder<Rsv>::instance), ...);
+    ((lut[H::api::key] = &handler_holder<H>::instance), ...);
     return lut;
 }
 
 static const auto& handlers() {
-    static constexpr auto lut = make_lut(
-      handler_request_types{}, redpanda_handler_request_types{});
+    static constexpr auto lut = make_lut(all_handler_request_types{});
     return lut;
 }
 

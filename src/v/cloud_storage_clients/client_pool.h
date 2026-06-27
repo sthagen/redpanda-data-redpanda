@@ -20,6 +20,7 @@
 #include "utils/stop_signal.h"
 
 #include <seastar/core/condition-variable.hh>
+#include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 
@@ -291,6 +292,57 @@ private:
     ss::gate _bg_gate;
 
     ssx::semaphore _pool_ready_barrier{0, "pool_barrier"};
+};
+
+/// Supplies a leased client for a single cloud-storage request, hiding the
+/// client_pool (and its admission group) from the caller. Lets an operation
+/// that issues many requests — e.g. a multipart upload — lease a client per
+/// request and release it immediately, rather than pinning one for its whole
+/// lifetime.
+class client_provider {
+public:
+    client_provider() = default;
+    client_provider(const client_provider&) = delete;
+    client_provider& operator=(const client_provider&) = delete;
+    client_provider(client_provider&&) = delete;
+    client_provider& operator=(client_provider&&) = delete;
+    virtual ~client_provider() = default;
+
+    /// Acquire a client and its admission slot for one request. The slot is
+    /// released when the returned lease is dropped.
+    virtual ss::future<client_pool::client_lease> acquire() = 0;
+};
+
+/// A client_provider that leases from a client_pool for a fixed bucket and
+/// admission group.
+class pooled_client_provider final : public client_provider {
+public:
+    pooled_client_provider(
+      client_pool& pool,
+      bucket_name_parts bucket,
+      cloud_io::group_id gid,
+      ss::lowres_clock::duration lease_timeout,
+      ss::abort_source& as,
+      ss::gate::holder owner_gate_holder)
+      : _pool(pool)
+      , _bucket(std::move(bucket))
+      , _gid(gid)
+      , _lease_timeout(lease_timeout)
+      , _as(as)
+      , _owner_gate_holder(std::move(owner_gate_holder)) {}
+
+    ss::future<client_pool::client_lease> acquire() override {
+        return _pool.acquire_with_timeout(
+          _bucket, _gid, _as, _lease_timeout, "multipart_upload");
+    }
+
+private:
+    client_pool& _pool;
+    bucket_name_parts _bucket;
+    cloud_io::group_id _gid;
+    ss::lowres_clock::duration _lease_timeout;
+    ss::abort_source& _as;
+    ss::gate::holder _owner_gate_holder;
 };
 
 } // namespace cloud_storage_clients

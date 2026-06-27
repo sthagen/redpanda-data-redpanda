@@ -12,6 +12,7 @@
 
 #include "container/chunked_hash_map.h"
 #include "kafka/protocol/errors.h"
+#include "kafka/server/handlers/details/roles.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"
 #include "security/acl.h"
@@ -23,21 +24,6 @@
 #include <ranges>
 
 namespace kafka {
-
-namespace {
-
-redpanda_role to_wire(const security::role_with_members& rwm) {
-    redpanda_role out;
-    out.name = rwm.name();
-    for (const auto& m : rwm.role.members()) {
-        out.members.push_back(
-          redpanda_role_member{
-            .member_type = static_cast<int8_t>(m.type()), .name = m.name()});
-    }
-    return out;
-}
-
-} // namespace
 
 template<>
 ss::future<response_ptr> describe_redpanda_roles_handler::handle(
@@ -82,7 +68,7 @@ ss::future<response_ptr> describe_redpanda_roles_handler::handle(
     };
 
     resp.data.roles = roles.roles_with_members(matches)
-                      | std::views::transform(to_wire)
+                      | std::views::transform(details::to_wire_redpanda_role)
                       | std::ranges::to<chunked_vector<redpanda_role>>();
 
     co_return co_await ctx.respond(std::move(resp));

@@ -48,7 +48,11 @@ redpanda_cc_library(
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         "//src/v/cluster_link/model",
+        "//src/v/kafka/client:cluster",
         "//src/v/kafka/client:configuration",
+        "//src/v/kafka/protocol",
+        "//src/v/ssx:sformat",
+        "@seastar",
     ],
 )
 
@@ -134,6 +138,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":logger",
+        ":utils",
         "//src/v/cluster_link/model",
         "//src/v/kafka/server:topic_config_utils",
         "//src/v/model",
@@ -193,6 +198,7 @@ redpanda_cc_library(
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         ":impl",
+        ":utils",
         "//src/v/cluster:fwd",
         "//src/v/cluster_link/model",
         "//src/v/kafka/client:cluster",

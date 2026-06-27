@@ -9,11 +9,13 @@
  */
 
 #include "cloud_topics/level_zero/notifier/level_zero_notifier.h"
+#include "cloud_topics/level_zero/notifier/notifier_routing.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/logger.h"
 #include "model/fundamental.h"
 #include "raft/tests/raft_fixture.h"
+#include "rpc/errc.h"
 #include "test_utils/test.h"
 
 #include <chrono>
@@ -23,6 +25,7 @@ using namespace std::chrono_literals;
 
 namespace {
 constexpr auto tiny_backoff = std::chrono::milliseconds(1);
+const model::node_id self_node(0);
 const model::ntp
   test_ntp(model::ns("kafka"), model::topic("tp"), model::partition_id(0));
 } // namespace
@@ -45,23 +48,23 @@ public:
     }
 };
 
-// Replicating to the leader succeeds on the first attempt.
+// Replicating to the leader succeeds.
 TEST_F_CORO(level_zero_notifier_fixture, replicate_to_leader_succeeds) {
     co_await start();
     co_await wait_for_leader(raft::default_timeout());
 
-    ct::level_zero_notifier notifier(nullptr, nullptr, tiny_backoff);
+    ct::level_zero_notifier notifier(
+      self_node, nullptr, nullptr, nullptr, nullptr, nullptr, tiny_backoff);
     auto leader_api = api(node(*get_leader()));
-    auto res = co_await notifier.replicate_with_retries(
+    auto res = co_await notifier.replicate(
       test_ntp, leader_api, kafka::offset(42));
     co_await notifier.stop();
 
     ASSERT_TRUE_CORO(res.has_value());
 }
 
-// Replicating to a follower hits not_leader, which the notifier treats as
-// non-retriable: it gives up immediately and returns the error to the caller
-// (not fire-and-forget).
+// Replicating to a follower returns not_leader in a single attempt (the caller
+// is responsible for forwarding to the new leader).
 TEST_F_CORO(level_zero_notifier_fixture, gives_up_on_follower) {
     co_await start();
     co_await wait_for_leader(raft::default_timeout());
@@ -76,11 +79,22 @@ TEST_F_CORO(level_zero_notifier_fixture, gives_up_on_follower) {
     }
     ASSERT_TRUE_CORO(follower != nullptr);
 
-    ct::level_zero_notifier notifier(nullptr, nullptr, tiny_backoff);
+    ct::level_zero_notifier notifier(
+      self_node, nullptr, nullptr, nullptr, nullptr, nullptr, tiny_backoff);
     auto follower_api = api(*follower);
-    auto res = co_await notifier.replicate_with_retries(
+    auto res = co_await notifier.replicate(
       test_ntp, follower_api, kafka::offset(7));
     co_await notifier.stop();
 
     ASSERT_FALSE_CORO(res.has_value());
+}
+
+TEST(level_zero_notifier_routing, map_transport_error) {
+    using ct::notifier_detail::map_transport_error;
+    EXPECT_EQ(
+      map_transport_error(rpc::errc::client_request_timeout),
+      ct::ctp_stm_api_errc::timeout);
+    EXPECT_EQ(
+      map_transport_error(rpc::errc::disconnected_endpoint),
+      ct::ctp_stm_api_errc::failure);
 }

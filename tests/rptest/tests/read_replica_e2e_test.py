@@ -172,7 +172,13 @@ def cross_region_rrr_test(func, /):
     return func
 
 
-class TestReadReplicaService(EndToEndTest):
+class ReadReplicaE2EBase(EndToEndTest):
+    """Read-replica setup helpers shared across read-replica test classes.
+
+    Holds no @cluster test methods, so ducktape does not collect it; concrete
+    subclasses (TestReadReplicaService and others) add their own tests while
+    reusing _setup_read_replica()/start_second_cluster()/etc."""
+
     log_segment_size = 1048576  # 5MB
     topic_name = "panda-topic"
 
@@ -185,7 +191,7 @@ class TestReadReplicaService(EndToEndTest):
             cloud_storage_spillover_manifest_size=None,
             cloud_topics_long_term_flush_interval=1000,
         )
-        super(TestReadReplicaService, self).__init__(
+        super().__init__(
             test_context=test_context,
             si_settings=SISettings(
                 test_context,
@@ -380,6 +386,8 @@ class TestReadReplicaService(EndToEndTest):
         else:
             return None
 
+
+class TestReadReplicaService(ReadReplicaE2EBase):
     @cluster(num_nodes=7, log_allow_list=READ_REPLICA_LOG_ALLOW_LIST)
     @matrix(
         partition_count=[1],

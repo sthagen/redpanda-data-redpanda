@@ -14,6 +14,7 @@
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/maintenance/l1_object_sink.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
+#include "cloud_topics/level_zero/notifier/level_zero_notifier.h"
 #include "config/property.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
@@ -35,7 +36,8 @@ public:
       config::binding<size_t>,
       size_t,
       prefix_logger&,
-      object_builder::options = {});
+      object_builder::options = {},
+      cloud_topics::level_zero_notifier* = nullptr);
 
     ss::future<bool>
     initialize(compaction::sliding_window_reducer::source&) final;
@@ -78,6 +80,11 @@ private:
     // `map_deduplication_iteration`.
     chunked_vector<metastore::compaction_update::cleaned_range>
       _new_cleaned_ranges;
+
+    // Receives the new min_allowed_local_threshold floor (keyed by the
+    // partition's topic_id_partition) after a successful finalize(). May be
+    // null. The notification is not sent if this is the case (tests).
+    cloud_topics::level_zero_notifier* _notifier;
 
 private:
     friend class throwing_compaction_sink;

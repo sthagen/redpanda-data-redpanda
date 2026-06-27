@@ -99,51 +99,6 @@ ErrT throw_if_not_timeout(const std::exception_ptr& e, ErrT on_timeout) {
     }
 }
 
-/// \brief Multipart upload state wrapper that holds a client lease
-///
-/// This wrapper holds a client lease for the entire duration of the
-/// multipart upload operation, ensuring the client remains available
-/// and is not returned to the pool prematurely.
-class multipart_upload_state_with_lease final
-  : public cloud_storage_clients::multipart_upload_state {
-public:
-    multipart_upload_state_with_lease(
-      cloud_storage_clients::client_pool::client_lease lease,
-      ss::shared_ptr<cloud_storage_clients::multipart_upload_state> inner)
-      : _lease(std::move(lease))
-      , _inner(std::move(inner)) {}
-
-    ss::future<> initialize_multipart() override {
-        return _inner->initialize_multipart();
-    }
-
-    ss::future<> upload_part(size_t part_num, iobuf data) override {
-        return _inner->upload_part(part_num, std::move(data));
-    }
-
-    ss::future<> complete_multipart_upload() override {
-        return _inner->complete_multipart_upload();
-    }
-
-    ss::future<> abort_multipart_upload() override {
-        return _inner->abort_multipart_upload();
-    }
-
-    ss::future<> upload_as_single_object(iobuf data) override {
-        return _inner->upload_as_single_object(std::move(data));
-    }
-
-    bool is_multipart_initialized() const override {
-        return _inner->is_multipart_initialized();
-    }
-
-    ss::sstring upload_id() const override { return _inner->upload_id(); }
-
-private:
-    cloud_storage_clients::client_pool::client_lease _lease;
-    ss::shared_ptr<cloud_storage_clients::multipart_upload_state> _inner;
-};
-
 } // namespace
 
 namespace cloud_io {
@@ -1389,9 +1344,28 @@ remote::initiate_multipart_upload(
         co_return cloud_storage_clients::error_outcome::fail;
     }
 
-    // Acquire a client lease from the pool
+    // The upload issues each request through `provider`, which leases a client
+    // from the pool per request. This avoids pinning a single client (and its
+    // admission slot) for the upload's whole lifetime, which can deadlock the
+    // pool against the reads that feed the upload.
+    auto provider
+      = ss::make_shared<cloud_storage_clients::pooled_client_provider>(
+        _pool.local(),
+        *bucket_parts,
+        group_id::default_group,
+        _lease_timeout(),
+        _as,
+        _gate.hold());
+
+    // Creating the backend state issues no request; it only needs a client of
+    // the right backend type to dispatch on, so lease one briefly.
     auto fut = co_await ss::coroutine::as_future(
-      _pool.local().acquire(*bucket_parts, _as));
+      _pool.local().acquire_with_timeout(
+        *bucket_parts,
+        group_id::default_group,
+        _as,
+        _lease_timeout(),
+        "multipart_init"));
     if (fut.failed()) {
         vlog(
           log.warn,
@@ -1400,26 +1374,14 @@ remote::initiate_multipart_upload(
         co_return cloud_storage_clients::error_outcome::fail;
     }
     auto lease = std::move(fut).get();
-
-    // Get the multipart upload state from the client
     auto state_result = co_await lease.client->initiate_multipart_upload(
-      bucket_parts->name, key, part_size, timeout);
-
+      std::move(provider), bucket_parts->name, key, part_size, timeout);
     if (!state_result) {
-        // Failed to initiate - lease will be automatically returned
         co_return state_result.error();
     }
 
-    // Wrap the state with the lease to keep the client alive
-    // for the entire duration of the upload operation
-    auto wrapped_state = ss::make_shared<multipart_upload_state_with_lease>(
-      std::move(lease), std::move(state_result.value()));
-
-    // Create the multipart_upload with the wrapped state
-    auto upload = ss::make_shared<cloud_storage_clients::multipart_upload>(
-      std::move(wrapped_state), part_size, log);
-
-    co_return upload;
+    co_return ss::make_shared<cloud_storage_clients::multipart_upload>(
+      std::move(state_result.value()), part_size, log);
 }
 
 } // namespace cloud_io

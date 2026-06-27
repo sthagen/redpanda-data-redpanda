@@ -16,6 +16,7 @@
 #include "model/timeout_clock.h"
 #include "raft/persisted_stm.h"
 #include "ssx/mutex.h"
+#include "storage/types.h"
 
 #include <seastar/core/semaphore.hh>
 
@@ -143,14 +144,22 @@ private:
     ss::future<iobuf> take_raft_snapshot(model::offset) override;
     model::offset max_removable_local_log_offset() override;
 
-    /// Target log offset for the background prefix-truncate loop.
-    /// Returns LRLO when no hint is set; otherwise min(LRLO, log_offset(hint)).
-    /// Does NOT affect max_removable_local_log_offset().
-    model::offset prefix_truncate_target();
+    /// Build the gc_config to feed compute_gc_offset. Derives
+    /// eviction_time from now() and retention.ms, and max_bytes from
+    /// retention.bytes.
+    storage::gc_config build_gc_config() const;
 
-    // A function invoked in a background loop that attempts to truncate the log
-    // below the current start offset.
-    ss::future<> prefix_truncate_below_lro();
+    // The prefix truncation background loop
+    ss::future<> prefix_truncate_bg();
+
+    /// Target log offset for the background prefix-truncate loop. Computed
+    /// uniformly for all TSv2 partitions, compacted or not. The target
+    /// combines:
+    /// - storage retention target via compute_gc_offset;
+    /// - MASH offset advanced by the compaction;
+    /// - max_collectible_offset;
+    /// - LSO offset advanced by the reconciler;
+    ss::future<model::offset> compute_local_retention_offset();
 
 private:
     l0::producer_queue _producer_queue;

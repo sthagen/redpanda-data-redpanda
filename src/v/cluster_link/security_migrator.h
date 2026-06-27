@@ -13,6 +13,7 @@
 
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
+#include "cluster_link/utils.h"
 #include "kafka/protocol/describe_acls.h"
 #include "kafka/protocol/types.h"
 
@@ -27,8 +28,7 @@ namespace cluster_link {
 class security_migrator : public controller_locked_task {
 public:
     static constexpr auto task_name = "Security Migrator Task";
-    static constexpr kafka::cluster_authorized_operations required_permissions
-      = kafka::cluster_authorized_operations{0x100}; // DESCRIBE
+    static constexpr auto required_permissions = cluster_describe_permission;
 
     security_migrator(link* link, const model::metadata& config);
     security_migrator(const security_migrator&) = delete;

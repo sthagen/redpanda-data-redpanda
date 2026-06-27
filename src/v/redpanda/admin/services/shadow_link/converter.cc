@@ -40,6 +40,7 @@ using proto::admin::create_shadow_link_request;
 using proto::admin::http_basic_auth_options;
 using proto::admin::name_filter;
 using proto::admin::plain_config;
+using proto::admin::role_sync_options;
 using proto::admin::schema_registry_auth_options;
 using proto::admin::schema_registry_context_destination;
 using proto::admin::schema_registry_context_map;
@@ -600,6 +601,23 @@ create_security_settings_sync_config(
     return config;
 }
 
+cluster_link::model::role_sync_config
+create_role_sync_config(const role_sync_options& options) {
+    cluster_link::model::role_sync_config config;
+
+    if (options.get_interval() > absl::ZeroDuration()) {
+        config.task_interval = absl::ToChronoNanoseconds(
+          options.get_interval());
+    }
+
+    config.role_name_filters = to_filter_patterns(
+      options.get_role_name_filters());
+
+    config.is_enabled = cluster_link::model::enabled_t{!options.get_paused()};
+
+    return config;
+}
+
 cluster_link::model::link_configuration
 create_link_configuration(const shadow_link& sl) {
     cluster_link::model::link_configuration config;
@@ -616,6 +634,9 @@ create_link_configuration(const shadow_link& sl) {
 
     config.schema_registry_sync_cfg = create_schema_registry_sync_config(
       sl.get_configurations().get_schema_registry_sync_options());
+
+    config.role_sync_cfg = create_role_sync_config(
+      sl.get_configurations().get_role_sync_options());
 
     return config;
 }
@@ -1187,6 +1208,21 @@ security_settings_sync_options create_security_settings_sync_options(
     return options;
 }
 
+role_sync_options
+create_role_sync_options(const cluster_link::model::role_sync_config& config) {
+    role_sync_options options;
+
+    options.set_interval(
+      absl::FromChrono(
+        config.task_interval.value_or(ss::lowres_clock::duration::zero())));
+    options.set_effective_interval(
+      absl::FromChrono(config.get_task_interval()));
+    options.set_role_name_filters(to_name_filters(config.role_name_filters));
+    options.set_paused(!bool(config.is_enabled));
+
+    return options;
+}
+
 void starting_offset_to_proto(
   std::optional<model::timestamp> ts, topic_metadata_sync_options& options) {
     if (!ts.has_value()) {
@@ -1402,6 +1438,8 @@ create_shadow_link_configuration(const cluster_link::model::metadata& md) {
     configurations.set_schema_registry_sync_options(
       create_schema_registry_sync_options(
         md.configuration.schema_registry_sync_cfg));
+    configurations.set_role_sync_options(
+      create_role_sync_options(md.configuration.role_sync_cfg));
 
     return configurations;
 }

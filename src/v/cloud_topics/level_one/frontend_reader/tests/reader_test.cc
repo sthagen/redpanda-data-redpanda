@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "base/units.h"
 #include "bytes/iostream.h"
 #include "cloud_topics/level_one/common/fake_io.h"
 #include "cloud_topics/level_one/common/object.h"
@@ -23,7 +24,10 @@
 
 #include <gtest/gtest.h>
 
+#include <iostream>
+#include <limits>
 #include <optional>
+#include <tuple>
 
 using namespace cloud_topics;
 using namespace std::chrono_literals;
@@ -657,4 +661,78 @@ TEST_F(l1_reader_test, lookahead_multiple_objects) {
     auto reader_no_prefetch = make_reader(ntp, tidp);
     auto result_no_prefetch = read_all(std::move(reader_no_prefetch));
     EXPECT_EQ(result_no_prefetch, expected);
+}
+
+// Demonstrates that the per-slice cap bounds the reader's peak in-memory
+// footprint. Without the cap, read_batches returned an entire offset range in a
+// single slice, so reading a large extent (with no max_bytes limit, as
+// compaction/leveling do) can materialize the whole thing at once. With the
+// cap, the same range is delivered across multiple bounded slices.
+TEST_F(l1_reader_test, slice_cap_bounds_peak_reader_memory) {
+    auto [ntp, tidp] = make_ntidp("big_extent_topic");
+
+    // Build a ~64 MiB single-partition extent from uncompressed batches so the
+    // stored size is predictable (not shrunk by compression).
+    static constexpr size_t batch_bytes = 1_MiB;
+    static constexpr int num_batches = 64;
+    model::test::record_batch_spec spec{
+      .offset = model::offset{0},
+      .allow_compression = false,
+      .count = num_batches,
+      .records = 1,
+      .record_sizes = std::vector<size_t>{batch_bytes},
+    };
+    {
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(
+          tidp, model::test::make_random_batches(spec).get());
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    // Drive do_load_slice directly so we can observe the bytes held in a single
+    // slice (i.e. the reader's peak in-memory footprint for the read).
+    auto measure = [&](size_t slice_cap) {
+        auto impl = std::make_unique<level_one_log_reader_impl>(
+          make_test_config(),
+          ntp,
+          tidp,
+          &_metastore,
+          &_io,
+          /*probe=*/nullptr,
+          slice_cap);
+        size_t total = 0;
+        size_t peak_slice = 0;
+        size_t slices = 0;
+        while (!impl->is_end_of_stream()) {
+            auto storage = impl->do_load_slice(model::no_timeout).get();
+            const auto& data = std::get<model::record_batch_reader::data_t>(
+              storage);
+            size_t slice_bytes = 0;
+            for (const auto& b : data) {
+                slice_bytes += b.size_bytes();
+            }
+            if (!data.empty()) {
+                ++slices;
+            }
+            total += slice_bytes;
+            peak_slice = std::max(peak_slice, slice_bytes);
+        }
+        impl->finally().get();
+        return std::tuple{total, peak_slice, slices};
+    };
+
+    // Unbounded: no per-slice cap -> the whole extent is one slice, so the
+    // reader holds the entire ~64 MiB at once.
+    auto [unbounded_total, unbounded_peak, unbounded_slices] = measure(
+      std::numeric_limits<size_t>::max());
+
+    // Now: the production cap -> the extent is chunked into bounded slices.
+    constexpr auto cap = level_one_log_reader_impl::default_max_slice_bytes;
+    auto [bounded_total, bounded_peak, bounded_slices] = measure(cap);
+
+    EXPECT_EQ(unbounded_total, bounded_total); // identical data read both ways
+    EXPECT_EQ(unbounded_slices, 1u);           // one giant slice
+    EXPECT_GE(unbounded_peak, 60_MiB);         // ~64 MiB held at once
+    EXPECT_GT(bounded_slices, 1u);             // chunked
+    EXPECT_LE(bounded_peak, cap);              // bounded to the cap
 }
